@@ -1,0 +1,20 @@
+{
+  "name": "cocxy-web",
+  "version": "0.1.0",
+  "description": "Landing page for Cocxy Terminal",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "compression": "^1.7.4",
+    "helmet": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "author": "Said Arturo Lopez"
+}

@@ -1,0 +1,63 @@
+# Cocxy Terminal - Agent Detection Configuration
+#
+# Each section defines an AI agent that Cocxy can detect in terminal output.
+# Patterns use regular expressions (NSRegularExpression syntax).
+#
+# To add a custom agent, create a new section:
+#
+# [my-agent]
+# display-name = "My Agent"
+# osc-supported = false
+# launch-patterns = ["^my-agent\\b"]
+# waiting-patterns = ["^>\\s*$"]
+# error-patterns = ["Error:"]
+# finished-indicators = ["^\\$\\s*$"]
+# idle-timeout-override = 10  # optional, in seconds
+
+[claude]
+display-name = "Claude Code"
+osc-supported = true
+launch-patterns = ["^claude\\b", "^claude-code\\b", "npx claude"]
+waiting-patterns = ["^\\? ", "\\(Y/n\\)", "\\(y/N\\)", "Do you want to", "Would you like"]
+error-patterns = ["^Error:", "^error\\[", "APIError", "Rate limit"]
+finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^>\\s*$"]
+
+[codex]
+display-name = "Codex CLI"
+osc-supported = false
+launch-patterns = ["^codex\\b"]
+waiting-patterns = ["\\? ", "Enter to confirm"]
+error-patterns = ["Error:", "Failed"]
+finished-indicators = ["^\\$\\s*$"]
+
+[aider]
+display-name = "Aider"
+osc-supported = false
+launch-patterns = ["^aider\\b", "^python.*aider"]
+waiting-patterns = ["^>\\s*$", "^aider>"]
+error-patterns = ["Error:", "Exception:", "Traceback"]
+finished-indicators = ["^\\$\\s*$"]
+
+[gemini-cli]
+display-name = "Gemini CLI"
+osc-supported = false
+launch-patterns = ["^gemini\\b"]
+waiting-patterns = ["^>\\s*$", "Enter your prompt"]
+error-patterns = ["Error:", "Failed"]
+finished-indicators = ["^\\$\\s*$"]
+
+[kiro]
+display-name = "Kiro"
+osc-supported = false
+launch-patterns = ["^kiro\\b"]
+waiting-patterns = ["\\? "]
+error-patterns = ["Error:"]
+finished-indicators = ["^\\$\\s*$"]
+
+[opencode]
+display-name = "OpenCode"
+osc-supported = false
+launch-patterns = ["^opencode\\b"]
+waiting-patterns = ["^>\\s*$"]
+error-patterns = ["Error:"]
+finished-indicators = ["^\\$\\s*$"]

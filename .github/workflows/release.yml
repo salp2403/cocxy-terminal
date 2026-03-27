@@ -1,0 +1,312 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build, Sign & Release
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache libghostty
+        id: cache-ghostty
+        uses: actions/cache@v4
+        with:
+          path: |
+            libs/GhosttyKit.xcframework
+            libs/ghostty-resources
+          key: ghostty-universal-${{ runner.os }}-${{ hashFiles('scripts/build-libghostty.sh') }}
+
+      - name: Install build dependencies
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: |
+          brew install zig gettext
+
+      - name: Build libghostty
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: |
+          chmod +x scripts/build-libghostty.sh
+          ./scripts/build-libghostty.sh --universal
+
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          echo "$CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          rm $RUNNER_TEMP/certificate.p12
+
+      - name: Build release binary (universal)
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Build CLI companion
+        run: swift build --target cocxy -c release --arch arm64 --arch x86_64 || true
+
+      - name: Create app bundle
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          APP_DIR="build/Cocxy Terminal.app"
+          CONTENTS_DIR="$APP_DIR/Contents"
+          MACOS_DIR="$CONTENTS_DIR/MacOS"
+          RESOURCES_DIR="$CONTENTS_DIR/Resources"
+
+          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+
+          # Copy universal binary
+          cp ".build/apple/Products/Release/CocxyTerminal" "$MACOS_DIR/Cocxy Terminal"
+
+          # Copy CLI companion if built
+          if [ -f ".build/apple/Products/Release/cocxy" ]; then
+            cp ".build/apple/Products/Release/cocxy" "$RESOURCES_DIR/cocxy"
+          fi
+
+          # Generate Info.plist
+          cat > "$CONTENTS_DIR/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>Cocxy Terminal</string>
+            <key>CFBundleDisplayName</key><string>Cocxy Terminal</string>
+            <key>CFBundleIdentifier</key><string>dev.cocxy.terminal</string>
+            <key>CFBundleVersion</key><string>$VERSION</string>
+            <key>CFBundleShortVersionString</key><string>$VERSION</string>
+            <key>CFBundleExecutable</key><string>Cocxy Terminal</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleIconFile</key><string>AppIcon</string>
+            <key>LSMinimumSystemVersion</key><string>14.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+            <key>NSAppTransportSecurity</key>
+            <dict>
+              <key>NSAllowsLocalNetworking</key><true/>
+            </dict>
+            <key>SUFeedURL</key>
+            <string>https://cocxy.dev/appcast.xml</string>
+            <key>SUPublicEDKey</key>
+            <string>${{ secrets.SPARKLE_PUBLIC_KEY }}</string>
+          </dict>
+          </plist>
+          PLIST
+
+          # Copy resources
+          [ -d Resources/Themes ] && cp -R Resources/Themes "$RESOURCES_DIR/" || true
+          [ -f Resources/AppIcon.png ] && cp Resources/AppIcon.png "$RESOURCES_DIR/" || true
+          [ -d libs/ghostty-resources/shell-integration ] && \
+            cp -R libs/ghostty-resources/shell-integration "$RESOURCES_DIR/" || true
+
+      - name: Code sign with Developer ID
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+        run: |
+          APP_DIR="build/Cocxy Terminal.app"
+          ENTITLEMENTS="Resources/CocxyTerminal.entitlements"
+
+          # Sign CLI companion first
+          [ -f "$APP_DIR/Contents/Resources/cocxy" ] && \
+            codesign --force --options runtime --timestamp \
+              --entitlements "$ENTITLEMENTS" \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Resources/cocxy" || true
+
+          # Sign main app
+          codesign --force --options runtime --timestamp \
+            --entitlements "$ENTITLEMENTS" \
+            --sign "$SIGNING_IDENTITY" \
+            "$APP_DIR"
+
+          codesign --verify --deep --strict "$APP_DIR"
+          echo "Code signing verified."
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          mkdir -p build/dmg-staging
+          cp -R "build/Cocxy Terminal.app" build/dmg-staging/
+          ln -s /Applications build/dmg-staging/Applications
+          hdiutil create -volname "Cocxy Terminal" \
+            -srcfolder build/dmg-staging \
+            -ov -format UDZO \
+            "build/CocxyTerminal-${VERSION}.dmg"
+
+      - name: Sign DMG
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          codesign --force --timestamp \
+            --sign "$SIGNING_IDENTITY" \
+            "build/CocxyTerminal-${VERSION}.dmg"
+
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="build/CocxyTerminal-${VERSION}.dmg"
+
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait --timeout 600
+
+          xcrun stapler staple "$DMG"
+          echo "Notarization and stapling complete."
+
+      - name: Generate Sparkle signature and appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="build/CocxyTerminal-${VERSION}.dmg"
+          DATE=$(date -u +"%a, %d %b %Y %H:%M:%S +0000")
+          DMG_SIZE=$(stat -f%z "$DMG")
+          DMG_URL="https://github.com/salp2403/cocxy-terminal/releases/download/v${VERSION}/CocxyTerminal-${VERSION}.dmg"
+
+          # Get Sparkle sign_update tool from the built SPM dependency
+          SPARKLE_BIN=$(find .build -name "sign_update" -type f 2>/dev/null | head -1)
+
+          SIGNATURE=""
+          if [ -n "$SPARKLE_BIN" ] && [ -f "$SPARKLE_BIN" ]; then
+            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_key
+            SIGNATURE=$("$SPARKLE_BIN" "$DMG" --ed-key-file /tmp/sparkle_key 2>/dev/null || echo "")
+            rm -f /tmp/sparkle_key
+          fi
+
+          # If Sparkle tool not available, use openssl Ed25519 signing
+          if [ -z "$SIGNATURE" ]; then
+            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_key
+            SIGNATURE=$(openssl pkeyutl -sign -inkey /tmp/sparkle_key -rawin < "$DMG" | base64 2>/dev/null || echo "pending")
+            rm -f /tmp/sparkle_key
+          fi
+
+          echo "Sparkle signature: ${SIGNATURE:0:20}..."
+
+          # Generate appcast.xml
+          cat > build/appcast.xml << APPCAST
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Cocxy Terminal</title>
+              <link>https://cocxy.dev/appcast.xml</link>
+              <description>Updates for Cocxy Terminal</description>
+              <language>en</language>
+              <item>
+                <title>Version ${VERSION}</title>
+                <pubDate>${DATE}</pubDate>
+                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <enclosure
+                  url="${DMG_URL}"
+                  sparkle:version="${VERSION}"
+                  sparkle:shortVersionString="${VERSION}"
+                  sparkle:edSignature="${SIGNATURE}"
+                  length="${DMG_SIZE}"
+                  type="application/octet-stream" />
+              </item>
+            </channel>
+          </rss>
+          APPCAST
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/CocxyTerminal-*.dmg
+          body: |
+            ## Cocxy Terminal v${{ steps.version.outputs.VERSION }}
+
+            ### Install
+            **Direct download:** Download the DMG below.
+            **Homebrew:** `brew tap salp2403/tap && brew install --cask cocxy`
+
+            ### System Requirements
+            - macOS 14.0 (Sonoma) or later
+            - Apple Silicon or Intel Mac
+          generate_release_notes: true
+
+      - name: Deploy appcast to website
+        env:
+          SERVER_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        run: |
+          echo "$SERVER_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            build/appcast.xml ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}
+          rm /tmp/deploy_key
+          echo "Appcast deployed to cocxy.dev"
+
+      - name: Update Homebrew Cask
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="build/CocxyTerminal-${VERSION}.dmg"
+          SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
+
+          # Clone tap, update formula, push
+          git clone https://x-access-token:${GH_TOKEN}@github.com/salp2403/homebrew-tap.git /tmp/tap
+          cd /tmp/tap
+
+          cat > Casks/cocxy.rb << CASK
+          cask "cocxy" do
+            version "${VERSION}"
+            sha256 "${SHA}"
+
+            url "https://github.com/salp2403/cocxy-terminal/releases/download/v#{version}/CocxyTerminal-#{version}.dmg"
+            name "Cocxy Terminal"
+            desc "Native macOS terminal built for AI agent workflows"
+            homepage "https://cocxy.dev"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            depends_on macos: ">= :sonoma"
+
+            app "Cocxy Terminal.app"
+
+            zap trash: [
+              "~/.config/cocxy",
+              "~/Library/Preferences/dev.cocxy.terminal.plist",
+              "~/Library/Caches/dev.cocxy.terminal",
+            ]
+          end
+          CASK
+
+          git config user.name "said lopez"
+          git config user.email "dev@cocxy.dev"
+          git add Casks/cocxy.rb
+          git commit -m "Update cocxy to ${VERSION}" || true
+          git push || true
+          rm -rf /tmp/tap

@@ -1,0 +1,36 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+xcuserdata/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Compiled binaries
+libs/GhosttyKit.xcframework/
+
+# IDE
+.idea/
+.vscode/
+
+# Build output
+build/
+
+# Website dependencies
+web/node_modules/
+
+# Logs and temp
+/tmp/
+*.pem
+*.p12
+*.key
+.env
+.env.*

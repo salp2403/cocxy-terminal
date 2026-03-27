@@ -1,0 +1,47 @@
+# Catppuccin Mocha - Dark variant
+# Official colors from https://github.com/catppuccin/catppuccin
+#
+# Base: #1e1e2e | Mantle: #181825 | Crust: #11111b
+# Text: #cdd6f4 | Subtext0: #a6adc8
+# Surface0: #313244 | Surface1: #45475a | Surface2: #585b70
+# Overlay0: #6c7086
+
+[metadata]
+name = "Catppuccin Mocha"
+author = "Catppuccin"
+variant = "dark"
+
+[colors]
+foreground = "#cdd6f4"
+background = "#1e1e2e"
+cursor = "#f5e0dc"
+selection = "#585b70"
+
+[colors.normal]
+black = "#45475a"
+red = "#f38ba8"
+green = "#a6e3a1"
+yellow = "#f9e2af"
+blue = "#89b4fa"
+magenta = "#f5c2e7"
+cyan = "#94e2d5"
+white = "#bac2de"
+
+[colors.bright]
+black = "#585b70"
+red = "#f38ba8"
+green = "#a6e3a1"
+yellow = "#f9e2af"
+blue = "#89b4fa"
+magenta = "#f5c2e7"
+cyan = "#94e2d5"
+white = "#a6adc8"
+
+[ui]
+tab-active-background = "#1e1e2e"
+tab-inactive-background = "#181825"
+tab-inactive-foreground = "#6c7086"
+badge-attention = "#f9e2af"
+badge-completed = "#a6e3a1"
+badge-error = "#f38ba8"
+badge-working = "#89b4fa"

@@ -1,0 +1,63 @@
+name: Bug Report
+description: Report a bug in Cocxy Terminal
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please fill out the details below so we can reproduce and fix the issue.
+  - type: input
+    id: version
+    attributes:
+      label: Cocxy Version
+      description: "Run `cocxy --version` or check About Cocxy"
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS Version
+      placeholder: "15.3 (Sequoia)"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: "What happened? What did you expect to happen?"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: "Minimal steps to reproduce"
+      placeholder: |
+        1. Open Cocxy
+        2. ...
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: "Paste any error output or crash logs"
+      render: shell
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: "If applicable, add screenshots"
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "Crash / Data Loss"
+        - "Major - Feature broken"
+        - "Minor - Cosmetic or workaround exists"
+    validations:
+      required: true

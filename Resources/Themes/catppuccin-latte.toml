@@ -1,0 +1,46 @@
+# Catppuccin Latte - Light variant
+# Official colors from https://github.com/catppuccin/catppuccin
+#
+# Base: #eff1f5 | Mantle: #e6e9ef | Crust: #dce0e8
+# Text: #4c4f69 | Subtext0: #6c6f85
+# Surface0: #ccd0da | Surface1: #bcc0cc | Surface2: #acb0be
+
+[metadata]
+name = "Catppuccin Latte"
+author = "Catppuccin"
+variant = "light"
+
+[colors]
+foreground = "#4c4f69"
+background = "#eff1f5"
+cursor = "#dc8a78"
+selection = "#acb0be"
+
+[colors.normal]
+black = "#5c5f77"
+red = "#d20f39"
+green = "#40a02b"
+yellow = "#df8e1d"
+blue = "#1e66f5"
+magenta = "#ea76cb"
+cyan = "#179299"
+white = "#acb0be"
+
+[colors.bright]
+black = "#6c6f85"
+red = "#d20f39"
+green = "#40a02b"
+yellow = "#df8e1d"
+blue = "#1e66f5"
+magenta = "#ea76cb"
+cyan = "#179299"
+white = "#bcc0cc"
+
+[ui]
+tab-active-background = "#eff1f5"
+tab-inactive-background = "#e6e9ef"
+tab-inactive-foreground = "#9ca0b0"
+badge-attention = "#df8e1d"
+badge-completed = "#40a02b"
+badge-error = "#d20f39"
+badge-working = "#1e66f5"

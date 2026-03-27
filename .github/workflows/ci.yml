@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache libghostty
+        id: cache-ghostty
+        uses: actions/cache@v4
+        with:
+          path: libs/GhosttyKit.xcframework
+          key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-libghostty.sh') }}
+
+      - name: Install Zig
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: brew install zig
+
+      - name: Build libghostty
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: |
+          chmod +x scripts/build-libghostty.sh
+          ./scripts/build-libghostty.sh
+
+      - name: Build
+        run: swift build -c debug
+
+      - name: Test
+        run: swift test --parallel
+
+      - name: Build Release
+        run: swift build -c release

@@ -1,0 +1,42 @@
+# One Dark - Atom editor theme
+# Based on the Atom One Dark color scheme
+
+[metadata]
+name = "One Dark"
+author = "Atom"
+variant = "dark"
+
+[colors]
+foreground = "#abb2bf"
+background = "#282c34"
+cursor = "#528bff"
+selection = "#3e4451"
+
+[colors.normal]
+black = "#282c34"
+red = "#e06c75"
+green = "#98c379"
+yellow = "#e5c07b"
+blue = "#61afef"
+magenta = "#c678dd"
+cyan = "#56b6c2"
+white = "#abb2bf"
+
+[colors.bright]
+black = "#545862"
+red = "#e06c75"
+green = "#98c379"
+yellow = "#e5c07b"
+blue = "#61afef"
+magenta = "#c678dd"
+cyan = "#56b6c2"
+white = "#c8ccd4"
+
+[ui]
+tab-active-background = "#282c34"
+tab-inactive-background = "#21252b"
+tab-inactive-foreground = "#636d83"
+badge-attention = "#e5c07b"
+badge-completed = "#98c379"
+badge-error = "#e06c75"
+badge-working = "#61afef"

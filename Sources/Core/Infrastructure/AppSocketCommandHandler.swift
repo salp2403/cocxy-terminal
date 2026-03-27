@@ -1,0 +1,952 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// AppSocketCommandHandler.swift - Production socket command dispatcher.
+
+import Foundation
+
+// MARK: - Version Constant
+
+/// Single source of truth for the application version.
+enum CocxyVersion {
+    static let current = "0.1.0-alpha"
+}
+
+// MARK: - App Socket Command Handler
+
+/// Production implementation of `SocketCommandHandling`.
+///
+/// Dispatches validated socket commands to the appropriate domain services.
+/// Called from background threads; dispatches to main actor when needed
+/// via closure providers that safely bridge the concurrency boundary.
+///
+/// ## Command Groups
+///
+/// 1. **Status & Tab listing** -- read-only queries (status, list-tabs).
+/// 2. **Tab mutations** -- focus-tab, close-tab, new-tab, tab-rename, tab-move.
+/// 3. **Config operations** -- config-get, config-set, config-path (disk I/O).
+/// 4. **Theme operations** -- theme-list, theme-set.
+/// 5. **Acknowledged commands** -- async UI actions that return immediately
+///    (notify, split, dashboard, timeline, search, send, send-key, hooks).
+///
+/// Unknown commands are rejected with an error response.
+///
+/// - SeeAlso: `SocketCommandHandling` protocol
+/// - SeeAlso: `CLICommandName` for the closed set of valid commands.
+final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable {
+
+    // MARK: - Dependencies
+
+    /// Closure that returns the tab count from the main thread.
+    private let tabCountProvider: @Sendable () -> Int
+
+    /// Closure that returns tab info (id, title, isActive) from the main thread.
+    private let tabInfoProvider: @Sendable () -> [(id: String, title: String, isActive: Bool)]
+
+    /// Closure that focuses a tab by UUID string. Returns true if the tab was found.
+    private let tabFocusProvider: @Sendable (String) -> Bool
+
+    /// Closure that closes a tab by UUID string. Returns true if executed.
+    private let tabCloseProvider: @Sendable (String) -> Bool
+
+    /// Closure that creates a new tab with an optional working directory.
+    /// Returns the new tab's (id, title) or nil if TabManager is unavailable.
+    private let tabCreateProvider: @Sendable (String?) -> (id: String, title: String)?
+
+    /// Closure that renames a tab. Params: (tabID, newName). Returns true on success.
+    private let tabRenameProvider: @Sendable (String, String) -> Bool
+
+    /// Closure that moves a tab. Params: (tabID, destinationIndex). Returns true on success.
+    private let tabMoveProvider: @Sendable (String, Int) -> Bool
+
+    /// The hook event receiver for processing Claude Code hook events.
+    private let hookEventReceiver: HookEventReceiverImpl?
+
+    /// Closure that provides the browser view model for scriptable browser commands.
+    /// Returns nil when no browser panel is open.
+    private let browserViewModelProvider: @Sendable () -> BrowserViewModel?
+
+    /// Closure that returns the current live configuration snapshot.
+    /// Falls back to defaults when ConfigService is unavailable.
+    private let configProvider: (@Sendable () -> CocxyConfig)?
+
+    /// Provides the shared theme engine for theme-list and theme-set commands.
+    /// Must be called from MainActor context.
+    private let themeEngineProvider: (() -> ThemeEngineImpl?)?
+
+    // MARK: - Initialization
+
+    /// Creates an AppSocketCommandHandler with closure-based access to @MainActor services.
+    ///
+    /// Each closure provider safely bridges the concurrency boundary between
+    /// the background socket thread and the main actor. The closures use the
+    /// `MainActor.assumeIsolated` + `DispatchQueue.main.sync` pattern for
+    /// safe cross-thread access to @MainActor-isolated properties.
+    ///
+    /// - Parameters:
+    ///   - tabManager: The tab manager for tab operations. Nil when no window is open.
+    ///   - hookEventReceiver: The hook event receiver for Layer 0 events.
+    ///   - browserViewModel: The browser view model for scriptable browser commands.
+    ///     Nil when no browser panel is available.
+    init(
+        tabManager: TabManager?,
+        hookEventReceiver: HookEventReceiverImpl?,
+        browserViewModel: BrowserViewModel? = nil,
+        configProvider: (@Sendable () -> CocxyConfig)? = nil,
+        themeEngineProvider: (() -> ThemeEngineImpl?)? = nil
+    ) {
+        self.configProvider = configProvider
+        self.themeEngineProvider = themeEngineProvider
+        weak var weakTabManager = tabManager
+        weak var weakBrowserVM = browserViewModel
+
+        // -- Browser view model provider --
+        self.browserViewModelProvider = {
+            var vm: BrowserViewModel?
+            let work = {
+                MainActor.assumeIsolated {
+                    vm = weakBrowserVM
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return vm
+        }
+
+        // -- Tab count provider (read-only) --
+        self.tabCountProvider = {
+            var count = 0
+            let work = {
+                MainActor.assumeIsolated {
+                    count = weakTabManager?.tabs.count ?? 0
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return count
+        }
+
+        // -- Tab info provider (read-only) --
+        self.tabInfoProvider = {
+            var info: [(id: String, title: String, isActive: Bool)] = []
+            let work = {
+                MainActor.assumeIsolated {
+                    guard let tabs = weakTabManager?.tabs else { return }
+                    info = tabs.map { (
+                        id: $0.id.rawValue.uuidString,
+                        title: $0.title,
+                        isActive: $0.isActive
+                    )}
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return info
+        }
+
+        // -- Focus tab by UUID string --
+        self.tabFocusProvider = { uuidString in
+            guard let uuid = UUID(uuidString: uuidString) else { return false }
+            var found = false
+            let work = {
+                MainActor.assumeIsolated {
+                    guard let manager = weakTabManager else { return }
+                    let tabID = TabID(rawValue: uuid)
+                    guard manager.tabs.contains(where: { $0.id == tabID }) else { return }
+                    manager.setActive(id: tabID)
+                    found = true
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return found
+        }
+
+        // -- Close tab by UUID string --
+        self.tabCloseProvider = { uuidString in
+            guard let uuid = UUID(uuidString: uuidString) else { return false }
+            var handled = false
+            let work = {
+                MainActor.assumeIsolated {
+                    guard let manager = weakTabManager else { return }
+                    let tabID = TabID(rawValue: uuid)
+                    manager.removeTab(id: tabID)
+                    handled = true
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return handled
+        }
+
+        // -- Create new tab with optional directory --
+        self.tabCreateProvider = { directoryPath in
+            var result: (id: String, title: String)?
+            let work = {
+                MainActor.assumeIsolated {
+                    guard let manager = weakTabManager else { return }
+                    let workingDirectory: URL
+                    if let path = directoryPath {
+                        workingDirectory = URL(fileURLWithPath: path)
+                    } else {
+                        workingDirectory = FileManager.default.homeDirectoryForCurrentUser
+                    }
+                    let newTab = manager.addTab(workingDirectory: workingDirectory)
+                    result = (id: newTab.id.rawValue.uuidString, title: newTab.title)
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return result
+        }
+
+        // -- Rename tab by UUID string --
+        self.tabRenameProvider = { uuidString, newName in
+            guard let uuid = UUID(uuidString: uuidString) else { return false }
+            var found = false
+            let work = {
+                MainActor.assumeIsolated {
+                    guard let manager = weakTabManager else { return }
+                    let tabID = TabID(rawValue: uuid)
+                    guard manager.tabs.contains(where: { $0.id == tabID }) else { return }
+                    manager.renameTab(id: tabID, newTitle: newName)
+                    found = true
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return found
+        }
+
+        // -- Move tab to new position --
+        self.tabMoveProvider = { uuidString, destinationIndex in
+            guard let uuid = UUID(uuidString: uuidString) else { return false }
+            var moved = false
+            let work = {
+                MainActor.assumeIsolated {
+                    guard let manager = weakTabManager else { return }
+                    let tabID = TabID(rawValue: uuid)
+                    guard let fromIndex = manager.tabs.firstIndex(
+                        where: { $0.id == tabID }
+                    ) else { return }
+                    guard destinationIndex >= 0,
+                          destinationIndex < manager.tabs.count else { return }
+                    manager.moveTab(from: fromIndex, to: destinationIndex)
+                    moved = true
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return moved
+        }
+
+        self.hookEventReceiver = hookEventReceiver
+    }
+
+    // MARK: - SocketCommandHandling
+
+    func handleCommand(_ request: SocketRequest) -> SocketResponse {
+        guard let commandName = CLICommandName(rawValue: request.command) else {
+            return .failure(id: request.id, error: "Unknown command: \(request.command)")
+        }
+
+        switch commandName {
+        // Status & listing
+        case .status:
+            return handleStatus(request)
+        case .listTabs:
+            return handleListTabs(request)
+
+        // Tab mutations
+        case .focusTab:
+            return handleFocusTab(request)
+        case .closeTab:
+            return handleCloseTab(request)
+        case .newTab:
+            return handleNewTab(request)
+        case .tabRename:
+            return handleTabRename(request)
+        case .tabMove:
+            return handleTabMove(request)
+
+        // Config operations
+        case .configGet:
+            return handleConfigGet(request)
+        case .configSet:
+            return handleConfigSet(request)
+        case .configPath:
+            return handleConfigPath(request)
+
+        // Theme operations
+        case .themeList:
+            return handleThemeList(request)
+        case .themeSet:
+            return handleThemeSet(request)
+
+        // Hook events
+        case .hookEvent:
+            return handleHookEvent(request)
+
+        // Browser commands
+        case .browserNavigate:
+            return handleBrowserNavigate(request)
+        case .browserBack:
+            return handleBrowserBack(request)
+        case .browserForward:
+            return handleBrowserForward(request)
+        case .browserReload:
+            return handleBrowserReload(request)
+        case .browserGetState:
+            return handleBrowserGetState(request)
+        case .browserEval:
+            return handleBrowserEval(request)
+        case .browserGetText:
+            return handleBrowserGetText(request)
+        case .browserListTabs:
+            return handleBrowserListTabs(request)
+
+        // Remote workspace commands
+        case .remoteList, .remoteConnect, .remoteDisconnect,
+             .remoteStatus, .remoteTunnels:
+            return .ok(id: request.id, data: ["status": "acknowledged"])
+
+        // Acknowledged commands (async UI actions)
+        case .notify, .split,
+             .splitList, .splitFocus, .splitClose, .splitResize,
+             .dashboardShow, .dashboardHide, .dashboardToggle, .dashboardStatus,
+             .timelineShow, .timelineExport,
+             .search,
+             .send, .sendKey,
+             .hooks, .hookHandler:
+            return .ok(id: request.id, data: ["status": "acknowledged"])
+        }
+    }
+
+    // MARK: - Status & Listing Handlers
+
+    /// Returns the application status including version and tab count.
+    private func handleStatus(_ request: SocketRequest) -> SocketResponse {
+        let tabCount = tabCountProvider()
+        return .ok(id: request.id, data: [
+            "status": "running",
+            "version": CocxyVersion.current,
+            "tabs": "\(tabCount)"
+        ])
+    }
+
+    /// Returns a list of all open tabs with their IDs, titles, and active state.
+    private func handleListTabs(_ request: SocketRequest) -> SocketResponse {
+        let tabs = tabInfoProvider()
+        var tabsInfo: [String: String] = [:]
+        for (index, tab) in tabs.enumerated() {
+            tabsInfo["tab_\(index)_id"] = tab.id
+            tabsInfo["tab_\(index)_title"] = tab.title
+            tabsInfo["tab_\(index)_active"] = tab.isActive ? "true" : "false"
+        }
+        tabsInfo["count"] = "\(tabs.count)"
+        return .ok(id: request.id, data: tabsInfo)
+    }
+
+    // MARK: - Tab Mutation Handlers
+
+    /// Focuses a tab by its UUID.
+    ///
+    /// Required params: `id` (UUID string).
+    private func handleFocusTab(_ request: SocketRequest) -> SocketResponse {
+        guard let tabIDString = request.params?["id"] else {
+            return .failure(id: request.id, error: "Missing required param: id")
+        }
+        guard UUID(uuidString: tabIDString) != nil else {
+            return .failure(id: request.id, error: "Invalid UUID format for param: id")
+        }
+
+        let found = tabFocusProvider(tabIDString)
+        if found {
+            return .ok(id: request.id, data: ["status": "focused"])
+        } else {
+            return .failure(id: request.id, error: "Tab not found or tab manager not available")
+        }
+    }
+
+    /// Closes a tab by its UUID.
+    ///
+    /// Required params: `id` (UUID string).
+    /// The last remaining tab cannot be closed (TabManager invariant).
+    private func handleCloseTab(_ request: SocketRequest) -> SocketResponse {
+        guard let tabIDString = request.params?["id"] else {
+            return .failure(id: request.id, error: "Missing required param: id")
+        }
+        guard UUID(uuidString: tabIDString) != nil else {
+            return .failure(id: request.id, error: "Invalid UUID format for param: id")
+        }
+
+        let handled = tabCloseProvider(tabIDString)
+        if handled {
+            return .ok(id: request.id, data: ["status": "closed"])
+        } else {
+            return .failure(id: request.id, error: "Tab manager not available")
+        }
+    }
+
+    /// Creates a new tab with an optional working directory.
+    ///
+    /// Optional params: `dir` (filesystem path for the working directory).
+    private func handleNewTab(_ request: SocketRequest) -> SocketResponse {
+        let directoryPath = request.params?["dir"]
+
+        // Validate directory exists if provided.
+        if let path = directoryPath {
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir),
+                  isDir.boolValue else {
+                return .failure(id: request.id, error: "Directory does not exist: \(path)")
+            }
+        }
+
+        guard let result = tabCreateProvider(directoryPath) else {
+            return .failure(id: request.id, error: "Tab manager not available")
+        }
+
+        return .ok(id: request.id, data: [
+            "status": "created",
+            "id": result.id,
+            "title": result.title
+        ])
+    }
+
+    /// Renames a tab by its UUID.
+    ///
+    /// Required params: `id` (UUID string), `name` (new custom title).
+    private func handleTabRename(_ request: SocketRequest) -> SocketResponse {
+        guard let tabIDString = request.params?["id"] else {
+            return .failure(id: request.id, error: "Missing required param: id")
+        }
+        guard let newName = request.params?["name"] else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+        guard UUID(uuidString: tabIDString) != nil else {
+            return .failure(id: request.id, error: "Invalid UUID format for param: id")
+        }
+
+        let found = tabRenameProvider(tabIDString, newName)
+        if found {
+            return .ok(id: request.id, data: ["status": "renamed"])
+        } else {
+            return .failure(id: request.id, error: "Tab not found or tab manager not available")
+        }
+    }
+
+    /// Moves a tab to a new position in the tab list.
+    ///
+    /// Required params: `id` (UUID string), `position` (0-based destination index).
+    private func handleTabMove(_ request: SocketRequest) -> SocketResponse {
+        guard let tabIDString = request.params?["id"] else {
+            return .failure(id: request.id, error: "Missing required param: id")
+        }
+        guard let positionString = request.params?["position"] else {
+            return .failure(id: request.id, error: "Missing required param: position")
+        }
+        guard let position = Int(positionString) else {
+            return .failure(id: request.id, error: "Invalid integer for param: position")
+        }
+        guard UUID(uuidString: tabIDString) != nil else {
+            return .failure(id: request.id, error: "Invalid UUID format for param: id")
+        }
+
+        let moved = tabMoveProvider(tabIDString, position)
+        if moved {
+            return .ok(id: request.id, data: ["status": "moved"])
+        } else {
+            return .failure(id: request.id, error: "Tab not found or invalid position")
+        }
+    }
+
+    // MARK: - Config Handlers
+
+    /// Returns the path to the configuration file.
+    private func handleConfigPath(_ request: SocketRequest) -> SocketResponse {
+        let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+        let configPath = "\(homePath)/.config/cocxy/config.toml"
+        return .ok(id: request.id, data: ["path": configPath])
+    }
+
+    /// Reads a configuration value by its dotted key path.
+    ///
+    /// Required params: `key` (dotted path like "appearance.theme").
+    /// Reads from the default ConfigService snapshot to avoid file I/O races.
+    private func handleConfigGet(_ request: SocketRequest) -> SocketResponse {
+        guard let key = request.params?["key"] else {
+            return .failure(id: request.id, error: "Missing required param: key")
+        }
+
+        let config = configProvider?() ?? CocxyConfig.defaults
+        guard let value = resolveConfigValue(key: key, config: config) else {
+            return .failure(id: request.id, error: "Unknown config key: \(key)")
+        }
+
+        return .ok(id: request.id, data: [
+            "key": key,
+            "value": value
+        ])
+    }
+
+    /// Writes a configuration value by its dotted key path.
+    ///
+    /// Required params: `key` (dotted path), `value` (new value as string).
+    /// Reads the current config file, updates the matching line, and writes back.
+    private func handleConfigSet(_ request: SocketRequest) -> SocketResponse {
+        guard let key = request.params?["key"] else {
+            return .failure(id: request.id, error: "Missing required param: key")
+        }
+        guard let value = request.params?["value"] else {
+            return .failure(id: request.id, error: "Missing required param: value")
+        }
+
+        // Reject values containing characters that could corrupt TOML structure.
+        guard !value.contains("\n") && !value.contains("\r") && !value.contains("\"") else {
+            return .failure(id: request.id, error: "Value must not contain newlines or double quotes")
+        }
+
+        // Validate key against known config keys.
+        guard resolveConfigValue(key: key, config: CocxyConfig.defaults) != nil else {
+            return .failure(id: request.id, error: "Unknown config key: \(key)")
+        }
+
+        let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+        let configPath = "\(homePath)/.config/cocxy/config.toml"
+
+        let existingContent = (try? String(contentsOfFile: configPath, encoding: .utf8))
+            ?? ConfigService.generateDefaultToml()
+
+        let updatedContent = updateTomlValue(
+            in: existingContent,
+            section: sectionFromKey(key),
+            field: fieldFromKey(key),
+            newValue: value
+        )
+
+        do {
+            try updatedContent.write(toFile: configPath, atomically: true, encoding: .utf8)
+        } catch {
+            return .failure(
+                id: request.id,
+                error: "Failed to write config: \(error.localizedDescription)"
+            )
+        }
+
+        return .ok(id: request.id, data: [
+            "status": "updated",
+            "key": key,
+            "value": value
+        ])
+    }
+
+    // MARK: - Theme Handlers
+
+    /// Returns the list of all available themes (built-in + custom).
+    private func handleThemeList(_ request: SocketRequest) -> SocketResponse {
+        var themes: [ThemeMetadata] = []
+        let work = {
+            MainActor.assumeIsolated {
+                themes = self.themeEngineProvider?()?.availableThemes ?? []
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        var data: [String: String] = ["count": "\(themes.count)"]
+        for (index, theme) in themes.enumerated() {
+            data["theme_\(index)"] = theme.name
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Applies a theme by name.
+    ///
+    /// Required params: `name` (theme display name or config name).
+    /// Supports fuzzy matching (e.g., "catppuccin-mocha" matches "Catppuccin Mocha").
+    private func handleThemeSet(_ request: SocketRequest) -> SocketResponse {
+        guard let themeName = request.params?["name"] else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+
+        var applied = false
+        let work = {
+            MainActor.assumeIsolated {
+                guard let engine = self.themeEngineProvider?() else { return }
+                do {
+                    try engine.apply(themeName: themeName)
+                    applied = true
+                } catch {
+                    // applied remains false
+                }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        if applied {
+            return .ok(id: request.id, data: [
+                "status": "applied",
+                "theme": themeName
+            ])
+        } else {
+            return .failure(id: request.id, error: "Theme not found: \(themeName)")
+        }
+    }
+
+    // MARK: - Hook Event Handler
+
+    /// Forwards a hook event payload to the HookEventReceiver.
+    ///
+    /// Required params: `payload` (JSON string of the hook event).
+    private func handleHookEvent(_ request: SocketRequest) -> SocketResponse {
+        guard let receiver = hookEventReceiver else {
+            return .failure(id: request.id, error: "Hook event receiver not initialized")
+        }
+
+        guard let payload = request.params?["payload"],
+              let payloadData = payload.data(using: .utf8) else {
+            return .failure(id: request.id, error: "Missing or invalid hook event payload")
+        }
+
+        let accepted = receiver.receiveRawJSON(payloadData)
+        if accepted {
+            return .ok(id: request.id, data: ["status": "accepted"])
+        } else {
+            return .failure(id: request.id, error: "Failed to parse hook event")
+        }
+    }
+
+    // MARK: - Config Key Resolution
+
+    /// Resolves a dotted config key to its current string value.
+    ///
+    /// Supports keys like "appearance.theme", "general.shell", "terminal.scrollback-lines".
+    /// Returns nil for unknown keys.
+    private func resolveConfigValue(key: String, config: CocxyConfig) -> String? {
+        switch key {
+        // General
+        case "general.shell":
+            return config.general.shell
+        case "general.working-directory":
+            return config.general.workingDirectory
+        case "general.confirm-close-process":
+            return "\(config.general.confirmCloseProcess)"
+
+        // Appearance
+        case "appearance.theme":
+            return config.appearance.theme
+        case "appearance.font-family":
+            return config.appearance.fontFamily
+        case "appearance.font-size":
+            return "\(config.appearance.fontSize)"
+        case "appearance.tab-position":
+            return config.appearance.tabPosition.rawValue
+        case "appearance.window-padding":
+            return "\(config.appearance.windowPadding)"
+        case "appearance.background-opacity":
+            return "\(config.appearance.backgroundOpacity)"
+        case "appearance.background-blur-radius":
+            return "\(config.appearance.backgroundBlurRadius)"
+
+        // Terminal
+        case "terminal.scrollback-lines":
+            return "\(config.terminal.scrollbackLines)"
+        case "terminal.cursor-style":
+            return config.terminal.cursorStyle.rawValue
+        case "terminal.cursor-blink":
+            return "\(config.terminal.cursorBlink)"
+        case "terminal.cursor-opacity":
+            return "\(config.terminal.cursorOpacity)"
+        case "terminal.mouse-hide-while-typing":
+            return "\(config.terminal.mouseHideWhileTyping)"
+        case "terminal.copy-on-select":
+            return "\(config.terminal.copyOnSelect)"
+        case "terminal.clipboard-paste-protection":
+            return "\(config.terminal.clipboardPasteProtection)"
+
+        // Agent detection
+        case "agent-detection.enabled":
+            return "\(config.agentDetection.enabled)"
+        case "agent-detection.osc-notifications":
+            return "\(config.agentDetection.oscNotifications)"
+        case "agent-detection.pattern-matching":
+            return "\(config.agentDetection.patternMatching)"
+        case "agent-detection.timing-heuristics":
+            return "\(config.agentDetection.timingHeuristics)"
+        case "agent-detection.idle-timeout-seconds":
+            return "\(config.agentDetection.idleTimeoutSeconds)"
+
+        // Notifications
+        case "notifications.macos-notifications":
+            return "\(config.notifications.macosNotifications)"
+        case "notifications.sound":
+            return "\(config.notifications.sound)"
+        case "notifications.badge-on-tab":
+            return "\(config.notifications.badgeOnTab)"
+        case "notifications.flash-tab":
+            return "\(config.notifications.flashTab)"
+        case "notifications.show-dock-badge":
+            return "\(config.notifications.showDockBadge)"
+
+        // Quick terminal
+        case "quick-terminal.enabled":
+            return "\(config.quickTerminal.enabled)"
+        case "quick-terminal.hotkey":
+            return config.quickTerminal.hotkey
+        case "quick-terminal.position":
+            return config.quickTerminal.position.rawValue
+        case "quick-terminal.height-percentage":
+            return "\(config.quickTerminal.heightPercentage)"
+        case "quick-terminal.hide-on-deactivate":
+            return "\(config.quickTerminal.hideOnDeactivate)"
+        case "quick-terminal.working-directory":
+            return config.quickTerminal.workingDirectory
+        case "quick-terminal.animation-duration":
+            return "\(config.quickTerminal.animationDuration)"
+        case "quick-terminal.screen":
+            return config.quickTerminal.screen.rawValue
+
+        // Keybindings
+        case "keybindings.new-tab":
+            return config.keybindings.newTab
+        case "keybindings.close-tab":
+            return config.keybindings.closeTab
+        case "keybindings.next-tab":
+            return config.keybindings.nextTab
+        case "keybindings.prev-tab":
+            return config.keybindings.prevTab
+        case "keybindings.split-vertical":
+            return config.keybindings.splitVertical
+        case "keybindings.split-horizontal":
+            return config.keybindings.splitHorizontal
+        case "keybindings.goto-attention":
+            return config.keybindings.gotoAttention
+        case "keybindings.toggle-quick-terminal":
+            return config.keybindings.toggleQuickTerminal
+
+        // Sessions
+        case "sessions.auto-save":
+            return "\(config.sessions.autoSave)"
+        case "sessions.auto-save-interval":
+            return "\(config.sessions.autoSaveInterval)"
+        case "sessions.restore-on-launch":
+            return "\(config.sessions.restoreOnLaunch)"
+
+        default:
+            return nil
+        }
+    }
+
+    // MARK: - Browser Handlers
+
+    /// Maximum allowed JavaScript evaluation script size in characters.
+    private static let maxBrowserEvalLength = 10_000
+
+    /// Navigates the embedded browser to a URL.
+    ///
+    /// Required params: `url` (the URL string to navigate to).
+    private func handleBrowserNavigate(_ request: SocketRequest) -> SocketResponse {
+        guard let urlString = request.params?["url"] else {
+            return .failure(id: request.id, error: "Missing required param: url")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let work = {
+            MainActor.assumeIsolated {
+                viewModel.navigate(to: urlString)
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        return .ok(id: request.id, data: ["status": "navigated"])
+    }
+
+    /// Navigates the browser backward in history.
+    private func handleBrowserBack(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let work = {
+            MainActor.assumeIsolated {
+                viewModel.goBack()
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        return .ok(id: request.id, data: ["status": "acknowledged"])
+    }
+
+    /// Navigates the browser forward in history.
+    private func handleBrowserForward(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let work = {
+            MainActor.assumeIsolated {
+                viewModel.goForward()
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        return .ok(id: request.id, data: ["status": "acknowledged"])
+    }
+
+    /// Reloads the current browser page.
+    private func handleBrowserReload(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let work = {
+            MainActor.assumeIsolated {
+                viewModel.reload()
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        return .ok(id: request.id, data: ["status": "acknowledged"])
+    }
+
+    /// Returns the current browser state (URL, title, loading, tabs).
+    private func handleBrowserGetState(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        var state: [String: String] = [:]
+        let work = {
+            MainActor.assumeIsolated {
+                state = viewModel.getState()
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        return .ok(id: request.id, data: state)
+    }
+
+    /// Evaluates JavaScript in the active browser tab.
+    ///
+    /// Required params: `script` (the JavaScript code, max 10,000 characters).
+    ///
+    /// The script is evaluated asynchronously by WKWebView; this returns
+    /// immediately after dispatching. Results are not returned via socket
+    /// (use `browser-get-text` for page content extraction).
+    private func handleBrowserEval(_ request: SocketRequest) -> SocketResponse {
+        guard let script = request.params?["script"] else {
+            return .failure(id: request.id, error: "Missing required param: script")
+        }
+        guard script.count <= Self.maxBrowserEvalLength else {
+            return .failure(
+                id: request.id,
+                error: "Script length \(script.count) exceeds maximum \(Self.maxBrowserEvalLength) characters"
+            )
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let work = {
+            MainActor.assumeIsolated {
+                viewModel.evaluateJavaScript(script)
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        return .ok(id: request.id, data: ["status": "evaluated"])
+    }
+
+    /// Gets the text content of the current page via `document.body.innerText`.
+    ///
+    /// Internally calls `evaluateJavaScript` with a fixed script.
+    /// The result is dispatched asynchronously.
+    private func handleBrowserGetText(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let work = {
+            MainActor.assumeIsolated {
+                viewModel.evaluateJavaScript("document.body.innerText")
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        return .ok(id: request.id, data: ["status": "evaluated"])
+    }
+
+    /// Lists all open browser tabs.
+    private func handleBrowserListTabs(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        var tabList: [[String: String]] = []
+        let work = {
+            MainActor.assumeIsolated {
+                tabList = viewModel.getTabList()
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        var data: [String: String] = ["count": "\(tabList.count)"]
+        for (index, tab) in tabList.enumerated() {
+            data["tab_\(index)_id"] = tab["id"] ?? ""
+            data["tab_\(index)_url"] = tab["url"] ?? ""
+            data["tab_\(index)_title"] = tab["title"] ?? ""
+            data["tab_\(index)_active"] = tab["isActive"] ?? "false"
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    // MARK: - TOML Helpers
+
+    /// Extracts the TOML section name from a dotted key.
+    private func sectionFromKey(_ key: String) -> String {
+        let components = key.split(separator: ".", maxSplits: 1)
+        return components.first.map(String.init) ?? ""
+    }
+
+    /// Extracts the TOML field name from a dotted key.
+    private func fieldFromKey(_ key: String) -> String {
+        let components = key.split(separator: ".", maxSplits: 1)
+        return components.count > 1 ? String(components[1]) : ""
+    }
+
+    /// Updates a single value in a TOML string.
+    ///
+    /// Finds the line matching `field = ...` within the `[section]` block
+    /// and replaces its value. Returns the original content if the field
+    /// is not found (append is not attempted to avoid malformed TOML).
+    private func updateTomlValue(
+        in content: String,
+        section: String,
+        field: String,
+        newValue: String
+    ) -> String {
+        var lines = content.components(separatedBy: "\n")
+        var inTargetSection = false
+
+        for index in lines.indices {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+
+            // Detect section headers.
+            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+                let sectionName = trimmed
+                    .dropFirst()
+                    .dropLast()
+                    .trimmingCharacters(in: .whitespaces)
+                inTargetSection = (sectionName == section)
+                continue
+            }
+
+            // Update the matching field in the target section.
+            if inTargetSection && trimmed.hasPrefix("\(field) =") {
+                let quotedValue: String
+                if newValue == "true" || newValue == "false" || Int(newValue) != nil
+                    || Double(newValue) != nil {
+                    quotedValue = newValue
+                } else {
+                    quotedValue = "\"\(newValue)\""
+                }
+                lines[index] = "\(field) = \(quotedValue)"
+                break
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
+}

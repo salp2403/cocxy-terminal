@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Releases - Cocxy Terminal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Release history for Cocxy Terminal.">
+    <link rel="stylesheet" href="/css/style.css?v=0.1.0">
+    <link rel="icon" href="/images/icon.png" type="image/png">
+  </head>
+  <body>
+    <header>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="/" class="nav-logo" aria-label="Cocxy Terminal home">
+          <img src="/images/icon.png" alt="" width="28" height="28">
+          <span>Cocxy</span>
+        </a>
+        <div class="nav-links">
+          <a href="/#features">Features</a>
+          <a href="/releases.html">Releases</a>
+          <a href="/#download">Download</a>
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="container" style="padding-top:8rem;padding-bottom:4rem;min-height:80vh;">
+        <h1 style="font-size:2.5rem;font-weight:700;margin-bottom:0.5rem;">Releases</h1>
+        <p style="color:var(--subtext0);margin-bottom:3rem;">Release history and changelog for Cocxy Terminal.</p>
+
+        <article style="background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:2rem;margin-bottom:1.5rem;">
+          <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+            <h2 style="font-size:1.5rem;font-weight:700;margin:0;">v0.1.0</h2>
+            <span style="background:var(--lavender);color:var(--crust);padding:0.15rem 0.6rem;border-radius:20px;font-size:0.75rem;font-weight:600;text-transform:uppercase;">Latest</span>
+            <time style="color:var(--subtext0);font-size:0.875rem;margin-left:auto;">March 2026</time>
+          </div>
+
+          <h3 style="font-size:1.1rem;margin-bottom:1rem;">Initial Release</h3>
+
+          <ul style="list-style:none;padding:0;display:grid;gap:0.5rem;">
+            <li style="color:var(--subtext1);font-size:0.95rem;"><strong style="color:var(--text);">GPU Terminal</strong> — Metal-accelerated rendering via libghostty</li>
+            <li style="color:var(--subtext1);font-size:0.95rem;"><strong style="color:var(--text);">Agent Detection</strong> — Passive 3-layer detection for Claude Code, Codex, Gemini CLI, Aider, Kiro, OpenCode</li>
+            <li style="color:var(--subtext1);font-size:0.95rem;"><strong style="color:var(--text);">Remote Workspaces</strong> — SSH multiplexing, port tunnels, SFTP browser, key management</li>
+            <li style="color:var(--subtext1);font-size:0.95rem;"><strong style="color:var(--text);">Built-in Browser</strong> — Profiles, DevTools, bookmarks, history, find-in-page</li>
+            <li style="color:var(--subtext1);font-size:0.95rem;"><strong style="color:var(--text);">Smart CLI</strong> — 43 commands via Unix socket API</li>
+            <li style="color:var(--subtext1);font-size:0.95rem;"><strong style="color:var(--text);">Auto-Updates</strong> — Sparkle with EdDSA signature verification</li>
+            <li style="color:var(--subtext1);font-size:0.95rem;"><strong style="color:var(--text);">Zero Telemetry</strong> — No analytics, no crash reporting, no tracking</li>
+          </ul>
+
+          <div style="display:flex;gap:0.75rem;margin-top:1.5rem;">
+            <a href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.1.0/CocxyTerminal-0.1.0.dmg" class="btn btn-primary" style="padding:0.5rem 1.2rem;font-size:0.85rem;">Download DMG</a>
+            <a href="https://github.com/salp2403/cocxy-terminal/releases/tag/v0.1.0" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:0.5rem 1.2rem;font-size:0.85rem;">Release Notes</a>
+          </div>
+        </article>
+
+        <div style="margin-top:3rem;text-align:center;">
+          <h3 style="margin-bottom:1rem;">Install via Homebrew</h3>
+          <div class="code-block" style="display:inline-block;padding:1rem 2rem;border-radius:8px;background:var(--mantle);border:1px solid var(--surface0);">
+            <code style="color:var(--lavender);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:0.9rem;">brew tap salp2403/tap && brew install --cask cocxy</code>
+          </div>
+          <p style="color:var(--subtext0);font-size:0.85rem;margin-top:0.75rem;">Auto-updates are built in. Cocxy checks for updates every 24 hours.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer" role="contentinfo">
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-brand">
+            <img src="/images/icon.png" alt="" width="24" height="24">
+            <span>Cocxy Terminal</span>
+          </div>
+          <div class="footer-links">
+            <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+            <a href="/releases.html">Releases</a>
+          </div>
+          <p class="footer-credit">Made by Said Arturo Lopez</p>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
