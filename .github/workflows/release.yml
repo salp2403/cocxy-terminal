@@ -146,11 +146,30 @@ jobs:
           APP_DIR="build/Cocxy Terminal.app"
           ENTITLEMENTS="Resources/CocxyTerminal.entitlements"
 
-          # Sign Sparkle.framework first (deepest components first)
-          if [ -d "$APP_DIR/Contents/Frameworks/Sparkle.framework" ]; then
+          # Sign Sparkle.framework (deepest components first, then framework)
+          SPARKLE_DIR="$APP_DIR/Contents/Frameworks/Sparkle.framework"
+          if [ -d "$SPARKLE_DIR" ]; then
+            # Sign all XPC services
+            find "$SPARKLE_DIR" -name "*.xpc" -type d | while read xpc; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$xpc"
+            done
+
+            # Sign Autoupdate binary
+            [ -f "$SPARKLE_DIR/Versions/B/Autoupdate" ] && \
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$SPARKLE_DIR/Versions/B/Autoupdate"
+
+            # Sign Updater.app
+            [ -d "$SPARKLE_DIR/Versions/B/Updater.app" ] && \
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$SPARKLE_DIR/Versions/B/Updater.app"
+
+            # Sign the framework itself
             codesign --force --options runtime --timestamp \
-              --sign "$SIGNING_IDENTITY" \
-              "$APP_DIR/Contents/Frameworks/Sparkle.framework"
+              --sign "$SIGNING_IDENTITY" "$SPARKLE_DIR"
+
+            echo "Sparkle.framework fully signed"
           fi
 
           # Sign CLI companion
