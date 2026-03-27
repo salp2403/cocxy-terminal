@@ -6,8 +6,13 @@ import Foundation
 // MARK: - Version Constant
 
 /// Single source of truth for the application version.
+/// Reads from Info.plist at runtime (set by the release pipeline).
+/// Falls back to a compile-time default for debug builds.
 enum CocxyVersion {
-    static let current = "0.1.0-alpha"
+    static let current: String = {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "0.1.1"
+    }()
 }
 
 // MARK: - App Socket Command Handler

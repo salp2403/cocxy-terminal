@@ -931,8 +931,8 @@ extension MainWindowController {
     @objc func showAboutPanel(_ sender: Any?) {
         let options: [NSApplication.AboutPanelOptionKey: Any] = [
             .applicationName: "Cocxy Terminal",
-            .applicationVersion: "0.1.0-alpha",
-            .version: "Build 1",
+            .applicationVersion: CocxyVersion.current,
+            .version: CocxyVersion.current,
             .applicationIcon: AppIconGenerator.generatePlaceholderIcon(),
             .credits: NSAttributedString(
                 string: "Agent-aware terminal for macOS\nby Said Arturo Lopez\n\nZero telemetry. MIT License.",

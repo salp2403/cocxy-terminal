@@ -413,7 +413,7 @@ struct AboutPreferencesSection: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
 
-            Text("Version 0.1.0-alpha")
+            Text("Version \(CocxyVersion.current)")
                 .font(.title3)
                 .foregroundStyle(.secondary)
 

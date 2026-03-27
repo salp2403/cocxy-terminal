@@ -24,7 +24,7 @@ final class MemoryLeakTests: XCTestCase {
     @MainActor
     func test_tabManager_lifecycle_doesNotLeak() {
         var tabManager: TabManager? = TabManager()
-        weak let weakRef = tabManager
+        weak var weakRef = tabManager
 
         // Use the object: add 10 tabs.
         for _ in 0..<10 {
@@ -51,7 +51,7 @@ final class MemoryLeakTests: XCTestCase {
     @MainActor
     func test_splitManager_lifecycle_doesNotLeak() {
         var splitManager: SplitManager? = SplitManager()
-        weak let weakRef = splitManager
+        weak var weakRef = splitManager
 
         // Use the object: 4 splits.
         for direction in [SplitDirection.horizontal, .vertical, .horizontal, .vertical] {
@@ -77,7 +77,7 @@ final class MemoryLeakTests: XCTestCase {
     @MainActor
     func test_tabSplitCoordinator_lifecycle_doesNotLeak() {
         var coordinator: TabSplitCoordinator? = TabSplitCoordinator()
-        weak let weakRef = coordinator
+        weak var weakRef = coordinator
 
         // Create 5 SplitManagers via the coordinator.
         let tabIDs = (0..<5).map { _ in TabID() }
@@ -133,7 +133,7 @@ final class MemoryLeakTests: XCTestCase {
             coalescenceWindow: 0.0,
             rateLimitPerTab: 0.0
         )
-        weak let weakRef = manager
+        weak var weakRef = manager
 
         // Use the object: send 5 notifications for different tabs.
         for _ in 0..<5 {
@@ -167,7 +167,7 @@ final class MemoryLeakTests: XCTestCase {
             compiledConfigs: [],
             debounceInterval: 0.0
         )
-        weak let weakRef = engine
+        weak var weakRef = engine
 
         // Use the object: inject signals and reset.
         engine?.injectSignal(DetectionSignal(
@@ -193,7 +193,7 @@ final class MemoryLeakTests: XCTestCase {
             compiledConfigs: [],
             debounceInterval: 0.0
         )
-        weak let weakRef = engine
+        weak var weakRef = engine
 
         var cancellables = Set<AnyCancellable>()
         var receivedTransitions = 0
@@ -233,7 +233,7 @@ final class MemoryLeakTests: XCTestCase {
             configService: configService,
             fileProvider: fileProvider
         )
-        weak let weakRef = watcher
+        weak var weakRef = watcher
 
         // Use the object.
         watcher?.startWatching()
@@ -265,7 +265,7 @@ final class MemoryLeakTests: XCTestCase {
             fileProvider: fileProvider
         )
         watcher?.debounceInterval = 60.0 // Long interval -- work item stays pending.
-        weak let weakRef = watcher
+        weak var weakRef = watcher
 
         // Schedule a reload (creates a pending DispatchWorkItem).
         watcher?.scheduleReload()
@@ -286,7 +286,7 @@ final class MemoryLeakTests: XCTestCase {
             defaultIdleTimeout: 60.0,
             sustainedOutputThreshold: 2.0
         )
-        weak let weakRef = detector
+        weak var weakRef = detector
 
         // Simulate timer activity: put the detector in a state where timers would fire.
         detector?.notifyStateChanged(to: .working)
@@ -310,7 +310,7 @@ final class MemoryLeakTests: XCTestCase {
             defaultIdleTimeout: 60.0,
             sustainedOutputThreshold: 2.0
         )
-        weak let weakRef = detector
+        weak var weakRef = detector
 
         // Put in working state so a timer is scheduled.
         detector?.notifyStateChanged(to: .working)
@@ -365,7 +365,7 @@ final class MemoryLeakTests: XCTestCase {
             .appendingPathComponent("cocxy-memleak-test-\(UUID().uuidString)")
 
         var manager: SessionManagerImpl? = SessionManagerImpl(sessionsDirectory: tempDir)
-        weak let weakRef = manager
+        weak var weakRef = manager
 
         defer {
             try? FileManager.default.removeItem(at: tempDir)
@@ -399,7 +399,7 @@ final class MemoryLeakTests: XCTestCase {
             .appendingPathComponent("cocxy-memleak-test-\(UUID().uuidString)")
 
         var manager: SessionManagerImpl? = SessionManagerImpl(sessionsDirectory: tempDir)
-        weak let weakRef = manager
+        weak var weakRef = manager
 
         defer {
             try? FileManager.default.removeItem(at: tempDir)
@@ -434,7 +434,7 @@ final class MemoryLeakTests: XCTestCase {
     @MainActor
     func test_quickTerminalController_lifecycle_doesNotLeak() {
         var controller: QuickTerminalController? = QuickTerminalController()
-        weak let weakRef = controller
+        weak var weakRef = controller
 
         // Use without a bridge (bridge is weak and optional).
         controller?.setup(bridge: nil, config: CocxyConfig.defaults)
@@ -483,7 +483,7 @@ final class MemoryLeakTests: XCTestCase {
             socketPath: tempSocketPath,
             commandHandler: mockHandler
         )
-        weak let weakRef = server
+        weak var weakRef = server
 
         defer {
             try? FileManager.default.removeItem(atPath: tempSocketPath)
@@ -547,7 +547,7 @@ final class MemoryLeakTests: XCTestCase {
             coalescenceWindow: 0.0,
             rateLimitPerTab: 0.0
         )
-        weak let weakRef = manager
+        weak var weakRef = manager
 
         var cancellables = Set<AnyCancellable>()
 
@@ -608,7 +608,7 @@ final class MemoryLeakTests: XCTestCase {
             compiledConfigs: [],
             debounceInterval: 0.0
         )
-        weak let weakRef = engine
+        weak var weakRef = engine
 
         // Enqueue async work by injecting a batch signal.
         engine?.injectSignalBatch([
