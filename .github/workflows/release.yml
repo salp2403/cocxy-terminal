@@ -329,18 +329,100 @@ jobs:
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             build/appcast.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
 
-          # Update version badge on landing page
+          # Update landing page: DMG link, version badge, CSS cache buster
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-            "sed -i 's/v[0-9]*\.[0-9]*\.[0-9]*/v${VERSION}/g' ${DEPLOY_PATH}index.html" || true
+            "sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}index.html && \
+             sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html && \
+             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html" || true
 
-          # Update download link on landing page
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-            "sed -i 's/CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*.dmg/CocxyTerminal-${VERSION}.dmg/g' ${DEPLOY_PATH}index.html" || true
+          # Generate fresh releases page from GitHub API
+          RELEASES_JSON=$(gh release list --repo salp2403/cocxy-terminal --json tagName,name,publishedAt,body --limit 10 2>/dev/null || echo '[]')
 
-          # Update releases page with new version
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-            "sed -i 's/v[0-9]*\.[0-9]*\.[0-9]*/v${VERSION}/g' ${DEPLOY_PATH}releases.html && \
-             sed -i 's/CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*.dmg/CocxyTerminal-${VERSION}.dmg/g' ${DEPLOY_PATH}releases.html" || true
+          python3 -c "
+          import json, sys
+          releases = json.loads('''${RELEASES_JSON}''')
+          cards = ''
+          for i, r in enumerate(releases):
+              tag = r.get('tagName', '')
+              ver = tag.lstrip('v')
+              date_raw = r.get('publishedAt', '')
+              date = date_raw[:7].replace('-', ' ') if date_raw else ''
+              badge = '<span style=\"background:var(--lavender);color:var(--crust);padding:0.15rem 0.6rem;border-radius:20px;font-size:0.75rem;font-weight:600;text-transform:uppercase;\">Latest</span>' if i == 0 else ''
+              dmg_url = f'https://github.com/salp2403/cocxy-terminal/releases/download/{tag}/CocxyTerminal-{ver}.dmg'
+              gh_url = f'https://github.com/salp2403/cocxy-terminal/releases/tag/{tag}'
+              cards += f'''
+              <article style=\"background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:2rem;margin-bottom:1.5rem;\">
+                <div style=\"display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;\">
+                  <h2 style=\"font-size:1.5rem;font-weight:700;margin:0;\">{tag}</h2>
+                  {badge}
+                  <time style=\"color:var(--subtext0);font-size:0.875rem;margin-left:auto;\">{date}</time>
+                </div>
+                <div style=\"display:flex;gap:0.75rem;margin-top:1rem;\">
+                  <a href=\"{dmg_url}\" class=\"btn btn-primary\" style=\"padding:0.5rem 1.2rem;font-size:0.85rem;\">Download DMG</a>
+                  <a href=\"{gh_url}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"btn btn-secondary\" style=\"padding:0.5rem 1.2rem;font-size:0.85rem;\">Release Notes</a>
+                </div>
+              </article>'''
+          print(cards)
+          " > /tmp/release_cards.html 2>/dev/null || true
+
+          # Build full releases page
+          CARDS=$(cat /tmp/release_cards.html 2>/dev/null)
+          cat > build/releases.html << RELHTML
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>Releases - Cocxy Terminal</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link rel="stylesheet" href="/css/style.css?v=${VERSION}">
+            <link rel="icon" href="/images/icon.png" type="image/png">
+          </head>
+          <body>
+            <header>
+              <nav class="nav" aria-label="Main navigation">
+                <a href="/" class="nav-logo"><img src="/images/icon.png" alt="" width="28" height="28"><span>Cocxy</span></a>
+                <div class="nav-links">
+                  <a href="/#features">Features</a>
+                  <a href="/releases.html">Releases</a>
+                  <a href="/#download">Download</a>
+                  <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+                </div>
+              </nav>
+            </header>
+            <main>
+              <section class="container" style="padding-top:8rem;padding-bottom:4rem;min-height:80vh;">
+                <h1 style="font-size:2.5rem;font-weight:700;margin-bottom:0.5rem;">Releases</h1>
+                <p style="color:var(--subtext0);margin-bottom:3rem;">Release history and changelog for Cocxy Terminal.</p>
+                ${CARDS}
+                <div style="margin-top:3rem;text-align:center;">
+                  <h3 style="margin-bottom:1rem;">Install via Homebrew</h3>
+                  <div style="display:inline-block;padding:1rem 2rem;border-radius:8px;background:var(--mantle);border:1px solid var(--surface0);">
+                    <code style="color:var(--lavender);font-family:ui-monospace,monospace;font-size:0.9rem;">brew tap salp2403/tap && brew install --cask cocxy</code>
+                  </div>
+                  <p style="color:var(--subtext0);font-size:0.85rem;margin-top:0.75rem;">Auto-updates are built in. Cocxy checks for updates every 24 hours.</p>
+                </div>
+              </section>
+            </main>
+            <footer class="site-footer" role="contentinfo">
+              <div class="container">
+                <div class="footer-content">
+                  <div class="footer-brand"><img src="/images/icon.png" alt="" width="24" height="24"><span>Cocxy Terminal</span></div>
+                  <div class="footer-links">
+                    <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+                    <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+                    <a href="/releases.html">Releases</a>
+                  </div>
+                  <p class="footer-credit">Made by Said Arturo Lopez</p>
+                </div>
+              </div>
+            </footer>
+          </body>
+          </html>
+          RELHTML
+
+          # Deploy releases page
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html || true
 
           rm /tmp/deploy_key
           echo "Appcast and website deployed to cocxy.dev"
