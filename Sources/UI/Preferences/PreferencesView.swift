@@ -436,6 +436,25 @@ struct AboutPreferencesSection: View {
                     .foregroundStyle(.tertiary)
             }
 
+            Divider()
+                .padding(.vertical, 8)
+
+            VStack(spacing: 8) {
+                Text("Updates")
+                    .font(.headline)
+
+                Button("Check for Updates") {
+                    if let appDelegate = NSApp.delegate as? AppDelegate {
+                        appDelegate.sparkleUpdater?.checkForUpdates()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+
+                Text("Cocxy checks for updates automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             Spacer()
         }
         .frame(maxWidth: .infinity)

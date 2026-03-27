@@ -22,7 +22,7 @@ cask "cocxy" do
 
   app "Cocxy Terminal.app"
 
-  binary "#{appdir}/Cocxy Terminal.app/Contents/MacOS/Cocxy Terminal", target: "cocxy"
+  binary "#{appdir}/Cocxy Terminal.app/Contents/Resources/cocxy"
 
   zap trash: [
     "~/.config/cocxy",

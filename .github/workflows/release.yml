@@ -320,10 +320,30 @@ jobs:
         run: |
           echo "$SERVER_KEY" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DATE=$(date +"%B %Y")
+          DEPLOY_TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+
+          # Deploy appcast.xml
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            build/appcast.xml ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}
+            build/appcast.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
+
+          # Update version badge on landing page
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "sed -i 's/v[0-9]*\.[0-9]*\.[0-9]*/v${VERSION}/g' ${DEPLOY_PATH}index.html" || true
+
+          # Update download link on landing page
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "sed -i 's/CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*.dmg/CocxyTerminal-${VERSION}.dmg/g' ${DEPLOY_PATH}index.html" || true
+
+          # Update releases page with new version
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "sed -i 's/v[0-9]*\.[0-9]*\.[0-9]*/v${VERSION}/g' ${DEPLOY_PATH}releases.html && \
+             sed -i 's/CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*.dmg/CocxyTerminal-${VERSION}.dmg/g' ${DEPLOY_PATH}releases.html" || true
+
           rm /tmp/deploy_key
-          echo "Appcast deployed to cocxy.dev"
+          echo "Appcast and website deployed to cocxy.dev"
 
       - name: Update Homebrew Cask
         env:
@@ -355,6 +375,8 @@ jobs:
             depends_on macos: ">= :sonoma"
 
             app "Cocxy Terminal.app"
+
+            binary "#{appdir}/Cocxy Terminal.app/Contents/Resources/cocxy"
 
             zap trash: [
               "~/.config/cocxy",
