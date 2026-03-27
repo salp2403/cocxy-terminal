@@ -77,10 +77,27 @@ jobs:
           MACOS_DIR="$CONTENTS_DIR/MacOS"
           RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
-          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+          FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
+          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 
           # Copy universal binary
           cp ".build/apple/Products/Release/CocxyTerminal" "$MACOS_DIR/Cocxy Terminal"
+
+          # Copy Sparkle.framework into bundle
+          SPARKLE_FW=$(find .build/artifacts -name "Sparkle.framework" -path "*/macos-*" -type d | head -1)
+          if [ -n "$SPARKLE_FW" ]; then
+            cp -R "$SPARKLE_FW" "$FRAMEWORKS_DIR/"
+            echo "Sparkle.framework copied to bundle"
+          else
+            SPARKLE_FW=$(find .build -name "Sparkle.framework" -type d | head -1)
+            if [ -n "$SPARKLE_FW" ]; then
+              cp -R "$SPARKLE_FW" "$FRAMEWORKS_DIR/"
+              echo "Sparkle.framework copied from build dir"
+            fi
+          fi
+
+          # Set rpath so binary finds Sparkle.framework
+          install_name_tool -add_rpath @executable_path/../Frameworks "$MACOS_DIR/Cocxy Terminal" 2>/dev/null || true
 
           # Copy CLI companion if built
           if [ -f ".build/apple/Products/Release/cocxy" ]; then
@@ -129,7 +146,14 @@ jobs:
           APP_DIR="build/Cocxy Terminal.app"
           ENTITLEMENTS="Resources/CocxyTerminal.entitlements"
 
-          # Sign CLI companion first
+          # Sign Sparkle.framework first (deepest components first)
+          if [ -d "$APP_DIR/Contents/Frameworks/Sparkle.framework" ]; then
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Frameworks/Sparkle.framework"
+          fi
+
+          # Sign CLI companion
           [ -f "$APP_DIR/Contents/Resources/cocxy" ] && \
             codesign --force --options runtime --timestamp \
               --entitlements "$ENTITLEMENTS" \

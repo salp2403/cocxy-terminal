@@ -46,11 +46,26 @@ fi
 # Step 2: Create .app bundle structure.
 echo "==> Creating app bundle..."
 rm -rf "${APP_BUNDLE}"
+FRAMEWORKS="${CONTENTS}/Frameworks"
 mkdir -p "${MACOS}"
 mkdir -p "${RESOURCES}"
+mkdir -p "${FRAMEWORKS}"
 
 # Step 3: Copy binary.
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS}/${APP_NAME}"
+
+# Step 3b: Copy Sparkle.framework into bundle.
+SPARKLE_FW=$(find "${PROJECT_ROOT}/.build/artifacts" -name "Sparkle.framework" -path "*/macos-*" -type d 2>/dev/null | head -1)
+if [ -z "${SPARKLE_FW}" ]; then
+    SPARKLE_FW=$(find "${PROJECT_ROOT}/.build" -name "Sparkle.framework" -type d 2>/dev/null | head -1)
+fi
+if [ -n "${SPARKLE_FW}" ]; then
+    cp -R "${SPARKLE_FW}" "${FRAMEWORKS}/"
+    echo "    Sparkle.framework: ${FRAMEWORKS}/Sparkle.framework"
+fi
+
+# Step 3c: Set rpath for Sparkle.
+install_name_tool -add_rpath @executable_path/../Frameworks "${MACOS}/${APP_NAME}" 2>/dev/null || true
 
 # Step 4: Copy Info.plist.
 if [ -f "${PROJECT_ROOT}/Resources/Info.plist" ]; then
