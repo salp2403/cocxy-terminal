@@ -21,11 +21,11 @@ final class SparkleUpdater: ObservableObject {
 
     // MARK: - Properties
 
-    /// The Sparkle updater controller. Nil if Sparkle initialization fails.
-    private let updaterController: SPUStandardUpdaterController?
+    /// The Sparkle updater controller. Nil if initialization fails.
+    private var updaterController: SPUStandardUpdaterController?
 
     /// Whether automatic update checks are enabled.
-    @Published var automaticallyChecksForUpdates: Bool {
+    @Published var automaticallyChecksForUpdates: Bool = false {
         didSet {
             updaterController?.updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         }
@@ -39,25 +39,35 @@ final class SparkleUpdater: ObservableObject {
     // MARK: - Initialization
 
     init() {
-        // SPUStandardUpdaterController reads SUFeedURL and SUPublicEDKey
-        // from the app's Info.plist automatically.
-        let controller = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
-
-        // Disable system profile sending — zero telemetry.
-        controller.updater.sendsSystemProfile = false
-
-        self.updaterController = controller
-        self.automaticallyChecksForUpdates = controller.updater.automaticallyChecksForUpdates
+        // Do not start the updater immediately. We initialize it lazily
+        // on the first manual check or after a short delay to avoid
+        // showing error dialogs on launch.
     }
 
     // MARK: - Actions
 
+    /// Starts the updater. Called after the app has fully launched.
+    func startIfNeeded() {
+        guard updaterController == nil else { return }
+
+        do {
+            let controller = try SPUStandardUpdaterController(
+                startingUpdater: false,
+                updaterDelegate: nil,
+                userDriverDelegate: nil
+            )
+            controller.updater.sendsSystemProfile = false
+            self.updaterController = controller
+            self.automaticallyChecksForUpdates = controller.updater.automaticallyChecksForUpdates
+        } catch {
+            // Sparkle initialization failed (e.g., missing SUFeedURL).
+            // Silently ignore — the app works without auto-updates.
+        }
+    }
+
     /// Triggers a user-initiated update check. Shows UI if an update is found.
     func checkForUpdates() {
+        startIfNeeded()
         updaterController?.checkForUpdates(nil)
     }
 }
