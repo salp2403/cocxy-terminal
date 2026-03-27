@@ -108,7 +108,7 @@ final class MemoryLeakTests: XCTestCase {
         let tabID = TabID()
 
         var splitManager: SplitManager? = coordinator.splitManager(for: tabID)
-        weak let weakSplitRef = splitManager
+        weak var weakSplitRef = splitManager
 
         // Perform some operations.
         splitManager?.splitFocused(direction: .horizontal)
@@ -341,7 +341,7 @@ final class MemoryLeakTests: XCTestCase {
             compiledConfigs: [],
             debounceInterval: 0.0
         )
-        weak let weakEngine = engine
+        weak var weakEngine = engine
 
         // Engine internally sets onSignalEmitted on the timing detector with [weak self].
         // Trigger activity to ensure the callback is wired up.
