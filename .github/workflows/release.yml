@@ -337,8 +337,10 @@ jobs:
             web/public/css/ ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
           [ -d web/public/js ] && scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true
-          scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            web/public/images/ ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "mkdir -p ${DEPLOY_PATH}images"
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/images/*.png ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
 
           # Deploy SEO files
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
