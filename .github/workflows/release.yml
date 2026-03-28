@@ -342,11 +342,13 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html && \
-             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html"
+             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html && \
+             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html"
 
-          # Fetch releases with body content for release notes
-          gh release list --repo salp2403/cocxy-terminal \
-            --json tagName,publishedAt,body --limit 50 > /tmp/releases.json
+          # Fetch releases with body content for release notes (gh release list lacks body field, use API)
+          gh api repos/salp2403/cocxy-terminal/releases?per_page=50 \
+            --jq '[.[] | {tagName: .tag_name, publishedAt: .published_at, body: .body}]' \
+            > /tmp/releases.json
           echo "${VERSION}" > /tmp/version.txt
 
           # Generate releases page with notes and pagination
