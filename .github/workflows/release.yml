@@ -479,7 +479,7 @@ jobs:
                   <div style="display:inline-block;padding:1rem 2rem;border-radius:8px;background:var(--mantle);border:1px solid var(--surface0);">
                     <code style="color:var(--lavender);font-family:ui-monospace,monospace;font-size:0.9rem;">brew tap salp2403/tap && brew install --cask cocxy</code>
                   </div>
-                  <p style="color:var(--subtext0);font-size:0.85rem;margin-top:0.75rem;">Auto-updates are built in. Cocxy checks for updates every 24 hours.</p>
+                  <p style="color:var(--subtext0);font-size:0.85rem;margin-top:0.75rem;">Update: <code style="color:var(--lavender);font-family:ui-monospace,monospace;font-size:0.85rem;">brew update &amp;&amp; brew upgrade --cask cocxy</code></p>
                 </div>
               </section>
             </main>

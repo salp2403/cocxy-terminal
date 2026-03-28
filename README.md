@@ -71,8 +71,16 @@ Cocxy sends **zero data** to any external server. No analytics, no crash reporti
 ### Homebrew
 
 ```bash
-brew tap cocxy/tap && brew install --cask cocxy
+brew tap salp2403/tap && brew install --cask cocxy
 ```
+
+To update:
+
+```bash
+brew update && brew upgrade --cask cocxy
+```
+
+> **Note:** `brew update` syncs the tap before upgrading. Running `brew upgrade` alone may not detect new versions from third-party taps.
 
 ### Direct Download
 
