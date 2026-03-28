@@ -347,13 +347,14 @@ jobs:
           # Fetch releases with body content for release notes
           gh release list --repo salp2403/cocxy-terminal \
             --json tagName,publishedAt,body --limit 50 > /tmp/releases.json
+          echo "${VERSION}" > /tmp/version.txt
 
           # Generate releases page with notes and pagination
           python3 << 'PYEOF'
           import json, pathlib, re, html
 
           releases = json.loads(pathlib.Path("/tmp/releases.json").read_text())
-          version = "$VERSION"
+          version = pathlib.Path("/tmp/version.txt").read_text().strip()
           PER_PAGE = 5
 
           def md_to_html(text):
