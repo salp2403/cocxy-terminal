@@ -332,11 +332,19 @@ jobs:
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/public/index.html ${DEPLOY_TARGET}:${DEPLOY_PATH}index.html
 
-          # Deploy CSS and JS assets
+          # Deploy CSS, JS, and image assets
           scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/public/css/ ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
           [ -d web/public/js ] && scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true
+          scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/images/ ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
+
+          # Deploy SEO files
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/robots.txt ${DEPLOY_TARGET}:${DEPLOY_PATH}robots.txt
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/sitemap.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}sitemap.xml
 
           # Fetch releases with body content for release notes (gh release list lacks body field, use API)
           gh api repos/salp2403/cocxy-terminal/releases?per_page=50 \
@@ -409,8 +417,23 @@ jobs:
             <meta charset="utf-8">
             <title>Releases - Cocxy Terminal</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="description" content="Release history and changelog for Cocxy Terminal. Download the latest version.">
+            <meta property="og:title" content="Releases - Cocxy Terminal">
+            <meta property="og:description" content="Release history and changelog for Cocxy Terminal.">
+            <meta property="og:type" content="website">
+            <meta property="og:url" content="https://cocxy.dev/releases.html">
+            <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
+            <meta property="og:image:width" content="1200">
+            <meta property="og:image:height" content="630">
+            <meta property="og:locale" content="en_US">
+            <meta name="twitter:card" content="summary_large_image">
+            <meta name="twitter:title" content="Releases - Cocxy Terminal">
+            <meta name="twitter:description" content="Release history and changelog for Cocxy Terminal.">
+            <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
+            <link rel="canonical" href="https://cocxy.dev/releases.html">
             <link rel="stylesheet" href="/css/style.css?v={version}">
             <link rel="icon" href="/images/icon.png" type="image/png">
+            <link rel="apple-touch-icon" href="/images/icon.png">
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -450,7 +473,7 @@ jobs:
                 {"".join(cards)}
                 {show_more}
                 <div style="margin-top:3rem;text-align:center;">
-                  <h3 style="margin-bottom:1rem;">Install via Homebrew</h3>
+                  <h2 style="font-size:1.25rem;margin-bottom:1rem;">Install via Homebrew</h2>
                   <div style="display:inline-block;padding:1rem 2rem;border-radius:8px;background:var(--mantle);border:1px solid var(--surface0);">
                     <code style="color:var(--lavender);font-family:ui-monospace,monospace;font-size:0.9rem;">brew tap salp2403/tap && brew install --cask cocxy</code>
                   </div>
@@ -493,7 +516,8 @@ jobs:
             "sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html && \
-             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html"
+             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html && \
+             sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}index.html"
 
           rm /tmp/deploy_key
           echo "Website deployed to cocxy.dev"

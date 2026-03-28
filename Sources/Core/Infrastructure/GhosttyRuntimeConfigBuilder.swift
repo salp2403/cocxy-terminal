@@ -38,13 +38,15 @@ enum GhosttyRuntimeConfigBuilder {
     // MARK: - C Callbacks
 
     /// Called from ANY thread when libghostty has work pending.
-    /// Converts pointer to Int (Sendable) to safely cross isolation boundary.
+    /// Retains the bridge for the async block to prevent use-after-free:
+    /// without retain, the bridge can be deallocated between dispatch and
+    /// execution (e.g., during Sparkle auto-update shutdown), causing
+    /// ghostty_app_tick to access a corrupt os_unfair_lock.
     private static let wakeupCallback: ghostty_runtime_wakeup_cb = { userdata in
         guard let ud = userdata else { return }
-        let address = Int(bitPattern: ud)
+        let retained = Unmanaged<GhosttyBridge>.fromOpaque(ud).retain()
         DispatchQueue.main.async {
-            guard let ptr = UnsafeMutableRawPointer(bitPattern: address) else { return }
-            let bridge = Unmanaged<GhosttyBridge>.fromOpaque(ptr).takeUnretainedValue()
+            let bridge = retained.takeRetainedValue()
             bridge.tick()
         }
     }
