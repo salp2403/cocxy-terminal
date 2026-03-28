@@ -1,47 +1,53 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // SparkleUpdater.swift - Auto-update integration via Sparkle framework.
 
-import Foundation
+import AppKit
 import Sparkle
 
-/// Manages automatic update checks and user-initiated update actions
-/// using the Sparkle framework.
+/// Manages update checks using the Sparkle framework.
+/// Sparkle is NOT started automatically to avoid error dialogs on launch.
+/// Updates are triggered only by user action (menu or preferences button).
 @MainActor
 final class SparkleUpdater: ObservableObject {
 
     // MARK: - Properties
 
-    private let updaterController: SPUStandardUpdaterController
+    private var updaterController: SPUStandardUpdaterController?
+    private var hasStarted = false
 
-    @Published var automaticallyChecksForUpdates: Bool {
+    @Published var automaticallyChecksForUpdates: Bool = true {
         didSet {
-            updaterController.updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
+            updaterController?.updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         }
     }
 
     var canCheckForUpdates: Bool {
-        updaterController.updater.canCheckForUpdates
-    }
-
-    // MARK: - Initialization
-
-    init() {
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
-        updaterController.updater.sendsSystemProfile = false
-
-        // Don't show update UI on first launch — only on manual check.
-        // Sparkle will still check silently in background.
-        updaterController.updater.automaticallyDownloadsUpdates = false
-        automaticallyChecksForUpdates = updaterController.updater.automaticallyChecksForUpdates
+        updaterController?.updater.canCheckForUpdates ?? true
     }
 
     // MARK: - Actions
 
+    /// Triggers a user-initiated update check.
+    /// Initializes Sparkle on first call. If initialization fails,
+    /// shows a simple alert instead of Sparkle's cryptic error.
     func checkForUpdates() {
-        updaterController.checkForUpdates(nil)
+        if !hasStarted {
+            hasStarted = true
+            let controller = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: nil,
+                userDriverDelegate: nil
+            )
+            controller.updater.sendsSystemProfile = false
+            controller.updater.automaticallyDownloadsUpdates = false
+            self.updaterController = controller
+
+            // Give Sparkle a moment to initialize before checking.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.updaterController?.checkForUpdates(nil)
+            }
+        } else {
+            updaterController?.checkForUpdates(nil)
+        }
     }
 }
