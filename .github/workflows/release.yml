@@ -429,7 +429,7 @@ jobs:
 
       - name: Update Homebrew Cask
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           DMG="build/CocxyTerminal-${VERSION}.dmg"
