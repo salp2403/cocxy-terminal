@@ -344,16 +344,33 @@ jobs:
              sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html"
 
-          # Write releases JSON to file (avoids shell/Python heredoc escaping issues)
+          # Fetch releases with body content for release notes
           gh release list --repo salp2403/cocxy-terminal \
-            --json tagName,publishedAt --limit 10 > /tmp/releases.json
+            --json tagName,publishedAt,body --limit 50 > /tmp/releases.json
 
-          # Generate releases page via Python reading from file (safe from quoting issues)
+          # Generate releases page with notes and pagination
           python3 << 'PYEOF'
-          import json, pathlib
+          import json, pathlib, re, html
 
           releases = json.loads(pathlib.Path("/tmp/releases.json").read_text())
           version = "$VERSION"
+          PER_PAGE = 5
+
+          def md_to_html(text):
+              if not text:
+                  return ""
+              t = html.escape(text)
+              t = re.sub(r"^### (.+)$", r"<h4>\1</h4>", t, flags=re.M)
+              t = re.sub(r"^## (.+)$", r"<h3>\1</h3>", t, flags=re.M)
+              t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
+              t = re.sub(r"`([^`]+)`", r"<code>\1</code>", t)
+              t = re.sub(r"^\* (.+)$", r"<li>\1</li>", t, flags=re.M)
+              t = re.sub(r"^- (.+)$", r"<li>\1</li>", t, flags=re.M)
+              t = t.replace("<li>", "<ul><li>").replace("</li>\n", "</li></ul>\n")
+              t = re.sub(r"(</ul>\n<ul>)", "\n", t)
+              t = re.sub(r"\n{2,}", "</p><p>", t)
+              t = re.sub(r"\n", "<br>", t)
+              return t
 
           cards = []
           for i, r in enumerate(releases):
@@ -361,22 +378,34 @@ jobs:
               ver = tag.lstrip("v")
               date_raw = r.get("publishedAt", "")
               date_str = date_raw[:10] if date_raw else ""
-              badge = ' <span style="background:var(--lavender);color:var(--crust);padding:0.15rem 0.6rem;border-radius:20px;font-size:0.75rem;font-weight:600;text-transform:uppercase;">Latest</span>' if i == 0 else ""
-              dmg_url = f"https://github.com/salp2403/cocxy-terminal/releases/download/{tag}/CocxyTerminal-{ver}.dmg"
-              gh_url = f"https://github.com/salp2403/cocxy-terminal/releases/tag/{tag}"
-              cards.append(f"""
-                <article style="background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:2rem;margin-bottom:1.5rem;">
-                  <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
-                    <h2 style="font-size:1.5rem;font-weight:700;margin:0;">{tag}</h2>{badge}
-                    <time style="color:var(--subtext0);font-size:0.875rem;margin-left:auto;">{date_str}</time>
+              body = md_to_html(r.get("body", ""))
+              badge = ' <span class="rel-badge">Latest</span>' if i == 0 else ""
+              hidden = ' style="display:none"' if i >= PER_PAGE else ""
+              dmg = f"https://github.com/salp2403/cocxy-terminal/releases/download/{tag}/CocxyTerminal-{ver}.dmg"
+              gh = f"https://github.com/salp2403/cocxy-terminal/releases/tag/{tag}"
+              notes_html = f'<div class="rel-notes">{body}</div>' if body else ""
+              cards.append(f'''
+                <article class="rel-card"{hidden}>
+                  <div class="rel-header">
+                    <h2>{tag}</h2>{badge}
+                    <time>{date_str}</time>
                   </div>
-                  <div style="display:flex;gap:0.75rem;margin-top:1rem;">
-                    <a href="{dmg_url}" class="btn btn-primary" style="padding:0.5rem 1.2rem;font-size:0.85rem;">Download DMG</a>
-                    <a href="{gh_url}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:0.5rem 1.2rem;font-size:0.85rem;">Release Notes</a>
+                  {notes_html}
+                  <div class="rel-actions">
+                    <a href="{dmg}" class="btn btn-primary">Download DMG</a>
+                    <a href="{gh}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Release Notes</a>
                   </div>
-                </article>""")
+                </article>''')
 
-          card_html = "\n".join(cards)
+          show_more = ""
+          if len(releases) > PER_PAGE:
+              hidden_count = len(releases) - PER_PAGE
+              show_more = f'''
+                <div id="showMore" style="text-align:center;margin:2rem 0;">
+                  <button onclick="document.querySelectorAll('.rel-card[style]').forEach(c=>c.style.display='');this.parentElement.style.display='none'" class="btn btn-secondary" style="padding:0.6rem 2rem;">
+                    Show {hidden_count} older release{"s" if hidden_count != 1 else ""}
+                  </button>
+                </div>'''
 
           page = f"""<!DOCTYPE html>
           <html lang="en">
@@ -386,6 +415,24 @@ jobs:
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <link rel="stylesheet" href="/css/style.css?v={version}">
             <link rel="icon" href="/images/icon.png" type="image/png">
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+            <style>
+              .rel-card {{background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:2rem;margin-bottom:1.5rem;}}
+              .rel-header {{display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;}}
+              .rel-header h2 {{font-size:1.5rem;font-weight:700;margin:0;}}
+              .rel-header time {{color:var(--subtext0);font-size:0.875rem;margin-left:auto;}}
+              .rel-badge {{background:var(--lavender);color:var(--crust);padding:0.15rem 0.6rem;border-radius:20px;font-size:0.75rem;font-weight:600;text-transform:uppercase;}}
+              .rel-notes {{color:var(--subtext1);font-size:0.9rem;line-height:1.7;margin-bottom:1.25rem;border-left:2px solid var(--surface1);padding-left:1rem;}}
+              .rel-notes h3 {{font-size:1.1rem;font-weight:600;color:var(--text);margin:1rem 0 0.5rem;}}
+              .rel-notes h4 {{font-size:0.95rem;font-weight:600;color:var(--subtext1);margin:0.75rem 0 0.25rem;}}
+              .rel-notes code {{font-family:var(--font-mono);font-size:0.8em;background:var(--crust);padding:0.15em 0.4em;border-radius:4px;color:var(--peach);}}
+              .rel-notes ul {{margin:0.5rem 0 0.5rem 1.25rem;}}
+              .rel-notes li {{margin-bottom:0.25rem;}}
+              .rel-actions {{display:flex;gap:0.75rem;margin-top:1rem;}}
+              .rel-actions .btn {{padding:0.5rem 1.2rem;font-size:0.85rem;}}
+            </style>
           </head>
           <body>
             <header>
@@ -404,7 +451,8 @@ jobs:
               <section class="container" style="padding-top:8rem;padding-bottom:4rem;min-height:80vh;">
                 <h1 style="font-size:2.5rem;font-weight:700;margin-bottom:0.5rem;">Releases</h1>
                 <p style="color:var(--subtext0);margin-bottom:3rem;">Release history and changelog for Cocxy Terminal.</p>
-                {card_html}
+                {"".join(cards)}
+                {show_more}
                 <div style="margin-top:3rem;text-align:center;">
                   <h3 style="margin-bottom:1rem;">Install via Homebrew</h3>
                   <div style="display:inline-block;padding:1rem 2rem;border-radius:8px;background:var(--mantle);border:1px solid var(--surface0);">
@@ -431,7 +479,7 @@ jobs:
           </html>"""
 
           pathlib.Path("build/releases.html").write_text(page)
-          print(f"Generated releases page with {len(releases)} entries")
+          print(f"Generated releases page with {len(releases)} entries ({PER_PAGE} visible, rest paginated)")
           PYEOF
 
           # Deploy releases page and getting-started docs
