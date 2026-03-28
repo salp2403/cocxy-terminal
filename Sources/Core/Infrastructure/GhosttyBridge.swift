@@ -102,6 +102,23 @@ final class GhosttyBridge: TerminalEngine {
         }
     }
 
+    /// Returns the path to ghostty resources during development builds.
+    ///
+    /// When running via `swift run` or Xcode, the app has no bundle with
+    /// a Resources directory. This method locates the shell integration
+    /// scripts relative to the project directory.
+    private static func developmentResourcesPath() -> String? {
+        let projectResources = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // Infrastructure/
+            .deletingLastPathComponent()  // Core/
+            .deletingLastPathComponent()  // Sources/
+            .appendingPathComponent("libs/ghostty-resources")
+        if FileManager.default.fileExists(atPath: projectResources.path) {
+            return projectResources.path
+        }
+        return nil
+    }
+
     // MARK: - TerminalEngine: Initialize
 
     /// One-time global initialization flag.
@@ -185,6 +202,16 @@ final class GhosttyBridge: TerminalEngine {
         terminalConfig: TerminalConfig? = nil
     ) {
         var lines: [String] = ["term = xterm-256color"]
+
+        // Point libghostty to the app bundle's Resources directory so it can
+        // find shell integration scripts (zsh, bash, fish). Without this,
+        // OSC 7 (CWD reporting) and OSC 133 (prompt marks) are not injected
+        // into the shell, breaking tab titles and agent detection.
+        if let resourcesPath = Bundle.main.resourceURL?.path {
+            lines.append("resources-dir = \(resourcesPath)")
+        } else if let devPath = Self.developmentResourcesPath() {
+            lines.append("resources-dir = \(devPath)")
+        }
 
         // Cursor configuration.
         if let tc = terminalConfig {

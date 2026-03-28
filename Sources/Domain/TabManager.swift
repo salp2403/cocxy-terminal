@@ -53,8 +53,15 @@ final class TabManager: ObservableObject, TabActivating {
     /// the user's home directory) and detects the git branch if available.
     /// The tab is activated immediately.
     init() {
-        let currentDirectoryPath = FileManager.default.currentDirectoryPath
-        let currentDirectoryURL = URL(fileURLWithPath: currentDirectoryPath)
+        // When launched from the Dock, currentDirectoryPath is "/" (root).
+        // Fall back to the home directory for a useful default tab title.
+        let cwd = FileManager.default.currentDirectoryPath
+        let currentDirectoryURL: URL
+        if cwd == "/" {
+            currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+        } else {
+            currentDirectoryURL = URL(fileURLWithPath: cwd)
+        }
         let gitProvider = GitInfoProviderImpl()
         let branch = gitProvider.currentBranch(at: currentDirectoryURL)
 

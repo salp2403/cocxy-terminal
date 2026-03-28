@@ -514,6 +514,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             bridge: bridge,
             configService: configService
         )
+        // Inject the agent detection engine BEFORE creating the first
+        // surface so the output handler captures a live reference.
+        // Without this, the closure captures nil and terminal output
+        // never reaches the detection system.
+        controller.injectedAgentDetectionEngine = agentDetectionEngine
+
         controller.showWindow(nil)
         controller.window?.center()
 

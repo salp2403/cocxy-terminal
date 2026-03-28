@@ -13,6 +13,7 @@ jobs:
     name: Build, Sign & Release
     runs-on: macos-15
     timeout-minutes: 60
+    environment: production
 
     steps:
       - name: Checkout
@@ -253,24 +254,22 @@ jobs:
           DMG_SIZE=$(stat -f%z "$DMG")
           DMG_URL="https://github.com/salp2403/cocxy-terminal/releases/download/v${VERSION}/CocxyTerminal-${VERSION}.dmg"
 
-          # Get Sparkle sign_update tool from the built SPM dependency
+          # Sign DMG with Sparkle's EdDSA key via stdin (no temp file on disk)
           SPARKLE_BIN=$(find .build -name "sign_update" -type f 2>/dev/null | head -1)
 
-          SIGNATURE=""
-          if [ -n "$SPARKLE_BIN" ] && [ -f "$SPARKLE_BIN" ]; then
-            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_key
-            SIGNATURE=$("$SPARKLE_BIN" "$DMG" --ed-key-file /tmp/sparkle_key 2>/dev/null || echo "")
-            rm -f /tmp/sparkle_key
+          if [ -z "$SPARKLE_BIN" ] || [ ! -f "$SPARKLE_BIN" ]; then
+            echo "ERROR: sign_update not found. Cannot generate Sparkle signature."
+            exit 1
           fi
 
-          # If Sparkle tool not available, use openssl Ed25519 signing
+          SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN" -p "$DMG" --ed-key-file -)
+
           if [ -z "$SIGNATURE" ]; then
-            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_key
-            SIGNATURE=$(openssl pkeyutl -sign -inkey /tmp/sparkle_key -rawin < "$DMG" | base64 2>/dev/null || echo "pending")
-            rm -f /tmp/sparkle_key
+            echo "ERROR: Failed to generate Sparkle EdDSA signature."
+            exit 1
           fi
 
-          echo "Sparkle signature: ${SIGNATURE:0:20}..."
+          echo "Sparkle EdDSA signature generated (${#SIGNATURE} chars)"
 
           # Generate appcast.xml
           cat > build/appcast.xml << APPCAST
@@ -314,14 +313,14 @@ jobs:
             - Apple Silicon or Intel Mac
           generate_release_notes: true
 
-      - name: Deploy appcast to website
+      - name: Deploy website
         env:
           SERVER_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "$SERVER_KEY" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           VERSION="${{ steps.version.outputs.VERSION }}"
-          DATE=$(date +"%B %Y")
           DEPLOY_TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
 
@@ -335,46 +334,47 @@ jobs:
              sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html" || true
 
-          # Generate fresh releases page from GitHub API
-          RELEASES_JSON=$(gh release list --repo salp2403/cocxy-terminal --json tagName,name,publishedAt,body --limit 10 2>/dev/null || echo '[]')
+          # Write releases JSON to file (avoids shell/Python heredoc escaping issues)
+          gh release list --repo salp2403/cocxy-terminal \
+            --json tagName,publishedAt --limit 10 > /tmp/releases.json
 
-          python3 -c "
-          import json, sys
-          releases = json.loads('''${RELEASES_JSON}''')
-          cards = ''
+          # Generate releases page via Python reading from file (safe from quoting issues)
+          python3 << 'PYEOF'
+          import json, pathlib
+
+          releases = json.loads(pathlib.Path("/tmp/releases.json").read_text())
+          version = "$VERSION"
+
+          cards = []
           for i, r in enumerate(releases):
-              tag = r.get('tagName', '')
-              ver = tag.lstrip('v')
-              date_raw = r.get('publishedAt', '')
-              date = date_raw[:7].replace('-', ' ') if date_raw else ''
-              badge = '<span style=\"background:var(--lavender);color:var(--crust);padding:0.15rem 0.6rem;border-radius:20px;font-size:0.75rem;font-weight:600;text-transform:uppercase;\">Latest</span>' if i == 0 else ''
-              dmg_url = f'https://github.com/salp2403/cocxy-terminal/releases/download/{tag}/CocxyTerminal-{ver}.dmg'
-              gh_url = f'https://github.com/salp2403/cocxy-terminal/releases/tag/{tag}'
-              cards += f'''
-              <article style=\"background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:2rem;margin-bottom:1.5rem;\">
-                <div style=\"display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;\">
-                  <h2 style=\"font-size:1.5rem;font-weight:700;margin:0;\">{tag}</h2>
-                  {badge}
-                  <time style=\"color:var(--subtext0);font-size:0.875rem;margin-left:auto;\">{date}</time>
-                </div>
-                <div style=\"display:flex;gap:0.75rem;margin-top:1rem;\">
-                  <a href=\"{dmg_url}\" class=\"btn btn-primary\" style=\"padding:0.5rem 1.2rem;font-size:0.85rem;\">Download DMG</a>
-                  <a href=\"{gh_url}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"btn btn-secondary\" style=\"padding:0.5rem 1.2rem;font-size:0.85rem;\">Release Notes</a>
-                </div>
-              </article>'''
-          print(cards)
-          " > /tmp/release_cards.html 2>/dev/null || true
+              tag = r.get("tagName", "")
+              ver = tag.lstrip("v")
+              date_raw = r.get("publishedAt", "")
+              date_str = date_raw[:10] if date_raw else ""
+              badge = ' <span style="background:var(--lavender);color:var(--crust);padding:0.15rem 0.6rem;border-radius:20px;font-size:0.75rem;font-weight:600;text-transform:uppercase;">Latest</span>' if i == 0 else ""
+              dmg_url = f"https://github.com/salp2403/cocxy-terminal/releases/download/{tag}/CocxyTerminal-{ver}.dmg"
+              gh_url = f"https://github.com/salp2403/cocxy-terminal/releases/tag/{tag}"
+              cards.append(f"""
+                <article style="background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:2rem;margin-bottom:1.5rem;">
+                  <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+                    <h2 style="font-size:1.5rem;font-weight:700;margin:0;">{tag}</h2>{badge}
+                    <time style="color:var(--subtext0);font-size:0.875rem;margin-left:auto;">{date_str}</time>
+                  </div>
+                  <div style="display:flex;gap:0.75rem;margin-top:1rem;">
+                    <a href="{dmg_url}" class="btn btn-primary" style="padding:0.5rem 1.2rem;font-size:0.85rem;">Download DMG</a>
+                    <a href="{gh_url}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:0.5rem 1.2rem;font-size:0.85rem;">Release Notes</a>
+                  </div>
+                </article>""")
 
-          # Build full releases page
-          CARDS=$(cat /tmp/release_cards.html 2>/dev/null)
-          cat > build/releases.html << RELHTML
-          <!DOCTYPE html>
+          card_html = "\n".join(cards)
+
+          page = f"""<!DOCTYPE html>
           <html lang="en">
           <head>
             <meta charset="utf-8">
             <title>Releases - Cocxy Terminal</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="stylesheet" href="/css/style.css?v=${VERSION}">
+            <link rel="stylesheet" href="/css/style.css?v={version}">
             <link rel="icon" href="/images/icon.png" type="image/png">
           </head>
           <body>
@@ -384,6 +384,7 @@ jobs:
                 <div class="nav-links">
                   <a href="/#features">Features</a>
                   <a href="/releases.html">Releases</a>
+                  <a href="/getting-started.html">Docs</a>
                   <a href="/#download">Download</a>
                   <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
                 </div>
@@ -393,7 +394,7 @@ jobs:
               <section class="container" style="padding-top:8rem;padding-bottom:4rem;min-height:80vh;">
                 <h1 style="font-size:2.5rem;font-weight:700;margin-bottom:0.5rem;">Releases</h1>
                 <p style="color:var(--subtext0);margin-bottom:3rem;">Release history and changelog for Cocxy Terminal.</p>
-                ${CARDS}
+                {card_html}
                 <div style="margin-top:3rem;text-align:center;">
                   <h3 style="margin-bottom:1rem;">Install via Homebrew</h3>
                   <div style="display:inline-block;padding:1rem 2rem;border-radius:8px;background:var(--mantle);border:1px solid var(--surface0);">
@@ -417,15 +418,24 @@ jobs:
               </div>
             </footer>
           </body>
-          </html>
-          RELHTML
+          </html>"""
 
-          # Deploy releases page
+          pathlib.Path("build/releases.html").write_text(page)
+          print(f"Generated releases page with {len(releases)} entries")
+          PYEOF
+
+          # Deploy releases page and getting-started docs
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html || true
+            build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html
+
+          # Deploy getting-started page from repo
+          if [ -f web/public/getting-started.html ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/getting-started.html ${DEPLOY_TARGET}:${DEPLOY_PATH}getting-started.html
+          fi
 
           rm /tmp/deploy_key
-          echo "Appcast and website deployed to cocxy.dev"
+          echo "Website deployed to cocxy.dev"
 
       - name: Update Homebrew Cask
         env:
