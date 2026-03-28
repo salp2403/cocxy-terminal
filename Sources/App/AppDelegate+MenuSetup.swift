@@ -36,9 +36,12 @@ extension AppDelegate {
                         action: #selector(MainWindowController.showAboutPanel(_:)),
                         keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Preferences...",
+        appMenu.addItem(withTitle: "Settings...",
                         action: #selector(MainWindowController.openPreferences(_:)),
                         keyEquivalent: ",")
+        appMenu.addItem(withTitle: "Check for Updates...",
+                        action: #selector(AppDelegate.checkForUpdatesMenu(_:)),
+                        keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
 
         let servicesMenuItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")

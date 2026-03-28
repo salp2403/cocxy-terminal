@@ -14,4 +14,9 @@ extension AppDelegate {
         self.sparkleUpdater = updater
         windowController?.sparkleUpdater = updater
     }
+
+    /// Menu action: triggers a user-initiated update check.
+    @objc func checkForUpdatesMenu(_ sender: Any?) {
+        sparkleUpdater?.checkForUpdates()
+    }
 }
