@@ -328,11 +328,21 @@ jobs:
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             build/appcast.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
 
-          # Update landing page: DMG link, version badge, CSS cache buster
+          # Deploy landing page from repo (ensures nav links, content are current)
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/index.html ${DEPLOY_TARGET}:${DEPLOY_PATH}index.html
+
+          # Deploy CSS and JS assets
+          scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/css/ ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
+          [ -d web/public/js ] && scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true
+
+          # Update version-specific values on the deployed landing page
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html && \
-             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html" || true
+             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html"
 
           # Write releases JSON to file (avoids shell/Python heredoc escaping issues)
           gh release list --repo salp2403/cocxy-terminal \
