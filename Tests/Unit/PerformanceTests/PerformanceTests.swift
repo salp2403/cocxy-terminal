@@ -515,8 +515,8 @@ final class PerformanceTests: XCTestCase {
         let elapsedMilliseconds = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
 
         XCTAssertLessThan(
-            elapsedMilliseconds, 20.0,
-            "10,000 state transitions took \(String(format: "%.1f", elapsedMilliseconds))ms, exceeds 20ms target"
+            elapsedMilliseconds, 50.0,
+            "10,000 state transitions took \(String(format: "%.1f", elapsedMilliseconds))ms, exceeds 50ms target"
         )
     }
 

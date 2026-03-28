@@ -309,13 +309,13 @@ final class ApplicationMenuItemTests: XCTestCase {
     }
 
     func testAppMenuHasPreferencesItem() {
-        let prefs = appMenu.items.first(where: { $0.title.contains("Preferences") })
-        XCTAssertNotNil(prefs, "App menu must have a 'Preferences' item")
+        let prefs = appMenu.items.first(where: { $0.title.contains("Settings") || $0.title.contains("Preferences") })
+        XCTAssertNotNil(prefs, "App menu must have a 'Settings' or 'Preferences' item")
     }
 
     func testPreferencesHasCorrectShortcut() {
-        let prefs = appMenu.items.first(where: { $0.title.contains("Preferences") })
-        XCTAssertEqual(prefs?.keyEquivalent, ",", "Preferences shortcut must be Cmd+,")
+        let prefs = appMenu.items.first(where: { $0.title.contains("Settings") || $0.title.contains("Preferences") })
+        XCTAssertEqual(prefs?.keyEquivalent, ",", "Settings shortcut must be Cmd+,")
     }
 
     func testAppMenuHasHideItem() {

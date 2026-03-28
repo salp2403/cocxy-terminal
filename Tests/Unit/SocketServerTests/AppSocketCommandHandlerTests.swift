@@ -34,7 +34,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let response = handler.handleCommand(request)
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "running")
-        XCTAssertEqual(response.data?["version"], "0.1.0-alpha")
+        XCTAssertEqual(response.data?["version"], CocxyVersion.current)
     }
 
     @MainActor

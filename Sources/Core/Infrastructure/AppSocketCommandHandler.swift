@@ -7,11 +7,15 @@ import Foundation
 
 /// Single source of truth for the application version.
 /// Reads from Info.plist at runtime (set by the release pipeline).
-/// Falls back to a compile-time default for debug builds.
+/// Falls back to "dev" for debug/test builds where no Info.plist exists.
 enum CocxyVersion {
     static let current: String = {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "0.1.1"
+        guard let bundleID = Bundle.main.bundleIdentifier,
+              bundleID.contains("cocxy"),
+              let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else {
+            return "dev"
+        }
+        return version
     }()
 }
 
