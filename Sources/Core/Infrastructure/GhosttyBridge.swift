@@ -586,7 +586,15 @@ final class GhosttyBridge: TerminalEngine {
             return handlePwdChanged(target: target, action: action)
 
         case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
-            // The shell process exited. We acknowledge it.
+            // Notify the process exit handler so the agent detection engine
+            // can transition to idle state.
+            if target.tag == GHOSTTY_TARGET_SURFACE,
+               let gSurface = target.target.surface {
+                notifyOSCHandlerForGhosttySurface(
+                    gSurface,
+                    notification: .processExited
+                )
+            }
             return true
 
         case GHOSTTY_ACTION_CLOSE_TAB,

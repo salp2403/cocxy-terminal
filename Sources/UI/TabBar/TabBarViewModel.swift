@@ -29,6 +29,10 @@ struct TabDisplayItem: Identifiable, Equatable {
     var processName: String?
     /// SSH session display string (e.g., "root@server.example.com:2222").
     var sshDisplay: String?
+    /// Number of unread notifications for this tab. Zero hides the badge.
+    var unreadNotificationCount: Int = 0
+    /// Preview text of the latest unread notification (for hover tooltip).
+    var notificationPreview: String?
 }
 
 // MARK: - Tab Bar View Model
@@ -60,6 +64,11 @@ final class TabBarViewModel: ObservableObject {
     /// The domain-level tab manager.
     private let tabManager: TabManager
 
+    /// The notification manager for per-tab unread counts and previews.
+    /// Injected after init via `setNotificationManager(_:)` because the
+    /// notification stack is initialized after the window controller.
+    private weak var notificationManager: NotificationManagerImpl?
+
     /// Closure invoked to create a new tab with full surface setup.
     /// Wired by `MainWindowController` to route through `createTab()` which
     /// creates the ghostty surface, PTY, and view hierarchy.
@@ -88,6 +97,26 @@ final class TabBarViewModel: ObservableObject {
         subscribeToChanges()
     }
 
+    /// Injects the notification manager and subscribes to notification changes.
+    ///
+    /// Called by AppDelegate after `initializeNotificationStack()` completes,
+    /// since the notification manager is created after the window controller.
+    func setNotificationManager(_ manager: NotificationManagerImpl) {
+        self.notificationManager = manager
+        manager.notificationsPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.syncWithManager()
+            }
+            .store(in: &cancellables)
+        manager.unreadCountPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.syncWithManager()
+            }
+            .store(in: &cancellables)
+    }
+
     // MARK: - Actions
 
     /// Selects a tab by its ID.
@@ -96,6 +125,7 @@ final class TabBarViewModel: ObservableObject {
     /// - Parameter id: The tab to activate.
     func selectTab(id: TabID) {
         tabManager.setActive(id: id)
+        notificationManager?.markAsRead(tabId: id)
         syncWithManager()
     }
 
@@ -206,7 +236,11 @@ final class TabBarViewModel: ObservableObject {
     func syncWithManager() {
         activeTabID = tabManager.activeTabID
         tabItems = tabManager.tabs.map { tab in
-            TabDisplayItem(
+            let unreadCount = notificationManager?.unreadCountForTab(tab.id) ?? 0
+            let latestUnread = notificationManager?.latestUnreadForTab(tab.id)
+            let previewText: String? = latestUnread.map { "\($0.title) — \($0.body)" }
+
+            return TabDisplayItem(
                 id: tab.id,
                 displayTitle: sshTitle(for: tab) ?? truncatedTitle(tab.displayTitle),
                 subtitle: buildSubtitle(gitBranch: tab.gitBranch, processName: tab.processName),
@@ -221,7 +255,9 @@ final class TabBarViewModel: ObservableObject {
                 timeSinceActivity: relativeTime(since: tab.lastActivityAt),
                 gitBranch: tab.gitBranch,
                 processName: tab.processName,
-                sshDisplay: tab.sshSession?.displayTitleWithPort
+                sshDisplay: tab.sshSession?.displayTitleWithPort,
+                unreadNotificationCount: unreadCount,
+                notificationPreview: previewText
             )
         }
     }

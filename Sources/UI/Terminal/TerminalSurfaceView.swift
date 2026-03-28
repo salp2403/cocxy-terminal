@@ -319,6 +319,9 @@ final class TerminalSurfaceView: NSView {
                     ideCursorController.commandExecuted()
                     bridge.performBindingAction("text:\u{0D}", on: surfaceID)
                 }
+                // Notify the agent detection engine that the user submitted
+                // input. This triggers waitingInput → working transition.
+                onUserInputSubmitted?()
                 return
             case 0x30: // Tab → HT
                 bridge.performBindingAction("text:\u{09}", on: surfaceID)
@@ -609,6 +612,11 @@ final class TerminalSurfaceView: NSView {
     /// Closure that provides the current terminal output buffer lines.
     /// Set by MainWindowController when wiring surfaces to tabs.
     var outputBufferProvider: (() -> [String])?
+
+    /// Called when the user submits input (Enter key) in this terminal.
+    /// The agent detection engine uses this to transition from
+    /// `waitingInput` to `working`.
+    var onUserInputSubmitted: (() -> Void)?
 
     /// Scale factor applied to trackpad/mouse scroll deltas.
     /// Lower values = slower, more controllable scrolling.

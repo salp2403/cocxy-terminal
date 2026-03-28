@@ -131,6 +131,26 @@ final class TabItemView: NSView {
         return button
     }()
 
+    /// Notification count badge — small red circle positioned top-right.
+    private let notificationBadge: NSTextField = {
+        let label = NSTextField(labelWithString: "")
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .bold)
+        label.textColor = .white
+        label.alignment = .center
+        label.isBordered = false
+        label.isEditable = false
+        label.drawsBackground = false
+        label.wantsLayer = true
+        label.layer?.backgroundColor = CocxyColors.red.cgColor
+        label.layer?.cornerRadius = 8
+        label.layer?.masksToBounds = true
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isHidden = true
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        return label
+    }()
+
     /// Whether the rename sheet is currently presented, used to guard against repeated clicks.
     private(set) var isEditing: Bool = false
 
@@ -172,6 +192,7 @@ final class TabItemView: NSView {
         addSubview(statusDot)
         addSubview(statusLabel)
         addSubview(pathLabel)
+        addSubview(notificationBadge)
 
         closeButton.target = self
         closeButton.action = #selector(handleCloseButton)
@@ -214,6 +235,12 @@ final class TabItemView: NSView {
             pathLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: textLeading + 20),
             pathLabel.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 2),
             pathLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
+
+            // Notification badge — top-right corner, to the left of close button.
+            notificationBadge.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -2),
+            notificationBadge.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            notificationBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 16),
+            notificationBadge.heightAnchor.constraint(equalToConstant: 16),
         ])
     }
 
@@ -319,7 +346,19 @@ final class TabItemView: NSView {
             accentStrip.frame.size.width = 2
         }
 
-        let needsAttention = !item.isActive && (item.agentState == .waitingInput || item.hasUnreadNotification)
+        // Notification badge: show count for inactive tabs with unread notifications.
+        let unreadCount = item.unreadNotificationCount
+        if unreadCount > 0 && !item.isActive {
+            notificationBadge.stringValue = unreadCount > 9 ? "9+" : "\(unreadCount)"
+            notificationBadge.isHidden = false
+        } else {
+            notificationBadge.isHidden = true
+        }
+
+        // Hover tooltip: show latest notification preview.
+        toolTip = item.notificationPreview
+
+        let needsAttention = !item.isActive && (item.agentState == .waitingInput || item.hasUnreadNotification || unreadCount > 0)
         if needsAttention {
             applyAttentionBorder(color: stateColor)
             applyGlowEffect(color: stateColor)

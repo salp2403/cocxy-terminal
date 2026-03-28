@@ -169,9 +169,10 @@ extension MainWindowController {
                 processMonitor?.registerTab(tabID, shellPID: shellPID)
             }
 
+            let capturedTabID = tabID
             bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
                 Task { @MainActor in
-                    self?.handleOSCNotification(notification)
+                    self?.handleOSCNotification(notification, fromTabID: capturedTabID)
                 }
             }
 
@@ -182,14 +183,14 @@ extension MainWindowController {
             // Track command durations via OSC 133 ;B (start) and ;D (finish).
             let commandTracker = CommandDurationTracker { [weak self] notification in
                 Task { @MainActor in
-                    self?.handleOSCNotification(notification)
+                    self?.handleOSCNotification(notification, fromTabID: capturedTabID)
                 }
             }
             tabCommandTrackers[tabID] = commandTracker
 
             let imageDetector = InlineImageOSCDetector { [weak self] payload in
                 Task { @MainActor in
-                    self?.handleOSCNotification(.inlineImage(payload))
+                    self?.handleOSCNotification(.inlineImage(payload), fromTabID: capturedTabID)
                 }
             }
             tabImageDetectors[tabID] = imageDetector
@@ -206,6 +207,11 @@ extension MainWindowController {
             // Wire Smart Copy output provider for right-click context menu.
             surfaceView.outputBufferProvider = { [weak buffer] in
                 buffer?.lines ?? []
+            }
+
+            // Wire user input callback for agent detection.
+            surfaceView.onUserInputSubmitted = { [weak engine] in
+                engine?.notifyUserInput()
             }
 
             // Wire CWD provider for relative path resolution on Cmd+click.

@@ -247,4 +247,60 @@ extension AppDelegate {
             }
             .store(in: &hookCancellables)
     }
+
+    // MARK: - Notification Wiring
+
+    /// Connects the agent detection engine's state changes to the notification manager.
+    ///
+    /// When an agent transitions to `waitingInput`, `finished`, or `error`, the
+    /// notification manager creates an in-app notification and optionally a macOS
+    /// push notification. This method bridges the two subsystems.
+    ///
+    /// MUST be called AFTER both `initializeAgentDetectionEngine()` and
+    /// `initializeNotificationStack()` since it depends on both.
+    func wireAgentDetectionToNotifications() {
+        guard let engine = agentDetectionEngine,
+              let notificationManager = notificationManager,
+              let windowController = windowController else { return }
+
+        var previousStateByTab: [TabID: AgentState] = [:]
+
+        engine.stateChanged
+            .receive(on: DispatchQueue.main)
+            .sink { [weak windowController, weak notificationManager] context in
+                guard let tabManager = windowController?.tabManager,
+                      let manager = notificationManager else { return }
+
+                let agentState = context.state.toTabAgentState
+
+                // Determine the target tab (same logic as wireAgentDetectionToTabs).
+                let targetTabID: TabID?
+                if let hookCwd = context.hookCwd {
+                    let cwdURL = URL(fileURLWithPath: hookCwd).standardized
+                    targetTabID = tabManager.tabs.first {
+                        $0.workingDirectory.standardized.path == cwdURL.path
+                    }?.id
+                } else {
+                    targetTabID = tabManager.activeTabID
+                }
+
+                guard let tabID = targetTabID,
+                      let tab = tabManager.tab(for: tabID) else { return }
+
+                let previousState = previousStateByTab[tabID] ?? .idle
+                previousStateByTab[tabID] = agentState
+
+                // Only notify on meaningful transitions (skip idle→idle, etc.).
+                guard agentState != previousState else { return }
+
+                manager.handleStateChange(
+                    state: agentState,
+                    previousState: previousState,
+                    for: tabID,
+                    tabTitle: tab.title,
+                    agentName: context.agentName
+                )
+            }
+            .store(in: &hookCancellables)
+    }
 }

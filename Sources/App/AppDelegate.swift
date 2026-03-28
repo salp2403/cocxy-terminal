@@ -170,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         createMainWindow()
         wireAgentDetectionToWindow()
         initializeNotificationStack()
+        wireAgentDetectionToNotifications()
         initializePortScanner()
         initializeSocketServer()
         initializeQuickTerminal()
@@ -259,8 +260,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 wc.showWindow(nil)
             } else {
                 // Window was closed — recreate it.
+                // Clear existing Combine subscriptions to prevent duplicate
+                // subscribers accumulating on engine.stateChanged.
+                hookCancellables.removeAll()
                 createMainWindow()
                 wireAgentDetectionToWindow()
+                initializeNotificationStack()
+                wireAgentDetectionToNotifications()
                 initializeSocketServer()
             }
         }
@@ -625,6 +631,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so OSC notifications are forwarded to the notification pipeline.
         windowController.injectedNotificationManager = manager
 
+        // 5b. Inject notification manager into the tab bar ViewModel so
+        // each tab can display its unread notification count and preview.
+        windowController.tabBarViewModel?.setNotificationManager(manager)
+
         // 6. Create the quick switch controller and wire to the window controller.
         let quickSwitch = QuickSwitchController(
             notificationManager: manager,
@@ -633,7 +643,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController.quickSwitchController = quickSwitch
         self.quickSwitchController = quickSwitch
 
-        // 7. Request notification permissions.
+        // 7. Install the notification center delegate so we receive
+        // click events from macOS notifications.
+        UNNotificationCenterBridge.shared.installDelegate()
+
+        // 8. Observe notification clicks and route to the adapter.
+        NotificationCenter.default.addObserver(
+            forName: .cocxyNotificationClicked,
+            object: nil,
+            queue: .main
+        ) { [weak adapter] note in
+            if let tabIdString = note.userInfo?["tabId"] as? String {
+                adapter?.handleNotificationClick(tabIdString: tabIdString)
+            }
+        }
+
+        // 9. Request notification permissions.
         Task {
             await adapter.requestPermissionIfNeeded()
         }
@@ -853,7 +878,7 @@ final class SystemNotificationCenter: NotificationCenterProviding {
 /// This class is the ONLY place in the codebase that imports UserNotifications.
 /// Everything else uses our protocol abstractions.
 @MainActor
-final class UNNotificationCenterBridge {
+final class UNNotificationCenterBridge: NSObject {
     static let shared = UNNotificationCenterBridge()
 
     func requestAuthorization(rawOptions: UInt) async throws -> Bool {
@@ -906,4 +931,52 @@ final class UNNotificationCenterBridge {
             }
         }
     }
+
+    /// Sets this bridge as the notification center delegate so we
+    /// receive notification click events.
+    func installDelegate() {
+        guard Bundle.main.bundleIdentifier != nil else { return }
+        UNUserNotificationCenter.current().delegate = self
+    }
+}
+
+// MARK: - UNUserNotificationCenterDelegate
+
+extension UNNotificationCenterBridge: @preconcurrency UNUserNotificationCenterDelegate {
+
+    /// Called when the user clicks on a delivered notification.
+    ///
+    /// Extracts the tab ID from userInfo and routes to the notification
+    /// adapter which activates the correct tab.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let tabIdString = userInfo["tabId"] as? String {
+            NotificationCenter.default.post(
+                name: .cocxyNotificationClicked,
+                object: nil,
+                userInfo: ["tabId": tabIdString]
+            )
+        }
+        completionHandler()
+    }
+
+    /// Show notifications even when the app is in the foreground.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .badge])
+    }
+}
+
+// MARK: - Notification Click Routing
+
+extension Notification.Name {
+    /// Posted when the user clicks a macOS notification from Cocxy.
+    static let cocxyNotificationClicked = Notification.Name("cocxyNotificationClicked")
 }

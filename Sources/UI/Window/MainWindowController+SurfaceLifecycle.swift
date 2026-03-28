@@ -48,10 +48,15 @@ extension MainWindowController {
                 }
             }
 
-            // Wire OSC handler for title changes.
-            bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
-                Task { @MainActor in
-                    self?.handleOSCNotification(notification)
+            // Wire OSC handler for title/directory/prompt changes.
+            // Captures the tab ID so updates target the correct tab,
+            // not just the active tab (critical for multi-tab).
+            if let firstTabID = tabManager.tabs.first?.id {
+                let capturedTabID = firstTabID
+                bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
+                    Task { @MainActor in
+                        self?.handleOSCNotification(notification, fromTabID: capturedTabID)
+                    }
                 }
             }
 
@@ -63,16 +68,17 @@ extension MainWindowController {
                 let engine = injectedAgentDetectionEngine
 
                 // Track command durations via OSC 133 ;B (start) and ;D (finish).
+                let trackerTabID = firstTabID
                 let commandTracker = CommandDurationTracker { [weak self] notification in
                     Task { @MainActor in
-                        self?.handleOSCNotification(notification)
+                        self?.handleOSCNotification(notification, fromTabID: trackerTabID)
                     }
                 }
                 tabCommandTrackers[firstTabID] = commandTracker
 
                 let imageDetector = InlineImageOSCDetector { [weak self] payload in
                     Task { @MainActor in
-                        self?.handleOSCNotification(.inlineImage(payload))
+                        self?.handleOSCNotification(.inlineImage(payload), fromTabID: trackerTabID)
                     }
                 }
                 tabImageDetectors[firstTabID] = imageDetector
@@ -89,6 +95,12 @@ extension MainWindowController {
                 // Wire Smart Copy output provider for right-click context menu.
                 surfaceView.outputBufferProvider = { [weak buffer] in
                     buffer?.lines ?? []
+                }
+
+                // Wire user input callback for agent detection.
+                // Triggers waitingInput → working when the user presses Enter.
+                surfaceView.onUserInputSubmitted = { [weak engine] in
+                    engine?.notifyUserInput()
                 }
 
                 // Wire CWD provider for relative path resolution on Cmd+click.
@@ -191,26 +203,34 @@ extension MainWindowController {
     ///   - tabID: The tab to wire handlers for.
     ///   - surfaceID: The ghostty surface ID associated with the tab.
     func wireHandlersForRestoredTab(tabID: TabID, surfaceID: SurfaceID) {
+        let capturedTabID = tabID
         bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
             Task { @MainActor in
-                self?.handleOSCNotification(notification)
+                self?.handleOSCNotification(notification, fromTabID: capturedTabID)
+            }
+        }
+
+        // Wire user input callback on the restored tab's surface view.
+        let engine = injectedAgentDetectionEngine
+        if let surfaceView = tabSurfaceViews[tabID] {
+            surfaceView.onUserInputSubmitted = { [weak engine] in
+                engine?.notifyUserInput()
             }
         }
 
         let buffer = TerminalOutputBuffer()
         tabOutputBuffers[tabID] = buffer
-        let engine = injectedAgentDetectionEngine
 
         let commandTracker = CommandDurationTracker { [weak self] notification in
             Task { @MainActor in
-                self?.handleOSCNotification(notification)
+                self?.handleOSCNotification(notification, fromTabID: capturedTabID)
             }
         }
         tabCommandTrackers[tabID] = commandTracker
 
         let imageDetector = InlineImageOSCDetector { [weak self] payload in
             Task { @MainActor in
-                self?.handleOSCNotification(.inlineImage(payload))
+                self?.handleOSCNotification(.inlineImage(payload), fromTabID: capturedTabID)
             }
         }
         tabImageDetectors[tabID] = imageDetector
@@ -247,24 +267,39 @@ extension MainWindowController {
 
     // MARK: - OSC Notification Handling
 
-    func handleOSCNotification(_ notification: OSCNotification) {
+    /// Processes an OSC notification from a terminal surface.
+    ///
+    /// - Parameters:
+    ///   - notification: The parsed OSC notification.
+    ///   - sourceTabID: The tab that owns the surface. When provided, the update
+    ///     targets this specific tab instead of falling back to the active tab.
+    ///     This ensures background tabs receive correct title/directory updates.
+    func handleOSCNotification(
+        _ notification: OSCNotification,
+        fromTabID sourceTabID: TabID? = nil
+    ) {
+        // Use the source tab when known, fall back to active tab.
+        let targetTabID = sourceTabID ?? tabManager.activeTabID
+
         switch notification {
         case .titleChange(let title):
-            terminalViewModel.updateTitle(title)
-            window?.title = title
-            if let activeID = tabManager.activeTabID {
-                tabManager.updateTab(id: activeID) { tab in
+            // Update the window title only when the source is the active tab
+            // (or unknown, for backward compatibility).
+            if sourceTabID == nil || sourceTabID == tabManager.activeTabID {
+                terminalViewModel.updateTitle(title)
+                window?.title = title
+            }
+
+            if let tabID = targetTabID {
+                tabManager.updateTab(id: tabID) { tab in
                     tab.title = title
 
                     // Detect SSH sessions from terminal title changes.
-                    // Many shells set the title to "ssh user@host" or "user@host"
-                    // when an SSH session is active.
                     if title.lowercased().hasPrefix("ssh ") {
                         tab.sshSession = SSHSessionDetector.detect(from: title)
                         tab.processName = "ssh"
                     } else if SSHSessionDetector.isSSHProcess(tab.processName ?? "") &&
                               !title.lowercased().contains("ssh") {
-                        // SSH ended — title changed back to something else.
                         tab.sshSession = nil
                         tab.processName = nil
                     }
@@ -273,47 +308,47 @@ extension MainWindowController {
                 refreshTabStrip()
             }
 
+            // Feed the title to the agent detection engine.
+            feedDetectionEngine(oscCode: 0, payload: title)
+
         case .notification(title: let title, body: let body):
-            // Forward OSC notification to the notification pipeline.
-            guard let activeID = tabManager.activeTabID else { break }
-            let notification = CocxyNotification(
+            guard let tabID = targetTabID else { break }
+            let cocxyNotification = CocxyNotification(
                 type: .custom("osc-notification"),
-                tabId: activeID,
+                tabId: tabID,
                 title: title,
                 body: body
             )
-            injectedNotificationManager?.notify(notification)
+            injectedNotificationManager?.notify(cocxyNotification)
+
+            feedDetectionEngine(oscCode: 9, payload: body)
 
         case .shellPrompt:
-            // Shell prompt indicates the command finished. If an agent was
-            // working, mark it as finished so the tab badge updates.
-            guard let activeID = tabManager.activeTabID else { break }
-            tabManager.updateTab(id: activeID) { tab in
+            guard let tabID = targetTabID else { break }
+            tabManager.updateTab(id: tabID) { tab in
                 if tab.agentState == .working {
                     tab.agentState = .finished
                 }
             }
             tabBarViewModel?.syncWithManager()
 
-            // Notify IDE cursor controller that a new prompt is ready.
-            // This enables click-to-position within the command line.
-            if let surfaceView = terminalSurfaceView {
+            // Notify IDE cursor controller only for the active tab.
+            if (sourceTabID == nil || sourceTabID == tabManager.activeTabID),
+               let surfaceView = terminalSurfaceView {
                 let cursorCtrl = surfaceView.ideCursorController
-                // Estimate prompt row from terminal dimensions.
-                // The prompt is at the bottom of the visible area.
                 let viewHeight = surfaceView.bounds.height
                 let cellHeight = cursorCtrl.cellHeight
                 let promptRow = cellHeight > 0 ? max(0, Int(viewHeight / cellHeight) - 1) : 0
-                // Standard prompt ends at column 2 (e.g., "$ ").
                 cursorCtrl.shellPromptDetected(row: promptRow, column: 2)
             }
 
+            feedDetectionEngine(oscCode: 133, payload: "A")
+
         case .currentDirectory(let directoryURL):
-            // Update the active tab's working directory and git branch.
-            guard let activeID = tabManager.activeTabID else { break }
+            guard let tabID = targetTabID else { break }
             let gitProvider = GitInfoProviderImpl()
             let branch = gitProvider.currentBranch(at: directoryURL)
-            tabManager.updateTab(id: activeID) { tab in
+            tabManager.updateTab(id: tabID) { tab in
                 tab.workingDirectory = directoryURL
                 tab.gitBranch = branch
             }
@@ -321,9 +356,14 @@ extension MainWindowController {
             refreshStatusBar()
             refreshTabStrip()
 
+            feedDetectionEngine(
+                oscCode: 7,
+                payload: "file://localhost\(directoryURL.path)"
+            )
+
         case .commandStarted:
-            guard let activeID = tabManager.activeTabID else { break }
-            tabManager.updateTab(id: activeID) { tab in
+            guard let tabID = targetTabID else { break }
+            tabManager.updateTab(id: tabID) { tab in
                 tab.lastCommandStartedAt = Date()
                 tab.lastCommandDuration = nil
                 tab.lastCommandExitCode = nil
@@ -331,8 +371,8 @@ extension MainWindowController {
             refreshStatusBar()
 
         case .commandFinished(let exitCode):
-            guard let activeID = tabManager.activeTabID else { break }
-            tabManager.updateTab(id: activeID) { tab in
+            guard let tabID = targetTabID else { break }
+            tabManager.updateTab(id: tabID) { tab in
                 if let startTime = tab.lastCommandStartedAt {
                     tab.lastCommandDuration = Date().timeIntervalSince(startTime)
                 }
@@ -342,12 +382,42 @@ extension MainWindowController {
             refreshStatusBar()
 
         case .inlineImage(let payload):
-            // Parse the OSC 1337 payload and render the image on the active surface.
             guard let surfaceView = terminalSurfaceView,
                   let imageData = OSC1337Parser.parse(payload) else { break }
             let renderer = inlineImageRenderer(for: surfaceView)
             let position = surfaceView.bounds.height - 20
             renderer.renderImage(imageData, at: position)
+
+        case .processExited:
+            // Shell process exited. Reset agent state to idle and clear
+            // activity metadata so the sidebar reflects the terminated session.
+            guard let tabID = targetTabID else { break }
+            tabManager.updateTab(id: tabID) { tab in
+                tab.agentState = .idle
+                tab.agentActivity = nil
+            }
+            tabBarViewModel?.syncWithManager()
+            injectedAgentDetectionEngine?.notifyProcessExited()
+        }
+    }
+
+    // MARK: - Detection Engine Feeding
+
+    /// Synthesizes an OSC escape sequence and feeds it to the agent detection engine.
+    ///
+    /// libghostty processes terminal output internally and only exposes parsed
+    /// events via action callbacks. The detection engine expects raw bytes
+    /// containing OSC sequences. This method bridges the gap by reconstructing
+    /// the OSC bytes from the already-parsed action data.
+    ///
+    /// - Parameters:
+    ///   - oscCode: The OSC code (0 = title, 7 = pwd, 9 = notification, 133 = prompt).
+    ///   - payload: The OSC payload string.
+    private func feedDetectionEngine(oscCode: Int, payload: String) {
+        guard let engine = injectedAgentDetectionEngine else { return }
+        let oscSequence = "\u{1b}]\(oscCode);\(payload)\u{07}"
+        if let data = oscSequence.data(using: .utf8) {
+            engine.processTerminalOutput(data)
         }
     }
 

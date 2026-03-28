@@ -34,6 +34,10 @@ struct AttentionItem: Identifiable, Sendable {
     let tabId: TabID
     /// The type of notification.
     let type: NotificationType
+    /// Short title from the original notification.
+    let title: String
+    /// Body text from the original notification.
+    let body: String
     /// When the notification was created.
     let timestamp: Date
     /// Whether the user has acknowledged this notification.
@@ -244,6 +248,15 @@ final class NotificationManagerImpl: NotificationManaging, UnreadCountPublishing
         markAsRead(tabId: tabId)
     }
 
+    /// Returns the most recent unread notification for a specific tab.
+    ///
+    /// Used by the tab bar to show a hover preview of what the notification says.
+    /// - Parameter tabId: The tab to query.
+    /// - Returns: The most recent unread attention item, or nil if none.
+    func latestUnreadForTab(_ tabId: TabID) -> AttentionItem? {
+        attentionQueue.last { $0.tabId == tabId && !$0.isRead }
+    }
+
     /// Convenience method that translates agent state changes into notifications.
     ///
     /// Only states that require user attention generate notifications:
@@ -336,6 +349,8 @@ final class NotificationManagerImpl: NotificationManaging, UnreadCountPublishing
             id: notification.id,
             tabId: notification.tabId,
             type: notification.type,
+            title: notification.title,
+            body: notification.body,
             timestamp: now,
             isRead: false
         )
