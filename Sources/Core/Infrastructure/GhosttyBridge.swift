@@ -107,6 +107,22 @@ final class GhosttyBridge: TerminalEngine {
     /// When running via `swift run` or Xcode, the app has no bundle with
     /// a Resources directory. This method locates the shell integration
     /// scripts relative to the project directory.
+    /// Resolves the path to ghostty resources (shell-integration scripts).
+    ///
+    /// In production (.app bundle): `Bundle.main.resourcePath`
+    /// In development: `libs/ghostty-resources` relative to the source tree.
+    static func resolveResourcesPath() -> String? {
+        // Production: app bundle has shell-integration in Resources/.
+        if let bundlePath = Bundle.main.resourcePath {
+            let shellIntegration = "\(bundlePath)/shell-integration"
+            if FileManager.default.fileExists(atPath: shellIntegration) {
+                return bundlePath
+            }
+        }
+        // Development: relative to the source file.
+        return developmentResourcesPath()
+    }
+
     private static func developmentResourcesPath() -> String? {
         let projectResources = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // Infrastructure/
@@ -203,15 +219,12 @@ final class GhosttyBridge: TerminalEngine {
     ) {
         var lines: [String] = ["term = xterm-256color"]
 
-        // Point libghostty to the app bundle's Resources directory so it can
-        // find shell integration scripts (zsh, bash, fish). Without this,
-        // OSC 7 (CWD reporting) and OSC 133 (prompt marks) are not injected
-        // into the shell, breaking tab titles and agent detection.
-        if let resourcesPath = Bundle.main.resourceURL?.path {
-            lines.append("resources-dir = \(resourcesPath)")
-        } else if let devPath = Self.developmentResourcesPath() {
-            lines.append("resources-dir = \(devPath)")
-        }
+        // Enable shell integration so libghostty injects precmd/preexec hooks
+        // into the user's shell. This is what makes OSC 7 (directory reporting)
+        // and OSC 133 (prompt marks) work. Without this, tab titles, directory
+        // tracking, and agent detection are all non-functional.
+        lines.append("shell-integration = detect")
+        lines.append("shell-integration-features = cursor,sudo,title")
 
         // Cursor configuration.
         if let tc = terminalConfig {
@@ -274,18 +287,41 @@ final class GhosttyBridge: TerminalEngine {
         let commandCString: UnsafeMutablePointer<CChar>? = command.map { strdup($0) }
         surfaceConfig.command = UnsafePointer(commandCString)
 
+        // Set GHOSTTY_RESOURCES_DIR so libghostty's shell integration scripts
+        // are found by the child shell. Without this env var, the shell does not
+        // emit OSC 7 (directory) or OSC 133 (prompt), breaking tab titles,
+        // directory tracking, and agent detection in production builds.
+        let resourcesPath = Self.resolveResourcesPath()
+        let envKeyC = strdup("GHOSTTY_RESOURCES_DIR")
+        let envValueC = strdup(resourcesPath ?? "")
+        // Heap-allocate the env var array so the pointer stays valid through surface creation.
+        let envVarPtr = UnsafeMutablePointer<ghostty_env_var_s>.allocate(capacity: 1)
+        envVarPtr.initialize(to: ghostty_env_var_s(key: envKeyC, value: envValueC))
+        if resourcesPath != nil {
+            surfaceConfig.env_vars = envVarPtr
+            surfaceConfig.env_var_count = 1
+        }
+
         // Create the surface.
         guard let gSurface = ghostty_surface_new(app, &surfaceConfig) else {
             free(workingDirCString)
             free(commandCString)
+            envVarPtr.deinitialize(count: 1)
+            envVarPtr.deallocate()
+            free(envKeyC)
+            free(envValueC)
             throw TerminalEngineError.surfaceCreationFailed(
                 reason: "ghostty_surface_new() returned nil"
             )
         }
 
-        // Clean up C strings.
+        // Clean up C strings and env var allocation.
         free(workingDirCString)
         free(commandCString)
+        envVarPtr.deinitialize(count: 1)
+        envVarPtr.deallocate()
+        free(envKeyC)
+        free(envValueC)
 
         // Register the surface.
         let surfaceID = SurfaceID()

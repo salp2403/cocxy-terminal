@@ -296,6 +296,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         self.configService = configService
         self.tabManager = tabManager ?? TabManager()
         self.terminalViewModel = TerminalViewModel(bridge: bridge)
+        let configuredFontSize = configService?.current.appearance.fontSize
+            ?? AppearanceConfig.defaults.fontSize
+        terminalViewModel.setDefaultFontSize(configuredFontSize)
 
         // Calculate window size from config, or use sensible defaults.
         let windowSize = Self.calculateWindowSize(from: configService)
@@ -1050,16 +1053,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Increases the terminal font size by one step. Wired to Cmd++ via the View menu.
     @objc func zoomInAction(_ sender: Any?) {
         terminalViewModel.zoomIn()
+        terminalSurfaceView?.ideCursorController.updateCellDimensions()
     }
 
     /// Decreases the terminal font size by one step. Wired to Cmd+- via the View menu.
     @objc func zoomOutAction(_ sender: Any?) {
         terminalViewModel.zoomOut()
+        terminalSurfaceView?.ideCursorController.updateCellDimensions()
     }
 
     /// Resets the terminal font size to the configured default. Wired to Cmd+0 via the View menu.
     @objc func resetZoomAction(_ sender: Any?) {
         terminalViewModel.resetZoom()
+        terminalSurfaceView?.ideCursorController.updateCellDimensions()
     }
 
     // MARK: - Tab Bar Toggle

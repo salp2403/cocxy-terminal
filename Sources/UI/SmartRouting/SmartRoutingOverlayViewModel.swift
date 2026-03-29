@@ -38,15 +38,15 @@ enum SmartRoutingFilter: Equatable, Sendable {
 /// - SeeAlso: `SmartAgentRouting` protocol
 /// - SeeAlso: `SmartRoutingOverlayView`
 @MainActor
-final class SmartRoutingOverlayViewModel {
+final class SmartRoutingOverlayViewModel: ObservableObject {
 
     // MARK: - Published State
 
     /// The agents currently displayed in the overlay, after filtering.
-    private(set) var displayedAgents: [AgentSessionInfo] = []
+    @Published private(set) var displayedAgents: [AgentSessionInfo] = []
 
     /// The current active filter.
-    private(set) var activeFilter: SmartRoutingFilter = .all
+    @Published private(set) var activeFilter: SmartRoutingFilter = .all
 
     /// Message shown when no agents need attention.
     let emptyMessage: String = "No agents need attention"

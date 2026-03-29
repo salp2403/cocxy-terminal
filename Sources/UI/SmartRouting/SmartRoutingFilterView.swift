@@ -7,10 +7,10 @@ import SwiftUI
 
 /// Displays the current filter state in the overlay header.
 ///
-/// Shows filter shortcuts:
-/// - `Cmd+Shift+E`: Show only errors.
-/// - `Cmd+Shift+W`: Show only waiting for input.
-/// - `Cmd+Shift+A`: Show all agents.
+/// Shows filter shortcuts (when overlay has focus):
+/// - `E`: Show only errors.
+/// - `W`: Show only waiting for input.
+/// - `A`: Show all agents.
 ///
 /// The active filter is highlighted with accent color.
 ///
@@ -19,6 +19,7 @@ import SwiftUI
 struct SmartRoutingFilterView: View {
 
     let activeFilter: SmartRoutingFilter
+    let onFilterSelected: (SmartRoutingFilter) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -31,17 +32,18 @@ struct SmartRoutingFilterView: View {
     // MARK: - Private
 
     private func filterBadge(label: String, filter: SmartRoutingFilter) -> some View {
-        Text(label)
+        let isActive = activeFilter == filter
+        return Text(label)
             .font(.caption2)
-            .fontWeight(activeFilter == filter ? .bold : .regular)
+            .fontWeight(isActive ? .bold : .regular)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(
-                activeFilter == filter
-                    ? Color.accentColor.opacity(0.2)
-                    : Color.clear
-            )
+            .background(isActive ? Color.accentColor.opacity(0.2) : Color.clear)
             .clipShape(Capsule())
-            .foregroundStyle(activeFilter == filter ? .primary : .secondary)
+            .foregroundStyle(isActive ? .primary : .secondary)
+            .contentShape(Capsule())
+            .onTapGesture { onFilterSelected(filter) }
+            .accessibilityAddTraits(isActive ? .isSelected : [])
+            .accessibilityLabel("Filter: \(label)")
     }
 }

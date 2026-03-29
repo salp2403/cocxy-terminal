@@ -72,6 +72,10 @@ final class IDECursorController {
     /// Padding from the top edge of the terminal view to the first row.
     var topPadding: CGFloat = 0
 
+    /// The visual indicator layer that blinks on the prompt line.
+    /// Lazily installed into the surface view's layer hierarchy.
+    private var indicatorLayer: IDECursorIndicatorLayer?
+
     // MARK: - Initialization
 
     init(surfaceView: TerminalSurfaceView) {
@@ -98,24 +102,58 @@ final class IDECursorController {
     // MARK: - Prompt Tracking
 
     /// Called when a shell prompt is detected (OSC 133 ;A).
-    /// Records the prompt position for cursor calculations.
+    /// Records the prompt position for cursor calculations and activates the blink indicator.
     func shellPromptDetected(row: Int, column: Int) {
         promptRow = row
         promptColumn = column
         cursorColumn = column
         isOnPromptLine = true
+        installIndicatorIfNeeded()
+        updateIndicatorPosition()
+        indicatorLayer?.startBlinking()
     }
 
     /// Called when user input changes the cursor position.
     /// Tracks the cursor column for relative movement calculations.
     func cursorMoved(toColumn column: Int) {
         cursorColumn = column
+        updateIndicatorPosition()
     }
 
     /// Called when a command is executed (return key pressed).
-    /// Marks that the cursor is no longer on the prompt line.
+    /// Marks that the cursor is no longer on the prompt line and stops the blink indicator.
     func commandExecuted() {
         isOnPromptLine = false
+        indicatorLayer?.stopBlinking()
+    }
+
+    // MARK: - Indicator Layer Management
+
+    /// Installs the IDE cursor indicator layer into the surface view if not already present.
+    private func installIndicatorIfNeeded() {
+        guard indicatorLayer == nil, let layer = surfaceView?.layer else { return }
+        let indicator = IDECursorIndicatorLayer()
+        indicator.cursorHeight = cellHeight
+        layer.addSublayer(indicator)
+        indicatorLayer = indicator
+    }
+
+    /// Updates the indicator layer position to match the current cursor column and prompt row.
+    ///
+    /// The layer frame is sized to exactly one cell row at the prompt position.
+    /// Since `TerminalSurfaceView.isFlipped == true`, y increases downward,
+    /// so `promptRow * cellHeight` places the layer at the correct row.
+    private func updateIndicatorPosition() {
+        guard let indicator = indicatorLayer, isOnPromptLine,
+              let viewBounds = surfaceView?.bounds else { return }
+        let rowY = topPadding + CGFloat(promptRow) * cellHeight
+        indicator.frame = CGRect(
+            x: 0, y: rowY,
+            width: viewBounds.width, height: cellHeight
+        )
+        indicator.cursorX = leftPadding + CGFloat(cursorColumn) * cellWidth
+        indicator.cursorHeight = cellHeight
+        indicator.setNeedsDisplay()
     }
 
     // MARK: - Click-to-Position

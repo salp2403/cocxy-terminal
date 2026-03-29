@@ -18,9 +18,9 @@ import SwiftUI
 ///
 /// ## Filters
 ///
-/// - `Cmd+Shift+E`: Show only errors.
-/// - `Cmd+Shift+W`: Show only waiting for input.
-/// - `Cmd+Shift+A`: Show all agents.
+/// - `E`: Show only errors.
+/// - `W`: Show only waiting for input.
+/// - `A`: Show all agents.
 ///
 /// - SeeAlso: `SmartRoutingOverlayViewModel`
 /// - SeeAlso: `SmartRoutingFilterView`
@@ -28,7 +28,7 @@ struct SmartRoutingOverlayView: View {
 
     // MARK: - State
 
-    let viewModel: SmartRoutingOverlayViewModel
+    @ObservedObject var viewModel: SmartRoutingOverlayViewModel
     let onDismiss: () -> Void
 
     @State private var selectedIndex: Int = 0
@@ -89,6 +89,19 @@ struct SmartRoutingOverlayView: View {
             onDismiss()
             return .handled
         }
+        .onKeyPress(characters: CharacterSet(charactersIn: "eEwWaA")) { press in
+            let ch = press.characters.lowercased()
+            switch ch {
+            case "e": viewModel.applyFilter(.errorsOnly)
+            case "w": viewModel.applyFilter(.waitingOnly)
+            case "a": viewModel.applyFilter(.all)
+            default: return .ignored
+            }
+            return .handled
+        }
+        .onChange(of: viewModel.activeFilter) {
+            selectedIndex = 0
+        }
     }
 
     // MARK: - Header
@@ -101,7 +114,12 @@ struct SmartRoutingOverlayView: View {
 
             Spacer()
 
-            SmartRoutingFilterView(activeFilter: viewModel.activeFilter)
+            SmartRoutingFilterView(
+                activeFilter: viewModel.activeFilter,
+                onFilterSelected: { filter in
+                    viewModel.applyFilter(filter)
+                }
+            )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

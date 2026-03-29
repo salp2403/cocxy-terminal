@@ -24,7 +24,22 @@ public struct ClaudeSettingsManager {
     // MARK: - Constants
 
     /// The command that cocxy registers as a hook handler.
-    static let cocxyHookCommand = "cocxy hook-handler"
+    ///
+    /// When running from inside an app bundle (symlink points to `.app/Contents/Resources/`),
+    /// uses the absolute path so hooks work without `cocxy` in PATH.
+    /// Otherwise falls back to bare `cocxy hook-handler`.
+    static let cocxyHookCommand: String = {
+        let executablePath = ProcessInfo.processInfo.arguments[0]
+        let resolved = (try? FileManager.default.destinationOfSymbolicLink(atPath: executablePath))
+            ?? executablePath
+        let absolutePath = URL(fileURLWithPath: resolved).standardized.path
+
+        // Use full path only when the binary lives inside an .app bundle.
+        if absolutePath.contains(".app/Contents/Resources/") {
+            return "\(absolutePath) hook-handler"
+        }
+        return "cocxy hook-handler"
+    }()
 
     /// The hook event types that cocxy registers for.
     ///

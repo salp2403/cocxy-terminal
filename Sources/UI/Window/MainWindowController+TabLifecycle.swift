@@ -23,6 +23,9 @@ extension MainWindowController {
         let newTab = tabManager.addTab(workingDirectory: dir)
 
         let viewModel = TerminalViewModel(bridge: bridge)
+        let configuredFontSize = configService?.current.appearance.fontSize
+            ?? AppearanceConfig.defaults.fontSize
+        viewModel.setDefaultFontSize(configuredFontSize)
         let surfaceView = TerminalSurfaceView(viewModel: viewModel)
 
         tabViewModels[newTab.id] = viewModel

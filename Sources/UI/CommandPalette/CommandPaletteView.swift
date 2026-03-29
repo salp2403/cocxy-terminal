@@ -228,6 +228,18 @@ struct CommandPaletteView: View {
                 .font(.system(size: 15))
                 .focused($isSearchFocused)
                 .onSubmit { viewModel.executeSelected() }
+                .onKeyPress(.upArrow) {
+                    viewModel.moveSelectionUp()
+                    return .handled
+                }
+                .onKeyPress(.downArrow) {
+                    viewModel.moveSelectionDown()
+                    return .handled
+                }
+                .onKeyPress(.escape) {
+                    viewModel.dismiss()
+                    return .handled
+                }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

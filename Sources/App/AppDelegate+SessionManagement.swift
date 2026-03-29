@@ -158,6 +158,9 @@ extension AppDelegate {
             // Create ViewModel, SurfaceView, and wire handlers for restored tab.
             if let bridge = bridge {
                 let viewModel = TerminalViewModel(bridge: bridge)
+                let configuredFontSize = configService?.current.appearance.fontSize
+                    ?? AppearanceConfig.defaults.fontSize
+                viewModel.setDefaultFontSize(configuredFontSize)
                 let surfaceView = TerminalSurfaceView(viewModel: viewModel)
                 windowController.tabViewModels[newTab.id] = viewModel
                 windowController.tabSurfaceViews[newTab.id] = surfaceView

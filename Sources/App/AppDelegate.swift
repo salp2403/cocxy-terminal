@@ -180,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupAutoUpdate()
         restoreSessionOnLaunch()
         applyPlaceholderAppIcon()
+        performFirstLaunchSetup()
         showWelcomeOnFirstLaunch()
         initializeMenuBarItem()
     }
@@ -463,6 +464,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : ThemeSwitchTabSnapshot(id: tab.id, title: tab.title, workingDirectory: tab.workingDirectory)
 
             let viewModel = TerminalViewModel(bridge: newBridge)
+            let configuredFontSize = configService?.current.appearance.fontSize
+                ?? AppearanceConfig.defaults.fontSize
+            viewModel.setDefaultFontSize(configuredFontSize)
             let surfaceView = TerminalSurfaceView(viewModel: viewModel)
 
             wc.tabViewModels[tab.id] = viewModel

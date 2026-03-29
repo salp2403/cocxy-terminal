@@ -103,6 +103,7 @@ final class QuickTerminalController {
 
         // Create the terminal view inside the panel.
         let terminalViewModel = TerminalViewModel(bridge: bridge)
+        terminalViewModel.setDefaultFontSize(config.appearance.fontSize)
         let surfaceView = TerminalSurfaceView(viewModel: terminalViewModel)
         surfaceView.translatesAutoresizingMaskIntoConstraints = false
 

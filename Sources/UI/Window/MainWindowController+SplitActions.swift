@@ -192,6 +192,9 @@ extension MainWindowController {
 
         // Create new terminal for the second pane.
         let newViewModel = TerminalViewModel(bridge: bridge)
+        let configuredFontSize = configService?.current.appearance.fontSize
+            ?? AppearanceConfig.defaults.fontSize
+        newViewModel.setDefaultFontSize(configuredFontSize)
         let newSurfaceView = TerminalSurfaceView(viewModel: newViewModel)
 
         let workingDirectory = tabManager.activeTab?.workingDirectory
