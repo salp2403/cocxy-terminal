@@ -201,6 +201,7 @@ extension AppDelegate {
                     tab.agentState = agentState
                 }
                 windowController?.tabBarViewModel?.syncWithManager()
+                windowController?.refreshStatusBar()
 
                 windowController?.updateNotificationRing(
                     for: tabID,
