@@ -7,18 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Remote persistence via tmux — zero-install session survival across SSH disconnects
-- Plugin system — extensible event-driven architecture with sandboxed script execution
-- Nightly build channel — side-by-side installation with separate Sparkle update feed
-- Remote session management UI panel in Remote Workspace
-- 3 new CLI commands: `plugin-list`, `plugin-enable`, `plugin-disable`
-- 5 remote workspace CLI commands now fully implemented (were stubs)
-- TmuxSessionManager with support detection, session CRUD, and attach commands
-- RemoteSessionStore for local persistence of remote session metadata
-- PluginManifest TOML parser with 8 event types
-- PluginSandbox with timeout enforcement and clean environment isolation
-- 61 new tests (35 remote persistence + 26 plugin system)
+## [$VERSION] - $DATE
+
+### Fixed
+- $RELEASE_NOTES
 
 ## [0.1.17] - 2026-03-29
 
@@ -181,7 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero telemetry — no PostHog, no Sentry, no analytics
 - MIT License
 
-[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.17...HEAD
+[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v$VERSION...HEAD
 [0.1.17]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.14...v0.1.15
