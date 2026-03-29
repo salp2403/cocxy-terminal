@@ -170,14 +170,25 @@ final class GhosttyBridge: TerminalEngine {
             guard FileManager.default.fileExists(atPath: zshIntegrationDir) else { break }
 
             // Save the user's original ZDOTDIR so the integration script
-            // can restore it after sourcing itself. If ZDOTDIR is unset,
-            // save an empty string — the script handles this by unsetting
-            // ZDOTDIR (zsh treats unset ZDOTDIR as HOME).
-            let originalZdotdir = ProcessInfo.processInfo.environment["ZDOTDIR"] ?? ""
-            envVars.append(ghostty_env_var_s(
-                key: strdup("GHOSTTY_ZSH_ZDOTDIR"),
-                value: strdup(originalZdotdir)
-            ))
+            // can restore it after sourcing itself.
+            //
+            // CRITICAL: only set GHOSTTY_ZSH_ZDOTDIR when the user actually
+            // has ZDOTDIR in their environment. If ZDOTDIR is unset (the
+            // normal case for GUI apps launched from the Dock), do NOT set
+            // GHOSTTY_ZSH_ZDOTDIR at all. The integration script checks
+            // `${GHOSTTY_ZSH_ZDOTDIR+X}` — when the variable doesn't exist,
+            // it takes the `else` branch and unsets ZDOTDIR, which correctly
+            // tells zsh to use $HOME for .zshrc, .zprofile, etc.
+            //
+            // Setting GHOSTTY_ZSH_ZDOTDIR="" (empty string) is WRONG because
+            // zsh treats ZDOTDIR="" as "look in the current directory" instead
+            // of $HOME, breaking Prezto, Oh My Zsh, and all user shell configs.
+            if let originalZdotdir = ProcessInfo.processInfo.environment["ZDOTDIR"] {
+                envVars.append(ghostty_env_var_s(
+                    key: strdup("GHOSTTY_ZSH_ZDOTDIR"),
+                    value: strdup(originalZdotdir)
+                ))
+            }
 
             // Point ZDOTDIR to our shell-integration/zsh/ directory.
             // zsh sources $ZDOTDIR/.zshenv on startup, which is our
