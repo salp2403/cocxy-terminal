@@ -1,0 +1,294 @@
+name: Nightly Build
+
+on:
+  push:
+    branches:
+      - nightly
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-nightly:
+    name: Build Nightly
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate nightly version
+        id: version
+        run: |
+          BASE_VERSION=$(grep -A1 CFBundleShortVersionString Resources/Info.plist | tail -1 | sed 's/.*<string>\(.*\)<\/string>.*/\1/')
+          NIGHTLY_VERSION="${BASE_VERSION}-nightly.$(date +%Y%m%d)"
+          echo "VERSION=$NIGHTLY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Nightly version: $NIGHTLY_VERSION"
+
+      - name: Cache libghostty
+        id: cache-ghostty
+        uses: actions/cache@v4
+        with:
+          path: |
+            libs/GhosttyKit.xcframework
+            libs/ghostty-resources
+          key: ghostty-universal-${{ runner.os }}-${{ hashFiles('scripts/build-libghostty.sh') }}
+
+      - name: Install build dependencies
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: |
+          brew install zig gettext
+
+      - name: Build libghostty
+        if: steps.cache-ghostty.outputs.cache-hit != 'true'
+        run: |
+          chmod +x scripts/build-libghostty.sh
+          ./scripts/build-libghostty.sh --universal
+
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          echo "$CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          rm $RUNNER_TEMP/certificate.p12
+
+      - name: Build release binary (universal)
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Build CLI companion
+        run: swift build --target cocxy -c release --arch arm64 --arch x86_64 || true
+
+      - name: Create app bundle (nightly)
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          APP_DIR="build/Cocxy Terminal Nightly.app"
+          CONTENTS_DIR="$APP_DIR/Contents"
+          MACOS_DIR="$CONTENTS_DIR/MacOS"
+          RESOURCES_DIR="$CONTENTS_DIR/Resources"
+          FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
+          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
+
+          cp ".build/apple/Products/Release/CocxyTerminal" "$MACOS_DIR/Cocxy Terminal Nightly"
+
+          SPARKLE_FW=$(find .build/artifacts -name "Sparkle.framework" -path "*/macos-*" -type d | head -1)
+          if [ -n "$SPARKLE_FW" ]; then
+            cp -R "$SPARKLE_FW" "$FRAMEWORKS_DIR/"
+          else
+            SPARKLE_FW=$(find .build -name "Sparkle.framework" -type d | head -1)
+            [ -n "$SPARKLE_FW" ] && cp -R "$SPARKLE_FW" "$FRAMEWORKS_DIR/"
+          fi
+
+          install_name_tool -add_rpath @executable_path/../Frameworks "$MACOS_DIR/Cocxy Terminal Nightly" 2>/dev/null || true
+
+          if [ -f ".build/apple/Products/Release/cocxy" ]; then
+            cp ".build/apple/Products/Release/cocxy" "$RESOURCES_DIR/cocxy"
+          fi
+
+          # Nightly-specific Info.plist
+          cat > "$CONTENTS_DIR/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>Cocxy Terminal Nightly</string>
+            <key>CFBundleDisplayName</key><string>Cocxy Terminal Nightly</string>
+            <key>CFBundleIdentifier</key><string>dev.cocxy.terminal.nightly</string>
+            <key>CFBundleVersion</key><string>$VERSION</string>
+            <key>CFBundleShortVersionString</key><string>$VERSION</string>
+            <key>CFBundleExecutable</key><string>Cocxy Terminal Nightly</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleIconFile</key><string>AppIcon</string>
+            <key>LSMinimumSystemVersion</key><string>14.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+            <key>NSAppTransportSecurity</key>
+            <dict>
+              <key>NSAllowsLocalNetworking</key><true/>
+            </dict>
+            <key>SUFeedURL</key>
+            <string>https://cocxy.dev/appcast-nightly.xml</string>
+            <key>SUPublicEDKey</key>
+            <string>${{ secrets.SPARKLE_PUBLIC_KEY }}</string>
+            <key>NSAppleScriptEnabled</key>
+            <true/>
+            <key>OSAScriptingDefinition</key>
+            <string>CocxyTerminal.sdef</string>
+          </dict>
+          </plist>
+          PLIST
+
+          [ -d Resources/Themes ] && cp -R Resources/Themes "$RESOURCES_DIR/" || true
+          [ -f Resources/AppIcon.png ] && cp Resources/AppIcon.png "$RESOURCES_DIR/" || true
+          [ -d libs/ghostty-resources/shell-integration ] && \
+            cp -R libs/ghostty-resources/shell-integration "$RESOURCES_DIR/" || true
+          [ -f Resources/CocxyTerminal.sdef ] && \
+            cp Resources/CocxyTerminal.sdef "$RESOURCES_DIR/" || true
+
+      - name: Code sign with Developer ID
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+        run: |
+          APP_DIR="build/Cocxy Terminal Nightly.app"
+          ENTITLEMENTS="Resources/CocxyTerminal.entitlements"
+
+          SPARKLE_DIR="$APP_DIR/Contents/Frameworks/Sparkle.framework"
+          if [ -d "$SPARKLE_DIR" ]; then
+            find "$SPARKLE_DIR" -name "*.xpc" -type d | while read xpc; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$xpc"
+            done
+            [ -f "$SPARKLE_DIR/Versions/B/Autoupdate" ] && \
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$SPARKLE_DIR/Versions/B/Autoupdate"
+            [ -d "$SPARKLE_DIR/Versions/B/Updater.app" ] && \
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$SPARKLE_DIR/Versions/B/Updater.app"
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" "$SPARKLE_DIR"
+          fi
+
+          [ -f "$APP_DIR/Contents/Resources/cocxy" ] && \
+            codesign --force --options runtime --timestamp \
+              --entitlements "$ENTITLEMENTS" \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Resources/cocxy" || true
+
+          codesign --force --options runtime --timestamp \
+            --entitlements "$ENTITLEMENTS" \
+            --sign "$SIGNING_IDENTITY" \
+            "$APP_DIR"
+
+          codesign --verify --deep --strict "$APP_DIR"
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          mkdir -p build/dmg-staging
+          cp -R "build/Cocxy Terminal Nightly.app" build/dmg-staging/
+          ln -s /Applications build/dmg-staging/Applications
+          hdiutil create -volname "Cocxy Terminal Nightly" \
+            -srcfolder build/dmg-staging \
+            -ov -format UDZO \
+            "build/CocxyTerminal-Nightly-${VERSION}.dmg"
+
+      - name: Sign DMG
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          codesign --force --timestamp \
+            --sign "$SIGNING_IDENTITY" \
+            "build/CocxyTerminal-Nightly-${VERSION}.dmg"
+
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="build/CocxyTerminal-Nightly-${VERSION}.dmg"
+
+          SUBMISSION=$(xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait --timeout 600 2>&1) || true
+
+          echo "$SUBMISSION"
+
+          if echo "$SUBMISSION" | grep -q "status: Accepted"; then
+            xcrun stapler staple "$DMG"
+            echo "Notarization complete."
+          else
+            echo "WARNING: Notarization not accepted."
+          fi
+
+      - name: Generate nightly appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="build/CocxyTerminal-Nightly-${VERSION}.dmg"
+          DATE=$(date -u +"%a, %d %b %Y %H:%M:%S +0000")
+          DMG_SIZE=$(stat -f%z "$DMG")
+          DMG_URL="https://github.com/salp2403/cocxy-terminal/releases/download/nightly-${VERSION}/CocxyTerminal-Nightly-${VERSION}.dmg"
+
+          SPARKLE_BIN=$(find .build -name "sign_update" -type f 2>/dev/null | head -1)
+          if [ -n "$SPARKLE_BIN" ] && [ -f "$SPARKLE_BIN" ]; then
+            SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN" -p "$DMG" --ed-key-file -)
+          else
+            SIGNATURE=""
+          fi
+
+          cat > build/appcast-nightly.xml << APPCAST
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Cocxy Terminal Nightly</title>
+              <link>https://cocxy.dev/appcast-nightly.xml</link>
+              <description>Nightly builds for Cocxy Terminal</description>
+              <language>en</language>
+              <item>
+                <title>Nightly ${VERSION}</title>
+                <pubDate>${DATE}</pubDate>
+                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <enclosure
+                  url="${DMG_URL}"
+                  sparkle:version="${VERSION}"
+                  sparkle:shortVersionString="${VERSION}"
+                  sparkle:edSignature="${SIGNATURE}"
+                  length="${DMG_SIZE}"
+                  type="application/octet-stream" />
+              </item>
+            </channel>
+          </rss>
+          APPCAST
+
+      - name: Create GitHub Release (nightly)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ steps.version.outputs.VERSION }}
+          prerelease: true
+          files: |
+            build/CocxyTerminal-Nightly-*.dmg
+          body: |
+            ## Cocxy Terminal Nightly ${{ steps.version.outputs.VERSION }}
+
+            **This is a nightly build.** It may contain experimental features and bugs.
+            For the stable version, visit [cocxy.dev](https://cocxy.dev).
+
+            ### Install
+            Download the DMG below. Nightly builds can be installed side-by-side with the stable version.
+
+      - name: Deploy nightly appcast
+        env:
+          SERVER_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        run: |
+          echo "$SERVER_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          DEPLOY_TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            build/appcast-nightly.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
+
+          rm /tmp/deploy_key
+          echo "Nightly appcast deployed."

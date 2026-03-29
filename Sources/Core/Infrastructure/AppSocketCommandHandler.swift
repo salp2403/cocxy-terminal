@@ -84,6 +84,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Must be called from MainActor context.
     private let themeEngineProvider: (() -> ThemeEngineImpl?)?
 
+    /// Provides the remote connection manager for remote workspace commands.
+    private let remoteConnectionManagerProvider: (() -> RemoteConnectionManager?)?
+
+    /// Provides the remote profile store for remote workspace queries.
+    private let remoteProfileStoreProvider: (() -> (any RemoteProfileStoring)?)?
+
+    /// Provides the plugin manager for plugin lifecycle commands.
+    private let pluginManagerProvider: (() -> PluginManager?)?
+
     // MARK: - Initialization
 
     /// Creates an AppSocketCommandHandler with closure-based access to @MainActor services.
@@ -103,10 +112,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         hookEventReceiver: HookEventReceiverImpl?,
         browserViewModel: BrowserViewModel? = nil,
         configProvider: (@Sendable () -> CocxyConfig)? = nil,
-        themeEngineProvider: (() -> ThemeEngineImpl?)? = nil
+        themeEngineProvider: (() -> ThemeEngineImpl?)? = nil,
+        remoteConnectionManagerProvider: (() -> RemoteConnectionManager?)? = nil,
+        remoteProfileStoreProvider: (() -> (any RemoteProfileStoring)?)? = nil,
+        pluginManagerProvider: (() -> PluginManager?)? = nil
     ) {
         self.configProvider = configProvider
         self.themeEngineProvider = themeEngineProvider
+        self.remoteConnectionManagerProvider = remoteConnectionManagerProvider
+        self.remoteProfileStoreProvider = remoteProfileStoreProvider
+        self.pluginManagerProvider = pluginManagerProvider
         weak var weakTabManager = tabManager
         weak var weakBrowserVM = browserViewModel
 
@@ -354,9 +369,24 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserListTabs(request)
 
         // Remote workspace commands
-        case .remoteList, .remoteConnect, .remoteDisconnect,
-             .remoteStatus, .remoteTunnels:
-            return .ok(id: request.id, data: ["status": "acknowledged"])
+        case .remoteList:
+            return handleRemoteList(request)
+        case .remoteConnect:
+            return handleRemoteConnect(request)
+        case .remoteDisconnect:
+            return handleRemoteDisconnect(request)
+        case .remoteStatus:
+            return handleRemoteStatus(request)
+        case .remoteTunnels:
+            return handleRemoteTunnels(request)
+
+        // Plugin commands
+        case .pluginList:
+            return handlePluginList(request)
+        case .pluginEnable:
+            return handlePluginEnable(request)
+        case .pluginDisable:
+            return handlePluginDisable(request)
 
         // Acknowledged commands (async UI actions)
         case .notify, .split,
@@ -959,6 +989,304 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             data["tab_\(index)_active"] = tab["isActive"] ?? "false"
         }
         return .ok(id: request.id, data: data)
+    }
+
+    // MARK: - Plugin Handlers
+
+    /// Lists all installed plugins with their enabled/disabled state.
+    private func handlePluginList(_ request: SocketRequest) -> SocketResponse {
+        var pluginData: [(id: String, name: String, enabled: Bool)] = []
+        let work = {
+            MainActor.assumeIsolated {
+                guard let manager = self.pluginManagerProvider?() else { return }
+                manager.scanPlugins()
+                pluginData = manager.plugins.map { ($0.id, $0.manifest.name, $0.isEnabled) }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        var data: [String: String] = ["count": "\(pluginData.count)"]
+        for (index, plugin) in pluginData.enumerated() {
+            data["plugin_\(index)_id"] = plugin.id
+            data["plugin_\(index)_name"] = plugin.name
+            data["plugin_\(index)_enabled"] = plugin.enabled ? "true" : "false"
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Enables a plugin by ID.
+    private func handlePluginEnable(_ request: SocketRequest) -> SocketResponse {
+        guard let pluginID = request.params?["id"] else {
+            return .failure(id: request.id, error: "Usage: plugin-enable {\"id\": \"<plugin-id>\"}")
+        }
+
+        var resultMessage = ""
+        let work = {
+            MainActor.assumeIsolated {
+                guard let manager = self.pluginManagerProvider?() else {
+                    resultMessage = "Plugin manager not initialized"
+                    return
+                }
+                do {
+                    try manager.enablePlugin(id: pluginID)
+                    resultMessage = "enabled"
+                } catch {
+                    resultMessage = "Failed: \(error)"
+                }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        if resultMessage == "enabled" {
+            return .ok(id: request.id, data: ["plugin": pluginID, "status": "enabled"])
+        }
+        return .failure(id: request.id, error: resultMessage)
+    }
+
+    /// Disables a plugin by ID.
+    private func handlePluginDisable(_ request: SocketRequest) -> SocketResponse {
+        guard let pluginID = request.params?["id"] else {
+            return .failure(id: request.id, error: "Usage: plugin-disable {\"id\": \"<plugin-id>\"}")
+        }
+
+        var resultMessage = ""
+        let work = {
+            MainActor.assumeIsolated {
+                guard let manager = self.pluginManagerProvider?() else {
+                    resultMessage = "Plugin manager not initialized"
+                    return
+                }
+                do {
+                    try manager.disablePlugin(id: pluginID)
+                    resultMessage = "disabled"
+                } catch {
+                    resultMessage = "Failed: \(error)"
+                }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        if resultMessage == "disabled" {
+            return .ok(id: request.id, data: ["plugin": pluginID, "status": "disabled"])
+        }
+        return .failure(id: request.id, error: resultMessage)
+    }
+
+    // MARK: - Remote Workspace Handlers
+
+    /// Lists all saved remote connection profiles and their connection state.
+    private func handleRemoteList(_ request: SocketRequest) -> SocketResponse {
+        guard let profileStore = remoteProfileStoreProvider?() else {
+            return .ok(id: request.id, data: ["count": "0"])
+        }
+
+        let profiles: [RemoteConnectionProfile]
+        do {
+            profiles = try profileStore.loadAll()
+        } catch {
+            return .failure(id: request.id, error: "Failed to load profiles")
+        }
+
+        // Read connection states from MainActor context.
+        var connectionStates: [UUID: RemoteConnectionManager.ConnectionState] = [:]
+        let work = {
+            MainActor.assumeIsolated {
+                if let manager = self.remoteConnectionManagerProvider?() {
+                    connectionStates = manager.connections
+                }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        var data: [String: String] = ["count": "\(profiles.count)"]
+        for (index, profile) in profiles.enumerated() {
+            data["profile_\(index)_id"] = profile.id.uuidString
+            data["profile_\(index)_name"] = profile.name
+            data["profile_\(index)_host"] = profile.displayTitle
+            data["profile_\(index)_state"] = connectionStateString(
+                connectionStates[profile.id] ?? .disconnected
+            )
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Connects to a remote profile by name or UUID.
+    private func handleRemoteConnect(_ request: SocketRequest) -> SocketResponse {
+        guard let identifier = request.params?["name"] else {
+            return .failure(id: request.id, error: "Usage: remote-connect {\"name\": \"<name-or-uuid>\"}")
+        }
+
+        guard let profileStore = remoteProfileStoreProvider?() else {
+            return .failure(id: request.id, error: "Remote workspace not initialized")
+        }
+
+        let profile: RemoteConnectionProfile?
+        if let uuid = UUID(uuidString: identifier) {
+            profile = (try? profileStore.loadAll())?.first { $0.id == uuid }
+        } else {
+            profile = try? profileStore.findByName(identifier)
+        }
+
+        guard let resolvedProfile = profile else {
+            return .failure(id: request.id, error: "Profile not found: \(identifier)")
+        }
+
+        Task { @MainActor in
+            guard let manager = self.remoteConnectionManagerProvider?() else { return }
+            await manager.connect(profile: resolvedProfile)
+        }
+
+        return .ok(id: request.id, data: [
+            "status": "connecting",
+            "profile": resolvedProfile.name,
+            "host": resolvedProfile.displayTitle,
+        ])
+    }
+
+    /// Disconnects from a remote profile.
+    private func handleRemoteDisconnect(_ request: SocketRequest) -> SocketResponse {
+        guard let identifier = request.params?["name"] else {
+            return .failure(id: request.id, error: "Usage: remote-disconnect {\"name\": \"<name-or-uuid>\"}")
+        }
+
+        guard let profileStore = remoteProfileStoreProvider?() else {
+            return .failure(id: request.id, error: "Remote workspace not initialized")
+        }
+
+        let profile: RemoteConnectionProfile?
+        if let uuid = UUID(uuidString: identifier) {
+            profile = (try? profileStore.loadAll())?.first { $0.id == uuid }
+        } else {
+            profile = try? profileStore.findByName(identifier)
+        }
+
+        guard let resolvedProfile = profile else {
+            return .failure(id: request.id, error: "Profile not found: \(identifier)")
+        }
+
+        Task { @MainActor in
+            guard let manager = self.remoteConnectionManagerProvider?() else { return }
+            await manager.disconnect(profileID: resolvedProfile.id)
+        }
+
+        return .ok(id: request.id, data: [
+            "status": "disconnecting",
+            "profile": resolvedProfile.name,
+        ])
+    }
+
+    /// Returns connection status for all profiles or a specific one.
+    private func handleRemoteStatus(_ request: SocketRequest) -> SocketResponse {
+        var connectionStates: [UUID: RemoteConnectionManager.ConnectionState] = [:]
+        var supportMap: [UUID: RemoteShellSupport] = [:]
+        let work = {
+            MainActor.assumeIsolated {
+                if let manager = self.remoteConnectionManagerProvider?() {
+                    connectionStates = manager.connections
+                    supportMap = manager.remoteSupport
+                }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        // If a specific profile is requested.
+        if let identifier = request.params?["name"] {
+            guard let profileStore = remoteProfileStoreProvider?() else {
+                return .failure(id: request.id, error: "Remote workspace not initialized")
+            }
+
+            let profile: RemoteConnectionProfile?
+            if let uuid = UUID(uuidString: identifier) {
+                profile = (try? profileStore.loadAll())?.first { $0.id == uuid }
+            } else {
+                profile = try? profileStore.findByName(identifier)
+            }
+
+            guard let resolvedProfile = profile else {
+                return .failure(id: request.id, error: "Profile not found: \(identifier)")
+            }
+
+            var data: [String: String] = [
+                "name": resolvedProfile.name,
+                "host": resolvedProfile.displayTitle,
+                "state": connectionStateString(
+                    connectionStates[resolvedProfile.id] ?? .disconnected
+                ),
+            ]
+
+            if let support = supportMap[resolvedProfile.id] {
+                data["remote_support"] = remoteShellSupportString(support)
+            }
+
+            return .ok(id: request.id, data: data)
+        }
+
+        // Return all connections.
+        var data: [String: String] = ["count": "\(connectionStates.count)"]
+        var index = 0
+        for (profileID, state) in connectionStates {
+            data["connection_\(index)_id"] = profileID.uuidString
+            data["connection_\(index)_state"] = connectionStateString(state)
+            index += 1
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Lists active remote sessions across all connected profiles.
+    private func handleRemoteTunnels(_ request: SocketRequest) -> SocketResponse {
+        var tunnelData: [[String: String]] = []
+        let work = {
+            MainActor.assumeIsolated {
+                guard let manager = self.remoteConnectionManagerProvider?() else { return }
+                for (profileID, state) in manager.connections {
+                    if case .connected = state {
+                        let sessions = manager.savedSessionRecords(profileID: profileID)
+                        for session in sessions {
+                            tunnelData.append([
+                                "profile_id": profileID.uuidString,
+                                "session_name": session.sessionName,
+                                "profile_title": session.profileDisplayTitle,
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        var data: [String: String] = ["count": "\(tunnelData.count)"]
+        for (index, tunnel) in tunnelData.enumerated() {
+            for (key, value) in tunnel {
+                data["tunnel_\(index)_\(key)"] = value
+            }
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    // MARK: - Remote Helpers
+
+    /// Converts a `ConnectionState` to a human-readable string.
+    private func connectionStateString(
+        _ state: RemoteConnectionManager.ConnectionState
+    ) -> String {
+        switch state {
+        case .disconnected: return "disconnected"
+        case .connecting: return "connecting"
+        case .connected(let latencyMs):
+            if let ms = latencyMs { return "connected (\(ms)ms)" }
+            return "connected"
+        case .reconnecting(let attempt): return "reconnecting (attempt \(attempt))"
+        case .failed(let message): return "failed: \(message)"
+        }
+    }
+
+    /// Converts a `RemoteShellSupport` to a human-readable string.
+    private func remoteShellSupportString(_ support: RemoteShellSupport) -> String {
+        switch support {
+        case .tmux(let version): return "tmux (\(version))"
+        case .screen: return "screen"
+        case .none: return "none"
+        }
     }
 
     // MARK: - TOML Helpers

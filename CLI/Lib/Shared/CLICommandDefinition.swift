@@ -78,6 +78,12 @@ public enum CLICommand: String, CaseIterable {
     case remoteStatus = "remote-status"
     case remoteTunnels = "remote-tunnels"
 
+    // MARK: - Plugins (v2)
+
+    case pluginList = "plugin-list"
+    case pluginEnable = "plugin-enable"
+    case pluginDisable = "plugin-disable"
+
     // MARK: - Browser (v2)
 
     case browserNavigate = "browser-navigate"
@@ -140,6 +146,11 @@ public enum CLICommand: String, CaseIterable {
         // System
         case .send: return "Send text to the active terminal"
         case .sendKey: return "Send a keystroke to the active terminal"
+
+        // Plugins
+        case .pluginList: return "List all installed plugins"
+        case .pluginEnable: return "Enable a plugin by ID"
+        case .pluginDisable: return "Disable a plugin by ID"
 
         // Remote Workspace
         case .remoteList: return "List all saved remote connection profiles"
@@ -211,6 +222,11 @@ public enum CLICommand: String, CaseIterable {
         // System
         case .send: return "cocxy send <text>"
         case .sendKey: return "cocxy send-key <key>"
+
+        // Plugins
+        case .pluginList: return "cocxy plugin-list"
+        case .pluginEnable: return "cocxy plugin-enable <id>"
+        case .pluginDisable: return "cocxy plugin-disable <id>"
 
         // Remote Workspace
         case .remoteList: return "cocxy remote-list [--group <group>]"

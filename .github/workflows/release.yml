@@ -319,6 +319,101 @@ jobs:
             - Apple Silicon or Intel Mac
           generate_release_notes: true
 
+      - name: Update CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DATE=$(date -u +"%Y-%m-%d")
+
+          # Fetch auto-generated release notes from GitHub
+          RELEASE_NOTES=$(gh api repos/salp2403/cocxy-terminal/releases/tags/v${VERSION} \
+            --jq '.body // ""' 2>/dev/null || echo "")
+
+          # Build the changelog entry from release notes
+          python3 << 'PYEOF'
+          import re, pathlib
+
+          version = pathlib.Path("/dev/stdin").read_text().strip() if False else "$VERSION"
+          date = "$DATE"
+          notes_raw = """$RELEASE_NOTES"""
+
+          # Parse release notes into Keep a Changelog sections
+          added, changed, fixed, security = [], [], [], []
+
+          for line in notes_raw.split("\n"):
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              # Remove leading bullet markers
+              clean = re.sub(r"^[\*\-]\s*", "", line)
+              if not clean:
+                  continue
+
+              lower = clean.lower()
+              if any(w in lower for w in ["add", "new", "feat", "support", "introduce"]):
+                  added.append(clean)
+              elif any(w in lower for w in ["security", "cve", "vulnerab"]):
+                  security.append(clean)
+              elif any(w in lower for w in ["change", "update", "improve", "refactor", "rename"]):
+                  changed.append(clean)
+              else:
+                  fixed.append(clean)
+
+          # Build entry
+          entry_lines = [f"## [{version}] - {date}", ""]
+          if added:
+              entry_lines += ["### Added"] + [f"- {x}" for x in added] + [""]
+          if changed:
+              entry_lines += ["### Changed"] + [f"- {x}" for x in changed] + [""]
+          if fixed:
+              entry_lines += ["### Fixed"] + [f"- {x}" for x in fixed] + [""]
+          if security:
+              entry_lines += ["### Security"] + [f"- {x}" for x in security] + [""]
+
+          # If no notes parsed, add a minimal entry
+          if not (added or changed or fixed or security):
+              entry_lines += [f"- Release v{version}", ""]
+
+          entry = "\n".join(entry_lines)
+
+          # Read existing CHANGELOG
+          changelog_path = pathlib.Path("CHANGELOG.md")
+          if changelog_path.exists():
+              content = changelog_path.read_text()
+              # Replace [Unreleased] section content and insert new version
+              # Find the ## [Unreleased] line and the next ## [x.y.z] line
+              unreleased_pattern = r"(## \[Unreleased\].*?\n)(.*?)(## \[)"
+              match = re.search(unreleased_pattern, content, re.DOTALL)
+              if match:
+                  new_content = content[:match.start(2)] + "\n" + entry + "\n" + content[match.start(3):]
+                  # Update comparison links at bottom
+                  old_link = f"[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v{version}...HEAD"
+                  # The previous version link needs updating
+                  new_content = re.sub(
+                      r"\[Unreleased\]: https://github.com/salp2403/cocxy-terminal/compare/v[\d.]+\.\.\.HEAD",
+                      f"[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v{version}...HEAD",
+                      new_content
+                  )
+                  changelog_path.write_text(new_content)
+              else:
+                  print("CHANGELOG format not recognized, skipping update")
+          else:
+              print("CHANGELOG.md not found, skipping")
+
+          PYEOF
+
+          # Commit updated CHANGELOG back to main
+          git config user.name "said lopez"
+          git config user.email "dev@cocxy.dev"
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No CHANGELOG changes to commit"
+          else
+            git commit -m "docs: update CHANGELOG for v${VERSION}"
+            git push origin HEAD:main || echo "CHANGELOG push failed (non-blocking)"
+          fi
+
       - name: Deploy website
         env:
           SERVER_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}

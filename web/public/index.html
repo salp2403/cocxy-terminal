@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cocxy Terminal - The Terminal for AI Agents</title>
-  <meta name="description" content="Native macOS terminal built for AI agents. Zero telemetry, GPU-accelerated, MIT licensed. Detects Claude, Codex, Gemini, Aider and more.">
+  <title>Cocxy Terminal - The Native macOS Terminal for AI Coding Agents</title>
+  <meta name="description" content="The native macOS terminal that understands AI coding agents. 4-layer detection for Claude, Codex, Gemini, Aider, Copilot and Cursor. Persistent remote sessions, plugin system, zero telemetry. MIT licensed.">
   <meta property="og:title" content="Cocxy Terminal">
-  <meta property="og:description" content="The terminal for AI agents. Native macOS, zero telemetry, MIT licensed.">
+  <meta property="og:description" content="The native macOS terminal that understands AI coding agents. 4-layer detection, persistent remote sessions, plugin system. Zero telemetry.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://cocxy.dev">
   <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
@@ -77,8 +77,8 @@
           <img src="/images/icon.png" alt="Cocxy Terminal icon" width="120" height="120">
         </div>
         <h1 class="hero-title">Cocxy Terminal</h1>
-        <p class="hero-tagline">The terminal for AI agents.</p>
-        <p class="hero-sub">Native macOS. Zero telemetry. Built for the way you work now.</p>
+        <p class="hero-tagline">Your terminal finally understands AI agents.</p>
+        <p class="hero-sub">Native macOS. 4-layer agent detection. Persistent remote sessions. Plugin system. Zero telemetry.</p>
         <div class="hero-actions">
           <a href="#download" class="btn btn-primary">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -177,8 +177,8 @@
     <!-- Features -->
     <section class="features" id="features" aria-label="Features">
       <div class="container">
-        <h2 class="section-title">Built different.</h2>
-        <p class="section-subtitle">Every feature designed for developers who work alongside AI.</p>
+        <h2 class="section-title">Built for what comes next.</h2>
+        <p class="section-subtitle">Every feature designed for developers who ship code with AI agents.</p>
         <div class="features-grid">
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--agents">
@@ -187,8 +187,8 @@
                 <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
               </svg>
             </div>
-            <h3>AI Agent Detection</h3>
-            <p>Detects Claude, Codex, Gemini, Aider, Copilot and Cursor automatically. Real-time status, timeline and smart routing.</p>
+            <h3>4-Layer Agent Detection</h3>
+            <p>Hooks, OSC sequences, pattern matching, and timing heuristics. Detects Claude, Codex, Gemini, Aider, Copilot and Cursor in real time. Dashboard, timeline, and smart routing built in.</p>
           </article>
 
           <article class="feature-card" data-animate>
@@ -198,8 +198,8 @@
                 <path d="M8 12h8M12 8v8"/>
               </svg>
             </div>
-            <h3>Remote Workspaces</h3>
-            <p>SSH connections, port forwarding, SFTP browsing. Zero daemon required. Your remote servers, one keystroke away.</p>
+            <h3>Persistent Remote Sessions</h3>
+            <p>SSH multiplexing with tmux-backed persistence. Sessions survive disconnects, zero installation on the server. Port tunneling, SFTP, and auto-reconnect.</p>
           </article>
 
           <article class="feature-card" data-animate>
@@ -240,8 +240,28 @@
                 <line x1="12" y1="19" x2="20" y2="19"/>
               </svg>
             </div>
-            <h3>Smart CLI</h3>
-            <p>50+ commands, Unix socket API, full scriptability. Hook system for CI/CD integration. Your terminal, your rules.</p>
+            <h3>47 CLI Commands</h3>
+            <p>Unix socket API for full scriptability. Manage tabs, agents, plugins, remote sessions, and dashboards from the command line.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--agents">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+              </svg>
+            </div>
+            <h3>Plugin System</h3>
+            <p>Event-driven plugins with sandboxed execution. Respond to 8 terminal events with custom scripts. Extend Cocxy to fit your workflow.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--cli">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+            </div>
+            <h3>Per-Project Config</h3>
+            <p>Drop a .cocxy.toml in any project to override fonts, opacity, detection rules, and shortcuts. Hot-reload included. AppleScript automation built in.</p>
           </article>
         </div>
       </div>
@@ -362,11 +382,11 @@
           </p>
           <div class="opensource-stats">
             <div class="stat">
-              <span class="stat-value">2153+</span>
+              <span class="stat-value">2,898</span>
               <span class="stat-label">Tests</span>
             </div>
             <div class="stat">
-              <span class="stat-value">50+</span>
+              <span class="stat-value">47</span>
               <span class="stat-label">CLI Commands</span>
             </div>
             <div class="stat">
@@ -395,6 +415,7 @@
         <div class="footer-links">
           <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
           <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+          <a href="/releases.html">Changelog</a>
           <a href="#download">Download</a>
         </div>
         <p class="footer-credit">Made by Said Arturo Lopez</p>

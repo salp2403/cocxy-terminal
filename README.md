@@ -6,65 +6,130 @@
 [![Swift](https://img.shields.io/badge/Swift-5.10-orange.svg)](https://swift.org)
 [![No Telemetry](https://img.shields.io/badge/telemetry-zero-brightgreen.svg)](#zero-telemetry)
 
-**Native macOS terminal built for developers who work with coding agents.** GPU-accelerated rendering, real-time agent detection, remote workspaces, built-in browser, and zero telemetry.
+**The native macOS terminal that understands your AI coding agents.** GPU-accelerated rendering, real-time 4-layer agent detection, persistent remote sessions, extensible plugin system, and absolute zero telemetry.
 
-Cocxy detects when your coding agent is working, waiting for input, or finished -- and notifies you so you can focus on what matters instead of watching terminals.
+Cocxy knows when your coding agent is thinking, working, waiting for input, or done. It shows you -- so you stop watching terminals and start shipping code.
 
-<!-- TODO: Add hero screenshot -->
-<!-- ![Cocxy Terminal](docs/assets/hero.png) -->
+## Why Cocxy
+
+Every terminal shows you text. Cocxy shows you what your agent is actually doing. It detects 6 coding agents across 4 independent detection layers, gives you a live dashboard of every session, and lets you jump between agents with a single keystroke. When your agent finishes a task at 3 AM, Cocxy knows -- and you know.
+
+Built from scratch in Swift and Metal. No Electron. No web views wrapping a terminal. No data leaving your machine. Just a fast, native terminal that was designed for the way developers work in 2026.
 
 ## Features
 
-### Agent Detection
+### 4-Layer Agent Detection
 
-Passive, three-layer detection engine that identifies coding agent state in real time without intercepting or modifying agent traffic.
+Passive detection engine that identifies coding agent state in real time without intercepting or modifying agent traffic. Four independent layers cross-validate for high-confidence results.
 
-- **6 Agents Supported** -- Claude Code (with full hook integration), Codex, Gemini CLI, Aider, Kiro, and OpenCode
-- **3-Layer Engine** -- OSC sequences, output pattern matching, and timing heuristics working together for high-confidence detection
-- **Agent Dashboard** -- Live view of all agent sessions with state, working directory, and duration
-- **Agent Timeline** -- Chronological log of agent actions with JSON and Markdown export
-- **Smart Routing** -- Intelligent navigation between agent sessions by priority
+| Layer | Method | What It Detects |
+|-------|--------|-----------------|
+| **Hooks** | Claude Code event streaming | Tool calls, responses, session lifecycle |
+| **OSC** | Terminal escape sequences | Working directory, title changes, prompts |
+| **Pattern** | Output pattern matching | Launch signatures, completion markers |
+| **Timing** | Activity heuristics | Active vs idle periods, session boundaries |
+
+- **6 Agents** -- Claude Code (with full 12-event hook integration), Codex, Gemini CLI, Aider, GitHub Copilot, and Cursor
+- **Agent Dashboard** -- Live view of all sessions with state, working directory, tools in use, and duration
+- **Agent Timeline** -- Chronological event log with JSON and Markdown export
+- **Smart Routing** -- Jump between agent sessions by priority, state, or recency
 
 ### Remote Workspaces
 
-SSH multiplexing, port tunneling, and SFTP integration for seamless remote development.
+SSH multiplexing with persistent sessions that survive disconnects.
 
-- **SSH Detection** -- Automatic detection of SSH sessions with connection metadata
-- **Port Scanning** -- Auto-detects active dev servers (3000, 5173, 8080, etc.) shown in status bar
+- **Persistent Sessions** -- tmux-backed sessions on remote hosts that survive SSH disconnects. Zero installation required on the server
+- **Session Management UI** -- Visual panel to create, list, attach, and kill remote sessions
+- **SSH Multiplexing** -- OpenSSH ControlMaster for connection reuse across tabs
+- **Port Tunneling** -- Local, remote, and dynamic SOCKS forwarding with conflict detection
+- **SFTP Browser** -- Navigate and transfer files on remote hosts
+- **Auto-Reconnect** -- Exponential backoff reconnection with configurable retry limits
 
 ### Built-in Browser
 
-In-app browser panel for previewing dev servers, reading documentation, and inspecting web output without leaving the terminal.
+In-app browser for previewing dev servers, reading docs, and inspecting web output without switching apps.
 
-- **Profile Support** -- Separate browsing profiles with isolated cookies and storage
-- **DevTools** -- Web inspector access for debugging
-- **Bookmarks** -- Quick access to frequently used URLs
-- **Split or Overlay** -- Open as a split pane alongside your terminal or as a floating overlay
+- **Profiles** -- Isolated cookies, storage, and history per profile
+- **DevTools** -- Console, Network, and DOM inspection
+- **Bookmarks** -- Organized with nested folders
+- **Split or Overlay** -- Side-by-side with terminal or floating panel
+
+### Per-Project Configuration
+
+Drop a `.cocxy.toml` file in any project root to override global settings per directory.
+
+```toml
+# .cocxy.toml
+font-size = 13
+background-opacity = 0.95
+
+[agent-detection]
+extra-launch-patterns = ["^python manage.py"]
+```
+
+Cocxy detects and applies project config automatically when you `cd` into a directory. Hot-reload on file changes.
+
+### AppleScript Automation
+
+Full AppleScript vocabulary for workflow automation and integration with Shortcuts, Automator, and Raycast.
+
+```applescript
+tell application "Cocxy Terminal"
+    make new tab with properties {command:"ssh deploy@prod"}
+    set name of tab 1 to "Production"
+end tell
+```
+
+### Plugin System
+
+Event-driven plugin architecture for extending Cocxy with custom integrations.
+
+```
+~/.config/cocxy/plugins/
+  my-plugin/
+    manifest.toml
+    on-session-start.sh
+    on-agent-detected.sh
+```
+
+Plugins respond to 8 terminal events (session start/end, agent detected, state changed, command complete, tab created/closed, directory changed). Scripts run in a sandboxed environment with timeout enforcement.
 
 ### GPU Terminal
 
-High-performance terminal rendering powered by libghostty and Metal.
+High-performance rendering powered by libghostty and Metal.
 
-- **Metal-Accelerated** -- GPU rendering for smooth scrolling and fast output
-- **Multi-Tab + Splits** -- Vertical sidebar with git branch display, agent state indicator, and split panes
-- **Command Palette** -- Fuzzy search across all commands
-- **Scrollback Search** -- Search terminal output with debounced live results
-- **Quick Terminal** -- Global dropdown terminal from any app
-- **Session Persistence** -- Tabs, splits, working directories, and window state restored on relaunch
-- **Inline Images** -- Render images directly in the terminal via OSC sequences
+- **Metal-Accelerated** -- GPU rendering for smooth scrolling at 120 fps
+- **Multi-Tab + Splits** -- Vertical sidebar with git branch, agent state, and horizontal/vertical splits
+- **Markdown Panels** -- Render Markdown files in split panes with live file watching
+- **Command Palette** -- Fuzzy search across all commands (`Cmd+Shift+P`)
+- **Scrollback Search** -- Live search with debounced results (`Cmd+F`)
+- **Quick Terminal** -- Global dropdown from any app (`` Cmd+` ``)
+- **Session Persistence** -- Tabs, splits, directories, and window state restored on relaunch
 
 ### Zero Telemetry
 
-Cocxy sends **zero data** to any external server. No analytics, no crash reporting, no tracking, no exceptions. Your terminal activity stays on your machine. You can verify this with any network monitoring tool.
+Cocxy sends **zero data** to any external server. No analytics. No crash reporting. No tracking. No exceptions. No PostHog. No Sentry. Nothing. Your terminal activity stays on your machine. Verify with any network monitor.
 
-### Smart CLI
+### CLI Companion
 
-50+ commands for scripting and automation via Unix Domain Socket.
+47 commands for scripting and automation via Unix Domain Socket.
 
-- **Hook Integration** -- Full integration with Claude Code hook events for real-time agent state
-- **Tab Management** -- Create, list, focus, close, rename, and pin tabs from the command line
-- **Notifications** -- Trigger notifications from scripts and pipelines
-- **Dashboard Control** -- Toggle panels, query agent state, and export timeline data
+```bash
+cocxy hooks install              # Auto-configure Claude Code hooks
+cocxy notify "Deploy complete"   # Trigger notification
+cocxy list-tabs                  # List all tabs as JSON
+cocxy remote-list                # List SSH profiles and status
+cocxy remote-connect prod-web    # Connect to a remote profile
+cocxy plugin-list                # List installed plugins
+cocxy dashboard-toggle           # Toggle agent dashboard
+cocxy config-project             # Show per-project overrides
+```
+
+Run `cocxy help` for the full command reference.
+
+### Nightly Builds
+
+Opt into early builds with experimental features. Nightly builds install side-by-side with the stable version using a separate bundle ID and update feed.
 
 ## Install
 
@@ -80,7 +145,7 @@ To update:
 brew update && brew upgrade --cask cocxy
 ```
 
-> **Note:** `brew update` syncs the tap before upgrading. Running `brew upgrade` alone may not detect new versions from third-party taps.
+> `brew update` syncs the tap before upgrading. Without it, third-party taps may not detect new versions.
 
 ### Direct Download
 
@@ -98,13 +163,17 @@ See [Building from Source](#building-from-source) below.
 | Close Tab | `Cmd+W` |
 | New Window | `Cmd+N` |
 | Command Palette | `Cmd+Shift+P` |
-| Agent Dashboard | `Cmd+Option+D` |
+| Agent Dashboard | `Cmd+Option+A` |
 | Agent Timeline | `Cmd+Shift+T` |
+| Smart Routing | `Cmd+Shift+U` |
 | Notifications | `Cmd+Shift+I` |
 | Browser Panel | `Cmd+Shift+B` |
+| Remote Workspaces | `Cmd+Shift+R` |
 | Find in Terminal | `Cmd+F` |
 | Split Horizontal | `Cmd+D` |
 | Split Vertical | `Cmd+Shift+D` |
+| Equalize Splits | `Cmd+Shift+E` |
+| Toggle Split Zoom | `Cmd+Shift+F` |
 | Close Split | `Cmd+Shift+W` |
 | Navigate Splits | `Cmd+Option+Arrows` |
 | Quick Terminal | `` Cmd+` `` |
@@ -114,55 +183,30 @@ See [Building from Source](#building-from-source) below.
 | Jump to Tab 1-9 | `Cmd+1` through `Cmd+9` |
 | Dismiss Overlay | `Esc` |
 
-## CLI
-
-The `cocxy` CLI companion communicates with the running app via a local Unix Domain Socket.
-
-```bash
-# Install hooks for Claude Code (auto-configures settings)
-cocxy hooks install
-
-# Notify from scripts
-cocxy notify "Build finished"
-
-# Tab management
-cocxy list-tabs
-cocxy new-tab --directory ~/projects/my-app
-cocxy focus-tab <id>
-cocxy rename-tab <id> "API Server"
-cocxy pin-tab <id>
-
-# Dashboard and panels
-cocxy dashboard-toggle
-cocxy timeline-export --format json
-
-# Check app status
-cocxy status
-```
-
-Run `cocxy help` for the full list of available commands.
-
 ## Supported Agents
 
-| Agent | Hook Integration | OSC Detection | Pattern Detection |
-|-------|-----------------|---------------|-------------------|
-| Claude Code | Yes (12 events) | Yes | Yes |
-| Codex | -- | -- | Yes |
-| Aider | -- | -- | Yes |
-| Gemini CLI | -- | -- | Yes |
-| Kiro | -- | -- | Yes |
-| OpenCode | -- | -- | Yes |
+| Agent | Hooks | OSC | Pattern | Timing |
+|-------|-------|-----|---------|--------|
+| Claude Code | 12 events | Yes | Yes | Yes |
+| Codex | -- | -- | Yes | Yes |
+| Gemini CLI | -- | -- | Yes | Yes |
+| Aider | -- | -- | Yes | Yes |
+| GitHub Copilot | -- | -- | Yes | Yes |
+| Cursor | -- | -- | Yes | Yes |
+
+Custom agents can be added via `agents.toml`.
 
 ## Configuration
 
-Configuration files live in `~/.config/cocxy/`:
-
 ```
 ~/.config/cocxy/
-  config.toml       # Main config (fonts, theme, keybindings)
-  agents.toml       # Agent detection patterns and thresholds
-  themes/*.toml     # Custom themes (Ghostty-compatible format)
-  sessions/         # Auto-saved session state
+  config.toml          # Fonts, theme, keybindings, terminal behavior
+  agents.toml          # Agent detection patterns and thresholds
+  themes/*.toml        # Custom themes (Ghostty-compatible format)
+  plugins/             # Plugin directories with manifest.toml
+  sessions/            # Auto-saved session state
+  remotes/             # SSH connection profiles
+  sockets/             # SSH ControlMaster socket files
 ```
 
 ### Example config.toml
@@ -175,17 +219,23 @@ size = 14.0
 [theme]
 name = "catppuccin-mocha"
 
-[window]
-restore-session = true
-
 [terminal]
 scrollback-lines = 10000
 cursor-style = "block"
+cursor-blink = true
+copy-on-select = true
+clipboard-paste-protection = true
+
+[appearance]
+background-opacity = 1.0
+background-blur-radius = 0
+window-padding-x = 2
+window-padding-y = 2
 ```
 
 ### Themes
 
-Cocxy ships with Catppuccin (Mocha and Latte), One Dark, and Solarized. It also imports Ghostty `.toml` theme files directly. Drop a `.toml` file into `~/.config/cocxy/themes/` and it becomes available immediately.
+Ships with Catppuccin (Mocha and Latte), One Dark, Solarized, and more. Also imports Ghostty `.toml` theme files. Drop a theme into `~/.config/cocxy/themes/` and it appears immediately.
 
 ## Building from Source
 
@@ -202,7 +252,7 @@ Cocxy ships with Catppuccin (Mocha and Latte), One Dark, and Solarized. It also 
 git clone https://github.com/salp2403/cocxy-terminal.git
 cd cocxy-terminal
 
-# Build the terminal engine (takes 5-10 minutes on first run)
+# Build the terminal engine (5-10 minutes on first run)
 chmod +x scripts/build-libghostty.sh
 ./scripts/build-libghostty.sh
 
@@ -219,27 +269,21 @@ swift run CocxyTerminal
 ### Test
 
 ```bash
-swift test
-```
-
-Or via Xcode:
-
-```bash
-xcodebuild test -scheme CocxyTerminal -destination 'platform=macOS'
+swift test    # 2,898 tests
 ```
 
 ## Architecture
 
-MVVM + Coordinators with Swift protocols as contracts between modules. Zero third-party Swift dependencies.
+MVVM + Coordinators with Swift protocols as contracts between modules. Zero third-party Swift dependencies (only libghostty for rendering and Sparkle for updates).
 
 ```
 Sources/
-  App/               # Entry point, AppDelegate, lifecycle
-  Core/              # Terminal engine bridge, PTY, socket server
-  Domain/            # Business logic, detection engine, session management
+  App/               # Entry point, AppDelegate, scripting bridge
+  Core/              # Terminal engine bridge, socket server, key input
+  Domain/            # Detection engine, plugins, remote workspace, config
   UI/                # Windows, tabs, panels, overlays, animations
-CLI/                 # cocxy companion tool (50+ commands)
-Tests/               # 2,000+ test cases
+CLI/                 # cocxy companion tool (47 commands)
+Tests/               # 2,898 test cases
 ```
 
 ## Contributing
@@ -248,12 +292,14 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full g
 
 ## Security
 
-Found a vulnerability? Do not open a public issue. See [SECURITY.md](SECURITY.md) for the responsible disclosure process.
+Found a vulnerability? Do not open a public issue. Email [security@cocxy.dev](mailto:security@cocxy.dev). See [SECURITY.md](SECURITY.md) for the responsible disclosure process.
 
 ## License
 
 MIT License. Copyright (c) 2026 Said Arturo Lopez. See [LICENSE](LICENSE).
 
-## Author
+## Links
 
-**Said Arturo Lopez** ([@salp2403](https://github.com/salp2403))
+- **Website:** [cocxy.dev](https://cocxy.dev)
+- **Releases:** [GitHub Releases](https://github.com/salp2403/cocxy-terminal/releases)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md)

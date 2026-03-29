@@ -427,6 +427,9 @@
       <a href="#agent-detection" class="sidebar-link">Agent Detection</a>
       <a href="#browser" class="sidebar-link">Browser</a>
       <a href="#remote-workspaces" class="sidebar-link">Remote Workspaces</a>
+      <a href="#per-project-config" class="sidebar-link">Per-Project Config</a>
+      <a href="#applescript" class="sidebar-link">AppleScript</a>
+      <a href="#plugin-system" class="sidebar-link">Plugin System</a>
       <a href="#splits" class="sidebar-link">Splits</a>
       <a href="#quick-terminal" class="sidebar-link">Quick Terminal</a>
       <a href="#notifications" class="sidebar-link">Notifications</a>
@@ -626,9 +629,10 @@ restore-on-launch = true</code></pre>
 
     <!-- Agent Detection -->
     <h2 id="agent-detection">Agent Detection</h2>
-    <p>Cocxy uses a 3-layer detection system to identify AI agents running in your terminal:</p>
+    <p>Cocxy uses a 4-layer detection engine to identify AI agents running in your terminal. Each layer cross-validates with the others for high-confidence results:</p>
     <ol>
-      <li><strong>OSC Sequences</strong> (highest priority) — Agents that emit shell integration markers (OSC 133, OSC 99). Claude Code uses this via hooks.</li>
+      <li><strong>Hook Events</strong> (highest priority) — Claude Code hook integration streams 12 event types in real time: tool calls, responses, session lifecycle.</li>
+      <li><strong>OSC Sequences</strong> — Shell integration markers (OSC 133, OSC 7, OSC 99) for working directory and prompt detection.</li>
       <li><strong>Pattern Matching</strong> — Regex patterns matched against terminal output to detect agent launch commands and prompts.</li>
       <li><strong>Timing Heuristics</strong> (fallback) — Detects idle timeouts and sustained output patterns when the other layers don't match.</li>
     </ol>
@@ -728,6 +732,114 @@ idle-timeout-override = 8</code></pre>
     <h3>Auto-Reconnect</h3>
     <p>When enabled on a profile, Cocxy automatically reconnects with exponential backoff (1s, 2s, 4s, 8s, up to 30s) for up to 5 attempts.</p>
 
+    <h3>Persistent Sessions (tmux)</h3>
+    <p>Remote sessions backed by tmux survive SSH disconnects. When you reconnect, your sessions are waiting exactly where you left them. Zero installation required on the server — Cocxy uses the tmux that's already there.</p>
+    <ul>
+      <li><strong>Auto-detection</strong> — Cocxy checks for tmux (preferred) or screen on the remote host</li>
+      <li><strong>Create sessions</strong> — Start a new persistent session from the Sessions panel</li>
+      <li><strong>Reconnect</strong> — After an SSH drop, your tmux sessions are still alive. Reconnect and re-attach</li>
+      <li><strong>Session UI</strong> — Visual panel showing all remote sessions with status, window count, and controls</li>
+      <li><strong>CLI</strong> — <code>cocxy remote-list</code>, <code>cocxy remote-connect &lt;name&gt;</code>, <code>cocxy remote-status</code></li>
+    </ul>
+
+    <!-- Per-Project Config -->
+    <h2 id="per-project-config">Per-Project Configuration</h2>
+    <p>Create a <code>.cocxy.toml</code> file in any project directory to override global settings. Cocxy detects it automatically when you <code>cd</code> into the directory and applies the overrides to the active tab.</p>
+
+    <h3>Supported Overrides</h3>
+    <ul>
+      <li><code>font-size</code> — Override font size for this project</li>
+      <li><code>background-opacity</code> / <code>background-blur-radius</code> — Per-project transparency</li>
+      <li><code>window-padding-x</code> / <code>window-padding-y</code> — Terminal padding</li>
+      <li><code>[agent-detection] extra-launch-patterns</code> — Custom agent detection patterns for project-specific tools</li>
+      <li><code>[keybindings]</code> — Project-specific keyboard shortcuts</li>
+    </ul>
+
+    <h3>Example .cocxy.toml</h3>
+    <pre><code># Project-specific overrides
+font-size = 13
+background-opacity = 0.95
+
+[agent-detection]
+extra-launch-patterns = ["^python manage.py", "^cargo run"]
+
+[keybindings]
+"cmd+shift+t" = "split-vertical"</code></pre>
+
+    <h3>Hot Reload</h3>
+    <p>Changes to <code>.cocxy.toml</code> are detected and applied in real time — no restart needed. Use <code>cocxy config-project</code> to view the active overrides for the current tab.</p>
+
+    <!-- AppleScript -->
+    <h2 id="applescript">AppleScript Automation</h2>
+    <p>Cocxy exposes a full AppleScript vocabulary for automation and integration with Shortcuts, Automator, Raycast, and other macOS tools.</p>
+
+    <h3>Vocabulary</h3>
+    <table class="docs-table">
+      <tr><th>Object</th><th>Properties</th></tr>
+      <tr><td><code>tab</code></td><td>id, name (read/write), working directory, agent state, is active, process name</td></tr>
+      <tr><th>Command</th><th>Description</th></tr>
+      <tr><td><code>make new tab</code></td><td>Create a tab with optional command and directory</td></tr>
+      <tr><td><code>run command</code></td><td>Send a command to the active terminal</td></tr>
+      <tr><td><code>split terminal</code></td><td>Split the active pane (horizontal or vertical)</td></tr>
+      <tr><td><code>focus tab</code></td><td>Focus a tab by index</td></tr>
+      <tr><td><code>close</code></td><td>Close a tab</td></tr>
+      <tr><td><code>count tabs</code></td><td>Get the number of open tabs</td></tr>
+    </table>
+
+    <h3>Examples</h3>
+    <pre><code>-- Create a new tab and run a command
+tell application "Cocxy Terminal"
+    make new tab with properties {command:"ssh deploy@prod"}
+    set name of tab 1 to "Production"
+end tell
+
+-- Count tabs
+tell application "Cocxy Terminal" to count tabs
+
+-- From the command line
+osascript -e 'tell application "Cocxy Terminal" to make new tab'</code></pre>
+
+    <!-- Plugin System -->
+    <h2 id="plugin-system">Plugin System</h2>
+    <p>Extend Cocxy with custom plugins that respond to terminal events. Plugins are stored in <code>~/.config/cocxy/plugins/</code> and managed via the CLI.</p>
+
+    <h3>Plugin Structure</h3>
+    <pre><code>~/.config/cocxy/plugins/
+  my-plugin/
+    manifest.toml          # Required: plugin metadata
+    on-session-start.sh    # Optional: runs when a session starts
+    on-agent-detected.sh   # Optional: runs when an agent is detected
+    on-command-complete.sh  # Optional: runs when a command finishes
+    README.md              # Optional: documentation</code></pre>
+
+    <h3>manifest.toml</h3>
+    <pre><code>name = "My Plugin"
+version = "1.0.0"
+author = "Your Name"
+description = "What this plugin does"
+events = ["session-start", "agent-detected", "command-complete"]</code></pre>
+
+    <h3>Available Events</h3>
+    <table class="docs-table">
+      <tr><th>Event</th><th>Script</th><th>When</th></tr>
+      <tr><td>session-start</td><td>on-session-start.sh</td><td>A new terminal session begins</td></tr>
+      <tr><td>session-end</td><td>on-session-end.sh</td><td>A terminal session ends</td></tr>
+      <tr><td>agent-detected</td><td>on-agent-detected.sh</td><td>A coding agent is detected</td></tr>
+      <tr><td>agent-state-changed</td><td>on-agent-state-changed.sh</td><td>Agent state changes (working, waiting, etc.)</td></tr>
+      <tr><td>command-complete</td><td>on-command-complete.sh</td><td>A shell command finishes executing</td></tr>
+      <tr><td>tab-created</td><td>on-tab-created.sh</td><td>A new tab is opened</td></tr>
+      <tr><td>tab-closed</td><td>on-tab-closed.sh</td><td>A tab is closed</td></tr>
+      <tr><td>directory-changed</td><td>on-directory-changed.sh</td><td>Working directory changes</td></tr>
+    </table>
+
+    <h3>Security</h3>
+    <p>Plugin scripts run in a sandboxed environment with a clean PATH, a 10-second timeout, and no access to Cocxy internals beyond the environment variables passed to them. Scripts execute as the current user — no privilege escalation.</p>
+
+    <h3>CLI Commands</h3>
+    <pre><code>cocxy plugin-list               # List installed plugins
+cocxy plugin-enable my-plugin   # Enable a plugin
+cocxy plugin-disable my-plugin  # Disable a plugin</code></pre>
+
     <!-- Splits -->
     <h2 id="splits">Splits</h2>
     <p>Split any tab into multiple panes. Each split runs its own terminal session or panel (browser, markdown preview).</p>
@@ -782,22 +894,38 @@ restore-on-launch = true</code></pre>
 
     <!-- CLI Companion -->
     <h2 id="cli-companion">CLI Companion</h2>
-    <p>The <code>cocxy</code> CLI communicates with the running app via a Unix domain socket.</p>
+    <p>The <code>cocxy</code> CLI provides 47 commands for scripting and automation via a local Unix domain socket.</p>
     <div class="code-wrap">
       <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code># Open a new tab at a specific directory
+      <pre><code># Tab management
 cocxy new-tab --dir ~/projects/my-app
-
-# List open tabs
 cocxy list-tabs
+cocxy focus-tab &lt;id&gt;
+cocxy close-tab &lt;id&gt;
 
-# Switch theme
-cocxy theme one-dark
+# Agent hooks
+cocxy hooks install          # Configure Claude Code integration
 
-# Show agent dashboard
-cocxy dashboard</code></pre>
+# Panels and dashboards
+cocxy dashboard-toggle
+cocxy timeline-export --format json
+
+# Remote workspaces
+cocxy remote-list
+cocxy remote-connect prod-web
+cocxy remote-status
+
+# Plugins
+cocxy plugin-list
+cocxy plugin-enable my-plugin
+
+# Configuration
+cocxy theme set catppuccin-mocha
+cocxy config-project          # Show per-project overrides
+
+# Run cocxy help for the full list of 47 commands</code></pre>
     </div>
-    <p>The CLI is automatically installed at <code>/opt/homebrew/bin/cocxy</code> when you install via Homebrew.</p>
+    <p>The CLI is automatically installed at <code>/opt/homebrew/bin/cocxy</code> when you install via Homebrew, or at <code>~/.local/bin/cocxy</code> via the app bundle.</p>
 
     <!-- Themes -->
     <h2 id="themes">Themes</h2>

@@ -153,6 +153,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
     var remoteProfileStore: RemoteProfileStore?
 
+    // MARK: - Plugin Properties
+
+    /// Plugin manager for plugin lifecycle operations.
+    var pluginManager: PluginManager?
+
     // MARK: - Browser Pro Properties
 
     /// Browser profile manager for multi-profile browsing.
@@ -185,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         initializeNotificationStack()
         wireAgentDetectionToNotifications()
         initializePortScanner()
+        setupPlugins()
         initializeSocketServer()
         initializeQuickTerminal()
         initializeAppearanceObserver()
@@ -210,7 +216,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarItem?.uninstall()
         menuBarItem = nil
 
-        // Release remote workspace, browser, and update services.
+        // Release plugins, remote workspace, browser, and update services.
+        pluginManager = nil
         remoteConnectionManager = nil
         remoteProfileStore = nil
         browserProfileManager = nil
@@ -733,6 +740,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    // MARK: - Plugin Initialization
+
+    /// Initializes the plugin manager and performs initial scan.
+    private func setupPlugins() {
+        let manager = PluginManager()
+        manager.scanPlugins()
+        self.pluginManager = manager
+    }
+
     // MARK: - Socket Server Initialization
 
     /// Starts the CLI companion socket server and schedules a health check timer.
@@ -742,7 +758,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             tabManager: windowController?.tabManager,
             hookEventReceiver: hookEventReceiver,
             configProvider: configService.map { svc in { svc.current } },
-            themeEngineProvider: { [weak self] in self?.themeEngine }
+            themeEngineProvider: { [weak self] in self?.themeEngine },
+            remoteConnectionManagerProvider: { [weak self] in self?.remoteConnectionManager },
+            remoteProfileStoreProvider: { [weak self] in self?.remoteProfileStore },
+            pluginManagerProvider: { [weak self] in self?.pluginManager }
         )
 
         let server = SocketServerImpl(commandHandler: handler)

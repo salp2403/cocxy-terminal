@@ -459,7 +459,7 @@ final class EnumParityTests: XCTestCase {
     // MARK: - 34. CLICommand has all expected cases (10 original + 20 new + 8 browser + 5 remote = 43)
 
     func testCLICommandHasExpectedCaseCount() {
-        XCTAssertEqual(CLICommand.allCases.count, 44)
+        XCTAssertEqual(CLICommand.allCases.count, 47)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription

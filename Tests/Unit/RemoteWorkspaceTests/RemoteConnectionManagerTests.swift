@@ -60,6 +60,16 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {}
+
+    var remoteCommandResults: [String: ProcessResult] = [:]
+
+    func executeRemoteCommand(
+        _ command: String,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws -> ProcessResult {
+        remoteCommandResults[command] ?? ProcessResult(exitCode: 0, stdout: "", stderr: "")
+    }
 }
 
 // MARK: - Tracking Multiplexer (for reconnect tests)
@@ -89,6 +99,9 @@ final class TrackingSSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
     func newSession(profile: RemoteConnectionProfile) -> String { "ssh mock" }
     func forwardPort(_ forward: RemoteConnectionProfile.PortForward, on profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
     func cancelForward(_ forward: RemoteConnectionProfile.PortForward, on profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
+    func executeRemoteCommand(_ command: String, on profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> ProcessResult {
+        ProcessResult(exitCode: 0, stdout: "", stderr: "")
+    }
 }
 
 // MARK: - Mock Profile Store

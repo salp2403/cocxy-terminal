@@ -25,6 +25,20 @@ final class SparkleUpdater: ObservableObject {
         updaterController?.updater.canCheckForUpdates ?? true
     }
 
+    /// The current update channel based on the bundle identifier.
+    ///
+    /// Returns "nightly" for `dev.cocxy.terminal.nightly` builds,
+    /// "stable" for production builds.
+    var updateChannel: String {
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        return bundleID.hasSuffix(".nightly") ? "nightly" : "stable"
+    }
+
+    /// Whether this is a nightly build.
+    var isNightly: Bool {
+        updateChannel == "nightly"
+    }
+
     // MARK: - Actions
 
     /// Triggers a user-initiated update check.

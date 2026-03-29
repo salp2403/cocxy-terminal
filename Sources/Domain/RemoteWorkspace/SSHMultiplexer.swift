@@ -55,6 +55,13 @@ protocol SSHMultiplexing: Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws
+
+    /// Executes a command on the remote host through the ControlMaster session.
+    func executeRemoteCommand(
+        _ command: String,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws -> ProcessResult
 }
 
 // MARK: - SSH Multiplexer
@@ -215,6 +222,39 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         guard result.exitCode == 0 else {
             throw SSHMultiplexerError.forwardFailed(result.stderr)
         }
+    }
+
+    // MARK: - Remote Command Execution
+
+    /// Executes a command on the remote host through the ControlMaster session.
+    ///
+    /// Reuses the existing multiplexed connection to avoid opening a new TCP
+    /// session. The command is passed via `--` to prevent SSH from interpreting
+    /// remote arguments as local flags.
+    ///
+    /// - Parameters:
+    ///   - command: The shell command to run on the remote host.
+    ///   - profile: The connection profile whose ControlMaster to use.
+    ///   - executor: The process executor for running SSH.
+    /// - Returns: The result of the remote command execution.
+    /// - Throws: `SSHMultiplexerError.connectionFailed` if the command fails to execute.
+    func executeRemoteCommand(
+        _ command: String,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws -> ProcessResult {
+        let arguments = [
+            "-o", "ControlMaster=no",
+            "-o", "ControlPath=\(controlPath(for: profile))",
+            destination(for: profile),
+            "--",
+            command,
+        ]
+
+        return try await executor.executeAsync(
+            command: "/usr/bin/ssh",
+            arguments: arguments
+        )
     }
 
     // MARK: - Helpers

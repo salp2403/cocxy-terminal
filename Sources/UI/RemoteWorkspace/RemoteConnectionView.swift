@@ -18,6 +18,7 @@ final class RemoteConnectionViewModel: ObservableObject {
     // MARK: - Sub-Panel Selection
 
     enum SubPanel: String, CaseIterable, Identifiable {
+        case sessions
         case tunnels
         case keys
         case sftp
@@ -26,6 +27,7 @@ final class RemoteConnectionViewModel: ObservableObject {
 
         var label: String {
             switch self {
+            case .sessions: return "Sessions"
             case .tunnels: return "Tunnels"
             case .keys: return "Keys"
             case .sftp: return "SFTP"
@@ -34,6 +36,7 @@ final class RemoteConnectionViewModel: ObservableObject {
 
         var icon: String {
             switch self {
+            case .sessions: return "terminal"
             case .tunnels: return "arrow.left.arrow.right"
             case .keys: return "key"
             case .sftp: return "folder"
@@ -45,7 +48,7 @@ final class RemoteConnectionViewModel: ObservableObject {
 
     @Published private(set) var profiles: [RemoteConnectionProfile] = []
     @Published var selectedProfileID: UUID?
-    @Published var selectedSubPanel: SubPanel = .tunnels
+    @Published var selectedSubPanel: SubPanel = .sessions
     @Published var quickConnectText: String = ""
     @Published var isEditorPresented = false
     @Published var editingProfile: RemoteConnectionProfile?
@@ -488,12 +491,32 @@ struct RemoteConnectionView: View {
     @ViewBuilder
     private var subPanelContent: some View {
         switch viewModel.selectedSubPanel {
+        case .sessions:
+            sessionsSubPanel
         case .tunnels:
             tunnelsSubPanel
         case .keys:
             keysSubPanel
         case .sftp:
             sftpSubPanel
+        }
+    }
+
+    private var sessionsSubPanel: some View {
+        Group {
+            if let profileID = viewModel.selectedProfileID {
+                RemoteSessionListView(
+                    viewModel: RemoteSessionListViewModel(
+                        connectionManager: viewModel.connectionManager,
+                        profileID: profileID
+                    )
+                )
+            } else {
+                selectProfilePlaceholder(
+                    icon: "terminal",
+                    text: "Select a profile to manage persistent sessions"
+                )
+            }
         }
     }
 

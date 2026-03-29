@@ -164,6 +164,15 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// List active SSH tunnels.
     case remoteTunnels = "remote-tunnels"
 
+    // MARK: - Plugins (v2)
+
+    /// List all installed plugins.
+    case pluginList = "plugin-list"
+    /// Enable a plugin by ID.
+    case pluginEnable = "plugin-enable"
+    /// Disable a plugin by ID.
+    case pluginDisable = "plugin-disable"
+
     // MARK: - Browser (v2)
 
     /// Navigate the embedded browser to a URL.

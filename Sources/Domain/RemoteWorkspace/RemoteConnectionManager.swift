@@ -51,12 +51,17 @@ final class RemoteConnectionManager: ObservableObject {
     private let profileStore: any RemoteProfileStoring
     private let tunnelManager: SSHTunnelManager
     private let executor: any ProcessExecutor
+    private let tmuxManager: any TmuxSessionManaging
+    private let sessionStore: any RemoteSessionStoring
 
     /// Async delay function for backoff waits. Injected for testability.
     private let delaySleep: @Sendable (UInt64) async throws -> Void
 
     /// Profiles that have been connected (kept in memory for reconnect/health check).
     private var knownProfiles: [UUID: RemoteConnectionProfile] = [:]
+
+    /// Cached remote shell support per profile.
+    private(set) var remoteSupport: [UUID: RemoteShellSupport] = [:]
 
     // MARK: - Initialization
 
@@ -67,6 +72,8 @@ final class RemoteConnectionManager: ObservableObject {
     ///   - profileStore: Persistent profile storage.
     ///   - tunnelManager: Active tunnel tracker.
     ///   - executor: Process executor for SSH commands.
+    ///   - tmuxManager: Tmux session manager for remote persistence.
+    ///   - sessionStore: Local persistence for remote session metadata.
     ///   - delaySleep: Async delay function. Defaults to `Task.sleep(nanoseconds:)`.
     ///     Inject a no-op closure in tests to avoid real waiting.
     init(
@@ -74,12 +81,16 @@ final class RemoteConnectionManager: ObservableObject {
         profileStore: any RemoteProfileStoring,
         tunnelManager: SSHTunnelManager,
         executor: any ProcessExecutor,
+        tmuxManager: any TmuxSessionManaging = TmuxSessionManager(),
+        sessionStore: any RemoteSessionStoring = RemoteSessionStore(),
         delaySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
     ) {
         self.multiplexer = multiplexer
         self.profileStore = profileStore
         self.tunnelManager = tunnelManager
         self.executor = executor
+        self.tmuxManager = tmuxManager
+        self.sessionStore = sessionStore
         self.delaySleep = delaySleep
     }
 
@@ -192,5 +203,129 @@ final class RemoteConnectionManager: ObservableObject {
     nonisolated static func backoffDelay(attempt: Int) -> TimeInterval {
         let baseDelay = pow(2.0, Double(attempt))
         return min(baseDelay, maxBackoffDelay)
+    }
+
+    // MARK: - Remote Session Support
+
+    /// Detects which session multiplexer is available on the remote host.
+    ///
+    /// Caches the result per profile to avoid repeated SSH round-trips.
+    /// Requires an active ControlMaster connection.
+    func detectRemoteSupport(profileID: UUID) async -> RemoteShellSupport {
+        if let cached = remoteSupport[profileID] {
+            return cached
+        }
+        guard let profile = knownProfiles[profileID] else { return .none }
+
+        let support = await tmuxManager.detectSupport(
+            on: profile,
+            multiplexer: multiplexer,
+            executor: executor
+        )
+        remoteSupport[profileID] = support
+        return support
+    }
+
+    // MARK: - Tmux Session Operations
+
+    /// Lists all tmux sessions on the remote host for a given profile.
+    ///
+    /// Requires an active SSH connection. Returns an empty array if
+    /// tmux is not available or no sessions exist.
+    func listRemoteSessions(profileID: UUID) async -> [TmuxSessionInfo] {
+        guard let profile = knownProfiles[profileID],
+              connections[profileID] == .connected(latencyMs: nil)
+                || isConnected(profileID: profileID)
+        else { return [] }
+
+        do {
+            return try await tmuxManager.listSessions(
+                on: profile,
+                multiplexer: multiplexer,
+                executor: executor
+            )
+        } catch {
+            return []
+        }
+    }
+
+    /// Creates a new persistent tmux session on the remote host.
+    ///
+    /// The session is created in detached mode so it persists
+    /// even if the SSH connection drops. A local record is saved
+    /// for offline reconnection tracking.
+    ///
+    /// - Parameters:
+    ///   - name: The session name (will be prefixed with "cocxy-" if not already).
+    ///   - profileID: The profile to create the session on.
+    /// - Throws: `TmuxError` if session creation fails.
+    func createRemoteSession(named name: String, profileID: UUID) async throws {
+        guard let profile = knownProfiles[profileID] else { return }
+
+        let sessionName = name.hasPrefix(TmuxSessionManager.sessionPrefix)
+            ? name
+            : "\(TmuxSessionManager.sessionPrefix)\(name)"
+
+        try await tmuxManager.createSession(
+            named: sessionName,
+            on: profile,
+            multiplexer: multiplexer,
+            executor: executor
+        )
+
+        // Persist record locally for reconnection tracking.
+        let record = RemoteSessionRecord(
+            profileID: profileID,
+            sessionName: sessionName,
+            profileDisplayTitle: profile.displayTitle
+        )
+        try? sessionStore.save(record)
+    }
+
+    /// Returns the SSH command string to attach to a remote tmux session.
+    ///
+    /// The returned command reuses the existing ControlMaster and allocates
+    /// a TTY for interactive use.
+    func attachCommand(sessionName: String, profileID: UUID) -> String? {
+        guard let profile = knownProfiles[profileID] else { return nil }
+
+        return tmuxManager.attachCommand(
+            sessionName: sessionName,
+            on: profile,
+            multiplexer: multiplexer
+        )
+    }
+
+    /// Kills a remote tmux session and removes its local record.
+    func killRemoteSession(named name: String, profileID: UUID) async throws {
+        guard let profile = knownProfiles[profileID] else { return }
+
+        try await tmuxManager.killSession(
+            named: name,
+            on: profile,
+            multiplexer: multiplexer,
+            executor: executor
+        )
+
+        // Remove local records for this session.
+        if let records = try? sessionStore.findByProfile(profileID) {
+            for record in records where record.sessionName == name {
+                try? sessionStore.delete(id: record.id)
+            }
+        }
+    }
+
+    /// Returns locally-stored session records for offline reconnection display.
+    func savedSessionRecords(profileID: UUID) -> [RemoteSessionRecord] {
+        (try? sessionStore.findByProfile(profileID)) ?? []
+    }
+
+    // MARK: - Connection State Helpers
+
+    /// Returns whether a profile is in any connected state.
+    private func isConnected(profileID: UUID) -> Bool {
+        guard let state = connections[profileID] else { return false }
+        if case .connected = state { return true }
+        return false
     }
 }

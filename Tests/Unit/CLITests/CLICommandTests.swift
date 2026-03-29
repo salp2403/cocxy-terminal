@@ -562,10 +562,10 @@ final class CLIErrorTests: XCTestCase {
 /// Tests for `CLICommand` enum metadata.
 final class CLICommandDefinitionTests: XCTestCase {
 
-    // MARK: - 43. All commands exist (10 original + 21 extended + 8 browser + 5 remote = 44)
+    // MARK: - 43. All commands exist (10 original + 21 extended + 8 browser + 5 remote + 3 plugin = 47)
 
     func testAllCommandsExist() {
-        XCTAssertEqual(CLICommand.allCases.count, 44)
+        XCTAssertEqual(CLICommand.allCases.count, 47)
     }
 
     // MARK: - 39. Raw values match server protocol
