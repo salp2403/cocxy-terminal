@@ -27,9 +27,10 @@ extension AppDelegate {
         let config = configService?.current ?? .defaults
         guard config.agentDetection.enabled else { return }
 
-        // Load agent configs from the service.
+        // Load agent configs from the service and retain for hot-reload.
         let agentConfigService = AgentConfigService()
         try? agentConfigService.reload()
+        self.agentConfigService = agentConfigService
         let compiledConfigs = agentConfigService.currentConfigs
 
         let engine = AgentDetectionEngineImpl(
@@ -51,6 +52,24 @@ extension AppDelegate {
         }
 
         hookEventReceiver = HookEventReceiverImpl()
+
+        // Start watching agents.toml for hot-reload. File changes are
+        // debounced (500ms) and routed through the config service's
+        // Combine publisher to update the pattern detector live.
+        let watcher = AgentConfigWatcher(
+            agentConfigService: agentConfigService,
+            fileProvider: DiskAgentConfigFileProvider()
+        )
+        watcher.startWatching()
+        self.agentConfigWatcher = watcher
+
+        agentConfigService.configChangedPublisher
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak engine] newConfigs in
+                engine?.updateAgentConfigs(newConfigs)
+            }
+            .store(in: &hookCancellables)
     }
 
     /// Wires the agent detection engine to the main window controller.

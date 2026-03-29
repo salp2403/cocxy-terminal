@@ -151,6 +151,44 @@ final class SocketServerImpl: CLISocketServing {
         isRunning = false
     }
 
+    // MARK: - Health Check
+
+    /// Returns true if the server is running and the socket file exists on disk.
+    ///
+    /// The socket file can disappear if another process removes it or if a
+    /// deinit race condition occurred during reopen. This check allows
+    /// external callers to detect the situation and restart the server.
+    var isHealthy: Bool {
+        guard isRunning, serverFD >= 0 else { return false }
+        return FileManager.default.fileExists(atPath: socketPath)
+    }
+
+    /// Restarts the server if the socket file has disappeared while the
+    /// server thinks it is still running.
+    ///
+    /// This handles edge cases where the socket file is removed externally
+    /// (e.g., by a race condition during window reopen). The old fd is
+    /// closed and a fresh socket is created.
+    func restartIfNeeded() {
+        guard isRunning, !isHealthy else { return }
+
+        // Close the old fd (it's bound to a deleted inode).
+        if serverFD >= 0 {
+            shouldAcceptConnectionsFlag.withLock { $0 = false }
+            Darwin.shutdown(serverFD, SHUT_RDWR)
+            Darwin.close(serverFD)
+            serverFD = -1
+        }
+        isRunning = false
+
+        // Restart with a fresh socket.
+        do {
+            try start()
+        } catch {
+            NSLog("[SocketServer] Failed to restart: %@", String(describing: error))
+        }
+    }
+
     // MARK: - CLISocketServing: registerHandler
 
     /// Registers a handler for a specific CLI command type.

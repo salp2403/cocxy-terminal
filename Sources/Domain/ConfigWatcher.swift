@@ -144,42 +144,151 @@ final class ConfigWatcher {
 /// Watches `agents.toml` for changes and triggers a reload of agent
 /// detection patterns.
 ///
-/// Uses the existing `AgentConfigFileProviding` protocol (defined in
-/// `AgentConfigService.swift`) for filesystem abstraction.
+/// Uses `DispatchSource.makeFileSystemObjectSource` to detect file
+/// modifications. Includes the same debounce mechanism as `ConfigWatcher`
+/// (default 500ms) to coalesce rapid writes.
 ///
-/// Similar to `ConfigWatcher` but focused on the agent configuration file.
+/// On each valid file change, calls `AgentConfigService.reload()` which
+/// re-parses the TOML, re-compiles regex patterns, and emits via
+/// `configChangedPublisher`. Downstream subscribers (the detection engine)
+/// pick up the new patterns automatically.
+///
+/// - SeeAlso: `ConfigWatcher` for the analogous `config.toml` watcher.
+/// - SeeAlso: ADR-004 (Agent detection strategy)
 final class AgentConfigWatcher {
 
     // MARK: - Properties
 
-    /// The file provider for agent config.
+    /// The agent config service to reload on file changes.
+    private let agentConfigService: AgentConfigService
+
+    /// The file provider for agent config (used to resolve the file path).
     private let fileProvider: AgentConfigFileProviding
+
+    /// Whether the watcher is currently active.
+    private(set) var isWatching: Bool = false
 
     /// Whether the last reload succeeded.
     private(set) var lastReloadSucceeded: Bool = false
 
+    /// Debounce interval in seconds. Rapid file changes within this
+    /// window are coalesced into a single reload.
+    var debounceInterval: TimeInterval = 0.5
+
+    /// The dispatch source monitoring the agent config file.
+    private var fileSource: DispatchSourceFileSystemObject?
+
+    /// Work item for debounced reload.
+    private var debounceWorkItem: DispatchWorkItem?
+
     // MARK: - Initialization
 
-    init(fileProvider: AgentConfigFileProviding) {
+    /// Creates a watcher for the given agent config service.
+    ///
+    /// - Parameters:
+    ///   - agentConfigService: The service to reload on file changes.
+    ///   - fileProvider: The file provider for reading agent config content.
+    init(agentConfigService: AgentConfigService, fileProvider: AgentConfigFileProviding) {
+        self.agentConfigService = agentConfigService
         self.fileProvider = fileProvider
+    }
+
+    deinit {
+        stopWatching()
+    }
+
+    // MARK: - Watch Control
+
+    /// Starts watching the agent config file for changes.
+    ///
+    /// Opens a file descriptor to `~/.config/cocxy/agents.toml` and creates
+    /// a `DispatchSourceFileSystemObject` to detect writes. When a write is
+    /// detected, a debounced reload is scheduled.
+    ///
+    /// If already watching, this call is a no-op.
+    /// If the config file does not exist yet, watching is deferred.
+    func startWatching() {
+        guard !isWatching else { return }
+
+        let configPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/cocxy/agents.toml").path
+
+        guard FileManager.default.fileExists(atPath: configPath) else {
+            isWatching = true
+            return
+        }
+
+        let fd = open(configPath, O_EVTONLY)
+        guard fd >= 0 else {
+            isWatching = true
+            return
+        }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete],
+            queue: DispatchQueue.main
+        )
+
+        source.setEventHandler { [weak self] in
+            self?.scheduleReload()
+        }
+
+        source.setCancelHandler {
+            close(fd)
+        }
+
+        source.resume()
+        self.fileSource = source
+        isWatching = true
+    }
+
+    /// Stops watching the agent config file and cleans up resources.
+    func stopWatching() {
+        debounceWorkItem?.cancel()
+        debounceWorkItem = nil
+        fileSource?.cancel()
+        fileSource = nil
+        isWatching = false
     }
 
     // MARK: - File Change Handling
 
-    /// Handles a file change by re-reading and validating the agent config.
+    /// Directly handles a file change event. Called by the dispatch source
+    /// or by tests to simulate a file change.
+    ///
+    /// Pre-validates the TOML content before calling `agentConfigService.reload()`.
+    /// This prevents the service from silently falling back to defaults when
+    /// the user saves an invalid file. Only valid TOML triggers a reload.
     func handleFileChange() {
         guard let content = fileProvider.readAgentConfigFile() else {
             lastReloadSucceeded = false
             return
         }
 
-        // Validate that the content is parseable
         let parser = TOMLParser()
         do {
             _ = try parser.parse(content)
+            try agentConfigService.reload()
             lastReloadSucceeded = true
         } catch {
             lastReloadSucceeded = false
         }
+    }
+
+    /// Schedules a debounced reload. Multiple calls within `debounceInterval`
+    /// are coalesced into a single reload.
+    func scheduleReload() {
+        debounceWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.handleFileChange()
+        }
+
+        debounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + debounceInterval,
+            execute: workItem
+        )
     }
 }

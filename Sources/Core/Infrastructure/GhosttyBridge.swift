@@ -565,6 +565,33 @@ final class GhosttyBridge: TerminalEngine {
         ghostty_surface_set_content_scale(gSurface, scaleFactor, scaleFactor)
     }
 
+    // MARK: - Selection Query
+
+    /// Returns whether the given surface currently has an active text selection.
+    ///
+    /// - Parameter surfaceID: The surface to query.
+    /// - Returns: `true` if the surface has a selection, `false` otherwise.
+    func hasSelection(for surfaceID: SurfaceID) -> Bool {
+        guard let gSurface = surfaceRegistry.lookup(surfaceID) else { return false }
+        return ghostty_surface_has_selection(gSurface)
+    }
+
+    /// Reads the currently selected text from the given surface.
+    ///
+    /// Copies the text into a Swift `String` and frees the ghostty-allocated
+    /// buffer before returning. The caller does not need to manage memory.
+    ///
+    /// - Parameter surfaceID: The surface to read from.
+    /// - Returns: The selected text, or `nil` if no selection exists.
+    func readSelection(for surfaceID: SurfaceID) -> String? {
+        guard let gSurface = surfaceRegistry.lookup(surfaceID) else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(gSurface, &text) else { return nil }
+        defer { ghostty_surface_free_text(gSurface, &text) }
+        guard text.text != nil, text.text_len > 0 else { return nil }
+        return String(cString: text.text)
+    }
+
     // MARK: - Private Mouse Conversion
 
     private static func ghosttyMouseButton(

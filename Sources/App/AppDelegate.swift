@@ -96,6 +96,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Exposed for testing purposes.
     private(set) var socketServer: SocketServerImpl?
 
+    /// Timer that periodically checks if the socket file still exists.
+    /// If the file disappears (e.g., due to a race condition), the server
+    /// is automatically restarted to restore hook connectivity.
+    private var socketHealthTimer: Timer?
+
     /// The hook event receiver for Claude Code integration.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var hookEventReceiver: HookEventReceiverImpl?
@@ -129,6 +134,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The dashboard ViewModel for agent sessions. Created alongside the engine.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentDashboardViewModel: AgentDashboardViewModel?
+
+    /// The agent config service for agents.toml hot-reload.
+    /// Internal setter: extensions (+AgentWiring) assign during engine init.
+    var agentConfigService: AgentConfigService?
+
+    /// The agent config file watcher for hot-reload.
+    /// Internal setter: extensions (+AgentWiring) assign during engine init.
+    var agentConfigWatcher: AgentConfigWatcher?
 
     // MARK: - Remote Workspace Properties
 
@@ -205,11 +218,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browserBookmarkStore = nil
         sparkleUpdater = nil
 
+        // Stop the agent config watcher before services are torn down.
+        agentConfigWatcher?.stopWatching()
+        agentConfigWatcher = nil
+        agentConfigService = nil
+
         // Stop the port scanner before other services are torn down.
         portScanner?.stopScanning()
         portScanner = nil
 
-        // Stop the socket server before other services are torn down.
+        // Stop the socket health check timer and server.
+        socketHealthTimer?.invalidate()
+        socketHealthTimer = nil
         socketServer?.stop()
         socketServer = nil
 
@@ -264,6 +284,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Clear existing Combine subscriptions to prevent duplicate
                 // subscribers accumulating on engine.stateChanged.
                 hookCancellables.removeAll()
+
+                // Stop the old socket server BEFORE creating a new one.
+                // Without this, the old server's deinit runs after the new
+                // server binds, and removeStaleSocketFile() deletes the
+                // new server's socket file (race condition).
+                socketServer?.stop()
+                socketServer = nil
+
                 createMainWindow()
                 wireAgentDetectionToWindow()
                 initializeNotificationStack()
@@ -707,7 +735,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Socket Server Initialization
 
-    /// Starts the CLI companion socket server.
+    /// Starts the CLI companion socket server and schedules a health check timer.
     private func initializeSocketServer() {
         let configService = self.configService
         let handler = AppSocketCommandHandler(
@@ -721,9 +749,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try server.start()
             self.socketServer = server
+            startSocketHealthCheck()
         } catch {
             NSLog("[AppDelegate] Failed to start socket server: %@",
                   String(describing: error))
+        }
+    }
+
+    /// Schedules a repeating timer that verifies the socket file exists.
+    ///
+    /// If the socket file disappears (e.g., external deletion or race
+    /// condition), the server is automatically restarted. Runs every
+    /// 30 seconds to balance responsiveness with overhead.
+    private func startSocketHealthCheck() {
+        socketHealthTimer?.invalidate()
+        socketHealthTimer = Timer.scheduledTimer(
+            withTimeInterval: 30.0,
+            repeats: true
+        ) { [weak self] _ in
+            self?.socketServer?.restartIfNeeded()
         }
     }
 

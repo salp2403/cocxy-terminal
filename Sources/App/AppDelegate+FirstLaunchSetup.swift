@@ -122,13 +122,37 @@ extension AppDelegate {
             for eventType in eventTypes {
                 var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
 
-                // Skip if any cocxy hook already exists for this event.
-                let hasCocxyHook = eventHooks.contains { entry in
+                // Check if a cocxy hook already exists for this event.
+                let cocxyEntryIndex = eventHooks.firstIndex { entry in
                     guard let commands = entry["hooks"] as? [[String: Any]] else { return false }
                     return commands.contains { ($0["command"] as? String)?.contains("cocxy hook-handler") == true }
                 }
-                guard !hasCocxyHook else { continue }
 
+                if let index = cocxyEntryIndex {
+                    // A cocxy hook exists. Check if it uses the correct absolute path.
+                    // Old installations used bare "cocxy hook-handler" which may not
+                    // resolve when PATH is not configured. Replace with absolute path.
+                    if let commands = eventHooks[index]["hooks"] as? [[String: Any]] {
+                        let needsUpdate = commands.contains { cmd in
+                            guard let command = cmd["command"] as? String,
+                                  command.contains("cocxy hook-handler") else { return false }
+                            return !command.contains("/")
+                        }
+                        if needsUpdate {
+                            eventHooks[index] = [
+                                "matcher": "",
+                                "hooks": [
+                                    ["type": "command", "command": hookCommand]
+                                ]
+                            ]
+                            hooks[eventType] = eventHooks
+                            modified = true
+                        }
+                    }
+                    continue
+                }
+
+                // No cocxy hook exists — install one.
                 let entry: [String: Any] = [
                     "matcher": "",
                     "hooks": [

@@ -876,7 +876,8 @@ final class AgentConfigWatcherEdgeCaseTests: XCTestCase {
 
     func testHandleFileChangeWithNilContentSetsFailed() {
         let provider = InMemoryAgentFileProvider(content: nil)
-        let watcher = AgentConfigWatcher(fileProvider: provider)
+        let service = AgentConfigService(fileProvider: provider)
+        let watcher = AgentConfigWatcher(agentConfigService: service, fileProvider: provider)
 
         watcher.handleFileChange()
 
@@ -886,7 +887,8 @@ final class AgentConfigWatcherEdgeCaseTests: XCTestCase {
 
     func testHandleFileChangeWithInvalidTomlSetsFailed() {
         let provider = InMemoryAgentFileProvider(content: "!!! invalid toml !!!")
-        let watcher = AgentConfigWatcher(fileProvider: provider)
+        let service = AgentConfigService(fileProvider: provider)
+        let watcher = AgentConfigWatcher(agentConfigService: service, fileProvider: provider)
 
         watcher.handleFileChange()
 
@@ -904,7 +906,8 @@ final class AgentConfigWatcherEdgeCaseTests: XCTestCase {
         error-patterns = ["^Error:"]
         finished-indicators = ["^\\$\\s*$"]
         """)
-        let watcher = AgentConfigWatcher(fileProvider: provider)
+        let service = AgentConfigService(fileProvider: provider)
+        let watcher = AgentConfigWatcher(agentConfigService: service, fileProvider: provider)
 
         watcher.handleFileChange()
 

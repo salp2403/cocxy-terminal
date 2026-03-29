@@ -220,6 +220,26 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         timingDetector.notifyStateChanged(to: .idle)
     }
 
+    /// Updates the pattern detector with new compiled agent configurations.
+    ///
+    /// Called when `agents.toml` is hot-reloaded. The pattern detector resets
+    /// its sliding window state to avoid matching stale patterns against the
+    /// new config. Also updates per-agent idle timeout overrides on the
+    /// timing detector.
+    ///
+    /// - Parameter configs: The newly compiled agent configurations.
+    func updateAgentConfigs(_ configs: [CompiledAgentConfig]) {
+        patternDetector.updateConfigs(configs)
+        for compiled in configs {
+            if let timeout = compiled.config.idleTimeoutOverride {
+                timingDetector.setAgentTimeout(
+                    agentName: compiled.config.name,
+                    timeout: timeout
+                )
+            }
+        }
+    }
+
     // MARK: - Hook Event Processing (Layer 0)
 
     /// Processes a hook event from Claude Code, converting it to a detection signal.

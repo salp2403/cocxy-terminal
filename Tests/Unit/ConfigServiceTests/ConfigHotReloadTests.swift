@@ -155,7 +155,11 @@ final class ConfigHotReloadTests: XCTestCase {
         finished-indicators = ["^\\\\$\\\\s*$"]
         """)
 
-        let watcher = AgentConfigWatcher(fileProvider: agentFileProvider)
+        let agentConfigService = AgentConfigService(fileProvider: agentFileProvider)
+        let watcher = AgentConfigWatcher(
+            agentConfigService: agentConfigService,
+            fileProvider: agentFileProvider
+        )
 
         agentFileProvider.content = """
         [claude]
