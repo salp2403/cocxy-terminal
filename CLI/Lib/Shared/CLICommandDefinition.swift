@@ -58,6 +58,7 @@ public enum CLICommand: String, CaseIterable {
     case configGet = "config-get"
     case configSet = "config-set"
     case configPath = "config-path"
+    case configProject = "config-project"
 
     // MARK: - Theme (v2)
 
@@ -130,6 +131,7 @@ public enum CLICommand: String, CaseIterable {
         case .configGet: return "Get a configuration value"
         case .configSet: return "Set a configuration value"
         case .configPath: return "Show configuration file path"
+        case .configProject: return "Show active tab's project config overrides"
 
         // Theme
         case .themeList: return "List available themes"
@@ -200,6 +202,7 @@ public enum CLICommand: String, CaseIterable {
         case .configGet: return "cocxy config get <key>"
         case .configSet: return "cocxy config set <key> <value>"
         case .configPath: return "cocxy config path"
+        case .configProject: return "cocxy config-project"
 
         // Theme
         case .themeList: return "cocxy theme list"

@@ -38,6 +38,14 @@ extension MainWindowController {
             workingDirectory: dir
         )
 
+        // Load project config from .cocxy.toml if present in the tab's directory.
+        let projectConfigService = ProjectConfigService()
+        if let projectConfig = projectConfigService.loadConfig(for: dir) {
+            tabManager.updateTab(id: newTab.id) { tab in
+                tab.projectConfig = projectConfig
+            }
+        }
+
         handleTabSwitch(to: newTab.id)
     }
 

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Cocxy Terminal Terminology">
+
+    <!-- Standard Suite (required for basic AppleScript support) -->
+    <suite name="Standard Suite" code="????" description="Common classes and commands for all applications.">
+
+        <command name="count" code="corecnte" description="Return the number of elements of a particular class within an object.">
+            <cocoa class="NSCountCommand"/>
+            <access-group identifier="*"/>
+            <direct-parameter type="specifier" description="The objects to be counted."/>
+            <parameter name="each" code="kocl" type="type" optional="yes"
+                description="The class of objects to be counted.">
+                <cocoa key="ObjectClass"/>
+            </parameter>
+            <result type="integer" description="The count."/>
+        </command>
+
+        <command name="close" code="coreclos" description="Close a tab.">
+            <cocoa class="NSCloseCommand"/>
+            <access-group identifier="*"/>
+            <direct-parameter type="specifier" description="The tab(s) to close."/>
+        </command>
+
+        <class name="application" code="capp" description="The Cocxy Terminal application.">
+            <cocoa class="NSApplication"/>
+            <property name="name" code="pnam" type="text" access="r" description="The name of the application.">
+                <cocoa key="name"/>
+            </property>
+            <property name="version" code="vers" type="text" access="r" description="The version number of the application.">
+                <cocoa key="version"/>
+            </property>
+            <element type="tab" access="r">
+                <cocoa key="scriptableTabs"/>
+            </element>
+        </class>
+
+    </suite>
+
+    <!-- Cocxy Suite (custom commands and classes) -->
+    <suite name="Cocxy Suite" code="Cocx" description="Cocxy Terminal specific classes and commands.">
+
+        <class name="tab" code="CxTb" description="A terminal tab." plural="tabs">
+            <cocoa class="ScriptableTab"/>
+            <property name="id" code="ID  " type="text" access="r" description="The unique identifier of the tab.">
+                <cocoa key="uniqueID"/>
+            </property>
+            <property name="name" code="pnam" type="text" access="rw" description="The title of the tab.">
+                <cocoa key="name"/>
+            </property>
+            <property name="cwd" code="CxCd" type="text" access="r" description="The working directory of the tab.">
+                <cocoa key="workingDirectory"/>
+            </property>
+            <property name="agent state" code="CxAs" type="text" access="r" description="The agent state (idle, working, waiting, error, finished).">
+                <cocoa key="agentState"/>
+            </property>
+            <property name="is active" code="CxAc" type="boolean" access="r" description="Whether this tab is the active tab.">
+                <cocoa key="isActiveTab"/>
+            </property>
+            <property name="process name" code="CxPn" type="text" access="r" description="The foreground process name.">
+                <cocoa key="processName"/>
+            </property>
+            <responds-to command="close">
+                <cocoa method="handleCloseCommand:"/>
+            </responds-to>
+        </class>
+
+        <command name="make new tab" code="Cocxmktb" description="Create a new terminal tab.">
+            <cocoa class="CocxyMakeTabCommand"/>
+            <parameter name="with command" code="Cmnd" type="text" optional="yes"
+                description="A shell command to run in the new tab.">
+                <cocoa key="command"/>
+            </parameter>
+            <parameter name="at" code="CxAt" type="text" optional="yes"
+                description="The working directory for the new tab.">
+                <cocoa key="workingDirectory"/>
+            </parameter>
+            <result type="tab" description="The newly created tab."/>
+        </command>
+
+        <command name="run command" code="Cocxrncm" description="Send a command to the active terminal.">
+            <cocoa class="CocxyRunCommandCommand"/>
+            <direct-parameter type="text" description="The command text to send."/>
+        </command>
+
+        <command name="split terminal" code="Cocxsplt" description="Split the active terminal pane.">
+            <cocoa class="CocxySplitCommand"/>
+            <parameter name="direction" code="CxDr" type="text" optional="yes"
+                description="Split direction: horizontal or vertical (default).">
+                <cocoa key="direction"/>
+            </parameter>
+        </command>
+
+        <command name="focus tab" code="Cocxfctb" description="Activate a tab by its index (1-based).">
+            <cocoa class="CocxyFocusTabCommand"/>
+            <direct-parameter type="integer" description="The 1-based index of the tab to focus."/>
+        </command>
+
+    </suite>
+
+</dictionary>

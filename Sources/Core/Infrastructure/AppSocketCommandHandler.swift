@@ -66,6 +66,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Closure that moves a tab. Params: (tabID, destinationIndex). Returns true on success.
     private let tabMoveProvider: @Sendable (String, Int) -> Bool
 
+    /// Closure that reads the active tab's project config. Returns a dict of overrides or nil.
+    private let projectConfigProvider: @Sendable () -> [String: String]?
+
     /// The hook event receiver for processing Claude Code hook events.
     private let hookEventReceiver: HookEventReceiverImpl?
 
@@ -239,6 +242,50 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return moved
         }
 
+        // -- Project config from active tab (read-only) --
+        self.projectConfigProvider = {
+            var result: [String: String]?
+            let work = {
+                MainActor.assumeIsolated {
+                    guard let manager = weakTabManager,
+                          let activeID = manager.activeTabID,
+                          let tab = manager.tab(for: activeID),
+                          let config = tab.projectConfig else { return }
+
+                    var data: [String: String] = [:]
+                    if let fontSize = config.fontSize {
+                        data["font-size"] = String(fontSize)
+                    }
+                    if let padding = config.windowPadding {
+                        data["window-padding"] = String(padding)
+                    }
+                    if let paddingX = config.windowPaddingX {
+                        data["window-padding-x"] = String(paddingX)
+                    }
+                    if let paddingY = config.windowPaddingY {
+                        data["window-padding-y"] = String(paddingY)
+                    }
+                    if let opacity = config.backgroundOpacity {
+                        data["background-opacity"] = String(opacity)
+                    }
+                    if let blur = config.backgroundBlurRadius {
+                        data["background-blur-radius"] = String(blur)
+                    }
+                    if let patterns = config.agentDetectionExtraPatterns {
+                        data["agent-detection-extra-patterns"] = patterns.joined(separator: ", ")
+                    }
+                    if let keybindings = config.keybindingOverrides {
+                        for (key, value) in keybindings {
+                            data["keybinding.\(key)"] = value
+                        }
+                    }
+                    result = data
+                }
+            }
+            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            return result
+        }
+
         self.hookEventReceiver = hookEventReceiver
     }
 
@@ -275,6 +322,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleConfigSet(request)
         case .configPath:
             return handleConfigPath(request)
+        case .configProject:
+            return handleConfigProject(request)
 
         // Theme operations
         case .themeList:
@@ -461,6 +510,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     }
 
     // MARK: - Config Handlers
+
+    /// Returns the active tab's project config overrides, or a message if none.
+    ///
+    /// No parameters required -- operates on the active tab.
+    private func handleConfigProject(_ request: SocketRequest) -> SocketResponse {
+        if let configData = projectConfigProvider() {
+            return .ok(id: request.id, data: configData)
+        } else {
+            return .ok(id: request.id, data: ["status": "No project config (.cocxy.toml) found for active tab"])
+        }
+    }
 
     /// Returns the path to the configuration file.
     private func handleConfigPath(_ request: SocketRequest) -> SocketResponse {

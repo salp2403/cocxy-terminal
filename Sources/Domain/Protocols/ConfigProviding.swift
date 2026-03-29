@@ -68,6 +68,55 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             sessions: .defaults
         )
     }
+
+    /// Returns a new configuration with per-project overrides applied.
+    ///
+    /// Only non-nil fields in `overrides` replace the corresponding global
+    /// value. All other fields are preserved unchanged.
+    ///
+    /// - Note: `agentDetectionExtraPatterns` is stored on `ProjectConfig`
+    ///   only and read separately by the detection engine; it is not merged
+    ///   into `AgentDetectionConfig`.
+    func applying(projectOverrides overrides: ProjectConfig) -> CocxyConfig {
+        let mergedAppearance = AppearanceConfig(
+            theme: appearance.theme,
+            fontFamily: appearance.fontFamily,
+            fontSize: overrides.fontSize ?? appearance.fontSize,
+            tabPosition: appearance.tabPosition,
+            windowPadding: overrides.windowPadding ?? appearance.windowPadding,
+            windowPaddingX: overrides.windowPaddingX ?? appearance.windowPaddingX,
+            windowPaddingY: overrides.windowPaddingY ?? appearance.windowPaddingY,
+            backgroundOpacity: overrides.backgroundOpacity ?? appearance.backgroundOpacity,
+            backgroundBlurRadius: overrides.backgroundBlurRadius ?? appearance.backgroundBlurRadius
+        )
+
+        let mergedKeybindings: KeybindingsConfig
+        if let keyOverrides = overrides.keybindingOverrides {
+            mergedKeybindings = KeybindingsConfig(
+                newTab: keyOverrides["new-tab"] ?? keybindings.newTab,
+                closeTab: keyOverrides["close-tab"] ?? keybindings.closeTab,
+                nextTab: keyOverrides["next-tab"] ?? keybindings.nextTab,
+                prevTab: keyOverrides["prev-tab"] ?? keybindings.prevTab,
+                splitVertical: keyOverrides["split-vertical"] ?? keybindings.splitVertical,
+                splitHorizontal: keyOverrides["split-horizontal"] ?? keybindings.splitHorizontal,
+                gotoAttention: keyOverrides["goto-attention"] ?? keybindings.gotoAttention,
+                toggleQuickTerminal: keyOverrides["toggle-quick-terminal"] ?? keybindings.toggleQuickTerminal
+            )
+        } else {
+            mergedKeybindings = keybindings
+        }
+
+        return CocxyConfig(
+            general: general,
+            appearance: mergedAppearance,
+            terminal: terminal,
+            agentDetection: agentDetection,
+            notifications: notifications,
+            quickTerminal: quickTerminal,
+            keybindings: mergedKeybindings,
+            sessions: sessions
+        )
+    }
 }
 
 // MARK: - General Config

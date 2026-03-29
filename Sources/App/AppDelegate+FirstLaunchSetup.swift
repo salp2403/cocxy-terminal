@@ -101,7 +101,7 @@ extension AppDelegate {
             return
         }
 
-        let hookCommand = "\(cliPath) hook-handler"
+        let hookCommand = "'\(cliPath)' hook-handler"
         let settingsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/settings.json").path
 
@@ -129,14 +129,15 @@ extension AppDelegate {
                 }
 
                 if let index = cocxyEntryIndex {
-                    // A cocxy hook exists. Check if it uses the correct absolute path.
-                    // Old installations used bare "cocxy hook-handler" which may not
-                    // resolve when PATH is not configured. Replace with absolute path.
+                    // A cocxy hook exists. Verify it points to the current
+                    // app bundle's CLI binary. When the user switches between
+                    // debug builds and the production .app, the path changes.
+                    // Always update to match the running app's bundle.
                     if let commands = eventHooks[index]["hooks"] as? [[String: Any]] {
                         let needsUpdate = commands.contains { cmd in
                             guard let command = cmd["command"] as? String,
                                   command.contains("cocxy hook-handler") else { return false }
-                            return !command.contains("/")
+                            return command != hookCommand
                         }
                         if needsUpdate {
                             eventHooks[index] = [

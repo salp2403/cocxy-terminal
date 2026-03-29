@@ -356,6 +356,14 @@ extension MainWindowController {
             refreshStatusBar()
             refreshTabStrip()
 
+            // Reload project config for the new working directory.
+            let projectService = ProjectConfigService()
+            let newProjectConfig = projectService.loadConfig(for: directoryURL)
+            tabManager.updateTab(id: tabID) { tab in
+                tab.projectConfig = newProjectConfig
+            }
+            applyProjectConfig(for: tabID)
+
             feedDetectionEngine(
                 oscCode: 7,
                 payload: "file://localhost\(directoryURL.path)"

@@ -88,6 +88,10 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// Exit code of the last completed command (0 = success).
     var lastCommandExitCode: Int?
 
+    /// Per-project config overrides loaded from `.cocxy.toml`.
+    /// When present, these values override the global config for this tab.
+    var projectConfig: ProjectConfig?
+
     /// Whether a command is currently executing.
     var isCommandRunning: Bool {
         lastCommandStartedAt != nil && lastCommandDuration == nil
@@ -109,7 +113,8 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         createdAt: Date = Date(),
         lastCommandStartedAt: Date? = nil,
         lastCommandDuration: TimeInterval? = nil,
-        lastCommandExitCode: Int? = nil
+        lastCommandExitCode: Int? = nil,
+        projectConfig: ProjectConfig? = nil
     ) {
         self.id = id
         self.title = title
@@ -127,6 +132,7 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         self.lastCommandStartedAt = lastCommandStartedAt
         self.lastCommandDuration = lastCommandDuration
         self.lastCommandExitCode = lastCommandExitCode
+        self.projectConfig = projectConfig
     }
 }
 

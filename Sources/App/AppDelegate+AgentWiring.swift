@@ -94,8 +94,11 @@ extension AppDelegate {
 
     /// Connects the hook event receiver to the agent detection engine.
     ///
-    /// Only forwards events whose `cwd` matches a Cocxy tab. Events from
-    /// external Claude sessions (running in other terminals) are dropped.
+    /// Forwards events whose `cwd` matches a Cocxy tab. When no exact match
+    /// is found, falls back to parent-directory matching (the tab's CWD is a
+    /// prefix of the event's CWD) and then to the active tab. This handles
+    /// the common production case where shell integration hasn't updated the
+    /// tab's working directory via OSC 7.
     ///
     /// Uses a weak capture of `self` and resolves `windowController?.tabManager`
     /// lazily inside the sink closure to avoid retaining the tab manager eagerly.
@@ -112,18 +115,18 @@ extension AppDelegate {
                     return
                 }
 
-                // Only process events from sessions running inside Cocxy tabs.
+                // Match the event to a Cocxy tab by working directory.
                 if let cwd = event.cwd {
-                    let cwdURL = URL(fileURLWithPath: cwd).standardized
-                    let matchingTab = tabManager.tabs.first { tab in
-                        tab.workingDirectory.standardized.path == cwdURL.path
-                    }
-                    guard matchingTab != nil else { return }
+                    let matchingTab = Self.findMatchingTab(
+                        cwd: cwd,
+                        tabs: tabManager.tabs,
+                        activeTabID: tabManager.activeTabID
+                    )
+                    guard let matchingTab else { return }
 
                     // Update the tab's agentActivity with tool details for
                     // real-time visibility in the sidebar.
-                    if case .toolUse(let toolData) = event.data,
-                       let tabID = matchingTab?.id {
+                    if case .toolUse(let toolData) = event.data {
                         let filePath = toolData.toolInput?["file_path"]
                             ?? toolData.toolInput?["path"]
                             ?? toolData.toolInput?["command"]?.prefix(40).description
@@ -134,7 +137,7 @@ extension AppDelegate {
                         } else {
                             activity = toolData.toolName
                         }
-                        tabManager.updateTab(id: tabID) { tab in
+                        tabManager.updateTab(id: matchingTab.id) { tab in
                             tab.agentActivity = activity
                         }
                     }
@@ -173,16 +176,15 @@ extension AppDelegate {
                     if let cached = sessionToTab[hookSessionId] {
                         targetTabID = cached
                     } else {
-                        let cwdURL = URL(fileURLWithPath: hookCwd).standardized
-                        let matchingTab = tabManager.tabs.first { tab in
-                            tab.workingDirectory.standardized.path == cwdURL.path
-                        }
+                        let matchingTab = Self.findMatchingTab(
+                            cwd: hookCwd,
+                            tabs: tabManager.tabs,
+                            activeTabID: tabManager.activeTabID
+                        )
                         if let tab = matchingTab {
                             sessionToTab[hookSessionId] = tab.id
                             targetTabID = tab.id
                         } else {
-                            // No matching tab — this event is from a Claude
-                            // session running outside Cocxy. Ignore it.
                             return
                         }
                     }
@@ -295,10 +297,11 @@ extension AppDelegate {
                 // Determine the target tab (same logic as wireAgentDetectionToTabs).
                 let targetTabID: TabID?
                 if let hookCwd = context.hookCwd {
-                    let cwdURL = URL(fileURLWithPath: hookCwd).standardized
-                    targetTabID = tabManager.tabs.first {
-                        $0.workingDirectory.standardized.path == cwdURL.path
-                    }?.id
+                    targetTabID = Self.findMatchingTab(
+                        cwd: hookCwd,
+                        tabs: tabManager.tabs,
+                        activeTabID: tabManager.activeTabID
+                    )?.id
                 } else {
                     targetTabID = tabManager.activeTabID
                 }
@@ -321,5 +324,51 @@ extension AppDelegate {
                 )
             }
             .store(in: &hookCancellables)
+    }
+
+    // MARK: - Tab CWD Matching
+
+    /// Finds the tab whose working directory best matches the given CWD.
+    ///
+    /// Uses a three-tier strategy:
+    /// 1. **Exact match** — the tab's CWD equals the event's CWD.
+    /// 2. **Parent match** — the tab's CWD is a parent directory of the
+    ///    event's CWD. This handles the common case where a shell started
+    ///    in `~/` but Claude Code reports `~/project` as its CWD.
+    /// 3. **Active tab fallback** — when shell integration (OSC 7) hasn't
+    ///    updated the tab's working directory, no CWD-based match is
+    ///    possible. Falling back to the active tab is better than silently
+    ///    dropping the event, because the user most likely launched the
+    ///    agent in the tab they're looking at.
+    ///
+    /// - Parameters:
+    ///   - cwd: The working directory reported by the hook event.
+    ///   - tabs: All tabs in the window.
+    ///   - activeTabID: The currently focused tab's ID.
+    /// - Returns: The best-matching tab, or `nil` if no tabs exist.
+    static func findMatchingTab(
+        cwd: String,
+        tabs: [Tab],
+        activeTabID: TabID?
+    ) -> Tab? {
+        let cwdPath = URL(fileURLWithPath: cwd).standardized.path
+
+        // 1. Exact match.
+        if let exact = tabs.first(where: {
+            $0.workingDirectory.standardized.path == cwdPath
+        }) {
+            return exact
+        }
+
+        // 2. Parent match — tab CWD is an ancestor of the event CWD.
+        if let parent = tabs.first(where: {
+            let tabPath = $0.workingDirectory.standardized.path
+            return cwdPath.hasPrefix(tabPath + "/")
+        }) {
+            return parent
+        }
+
+        // 3. Active tab fallback.
+        return tabs.first { $0.id == activeTabID }
     }
 }

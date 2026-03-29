@@ -134,6 +134,8 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case configSet = "config-set"
     /// Show configuration file path.
     case configPath = "config-path"
+    /// Show the active tab's project config (.cocxy.toml overrides).
+    case configProject = "config-project"
 
     // MARK: - Theme (v2)
 

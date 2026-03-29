@@ -97,6 +97,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// The split container view for the active tab (when splits are active).
     private(set) var splitContainer: SplitContainer?
 
+    /// Watcher for the active tab's `.cocxy.toml` project config.
+    /// Stopped and recreated on every tab switch.
+    private var projectConfigWatcher: ProjectConfigWatcher?
+
     /// Subscriptions for config change notifications.
     private var cancellables = Set<AnyCancellable>()
 
@@ -998,6 +1002,87 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         refreshStatusBar()
         refreshTabStrip()
+        applyProjectConfig(for: tabID)
+    }
+
+    // MARK: - Project Config
+
+    /// Applies per-project config overrides to the active tab's terminal.
+    ///
+    /// Called on every tab switch. If the tab has a `.cocxy.toml` config,
+    /// its overrides are merged with the global config and applied to the
+    /// terminal view model (font size) and window appearance (padding, opacity).
+    /// When no project config exists, the global config is reapplied to ensure
+    /// switching FROM a project tab TO a non-project tab restores defaults.
+    func applyProjectConfig(for tabID: TabID) {
+        guard let tab = tabManager.tab(for: tabID) else { return }
+
+        let globalConfig = configService?.current ?? .defaults
+        let effective: CocxyConfig
+        if let projectOverrides = tab.projectConfig {
+            effective = globalConfig.applying(projectOverrides: projectOverrides)
+        } else {
+            effective = globalConfig
+        }
+
+        // Apply font size to the tab's view model.
+        if let viewModel = tabViewModels[tabID] {
+            viewModel.setDefaultFontSize(effective.appearance.fontSize)
+        }
+
+        // Apply window appearance overrides.
+        applyEffectiveAppearance(effective.appearance)
+
+        // Restart the project config watcher for this tab's directory.
+        restartProjectConfigWatcher(for: tab)
+    }
+
+    /// Restarts the file watcher for the active tab's `.cocxy.toml`.
+    ///
+    /// Stops any existing watcher and starts a new one pointing to the
+    /// `.cocxy.toml` in the tab's working directory (or nearest parent).
+    private func restartProjectConfigWatcher(for tab: Tab) {
+        projectConfigWatcher?.stopWatching()
+        projectConfigWatcher = nil
+
+        // Find the .cocxy.toml path (same traversal as loadConfig).
+        let service = ProjectConfigService()
+        let configPath = service.findConfigPath(for: tab.workingDirectory)
+        guard let configPath else { return }
+
+        let watcher = ProjectConfigWatcher(configFilePath: configPath)
+        watcher.startWatching { [weak self, tabID = tab.id] in
+            // Re-load project config and re-apply.
+            guard let self else { return }
+            let newConfig = ProjectConfigService().loadConfig(
+                for: self.tabManager.tab(for: tabID)?.workingDirectory
+                    ?? FileManager.default.homeDirectoryForCurrentUser
+            )
+            self.tabManager.updateTab(id: tabID) { tab in
+                tab.projectConfig = newConfig
+            }
+            self.applyProjectConfig(for: tabID)
+        }
+        self.projectConfigWatcher = watcher
+    }
+
+    /// Applies appearance settings to the window chrome.
+    ///
+    /// Updates background opacity and blur for the window and sidebar.
+    /// Called when switching tabs with different project configs.
+    private func applyEffectiveAppearance(_ appearance: AppearanceConfig) {
+        guard let window = window else { return }
+
+        // Apply background opacity.
+        window.isOpaque = appearance.backgroundOpacity >= 1.0
+        if appearance.backgroundOpacity < 1.0 {
+            window.backgroundColor = window.backgroundColor?.withAlphaComponent(
+                appearance.backgroundOpacity
+            )
+        }
+
+        // Update sidebar transparency to match.
+        tabBarView?.setSidebarTransparent(appearance.backgroundOpacity < 1.0)
     }
 
     // MARK: - Tab Actions
