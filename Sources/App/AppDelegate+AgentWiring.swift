@@ -328,24 +328,29 @@ extension AppDelegate {
 
     // MARK: - Tab CWD Matching
 
-    /// Finds the tab whose working directory best matches the given CWD.
+    /// Finds the tab whose working directory exactly matches the given CWD.
     ///
-    /// Uses a three-tier strategy:
-    /// 1. **Exact match** — the tab's CWD equals the event's CWD.
-    /// 2. **Parent match** — the tab's CWD is a parent directory of the
-    ///    event's CWD. This handles the common case where a shell started
-    ///    in `~/` but Claude Code reports `~/project` as its CWD.
-    /// 3. **Active tab fallback** — when shell integration (OSC 7) hasn't
-    ///    updated the tab's working directory, no CWD-based match is
-    ///    possible. Falling back to the active tab is better than silently
-    ///    dropping the event, because the user most likely launched the
-    ///    agent in the tab they're looking at.
+    /// Uses **strict exact matching only**. The previous parent-directory
+    /// heuristic was removed because it caused cross-terminal contamination:
+    /// an agent session in another terminal at `~/project` would match
+    /// a Cocxy tab whose CWD was `~/` (the home directory), polluting that
+    /// tab's agent state with events from an unrelated terminal.
+    ///
+    /// With shell integration (ZDOTDIR) properly configured, tabs always
+    /// have an up-to-date working directory via OSC 7, making exact matching
+    /// both correct and sufficient.
+    ///
+    /// Returns `nil` when no tab's CWD matches the event. Callers handle
+    /// the nil case: hook events are silently dropped (correct — the session
+    /// belongs to another terminal), pattern-based events fall back to the
+    /// active tab (correct — patterns are read from our own surfaces).
     ///
     /// - Parameters:
     ///   - cwd: The working directory reported by the hook event.
     ///   - tabs: All tabs in the window.
-    ///   - activeTabID: The currently focused tab's ID.
-    /// - Returns: The best-matching tab, or `nil` if no tabs exist.
+    ///   - activeTabID: Unused (kept for source compatibility). Callers that
+    ///     need active-tab fallback handle it externally.
+    /// - Returns: The tab with an exactly matching CWD, or `nil`.
     static func findMatchingTab(
         cwd: String,
         tabs: [Tab],
@@ -353,22 +358,8 @@ extension AppDelegate {
     ) -> Tab? {
         let cwdPath = URL(fileURLWithPath: cwd).standardized.path
 
-        // 1. Exact match.
-        if let exact = tabs.first(where: {
+        return tabs.first(where: {
             $0.workingDirectory.standardized.path == cwdPath
-        }) {
-            return exact
-        }
-
-        // 2. Parent match — tab CWD is an ancestor of the event CWD.
-        if let parent = tabs.first(where: {
-            let tabPath = $0.workingDirectory.standardized.path
-            return cwdPath.hasPrefix(tabPath + "/")
-        }) {
-            return parent
-        }
-
-        // 3. Active tab fallback.
-        return tabs.first { $0.id == activeTabID }
+        })
     }
 }

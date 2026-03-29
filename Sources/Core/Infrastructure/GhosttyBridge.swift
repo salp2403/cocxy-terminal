@@ -135,6 +135,111 @@ final class GhosttyBridge: TerminalEngine {
         return nil
     }
 
+    // MARK: - Shell Integration Env Vars
+
+    /// Builds the array of environment variables needed for shell integration.
+    ///
+    /// Detects the user's default shell and sets the appropriate env vars:
+    /// - **zsh**: `ZDOTDIR` → `<resources>/shell-integration/zsh`,
+    ///   `GHOSTTY_ZSH_ZDOTDIR` → original ZDOTDIR value.
+    /// - **bash**: `GHOSTTY_BASH_INJECT` → `1`,
+    ///   `ENV` → `<resources>/shell-integration/bash/ghostty.bash`.
+    /// - **All shells**: `GHOSTTY_RESOURCES_DIR` → resources root.
+    ///
+    /// Returns an array of `ghostty_env_var_s` with strdup'd key/value pairs.
+    /// Caller must free them via `freeEnvVars(_:count:)`.
+    static func buildShellIntegrationEnvVars(
+        resourcesPath: String?
+    ) -> [ghostty_env_var_s] {
+        guard let resources = resourcesPath else { return [] }
+        var envVars: [ghostty_env_var_s] = []
+
+        // 1. GHOSTTY_RESOURCES_DIR (all shells use this for resource lookup).
+        envVars.append(ghostty_env_var_s(
+            key: strdup("GHOSTTY_RESOURCES_DIR"),
+            value: strdup(resources)
+        ))
+
+        // Detect user's login shell.
+        let userShell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let shellName = URL(fileURLWithPath: userShell).lastPathComponent
+
+        switch shellName {
+        case "zsh":
+            let zshIntegrationDir = "\(resources)/shell-integration/zsh"
+            guard FileManager.default.fileExists(atPath: zshIntegrationDir) else { break }
+
+            // Save the user's original ZDOTDIR so the integration script
+            // can restore it after sourcing itself. If ZDOTDIR is unset,
+            // save an empty string — the script handles this by unsetting
+            // ZDOTDIR (zsh treats unset ZDOTDIR as HOME).
+            let originalZdotdir = ProcessInfo.processInfo.environment["ZDOTDIR"] ?? ""
+            envVars.append(ghostty_env_var_s(
+                key: strdup("GHOSTTY_ZSH_ZDOTDIR"),
+                value: strdup(originalZdotdir)
+            ))
+
+            // Point ZDOTDIR to our shell-integration/zsh/ directory.
+            // zsh sources $ZDOTDIR/.zshenv on startup, which is our
+            // integration entry point that installs OSC 7, OSC 133, etc.
+            envVars.append(ghostty_env_var_s(
+                key: strdup("ZDOTDIR"),
+                value: strdup(zshIntegrationDir)
+            ))
+
+        case "bash":
+            let bashScript = "\(resources)/shell-integration/bash/ghostty.bash"
+            guard FileManager.default.fileExists(atPath: bashScript) else { break }
+
+            // GHOSTTY_BASH_INJECT tells the integration script it was
+            // injected via env vars (not --rcfile). The script then
+            // manually recreates bash's startup sequence.
+            envVars.append(ghostty_env_var_s(
+                key: strdup("GHOSTTY_BASH_INJECT"),
+                value: strdup("1")
+            ))
+
+            // ENV is sourced by bash when started in POSIX mode.
+            // ghostty.bash handles switching out of POSIX mode internally.
+            envVars.append(ghostty_env_var_s(
+                key: strdup("ENV"),
+                value: strdup(bashScript)
+            ))
+
+        case "fish":
+            // Fish integration uses XDG_DATA_DIRS for vendor conf.d.
+            // Set it so fish finds the integration vendor config.
+            let fishVendorDir = "\(resources)/shell-integration/fish"
+            guard FileManager.default.fileExists(atPath: fishVendorDir) else { break }
+
+            let existingXDG = ProcessInfo.processInfo.environment["XDG_DATA_DIRS"] ?? "/usr/local/share:/usr/share"
+            envVars.append(ghostty_env_var_s(
+                key: strdup("XDG_DATA_DIRS"),
+                value: strdup("\(fishVendorDir):\(existingXDG)")
+            ))
+
+        default:
+            break
+        }
+
+        return envVars
+    }
+
+    /// Frees strdup'd env var keys/values and deallocates the array.
+    static func freeEnvVars(
+        _ ptr: UnsafeMutablePointer<ghostty_env_var_s>?,
+        count: Int
+    ) {
+        guard let ptr, count > 0 else { return }
+        for i in 0..<count {
+            let envVar = (ptr + i).pointee
+            free(UnsafeMutablePointer(mutating: envVar.key))
+            free(UnsafeMutablePointer(mutating: envVar.value))
+        }
+        ptr.deinitialize(count: count)
+        ptr.deallocate()
+    }
+
     // MARK: - TerminalEngine: Initialize
 
     /// One-time global initialization flag.
@@ -287,29 +392,46 @@ final class GhosttyBridge: TerminalEngine {
         let commandCString: UnsafeMutablePointer<CChar>? = command.map { strdup($0) }
         surfaceConfig.command = UnsafePointer(commandCString)
 
-        // Set GHOSTTY_RESOURCES_DIR so libghostty's shell integration scripts
-        // are found by the child shell. Without this env var, the shell does not
-        // emit OSC 7 (directory) or OSC 133 (prompt), breaking tab titles,
-        // directory tracking, and agent detection in production builds.
+        // Build environment variables for shell integration.
+        //
+        // libghostty in embedded mode does NOT automatically inject shell
+        // integration scripts (unlike standalone Ghostty). We must manually
+        // set the env vars that trigger integration loading:
+        //
+        // - GHOSTTY_RESOURCES_DIR: tells the integration scripts where to
+        //   find additional resources.
+        // - ZDOTDIR + GHOSTTY_ZSH_ZDOTDIR (zsh): makes zsh source the
+        //   integration .zshenv which installs OSC 7 (directory), OSC 133
+        //   (prompt marks), and title reporting hooks.
+        // - GHOSTTY_BASH_INJECT + ENV (bash): makes bash source the
+        //   integration script in POSIX mode before loading user configs.
+        //
+        // Without these, directory tracking, tab titles, and prompt detection
+        // are completely non-functional in production builds.
         let resourcesPath = Self.resolveResourcesPath()
-        let envKeyC = strdup("GHOSTTY_RESOURCES_DIR")
-        let envValueC = strdup(resourcesPath ?? "")
-        // Heap-allocate the env var array so the pointer stays valid through surface creation.
-        let envVarPtr = UnsafeMutablePointer<ghostty_env_var_s>.allocate(capacity: 1)
-        envVarPtr.initialize(to: ghostty_env_var_s(key: envKeyC, value: envValueC))
-        if resourcesPath != nil {
-            surfaceConfig.env_vars = envVarPtr
-            surfaceConfig.env_var_count = 1
+        let shellEnvVars = Self.buildShellIntegrationEnvVars(resourcesPath: resourcesPath)
+
+        // Heap-allocate the env var array so pointers stay valid through
+        // surface creation. Each ghostty_env_var_s holds strdup'd C strings.
+        let envVarPtr: UnsafeMutablePointer<ghostty_env_var_s>?
+        let envVarCount = shellEnvVars.count
+        if envVarCount > 0 {
+            let ptr = UnsafeMutablePointer<ghostty_env_var_s>.allocate(capacity: envVarCount)
+            for (i, envVar) in shellEnvVars.enumerated() {
+                (ptr + i).initialize(to: envVar)
+            }
+            surfaceConfig.env_vars = ptr
+            surfaceConfig.env_var_count = envVarCount
+            envVarPtr = ptr
+        } else {
+            envVarPtr = nil
         }
 
         // Create the surface.
         guard let gSurface = ghostty_surface_new(app, &surfaceConfig) else {
             free(workingDirCString)
             free(commandCString)
-            envVarPtr.deinitialize(count: 1)
-            envVarPtr.deallocate()
-            free(envKeyC)
-            free(envValueC)
+            Self.freeEnvVars(envVarPtr, count: envVarCount)
             throw TerminalEngineError.surfaceCreationFailed(
                 reason: "ghostty_surface_new() returned nil"
             )
@@ -318,10 +440,7 @@ final class GhosttyBridge: TerminalEngine {
         // Clean up C strings and env var allocation.
         free(workingDirCString)
         free(commandCString)
-        envVarPtr.deinitialize(count: 1)
-        envVarPtr.deallocate()
-        free(envKeyC)
-        free(envValueC)
+        Self.freeEnvVars(envVarPtr, count: envVarCount)
 
         // Register the surface.
         let surfaceID = SurfaceID()

@@ -130,6 +130,10 @@ jobs:
             <string>https://cocxy.dev/appcast.xml</string>
             <key>SUPublicEDKey</key>
             <string>${{ secrets.SPARKLE_PUBLIC_KEY }}</string>
+            <key>NSAppleScriptEnabled</key>
+            <true/>
+            <key>OSAScriptingDefinition</key>
+            <string>CocxyTerminal.sdef</string>
           </dict>
           </plist>
           PLIST
@@ -139,6 +143,8 @@ jobs:
           [ -f Resources/AppIcon.png ] && cp Resources/AppIcon.png "$RESOURCES_DIR/" || true
           [ -d libs/ghostty-resources/shell-integration ] && \
             cp -R libs/ghostty-resources/shell-integration "$RESOURCES_DIR/" || true
+          [ -f Resources/CocxyTerminal.sdef ] && \
+            cp Resources/CocxyTerminal.sdef "$RESOURCES_DIR/" || true
 
       - name: Code sign with Developer ID
         env:
