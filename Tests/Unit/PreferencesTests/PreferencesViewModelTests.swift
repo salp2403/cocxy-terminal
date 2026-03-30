@@ -70,7 +70,8 @@ final class PreferencesViewModelTests: XCTestCase {
             ),
             notifications: NotificationConfig(
                 macosNotifications: false, sound: false,
-                badgeOnTab: false, flashTab: false, showDockBadge: false
+                badgeOnTab: false, flashTab: false, showDockBadge: false,
+                soundFinished: "default", soundAttention: "default", soundError: "default"
             ),
             quickTerminal: .defaults,
             keybindings: .defaults,

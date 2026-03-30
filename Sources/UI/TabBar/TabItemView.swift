@@ -27,6 +27,14 @@ final class TabItemView: NSView {
     /// Set by the parent view based on `confirmCloseProcess` config.
     var shouldConfirmClose: Bool = false
 
+    /// When true, attention borders and glow effects are applied on unread tabs.
+    /// Set by the parent view from `notifications.flash-tab` config.
+    var flashTabEnabled: Bool = true
+
+    /// When true, unread notification count badges are shown on inactive tabs.
+    /// Set by the parent view from `notifications.badge-on-tab` config.
+    var badgeOnTabEnabled: Bool = true
+
     // MARK: - Layers
 
     /// Left accent strip indicating agent state color.
@@ -347,8 +355,9 @@ final class TabItemView: NSView {
         }
 
         // Notification badge: show count for inactive tabs with unread notifications.
+        // Gated by the `badge-on-tab` config toggle.
         let unreadCount = item.unreadNotificationCount
-        if unreadCount > 0 && !item.isActive {
+        if badgeOnTabEnabled && unreadCount > 0 && !item.isActive {
             notificationBadge.stringValue = unreadCount > 9 ? "9+" : "\(unreadCount)"
             notificationBadge.isHidden = false
         } else {
@@ -358,8 +367,9 @@ final class TabItemView: NSView {
         // Hover tooltip: show latest notification preview.
         toolTip = item.notificationPreview
 
+        // Attention effects (border glow, pulse) gated by `flash-tab` config toggle.
         let needsAttention = !item.isActive && (item.agentState == .waitingInput || item.hasUnreadNotification || unreadCount > 0)
-        if needsAttention {
+        if flashTabEnabled && needsAttention {
             applyAttentionBorder(color: stateColor)
             applyGlowEffect(color: stateColor)
         } else {
@@ -367,7 +377,7 @@ final class TabItemView: NSView {
             removeGlowEffect()
         }
 
-        if item.agentState == .working {
+        if flashTabEnabled && item.agentState == .working {
             startAccentPulse(color: stateColor)
         } else {
             stopAccentPulse()

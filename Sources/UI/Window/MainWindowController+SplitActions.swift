@@ -53,8 +53,9 @@ extension MainWindowController {
     }
 
     /// Opens a browser panel appended at the end of the split tree.
+    /// The browser tab receives focus so it appears selected in the tab strip.
     @objc func splitWithBrowserAction(_ sender: Any?) {
-        performVisualSplitWithPanel(isVertical: true, panel: .browser(), appendToEnd: true)
+        performVisualSplitWithPanel(isVertical: true, panel: .browser(), appendToEnd: true, focusNewPanel: true)
     }
 
     /// Opens a markdown panel appended at the end of the split tree.
@@ -78,7 +79,9 @@ extension MainWindowController {
     ///   - panel: The panel info describing the content type and initial data.
     ///   - appendToEnd: When true, the panel is added at the rightmost position
     ///     of the split tree regardless of focus. Defaults to false (split at focus).
-    func performVisualSplitWithPanel(isVertical: Bool, panel: PanelInfo, appendToEnd: Bool = false) {
+    ///   - focusNewPanel: When true, the new panel receives focus in the domain
+    ///     model so the tab strip highlights it. Defaults to false.
+    func performVisualSplitWithPanel(isVertical: Bool, panel: PanelInfo, appendToEnd: Bool = false, focusNewPanel: Bool = false) {
         guard let container = terminalContainerView else { return }
         let currentPaneCount = countSplitPanes()
         guard currentPaneCount < Self.maxPaneCount else { return }
@@ -87,7 +90,7 @@ extension MainWindowController {
         // Update the domain model with panel type.
         let contentID: UUID?
         if appendToEnd {
-            contentID = activeSplitManager?.appendPanel(panel: panel)
+            contentID = activeSplitManager?.appendPanel(panel: panel, focusNewPanel: focusNewPanel)
         } else {
             contentID = activeSplitManager?.splitFocusedWithPanel(
                 direction: isVertical ? .horizontal : .vertical,
@@ -107,6 +110,8 @@ extension MainWindowController {
             return
         case .browser:
             let browserVM = BrowserViewModel()
+            browserVM.historyStore = browserHistoryStore
+            browserVM.activeProfileID = browserProfileManager?.activeProfileID
             if let url = panel.initialURL {
                 browserVM.urlString = url.absoluteString
             }
@@ -157,8 +162,13 @@ extension MainWindowController {
             }
         }
 
-        // Keep focus on the terminal (don't steal focus to the panel).
-        window?.makeFirstResponder(focusedSurface)
+        // When focusNewPanel is false, keep focus on the terminal so the
+        // user's workflow is not disrupted. When true, the panel receives
+        // domain-model focus (via appendPanel) and we skip forcing the
+        // terminal as first responder so the tab strip highlights the new panel.
+        if !focusNewPanel {
+            window?.makeFirstResponder(focusedSurface)
+        }
 
         // Update toolbar to show panel tabs.
         updateWorkspaceToolbar()

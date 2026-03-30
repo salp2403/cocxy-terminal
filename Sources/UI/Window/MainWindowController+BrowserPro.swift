@@ -13,6 +13,44 @@ import SwiftUI
 /// used by Dashboard and Timeline.
 extension MainWindowController {
 
+    // MARK: - Active Browser Resolution
+
+    /// Returns the currently active `BrowserViewModel`, checking both the
+    /// overlay browser and any split-based browser panels.
+    ///
+    /// Resolution order:
+    /// 1. The overlay browser's ViewModel (`browserViewModel`), if the overlay is open.
+    /// 2. The focused split leaf's BrowserContentView ViewModel, if it's a browser panel.
+    /// 3. The first BrowserContentView found in `panelContentViews`, as a fallback.
+    ///
+    /// Returns nil when no browser panel is open in any form.
+    func activeBrowserViewModel() -> BrowserViewModel? {
+        // Prefer the overlay browser when it's visible.
+        if isBrowserVisible, let overlayVM = browserViewModel {
+            return overlayVM
+        }
+
+        // Check for a split-based browser by looking at the focused leaf.
+        if let sm = activeSplitManager, let focusedID = sm.focusedLeafID {
+            let leaves = sm.rootNode.allLeafIDs()
+            if let focusedLeaf = leaves.first(where: { $0.leafID == focusedID }),
+               let browserView = panelContentViews[focusedLeaf.terminalID] as? BrowserContentView {
+                return browserView.viewModel
+            }
+        }
+
+        // Fallback: return any open browser split panel.
+        for (_, view) in panelContentViews {
+            if let browserView = view as? BrowserContentView {
+                return browserView.viewModel
+            }
+        }
+
+        // Last resort: the overlay ViewModel even if overlay is not visible
+        // (it may have been set from a previous session).
+        return browserViewModel
+    }
+
     /// Toggles the browser history panel.
     func toggleBrowserHistory() {
         if isBrowserHistoryVisible {
@@ -34,7 +72,7 @@ extension MainWindowController {
             activeProfileID: activeProfileID,
             onNavigate: { [weak self] url in
                 self?.dismissBrowserHistory()
-                self?.browserViewModel?.navigate(to: url)
+                self?.activeBrowserViewModel()?.navigate(to: url)
             },
             onDismiss: { [weak self] in self?.dismissBrowserHistory() }
         )
@@ -98,10 +136,10 @@ extension MainWindowController {
             bookmarkStore: bookmarkStore,
             onNavigate: { [weak self] url in
                 self?.dismissBrowserBookmarks()
-                self?.browserViewModel?.navigate(to: url)
+                self?.activeBrowserViewModel()?.navigate(to: url)
             },
             onAddBookmark: { [weak self] in
-                guard let vm = self?.browserViewModel,
+                guard let vm = self?.activeBrowserViewModel(),
                       let pageURL = vm.currentURL else { return }
                 let urlString = pageURL.absoluteString
                 let title = vm.pageTitle.isEmpty ? urlString : vm.pageTitle

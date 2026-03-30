@@ -47,6 +47,10 @@ extension MainWindowController {
             applyTabPosition(config.appearance.tabPosition, sidebar: sidebar, strip: strip)
         }
 
+        // Apply notification toggle changes to tab bar.
+        tabBarView?.flashTabEnabled = config.notifications.flashTab
+        tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
+
         // Detect theme change and trigger surface recreation.
         let currentThemeName = activeThemeIndex < Self.themeNames.count
             ? Self.themeNames[activeThemeIndex] : nil

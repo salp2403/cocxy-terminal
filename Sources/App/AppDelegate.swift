@@ -761,7 +761,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             themeEngineProvider: { [weak self] in self?.themeEngine },
             remoteConnectionManagerProvider: { [weak self] in self?.remoteConnectionManager },
             remoteProfileStoreProvider: { [weak self] in self?.remoteProfileStore },
-            pluginManagerProvider: { [weak self] in self?.pluginManager }
+            pluginManagerProvider: { [weak self] in self?.pluginManager },
+            notifyDispatcher: { [weak self] title, body in
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let manager = self?.notificationManager else { return }
+                        // Use the active tab as the source, or a sentinel tab ID.
+                        let tabId = self?.windowController?.tabManager.activeTabID ?? TabID()
+                        let notification = CocxyNotification(
+                            type: .custom("cli"),
+                            tabId: tabId,
+                            title: title,
+                            body: body
+                        )
+                        manager.notify(notification)
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            }
         )
 
         let server = SocketServerImpl(commandHandler: handler)
@@ -927,7 +944,8 @@ final class SystemNotificationCenter: NotificationCenterProviding {
             body: request.body,
             categoryIdentifier: request.categoryIdentifier,
             userInfo: request.userInfo,
-            hasSound: request.hasSound
+            hasSound: request.hasSound,
+            soundName: request.soundName
         )
     }
 
@@ -964,7 +982,8 @@ final class UNNotificationCenterBridge: NSObject {
         body: String,
         categoryIdentifier: String,
         userInfo: [String: String],
-        hasSound: Bool
+        hasSound: Bool,
+        soundName: String = "default"
     ) {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -972,7 +991,11 @@ final class UNNotificationCenterBridge: NSObject {
         content.categoryIdentifier = categoryIdentifier
         content.userInfo = userInfo
         if hasSound {
-            content.sound = .default
+            if soundName == "default" {
+                content.sound = .default
+            } else {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(soundName))
+            }
         }
 
         guard Bundle.main.bundleIdentifier != nil else {

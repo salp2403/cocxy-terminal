@@ -548,8 +548,17 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     // MARK: - Group 4: Acknowledged Commands
 
-    func test_notifyCommand_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+    func test_notifyCommand_dispatchesAndReturnsNotificationSent() {
+        var dispatchedTitle: String?
+        var dispatchedBody: String?
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            notifyDispatcher: { title, body in
+                dispatchedTitle = title
+                dispatchedBody = body
+            }
+        )
         let request = SocketRequest(
             id: "ack-1",
             command: "notify",
@@ -558,7 +567,40 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let response = handler.handleCommand(request)
 
         XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
+        XCTAssertEqual(response.data?["status"], "notification sent")
+        XCTAssertEqual(dispatchedTitle, "Cocxy")
+        XCTAssertEqual(dispatchedBody, "Build done")
+    }
+
+    func test_notifyCommand_withCustomTitle() {
+        var dispatchedTitle: String?
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            notifyDispatcher: { title, _ in dispatchedTitle = title }
+        )
+        let request = SocketRequest(
+            id: "ack-1b",
+            command: "notify",
+            params: ["title": "Deploy", "message": "Success"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(dispatchedTitle, "Deploy")
+    }
+
+    func test_notifyCommand_withoutMessage_returnsError() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "ack-1c",
+            command: "notify",
+            params: nil
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertFalse(response.success)
+        XCTAssertTrue(response.error?.contains("message") == true)
     }
 
     func test_splitCommand_returnsAcknowledged() {

@@ -117,7 +117,10 @@ final class DockBadgeControllerTests: XCTestCase {
                 sound: true,
                 badgeOnTab: true,
                 flashTab: true,
-                showDockBadge: false
+                showDockBadge: false,
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: .defaults,
             keybindings: .defaults,

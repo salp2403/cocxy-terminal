@@ -7,10 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [$VERSION] - $DATE
+## [0.1.19] - 2026-03-30
 
 ### Fixed
-- $RELEASE_NOTES
+- Browser history recording — `recordPageVisit()` now called on navigation finish
+- Browser tab auto-selection — new panels receive focus via `focusNewPanel` parameter
+- Browser bookmarks with split panels — dynamic ViewModel resolution across all instances
+- Browser DevTools (Console, Network, DOM) — connected from scaffolding to functional
+- Browser Find Bar — connected with `window.find()` JavaScript integration
+- Browser Downloads — tracking with status states in ViewModel
+- Browser Profile Selector — wired in overlay panel header
+- Notification config toggles (`flashTab`, `badgeOnTab`) now read from config and hot-reload
+- CLI `cocxy notify` now dispatches real notifications through the notification pipeline
+- Custom notification sounds per type (`sound-finished`, `sound-attention`, `sound-error`)
+- WebKit delegate concurrency warnings — proper `@MainActor @Sendable` signatures
+- Dead code in BrowserContentView find bar constraint management
+- CHANGELOG pipeline variable substitution — heredoc now passes vars via environment
+
+## [0.1.18] - 2026-03-29
+
+### Added
+- Remote persistence via tmux — zero-install session survival across SSH disconnects
+- Plugin system — extensible event-driven architecture with sandboxed script execution
+- Nightly build channel — side-by-side installation with separate Sparkle update feed
+- Remote session management UI panel in Remote Workspace
+- 3 new CLI commands: `plugin-list`, `plugin-enable`, `plugin-disable`
+- 5 remote workspace CLI commands now fully implemented (were stubs)
+- TmuxSessionManager with support detection, session CRUD, and attach commands
+- RemoteSessionStore for local persistence of remote session metadata
+- PluginManifest TOML parser with 8 event types
+- PluginSandbox with timeout enforcement and clean environment isolation
+- 61 new tests (35 remote persistence + 26 plugin system)
 
 ## [0.1.17] - 2026-03-29
 
@@ -159,7 +186,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scrollback search (Cmd+F)
 - Session persistence across restarts
 - 47 CLI commands via Unix Domain Socket API
-- Claude Code hook integration for real-time event streaming
+- Hook integration for real-time agent event streaming
 - Port scanner for localhost dev server detection
 - SSH session detection from process titles
 - Configurable themes (8 built-in, TOML-based)
@@ -173,7 +200,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero telemetry — no PostHog, no Sentry, no analytics
 - MIT License
 
-[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v$VERSION...HEAD
+[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.19...HEAD
+[0.1.19]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.18...v0.1.19
+[0.1.18]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.14...v0.1.15

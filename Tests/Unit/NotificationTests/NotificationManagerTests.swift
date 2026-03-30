@@ -469,7 +469,10 @@ final class NotificationManagerTests: XCTestCase {
             sound: false,
             badgeOnTab: false,
             flashTab: false,
-            showDockBadge: false
+            showDockBadge: false,
+            soundFinished: "default",
+            soundAttention: "default",
+            soundError: "default"
         )
         let disabledSut = NotificationManagerImpl(
             config: CocxyConfig(
@@ -513,7 +516,10 @@ final class NotificationManagerTests: XCTestCase {
                 sound: false,
                 badgeOnTab: false,
                 flashTab: false,
-                showDockBadge: false
+                showDockBadge: false,
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: .defaults,
             keybindings: .defaults,

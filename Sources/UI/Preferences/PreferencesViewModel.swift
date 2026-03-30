@@ -312,7 +312,10 @@ final class PreferencesViewModel: ObservableObject {
                 sound: sound,
                 badgeOnTab: badgeOnTab,
                 flashTab: flashTab,
-                showDockBadge: showDockBadge
+                showDockBadge: showDockBadge,
+                soundFinished: savedConfig.notifications.soundFinished,
+                soundAttention: savedConfig.notifications.soundAttention,
+                soundError: savedConfig.notifications.soundError
             ),
             quickTerminal: savedConfig.quickTerminal,
             keybindings: savedConfig.keybindings,
@@ -369,6 +372,9 @@ final class PreferencesViewModel: ObservableObject {
         badge-on-tab = \(badgeOnTab)
         flash-tab = \(flashTab)
         show-dock-badge = \(showDockBadge)
+        sound-finished = "\(savedConfig.notifications.soundFinished)"
+        sound-attention = "\(savedConfig.notifications.soundAttention)"
+        sound-error = "\(savedConfig.notifications.soundError)"
 
         [quick-terminal]
         hotkey = "\(defaults.quickTerminal.hotkey)"

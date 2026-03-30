@@ -3,7 +3,7 @@
 
 import AppKit
 import WebKit
-import Combine
+@preconcurrency import Combine
 import SwiftUI
 
 // MARK: - Browser Content View
@@ -51,6 +51,35 @@ final class BrowserContentView: NSView {
     /// Height of the compact navigation bar.
     private static let toolbarHeight: CGFloat = 32
 
+    // MARK: - Browser Feature State
+
+    /// Console capture installed on the web view.
+    private var consoleCapture: BrowserConsoleCapture?
+
+    /// Network monitor polling the web view.
+    private var networkMonitor: BrowserNetworkMonitor?
+
+    /// Console entries collected from the page.
+    private var consoleEntries: [ConsoleEntry] = []
+
+    /// The hosting view for the DevTools panel.
+    private var devToolsHostingView: NSView?
+
+    /// The hosting view for the find bar.
+    private var findBarHostingView: NSView?
+
+    /// The hosting view for the downloads panel.
+    private var downloadsHostingView: NSView?
+
+    /// Web view bottom constraint, adjusted when DevTools or Downloads are visible.
+    private var webViewBottomConstraint: NSLayoutConstraint?
+
+    /// Constraint that positions the find bar below the toolbar.
+    private var findBarTopConstraint: NSLayoutConstraint?
+
+    /// Reference to the toolbar view for constraint anchoring.
+    private var toolbarContainer: NSView?
+
     // MARK: - Initialization
 
     init(viewModel: BrowserViewModel) {
@@ -58,6 +87,7 @@ final class BrowserContentView: NSView {
         super.init(frame: .zero)
         setupUI()
         bindViewModel()
+        installBrowserInstrumentation()
         // Load after binding so the subscription catches the navigation action.
         DispatchQueue.main.async { [weak viewModel] in
             viewModel?.loadDefaultPage()
@@ -70,9 +100,19 @@ final class BrowserContentView: NSView {
     }
 
     deinit {
-        webView?.navigationDelegate = nil
-        observations.removeAll()
-        cancellables.removeAll()
+        let monitor = networkMonitor
+        let capture = consoleCapture
+        let wv = webView
+        // Schedule cleanup on main actor since deinit is nonisolated.
+        // observations and cancellables are released by ARC (KVO observations
+        // are invalidated on dealloc; AnyCancellable cancels on dealloc).
+        Task { @MainActor in
+            monitor?.stopMonitoring()
+            wv?.navigationDelegate = nil
+            if let wv {
+                capture?.uninstall(from: wv)
+            }
+        }
     }
 
     // MARK: - UI Setup
@@ -109,6 +149,22 @@ final class BrowserContentView: NSView {
         )
         toolbar.addSubview(reloadButton)
 
+        // Find button.
+        let findButton = createToolbarButton(
+            symbol: "magnifyingglass",
+            action: #selector(toggleFindBarAction)
+        )
+        findButton.toolTip = "Find in page"
+        toolbar.addSubview(findButton)
+
+        // DevTools button.
+        let devToolsButton = createToolbarButton(
+            symbol: "wrench.and.screwdriver",
+            action: #selector(toggleDevToolsAction)
+        )
+        devToolsButton.toolTip = "Developer Tools"
+        toolbar.addSubview(devToolsButton)
+
         // URL field.
         let field = NSTextField()
         field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -129,6 +185,10 @@ final class BrowserContentView: NSView {
         backButton.translatesAutoresizingMaskIntoConstraints = false
         forwardButton.translatesAutoresizingMaskIntoConstraints = false
         reloadButton.translatesAutoresizingMaskIntoConstraints = false
+        findButton.translatesAutoresizingMaskIntoConstraints = false
+        devToolsButton.translatesAutoresizingMaskIntoConstraints = false
+
+        self.toolbarContainer = toolbar
 
         NSLayoutConstraint.activate([
             toolbar.topAnchor.constraint(equalTo: topAnchor),
@@ -147,9 +207,19 @@ final class BrowserContentView: NSView {
             forwardButton.heightAnchor.constraint(equalToConstant: 24),
 
             field.leadingAnchor.constraint(equalTo: forwardButton.trailingAnchor, constant: 6),
-            field.trailingAnchor.constraint(equalTo: reloadButton.leadingAnchor, constant: -6),
+            field.trailingAnchor.constraint(equalTo: findButton.leadingAnchor, constant: -6),
             field.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
             field.heightAnchor.constraint(equalToConstant: 22),
+
+            findButton.trailingAnchor.constraint(equalTo: devToolsButton.leadingAnchor, constant: -2),
+            findButton.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            findButton.widthAnchor.constraint(equalToConstant: 24),
+            findButton.heightAnchor.constraint(equalToConstant: 24),
+
+            devToolsButton.trailingAnchor.constraint(equalTo: reloadButton.leadingAnchor, constant: -2),
+            devToolsButton.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            devToolsButton.widthAnchor.constraint(equalToConstant: 24),
+            devToolsButton.heightAnchor.constraint(equalToConstant: 24),
 
             reloadButton.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -4),
             reloadButton.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
@@ -167,11 +237,14 @@ final class BrowserContentView: NSView {
         addSubview(wv)
         self.webView = wv
 
+        let bottomConstraint = wv.bottomAnchor.constraint(equalTo: bottomAnchor)
+        self.webViewBottomConstraint = bottomConstraint
+
         NSLayoutConstraint.activate([
             wv.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
             wv.leadingAnchor.constraint(equalTo: leadingAnchor),
             wv.trailingAnchor.constraint(equalTo: trailingAnchor),
-            wv.bottomAnchor.constraint(equalTo: bottomAnchor),
+            bottomConstraint,
         ])
 
         // KVO on WKWebView properties.
@@ -260,16 +333,152 @@ final class BrowserContentView: NSView {
     @objc private func reloadAction(_ sender: Any?) {
         viewModel.reload()
     }
+
+    // MARK: - Browser Instrumentation
+
+    /// Installs console capture and network monitoring on the web view.
+    private func installBrowserInstrumentation() {
+        guard let webView else { return }
+
+        let capture = BrowserConsoleCapture()
+        capture.install(on: webView)
+        capture.onNewEntry = { [weak self] entry in
+            Task { @MainActor in
+                self?.consoleEntries.append(entry)
+            }
+        }
+        self.consoleCapture = capture
+
+        let monitor = BrowserNetworkMonitor()
+        monitor.startMonitoring(webView)
+        self.networkMonitor = monitor
+    }
+
+    // MARK: - Feature Toggle Actions
+
+    @objc private func toggleFindBarAction(_ sender: Any?) {
+        if findBarHostingView != nil {
+            dismissFindBar()
+        } else {
+            showFindBar()
+        }
+    }
+
+    @objc private func toggleDevToolsAction(_ sender: Any?) {
+        if devToolsHostingView != nil {
+            dismissDevTools()
+        } else {
+            showDevTools()
+        }
+    }
+
+    // MARK: - Find Bar
+
+    private func showFindBar() {
+        guard findBarHostingView == nil, let toolbarContainer else { return }
+
+        let findBarView = BrowserFindBar(
+            searchText: Binding(
+                get: { [weak self] in self?.viewModel.findSearchText ?? "" },
+                set: { [weak self] in self?.viewModel.findSearchText = $0 }
+            ),
+            currentMatch: viewModel.findCurrentMatch,
+            totalMatches: viewModel.findTotalMatches,
+            onSearch: { [weak self] text in self?.viewModel.findInPage(text) },
+            onNextMatch: { [weak self] in self?.viewModel.findNextMatch() },
+            onPreviousMatch: { [weak self] in self?.viewModel.findPreviousMatch() },
+            onDismiss: { [weak self] in self?.dismissFindBar() }
+        )
+        let hosting = NSHostingView(rootView: findBarView)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(hosting)
+
+        NSLayoutConstraint.activate([
+            hosting.topAnchor.constraint(equalTo: toolbarContainer.bottomAnchor),
+            hosting.leadingAnchor.constraint(equalTo: leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: trailingAnchor),
+            hosting.heightAnchor.constraint(equalToConstant: 36),
+        ])
+
+        if let webView {
+            // Remove old top constraint and add new one below find bar.
+            for constraint in constraints where
+                constraint.firstItem === webView && constraint.firstAnchor == webView.topAnchor {
+                constraint.isActive = false
+            }
+            webView.topAnchor.constraint(equalTo: hosting.bottomAnchor).isActive = true
+        }
+
+        self.findBarHostingView = hosting
+    }
+
+    private func dismissFindBar() {
+        viewModel.clearFind()
+        findBarHostingView?.removeFromSuperview()
+        findBarHostingView = nil
+
+        // Restore web view top constraint to toolbar.
+        if let webView, let toolbarContainer {
+            for constraint in constraints where
+                constraint.firstItem === webView && constraint.firstAnchor == webView.topAnchor {
+                constraint.isActive = false
+            }
+            webView.topAnchor.constraint(equalTo: toolbarContainer.bottomAnchor).isActive = true
+        }
+    }
+
+    // MARK: - DevTools
+
+    private func showDevTools() {
+        guard devToolsHostingView == nil, let networkMonitor else { return }
+
+        let devToolsView = BrowserDevToolsView(
+            consoleEntries: consoleEntries,
+            networkMonitor: networkMonitor,
+            domNodes: [],
+            onClearConsole: { [weak self] in self?.consoleEntries.removeAll() },
+            onClearNetwork: { [weak self] in self?.networkMonitor?.clear() },
+            onRefreshDOM: {},
+            onDismiss: { [weak self] in self?.dismissDevTools() }
+        )
+        let hosting = NSHostingView(rootView: devToolsView)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(hosting)
+
+        // Adjust web view bottom to make room.
+        webViewBottomConstraint?.isActive = false
+        webViewBottomConstraint = webView?.bottomAnchor.constraint(equalTo: hosting.topAnchor)
+        webViewBottomConstraint?.isActive = true
+
+        NSLayoutConstraint.activate([
+            hosting.leadingAnchor.constraint(equalTo: leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: trailingAnchor),
+            hosting.bottomAnchor.constraint(equalTo: bottomAnchor),
+            hosting.heightAnchor.constraint(equalToConstant: 200),
+        ])
+
+        self.devToolsHostingView = hosting
+    }
+
+    private func dismissDevTools() {
+        devToolsHostingView?.removeFromSuperview()
+        devToolsHostingView = nil
+
+        // Restore web view bottom to the view's bottom.
+        webViewBottomConstraint?.isActive = false
+        webViewBottomConstraint = webView?.bottomAnchor.constraint(equalTo: bottomAnchor)
+        webViewBottomConstraint?.isActive = true
+    }
 }
 
 // MARK: - WKNavigationDelegate
 
 extension BrowserContentView: WKNavigationDelegate {
 
-    nonisolated func webView(
+    func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
         guard let url = navigationAction.request.url,
               let scheme = url.scheme?.lowercased(),
@@ -280,10 +489,10 @@ extension BrowserContentView: WKNavigationDelegate {
         decisionHandler(.allow)
     }
 
-    nonisolated func webView(
+    func webView(
         _ webView: WKWebView,
         didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+        completionHandler: @escaping @MainActor @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
         // Allow self-signed certificates for localhost dev servers.
         if challenge.protectionSpace.host == "localhost" || challenge.protectionSpace.host == "127.0.0.1" {
@@ -293,6 +502,16 @@ extension BrowserContentView: WKNavigationDelegate {
             }
         }
         completionHandler(.performDefaultHandling, nil)
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.viewModel.isLoading = false
+            if let url = webView.url?.absoluteString {
+                self.viewModel.recordPageVisit(url: url, title: webView.title)
+            }
+        }
     }
 
     nonisolated func webView(

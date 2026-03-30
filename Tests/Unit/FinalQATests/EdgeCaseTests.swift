@@ -56,7 +56,10 @@ final class EdgeCaseTests: XCTestCase {
                 sound: false,
                 badgeOnTab: true,
                 flashTab: false,
-                showDockBadge: false
+                showDockBadge: false,
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: config.quickTerminal,
             keybindings: config.keybindings,
@@ -783,7 +786,10 @@ final class EdgeCaseTests: XCTestCase {
                 sound: false,
                 badgeOnTab: true,
                 flashTab: false,
-                showDockBadge: false
+                showDockBadge: false,
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: config.quickTerminal,
             keybindings: config.keybindings,

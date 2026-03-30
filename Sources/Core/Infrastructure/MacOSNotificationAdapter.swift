@@ -22,6 +22,9 @@ struct NotificationRequestSnapshot: Sendable {
     let userInfo: [String: String]
     /// Whether the notification should play a sound.
     let hasSound: Bool
+    /// Sound name for this notification type. "default" uses the system default sound.
+    /// Any other value is treated as a custom sound file name (must be bundled as .caf/.aiff).
+    let soundName: String
 }
 
 // MARK: - Notification Authorization Options
@@ -143,10 +146,28 @@ final class MacOSNotificationAdapter: SystemNotificationEmitting {
             body: notification.body,
             categoryIdentifier: categoryIdentifier,
             userInfo: ["tabID": notification.tabId.rawValue.uuidString],
-            hasSound: config.notifications.sound
+            hasSound: config.notifications.sound,
+            soundName: soundName(for: notification.type)
         )
 
         notificationCenter.add(snapshot)
+    }
+
+    /// Resolves the configured sound name for a given notification type.
+    ///
+    /// Maps each notification type to its per-type config field. Types without
+    /// a dedicated config field (processExited, custom) use "default".
+    private func soundName(for type: NotificationType) -> String {
+        switch type {
+        case .agentFinished:
+            return config.notifications.soundFinished
+        case .agentNeedsAttention:
+            return config.notifications.soundAttention
+        case .agentError:
+            return config.notifications.soundError
+        case .processExited, .custom:
+            return "default"
+        }
     }
 
     // MARK: - Permission Management

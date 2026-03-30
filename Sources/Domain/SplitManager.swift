@@ -159,26 +159,35 @@ final class SplitManager: ObservableObject {
     ///
     /// Unlike `splitFocusedWithPanel`, this method always places the new panel
     /// at the END of the tree, regardless of which leaf currently has focus.
-    /// After insertion, the original focus is restored so the user's workflow
-    /// is not disrupted.
+    /// By default the original focus is restored so the user's workflow is not
+    /// disrupted. When `focusNewPanel` is true, focus moves to the newly
+    /// created panel instead (useful for browser/markdown panels that the user
+    /// wants to interact with immediately).
     ///
-    /// - Parameter panel: The panel info for the new pane.
+    /// - Parameters:
+    ///   - panel: The panel info for the new pane.
+    ///   - focusNewPanel: When true, the new panel receives focus instead of
+    ///     restoring the previous focus. Defaults to false.
     /// - Returns: The content ID of the newly created pane, or `nil` if the
     ///   tree is at max pane count or empty.
     @discardableResult
-    func appendPanel(panel: PanelInfo) -> UUID? {
+    func appendPanel(panel: PanelInfo, focusNewPanel: Bool = false) -> UUID? {
         guard rootNode.leafCount < Self.maxPaneCount else { return nil }
 
         let leaves = rootNode.allLeafIDs()
         guard let lastLeaf = leaves.last else { return nil }
 
-        // Save and restore focus so the user stays where they were.
+        // Save focus so it can be restored when focusNewPanel is false.
         let savedFocus = focusedLeafID
         focusedLeafID = lastLeaf.leafID
 
         let result = splitFocusedWithPanel(direction: .horizontal, panel: panel)
 
-        focusedLeafID = savedFocus
+        if !focusNewPanel {
+            focusedLeafID = savedFocus
+        }
+        // When focusNewPanel is true, splitFocusedWithPanel already set
+        // focusedLeafID to the new leaf — no restoration needed.
         return result
     }
 

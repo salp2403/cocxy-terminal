@@ -145,7 +145,10 @@ final class MacOSNotificationAdapterTests: XCTestCase {
                 sound: true,
                 badgeOnTab: true,
                 flashTab: true,
-                showDockBadge: true
+                showDockBadge: true,
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: .defaults,
             keybindings: .defaults,
@@ -181,7 +184,10 @@ final class MacOSNotificationAdapterTests: XCTestCase {
                 sound: false,
                 badgeOnTab: true,
                 flashTab: true,
-                showDockBadge: true
+                showDockBadge: true,
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: .defaults,
             keybindings: .defaults,

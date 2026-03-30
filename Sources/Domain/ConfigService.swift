@@ -189,6 +189,9 @@ final class ConfigService: ConfigProviding {
         sound = \(defaults.notifications.sound)
         badge-on-tab = \(defaults.notifications.badgeOnTab)
         flash-tab = \(defaults.notifications.flashTab)
+        sound-finished = "\(defaults.notifications.soundFinished)"
+        sound-attention = "\(defaults.notifications.soundAttention)"
+        sound-error = "\(defaults.notifications.soundError)"
 
         [quick-terminal]
         hotkey = "\(defaults.quickTerminal.hotkey)"
@@ -357,7 +360,10 @@ final class ConfigService: ConfigProviding {
             sound: boolValue(table["sound"]) ?? defaults.sound,
             badgeOnTab: boolValue(table["badge-on-tab"]) ?? defaults.badgeOnTab,
             flashTab: boolValue(table["flash-tab"]) ?? defaults.flashTab,
-            showDockBadge: boolValue(table["show-dock-badge"]) ?? defaults.showDockBadge
+            showDockBadge: boolValue(table["show-dock-badge"]) ?? defaults.showDockBadge,
+            soundFinished: stringValue(table["sound-finished"]) ?? defaults.soundFinished,
+            soundAttention: stringValue(table["sound-attention"]) ?? defaults.soundAttention,
+            soundError: stringValue(table["sound-error"]) ?? defaults.soundError
         )
     }
 

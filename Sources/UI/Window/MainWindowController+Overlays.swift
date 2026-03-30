@@ -808,7 +808,10 @@ extension MainWindowController {
         guard let overlayContainer = overlayContainerView else { return }
 
         if browserViewModel == nil {
-            browserViewModel = BrowserViewModel()
+            let vm = BrowserViewModel()
+            vm.historyStore = browserHistoryStore
+            vm.activeProfileID = browserProfileManager?.activeProfileID
+            browserViewModel = vm
         }
 
         guard let viewModel = browserViewModel else { return }
@@ -816,6 +819,7 @@ extension MainWindowController {
         browserHostingView?.removeFromSuperview()
         let swiftUIView = BrowserPanelView(
             viewModel: viewModel,
+            profileManager: browserProfileManager,
             onDismiss: { [weak self] in self?.dismissBrowser() }
         )
         let hostingView = NSHostingView(rootView: swiftUIView)

@@ -55,6 +55,22 @@ final class BrowserViewModel: ObservableObject {
     /// The ID of the currently active browser tab.
     @Published var activeTabID: UUID?
 
+    // MARK: - Downloads State
+
+    /// Active and completed downloads tracked by the browser.
+    @Published var downloads: [DownloadItem] = []
+
+    // MARK: - Find-in-Page State
+
+    /// The current find-in-page search text.
+    @Published var findSearchText: String = ""
+
+    /// The 1-based index of the currently highlighted match.
+    @Published var findCurrentMatch: Int = 0
+
+    /// Total number of matches found on the page.
+    @Published var findTotalMatches: Int = 0
+
     // MARK: - Navigation Actions
 
     /// Navigation action signals consumed by the WKWebView wrapper.
@@ -69,6 +85,38 @@ final class BrowserViewModel: ObservableObject {
 
     /// Publisher that emits navigation actions for the web view coordinator to observe.
     let navigationActionSubject = PassthroughSubject<NavigationAction, Never>()
+
+    // MARK: - History Recording
+
+    /// History store for recording page visits. Injected by the window controller.
+    var historyStore: BrowserHistoryStoring?
+
+    /// The active browser profile ID, used to associate visits with a profile.
+    var activeProfileID: UUID?
+
+    /// Records a page visit to the history store.
+    ///
+    /// Silently ignores errors to avoid disrupting navigation.
+    /// Internal URLs (about:blank, error pages) are not recorded.
+    ///
+    /// - Parameters:
+    ///   - url: The URL string of the visited page.
+    ///   - title: The page title, if available.
+    func recordPageVisit(url: String, title: String?) {
+        guard let historyStore else { return }
+        // Skip internal/blank URLs that are not real visits.
+        let lowered = url.lowercased()
+        guard !lowered.isEmpty,
+              !lowered.hasPrefix("about:"),
+              URL(string: url)?.scheme != nil else { return }
+
+        let profileID = activeProfileID ?? UUID()
+        do {
+            try historyStore.recordVisit(url: url, title: title, profileID: profileID)
+        } catch {
+            NSLog("[BrowserViewModel] Failed to record visit: %@", String(describing: error))
+        }
+    }
 
     // MARK: - Initialization
 
@@ -228,6 +276,108 @@ final class BrowserViewModel: ObservableObject {
                 "isActive": tab.id == activeTabID ? "true" : "false"
             ]
         }
+    }
+
+    // MARK: - Downloads Management
+
+    /// Adds a new download item to the tracked downloads list.
+    ///
+    /// - Parameter item: The download to track.
+    func addDownload(_ item: DownloadItem) {
+        downloads.append(item)
+    }
+
+    /// Updates an existing download item by its ID.
+    ///
+    /// - Parameter item: The updated download item.
+    func updateDownload(_ item: DownloadItem) {
+        guard let index = downloads.firstIndex(where: { $0.id == item.id }) else { return }
+        downloads[index] = item
+    }
+
+    /// Removes all completed and failed downloads from the list.
+    func clearCompletedDownloads() {
+        downloads.removeAll { $0.isFinished }
+    }
+
+    // MARK: - Find-in-Page
+
+    /// Executes a find-in-page search by injecting JavaScript.
+    ///
+    /// Uses `window.find()` to highlight matches in the page. Updates
+    /// match count by querying the page via the Performance API.
+    ///
+    /// - Parameter text: The text to search for. Empty string clears the search.
+    func findInPage(_ text: String) {
+        findSearchText = text
+        guard !text.isEmpty else {
+            findCurrentMatch = 0
+            findTotalMatches = 0
+            // Clear selection by searching for empty string.
+            navigationActionSubject.send(.evaluateJS(
+                "window.getSelection().removeAllRanges();"
+            ))
+            return
+        }
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        let countScript = """
+        (function() {
+            var count = 0;
+            var pos = 0;
+            var text = document.body.innerText;
+            var query = '\(escaped)'.toLowerCase();
+            var lower = text.toLowerCase();
+            while ((pos = lower.indexOf(query, pos)) !== -1) {
+                count++;
+                pos += query.length;
+            }
+            return count;
+        })();
+        """
+        navigationActionSubject.send(.evaluateJS(countScript))
+        let findScript = "window.find('\(escaped)', false, false, true);"
+        navigationActionSubject.send(.evaluateJS(findScript))
+        findCurrentMatch = 1
+    }
+
+    /// Navigates to the next find-in-page match.
+    func findNextMatch() {
+        guard !findSearchText.isEmpty else { return }
+        let escaped = findSearchText
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        navigationActionSubject.send(.evaluateJS(
+            "window.find('\(escaped)', false, false, true);"
+        ))
+        if findTotalMatches > 0 {
+            findCurrentMatch = (findCurrentMatch % findTotalMatches) + 1
+        }
+    }
+
+    /// Navigates to the previous find-in-page match.
+    func findPreviousMatch() {
+        guard !findSearchText.isEmpty else { return }
+        let escaped = findSearchText
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        navigationActionSubject.send(.evaluateJS(
+            "window.find('\(escaped)', false, true, true);"
+        ))
+        if findTotalMatches > 0 {
+            findCurrentMatch = findCurrentMatch <= 1 ? findTotalMatches : findCurrentMatch - 1
+        }
+    }
+
+    /// Clears the find-in-page state and removes highlights.
+    func clearFind() {
+        findSearchText = ""
+        findCurrentMatch = 0
+        findTotalMatches = 0
+        navigationActionSubject.send(.evaluateJS(
+            "window.getSelection().removeAllRanges();"
+        ))
     }
 
     // MARK: - URL Normalization

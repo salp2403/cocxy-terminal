@@ -330,13 +330,19 @@ jobs:
           RELEASE_NOTES=$(gh api repos/salp2403/cocxy-terminal/releases/tags/v${VERSION} \
             --jq '.body // ""' 2>/dev/null || echo "")
 
-          # Build the changelog entry from release notes
-          python3 << 'PYEOF'
-          import re, pathlib
+          # Build the changelog entry from release notes.
+          # Variables are passed via environment because the heredoc is
+          # single-quoted (required to protect Python's { } and $ in f-strings).
+          export CL_VERSION="$VERSION"
+          export CL_DATE="$DATE"
+          export CL_NOTES="$RELEASE_NOTES"
 
-          version = pathlib.Path("/dev/stdin").read_text().strip() if False else "$VERSION"
-          date = "$DATE"
-          notes_raw = """$RELEASE_NOTES"""
+          python3 << 'PYEOF'
+          import os, re, pathlib
+
+          version = os.environ.get("CL_VERSION", "")
+          date = os.environ.get("CL_DATE", "")
+          notes_raw = os.environ.get("CL_NOTES", "")
 
           # Parse release notes into Keep a Changelog sections
           added, changed, fixed, security = [], [], [], []

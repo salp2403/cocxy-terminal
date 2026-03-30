@@ -162,7 +162,10 @@ final class NotificationManagerDockBadgeIntegrationTests: XCTestCase {
                 sound: true,
                 badgeOnTab: true,
                 flashTab: true,
-                showDockBadge: false
+                showDockBadge: false,
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: .defaults,
             keybindings: .defaults,
@@ -555,7 +558,10 @@ final class RateLimitingEdgeCaseTests: XCTestCase {
                 sound: false,
                 badgeOnTab: false,
                 flashTab: false,
-                showDockBadge: false
+                showDockBadge: false,
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: .defaults,
             keybindings: .defaults,
@@ -808,7 +814,10 @@ final class ConfigToggleMidSessionTests: XCTestCase {
                 sound: enabled,
                 badgeOnTab: enabled,
                 flashTab: enabled,
-                showDockBadge: true  // keep badge always on to test unread count
+                showDockBadge: true,  // keep badge always on to test unread count
+                soundFinished: "default",
+                soundAttention: "default",
+                soundError: "default"
             ),
             quickTerminal: .defaults,
             keybindings: .defaults,

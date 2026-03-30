@@ -36,10 +36,34 @@ import Combine
 struct BrowserPanelView: View {
 
     @ObservedObject var viewModel: BrowserViewModel
+    var profileManager: BrowserProfileManager?
     var onDismiss: () -> Void
 
     /// Fixed width of the browser panel.
     static let panelWidth: CGFloat = 480
+
+    // MARK: - Panel State
+
+    /// Whether the DevTools panel is visible below the web view.
+    @State private var showDevTools: Bool = false
+
+    /// Whether the find-in-page bar is visible above the web view.
+    @State private var showFindBar: Bool = false
+
+    /// Whether the downloads panel is visible.
+    @State private var showDownloads: Bool = false
+
+    /// Console entries captured from the web page.
+    @State private var consoleEntries: [ConsoleEntry] = []
+
+    /// DOM tree nodes for the DevTools inspector.
+    @State private var domNodes: [DOMNode] = []
+
+    /// The console capture instance installed on the web view.
+    @State private var consoleCapture: BrowserConsoleCapture?
+
+    /// The network monitor polling the web view.
+    @StateObject private var networkMonitor = BrowserNetworkMonitor()
 
     // MARK: - Body
 
@@ -51,7 +75,48 @@ struct BrowserPanelView: View {
             Divider()
             toolbarView
             Divider()
+            if showFindBar {
+                BrowserFindBar(
+                    searchText: $viewModel.findSearchText,
+                    currentMatch: viewModel.findCurrentMatch,
+                    totalMatches: viewModel.findTotalMatches,
+                    onSearch: { text in viewModel.findInPage(text) },
+                    onNextMatch: { viewModel.findNextMatch() },
+                    onPreviousMatch: { viewModel.findPreviousMatch() },
+                    onDismiss: {
+                        showFindBar = false
+                        viewModel.clearFind()
+                    }
+                )
+            }
             webContentView
+            if showDevTools {
+                Divider()
+                BrowserDevToolsView(
+                    consoleEntries: consoleEntries,
+                    networkMonitor: networkMonitor,
+                    domNodes: domNodes,
+                    onClearConsole: { consoleEntries.removeAll() },
+                    onClearNetwork: { networkMonitor.clear() },
+                    onRefreshDOM: { refreshDOM() },
+                    onDismiss: { showDevTools = false }
+                )
+                .frame(height: 200)
+            }
+            if showDownloads {
+                Divider()
+                BrowserDownloadsView(
+                    downloads: viewModel.downloads,
+                    onClearCompleted: { viewModel.clearCompletedDownloads() },
+                    onRevealInFinder: { item in
+                        if let path = item.localPath {
+                            NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
+                        }
+                    },
+                    onDismiss: { showDownloads = false }
+                )
+                .frame(maxHeight: 200)
+            }
         }
         .frame(width: Self.panelWidth)
         .frame(maxHeight: .infinity)
@@ -71,10 +136,24 @@ struct BrowserPanelView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        HStack {
+        HStack(spacing: 6) {
             Text("Browser")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
+
+            if let profileManager {
+                BrowserProfileSelector(
+                    profileManager: profileManager,
+                    onCreateProfile: {
+                        profileManager.createProfile(
+                            name: "Profile \(profileManager.profiles.count + 1)",
+                            icon: "person.circle",
+                            colorHex: "#89B4FA"
+                        )
+                    },
+                    onManageProfiles: {}
+                )
+            }
 
             Spacer()
 
@@ -166,9 +245,56 @@ struct BrowserPanelView: View {
             navigationButtons
             urlField
             reloadButton
+            featureButtons
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+
+    private var featureButtons: some View {
+        HStack(spacing: 2) {
+            Button(action: { showFindBar.toggle() }) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(
+                        showFindBar
+                            ? Color(nsColor: CocxyColors.blue)
+                            : Color(nsColor: CocxyColors.subtext0)
+                    )
+            }
+            .buttonStyle(.plain)
+            .frame(width: 22, height: 22)
+            .accessibilityLabel("Find in page")
+            .help("Find in page")
+
+            Button(action: { showDownloads.toggle() }) {
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(
+                        showDownloads
+                            ? Color(nsColor: CocxyColors.blue)
+                            : Color(nsColor: CocxyColors.subtext0)
+                    )
+            }
+            .buttonStyle(.plain)
+            .frame(width: 22, height: 22)
+            .accessibilityLabel("Downloads")
+            .help("Downloads")
+
+            Button(action: { showDevTools.toggle() }) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(
+                        showDevTools
+                            ? Color(nsColor: CocxyColors.blue)
+                            : Color(nsColor: CocxyColors.subtext0)
+                    )
+            }
+            .buttonStyle(.plain)
+            .frame(width: 22, height: 22)
+            .accessibilityLabel("DevTools")
+            .help("Developer Tools")
+        }
     }
 
     private var navigationButtons: some View {
@@ -238,12 +364,52 @@ struct BrowserPanelView: View {
     private var webContentView: some View {
         Group {
             if viewModel.currentURL != nil {
-                WebViewRepresentable(viewModel: viewModel)
+                WebViewRepresentable(
+                    viewModel: viewModel,
+                    consoleCapture: consoleCapture,
+                    networkMonitor: networkMonitor,
+                    onConsoleEntry: { entry in
+                        Task { @MainActor in
+                            consoleEntries.append(entry)
+                        }
+                    }
+                )
             } else {
                 emptyStateView
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            if consoleCapture == nil {
+                consoleCapture = BrowserConsoleCapture()
+            }
+        }
+    }
+
+    // MARK: - DOM Refresh
+
+    /// Injects JavaScript to capture a simplified snapshot of the current DOM tree.
+    ///
+    /// The script walks the first two levels of the document body,
+    /// returning tag names, IDs, and class lists for each element.
+    private func refreshDOM() {
+        let script = """
+        (function walkNode(el, depth) {
+            if (depth > 3 || !el || !el.tagName) return null;
+            var children = [];
+            for (var i = 0; i < Math.min(el.children.length, 20); i++) {
+                var c = walkNode(el.children[i], depth + 1);
+                if (c) children.push(c);
+            }
+            return {
+                tag: el.tagName.toLowerCase(),
+                id: el.id || '',
+                classes: Array.from(el.classList || []),
+                children: children
+            };
+        })(document.documentElement, 0);
+        """
+        viewModel.navigationActionSubject.send(.evaluateJS(script))
     }
 
     // MARK: - Empty State
@@ -355,6 +521,15 @@ struct WebViewRepresentable: NSViewRepresentable {
 
     @ObservedObject var viewModel: BrowserViewModel
 
+    /// Console capture instance to install on the web view.
+    var consoleCapture: BrowserConsoleCapture?
+
+    /// Network monitor to start polling the web view.
+    var networkMonitor: BrowserNetworkMonitor?
+
+    /// Callback fired each time a new console entry is captured.
+    var onConsoleEntry: ((ConsoleEntry) -> Void)?
+
     // MARK: - NSViewRepresentable
 
     func makeNSView(context: Context) -> WKWebView {
@@ -371,6 +546,21 @@ struct WebViewRepresentable: NSViewRepresentable {
         // Set dark background while page loads.
         webView.wantsLayer = true
         webView.layer?.backgroundColor = CocxyColors.base.cgColor
+
+        // Install console capture if provided.
+        if let consoleCapture {
+            consoleCapture.install(on: webView)
+            consoleCapture.onNewEntry = { [onConsoleEntry] entry in
+                onConsoleEntry?(entry)
+            }
+        }
+
+        // Start network monitoring if provided.
+        if let networkMonitor {
+            Task { @MainActor in
+                networkMonitor.startMonitoring(webView)
+            }
+        }
 
         context.coordinator.webView = webView
         context.coordinator.subscribeToNavigationActions()
@@ -446,6 +636,9 @@ struct WebViewRepresentable: NSViewRepresentable {
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
+                if let url = webView.url?.absoluteString {
+                    self.viewModel.recordPageVisit(url: url, title: webView.title)
+                }
             }
         }
 
@@ -471,7 +664,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+            decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
         ) {
             guard let url = navigationAction.request.url,
                   let scheme = url.scheme?.lowercased(),
@@ -499,7 +692,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         func webView(
             _ webView: WKWebView,
             didReceive challenge: URLAuthenticationChallenge,
-            completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+            completionHandler: @escaping @MainActor @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
         ) {
             if challenge.protectionSpace.host == "localhost" || challenge.protectionSpace.host == "127.0.0.1",
                let trust = challenge.protectionSpace.serverTrust {

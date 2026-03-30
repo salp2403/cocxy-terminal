@@ -188,6 +188,14 @@ final class TabBarView: NSView {
     /// Set by the window controller from `configService.current.general.confirmCloseProcess`.
     var confirmCloseProcess: Bool = false
 
+    /// When true, attention borders and glow effects are applied on unread tabs.
+    /// Set by the window controller from `configService.current.notifications.flashTab`.
+    var flashTabEnabled: Bool = true
+
+    /// When true, unread notification count badges are shown on inactive tabs.
+    /// Set by the window controller from `configService.current.notifications.badgeOnTab`.
+    var badgeOnTabEnabled: Bool = true
+
     // MARK: - Callbacks
 
     /// Invoked when the command palette button is clicked.
@@ -502,6 +510,8 @@ final class TabBarView: NSView {
             if let existingView = tabItemViews[item.id] {
                 existingView.update(with: item)
                 existingView.shouldConfirmClose = confirmCloseProcess
+                existingView.flashTabEnabled = flashTabEnabled
+                existingView.badgeOnTabEnabled = badgeOnTabEnabled
 
                 let currentIndex = tabStackView.arrangedSubviews.firstIndex(of: existingView)
                 if currentIndex != index {
@@ -511,6 +521,8 @@ final class TabBarView: NSView {
             } else {
                 let itemView = TabItemView(displayItem: item)
                 itemView.shouldConfirmClose = confirmCloseProcess
+                itemView.flashTabEnabled = flashTabEnabled
+                itemView.badgeOnTabEnabled = badgeOnTabEnabled
                 itemView.onSelect = { [weak self] in
                     self?.viewModel.selectTab(id: item.id)
                 }

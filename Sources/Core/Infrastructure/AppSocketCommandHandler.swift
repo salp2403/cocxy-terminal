@@ -93,6 +93,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Provides the plugin manager for plugin lifecycle commands.
     private let pluginManagerProvider: (() -> PluginManager?)?
 
+    /// Dispatches a CLI notification through the notification pipeline.
+    /// Called from `handleNotify(_:)` to deliver real notifications instead
+    /// of silently returning "acknowledged".
+    private let notifyDispatcher: @Sendable (String, String) -> Void
+
     // MARK: - Initialization
 
     /// Creates an AppSocketCommandHandler with closure-based access to @MainActor services.
@@ -115,13 +120,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         themeEngineProvider: (() -> ThemeEngineImpl?)? = nil,
         remoteConnectionManagerProvider: (() -> RemoteConnectionManager?)? = nil,
         remoteProfileStoreProvider: (() -> (any RemoteProfileStoring)?)? = nil,
-        pluginManagerProvider: (() -> PluginManager?)? = nil
+        pluginManagerProvider: (() -> PluginManager?)? = nil,
+        notifyDispatcher: (@Sendable (String, String) -> Void)? = nil
     ) {
         self.configProvider = configProvider
         self.themeEngineProvider = themeEngineProvider
         self.remoteConnectionManagerProvider = remoteConnectionManagerProvider
         self.remoteProfileStoreProvider = remoteProfileStoreProvider
         self.pluginManagerProvider = pluginManagerProvider
+        self.notifyDispatcher = notifyDispatcher ?? { _, _ in }
         weak var weakTabManager = tabManager
         weak var weakBrowserVM = browserViewModel
 
@@ -388,8 +395,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case .pluginDisable:
             return handlePluginDisable(request)
 
+        // CLI notify: dispatch through the notification pipeline.
+        case .notify:
+            return handleNotify(request)
+
         // Acknowledged commands (async UI actions)
-        case .notify, .split,
+        case .split,
              .splitList, .splitFocus, .splitClose, .splitResize,
              .dashboardShow, .dashboardHide, .dashboardToggle, .dashboardStatus,
              .timelineShow, .timelineExport,
@@ -398,6 +409,22 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
              .hooks, .hookHandler:
             return .ok(id: request.id, data: ["status": "acknowledged"])
         }
+    }
+
+    // MARK: - Notify Handler
+
+    /// Dispatches a CLI notification through the notification pipeline.
+    ///
+    /// Reads `title` and `message` from the request params. Falls back to
+    /// "Cocxy" for the title and returns an error when no message is provided.
+    private func handleNotify(_ request: SocketRequest) -> SocketResponse {
+        let title = request.params?["title"] ?? "Cocxy"
+        guard let message = request.params?["message"], !message.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: message")
+        }
+
+        notifyDispatcher(title, message)
+        return .ok(id: request.id, data: ["status": "notification sent"])
     }
 
     // MARK: - Status & Listing Handlers
@@ -776,6 +803,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.notifications.flashTab)"
         case "notifications.show-dock-badge":
             return "\(config.notifications.showDockBadge)"
+        case "notifications.sound-finished":
+            return config.notifications.soundFinished
+        case "notifications.sound-attention":
+            return config.notifications.soundAttention
+        case "notifications.sound-error":
+            return config.notifications.soundError
 
         // Quick terminal
         case "quick-terminal.enabled":

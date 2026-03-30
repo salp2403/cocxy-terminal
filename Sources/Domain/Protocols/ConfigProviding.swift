@@ -275,6 +275,12 @@ struct NotificationConfig: Codable, Sendable, Equatable {
     let flashTab: Bool
     /// Whether to show an unread count badge on the Dock icon.
     let showDockBadge: Bool
+    /// Sound name for agent-finished notifications. "default" uses the system default.
+    let soundFinished: String
+    /// Sound name for agent-needs-attention notifications. "default" uses the system default.
+    let soundAttention: String
+    /// Sound name for agent-error notifications. "default" uses the system default.
+    let soundError: String
 
     static var defaults: NotificationConfig {
         NotificationConfig(
@@ -282,7 +288,10 @@ struct NotificationConfig: Codable, Sendable, Equatable {
             sound: true,
             badgeOnTab: true,
             flashTab: true,
-            showDockBadge: true
+            showDockBadge: true,
+            soundFinished: "default",
+            soundAttention: "default",
+            soundError: "default"
         )
     }
 }

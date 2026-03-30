@@ -97,6 +97,30 @@ final class SplitManagerAppendPanelTests: XCTestCase {
                        "Panel type should be registered as browser")
     }
 
+    func testAppendPanelFocusNewPanelMoveFocusToNewLeaf() {
+        let manager = SplitManager()
+        _ = manager.splitFocused(direction: .horizontal)
+
+        // Focus the first leaf.
+        let firstLeaf = manager.rootNode.allLeafIDs().first!
+        manager.focusLeaf(id: firstLeaf.leafID)
+        let savedFocus = manager.focusedLeafID
+
+        // Append panel with focusNewPanel: true.
+        let contentID = manager.appendPanel(panel: .browser(), focusNewPanel: true)
+
+        XCTAssertNotNil(contentID)
+        XCTAssertNotEqual(manager.focusedLeafID, savedFocus,
+                          "focusNewPanel: true must NOT restore original focus")
+
+        // The focused leaf should be the one backing the new panel.
+        let leaves = manager.rootNode.allLeafIDs()
+        let newLeaf = leaves.first(where: { $0.terminalID == contentID })
+        XCTAssertNotNil(newLeaf)
+        XCTAssertEqual(manager.focusedLeafID, newLeaf?.leafID,
+                       "Focus must be on the newly appended panel leaf")
+    }
+
     func testAppendTerminalPanelDoesNotRegisterType() {
         let manager = SplitManager()
 

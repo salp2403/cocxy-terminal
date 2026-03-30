@@ -453,6 +453,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             sidebar.setSidebarTransparent(appearance.backgroundOpacity < 1.0)
         }
         sidebar.confirmCloseProcess = configService?.current.general.confirmCloseProcess ?? false
+        sidebar.flashTabEnabled = configService?.current.notifications.flashTab ?? true
+        sidebar.badgeOnTabEnabled = configService?.current.notifications.badgeOnTab ?? true
         self.tabBarViewModel = tabBarVM
         self.tabBarView = sidebar
         return sidebar
