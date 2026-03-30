@@ -39,6 +39,27 @@ extension AppDelegate {
             executor: executor
         )
 
+        // Proxy manager — optional, zero overhead when unused.
+        let proxyManager = ProxyManagerImpl(
+            tunnelManager: tunnelManager,
+            forwarder: connectionManager
+        )
+        connectionManager.proxyManager = proxyManager
+
+        // Relay manager — optional, zero overhead when unused.
+        let relayManager = RelayManagerImpl(
+            tunnelManager: tunnelManager,
+            forwarder: connectionManager,
+            tokenStore: RelayKeychainStore()
+        )
+        connectionManager.relayManager = relayManager
+
+        // Daemon manager — optional, zero overhead when unused.
+        let deployAdapter = DaemonDeployAdapter(connectionManager: connectionManager, profileStore: profileStore)
+        let daemonDeployer = DaemonDeployer(executor: deployAdapter)
+        let daemonManager = DaemonManagerImpl(deployer: daemonDeployer)
+        connectionManager.daemonManager = daemonManager
+
         let keyFileSystem = DiskSSHKeyFileSystem()
         let keyExecutor = SystemSSHKeyExecutor()
         let keyManager = SSHKeyManager(
@@ -98,5 +119,54 @@ final class SystemSSHKeyExecutor: SSHKeyExecuting {
             stdout: String(data: stdoutData, encoding: .utf8) ?? "",
             stderr: String(data: stderrData, encoding: .utf8) ?? ""
         )
+    }
+}
+
+// MARK: - Daemon Deploy Adapter
+
+/// Bridges `DaemonDeployExecuting` to the existing SSH infrastructure.
+///
+/// Uses `SSHMultiplexer.executeRemoteCommand()` for remote commands
+/// and `SFTPClient.upload()` for file transfer.
+@MainActor
+final class DaemonDeployAdapter: DaemonDeployExecuting {
+
+    private weak var connectionManager: RemoteConnectionManager?
+    private let profileStore: RemoteProfileStore?
+
+    init(connectionManager: RemoteConnectionManager, profileStore: RemoteProfileStore?) {
+        self.connectionManager = connectionManager
+        self.profileStore = profileStore
+    }
+
+    func executeRemote(_ command: String, profileID: UUID) async throws -> String {
+        guard let manager = connectionManager else {
+            throw DaemonProtocolError.connectionLost
+        }
+        return try await manager.executeRemoteCommand(command, profileID: profileID)
+    }
+
+    func uploadFile(localPath: String, remotePath: String, profileID: UUID) async throws {
+        guard let manager = connectionManager else {
+            throw DaemonProtocolError.connectionLost
+        }
+        // Upload via SFTPClient using the profile's SSH ControlMaster.
+        guard let profile = profileStore?.loadProfile(id: profileID) else {
+            throw DaemonProtocolError.connectionLost
+        }
+        let executor = SystemSFTPExecutor()
+        let client = SFTPClient(executor: executor)
+        try client.upload(
+            localPath: localPath,
+            remotePath: remotePath,
+            on: profile
+        )
+    }
+}
+
+extension RemoteProfileStore {
+    /// Loads a single profile by ID.
+    func loadProfile(id: UUID) -> RemoteConnectionProfile? {
+        try? loadAll().first { $0.id == id }
     }
 }

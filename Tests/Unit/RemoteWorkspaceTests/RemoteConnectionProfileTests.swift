@@ -405,4 +405,45 @@ struct RemoteConnectionProfileTests {
         let profile2 = RemoteConnectionProfile(id: id, name: "staging", host: "server.com")
         #expect(profile1 != profile2)
     }
+
+    // MARK: - Proxy Exclusions
+
+    @Test func defaultProxyExclusionsAreEmpty() {
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        #expect(profile.proxyExclusions.isEmpty)
+    }
+
+    @Test func proxyExclusionsRoundTrip() throws {
+        let original = RemoteConnectionProfile(
+            name: "proxy-test",
+            host: "server.com",
+            proxyExclusions: ["*.internal.com", "10.0.0.*"]
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteConnectionProfile.self, from: data)
+        #expect(decoded.proxyExclusions == ["*.internal.com", "10.0.0.*"])
+        #expect(original == decoded)
+    }
+
+    @Test func backwardCompatDecodingWithoutProxyExclusions() throws {
+        // Simulate a JSON profile saved before proxyExclusions was added.
+        let json = """
+        {
+            "id": "550E8400-E29B-41D4-A716-446655440000",
+            "name": "old-profile",
+            "host": "legacy.server.com",
+            "keepAliveInterval": 60,
+            "autoReconnect": true,
+            "jumpHosts": [],
+            "portForwards": [],
+            "envVars": {}
+        }
+        """.data(using: .utf8)!
+
+        let profile = try JSONDecoder().decode(RemoteConnectionProfile.self, from: json)
+        #expect(profile.name == "old-profile")
+        #expect(profile.host == "legacy.server.com")
+        #expect(profile.proxyExclusions.isEmpty)
+        #expect(profile.autoReconnect == true)
+    }
 }

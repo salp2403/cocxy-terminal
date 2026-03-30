@@ -7,14 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.20] - 2026-03-30
 
-### Changed
-- *Full Changelog**: https://github.com/salp2403/cocxy-terminal/compare/v0.1.19...v0.1.20
-
 ### Fixed
-- *Direct download:** Download the DMG below.
-- *Homebrew:** `brew tap salp2403/tap && brew install --cask cocxy`
-- macOS 14.0 (Sonoma) or later
-- Apple Silicon or Intel Mac
+- SFTP file browser connected — `SystemSFTPExecutor` with batch mode via ControlMaster
+- SSH Key Manager connected — `sshKeyManager` passed to RemoteConnectionView with lazy ViewModel
+- Port forwarding tunnels connected to real SSH — `forwardPort()`/`cancelForward()` in RemoteConnectionManager
+- Bookmark list instant refresh — `@State storeRevision` counter with `.id()` modifier on list views
 
 ## [0.1.19] - 2026-03-30
 

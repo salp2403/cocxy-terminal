@@ -356,6 +356,27 @@ jobs:
               print(f"Version {version} already in CHANGELOG, skipping")
               raise SystemExit(0)
 
+          # Strip the installation template and GitHub boilerplate from
+          # the release body before parsing. The body contains both the
+          # static install template AND the auto-generated release notes.
+          # We only want the auto-generated part (commit-based entries).
+          skip_patterns = [
+              "cocxy terminal v",       # Release title
+              "direct download",        # Install template
+              "download the dmg",       # Install template
+              "brew tap",               # Install template
+              "brew install",           # Install template
+              "macos 14",              # System requirements
+              "apple silicon",          # System requirements
+              "intel mac",              # System requirements
+              "system requirements",    # Section header
+              "full changelog",         # GitHub auto-generated footer link
+              "install",                # "### Install" header
+              "what's changed",         # GitHub auto-generated header
+              "new contributors",       # GitHub auto-generated
+              "**full changelog**",     # GitHub auto-generated
+          ]
+
           # Parse release notes into Keep a Changelog sections
           added, changed, fixed, security = [], [], [], []
 
@@ -365,6 +386,15 @@ jobs:
                   continue
               clean = re.sub(r"^[\*\-]\s*", "", line)
               if not clean:
+                  continue
+
+              # Skip installation template and boilerplate lines.
+              lower_check = clean.lower()
+              if any(p in lower_check for p in skip_patterns):
+                  continue
+
+              # Skip lines that are just URLs (comparison links).
+              if clean.startswith("http://") or clean.startswith("https://"):
                   continue
 
               lower = clean.lower()

@@ -49,6 +49,13 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
     /// Whether to automatically reconnect on connection loss.
     let autoReconnect: Bool
 
+    /// Custom proxy bypass patterns (e.g., "*.internal.com", "10.0.0.*").
+    /// Combined with `ProxyExclusionList.defaultExclusions` at runtime.
+    let proxyExclusions: [String]
+
+    /// Relay channel configurations to auto-open on connection.
+    let relayChannels: [RelayChannelConfig]
+
     init(
         id: UUID = UUID(),
         name: String,
@@ -61,7 +68,9 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
         group: String? = nil,
         envVars: [String: String] = [:],
         keepAliveInterval: Int = 60,
-        autoReconnect: Bool = true
+        autoReconnect: Bool = true,
+        proxyExclusions: [String] = [],
+        relayChannels: [RelayChannelConfig] = []
     ) {
         self.id = id
         self.name = name
@@ -75,6 +84,34 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
         self.envVars = envVars
         self.keepAliveInterval = keepAliveInterval
         self.autoReconnect = autoReconnect
+        self.proxyExclusions = proxyExclusions
+        self.relayChannels = relayChannels
+    }
+
+    // MARK: - Codable (backward compatible)
+
+    /// Custom decoding to support profiles saved without new fields.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        host = try container.decode(String.self, forKey: .host)
+        user = try container.decodeIfPresent(String.self, forKey: .user)
+        port = try container.decodeIfPresent(Int.self, forKey: .port)
+        identityFile = try container.decodeIfPresent(String.self, forKey: .identityFile)
+        jumpHosts = try container.decodeIfPresent([String].self, forKey: .jumpHosts) ?? []
+        portForwards = try container.decodeIfPresent([PortForward].self, forKey: .portForwards) ?? []
+        group = try container.decodeIfPresent(String.self, forKey: .group)
+        envVars = try container.decodeIfPresent([String: String].self, forKey: .envVars) ?? [:]
+        keepAliveInterval = try container.decodeIfPresent(Int.self, forKey: .keepAliveInterval) ?? 60
+        autoReconnect = try container.decodeIfPresent(Bool.self, forKey: .autoReconnect) ?? true
+        proxyExclusions = try container.decodeIfPresent([String].self, forKey: .proxyExclusions) ?? []
+        relayChannels = try container.decodeIfPresent([RelayChannelConfig].self, forKey: .relayChannels) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, host, user, port, identityFile, jumpHosts, portForwards
+        case group, envVars, keepAliveInterval, autoReconnect, proxyExclusions, relayChannels
     }
 }
 

@@ -63,6 +63,15 @@ final class RemoteConnectionManager: ObservableObject {
     /// Cached remote shell support per profile.
     private(set) var remoteSupport: [UUID: RemoteShellSupport] = [:]
 
+    /// Optional proxy manager for coordinated recovery on reconnect.
+    var proxyManager: ProxyManagerImpl?
+
+    /// Optional relay manager for multi-channel reverse tunnels.
+    var relayManager: RelayManagerImpl?
+
+    /// Optional daemon manager for remote cocxyd lifecycle.
+    var daemonManager: DaemonManagerImpl?
+
     // MARK: - Initialization
 
     /// Creates a connection manager with injected dependencies.
@@ -206,6 +215,27 @@ final class RemoteConnectionManager: ObservableObject {
     ) throws {
         guard let profile = knownProfiles[profileID] else { return }
         try multiplexer.cancelForward(forward, on: profile, executor: executor)
+    }
+
+    // MARK: - Remote Command Execution
+
+    /// Executes a command on the remote server via the SSH ControlMaster.
+    ///
+    /// Used by `DaemonDeployer` for deploy, start, stop, and version check.
+    ///
+    /// - Parameters:
+    ///   - command: The shell command to execute on the remote host.
+    ///   - profileID: The profile whose SSH session carries the command.
+    /// - Returns: The command's stdout output.
+    func executeRemoteCommand(_ command: String, profileID: UUID) async throws -> String {
+        guard let profile = knownProfiles[profileID] else {
+            throw SSHMultiplexerError.connectionFailed("No active connection for profile")
+        }
+        let result = try await multiplexer.executeRemoteCommand(command, on: profile, executor: executor)
+        if result.exitCode != 0 && !result.stderr.isEmpty {
+            throw SSHMultiplexerError.connectionFailed(result.stderr)
+        }
+        return result.stdout
     }
 
     // MARK: - Health Check
@@ -358,3 +388,9 @@ final class RemoteConnectionManager: ObservableObject {
         return false
     }
 }
+
+// MARK: - PortForwarding Conformance
+
+/// RemoteConnectionManager already implements the required methods.
+/// This conformance enables ProxyManager to use it without tight coupling.
+extension RemoteConnectionManager: PortForwarding {}

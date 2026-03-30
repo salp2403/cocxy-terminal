@@ -102,7 +102,9 @@ final class RemoteProfileEditorViewModel: ObservableObject {
             group: trimmedGroup.isEmpty ? nil : trimmedGroup,
             envVars: envVars,
             keepAliveInterval: keepAliveInterval,
-            autoReconnect: autoReconnect
+            autoReconnect: autoReconnect,
+            proxyExclusions: existingProfile?.proxyExclusions ?? [],
+            relayChannels: existingProfile?.relayChannels ?? []
         )
 
         onSave?(profile)

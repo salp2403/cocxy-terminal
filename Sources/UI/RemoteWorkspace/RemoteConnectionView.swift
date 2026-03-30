@@ -20,6 +20,9 @@ final class RemoteConnectionViewModel: ObservableObject {
     enum SubPanel: String, CaseIterable, Identifiable {
         case sessions
         case tunnels
+        case proxy
+        case relay
+        case daemon
         case keys
         case sftp
 
@@ -29,6 +32,9 @@ final class RemoteConnectionViewModel: ObservableObject {
             switch self {
             case .sessions: return "Sessions"
             case .tunnels: return "Tunnels"
+            case .proxy: return "Proxy"
+            case .relay: return "Relay"
+            case .daemon: return "Daemon"
             case .keys: return "Keys"
             case .sftp: return "SFTP"
             }
@@ -38,6 +44,9 @@ final class RemoteConnectionViewModel: ObservableObject {
             switch self {
             case .sessions: return "terminal"
             case .tunnels: return "arrow.left.arrow.right"
+            case .proxy: return "network.badge.shield.half.filled"
+            case .relay: return "point.3.connected.trianglepath.dotted"
+            case .daemon: return "server.rack"
             case .keys: return "key"
             case .sftp: return "folder"
             }
@@ -194,7 +203,9 @@ final class RemoteConnectionViewModel: ObservableObject {
             group: profile.group,
             envVars: profile.envVars,
             keepAliveInterval: profile.keepAliveInterval,
-            autoReconnect: profile.autoReconnect
+            autoReconnect: profile.autoReconnect,
+            proxyExclusions: profile.proxyExclusions,
+            relayChannels: profile.relayChannels
         )
         saveProfile(copy)
     }
@@ -504,6 +515,12 @@ struct RemoteConnectionView: View {
             sessionsSubPanel
         case .tunnels:
             tunnelsSubPanel
+        case .proxy:
+            proxySubPanel
+        case .relay:
+            relaySubPanel
+        case .daemon:
+            daemonSubPanel
         case .keys:
             keysSubPanel
         case .sftp:
@@ -544,6 +561,60 @@ struct RemoteConnectionView: View {
                 )
             } else {
                 selectProfilePlaceholder(icon: "arrow.left.arrow.right", text: "Select a profile to manage tunnels")
+            }
+        }
+    }
+
+    private var proxySubPanel: some View {
+        Group {
+            if let profileID = viewModel.selectedProfileID,
+               let proxyManager = viewModel.connectionManager.proxyManager {
+                ProxyControlView(
+                    profileID: profileID,
+                    viewModel: viewModel,
+                    proxyManager: proxyManager
+                )
+            } else {
+                selectProfilePlaceholder(
+                    icon: "network.badge.shield.half.filled",
+                    text: "Select a profile to manage proxy"
+                )
+            }
+        }
+    }
+
+    private var relaySubPanel: some View {
+        Group {
+            if let profileID = viewModel.selectedProfileID,
+               let relayManager = viewModel.connectionManager.relayManager {
+                RelayControlView(
+                    profileID: profileID,
+                    viewModel: viewModel,
+                    relayManager: relayManager
+                )
+            } else {
+                selectProfilePlaceholder(
+                    icon: "point.3.connected.trianglepath.dotted",
+                    text: "Select a profile to manage relay channels"
+                )
+            }
+        }
+    }
+
+    private var daemonSubPanel: some View {
+        Group {
+            if let profileID = viewModel.selectedProfileID,
+               let daemonManager = viewModel.connectionManager.daemonManager {
+                DaemonControlView(
+                    profileID: profileID,
+                    viewModel: viewModel,
+                    daemonManager: daemonManager
+                )
+            } else {
+                selectProfilePlaceholder(
+                    icon: "server.rack",
+                    text: "Select a profile to manage remote daemon"
+                )
             }
         }
     }
