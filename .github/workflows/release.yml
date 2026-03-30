@@ -344,6 +344,18 @@ jobs:
           date = os.environ.get("CL_DATE", "")
           notes_raw = os.environ.get("CL_NOTES", "")
 
+          changelog_path = pathlib.Path("CHANGELOG.md")
+          if not changelog_path.exists():
+              print("CHANGELOG.md not found, skipping")
+              raise SystemExit(0)
+
+          content = changelog_path.read_text()
+
+          # Guard: skip if this version already has an entry.
+          if f"## [{version}]" in content:
+              print(f"Version {version} already in CHANGELOG, skipping")
+              raise SystemExit(0)
+
           # Parse release notes into Keep a Changelog sections
           added, changed, fixed, security = [], [], [], []
 
@@ -351,7 +363,6 @@ jobs:
               line = line.strip()
               if not line or line.startswith("#"):
                   continue
-              # Remove leading bullet markers
               clean = re.sub(r"^[\*\-]\s*", "", line)
               if not clean:
                   continue
@@ -377,35 +388,31 @@ jobs:
           if security:
               entry_lines += ["### Security"] + [f"- {x}" for x in security] + [""]
 
-          # If no notes parsed, add a minimal entry
           if not (added or changed or fixed or security):
               entry_lines += [f"- Release v{version}", ""]
 
           entry = "\n".join(entry_lines)
 
-          # Read existing CHANGELOG
-          changelog_path = pathlib.Path("CHANGELOG.md")
-          if changelog_path.exists():
-              content = changelog_path.read_text()
-              # Replace [Unreleased] section content and insert new version
-              # Find the ## [Unreleased] line and the next ## [x.y.z] line
-              unreleased_pattern = r"(## \[Unreleased\].*?\n)(.*?)(## \[)"
-              match = re.search(unreleased_pattern, content, re.DOTALL)
-              if match:
-                  new_content = content[:match.start(2)] + "\n" + entry + "\n" + content[match.start(3):]
-                  # Update comparison links at bottom
-                  old_link = f"[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v{version}...HEAD"
-                  # The previous version link needs updating
-                  new_content = re.sub(
-                      r"\[Unreleased\]: https://github.com/salp2403/cocxy-terminal/compare/v[\d.]+\.\.\.HEAD",
-                      f"[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v{version}...HEAD",
-                      new_content
-                  )
-                  changelog_path.write_text(new_content)
-              else:
-                  print("CHANGELOG format not recognized, skipping update")
+          # Insert after the header block (first 6 lines), before the first ## version.
+          first_version = re.search(r"^## \[", content, re.MULTILINE)
+          if first_version:
+              insert_pos = first_version.start()
+              new_content = content[:insert_pos] + entry + "\n" + content[insert_pos:]
           else:
-              print("CHANGELOG.md not found, skipping")
+              new_content = content + "\n" + entry
+
+          # Add reference link for the new version if not present.
+          if f"[{version}]:" not in new_content:
+              # Find the first reference link line to insert before it.
+              ref_match = re.search(r"^\[[\d.]+\]:", new_content, re.MULTILINE)
+              if ref_match:
+                  prev_versions = re.findall(r"## \[([\d.]+)\]", new_content)
+                  prev_ver = prev_versions[1] if len(prev_versions) > 1 else version
+                  link = f"[{version}]: https://github.com/salp2403/cocxy-terminal/compare/v{prev_ver}...v{version}\n"
+                  new_content = new_content[:ref_match.start()] + link + new_content[ref_match.start():]
+
+          changelog_path.write_text(new_content)
+          print(f"CHANGELOG updated with v{version}")
 
           PYEOF
 

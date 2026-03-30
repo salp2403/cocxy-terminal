@@ -5,19 +5,6 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-## [0.1.19] - 2026-03-30
-
-### Changed
-- *Full Changelog**: https://github.com/salp2403/cocxy-terminal/compare/v0.1.18...v0.1.19
-
-### Fixed
-- *Direct download:** Download the DMG below.
-- *Homebrew:** `brew tap salp2403/tap && brew install --cask cocxy`
-- macOS 14.0 (Sonoma) or later
-- Apple Silicon or Intel Mac
-
 ## [0.1.19] - 2026-03-30
 
 ### Fixed
@@ -211,7 +198,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero telemetry — no PostHog, no Sentry, no analytics
 - MIT License
 
-[Unreleased]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.19...HEAD
 [0.1.19]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.16...v0.1.17
