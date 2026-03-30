@@ -25,6 +25,60 @@ protocol SFTPExecutor: Sendable {
     ) throws -> String
 }
 
+// MARK: - System SFTP Executor
+
+/// Production implementation that pipes commands to `/usr/bin/sftp` in batch mode.
+///
+/// Uses the SSH ControlMaster socket for connection reuse, so the existing
+/// SSH session is shared without re-authentication.
+final class SystemSFTPExecutor: SFTPExecutor {
+
+    func execute(
+        sftpCommand: String,
+        host: String,
+        controlPath: String
+    ) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sftp")
+        process.arguments = [
+            "-b", "-",
+            "-o", "ControlPath=\(controlPath)",
+            host,
+        ]
+
+        let stdinPipe = Pipe()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardInput = stdinPipe
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        try process.run()
+
+        if let commandData = "\(sftpCommand)\nbye\n".data(using: .utf8) {
+            stdinPipe.fileHandleForWriting.write(commandData)
+        }
+        stdinPipe.fileHandleForWriting.closeFile()
+
+        process.waitUntilExit()
+
+        let stdout = String(
+            data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
+        let stderr = String(
+            data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
+
+        guard process.terminationStatus == 0 else {
+            throw SFTPClientError.commandFailed(stderr.isEmpty ? "sftp exited with code \(process.terminationStatus)" : stderr)
+        }
+
+        return stdout
+    }
+}
+
 // MARK: - SFTP Errors
 
 /// Errors that can occur during SFTP operations.

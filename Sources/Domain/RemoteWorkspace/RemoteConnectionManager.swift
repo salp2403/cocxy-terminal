@@ -179,6 +179,35 @@ final class RemoteConnectionManager: ObservableObject {
         await connect(profile: profile)
     }
 
+    // MARK: - Port Forwarding
+
+    /// Dynamically adds a port forward through the active SSH ControlMaster.
+    ///
+    /// Delegates to `SSHMultiplexer.forwardPort()` which runs `ssh -O forward`.
+    /// The tunnel manager is updated by the caller.
+    ///
+    /// - Parameters:
+    ///   - forward: The port forwarding rule to apply.
+    ///   - profileID: The profile whose SSH session carries the forward.
+    func forwardPort(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID
+    ) throws {
+        guard let profile = knownProfiles[profileID] else {
+            throw SSHMultiplexerError.connectionFailed("No active connection for profile")
+        }
+        try multiplexer.forwardPort(forward, on: profile, executor: executor)
+    }
+
+    /// Cancels an active port forward on the SSH ControlMaster.
+    func cancelForward(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID
+    ) throws {
+        guard let profile = knownProfiles[profileID] else { return }
+        try multiplexer.cancelForward(forward, on: profile, executor: executor)
+    }
+
     // MARK: - Health Check
 
     /// Verifies that the SSH connection is still alive.

@@ -262,6 +262,12 @@ struct RemoteConnectionView: View {
     @ObservedObject var viewModel: RemoteConnectionViewModel
     var onDismiss: () -> Void
 
+    /// Injected SSH key manager for the keys sub-panel.
+    var sshKeyManager: SSHKeyManager?
+
+    /// Injected SFTP executor for the file browser sub-panel.
+    var sftpExecutor: (any SFTPExecutor)?
+
     /// Sub-panel view models created lazily and retained for the panel lifetime.
     @State private var keyManagerVM: SSHKeyManagerViewModel?
     @State private var sftpBrowserVM: SFTPBrowserViewModel?
@@ -291,6 +297,9 @@ struct RemoteConnectionView: View {
             }
         )
         .onAppear { viewModel.loadProfiles() }
+        .onChange(of: viewModel.selectedProfileID) { _ in
+            sftpBrowserVM = nil
+        }
         .sheet(isPresented: $viewModel.isEditorPresented) {
             editorSheet
         }
@@ -525,7 +534,13 @@ struct RemoteConnectionView: View {
             if let profileID = viewModel.selectedProfileID {
                 PortForwardingView(
                     tunnelManager: viewModel.tunnelManager,
-                    profileID: profileID
+                    profileID: profileID,
+                    onForwardPort: { forward, profID in
+                        try? viewModel.connectionManager.forwardPort(forward, for: profID)
+                    },
+                    onCancelForward: { forward, profID in
+                        try? viewModel.connectionManager.cancelForward(forward, for: profID)
+                    }
                 )
             } else {
                 selectProfilePlaceholder(icon: "arrow.left.arrow.right", text: "Select a profile to manage tunnels")
@@ -537,6 +552,11 @@ struct RemoteConnectionView: View {
         Group {
             if let vm = keyManagerVM {
                 SSHKeyManagerView(viewModel: vm)
+            } else if let keyManager = sshKeyManager {
+                Color.clear.onAppear {
+                    keyManagerVM = SSHKeyManagerViewModel(keyManager: keyManager)
+                    keyManagerVM?.loadKeys()
+                }
             } else {
                 selectProfilePlaceholder(icon: "key", text: "SSH key management")
             }
@@ -547,6 +567,15 @@ struct RemoteConnectionView: View {
         Group {
             if let vm = sftpBrowserVM {
                 SFTPBrowserView(viewModel: vm)
+            } else if let profileID = viewModel.selectedProfileID,
+                      let profile = viewModel.profiles.first(where: { $0.id == profileID }),
+                      let executor = sftpExecutor {
+                Color.clear.onAppear {
+                    let client = SFTPClient(executor: executor)
+                    let vm = SFTPBrowserViewModel(sftpClient: client, profile: profile)
+                    sftpBrowserVM = vm
+                    vm.loadDirectory()
+                }
             } else {
                 selectProfilePlaceholder(icon: "folder", text: "Select a connected profile to browse files")
             }

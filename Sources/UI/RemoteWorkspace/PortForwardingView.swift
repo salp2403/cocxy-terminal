@@ -32,6 +32,14 @@ struct PortForwardingView: View {
     /// The profile ID whose tunnels are displayed.
     let profileID: UUID
 
+    /// Executes the real SSH port forward via ControlMaster.
+    /// Called after the tunnel is added to the manager.
+    var onForwardPort: ((RemoteConnectionProfile.PortForward, UUID) -> Void)?
+
+    /// Cancels the real SSH port forward via ControlMaster.
+    /// Called before the tunnel is removed from the manager.
+    var onCancelForward: ((RemoteConnectionProfile.PortForward, UUID) -> Void)?
+
     /// Whether the inline "add tunnel" form is expanded.
     @State private var isAddFormVisible = false
 
@@ -86,7 +94,10 @@ struct PortForwardingView: View {
                         ForEach(tunnels) { tunnel in
                             TunnelRow(
                                 tunnel: tunnel,
-                                onRemove: { tunnelManager.removeTunnel(id: tunnel.id) }
+                                onRemove: {
+                                    onCancelForward?(tunnel.forward, profileID)
+                                    tunnelManager.removeTunnel(id: tunnel.id)
+                                }
                             )
                             Divider()
                                 .padding(.leading, 40)
@@ -241,7 +252,8 @@ struct PortForwardingView: View {
             forward = .dynamic(localPort: localPort)
         }
 
-        tunnelManager.addTunnel(forward: forward, for: profileID)
+        let tunnel = tunnelManager.addTunnel(forward: forward, for: profileID)
+        onForwardPort?(forward, profileID)
 
         withAnimation(.easeOut(duration: 0.15)) {
             isAddFormVisible = false

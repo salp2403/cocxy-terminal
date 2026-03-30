@@ -61,6 +61,10 @@ struct BrowserBookmarksView: View {
     /// Whether the delete confirmation alert is showing.
     @State private var showDeleteConfirmation: Bool = false
 
+    /// Incremented after mutations to force SwiftUI to re-evaluate the body.
+    /// The store is not observable, so this is the reactive bridge.
+    @State private var storeRevision: UInt = 0
+
     // MARK: - Body
 
     var body: some View {
@@ -84,6 +88,7 @@ struct BrowserBookmarksView: View {
                 if let bookmark = bookmarkToDelete {
                     try? bookmarkStore.delete(id: bookmark.id)
                     bookmarkToDelete = nil
+                    storeRevision &+= 1
                 }
             }
             Button("Cancel", role: .cancel) {
@@ -107,7 +112,10 @@ struct BrowserBookmarksView: View {
 
             Spacer()
 
-            Button(action: onAddBookmark) {
+            Button {
+                onAddBookmark()
+                storeRevision &+= 1
+            } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(Color(nsColor: CocxyColors.subtext0))
@@ -153,8 +161,10 @@ struct BrowserBookmarksView: View {
     private var bookmarkListView: some View {
         if isSearchActive {
             searchResultsView
+                .id(storeRevision)
         } else {
             treeView
+                .id(storeRevision)
         }
     }
 
