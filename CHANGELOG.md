@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.19] - 2026-03-30
 
+### Changed
+- *Full Changelog**: https://github.com/salp2403/cocxy-terminal/compare/v0.1.18...v0.1.19
+
+### Fixed
+- *Direct download:** Download the DMG below.
+- *Homebrew:** `brew tap salp2403/tap && brew install --cask cocxy`
+- macOS 14.0 (Sonoma) or later
+- Apple Silicon or Intel Mac
+
+## [0.1.19] - 2026-03-30
+
 ### Fixed
 - Browser history recording — `recordPageVisit()` now called on navigation finish
 - Browser tab auto-selection — new panels receive focus via `focusNewPanel` parameter
