@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
+  <link rel="stylesheet" href="/css/style.css?v=0.0.1">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -106,13 +106,78 @@
           <span class="version-req">macOS 14.0+</span>
         </div>
 
-        <!-- Terminal Screenshot -->
+        <!-- Terminal Mockup -->
         <div class="hero-mockup" aria-label="Cocxy Terminal preview">
-          <img src="images/cocxy-preview.png"
-               alt="Cocxy Terminal showing agent detection sidebar, split panes with browser, and status bar"
-               class="hero-screenshot"
-               width="1470" height="802"
-               loading="eager" />
+          <div class="mock-window">
+            <div class="mock-titlebar">
+              <div class="mock-dots"><span class="d r"></span><span class="d y"></span><span class="d g"></span></div>
+              <div class="mock-tabs">
+                <span class="mock-tab active"><span class="ti working"></span>api-server</span>
+                <span class="mock-tab"><span class="ti waiting"></span>frontend</span>
+                <span class="mock-tab"><span class="ti idle"></span>docs</span>
+              </div>
+            </div>
+            <div class="mock-body">
+              <aside class="mock-sidebar">
+                <div class="mock-sidebar-header">WORKSPACES</div>
+                <div class="mock-ws active">
+                  <span class="ws-dot working"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">api-server</span>
+                    <span class="ws-detail">Working 2m 14s</span>
+                    <span class="ws-path">~/projects/api-server</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot waiting"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">frontend</span>
+                    <span class="ws-detail">Waiting for input</span>
+                    <span class="ws-path">~/projects/frontend</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot idle"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">docs</span>
+                    <span class="ws-detail">Ready</span>
+                    <span class="ws-path">~/projects/docs</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot connected"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">prod-srv</span>
+                    <span class="ws-detail ssh">SSH connected</span>
+                    <span class="ws-path">deploy@10.0.1.5</span>
+                  </div>
+                </div>
+              </aside>
+              <div class="mock-terminal">
+                <div class="tl"><span class="tp">$</span> <span class="tc">claude</span> <span class="ta">--model opus "Add rate limiting to /api/users"</span></div>
+                <div class="tl"><span class="agent-badge">Claude</span> <span class="agent-status">Working</span> <span class="agent-time">2m 14s</span></div>
+                <div class="tl dim">  Creating middleware/rateLimit.ts...</div>
+                <div class="tl dim">  Updating routes/users.ts with limiter...</div>
+                <div class="tl dim">  Writing tests for rate limit scenarios...</div>
+                <div class="tl"><span class="ts">&#10003;</span> 3 files changed, 147 insertions</div>
+                <div class="tl">&nbsp;</div>
+                <div class="tl"><span class="tp">$</span> <span class="tc">npm</span> <span class="ta">test -- --coverage</span></div>
+                <div class="tl dim">  PASS  src/middleware/rateLimit.test.ts</div>
+                <div class="tl dim">  PASS  src/routes/users.test.ts</div>
+                <div class="tl"><span class="ts">&#10003;</span> Tests: 24 passed, 24 total</div>
+                <div class="tl"><span class="tp">$</span> <span class="cursor">|</span></div>
+              </div>
+            </div>
+            <div class="mock-statusbar">
+              <span class="sb-item"><span class="sb-chevron">&#9656;</span> user@MacBook</span>
+              <span class="sb-divider"></span>
+              <span class="sb-item"><span class="sb-branch">&#9739;</span> main</span>
+              <span class="sb-spacer"></span>
+              <span class="sb-item port">:3000 :5173</span>
+              <span class="sb-pill working">1 working</span>
+              <span class="sb-pill waiting">1 waiting</span>
+            </div>
+          </div>
         </div>
 
       </div>
