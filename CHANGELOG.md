@@ -5,6 +5,17 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.24] - 2026-03-31
+
+### Fixed
+- Terminal input frozen after closing Preferences — focus now restored via `windowWillClose` callback
+- Double bridge restart when saving Preferences — `onSave` simplified to config reload only, `applyConfig` handles all UI updates and bridge restart via `lastAppliedConfig` comparison
+- CHANGELOG pipeline generated empty entries ("Release vX.Y.Z") — now uses `git log` between tags instead of GitHub release body which only lists PRs
+
+### Changed
+- App screenshot replaces HTML mockup in landing page hero section
+- App screenshot added to README for GitHub preview
+
 ## [0.1.23] - 2026-03-31
 
 ### Added
