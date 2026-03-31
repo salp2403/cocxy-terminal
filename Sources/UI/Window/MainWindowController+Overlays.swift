@@ -882,35 +882,11 @@ extension MainWindowController {
         let config = configService?.current ?? .defaults
         let viewModel = PreferencesViewModel(config: config)
         viewModel.onSave = { [weak self] in
-            guard let self else { return }
-            let oldConfig = self.configService?.current ?? .defaults
-            try? self.configService?.reload()
-            let newConfig = self.configService?.current ?? .defaults
-
-            // Determine if a bridge restart is needed.
-            // libghostty embeds font, theme, cursor, and padding at init time —
-            // these cannot be changed without destroying and recreating the bridge.
-            let needsBridgeRestart =
-                oldConfig.appearance.theme != newConfig.appearance.theme ||
-                oldConfig.appearance.fontFamily != newConfig.appearance.fontFamily ||
-                oldConfig.appearance.fontSize != newConfig.appearance.fontSize ||
-                oldConfig.appearance.windowPadding != newConfig.appearance.windowPadding ||
-                oldConfig.terminal.cursorStyle != newConfig.terminal.cursorStyle ||
-                oldConfig.terminal.cursorBlink != newConfig.terminal.cursorBlink ||
-                oldConfig.general.shell != newConfig.general.shell
-
-            if needsBridgeRestart, let appDelegate = NSApp.delegate as? AppDelegate {
-                // switchTheme handles full bridge recreation: destroys all surfaces,
-                // creates new bridge with updated config, recreates surfaces for
-                // every tab, and restores the active tab. Working directories are
-                // preserved; shell sessions restart.
-                appDelegate.switchTheme(to: newConfig.appearance.theme)
-            }
-
-            // Apply UI-only changes that do not require bridge restart.
-            self.tabBarView?.setSidebarTransparent(newConfig.appearance.backgroundOpacity < 1.0)
-            self.refreshStatusBar()
-            self.refreshTabStrip()
+            // Reload the config from disk. The configChangedPublisher
+            // subscriber fires applyConfig which handles everything:
+            // background color, tab position, vibrancy, notification
+            // toggles, and bridge restart when needed.
+            try? self?.configService?.reload()
         }
         let prefsView = PreferencesView(viewModel: viewModel)
         let hostingController = NSHostingController(rootView: prefsView)

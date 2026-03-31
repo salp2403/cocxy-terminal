@@ -63,6 +63,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Optional reference to the configuration service.
     let configService: ConfigService?
 
+    /// Snapshot of the last applied config, used to detect which properties
+    /// changed and whether a bridge restart is needed.
+    var lastAppliedConfig: CocxyConfig?
+
     /// Manages the lifecycle and ordering of tabs.
     let tabManager: TabManager
 
@@ -324,6 +328,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         )
 
         super.init(window: window)
+        self.lastAppliedConfig = configService?.current
         configureWindow(window)
         subscribeToConfigChanges()
         subscribeToActiveTabChanges()

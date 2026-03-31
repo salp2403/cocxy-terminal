@@ -25,8 +25,9 @@ extension MainWindowController {
 
     /// Applies configuration changes to the window.
     ///
-    /// Updates the window background color, tab position, and triggers
-    /// a theme switch when the theme has changed.
+    /// Updates the window background, tab position, vibrancy, and triggers
+    /// a bridge restart when embedded-at-init properties have changed
+    /// (theme, font, padding, cursor, shell).
     ///
     /// - Parameter config: The new configuration to apply.
     func applyConfig(_ config: CocxyConfig) {
@@ -54,13 +55,23 @@ extension MainWindowController {
         // Apply vibrancy/opacity changes to all chrome components.
         applyEffectiveAppearance(config.appearance)
 
-        // Detect theme change and trigger surface recreation.
-        let currentThemeName = activeThemeIndex < Self.themeNames.count
-            ? Self.themeNames[activeThemeIndex] : nil
-        if currentThemeName != themeName {
-            if let appDelegate = NSApp.delegate as? AppDelegate {
-                appDelegate.switchTheme(to: themeName)
-            }
+        // Determine if a bridge restart is needed by comparing against the
+        // last applied config. libghostty embeds theme, font, cursor, padding,
+        // and shell at init time — these cannot be changed at runtime.
+        let old = lastAppliedConfig
+        let needsBridgeRestart =
+            old?.appearance.theme != config.appearance.theme ||
+            old?.appearance.fontFamily != config.appearance.fontFamily ||
+            old?.appearance.fontSize != config.appearance.fontSize ||
+            old?.appearance.windowPadding != config.appearance.windowPadding ||
+            old?.terminal.cursorStyle != config.terminal.cursorStyle ||
+            old?.terminal.cursorBlink != config.terminal.cursorBlink ||
+            old?.general.shell != config.general.shell
+
+        lastAppliedConfig = config
+
+        if needsBridgeRestart, let appDelegate = NSApp.delegate as? AppDelegate {
+            appDelegate.switchTheme(to: themeName)
         }
     }
 
