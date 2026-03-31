@@ -21,8 +21,16 @@ final class PreferencesWindowDelegate: NSObject, NSWindowDelegate {
     /// The view model to check for unsaved changes and to trigger save/discard.
     private let viewModel: PreferencesViewModel
 
+    /// Callback fired when the preferences window is about to close.
+    /// Used by MainWindowController to restore terminal focus.
+    var onClose: (() -> Void)?
+
     init(viewModel: PreferencesViewModel) {
         self.viewModel = viewModel
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

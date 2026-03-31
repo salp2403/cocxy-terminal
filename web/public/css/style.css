@@ -896,6 +896,23 @@ img {
   perspective: 1200px;
 }
 
+.hero-screenshot {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--surface0);
+  box-shadow:
+    0 0 0 1px rgba(137, 180, 250, 0.05),
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 120px rgba(137, 180, 250, 0.03);
+  transform: rotateX(2deg);
+  transition: transform 0.4s ease;
+}
+
+.hero-screenshot:hover {
+  transform: rotateX(0deg);
+}
+
 .mockup-window {
   background: var(--crust);
   border-radius: 12px;

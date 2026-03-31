@@ -106,77 +106,13 @@
           <span class="version-req">macOS 14.0+</span>
         </div>
 
-        <!-- Terminal Mockup -->
+        <!-- Terminal Screenshot -->
         <div class="hero-mockup" aria-label="Cocxy Terminal preview">
-          <div class="mockup-window">
-            <div class="mockup-titlebar">
-              <div class="mockup-dots">
-                <span class="dot dot-red"></span>
-                <span class="dot dot-yellow"></span>
-                <span class="dot dot-green"></span>
-              </div>
-              <div class="mockup-title">cocxy — ~/projects/api-server</div>
-              <div class="mockup-dots" style="visibility:hidden">
-                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-              </div>
-            </div>
-            <div class="mockup-body">
-              <div class="mockup-layout">
-                <!-- Sidebar -->
-                <div class="mockup-sidebar">
-                  <div class="mockup-tab active">
-                    <span class="tab-indicator working"></span>
-                    <span class="tab-name">api-server</span>
-                    <span class="tab-branch">main</span>
-                  </div>
-                  <div class="mockup-tab">
-                    <span class="tab-indicator idle"></span>
-                    <span class="tab-name">frontend</span>
-                    <span class="tab-branch">feat/ui</span>
-                  </div>
-                  <div class="mockup-tab">
-                    <span class="tab-indicator waiting"></span>
-                    <span class="tab-name">database</span>
-                    <span class="tab-branch">main</span>
-                  </div>
-                  <div class="mockup-tab remote">
-                    <span class="tab-indicator connected"></span>
-                    <span class="tab-name">prod-srv</span>
-                    <span class="tab-detail">SSH</span>
-                  </div>
-                </div>
-                <!-- Terminal + Split -->
-                <div class="mockup-content">
-                  <div class="mockup-terminal">
-                    <div class="term-line"><span class="term-prompt">$</span> <span class="term-cmd">claude</span> <span class="term-arg">--model opus "Add rate limiting to /api/users"</span></div>
-                    <div class="term-line"><span class="term-agent">Claude</span> <span class="term-status working-text">Working</span> <span class="term-time">2m 14s</span></div>
-                    <div class="term-line dim">  Creating middleware/rateLimit.ts...</div>
-                    <div class="term-line dim">  Updating routes/users.ts with limiter...</div>
-                    <div class="term-line dim">  Writing tests for rate limit scenarios...</div>
-                    <div class="term-line"><span class="term-success">✓</span> 3 files changed, 147 insertions</div>
-                    <div class="term-line"><span class="term-prompt">$</span> <span class="term-cursor">|</span></div>
-                  </div>
-                  <!-- Browser split -->
-                  <div class="mockup-browser">
-                    <div class="browser-bar">
-                      <span class="browser-dot"></span>
-                      <span class="browser-url">localhost:3000/api/users</span>
-                    </div>
-                    <div class="browser-content">
-                      <span class="browser-status">200</span> <span class="browser-json">{"users": [...],"limit": 100}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- Status bar -->
-              <div class="mockup-statusbar">
-                <span class="status-item"><span class="status-dot green"></span> Claude Code — Working</span>
-                <span class="status-item">3 agents</span>
-                <span class="status-item">Port 3000</span>
-                <span class="status-item">deploy@prod-srv:22</span>
-              </div>
-            </div>
-          </div>
+          <img src="images/cocxy-preview.png"
+               alt="Cocxy Terminal showing agent detection sidebar, split panes with browser, and status bar"
+               class="hero-screenshot"
+               width="1470" height="802"
+               loading="eager" />
         </div>
 
       </div>

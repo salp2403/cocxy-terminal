@@ -10,6 +10,10 @@
 
 Cocxy knows when your coding agent is thinking, working, waiting for input, or done. It shows you -- so you stop watching terminals and start shipping code.
 
+<p align="center">
+  <img src="web/public/images/cocxy-preview.png" alt="Cocxy Terminal" width="800" />
+</p>
+
 ## Why Cocxy
 
 Every terminal shows you text. Cocxy shows you what your agent is actually doing. It detects 6 coding agents across 4 independent detection layers, gives you a live dashboard of every session, and lets you jump between agents with a single keystroke. When your agent finishes a task at 3 AM, Cocxy knows -- and you know.

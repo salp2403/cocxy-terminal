@@ -923,6 +923,19 @@ extension MainWindowController {
         // Install the delegate that prompts on close with unsaved changes.
         // Retained as a property because NSWindow.delegate is weak.
         let windowDelegate = PreferencesWindowDelegate(viewModel: viewModel)
+        windowDelegate.onClose = { [weak self] in
+            guard let self else { return }
+            self.preferencesWindow = nil
+            self.preferencesWindowDelegate = nil
+            // Restore terminal focus on the next run loop tick to ensure
+            // the preferences window is fully ordered out first.
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let surfaceView = self.terminalSurfaceView else { return }
+                self.window?.makeKeyAndOrderFront(nil)
+                self.window?.makeFirstResponder(surfaceView)
+            }
+        }
         prefsWindow.delegate = windowDelegate
         self.preferencesWindowDelegate = windowDelegate
 
