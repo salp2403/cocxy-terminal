@@ -135,6 +135,9 @@ img {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%, rgba(137, 180, 250, 0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 50% 80%, rgba(137, 180, 250, 0.04) 0%, transparent 60%);
 }
 
 .hero-grid {
@@ -148,11 +151,13 @@ img {
   position: relative;
   z-index: 2;
   text-align: center;
-  padding: 120px 24px 80px;
+  padding: 120px 24px 60px;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .hero-icon {
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .hero-icon img {
@@ -890,27 +895,54 @@ img {
    ============================================ */
 
 .hero-mockup {
-  margin-top: 3.5rem;
+  margin-top: 2.5rem;
   width: 100%;
-  max-width: 900px;
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
   perspective: 1200px;
+  position: relative;
+}
+
+/* Glow behind the screenshot */
+.hero-mockup::before {
+  content: "";
+  position: absolute;
+  inset: 10% 5%;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(137, 180, 250, 0.12) 0%,
+    rgba(137, 180, 250, 0.04) 40%,
+    transparent 70%
+  );
+  filter: blur(40px);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .hero-screenshot {
   width: 100%;
   height: auto;
+  display: block;
   border-radius: 12px;
-  border: 1px solid var(--surface0);
+  border: 1px solid rgba(69, 71, 90, 0.6);
   box-shadow:
-    0 0 0 1px rgba(137, 180, 250, 0.05),
-    0 20px 60px rgba(0, 0, 0, 0.5),
-    0 0 120px rgba(137, 180, 250, 0.03);
+    0 0 0 1px rgba(137, 180, 250, 0.06),
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    0 24px 80px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(137, 180, 250, 0.04);
   transform: rotateX(2deg);
-  transition: transform 0.4s ease;
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 0.6s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .hero-screenshot:hover {
-  transform: rotateX(0deg);
+  transform: rotateX(0deg) translateY(-4px);
+  box-shadow:
+    0 0 0 1px rgba(137, 180, 250, 0.1),
+    0 8px 24px rgba(0, 0, 0, 0.3),
+    0 32px 100px rgba(0, 0, 0, 0.5),
+    0 0 140px rgba(137, 180, 250, 0.08);
 }
 
 .mockup-window {
@@ -1146,8 +1178,8 @@ img {
 
 /* Responsive mockup */
 @media (max-width: 768px) {
-  .mockup-sidebar { display: none; }
-  .hero-mockup { margin-top: 2rem; }
-  .mockup-window { transform: none; }
-  .mockup-layout { min-height: 200px; }
+  .hero-mockup { margin-top: 1.5rem; }
+  .hero-screenshot { transform: none; border-radius: 8px; }
+  .hero-screenshot:hover { transform: none; }
+  .hero-mockup::before { display: none; }
 }
