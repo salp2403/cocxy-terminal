@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.23] - 2026-03-31
 
-- Release v0.1.23
+### Added
+- Configurable vibrancy/glass effect on sidebar, tab strip, and status bar via `background-opacity`
+- NSVisualEffectView with `.headerView` material on horizontal tab strip
+- Conditional SwiftUI material background on status bar
+- Background Opacity slider (30%-100%) in Preferences replacing sidebar transparency toggle
+
+### Fixed
+- Double-click-to-zoom on tab strip broken by background layer intercepting hitTest
+- Theme color overridden when switching from transparent to opaque mode
+- Stale web stats: tests 2,898 → 3,051, releases page CLI commands 43 → 47
 
 ## [0.1.22] - 2026-03-30
 

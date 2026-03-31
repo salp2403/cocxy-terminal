@@ -326,9 +326,17 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           DATE=$(date -u +"%Y-%m-%d")
 
-          # Fetch auto-generated release notes from GitHub
-          RELEASE_NOTES=$(gh api repos/salp2403/cocxy-terminal/releases/tags/v${VERSION} \
-            --jq '.body // ""' 2>/dev/null || echo "")
+          # Get commit messages between previous tag and current tag.
+          # This is more reliable than the release body because we push
+          # directly to main (no PRs), so generate_release_notes only
+          # produces a "Full Changelog" link without individual entries.
+          git fetch --tags --force
+          PREV_TAG=$(git describe --tags --abbrev=0 "v${VERSION}^" 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            RELEASE_NOTES=$(git log "${PREV_TAG}...v${VERSION}" --pretty=format:"- %s" --no-merges)
+          else
+            RELEASE_NOTES=$(git log "v${VERSION}" --pretty=format:"- %s" --no-merges -20)
+          fi
 
           # Build the changelog entry from release notes.
           # Variables are passed via environment because the heredoc is
@@ -356,10 +364,9 @@ jobs:
               print(f"Version {version} already in CHANGELOG, skipping")
               raise SystemExit(0)
 
-          # Strip the installation template and GitHub boilerplate from
-          # the release body before parsing. The body contains both the
-          # static install template AND the auto-generated release notes.
-          # We only want the auto-generated part (commit-based entries).
+          # Filter patterns to skip non-changelog content.
+          # Kept for safety in case commit messages accidentally contain
+          # template-like text (unlikely with conventional commits).
           skip_patterns = [
               "cocxy terminal v",       # Release title
               "direct download",        # Install template
@@ -397,13 +404,26 @@ jobs:
               if clean.startswith("http://") or clean.startswith("https://"):
                   continue
 
-              lower = clean.lower()
-              if any(w in lower for w in ["add", "new", "feat", "support", "introduce"]):
-                  added.append(clean)
-              elif any(w in lower for w in ["security", "cve", "vulnerab"]):
-                  security.append(clean)
+              # Strip conventional commit prefix for cleaner display.
+              # "feat: add X" → "Add X", "fix: broken Y" → "Broken Y"
+              prefix_match = re.match(r"^(feat|fix|docs|chore|refactor|perf|style|test|ci|build)(\(.+?\))?:\s*", clean)
+              prefix_type = prefix_match.group(1) if prefix_match else None
+              display = clean[prefix_match.end():] if prefix_match else clean
+              if display:
+                  display = display[0].upper() + display[1:]
+
+              lower = (prefix_type or display).lower()
+              if prefix_type in ("feat",) or any(w in lower for w in ["add", "new", "feat", "support", "introduce"]):
+                  added.append(display)
+              elif prefix_type in ("fix",) or any(w in lower for w in ["security", "cve", "vulnerab"]):
+                  if any(w in display.lower() for w in ["security", "cve", "vulnerab"]):
+                      security.append(display)
+                  else:
+                      fixed.append(display)
+              elif prefix_type in ("docs",):
+                  changed.append(display)
               elif any(w in lower for w in ["change", "update", "improve", "refactor", "rename"]):
-                  changed.append(clean)
+                  changed.append(display)
               else:
                   fixed.append(clean)
 
