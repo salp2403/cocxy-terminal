@@ -51,6 +51,9 @@ extension MainWindowController {
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
+        // Apply vibrancy/opacity changes to all chrome components.
+        applyEffectiveAppearance(config.appearance)
+
         // Detect theme change and trigger surface recreation.
         let currentThemeName = activeThemeIndex < Self.themeNames.count
             ? Self.themeNames[activeThemeIndex] : nil

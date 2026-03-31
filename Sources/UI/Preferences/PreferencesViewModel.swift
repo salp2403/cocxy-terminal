@@ -60,11 +60,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Uniform window padding in points. Clamped to 0...40 on save.
     @Published var windowPadding: Double
 
-    /// Window background opacity (0.0 = fully transparent, 1.0 = opaque).
+    /// Window background opacity (0.3 = very transparent, 1.0 = fully opaque).
+    /// Controls vibrancy on sidebar, tab strip, and status bar.
     @Published var backgroundOpacity: Double
-
-    /// Sidebar transparency (derived from background opacity for convenience).
-    @Published var sidebarTransparent: Bool
 
     // MARK: - Agent Detection
 
@@ -165,7 +163,7 @@ final class PreferencesViewModel: ObservableObject {
             || fontSize != c.appearance.fontSize
             || tabPosition != c.appearance.tabPosition.rawValue
             || windowPadding != c.appearance.windowPadding
-            || sidebarTransparent != (c.appearance.backgroundOpacity < 1.0)
+            || backgroundOpacity != c.appearance.backgroundOpacity
             || agentDetectionEnabled != c.agentDetection.enabled
             || oscNotifications != c.agentDetection.oscNotifications
             || patternMatching != c.agentDetection.patternMatching
@@ -190,7 +188,6 @@ final class PreferencesViewModel: ObservableObject {
         tabPosition = c.appearance.tabPosition.rawValue
         windowPadding = c.appearance.windowPadding
         backgroundOpacity = c.appearance.backgroundOpacity
-        sidebarTransparent = c.appearance.backgroundOpacity < 1.0
         agentDetectionEnabled = c.agentDetection.enabled
         oscNotifications = c.agentDetection.oscNotifications
         patternMatching = c.agentDetection.patternMatching
@@ -238,7 +235,6 @@ final class PreferencesViewModel: ObservableObject {
         self.tabPosition = config.appearance.tabPosition.rawValue
         self.windowPadding = config.appearance.windowPadding
         self.backgroundOpacity = config.appearance.backgroundOpacity
-        self.sidebarTransparent = config.appearance.backgroundOpacity < 1.0
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -281,7 +277,7 @@ final class PreferencesViewModel: ObservableObject {
     /// Called after a successful save so that `hasUnsavedChanges` returns false
     /// until the user makes further edits.
     private func updateSavedSnapshot() {
-        let clampedOpacity = sidebarTransparent ? 0.85 : 1.0
+        let clampedOpacity = min(max(backgroundOpacity, 0.3), 1.0)
         savedConfig = CocxyConfig(
             general: GeneralConfig(
                 shell: shell,
@@ -332,7 +328,7 @@ final class PreferencesViewModel: ObservableObject {
     func generateToml() -> String {
         let clampedFontSize = Int(min(max(fontSize, 8), 32))
         let clampedPadding = Int(min(max(windowPadding, 0), 40))
-        let clampedOpacity = min(max(sidebarTransparent ? 0.85 : 1.0, 0.3), 1.0)
+        let clampedOpacity = min(max(backgroundOpacity, 0.3), 1.0)
         let clampedTimeout = min(max(idleTimeoutSeconds, 1), 300)
 
         let defaults = savedConfig

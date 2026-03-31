@@ -253,8 +253,22 @@ struct EditableAppearanceSection: View {
                     }
                     Slider(value: $viewModel.windowPadding, in: 0...40, step: 1)
                 }
+            }
 
-                Toggle("Sidebar transparency", isOn: $viewModel.sidebarTransparent)
+            Section("Transparency") {
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text("Background opacity")
+                        Spacer()
+                        Text("\(Int(viewModel.backgroundOpacity * 100))%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $viewModel.backgroundOpacity, in: 0.3...1.0, step: 0.05)
+                }
+                Text("Lower values enable a glass effect on the sidebar, tab strip, and status bar.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
 
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)

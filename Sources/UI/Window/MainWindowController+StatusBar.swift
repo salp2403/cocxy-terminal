@@ -39,7 +39,8 @@ extension MainWindowController {
     /// Refreshes the status bar content.
     func refreshStatusBar() {
         let activeTab = tabManager.activeTab
-        let statusBar = StatusBarView(
+        let isTransparent = configService?.current.appearance.backgroundOpacity ?? 1.0 < 1.0
+        var statusBar = StatusBarView(
             hostname: currentHostname(),
             gitBranch: activeTab?.gitBranch,
             agentSummary: computeAgentSummary(),
@@ -49,6 +50,7 @@ extension MainWindowController {
             lastCommandExitCode: activeTab?.lastCommandExitCode,
             isCommandRunning: activeTab?.isCommandRunning ?? false
         )
+        statusBar.useVibrancy = isTransparent
         statusBarHostingView?.rootView = statusBar
     }
 }

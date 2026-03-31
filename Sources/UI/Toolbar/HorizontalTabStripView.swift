@@ -99,6 +99,25 @@ final class HorizontalTabStripView: NSView {
         return stack
     }()
 
+    /// Vibrancy background for glass effect when transparency is enabled.
+    private let vibrancyView: NSVisualEffectView = {
+        let vev = NSVisualEffectView()
+        vev.material = .headerView
+        vev.blendingMode = .behindWindow
+        vev.state = .active
+        vev.translatesAutoresizingMaskIntoConstraints = false
+        return vev
+    }()
+
+    /// Opaque overlay that covers the vibrancy view when transparency is off.
+    private let solidOverlay: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = CocxyColors.mantle.cgColor
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }()
+
     /// Bottom border line.
     private let borderLine: NSView = {
         let v = NSView()
@@ -126,7 +145,11 @@ final class HorizontalTabStripView: NSView {
 
     private func setupUI() {
         wantsLayer = true
-        layer?.backgroundColor = CocxyColors.mantle.cgColor
+
+        // Background layers: vibrancy underneath, solid overlay on top.
+        // The solid overlay is shown by default (opaque mode).
+        addSubview(vibrancyView)
+        addSubview(solidOverlay)
 
         addSubview(tabStack)
         addSubview(actionStack)
@@ -136,8 +159,18 @@ final class HorizontalTabStripView: NSView {
         addButton.target = self
         addButton.action = #selector(addButtonClicked)
 
-
         NSLayoutConstraint.activate([
+            // Background layers fill the entire view.
+            vibrancyView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            vibrancyView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            vibrancyView.topAnchor.constraint(equalTo: topAnchor),
+            vibrancyView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            solidOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            solidOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            solidOverlay.topAnchor.constraint(equalTo: topAnchor),
+            solidOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+
             tabStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             tabStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             tabStack.trailingAnchor.constraint(lessThanOrEqualTo: actionStack.leadingAnchor, constant: -8),
@@ -158,6 +191,17 @@ final class HorizontalTabStripView: NSView {
     }
 
     // MARK: - Public API
+
+    /// Toggles between vibrancy (glass) and solid background modes.
+    ///
+    /// When transparent, the solid overlay is hidden and the underlying
+    /// `NSVisualEffectView` provides a native blur-behind-window effect.
+    /// When opaque, the solid overlay covers the vibrancy view.
+    ///
+    /// - Parameter transparent: `true` for glass effect, `false` for solid.
+    func setTransparent(_ transparent: Bool) {
+        solidOverlay.isHidden = transparent
+    }
 
     /// Updates the tab strip with the given tab items.
     func updateTabs(_ newTabs: [(title: String, icon: String, isActive: Bool)]) {
@@ -543,6 +587,7 @@ final class HorizontalTabStripView: NSView {
         if event.clickCount == 2 {
             let hitView = hitTest(convert(event.locationInWindow, from: nil))
             let isEmptyArea = hitView === self || hitView == nil
+                || hitView === vibrancyView || hitView === solidOverlay
             if isEmptyArea {
                 window?.zoom(nil)
                 return

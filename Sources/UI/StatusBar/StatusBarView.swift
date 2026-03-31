@@ -38,6 +38,9 @@ struct StatusBarView: View {
     /// Whether a command is currently running.
     var isCommandRunning: Bool = false
 
+    /// Whether to use vibrancy material instead of solid background.
+    var useVibrancy: Bool = false
+
     var body: some View {
         HStack(spacing: 0) {
             // Left: user@host
@@ -173,7 +176,13 @@ struct StatusBarView: View {
             .padding(.trailing, 14)
         }
         .frame(height: 24)
-        .background(CocxyColors.swiftUI(CocxyColors.crust))
+        .background {
+            if useVibrancy {
+                VisualEffectBackground(material: .headerView, blendingMode: .behindWindow)
+            } else {
+                Color(nsColor: CocxyColors.crust)
+            }
+        }
         .overlay(alignment: .top) {
             Rectangle()
                 .frame(height: 0.5)

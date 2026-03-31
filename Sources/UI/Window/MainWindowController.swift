@@ -520,6 +520,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onCloseTab = { [weak self] index in self?.handleStripCloseTab(at: index) }
         strip.onSwapTabs = { [weak self] from, to in self?.handleStripSwapTabs(from: from, to: to) }
         strip.onRenameTab = { [weak self] index, name in self?.handleStripRenameTab(at: index, newTitle: name) }
+
+        // Apply initial vibrancy state from config.
+        if let appearance = configService?.current.appearance {
+            strip.setTransparent(appearance.backgroundOpacity < 1.0)
+        }
+
         return strip
     }
 
@@ -545,17 +551,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         rootView.autoresizingMask = [.width, .height]
 
         // Status bar at the bottom.
-        let statusBar = StatusBarView(
+        let isTransparent = configService?.current.appearance.backgroundOpacity ?? 1.0 < 1.0
+        var statusBar = StatusBarView(
             hostname: currentHostname(),
             gitBranch: tabManager.activeTab?.gitBranch,
             agentSummary: computeAgentSummary(),
             activePorts: [],
             sshSession: tabManager.activeTab?.sshSession
         )
+        statusBar.useVibrancy = isTransparent
         let statusBarHost = NSHostingView(rootView: statusBar)
         statusBarHost.frame = NSRect(x: 0, y: 0, width: contentFrame.width, height: Self.statusBarHeight)
         statusBarHost.wantsLayer = true
-        statusBarHost.layer?.backgroundColor = CocxyColors.crust.cgColor
+        statusBarHost.layer?.backgroundColor = isTransparent
+            ? NSColor.clear.cgColor
+            : CocxyColors.crust.cgColor
         statusBarHost.autoresizingMask = [.width]
         rootView.addSubview(statusBarHost)
         self.statusBarHostingView = statusBarHost
@@ -1070,21 +1080,36 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Applies appearance settings to the window chrome.
     ///
-    /// Updates background opacity and blur for the window and sidebar.
-    /// Called when switching tabs with different project configs.
-    private func applyEffectiveAppearance(_ appearance: AppearanceConfig) {
+    /// Updates background opacity and vibrancy for the window, sidebar,
+    /// tab strip, and status bar. Called when switching tabs with different
+    /// project configs or when the user changes the background-opacity setting.
+    func applyEffectiveAppearance(_ appearance: AppearanceConfig) {
         guard let window = window else { return }
 
-        // Apply background opacity.
-        window.isOpaque = appearance.backgroundOpacity >= 1.0
-        if appearance.backgroundOpacity < 1.0 {
-            window.backgroundColor = window.backgroundColor?.withAlphaComponent(
-                appearance.backgroundOpacity
-            )
+        let isTransparent = appearance.backgroundOpacity < 1.0
+
+        // Apply background opacity to the window.
+        // When transparent: apply alpha to the current background color (set by theme).
+        // When opaque: restore full alpha on the current color (preserves theme choice).
+        window.isOpaque = !isTransparent
+        window.backgroundColor = window.backgroundColor?.withAlphaComponent(
+            isTransparent ? appearance.backgroundOpacity : 1.0
+        )
+
+        // Propagate vibrancy state to all chrome components.
+        tabBarView?.setSidebarTransparent(isTransparent)
+
+        if let strip = horizontalTabStripView as? HorizontalTabStripView {
+            strip.setTransparent(isTransparent)
         }
 
-        // Update sidebar transparency to match.
-        tabBarView?.setSidebarTransparent(appearance.backgroundOpacity < 1.0)
+        // Update status bar vibrancy and hosting view background.
+        if let hostingView = statusBarHostingView {
+            hostingView.layer?.backgroundColor = isTransparent
+                ? NSColor.clear.cgColor
+                : CocxyColors.crust.cgColor
+            hostingView.rootView.useVibrancy = isTransparent
+        }
     }
 
     // MARK: - Tab Actions
