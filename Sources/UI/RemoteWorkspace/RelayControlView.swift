@@ -19,6 +19,12 @@ struct RelayControlView: View {
     @State private var newLocalPort: String = ""
     @State private var newRemotePort: String = ""
     @State private var errorMessage: String?
+    @State private var showingAuditFor: UUID?
+    @State private var auditEntries: [String] = []
+    @State private var editingACLFor: UUID?
+    @State private var aclProcesses: String = ""
+    @State private var aclMaxConn: String = "10"
+    @State private var aclHosts: String = "127.0.0.1"
 
     // MARK: - Body
 
@@ -84,7 +90,7 @@ struct RelayControlView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Circle()
-                    .fill(Color.green)
+                    .fill(channel.isExpired ? Color.orange : Color.green)
                     .frame(width: 6, height: 6)
                 Text(channel.name)
                     .font(.system(size: 11, weight: .medium))
@@ -108,8 +114,28 @@ struct RelayControlView: View {
                 Text("remote:\(channel.remotePort)")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                Spacer()
+                Text(verbatim: "\(channel.connectionCount) conn")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
             }
 
+            // Created timestamp.
+            Text("Created \(channel.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                .font(.system(size: 8))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+
+            // ACL summary.
+            HStack(spacing: 4) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 8))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                Text(aclSummary(channel.acl))
+                    .font(.system(size: 8))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            }
+
+            // Action buttons.
             HStack(spacing: 8) {
                 Button("Rotate Token") {
                     relayManager.rotateToken(channelID: channel.id)
@@ -118,15 +144,142 @@ struct RelayControlView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(Color(nsColor: CocxyColors.mauve))
 
-                Text(verbatim: "\(channel.connectionCount) conn")
-                    .font(.system(size: 9))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                Button("View Audit") {
+                    loadAuditEntries(for: channel.id)
+                }
+                .font(.system(size: 9))
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.blue))
+
+                Button("Edit ACL") {
+                    beginEditingACL(channel)
+                }
+                .font(.system(size: 9))
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.yellow))
+            }
+
+            // Inline audit log viewer.
+            if showingAuditFor == channel.id {
+                auditLogViewer(channelID: channel.id)
+            }
+
+            // Inline ACL editor.
+            if editingACLFor == channel.id {
+                aclEditor(channelID: channel.id)
             }
         }
         .padding(6)
         .background(
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color(nsColor: CocxyColors.surface0).opacity(0.5))
+        )
+    }
+
+    private func aclSummary(_ acl: RelayACL) -> String {
+        let hosts = acl.allowedRemoteHosts.joined(separator: ", ")
+        let procs = acl.allowedProcesses.isEmpty ? "all" : acl.allowedProcesses.joined(separator: ", ")
+        return "Hosts: \(hosts) | Procs: \(procs) | Max: \(acl.maxConnections)"
+    }
+
+    // MARK: - Audit Log Viewer
+
+    private func auditLogViewer(channelID: UUID) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Audit Log")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(Color(nsColor: CocxyColors.text))
+                Spacer()
+                Button(action: { showingAuditFor = nil }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            }
+
+            let filtered = auditEntries.filter { $0.contains(channelID.uuidString) }
+            if filtered.isEmpty {
+                Text("No audit entries for this channel")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            } else {
+                ForEach(Array(filtered.suffix(10).enumerated()), id: \.offset) { _, entry in
+                    Text(formatAuditEntry(entry))
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color(nsColor: CocxyColors.mantle).opacity(0.6))
+        )
+    }
+
+    // MARK: - ACL Editor
+
+    private func aclEditor(channelID: UUID) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Edit ACL")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(Color(nsColor: CocxyColors.text))
+                Spacer()
+                Button(action: { editingACLFor = nil }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            }
+
+            HStack(spacing: 4) {
+                Text("Hosts:")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                TextField("127.0.0.1", text: $aclHosts)
+                    .font(.system(size: 9, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+            }
+            HStack(spacing: 4) {
+                Text("Procs:")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                TextField("(empty = all)", text: $aclProcesses)
+                    .font(.system(size: 9, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+            }
+            HStack(spacing: 4) {
+                Text("Max:")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                TextField("10", text: $aclMaxConn)
+                    .font(.system(size: 9, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 40)
+            }
+
+            HStack(spacing: 8) {
+                Button("Save ACL") {
+                    saveACL(channelID: channelID)
+                }
+                .font(.system(size: 9, weight: .medium))
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.green))
+
+                Text("Changes apply to new connections only.")
+                    .font(.system(size: 8))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            }
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color(nsColor: CocxyColors.mantle).opacity(0.6))
         )
     }
 
@@ -217,6 +370,63 @@ struct RelayControlView: View {
     }
 
     // MARK: - Actions
+
+    // MARK: - Audit Helpers
+
+    private func loadAuditEntries(for channelID: UUID) {
+        if showingAuditFor == channelID {
+            showingAuditFor = nil
+            return
+        }
+        let reader = DiskAuditLogWriter()
+        auditEntries = (try? reader.readAllLines()) ?? []
+        showingAuditFor = channelID
+    }
+
+    private func formatAuditEntry(_ json: String) -> String {
+        guard let data = json.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return json }
+        let event = dict["event"] as? String ?? "?"
+        let ts = dict["timestamp"] as? String ?? ""
+        let shortTs = String(ts.suffix(8)) // HH:MM:SSZ
+        return "\(shortTs) \(event)"
+    }
+
+    // MARK: - ACL Helpers
+
+    private func beginEditingACL(_ channel: RelayChannel) {
+        if editingACLFor == channel.id {
+            editingACLFor = nil
+            return
+        }
+        aclProcesses = channel.acl.allowedProcesses.joined(separator: ", ")
+        aclMaxConn = "\(channel.acl.maxConnections)"
+        aclHosts = channel.acl.allowedRemoteHosts.joined(separator: ", ")
+        editingACLFor = channel.id
+    }
+
+    private func saveACL(channelID: UUID) {
+        let hosts = aclHosts
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let processes = aclProcesses
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let maxConn = Int(aclMaxConn) ?? 10
+
+        let newACL = RelayACL(
+            allowedProcesses: processes,
+            maxConnections: max(1, maxConn),
+            allowedRemoteHosts: hosts.isEmpty ? ["127.0.0.1"] : hosts
+        )
+        relayManager.updateACL(channelID: channelID, acl: newACL)
+        editingACLFor = nil
+    }
+
+    // MARK: - Channel Actions
 
     private func addChannel() {
         guard let localPort = Int(newLocalPort), (1...65535).contains(localPort),

@@ -124,6 +124,7 @@ final class RemoteConnectionManager: ObservableObject {
             let message = errorMessage(from: error)
 
             guard profile.autoReconnect else {
+                await cleanupSubsystems(profileID: profile.id)
                 connections[profile.id] = .failed(message)
                 return
             }
@@ -147,6 +148,7 @@ final class RemoteConnectionManager: ObservableObject {
                 }
             }
 
+            await cleanupSubsystems(profileID: profile.id)
             connections[profile.id] = .failed(lastErrorMessage)
         }
     }
@@ -173,8 +175,19 @@ final class RemoteConnectionManager: ObservableObject {
             // Best-effort: even if disconnect fails, clean up local state.
         }
 
+        await cleanupSubsystems(profileID: profileID)
         tunnelManager.removeAllTunnels(for: profileID)
         connections[profileID] = .disconnected
+    }
+
+    /// Cleans up relay channels, proxy, and daemon state for a profile.
+    ///
+    /// Called on disconnect AND when connection fails permanently.
+    /// Ensures no orphaned heartbeats, NWConnections, or pending requests.
+    private func cleanupSubsystems(profileID: UUID) async {
+        relayManager?.closeAllChannels(profileID: profileID)
+        await proxyManager?.disable(profileID: profileID)
+        daemonManager?.connection.disconnect()
     }
 
     // MARK: - Reconnect

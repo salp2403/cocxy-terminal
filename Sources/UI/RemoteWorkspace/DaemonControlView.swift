@@ -8,7 +8,8 @@ import SwiftUI
 /// Sub-panel for managing the remote cocxyd daemon.
 ///
 /// Connected to `DaemonManagerImpl` for real deployment and session operations.
-/// Shows daemon status, deploy/start/stop buttons, session list, and file sync.
+/// Shows daemon status, deploy/start/stop buttons, session list, forward list,
+/// and file sync watchers.
 struct DaemonControlView: View {
 
     let profileID: UUID
@@ -17,6 +18,13 @@ struct DaemonControlView: View {
 
     @State private var errorMessage: String?
     @State private var isDeploying = false
+    @State private var sessions: [DaemonSessionInfo] = []
+    @State private var isLoadingSessions = false
+    @State private var newSessionTitle = ""
+    @State private var newForwardSpec = ""
+    @State private var newSyncPath = ""
+    @State private var forwards: [[String: Any]] = []
+    @State private var syncChanges: [[String: Any]] = []
 
     // MARK: - Body
 
@@ -37,6 +45,10 @@ struct DaemonControlView: View {
             controlSection
             Divider()
             sessionsSection
+            Divider()
+            forwardsSection
+            Divider()
+            syncSection
             if let errorMessage {
                 Divider()
                 errorSection(errorMessage)
@@ -137,19 +149,218 @@ struct DaemonControlView: View {
 
     private var sessionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Remote Sessions")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Color(nsColor: CocxyColors.text))
+            HStack {
+                Text("Remote Sessions")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(nsColor: CocxyColors.text))
+                Spacer()
+                if isDaemonRunning {
+                    Button(action: refreshSessions) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(Color(nsColor: CocxyColors.mauve))
+                    .disabled(isLoadingSessions)
+                }
+            }
 
-            if case .running = daemonManager.state {
-                Text("Use the daemon connection to list and manage persistent sessions.")
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            if isDaemonRunning {
+                // Create session form.
+                HStack(spacing: 4) {
+                    TextField("Session name", text: $newSessionTitle)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 10))
+                        .frame(maxWidth: 120)
+                    Button(action: createSession) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(Color(nsColor: CocxyColors.green))
+                    .disabled(isLoadingSessions)
+                }
+
+                if isLoadingSessions {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if sessions.isEmpty {
+                    Text("No active sessions")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                } else {
+                    ForEach(sessions) { session in
+                        sessionRow(session)
+                    }
+                }
             } else {
                 Text("Deploy the daemon to manage persistent sessions.")
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
             }
+        }
+    }
+
+    private func sessionRow(_ session: DaemonSessionInfo) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(session.status == "running" ? Color.green : Color.orange)
+                .frame(width: 6, height: 6)
+            Text(session.title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+            Text("PID \(session.pid)")
+                .font(.system(size: 9))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            Spacer()
+            Button(action: { killSession(session.id) }) {
+                Image(systemName: "xmark.circle")
+                    .font(.system(size: 10))
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(Color(nsColor: CocxyColors.red))
+        }
+    }
+
+    // MARK: - Forwards Section
+
+    private var forwardsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Persistent Forwards")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(nsColor: CocxyColors.text))
+                Spacer()
+                if isDaemonRunning {
+                    Button(action: refreshForwards) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(Color(nsColor: CocxyColors.mauve))
+                }
+            }
+
+            if isDaemonRunning {
+                HStack(spacing: 4) {
+                    TextField("local:remote", text: $newForwardSpec)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 10))
+                        .frame(maxWidth: 120)
+                    Button(action: addForward) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(Color(nsColor: CocxyColors.green))
+                    .disabled(newForwardSpec.isEmpty)
+                }
+
+                if forwards.isEmpty {
+                    Text("No persistent forwards")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                } else {
+                    ForEach(Array(forwards.enumerated()), id: \.offset) { _, fwd in
+                        forwardRow(fwd)
+                    }
+                }
+            } else {
+                Text("Deploy the daemon to manage persistent forwards.")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            }
+        }
+    }
+
+    private func forwardRow(_ fwd: [String: Any]) -> some View {
+        let local = fwd["local"] as? Int ?? 0
+        let remote = fwd["remote"] as? Int ?? 0
+        let host = fwd["host"] as? String ?? "localhost"
+        return HStack(spacing: 6) {
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 9))
+                .foregroundColor(Color(nsColor: CocxyColors.blue))
+            Text(verbatim: "\(local) → \(remote)")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+            Text(host)
+                .font(.system(size: 9))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            Spacer()
+            Button(action: { removeForward("\(local):\(remote)") }) {
+                Image(systemName: "xmark.circle")
+                    .font(.system(size: 10))
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(Color(nsColor: CocxyColors.red))
+        }
+    }
+
+    // MARK: - Sync Section
+
+    private var syncSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("File Sync Watch")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(nsColor: CocxyColors.text))
+                Spacer()
+                if isDaemonRunning {
+                    Button(action: checkSyncChanges) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(Color(nsColor: CocxyColors.mauve))
+                }
+            }
+
+            if isDaemonRunning {
+                HStack(spacing: 4) {
+                    TextField("Remote path to watch", text: $newSyncPath)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 10))
+                        .frame(maxWidth: 180)
+                    Button(action: addSyncWatch) {
+                        Image(systemName: "eye")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(Color(nsColor: CocxyColors.green))
+                    .disabled(newSyncPath.isEmpty)
+                }
+
+                if syncChanges.isEmpty {
+                    Text("No recent changes detected")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                } else {
+                    ForEach(Array(syncChanges.prefix(10).enumerated()), id: \.offset) { _, change in
+                        syncChangeRow(change)
+                    }
+                }
+            } else {
+                Text("Deploy the daemon to use file sync.")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            }
+        }
+    }
+
+    private func syncChangeRow(_ change: [String: Any]) -> some View {
+        let path = change["path"] as? String ?? "unknown"
+        let type = change["type"] as? String ?? "modified"
+        let icon = type == "created" ? "doc.badge.plus" : type == "deleted" ? "trash" : "pencil"
+        return HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 9))
+                .foregroundColor(Color(nsColor: CocxyColors.yellow))
+            Text(path)
+                .font(.system(size: 10))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
     }
 
@@ -167,6 +378,13 @@ struct DaemonControlView: View {
         }
     }
 
+    // MARK: - Helpers
+
+    private var isDaemonRunning: Bool {
+        if case .running = daemonManager.state { return true }
+        return false
+    }
+
     // MARK: - Actions
 
     private func deployDaemon() {
@@ -175,6 +393,7 @@ struct DaemonControlView: View {
         Task {
             do {
                 try await daemonManager.deploy(profileID: profileID)
+                refreshSessions()
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -187,6 +406,9 @@ struct DaemonControlView: View {
         Task {
             do {
                 try await daemonManager.stop(profileID: profileID)
+                sessions = []
+                forwards = []
+                syncChanges = []
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -206,7 +428,124 @@ struct DaemonControlView: View {
         }
     }
 
-    // MARK: - Helpers
+    private func refreshSessions() {
+        guard isDaemonRunning else { return }
+        isLoadingSessions = true
+        Task {
+            do {
+                let bridge = DaemonSessionBridge(connection: daemonManager.connection)
+                sessions = try await bridge.listSessions()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoadingSessions = false
+        }
+    }
+
+    private func createSession() {
+        let title = newSessionTitle.isEmpty ? "cocxy-session" : newSessionTitle
+        Task {
+            do {
+                let bridge = DaemonSessionBridge(connection: daemonManager.connection)
+                _ = try await bridge.createAndAttach(title: title)
+                newSessionTitle = ""
+                refreshSessions()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func killSession(_ sessionID: String) {
+        Task {
+            do {
+                let bridge = DaemonSessionBridge(connection: daemonManager.connection)
+                try await bridge.killSession(sessionID: sessionID)
+                refreshSessions()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func refreshForwards() {
+        guard isDaemonRunning else { return }
+        Task {
+            do {
+                let response = try await daemonManager.connection.send(
+                    cmd: DaemonCommand.forwardList.rawValue
+                )
+                if let data = response.data,
+                   let fwds = data["forwards"] as? [[String: Any]] {
+                    forwards = fwds
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func addForward() {
+        guard !newForwardSpec.isEmpty else { return }
+        Task {
+            do {
+                _ = try await daemonManager.connection.send(
+                    cmd: DaemonCommand.forwardAdd.rawValue,
+                    args: ["spec": newForwardSpec]
+                )
+                newForwardSpec = ""
+                refreshForwards()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func removeForward(_ spec: String) {
+        Task {
+            do {
+                _ = try await daemonManager.connection.send(
+                    cmd: DaemonCommand.forwardRemove.rawValue,
+                    args: ["spec": spec]
+                )
+                refreshForwards()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func addSyncWatch() {
+        guard !newSyncPath.isEmpty else { return }
+        Task {
+            do {
+                _ = try await daemonManager.connection.send(
+                    cmd: DaemonCommand.syncWatch.rawValue,
+                    args: ["path": newSyncPath]
+                )
+                newSyncPath = ""
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func checkSyncChanges() {
+        guard isDaemonRunning else { return }
+        Task {
+            do {
+                let response = try await daemonManager.connection.send(
+                    cmd: DaemonCommand.syncChanges.rawValue
+                )
+                if let data = response.data,
+                   let changes = data["changes"] as? [[String: Any]] {
+                    syncChanges = changes
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
 
     private func formatUptime(_ seconds: TimeInterval) -> String {
         let hours = Int(seconds) / 3600

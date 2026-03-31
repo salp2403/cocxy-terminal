@@ -5,9 +5,54 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.22] - 2026-03-30
+
+### Fixed
+- DaemonConnection double-resume crash — continuation resume moved to atomic MainActor guard
+- RelayAuditLog auto-rotation — size check after each append triggers rotation at 10 MB
+- RelayAuthBroker ACL enforcement — `evaluate(processName:remoteHost:)` now called with real remote host
+- RelayManager auto-cleanup on SSH disconnect — channels and proxy cleaned up on all disconnect paths
+- DaemonManager connection cleanup on disconnect — heartbeats and pending requests properly stopped
+- cocxyd.sh sync_changes word-split — paths with spaces handled via temp file and read loop
+- cocxyd.sh cleanup removes stale sync markers and idle timestamp on shutdown
+
+### Added
+- RelayChannel `createdAt` timestamp field with default value
+- RelayControlView per-channel "View Audit Log" with inline viewer
+- RelayControlView per-channel "Edit ACL" with Save button and `updateACL()` support
+- DaemonControlView live session list with create, kill, and refresh
+- DaemonControlView persistent forwards list with add, remove, and refresh
+- DaemonControlView file sync watch with add path and check changes
+- cocxyd.sh real `forward.add`/`forward.remove`/`forward.list` with port validation (1-65535)
+- cocxyd.sh real `sync.watch`/`sync.changes` with find-based polling and JSON escaping
+- cocxyd.sh auto-cleanup after 24h idle with `update_last_client` tracking
+- cocxyd.sh protocol version validation (warn-only, backward compatible)
+
 ## [0.1.21] - 2026-03-30
 
-- Release v0.1.21
+### Added
+- SOCKS5 proxy manager with state machine (off/starting/active/failing/failover)
+- HTTP CONNECT proxy via Network.framework (NWListener + bidirectional relay)
+- System-wide proxy integration via `networksetup` with admin privilege escalation
+- Proxy exclusion list with wildcard matching and PAC file generation
+- Proxy health monitor with TCP probe, 3-failure threshold, and auto-failover
+- Proxy control UI panel with SOCKS/HTTP/system-wide toggles and stats
+- Agent relay multi-channel manager with reverse SSH tunnels
+- Relay HMAC-SHA256 token authentication via CryptoKit with rotation support
+- Relay access control lists (ACL) per channel with process and host filtering
+- Relay auth broker with 60-byte wire protocol handshake validation
+- Relay audit log with JSON lines format and file rotation
+- Relay Keychain persistence for production token storage
+- Relay control UI panel with channel management and global stats
+- Remote daemon manager with deploy/connect/stop/upgrade lifecycle
+- cocxyd.sh POSIX shell daemon (~500 LOC) with 3-level session fallback (tmux/screen/PTY)
+- Daemon JSON-RPC protocol with 15 commands and version negotiation
+- Daemon deployer with platform detection, SFTP upload, and version checking
+- Daemon connection via NWConnection with request multiplexing and 30s heartbeat
+- Daemon session bridge with bidirectional I/O (base64) and 50ms output polling
+- Daemon file sync watcher with remote directory monitoring
+- Daemon control UI panel with deploy/stop/upgrade buttons
+- 7 new Remote Workspace sub-panels: Sessions, Tunnels, Proxy, Relay, Daemon, Keys, SFTP
 
 ## [0.1.20] - 2026-03-30
 
@@ -210,6 +255,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero telemetry — no PostHog, no Sentry, no analytics
 - MIT License
 
+[0.1.22]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.18...v0.1.19

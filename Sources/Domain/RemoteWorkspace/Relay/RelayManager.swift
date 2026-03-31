@@ -14,6 +14,7 @@ protocol RelayManaging: AnyObject {
     func closeAllChannels(profileID: UUID)
     func listChannels(profileID: UUID) -> [RelayChannel]
     func rotateToken(channelID: UUID)
+    func updateACL(channelID: UUID, acl: RelayACL)
 }
 
 // MARK: - Relay Manager Implementation
@@ -151,6 +152,29 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     /// Returns the current token for a channel.
     func token(for channelID: UUID) -> RelayToken? {
         tokens[channelID]
+    }
+
+    // MARK: - ACL Management
+
+    /// Updates the access control list for an active channel.
+    ///
+    /// The new ACL applies to subsequent connections only;
+    /// already-established connections are not affected.
+    func updateACL(channelID: UUID, acl: RelayACL) {
+        guard var channel = channels[channelID] else { return }
+        channel = RelayChannel(
+            id: channel.id,
+            profileID: channel.profileID,
+            name: channel.name,
+            localHost: channel.localHost,
+            localPort: channel.localPort,
+            remotePort: channel.remotePort,
+            acl: acl,
+            createdAt: channel.createdAt,
+            expiresAt: channel.expiresAt,
+            connectionCount: channel.connectionCount
+        )
+        channels[channelID] = channel
     }
 
     // MARK: - Expiration Timer

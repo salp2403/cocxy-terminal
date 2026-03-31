@@ -65,6 +65,8 @@ protocol AuditLogWriting: AnyObject, Sendable {
     func appendLine(_ line: String) throws
     func rotate() throws
     func readAllLines() throws -> [String]
+    /// Returns the current size of the log in bytes.
+    var currentSize: Int { get }
 }
 
 // MARK: - Relay Audit Log
@@ -96,6 +98,7 @@ final class RelayAuditLog {
     /// Logs an audit event.
     ///
     /// Serializes the event to a JSON line and appends it to the log.
+    /// Triggers rotation when the log exceeds `maxSizeBytes`.
     func log(_ event: RelayAuditEvent) {
         let json = event.toJSON()
         guard let data = try? JSONSerialization.data(withJSONObject: json),
@@ -103,6 +106,10 @@ final class RelayAuditLog {
         else { return }
 
         try? writer.appendLine(line)
+
+        if writer.currentSize >= maxSizeBytes {
+            try? writer.rotate()
+        }
     }
 
     /// Reads all log entries.
@@ -166,6 +173,13 @@ final class DiskAuditLogWriter: AuditLogWriting, @unchecked Sendable {
             try? fm.removeItem(atPath: "\(filePath).1")
             try fm.moveItem(atPath: filePath, toPath: "\(filePath).1")
         }
+    }
+
+    var currentSize: Int {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: filePath),
+              let size = attrs[.size] as? Int
+        else { return 0 }
+        return size
     }
 
     func readAllLines() throws -> [String] {

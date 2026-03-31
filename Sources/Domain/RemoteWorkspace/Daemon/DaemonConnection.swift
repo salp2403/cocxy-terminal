@@ -102,9 +102,12 @@ final class DaemonConnection: ObservableObject {
             connection.send(content: data, completion: .contentProcessed { [weak self] error in
                 if let error {
                     Task { @MainActor in
-                        self?.pendingRequests.removeValue(forKey: reqID)
+                        // Remove-then-resume atomically on MainActor to prevent
+                        // double-resume race with failAllPending().
+                        if let cont = self?.pendingRequests.removeValue(forKey: reqID) {
+                            cont.resume(throwing: error)
+                        }
                     }
-                    continuation.resume(throwing: error)
                 }
             })
         }

@@ -91,6 +91,30 @@ struct RelayAuditLogTests {
         #expect(writer.entries.count == 5)
     }
 
+    @Test("Auto-rotation triggers when log exceeds maxSizeBytes")
+    @MainActor func autoRotation() {
+        let writer = MockAuditLogWriter()
+        // Use a tiny max so rotation triggers quickly.
+        let log = RelayAuditLog(writer: writer, maxSizeBytes: 50)
+        let channelID = UUID()
+
+        // Each JSON line is ~100+ bytes, so a single entry exceeds 50 bytes.
+        log.log(.channelOpened(channelID: channelID, name: "test-channel"))
+
+        #expect(writer.rotationCount >= 1, "Rotation should have been triggered")
+    }
+
+    @Test("No rotation when log is within size limit")
+    @MainActor func noRotationUnderLimit() {
+        let writer = MockAuditLogWriter()
+        // 10 MB — a single entry won't trigger rotation.
+        let log = RelayAuditLog(writer: writer, maxSizeBytes: 10 * 1024 * 1024)
+
+        log.log(.channelClosed(channelID: UUID()))
+
+        #expect(writer.rotationCount == 0)
+    }
+
     @Test("AuditEvent type names are correct")
     func eventTypeNames() {
         let id = UUID()

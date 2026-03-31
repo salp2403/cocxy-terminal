@@ -17,6 +17,9 @@ PIDFILE="$RUNTIME_DIR/cocxyd.pid"
 LOGFILE="$RUNTIME_DIR/cocxyd.log"
 TCP_PORT_FILE="$RUNTIME_DIR/cocxyd.port"
 SESSION_DIR="$RUNTIME_DIR/sessions"
+FORWARD_DIR="$RUNTIME_DIR/forwards"
+SYNC_DIR="$RUNTIME_DIR/sync"
+LAST_CLIENT_FILE="$RUNTIME_DIR/last_client"
 
 # Log rotation: 5MB max.
 MAX_LOG_SIZE=5242880
@@ -186,6 +189,135 @@ session_kill() {
     log_msg "Session killed: $target"
 }
 
+# --- Port Forward Persistence ---
+
+forward_list() {
+    req_id="$1"
+    mkdir -p "$FORWARD_DIR"
+    result="["
+    first=1
+    for f in "$FORWARD_DIR"/*.fwd; do
+        [ -f "$f" ] || continue
+        spec=$(cat "$f" 2>/dev/null)
+        local_port=$(echo "$spec" | cut -d: -f1)
+        remote_port=$(echo "$spec" | cut -d: -f2)
+        host=$(echo "$spec" | cut -d: -f3)
+        [ -z "$host" ] && host="localhost"
+        [ "$first" = "1" ] || result="${result},"
+        result="${result}{\"local\":$local_port,\"remote\":$remote_port,\"host\":\"$host\",\"status\":\"saved\"}"
+        first=0
+    done
+    result="${result}]"
+    json_ok "$req_id" "\"forwards\":$result"
+}
+
+forward_add() {
+    req_id="$1"
+    spec="$2"
+    if [ -z "$spec" ]; then
+        json_err "$req_id" "missing forward spec (local:remote or local:remote:host)"
+        return
+    fi
+    mkdir -p "$FORWARD_DIR"
+    local_port=$(echo "$spec" | cut -d: -f1)
+    remote_port=$(echo "$spec" | cut -d: -f2)
+    # Validate ports are numeric and in valid range (1-65535).
+    case "$local_port" in *[!0-9]*) json_err "$req_id" "invalid local port"; return ;; esac
+    case "$remote_port" in *[!0-9]*) json_err "$req_id" "invalid remote port"; return ;; esac
+    if [ "$local_port" -lt 1 ] || [ "$local_port" -gt 65535 ] 2>/dev/null; then
+        json_err "$req_id" "local port out of range (1-65535)"; return
+    fi
+    if [ "$remote_port" -lt 1 ] || [ "$remote_port" -gt 65535 ] 2>/dev/null; then
+        json_err "$req_id" "remote port out of range (1-65535)"; return
+    fi
+    echo "$spec" > "$FORWARD_DIR/${local_port}-${remote_port}.fwd"
+    log_msg "Forward added: $spec"
+    json_simple_ok "$req_id"
+}
+
+forward_remove() {
+    req_id="$1"
+    spec="$2"
+    if [ -z "$spec" ]; then
+        json_err "$req_id" "missing forward spec"
+        return
+    fi
+    local_port=$(echo "$spec" | cut -d: -f1)
+    remote_port=$(echo "$spec" | cut -d: -f2)
+    target="$FORWARD_DIR/${local_port}-${remote_port}.fwd"
+    if [ -f "$target" ]; then
+        rm -f "$target"
+        log_msg "Forward removed: $spec"
+        json_simple_ok "$req_id"
+    else
+        json_err "$req_id" "forward not found: $spec"
+    fi
+}
+
+# --- File Sync Watching ---
+
+sync_watch() {
+    req_id="$1"
+    path="$2"
+    if [ -z "$path" ]; then
+        json_err "$req_id" "missing path to watch"
+        return
+    fi
+    mkdir -p "$SYNC_DIR"
+    # Store the watched path and create a timestamp marker.
+    safe_name=$(echo "$path" | sed 's/[^a-zA-Z0-9_.-]/_/g')
+    echo "$path" > "$SYNC_DIR/${safe_name}.path"
+    touch "$SYNC_DIR/${safe_name}.marker"
+    log_msg "Sync watch started: $path"
+    json_simple_ok "$req_id"
+}
+
+sync_changes() {
+    req_id="$1"
+    mkdir -p "$SYNC_DIR"
+    result="["
+    first=1
+    for pathfile in "$SYNC_DIR"/*.path; do
+        [ -f "$pathfile" ] || continue
+        watched_path=$(cat "$pathfile" 2>/dev/null)
+        safe_name=$(basename "$pathfile" .path)
+        marker="$SYNC_DIR/${safe_name}.marker"
+        [ -f "$marker" ] || continue
+        [ -d "$watched_path" ] || continue
+        # Find files modified since the last check.
+        # Use temp file + read loop to handle paths with spaces
+        # (pipe creates subshell in POSIX sh, losing variable changes).
+        _sync_tmp="$RUNTIME_DIR/sync_tmp.$$"
+        find "$watched_path" -maxdepth 2 -newer "$marker" -type f 2>/dev/null | head -50 > "$_sync_tmp"
+        while IFS= read -r file; do
+            # Escape double quotes and backslashes for valid JSON.
+            safe_file=$(printf '%s' "$file" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            [ "$first" = "1" ] || result="${result},"
+            result="${result}{\"path\":\"$safe_file\",\"type\":\"modified\"}"
+            first=0
+        done < "$_sync_tmp"
+        rm -f "$_sync_tmp"
+        # Update the marker to the current time for next poll.
+        touch "$marker"
+    done
+    result="${result}]"
+    json_ok "$req_id" "\"changes\":$result"
+}
+
+# --- Auto-Cleanup ---
+
+update_last_client() {
+    date +%s > "$LAST_CLIENT_FILE" 2>/dev/null
+}
+
+check_idle_timeout() {
+    [ -f "$LAST_CLIENT_FILE" ] || return 1
+    last=$(cat "$LAST_CLIENT_FILE" 2>/dev/null)
+    now=$(date +%s)
+    elapsed=$((now - last))
+    [ "$elapsed" -gt "$MAX_IDLE_SECONDS" ]
+}
+
 # --- Command Handler ---
 
 handle_command() {
@@ -193,6 +325,13 @@ handle_command() {
 
     req_id=$(printf '%s' "$line" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     cmd=$(printf '%s' "$line" | sed -n 's/.*"cmd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    # Track client activity for auto-cleanup.
+    update_last_client
+    # Validate protocol version (warn but don't reject for backward compat).
+    proto=$(printf '%s' "$line" | sed -n 's/.*"proto"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')
+    if [ -n "$proto" ] && [ "$proto" -gt "$COCXYD_PROTO" ] 2>/dev/null; then
+        log_msg "WARNING: Client proto=$proto > daemon proto=$COCXYD_PROTO"
+    fi
     title_arg=$(printf '%s' "$line" | sed -n 's/.*"title"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     data_arg=$(printf '%s' "$line" | sed -n 's/.*"data"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     # Extract session ID from args. The Swift client sends {"args":{"id":"...","data":"..."}}.
@@ -215,6 +354,9 @@ except: pass
     if [ -z "$session_id_arg" ]; then
         session_id_arg="$title_arg"
     fi
+    # Extract spec (for forward commands) and path (for sync commands).
+    spec_arg=$(printf '%s' "$line" | sed -n 's/.*"spec"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    path_arg=$(printf '%s' "$line" | sed -n 's/.*"path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 
     case "$cmd" in
         ping)
@@ -302,16 +444,19 @@ except: pass
             json_simple_ok "$req_id"
             ;;
         forward.list)
-            json_ok "$req_id" '"forwards":[]'
+            forward_list "$req_id"
             ;;
-        forward.add|forward.remove)
-            json_simple_ok "$req_id"
+        forward.add)
+            forward_add "$req_id" "$spec_arg"
+            ;;
+        forward.remove)
+            forward_remove "$req_id" "$spec_arg"
             ;;
         sync.watch)
-            json_simple_ok "$req_id"
+            sync_watch "$req_id" "$path_arg"
             ;;
         sync.changes)
-            json_ok "$req_id" '"changes":[]'
+            sync_changes "$req_id"
             ;;
         shutdown)
             json_simple_ok "$req_id"
@@ -367,17 +512,31 @@ run_daemon() {
     # Main loop: accept TCP connections and handle JSON-RPC commands.
     # socat (preferred): forks a handler per connection for concurrency.
     # nc fallback: handles one connection at a time (sequential).
+    # Initialize last-client timestamp on startup.
+    update_last_client
+
     if command -v socat >/dev/null 2>&1; then
         socat "TCP-LISTEN:$port,bind=127.0.0.1,reuseaddr,fork" \
               "EXEC:sh $0 _handle" &
         LISTENER_PID=$!
-        # Wait for the listener or SIGTERM.
+        # Wait loop: check for idle timeout every 60s.
         while kill -0 "$LISTENER_PID" 2>/dev/null; do
-            sleep 5
+            sleep 60
+            if check_idle_timeout; then
+                log_msg "Idle timeout ($MAX_IDLE_SECONDS s) reached, shutting down"
+                kill "$LISTENER_PID" 2>/dev/null
+                cleanup
+                exit 0
+            fi
         done
     else
         # nc fallback: one connection at a time in a loop.
         while true; do
+            if check_idle_timeout; then
+                log_msg "Idle timeout ($MAX_IDLE_SECONDS s) reached, shutting down"
+                cleanup
+                exit 0
+            fi
             if command -v nc >/dev/null 2>&1; then
                 nc -l 127.0.0.1 "$port" -e "sh $0 _handle" 2>/dev/null || \
                     echo '{"ok":false,"error":"nc failed"}' | nc -l "$port" 2>/dev/null
@@ -392,7 +551,10 @@ run_daemon() {
 # --- Lifecycle ---
 
 cleanup() {
-    rm -f "$SOCKET" "$PIDFILE" "$TCP_PORT_FILE"
+    rm -f "$SOCKET" "$PIDFILE" "$TCP_PORT_FILE" "$LAST_CLIENT_FILE"
+    # Remove sync markers to prevent stale timestamps on restart
+    # (would cause find -newer to return false-positive changes).
+    rm -f "$SYNC_DIR"/*.marker 2>/dev/null
     log_msg "Daemon stopped"
 }
 
@@ -404,6 +566,8 @@ do_start() {
 
     mkdir -p -m 700 "$RUNTIME_DIR"
     mkdir -p "$SESSION_DIR"
+    mkdir -p "$FORWARD_DIR"
+    mkdir -p "$SYNC_DIR"
 
     # Rotate log if too large.
     if [ -f "$LOGFILE" ]; then

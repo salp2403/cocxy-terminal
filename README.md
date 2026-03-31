@@ -30,18 +30,21 @@ Passive detection engine that identifies coding agent state in real time without
 | **Timing** | Activity heuristics | Active vs idle periods, session boundaries |
 
 - **6 Agents** -- Claude Code (with full 12-event hook integration), Codex, Gemini CLI, Aider, GitHub Copilot, and Cursor
-- **Agent Dashboard** -- Live view of all sessions with state, working directory, tools in use, and duration
-- **Agent Timeline** -- Chronological event log with JSON and Markdown export
-- **Smart Routing** -- Jump between agent sessions by priority, state, or recency
+- **Agent Dashboard** -- Live view of all sessions with state, working directory, tools in use, and duration (`Cmd+Option+A`)
+- **Agent Timeline** -- Chronological event log with JSON and Markdown export (`Cmd+Shift+T`)
+- **Smart Routing** -- Jump between agent sessions by priority, state, or recency (`Cmd+Shift+U`)
 
 ### Remote Workspaces
 
-SSH multiplexing with persistent sessions that survive disconnects.
+SSH multiplexing with persistent sessions, proxy management, agent relay, and a remote daemon -- all from the client, zero installation on the server.
 
 - **Persistent Sessions** -- tmux-backed sessions on remote hosts that survive SSH disconnects. Zero installation required on the server
 - **Session Management UI** -- Visual panel to create, list, attach, and kill remote sessions
 - **SSH Multiplexing** -- OpenSSH ControlMaster for connection reuse across tabs
 - **Port Tunneling** -- Local, remote, and dynamic SOCKS forwarding with conflict detection
+- **SOCKS5 + HTTP CONNECT Proxy** -- Native proxy with system-wide macOS integration, PAC generation, exclusion lists, and health monitoring with auto-failover
+- **Agent Relay** -- Multi-channel reverse tunnels with HMAC-SHA256 auth, per-channel ACL, audit logging, token rotation, and Keychain persistence
+- **Remote Daemon** -- POSIX shell daemon (~500 LOC) with 3-level session fallback (tmux/screen/PTY native), persistent port forwards, file sync watching, and 24h auto-cleanup
 - **SFTP Browser** -- Navigate and transfer files on remote hosts
 - **Auto-Reconnect** -- Exponential backoff reconnection with configurable retry limits
 
@@ -269,7 +272,7 @@ swift run CocxyTerminal
 ### Test
 
 ```bash
-swift test    # 2,898 tests
+swift test    # 3,051 tests
 ```
 
 ## Architecture
@@ -283,7 +286,7 @@ Sources/
   Domain/            # Detection engine, plugins, remote workspace, config
   UI/                # Windows, tabs, panels, overlays, animations
 CLI/                 # cocxy companion tool (47 commands)
-Tests/               # 2,898 test cases
+Tests/               # 3,051 test cases
 ```
 
 ## Contributing

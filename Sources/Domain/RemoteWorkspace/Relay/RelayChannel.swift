@@ -33,6 +33,9 @@ struct RelayChannel: Identifiable, Sendable {
     /// Access control list for this channel.
     let acl: RelayACL
 
+    /// When this channel was created.
+    let createdAt: Date
+
     /// When this channel should auto-expire (nil = never).
     let expiresAt: Date?
 
@@ -47,6 +50,7 @@ struct RelayChannel: Identifiable, Sendable {
         localPort: Int,
         remotePort: Int,
         acl: RelayACL = RelayACL(),
+        createdAt: Date = Date(),
         expiresAt: Date? = nil,
         connectionCount: Int = 0
     ) {
@@ -57,6 +61,7 @@ struct RelayChannel: Identifiable, Sendable {
         self.localPort = localPort
         self.remotePort = remotePort
         self.acl = acl
+        self.createdAt = createdAt
         self.expiresAt = expiresAt
         self.connectionCount = connectionCount
     }

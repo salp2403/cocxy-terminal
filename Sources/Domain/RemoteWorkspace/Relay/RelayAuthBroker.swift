@@ -222,10 +222,12 @@ final class RelayAuthBroker {
             Task { @MainActor in
                 guard let self else { return }
 
+                let earlyRemoteHost = self.extractRemoteHost(from: connection)
+
                 guard let data, data.count >= RelayHandshake.totalSize else {
                     self.auditLog?.log(.connectionRejected(
                         channelID: self.channelID,
-                        remoteHost: "unknown",
+                        remoteHost: earlyRemoteHost,
                         reason: "Incomplete handshake"
                     ))
                     connection.cancel()
@@ -239,12 +241,25 @@ final class RelayAuthBroker {
                     replayTracker: &self.replayTracker
                 )
 
+                // Extract remote host from the NWConnection endpoint.
+                let remoteHost = self.extractRemoteHost(from: connection)
+
                 switch result {
                 case .accepted:
+                    // Enforce ACL: host filtering + connection limit.
+                    guard self.acl.evaluate(processName: "", remoteHost: remoteHost) else {
+                        self.auditLog?.log(.connectionRejected(
+                            channelID: self.channelID,
+                            remoteHost: remoteHost,
+                            reason: "ACL denied host"
+                        ))
+                        connection.cancel()
+                        return
+                    }
                     guard self.acl.canAcceptConnection(currentCount: self.activeConnections) else {
                         self.auditLog?.log(.connectionRejected(
                             channelID: self.channelID,
-                            remoteHost: "127.0.0.1",
+                            remoteHost: remoteHost,
                             reason: "Max connections exceeded"
                         ))
                         connection.cancel()
@@ -253,20 +268,34 @@ final class RelayAuthBroker {
                     self.activeConnections += 1
                     self.auditLog?.log(.connectionAccepted(
                         channelID: self.channelID,
-                        remoteHost: "127.0.0.1"
+                        remoteHost: remoteHost
                     ))
-                    // Establish relay to the local service.
                     self.relayToTarget(clientConnection: connection)
 
                 case .rejected(let reason):
                     self.auditLog?.log(.connectionRejected(
                         channelID: self.channelID,
-                        remoteHost: "unknown",
+                        remoteHost: remoteHost,
                         reason: "\(reason)"
                     ))
                     connection.cancel()
                 }
             }
+        }
+    }
+
+    // MARK: - Helpers
+
+    /// Extracts the remote host address from an NWConnection endpoint.
+    private func extractRemoteHost(from connection: NWConnection) -> String {
+        guard let endpoint = connection.currentPath?.remoteEndpoint else {
+            return "unknown"
+        }
+        switch endpoint {
+        case .hostPort(let host, _):
+            return "\(host)"
+        default:
+            return "unknown"
         }
     }
 
