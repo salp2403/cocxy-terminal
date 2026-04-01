@@ -517,31 +517,19 @@ final class TabItemView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// Pending single-click work item, cancelled if a double-click arrives.
-    private var pendingSelectWork: DispatchWorkItem?
-
     override func mouseDown(with event: NSEvent) {
         let localPoint = convert(event.locationInWindow, from: nil)
         if closeButton.frame.contains(localPoint) { return }
         if isEditing { return }
-
-        pendingSelectWork?.cancel()
-        pendingSelectWork = nil
 
         if event.clickCount >= 2 {
             startEditing()
             return
         }
 
-        let work = DispatchWorkItem { [weak self] in
-            self?.onSelect?()
-            self?.pendingSelectWork = nil
-        }
-        pendingSelectWork = work
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + NSEvent.doubleClickInterval,
-            execute: work
-        )
+        // Select immediately on single click — no delay.
+        // Double-click rename is handled above via clickCount.
+        onSelect?()
     }
 
     // MARK: - Inline Rename

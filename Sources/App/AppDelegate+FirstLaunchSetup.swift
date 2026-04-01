@@ -166,7 +166,8 @@ extension AppDelegate {
                         return false
                     }
                     return commands.contains {
-                        ($0["command"] as? String)?.contains("cocxy hook-handler") == true
+                        guard let cmd = $0["command"] as? String else { return false }
+                        return cmd.contains("cocxy") && cmd.contains("hook-handler")
                     }
                 }
 

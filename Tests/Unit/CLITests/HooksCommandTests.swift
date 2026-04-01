@@ -332,7 +332,76 @@ final class ClaudeSettingsManagerTests: XCTestCase {
         XCTAssertTrue(afterUninstallStatus.installedEvents.isEmpty)
     }
 
-    // MARK: - 13. Install preserves non-hook settings
+    // MARK: - 13. Install detects hooks with quoted paths (AppDelegate format)
+
+    func testInstallDetectsQuotedPathHooks() throws {
+        // Simulate hooks written by AppDelegate (quoted path for shell safety).
+        let appDelegateSettings: [String: Any] = [
+            "hooks": ClaudeSettingsManager.hookedEventTypes.reduce(into: [String: Any]()) { dict, event in
+                dict[event] = [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            [
+                                "type": "command",
+                                "command": "'/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler"
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+        let data = try JSONSerialization.data(withJSONObject: appDelegateSettings, options: .prettyPrinted)
+        try data.write(to: URL(fileURLWithPath: settingsFilePath))
+
+        let manager = ClaudeSettingsManager(settingsFilePath: settingsFilePath)
+
+        // CLI install should detect the quoted hooks and NOT add duplicates.
+        let result = try manager.installHooks()
+        XCTAssertFalse(result.installed)
+        XCTAssertTrue(result.alreadyInstalled)
+
+        // Verify only 1 entry per event type (no duplication).
+        let readData = try Data(contentsOf: URL(fileURLWithPath: settingsFilePath))
+        let settings = try JSONSerialization.jsonObject(with: readData) as! [String: Any]
+        let hooks = settings["hooks"] as! [String: Any]
+
+        for eventType in ClaudeSettingsManager.hookedEventTypes {
+            let eventHooks = hooks[eventType] as! [[String: Any]]
+            XCTAssertEqual(eventHooks.count, 1, "Expected exactly 1 hook for \(eventType), got \(eventHooks.count)")
+        }
+    }
+
+    // MARK: - 14. Uninstall removes hooks with quoted paths
+
+    func testUninstallRemovesQuotedPathHooks() throws {
+        // Simulate hooks written by AppDelegate (quoted path).
+        let appDelegateSettings: [String: Any] = [
+            "hooks": [
+                "Stop": [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            [
+                                "type": "command",
+                                "command": "'/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler"
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: appDelegateSettings, options: .prettyPrinted)
+        try data.write(to: URL(fileURLWithPath: settingsFilePath))
+
+        let manager = ClaudeSettingsManager(settingsFilePath: settingsFilePath)
+        let result = try manager.uninstallHooks()
+
+        XCTAssertTrue(result.uninstalled)
+        XCTAssertTrue(result.removedEvents.contains("Stop"))
+    }
+
+    // MARK: - 15. Install preserves non-hook settings
 
     func testInstallPreservesNonHookSettings() throws {
         // Write settings with permissions and other fields

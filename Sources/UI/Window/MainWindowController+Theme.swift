@@ -52,6 +52,14 @@ extension MainWindowController {
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
+        // Propagate config to the notification stack so preference changes
+        // take effect immediately (macOS notifications, sounds, dock badge).
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            appDelegate.notificationManager?.updateConfig(config)
+            appDelegate.notificationAdapter?.updateConfig(config)
+            appDelegate.dockBadgeController?.updateConfig(config)
+        }
+
         // Apply vibrancy/opacity changes to all chrome components.
         applyEffectiveAppearance(config.appearance)
 

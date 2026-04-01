@@ -999,20 +999,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             terminalOutputBuffer = buffer
         }
 
-        // 4. Notify libghostty of the surface size after re-adding to container.
-        // Without this, the terminal renders at its old size until the user resizes
-        // the window. This ensures the terminal fills the container immediately.
-        if let surfaceID = tabSurfaceMap[tabID] {
-            let bounds = container.bounds
-            let cols = UInt16(max(1, bounds.width / 8))   // approximate cell width
-            let rows = UInt16(max(1, bounds.height / 16)) // approximate cell height
-            bridge.resize(surfaceID, to: TerminalSize(
-                columns: cols,
-                rows: rows,
-                pixelWidth: UInt16(clamping: Int(bounds.width)),
-                pixelHeight: UInt16(clamping: Int(bounds.height))
-            ))
-        }
+        // 4. Resize is handled automatically by TerminalSurfaceView.setFrameSize
+        // when the view is laid out in the container. That path uses actual backing
+        // pixel dimensions from the view, which is more accurate than the approximate
+        // cell sizes we computed here before. Calling resize twice caused a brief
+        // flicker when the approximate and actual sizes diverged.
 
         window?.makeFirstResponder(targetSurfaceView)
         targetSurfaceView.hideNotificationRing()

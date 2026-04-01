@@ -289,9 +289,9 @@ struct NotificationConfig: Codable, Sendable, Equatable {
             badgeOnTab: true,
             flashTab: true,
             showDockBadge: true,
-            soundFinished: "default",
-            soundAttention: "default",
-            soundError: "default"
+            soundFinished: "Sounds/cocxy-finished.caf",
+            soundAttention: "Sounds/cocxy-attention.caf",
+            soundError: "Sounds/cocxy-error.caf"
         )
     }
 }

@@ -257,6 +257,31 @@ final class NotificationManagerImpl: NotificationManaging, UnreadCountPublishing
         attentionQueue.last { $0.tabId == tabId && !$0.isRead }
     }
 
+    /// Returns all attention items as `CocxyNotification` values, newest first.
+    ///
+    /// Used by the notification panel to seed its list with notifications that
+    /// arrived before the panel was opened. The panel subscribes to a
+    /// `PassthroughSubject` that does not replay past values, so this method
+    /// provides the historical backfill.
+    ///
+    /// - Returns: All stored notifications ordered newest first, capped at 50.
+    func allNotifications() -> [CocxyNotification] {
+        attentionQueue
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(50)
+            .map { item in
+                CocxyNotification(
+                    id: item.id,
+                    type: item.type,
+                    tabId: item.tabId,
+                    title: item.title,
+                    body: item.body,
+                    timestamp: item.timestamp,
+                    isRead: item.isRead
+                )
+            }
+    }
+
     /// Convenience method that translates agent state changes into notifications.
     ///
     /// Only states that require user attention generate notifications:

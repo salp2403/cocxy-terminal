@@ -35,8 +35,9 @@ public struct ClaudeSettingsManager {
         let absolutePath = URL(fileURLWithPath: resolved).standardized.path
 
         // Use full path only when the binary lives inside an .app bundle.
+        // Wrap in single quotes because the path contains spaces (e.g., "Cocxy Terminal.app").
         if absolutePath.contains(".app/Contents/Resources/") {
-            return "\(absolutePath) hook-handler"
+            return "'\(absolutePath)' hook-handler"
         }
         return "cocxy hook-handler"
     }()
@@ -310,6 +311,11 @@ public struct ClaudeSettingsManager {
     }
 
     /// Checks if a hook entry contains the cocxy hook-handler command.
+    ///
+    /// Uses separate substring checks for "cocxy" and "hook-handler" to handle
+    /// both quoted (`'/path/cocxy' hook-handler`) and unquoted (`/path/cocxy hook-handler`)
+    /// command formats. The quoted format is needed because the app bundle path
+    /// contains spaces ("Cocxy Terminal.app").
     private func containsCocxyCommand(in hookEntry: [String: Any]) -> Bool {
         guard let hookCommands = hookEntry["hooks"] as? [[String: Any]] else {
             return false
@@ -318,7 +324,7 @@ public struct ClaudeSettingsManager {
             guard let commandString = command["command"] as? String else {
                 return false
             }
-            return commandString.contains(Self.cocxyHookCommand)
+            return commandString.contains("cocxy") && commandString.contains("hook-handler")
         }
     }
 }

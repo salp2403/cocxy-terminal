@@ -91,6 +91,11 @@ if [ -d "${PROJECT_ROOT}/Resources/Themes" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Themes" "${RESOURCES}/Themes"
 fi
 
+# Step 6b: Copy notification sound files.
+if [ -d "${PROJECT_ROOT}/Resources/Sounds" ]; then
+    cp -R "${PROJECT_ROOT}/Resources/Sounds" "${RESOURCES}/Sounds"
+fi
+
 # Step 7: Copy shell integration scripts.
 if [ -d "${PROJECT_ROOT}/libs/ghostty-resources/shell-integration" ]; then
     cp -R "${PROJECT_ROOT}/libs/ghostty-resources/shell-integration" "${RESOURCES}/shell-integration"

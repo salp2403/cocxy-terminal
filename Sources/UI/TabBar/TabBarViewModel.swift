@@ -247,7 +247,7 @@ final class TabBarViewModel: ObservableObject {
                 statusColorName: colorName(for: tab.agentState),
                 badgeText: badgeText(for: tab.agentState),
                 isActive: tab.isActive,
-                hasUnreadNotification: tab.hasUnreadNotification,
+                hasUnreadNotification: unreadCount > 0,
                 agentState: tab.agentState,
                 isPinned: tab.isPinned,
                 agentStatusText: agentStatusText(for: tab.agentState, processName: tab.processName, activity: tab.agentActivity),

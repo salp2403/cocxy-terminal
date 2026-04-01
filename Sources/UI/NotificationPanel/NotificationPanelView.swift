@@ -30,6 +30,7 @@ final class NotificationPanelViewModel: ObservableObject {
 
     init(notificationManager: NotificationManagerImpl? = nil) {
         self.notificationManager = notificationManager
+        seedExistingNotifications()
         subscribeToNotifications()
     }
 
@@ -49,6 +50,18 @@ final class NotificationPanelViewModel: ObservableObject {
     }
 
     // MARK: - Private
+
+    /// Loads notifications that arrived before this ViewModel was created.
+    ///
+    /// The panel is created lazily (only when the user opens it), but
+    /// notifications arrive from app launch. Since `notificationsPublisher`
+    /// is a PassthroughSubject that does not replay past events, we backfill
+    /// from the manager's stored attention queue.
+    private func seedExistingNotifications() {
+        guard let manager = notificationManager else { return }
+        notifications = manager.allNotifications()
+        unreadCount = manager.unreadCount
+    }
 
     private func subscribeToNotifications() {
         guard let manager = notificationManager else { return }

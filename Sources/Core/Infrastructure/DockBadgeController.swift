@@ -64,8 +64,9 @@ final class DockBadgeController {
     /// The source of unread count changes.
     private let unreadCountSource: UnreadCountPublishing
 
-    /// The current configuration snapshot.
-    private let config: CocxyConfig
+    /// The current configuration snapshot. Updated dynamically when
+    /// the user changes notification preferences.
+    private var config: CocxyConfig
 
     /// The maximum count displayed literally. Above this, "99+" is shown.
     private let maxDisplayCount = 99
@@ -89,6 +90,18 @@ final class DockBadgeController {
         self.dockTile = dockTile
         self.unreadCountSource = unreadCountSource
         self.config = config
+    }
+
+    // MARK: - Configuration
+
+    /// Updates the configuration used for badge display decisions.
+    ///
+    /// Call this when the user changes notification preferences. The new
+    /// config takes effect immediately for the next badge update.
+    ///
+    /// - Parameter newConfig: The updated configuration.
+    func updateConfig(_ newConfig: CocxyConfig) {
+        config = newConfig
     }
 
     // MARK: - Binding
