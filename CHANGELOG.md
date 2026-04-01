@@ -5,6 +5,22 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.25] - 2026-04-01
+
+### Fixed
+- Hook duplication in settings.json — single-quote mismatch in command string detection caused duplicate entries on every app launch
+- Tab switching lag (~250ms) — removed doubleClickInterval timer, use clickCount detection for immediate response
+- Notification panel showing "No notifications yet" despite badge count — panel now seeds from existing attention queue on first open
+- `Tab.hasUnreadNotification` field never set to true — now derived from notification manager unread count
+- Notification config changes not taking effect until restart — preferences now propagate to all notification components immediately
+- Redundant bridge.resize() with approximate cell dimensions during tab switch removed
+
+### Added
+- 3 custom notification sounds: cocxy-attention (ascending pings), cocxy-finished (descending chime), cocxy-error (low tone)
+- `DockBadgeController.updateConfig()` for dynamic config propagation
+- `NotificationManagerImpl.allNotifications()` for historical notification backfill
+- 2 new tests for quoted-path hook detection and removal
+
 ## [0.1.24] - 2026-03-31
 
 ### Fixed
