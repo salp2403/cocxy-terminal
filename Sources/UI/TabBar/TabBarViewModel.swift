@@ -33,6 +33,12 @@ struct TabDisplayItem: Identifiable, Equatable {
     var unreadNotificationCount: Int = 0
     /// Preview text of the latest unread notification (for hover tooltip).
     var notificationPreview: String?
+    /// Cumulative tool calls by the agent. Zero when no agent or idle.
+    var agentToolCount: Int = 0
+    /// Cumulative errors by the agent. Zero when no agent or idle.
+    var agentErrorCount: Int = 0
+    /// Human-readable agent duration (e.g., "2m", "1h"). Nil when no agent.
+    var agentDurationText: String?
 }
 
 // MARK: - Tab Bar View Model
@@ -257,7 +263,10 @@ final class TabBarViewModel: ObservableObject {
                 processName: tab.processName,
                 sshDisplay: tab.sshSession?.displayTitleWithPort,
                 unreadNotificationCount: unreadCount,
-                notificationPreview: previewText
+                notificationPreview: previewText,
+                agentToolCount: tab.agentToolCount,
+                agentErrorCount: tab.agentErrorCount,
+                agentDurationText: agentDuration(for: tab)
             )
         }
     }
@@ -377,6 +386,17 @@ final class TabBarViewModel: ObservableObject {
             return "~" + relative
         }
         return path
+    }
+
+    /// Returns the running duration of the agent in this tab, or nil if idle.
+    private func agentDuration(for tab: Tab) -> String? {
+        guard let agent = tab.detectedAgent,
+              tab.agentState != .idle else { return nil }
+        let seconds = Int(Date().timeIntervalSince(agent.startedAt))
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        return "\(minutes / 60)h\(minutes % 60)m"
     }
 
     /// Returns a relative time string (e.g., "2m", "1h", "now").

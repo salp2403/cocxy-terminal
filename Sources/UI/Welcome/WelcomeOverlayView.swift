@@ -15,31 +15,33 @@ import SwiftUI
 /// ## Layout
 ///
 /// ```
-/// +-- Welcome Overlay (520x420) --------------------+
+/// +-- Welcome Overlay (540x520) --------------------+
 /// |                                                  |
-/// |   [terminal icon]                                |
-/// |   Cocxy Terminal                                 |
+/// |   [terminal icon with glow]                      |
+/// |   Cocxy Terminal              v0.1.30            |
 /// |   Agent-aware terminal for macOS                 |
+/// |                                                  |
+/// |   HIGHLIGHTS                                     |
+/// |   ────────────────────────                       |
+/// |   [icon] Agent Detection  [icon] Subagent Panels |
+/// |   [icon] Dashboard        [icon] Smart Routing   |
 /// |                                                  |
 /// |   KEYBOARD SHORTCUTS                             |
 /// |   ────────────────────────                       |
 /// |   Cmd+T           New Tab                        |
-/// |   Cmd+W           Close Tab                      |
 /// |   ...                                            |
 /// |                                                  |
-/// |   TIPS                                           |
-/// |   - Agent states appear in the sidebar...        |
-/// |   ...                                            |
-/// |                                                  |
-/// |          [ Got it! ]                             |
+/// |          [ Get Started ]                         |
 /// +--------------------------------------------------+
 /// ```
 ///
 /// ## Design
 ///
 /// - `.ultraThinMaterial` background with 16pt corner radius.
-/// - Keyboard shortcut text in monospaced font for alignment.
-/// - Section titles in `CocxyColors.blue`.
+/// - Animated entrance: scale 0.95→1.0 + fade-in (0.35s).
+/// - Header icon with subtle gradient glow.
+/// - Feature highlights grid before keyboard shortcuts.
+/// - Section titles in `CocxyColors.blue` with tracking.
 /// - Dismiss button with `CocxyColors.blue` background and `CocxyColors.crust` text.
 ///
 /// - SeeAlso: `MainWindowController+Overlays` (overlay lifecycle)
@@ -50,28 +52,39 @@ struct WelcomeOverlayView: View {
     let onDismiss: () -> Void
 
     /// Fixed overlay width.
-    private static let overlayWidth: CGFloat = 520
+    private static let overlayWidth: CGFloat = 540
 
     /// Fixed overlay height.
-    private static let overlayHeight: CGFloat = 420
+    private static let overlayHeight: CGFloat = 520
+
+    /// Controls the entrance animation state.
+    @State private var isVisible = false
 
     // MARK: - Body
 
     var body: some View {
         ZStack {
             // Dimmed background that dismisses on click.
-            Color.black.opacity(0.3)
+            Color.black.opacity(isVisible ? 0.35 : 0.0)
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
+                .animation(.easeOut(duration: 0.3), value: isVisible)
 
             overlayContent
                 .frame(width: Self.overlayWidth, height: Self.overlayHeight)
                 .background(.ultraThinMaterial)
                 .cornerRadius(16)
                 .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
+                .scaleEffect(isVisible ? 1.0 : 0.95)
+                .opacity(isVisible ? 1.0 : 0.0)
+                .animation(
+                    .spring(response: 0.35, dampingFraction: 0.85),
+                    value: isVisible
+                )
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Welcome to Cocxy Terminal")
+        .onAppear { isVisible = true }
     }
 
     // MARK: - Overlay Content
@@ -79,38 +92,102 @@ struct WelcomeOverlayView: View {
     private var overlayContent: some View {
         VStack(spacing: 0) {
             headerSection
-                .padding(.top, 20)
-                .padding(.bottom, 12)
+                .padding(.top, 24)
+                .padding(.bottom, 16)
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 20) {
+                    highlightsSection
                     keyboardShortcutsSection
-                    tipsSection
                 }
                 .padding(.horizontal, 28)
             }
 
             dismissButton
-                .padding(.top, 12)
-                .padding(.bottom, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 18)
         }
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "terminal")
-                .font(.system(size: 36))
-                .foregroundColor(CocxyColors.swiftUI(CocxyColors.blue))
+        VStack(spacing: 8) {
+            ZStack {
+                // Subtle glow behind the icon.
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                CocxyColors.swiftUI(CocxyColors.blue).opacity(0.25),
+                                Color.clear,
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 40
+                        )
+                    )
+                    .frame(width: 80, height: 80)
 
-            Text("Cocxy Terminal")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(CocxyColors.swiftUI(CocxyColors.text))
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 38, weight: .medium))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.blue))
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Cocxy Terminal")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.text))
+
+                Text(appVersionString)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
+            }
 
             Text("Agent-aware terminal for macOS")
                 .font(.system(size: 14))
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
+        }
+    }
+
+    // MARK: - Feature Highlights
+
+    private var highlightsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("HIGHLIGHTS")
+            sectionDivider
+
+            let columns = [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12),
+            ]
+
+            LazyVGrid(columns: columns, spacing: 10) {
+                highlightCard(
+                    icon: "bolt.fill",
+                    color: CocxyColors.blue,
+                    title: "Agent Detection",
+                    subtitle: "Auto-detects Claude, Codex, Aider and more"
+                )
+                highlightCard(
+                    icon: "rectangle.split.2x1",
+                    color: CocxyColors.green,
+                    title: "Subagent Panels",
+                    subtitle: "Live split panels for each subagent"
+                )
+                highlightCard(
+                    icon: "chart.bar.fill",
+                    color: CocxyColors.mauve,
+                    title: "Dashboard",
+                    subtitle: "Tools, errors, files and activity at a glance"
+                )
+                highlightCard(
+                    icon: "arrow.triangle.branch",
+                    color: CocxyColors.teal,
+                    title: "Smart Routing",
+                    subtitle: "Switch between agents instantly"
+                )
+            }
         }
     }
 
@@ -127,7 +204,7 @@ struct WelcomeOverlayView: View {
                 shortcutRow("Cmd+D", "Split Horizontal")
                 shortcutRow("Cmd+Shift+D", "Split Vertical")
                 shortcutRow("Cmd+Shift+P", "Command Palette")
-                shortcutRow("Cmd+Option+D", "Agent Dashboard")
+                shortcutRow("Cmd+Option+A", "Agent Dashboard")
                 shortcutRow("Cmd+Shift+T", "Agent Timeline")
                 shortcutRow("Cmd+F", "Search")
                 shortcutRow("Cmd+`", "Quick Terminal")
@@ -137,29 +214,15 @@ struct WelcomeOverlayView: View {
         }
     }
 
-    // MARK: - Tips
-
-    private var tipsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("TIPS")
-
-            VStack(alignment: .leading, spacing: 4) {
-                tipRow("Agent states appear in the sidebar \u{2014} watch for the pulsing indicator")
-                tipRow("Use Command Palette for quick actions")
-                tipRow("Dashboard and Timeline can be open at the same time")
-            }
-        }
-    }
-
     // MARK: - Dismiss Button
 
     private var dismissButton: some View {
         Button(action: onDismiss) {
-            Text("Got it!")
+            Text("Get Started")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.crust))
-                .padding(.horizontal, 24)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 10)
                 .background(CocxyColors.swiftUI(CocxyColors.blue))
                 .cornerRadius(8)
         }
@@ -195,16 +258,44 @@ struct WelcomeOverlayView: View {
         }
     }
 
-    private func tipRow(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Text("\u{2022}")
-                .font(.system(size: 12))
-                .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
+    private func highlightCard(
+        icon: String,
+        color: NSColor,
+        title: String,
+        subtitle: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(CocxyColors.swiftUI(color))
+                .frame(width: 28, height: 28)
+                .background(CocxyColors.swiftUI(color).opacity(0.12))
+                .cornerRadius(6)
 
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext1))
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.text))
+
+                Text(subtitle)
+                    .font(.system(size: 10))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CocxyColors.swiftUI(CocxyColors.surface0).opacity(0.4))
+        .cornerRadius(8)
+    }
+
+    // MARK: - Helpers
+
+    private var appVersionString: String {
+        let version = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String ?? "dev"
+        return "v\(version)"
     }
 }

@@ -139,6 +139,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var welcomeHostingView: NSHostingView<WelcomeOverlayView>?
     var isWelcomeVisible: Bool = false
 
+    /// Hosting view for the agent progress overlay shown in the terminal corner.
+    var agentProgressHostingView: NSView?
+
     var notificationPanelViewModel: NotificationPanelViewModel?
     var notificationPanelHostingView: NSHostingView<NotificationPanelView>?
     var isNotificationPanelVisible: Bool = false
@@ -1020,6 +1023,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         refreshStatusBar()
         refreshTabStrip()
+        updateAgentProgressOverlay()
         applyProjectConfig(for: tabID)
     }
 

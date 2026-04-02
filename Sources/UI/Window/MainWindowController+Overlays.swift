@@ -978,6 +978,64 @@ extension MainWindowController {
         }
     }
 
+    // MARK: - Agent Progress Overlay
+
+    /// Updates the agent progress overlay based on the active tab's state.
+    ///
+    /// Called from `handleTabSwitch` and `wireAgentDetectionToTabs` whenever
+    /// the active tab's agent state changes.
+    func updateAgentProgressOverlay() {
+        guard let container = terminalContainerView,
+              let tabID = displayedTabID,
+              let tab = tabManager.tab(for: tabID) else {
+            dismissAgentProgressOverlay()
+            return
+        }
+
+        let isActive = tab.agentState == .working || tab.agentState == .launched
+        guard isActive else {
+            dismissAgentProgressOverlay()
+            return
+        }
+
+        let agentName = tab.detectedAgent?.name ?? tab.processName ?? "Agent"
+        let durationText: String? = tab.detectedAgent.map { agent in
+            let seconds = Int(Date().timeIntervalSince(agent.startedAt))
+            if seconds < 60 { return "\(seconds)s" }
+            let minutes = seconds / 60
+            if minutes < 60 { return "\(minutes)m" }
+            return "\(minutes / 60)h\(minutes % 60)m"
+        }
+
+        let overlay = AgentProgressOverlay(
+            agentName: agentName,
+            toolCount: tab.agentToolCount,
+            errorCount: tab.agentErrorCount,
+            durationText: durationText
+        )
+
+        // Reuse or create the hosting view.
+        agentProgressHostingView?.removeFromSuperview()
+        let hosting = NSHostingView(rootView: overlay)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+
+        // Allow clicks to pass through to the terminal.
+        hosting.wantsLayer = true
+        hosting.alphaValue = 0.9
+
+        container.addSubview(hosting)
+        NSLayoutConstraint.activate([
+            hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+        ])
+        agentProgressHostingView = hosting
+    }
+
+    private func dismissAgentProgressOverlay() {
+        agentProgressHostingView?.removeFromSuperview()
+        agentProgressHostingView = nil
+    }
+
     // MARK: - Dismiss All Overlays (Esc)
 
     @objc func dismissActiveOverlay(_ sender: Any?) {

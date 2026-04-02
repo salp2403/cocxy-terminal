@@ -641,18 +641,48 @@ extension MainWindowController {
         }
         let panel = PanelInfo.subagent(id: subagentId, sessionId: sessionId)
         performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
+
+        // Animate the new panel entrance (fade-in).
+        if let newPanelView = panelContentViews.values.first(where: { ($0 as? SubagentContentView)?.subagentId == subagentId }) {
+            let duration = AnimationConfig.duration(AnimationConfig.splitTransitionDuration)
+            if duration > 0 {
+                newPanelView.alphaValue = 0
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = duration
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    newPanelView.animator().alphaValue = 1.0
+                }
+            }
+        }
+
         refreshTabStrip()
     }
 
-    /// Closes a subagent panel by its content ID.
+    /// Closes a subagent panel by its content ID, with an optional exit animation.
     func closeSubagentPanel(contentID: UUID) {
         guard let sm = activeSplitManager else { return }
         let leaves = sm.rootNode.allLeafIDs()
         guard let targetLeaf = leaves.first(where: { $0.terminalID == contentID }) else { return }
 
-        sm.focusLeaf(id: targetLeaf.leafID)
-        closeSplitAction(nil)
-        refreshTabStrip()
+        let panelView = panelContentViews[contentID]
+        let duration = AnimationConfig.duration(AnimationConfig.splitTransitionDuration)
+
+        if duration > 0, let panelView {
+            // Animate fade-out before removing.
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = duration
+                context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                panelView.animator().alphaValue = 0
+            }, completionHandler: { [weak self] in
+                sm.focusLeaf(id: targetLeaf.leafID)
+                self?.closeSplitAction(nil)
+                self?.refreshTabStrip()
+            })
+        } else {
+            sm.focusLeaf(id: targetLeaf.leafID)
+            closeSplitAction(nil)
+            refreshTabStrip()
+        }
     }
 
     /// Closes a subagent panel by subagent ID and session ID.

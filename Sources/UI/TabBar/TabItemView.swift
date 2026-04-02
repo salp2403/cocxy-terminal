@@ -159,6 +159,15 @@ final class TabItemView: NSView {
         return label
     }()
 
+    /// Inline stats chips shown when an agent is active (tools/errors/duration).
+    private let statsStack: NSStackView = {
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }()
+
     /// Whether the rename sheet is currently presented, used to guard against repeated clicks.
     private(set) var isEditing: Bool = false
 
@@ -200,6 +209,7 @@ final class TabItemView: NSView {
         addSubview(statusDot)
         addSubview(statusLabel)
         addSubview(pathLabel)
+        addSubview(statsStack)
         addSubview(notificationBadge)
 
         closeButton.target = self
@@ -242,7 +252,10 @@ final class TabItemView: NSView {
 
             pathLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: textLeading + 20),
             pathLabel.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 2),
-            pathLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
+            pathLabel.trailingAnchor.constraint(lessThanOrEqualTo: statsStack.leadingAnchor, constant: -4),
+
+            statsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            statsStack.centerYAnchor.constraint(equalTo: pathLabel.centerYAnchor),
 
             // Notification badge — top-right corner, to the left of close button.
             notificationBadge.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -2),
@@ -290,6 +303,8 @@ final class TabItemView: NSView {
         }
         pathLabel.stringValue = pathText
         pathLabel.isHidden = pathText.isEmpty
+
+        configureStatsChips(with: item)
 
         let iconName: String
         let iconColor: NSColor
@@ -387,6 +402,73 @@ final class TabItemView: NSView {
         setAccessibilityLabel(item.displayTitle)
         setAccessibilityValue("Agent: \(item.agentState.accessibilityDescription)")
         setAccessibilityHelp("Activate this tab")
+    }
+
+    // MARK: - Stats Chips
+
+    /// Configures inline stats chips (tools/errors/duration) when an agent is active.
+    private func configureStatsChips(with item: TabDisplayItem) {
+        // Remove previous chips.
+        statsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        let isAgentActive = item.agentState != .idle
+        statsStack.isHidden = !isAgentActive
+
+        guard isAgentActive else { return }
+
+        if item.agentToolCount > 0 {
+            statsStack.addArrangedSubview(
+                makeStatChip(
+                    icon: "bolt.fill",
+                    value: "\(item.agentToolCount)",
+                    color: CocxyColors.blue
+                )
+            )
+        }
+        if item.agentErrorCount > 0 {
+            statsStack.addArrangedSubview(
+                makeStatChip(
+                    icon: "exclamationmark.triangle.fill",
+                    value: "\(item.agentErrorCount)",
+                    color: CocxyColors.red
+                )
+            )
+        }
+        if let duration = item.agentDurationText {
+            statsStack.addArrangedSubview(
+                makeStatChip(
+                    icon: "clock",
+                    value: duration,
+                    color: CocxyColors.overlay1
+                )
+            )
+        }
+    }
+
+    /// Creates a compact stat chip (icon + value) for the stats stack.
+    private func makeStatChip(icon: String, value: String, color: NSColor) -> NSView {
+        let container = NSStackView()
+        container.orientation = .horizontal
+        container.spacing = 2
+
+        let iconView = NSImageView()
+        if let img = NSImage(systemSymbolName: icon, accessibilityDescription: nil) {
+            iconView.image = img.withSymbolConfiguration(.init(pointSize: 7, weight: .medium))
+        }
+        iconView.contentTintColor = color
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 10),
+            iconView.heightAnchor.constraint(equalToConstant: 10),
+        ])
+
+        let label = NSTextField(labelWithString: value)
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+        label.textColor = color
+
+        container.addArrangedSubview(iconView)
+        container.addArrangedSubview(label)
+        return container
     }
 
     // MARK: - Attention Border (Notification Ring)

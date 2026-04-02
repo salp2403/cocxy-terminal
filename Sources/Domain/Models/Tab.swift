@@ -92,6 +92,12 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// When present, these values override the global config for this tab.
     var projectConfig: ProjectConfig?
 
+    /// Cumulative tool call count from the running agent (fed by hook events).
+    var agentToolCount: Int = 0
+
+    /// Cumulative error count from the running agent (fed by hook events).
+    var agentErrorCount: Int = 0
+
     /// Whether a command is currently executing.
     var isCommandRunning: Bool {
         lastCommandStartedAt != nil && lastCommandDuration == nil

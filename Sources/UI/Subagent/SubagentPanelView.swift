@@ -43,7 +43,12 @@ struct SubagentPanelView: View {
                 waitingView
             }
         }
-        .background(CocxyColors.swiftUI(CocxyColors.base).opacity(0.95))
+        .background(
+            ZStack {
+                Color(nsColor: CocxyColors.mantle)
+                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+            }
+        )
     }
 
     // MARK: - Header

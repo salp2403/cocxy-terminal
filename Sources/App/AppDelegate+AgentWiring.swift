@@ -124,8 +124,8 @@ extension AppDelegate {
                     )
                     guard let matchingTab else { return }
 
-                    // Update the tab's agentActivity with tool details for
-                    // real-time visibility in the sidebar.
+                    // Update the tab's agentActivity and stats with tool details
+                    // for real-time visibility in the sidebar.
                     if case .toolUse(let toolData) = event.data {
                         let filePath = toolData.toolInput?["file_path"]
                             ?? toolData.toolInput?["path"]
@@ -137,9 +137,17 @@ extension AppDelegate {
                         } else {
                             activity = toolData.toolName
                         }
+                        let isError = event.type == .postToolUseFailure
                         tabManager.updateTab(id: matchingTab.id) { tab in
                             tab.agentActivity = activity
+                            tab.agentToolCount += 1
+                            if isError {
+                                tab.agentErrorCount += 1
+                            }
                         }
+                        // Refresh progress overlay and sidebar with new tool counts.
+                        self?.windowController?.updateAgentProgressOverlay()
+                        self?.windowController?.tabBarViewModel?.syncWithManager()
                     }
                 }
                 engine?.processHookEvent(event)
@@ -199,9 +207,15 @@ extension AppDelegate {
 
                 tabManager.updateTab(id: tabID) { tab in
                     tab.agentState = agentState
+                    // Reset tool/error counters when agent finishes or goes idle.
+                    if agentState == .idle {
+                        tab.agentToolCount = 0
+                        tab.agentErrorCount = 0
+                    }
                 }
                 windowController?.tabBarViewModel?.syncWithManager()
                 windowController?.refreshStatusBar()
+                windowController?.updateAgentProgressOverlay()
 
                 windowController?.updateNotificationRing(
                     for: tabID,
