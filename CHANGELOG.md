@@ -5,6 +5,15 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.30] - 2026-04-02
+
+### Fixed
+- Subagent panels now open in the correct tab instead of the active tab
+- Subagent panels auto-close 2 seconds after the subagent finishes
+- Notification bell button now responds to clicks reliably
+- Dashboard "Go to Tab" navigation now works correctly
+- Double-click titlebar in fullscreen mode now exits fullscreen
+
 ## [0.1.29] - 2026-04-02
 
 ### Added
