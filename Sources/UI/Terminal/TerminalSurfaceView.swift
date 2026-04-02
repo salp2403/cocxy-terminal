@@ -843,6 +843,15 @@ final class TerminalSurfaceView: NSView {
         bridge.notifyFocusChanged(surfaceID: surfaceID, focused: focused)
     }
 
+    /// Forces a size sync to libghostty using the view's current bounds.
+    ///
+    /// The initial `setFrameSize` fires before the surface exists (surfaceID is nil),
+    /// so that notification is silently dropped. Call this after `markRunning`
+    /// to ensure libghostty receives the correct pixel dimensions.
+    func syncSizeWithGhostty() {
+        notifySurfaceSizeChanged(bounds.size)
+    }
+
     /// Notifies libghostty that the surface size changed.
     private func notifySurfaceSizeChanged(_ newSize: NSSize) {
         guard let surfaceID = viewModel.surfaceID,

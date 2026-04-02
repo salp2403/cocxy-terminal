@@ -5,6 +5,25 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.26] - 2026-04-01
+
+### Added
+- 18 new CLI commands (47 → 65 total): window management, session save/restore, tab duplicate/pin, config list/reload, split swap/zoom, capture-pane, notification list/clear
+- Exposed 17 existing server-only commands to CLI parser: browser (8), remote (5), plugin (3), config-project
+- Terminal inner padding via ghostty config (`window-padding-x`, `window-padding-y`)
+- `syncSizeWithGhostty()` method for explicit surface size notification after creation
+
+### Fixed
+- Terminal not filling available space on first open — race condition where `setFrameSize` fired before surface creation, silently dropping the size notification to libghostty
+- Terminal content sticking to edges — window padding values were never passed to ghostty config
+
+### Changed
+- `TerminalEngineConfig` now carries `windowPaddingX` and `windowPaddingY` through the initialization chain
+- `needsBridgeRestart` detection expanded to include `windowPaddingX` and `windowPaddingY` changes
+- Updated web stats: tests 3,051 → 3,053, CLI commands 47 → 65
+- Updated README CLI examples to use correct compound subcommand syntax
+- Fixed agent detection layer count from 3-layer to 4-layer in releases page
+
 ## [0.1.25] - 2026-04-01
 
 ### Fixed

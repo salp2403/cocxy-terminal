@@ -95,6 +95,45 @@ public enum CLICommand: String, CaseIterable {
     case browserGetText = "browser-get-text"
     case browserListTabs = "browser-list-tabs"
 
+    // MARK: - Window Management (v3)
+
+    case windowNew = "window-new"
+    case windowList = "window-list"
+    case windowFocus = "window-focus"
+    case windowClose = "window-close"
+    case windowFullscreen = "window-fullscreen"
+
+    // MARK: - Session Management (v3)
+
+    case sessionSave = "session-save"
+    case sessionRestore = "session-restore"
+    case sessionList = "session-list"
+    case sessionDelete = "session-delete"
+
+    // MARK: - Tab extended (v3)
+
+    case tabDuplicate = "tab-duplicate"
+    case tabPin = "tab-pin"
+
+    // MARK: - Config extended (v3)
+
+    case configList = "config-list"
+    case configReload = "config-reload"
+
+    // MARK: - Split extended (v3)
+
+    case splitSwap = "split-swap"
+    case splitZoom = "split-zoom"
+
+    // MARK: - Output (v3)
+
+    case capturePane = "capture-pane"
+
+    // MARK: - Notification CLI (v3)
+
+    case notificationList = "notification-list"
+    case notificationClear = "notification-clear"
+
     /// Human-readable description for --help output.
     public var helpDescription: String {
         switch self {
@@ -168,6 +207,38 @@ public enum CLICommand: String, CaseIterable {
         case .browserEval: return "Evaluate JavaScript in the active browser tab"
         case .browserGetText: return "Get the text content of the current page"
         case .browserListTabs: return "List all open browser tabs"
+
+        // Window Management
+        case .windowNew: return "Create a new window"
+        case .windowList: return "List all open windows as JSON"
+        case .windowFocus: return "Focus a window by index"
+        case .windowClose: return "Close a window by index"
+        case .windowFullscreen: return "Toggle fullscreen for the focused window"
+
+        // Session Management
+        case .sessionSave: return "Save the current session to disk"
+        case .sessionRestore: return "Restore a saved session"
+        case .sessionList: return "List all saved sessions as JSON"
+        case .sessionDelete: return "Delete a saved session by name"
+
+        // Tab extended v3
+        case .tabDuplicate: return "Duplicate the active tab"
+        case .tabPin: return "Pin or unpin a tab"
+
+        // Config extended v3
+        case .configList: return "List all configuration keys and values"
+        case .configReload: return "Reload configuration from disk"
+
+        // Split extended v3
+        case .splitSwap: return "Swap two pane positions"
+        case .splitZoom: return "Toggle zoom on the active pane"
+
+        // Output
+        case .capturePane: return "Capture the active pane's visible content as text"
+
+        // Notification CLI
+        case .notificationList: return "List recent notifications as JSON"
+        case .notificationClear: return "Clear notification badge and unread count"
         }
     }
 
@@ -244,6 +315,38 @@ public enum CLICommand: String, CaseIterable {
         case .browserEval: return "cocxy browser-eval <script>"
         case .browserGetText: return "cocxy browser-get-text"
         case .browserListTabs: return "cocxy browser-list-tabs"
+
+        // Window Management
+        case .windowNew: return "cocxy window new"
+        case .windowList: return "cocxy window list"
+        case .windowFocus: return "cocxy window focus <index>"
+        case .windowClose: return "cocxy window close [<index>]"
+        case .windowFullscreen: return "cocxy window fullscreen"
+
+        // Session Management
+        case .sessionSave: return "cocxy session save [<name>]"
+        case .sessionRestore: return "cocxy session restore <name>"
+        case .sessionList: return "cocxy session list"
+        case .sessionDelete: return "cocxy session delete <name>"
+
+        // Tab extended v3
+        case .tabDuplicate: return "cocxy tab duplicate [<id>]"
+        case .tabPin: return "cocxy tab pin [<id>]"
+
+        // Config extended v3
+        case .configList: return "cocxy config list [--filter <prefix>]"
+        case .configReload: return "cocxy config reload"
+
+        // Split extended v3
+        case .splitSwap: return "cocxy split swap <direction>"
+        case .splitZoom: return "cocxy split zoom"
+
+        // Output
+        case .capturePane: return "cocxy capture-pane [--start <line>] [--end <line>]"
+
+        // Notification CLI
+        case .notificationList: return "cocxy notification list [--limit <n>]"
+        case .notificationClear: return "cocxy notification clear"
         }
     }
 }

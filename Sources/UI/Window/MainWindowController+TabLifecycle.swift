@@ -172,6 +172,7 @@ extension MainWindowController {
                 command: nil
             )
             viewModel.markRunning(surfaceID: surfaceID)
+            surfaceView.syncSizeWithGhostty()
             tabSurfaceMap[tabID] = surfaceID
 
             // Register the tab with the process monitor for SSH detection.

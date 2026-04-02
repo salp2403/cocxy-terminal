@@ -402,11 +402,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         // Acknowledged commands (async UI actions)
         case .split,
              .splitList, .splitFocus, .splitClose, .splitResize,
+             .splitSwap, .splitZoom,
              .dashboardShow, .dashboardHide, .dashboardToggle, .dashboardStatus,
              .timelineShow, .timelineExport,
              .search,
              .send, .sendKey,
-             .hooks, .hookHandler:
+             .hooks, .hookHandler,
+             .windowNew, .windowList, .windowFocus, .windowClose, .windowFullscreen,
+             .sessionSave, .sessionRestore, .sessionList, .sessionDelete,
+             .tabDuplicate, .tabPin,
+             .configList, .configReload,
+             .capturePane,
+             .notificationList, .notificationClear:
             return .ok(id: request.id, data: ["status": "acknowledged"])
         }
     }

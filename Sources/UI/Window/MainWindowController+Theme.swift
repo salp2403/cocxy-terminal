@@ -72,6 +72,8 @@ extension MainWindowController {
             old?.appearance.fontFamily != config.appearance.fontFamily ||
             old?.appearance.fontSize != config.appearance.fontSize ||
             old?.appearance.windowPadding != config.appearance.windowPadding ||
+            old?.appearance.windowPaddingX != config.appearance.windowPaddingX ||
+            old?.appearance.windowPaddingY != config.appearance.windowPaddingY ||
             old?.terminal.cursorStyle != config.terminal.cursorStyle ||
             old?.terminal.cursorBlink != config.terminal.cursorBlink ||
             old?.general.shell != config.general.shell

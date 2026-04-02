@@ -281,8 +281,14 @@ final class GhosttyBridge: TerminalEngine {
             )
         }
 
-        // Step 2: Load config (term type + theme colors) before finalize.
-        loadGhosttyConfig(gConfig, palette: config.themePalette)
+        // Step 2: Load config (term type, theme colors, padding) before finalize.
+        loadGhosttyConfig(
+            gConfig,
+            palette: config.themePalette,
+            terminalConfig: nil,
+            paddingX: config.windowPaddingX,
+            paddingY: config.windowPaddingY
+        )
 
         // Step 3: Finalize config (applies defaults). This is mandatory before use.
         ghostty_config_finalize(gConfig)
@@ -331,7 +337,9 @@ final class GhosttyBridge: TerminalEngine {
     private func loadGhosttyConfig(
         _ gConfig: ghostty_config_t,
         palette: ThemePalette?,
-        terminalConfig: TerminalConfig? = nil
+        terminalConfig: TerminalConfig? = nil,
+        paddingX: Double = 8,
+        paddingY: Double = 4
     ) {
         var lines: [String] = ["term = xterm-256color"]
 
@@ -341,6 +349,10 @@ final class GhosttyBridge: TerminalEngine {
         // tracking, and agent detection are all non-functional.
         lines.append("shell-integration = detect")
         lines.append("shell-integration-features = cursor,sudo,title")
+
+        // Inner padding so terminal content doesn't stick to edges.
+        lines.append("window-padding-x = \(Int(paddingX))")
+        lines.append("window-padding-y = \(Int(paddingY))")
 
         // Cursor configuration.
         if let tc = terminalConfig {

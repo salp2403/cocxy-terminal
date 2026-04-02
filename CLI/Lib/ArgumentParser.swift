@@ -127,6 +127,131 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy send-key <key>`
     case sendKey(key: String)
+
+    // MARK: - Window Management (v3)
+
+    /// `cocxy window new`
+    case windowNew
+
+    /// `cocxy window list`
+    case windowList
+
+    /// `cocxy window focus <index>`
+    case windowFocus(index: String)
+
+    /// `cocxy window close [<index>]`
+    case windowClose(index: String?)
+
+    /// `cocxy window fullscreen`
+    case windowFullscreen
+
+    // MARK: - Session Management (v3)
+
+    /// `cocxy session save [<name>]`
+    case sessionSave(name: String?)
+
+    /// `cocxy session restore <name>`
+    case sessionRestore(name: String)
+
+    /// `cocxy session list`
+    case sessionList
+
+    /// `cocxy session delete <name>`
+    case sessionDelete(name: String)
+
+    // MARK: - Tab extended (v3)
+
+    /// `cocxy tab duplicate [<id>]`
+    case tabDuplicate(id: String?)
+
+    /// `cocxy tab pin [<id>]`
+    case tabPin(id: String?)
+
+    // MARK: - Config extended (v3)
+
+    /// `cocxy config list [--filter <prefix>]`
+    case configList(filter: String?)
+
+    /// `cocxy config reload`
+    case configReload
+
+    /// `cocxy config-project`
+    case configProject
+
+    // MARK: - Split extended (v3)
+
+    /// `cocxy split swap <direction>`
+    case splitSwap(direction: String)
+
+    /// `cocxy split zoom`
+    case splitZoom
+
+    // MARK: - Output (v3)
+
+    /// `cocxy capture-pane [--start <line>] [--end <line>]`
+    case capturePane(start: Int?, end: Int?)
+
+    // MARK: - Notification CLI (v3)
+
+    /// `cocxy notification list [--limit <n>]`
+    case notificationList(limit: Int?)
+
+    /// `cocxy notification clear`
+    case notificationClear
+
+    // MARK: - Remote Workspace (exposed v3)
+
+    /// `cocxy remote list`
+    case remoteList
+
+    /// `cocxy remote connect <name>`
+    case remoteConnect(name: String)
+
+    /// `cocxy remote disconnect <name>`
+    case remoteDisconnect(name: String)
+
+    /// `cocxy remote status [<name>]`
+    case remoteStatus(name: String?)
+
+    /// `cocxy remote tunnels [--profile <name>]`
+    case remoteTunnels(profile: String?)
+
+    // MARK: - Plugin Management (exposed v3)
+
+    /// `cocxy plugin list`
+    case pluginList
+
+    /// `cocxy plugin enable <id>`
+    case pluginEnable(id: String)
+
+    /// `cocxy plugin disable <id>`
+    case pluginDisable(id: String)
+
+    // MARK: - Browser (exposed v3)
+
+    /// `cocxy browser navigate <url>`
+    case browserNavigate(url: String)
+
+    /// `cocxy browser back`
+    case browserBack
+
+    /// `cocxy browser forward`
+    case browserForward
+
+    /// `cocxy browser reload`
+    case browserReload
+
+    /// `cocxy browser state`
+    case browserGetState
+
+    /// `cocxy browser eval <script>`
+    case browserEval(script: String)
+
+    /// `cocxy browser text`
+    case browserGetText
+
+    /// `cocxy browser tabs`
+    case browserListTabs
 }
 
 // MARK: - Split Direction
@@ -219,6 +344,32 @@ public enum CLIArgumentParser {
         case "send-key":
             return try parseSendKey(arguments: Array(arguments.dropFirst()))
 
+        // MARK: v3 compound commands
+
+        case "window":
+            return try parseWindow(arguments: Array(arguments.dropFirst()))
+
+        case "session":
+            return try parseSession(arguments: Array(arguments.dropFirst()))
+
+        case "capture-pane":
+            return try parseCapturePane(arguments: Array(arguments.dropFirst()))
+
+        case "config-project":
+            return .configProject
+
+        case "notification":
+            return try parseNotification(arguments: Array(arguments.dropFirst()))
+
+        case "remote":
+            return try parseRemote(arguments: Array(arguments.dropFirst()))
+
+        case "plugin":
+            return try parsePlugin(arguments: Array(arguments.dropFirst()))
+
+        case "browser":
+            return try parseBrowser(arguments: Array(arguments.dropFirst()))
+
         default:
             throw CLIError.unknownCommand(firstArg)
         }
@@ -292,6 +443,14 @@ public enum CLIArgumentParser {
                 return .splitClose
             case "resize":
                 return try parseSplitResize(arguments: Array(arguments.dropFirst()))
+            case "swap":
+                let rest = Array(arguments.dropFirst())
+                guard let direction = rest.first, !direction.isEmpty else {
+                    throw CLIError.missingArgument(command: "split swap", argument: "direction")
+                }
+                return .splitSwap(direction: direction)
+            case "zoom":
+                return .splitZoom
             default:
                 break // Fall through to v1 parsing
             }
@@ -364,11 +523,15 @@ public enum CLIArgumentParser {
             return try parseTabRename(arguments: Array(arguments.dropFirst()))
         case "move":
             return try parseTabMove(arguments: Array(arguments.dropFirst()))
+        case "duplicate":
+            return .tabDuplicate(id: arguments.dropFirst().first)
+        case "pin":
+            return .tabPin(id: arguments.dropFirst().first)
         default:
             throw CLIError.invalidArgument(
                 command: "tab",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use rename or move."
+                reason: "Unknown subcommand. Use rename, move, duplicate, or pin."
             )
         }
     }
@@ -562,11 +725,31 @@ public enum CLIArgumentParser {
         case "path":
             return .configPath
 
+        case "list":
+            let rest = Array(arguments.dropFirst())
+            var filter: String?
+            var idx = 0
+            while idx < rest.count {
+                if rest[idx] == "--filter", idx + 1 < rest.count {
+                    filter = rest[idx + 1]
+                    idx += 2
+                } else {
+                    idx += 1
+                }
+            }
+            return .configList(filter: filter)
+
+        case "reload":
+            return .configReload
+
+        case "project":
+            return .configProject
+
         default:
             throw CLIError.invalidArgument(
                 command: "config",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use get, set, or path."
+                reason: "Unknown subcommand. Use get, set, path, list, reload, or project."
             )
         }
     }
@@ -610,6 +793,244 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "send-key", argument: "key")
         }
         return .sendKey(key: key)
+    }
+
+    // MARK: - Private: v3 Subcommand Parsers
+
+    /// Parses `cocxy window <subcommand>`.
+    private static func parseWindow(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "window", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "new":
+            return .windowNew
+        case "list":
+            return .windowList
+        case "focus":
+            let rest = Array(arguments.dropFirst())
+            guard let index = rest.first, !index.isEmpty else {
+                throw CLIError.missingArgument(command: "window focus", argument: "index")
+            }
+            return .windowFocus(index: index)
+        case "close":
+            return .windowClose(index: arguments.dropFirst().first)
+        case "fullscreen":
+            return .windowFullscreen
+        default:
+            throw CLIError.invalidArgument(
+                command: "window",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use new, list, focus, close, or fullscreen."
+            )
+        }
+    }
+
+    /// Parses `cocxy session <subcommand>`.
+    private static func parseSession(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "session", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "save":
+            return .sessionSave(name: arguments.dropFirst().first)
+        case "restore":
+            let rest = Array(arguments.dropFirst())
+            guard let name = rest.first, !name.isEmpty else {
+                throw CLIError.missingArgument(command: "session restore", argument: "name")
+            }
+            return .sessionRestore(name: name)
+        case "list":
+            return .sessionList
+        case "delete":
+            let rest = Array(arguments.dropFirst())
+            guard let name = rest.first, !name.isEmpty else {
+                throw CLIError.missingArgument(command: "session delete", argument: "name")
+            }
+            return .sessionDelete(name: name)
+        default:
+            throw CLIError.invalidArgument(
+                command: "session",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use save, restore, list, or delete."
+            )
+        }
+    }
+
+    /// Parses `cocxy capture-pane [--start <line>] [--end <line>]`.
+    private static func parseCapturePane(arguments: [String]) throws -> ParsedCommand {
+        var start: Int?
+        var end: Int?
+
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--start":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "capture-pane", argument: "start line")
+                }
+                start = Int(arguments[index + 1])
+                index += 2
+            case "--end":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "capture-pane", argument: "end line")
+                }
+                end = Int(arguments[index + 1])
+                index += 2
+            default:
+                index += 1
+            }
+        }
+
+        return .capturePane(start: start, end: end)
+    }
+
+    /// Parses `cocxy notification <subcommand>`.
+    private static func parseNotification(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "notification", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "list":
+            let rest = Array(arguments.dropFirst())
+            var limit: Int?
+            var idx = 0
+            while idx < rest.count {
+                if rest[idx] == "--limit", idx + 1 < rest.count {
+                    limit = Int(rest[idx + 1])
+                    idx += 2
+                } else {
+                    idx += 1
+                }
+            }
+            return .notificationList(limit: limit)
+        case "clear":
+            return .notificationClear
+        default:
+            throw CLIError.invalidArgument(
+                command: "notification",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list or clear."
+            )
+        }
+    }
+
+    /// Parses `cocxy remote <subcommand>`.
+    private static func parseRemote(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "remote", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "list":
+            return .remoteList
+        case "connect":
+            let rest = Array(arguments.dropFirst())
+            guard let name = rest.first, !name.isEmpty else {
+                throw CLIError.missingArgument(command: "remote connect", argument: "name")
+            }
+            return .remoteConnect(name: name)
+        case "disconnect":
+            let rest = Array(arguments.dropFirst())
+            guard let name = rest.first, !name.isEmpty else {
+                throw CLIError.missingArgument(command: "remote disconnect", argument: "name")
+            }
+            return .remoteDisconnect(name: name)
+        case "status":
+            return .remoteStatus(name: arguments.dropFirst().first)
+        case "tunnels":
+            let rest = Array(arguments.dropFirst())
+            var profile: String?
+            var idx = 0
+            while idx < rest.count {
+                if rest[idx] == "--profile", idx + 1 < rest.count {
+                    profile = rest[idx + 1]
+                    idx += 2
+                } else {
+                    idx += 1
+                }
+            }
+            return .remoteTunnels(profile: profile)
+        default:
+            throw CLIError.invalidArgument(
+                command: "remote",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list, connect, disconnect, status, or tunnels."
+            )
+        }
+    }
+
+    /// Parses `cocxy plugin <subcommand>`.
+    private static func parsePlugin(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "plugin", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "list":
+            return .pluginList
+        case "enable":
+            let rest = Array(arguments.dropFirst())
+            guard let id = rest.first, !id.isEmpty else {
+                throw CLIError.missingArgument(command: "plugin enable", argument: "id")
+            }
+            return .pluginEnable(id: id)
+        case "disable":
+            let rest = Array(arguments.dropFirst())
+            guard let id = rest.first, !id.isEmpty else {
+                throw CLIError.missingArgument(command: "plugin disable", argument: "id")
+            }
+            return .pluginDisable(id: id)
+        default:
+            throw CLIError.invalidArgument(
+                command: "plugin",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list, enable, or disable."
+            )
+        }
+    }
+
+    /// Parses `cocxy browser <subcommand>`.
+    private static func parseBrowser(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "browser", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "navigate":
+            let rest = Array(arguments.dropFirst())
+            guard let url = rest.first, !url.isEmpty else {
+                throw CLIError.missingArgument(command: "browser navigate", argument: "url")
+            }
+            return .browserNavigate(url: url)
+        case "back":
+            return .browserBack
+        case "forward":
+            return .browserForward
+        case "reload":
+            return .browserReload
+        case "state":
+            return .browserGetState
+        case "eval":
+            let rest = Array(arguments.dropFirst())
+            guard !rest.isEmpty else {
+                throw CLIError.missingArgument(command: "browser eval", argument: "script")
+            }
+            return .browserEval(script: rest.joined(separator: " "))
+        case "text":
+            return .browserGetText
+        case "tabs":
+            return .browserListTabs
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, or tabs."
+            )
+        }
     }
 
     // MARK: - Help Text

@@ -348,13 +348,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             resolvedPalette = themeEngine?.activeTheme.palette
         }
 
+        let paddingX = configService?.current.appearance.effectivePaddingX
+            ?? AppearanceConfig.defaults.windowPadding
+        let paddingY = configService?.current.appearance.effectivePaddingY
+            ?? AppearanceConfig.defaults.windowPadding
+
         let config = TerminalEngineConfig(
             fontFamily: fontFamily,
             fontSize: fontSize,
             themeName: theme,
             shell: shell,
             workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
-            themePalette: resolvedPalette
+            themePalette: resolvedPalette,
+            windowPaddingX: paddingX,
+            windowPaddingY: paddingY
         )
 
         do {
@@ -465,13 +472,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let shell = configService?.current.general.shell
             ?? GeneralConfig.defaults.shell
 
+        let paddingX = configService?.current.appearance.effectivePaddingX
+            ?? AppearanceConfig.defaults.windowPadding
+        let paddingY = configService?.current.appearance.effectivePaddingY
+            ?? AppearanceConfig.defaults.windowPadding
+
         let engineConfig = TerminalEngineConfig(
             fontFamily: fontFamily,
             fontSize: fontSize,
             themeName: themeName,
             shell: shell,
             workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
-            themePalette: palette
+            themePalette: palette,
+            windowPaddingX: paddingX,
+            windowPaddingY: paddingY
         )
 
         do {

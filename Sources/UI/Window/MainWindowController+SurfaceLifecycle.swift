@@ -32,6 +32,7 @@ extension MainWindowController {
                 command: nil
             )
             terminalViewModel.markRunning(surfaceID: surfaceID)
+            surfaceView.syncSizeWithGhostty()
 
             // Register the first tab's surface in all tracking dictionaries.
             // This ensures destroyAllSurfaces can find it without special-casing.

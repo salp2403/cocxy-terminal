@@ -373,6 +373,174 @@ public struct CommandRunner {
                 command: "send-key",
                 params: ["key": key]
             )
+
+        // MARK: Window Management (v3)
+
+        case .windowNew:
+            return CLISocketRequest(id: requestID, command: "window-new", params: nil)
+
+        case .windowList:
+            return CLISocketRequest(id: requestID, command: "window-list", params: nil)
+
+        case .windowFocus(let index):
+            return CLISocketRequest(
+                id: requestID, command: "window-focus", params: ["index": index]
+            )
+
+        case .windowClose(let index):
+            var params: [String: String]?
+            if let index { params = ["index": index] }
+            return CLISocketRequest(id: requestID, command: "window-close", params: params)
+
+        case .windowFullscreen:
+            return CLISocketRequest(id: requestID, command: "window-fullscreen", params: nil)
+
+        // MARK: Session Management (v3)
+
+        case .sessionSave(let name):
+            var params: [String: String]?
+            if let name { params = ["name": name] }
+            return CLISocketRequest(id: requestID, command: "session-save", params: params)
+
+        case .sessionRestore(let name):
+            return CLISocketRequest(
+                id: requestID, command: "session-restore", params: ["name": name]
+            )
+
+        case .sessionList:
+            return CLISocketRequest(id: requestID, command: "session-list", params: nil)
+
+        case .sessionDelete(let name):
+            return CLISocketRequest(
+                id: requestID, command: "session-delete", params: ["name": name]
+            )
+
+        // MARK: Tab extended (v3)
+
+        case .tabDuplicate(let id):
+            var params: [String: String]?
+            if let id { params = ["id": id] }
+            return CLISocketRequest(id: requestID, command: "tab-duplicate", params: params)
+
+        case .tabPin(let id):
+            var params: [String: String]?
+            if let id { params = ["id": id] }
+            return CLISocketRequest(id: requestID, command: "tab-pin", params: params)
+
+        // MARK: Config extended (v3)
+
+        case .configList(let filter):
+            var params: [String: String]?
+            if let filter { params = ["filter": filter] }
+            return CLISocketRequest(id: requestID, command: "config-list", params: params)
+
+        case .configReload:
+            return CLISocketRequest(id: requestID, command: "config-reload", params: nil)
+
+        case .configProject:
+            return CLISocketRequest(id: requestID, command: "config-project", params: nil)
+
+        // MARK: Split extended (v3)
+
+        case .splitSwap(let direction):
+            return CLISocketRequest(
+                id: requestID, command: "split-swap", params: ["direction": direction]
+            )
+
+        case .splitZoom:
+            return CLISocketRequest(id: requestID, command: "split-zoom", params: nil)
+
+        // MARK: Output (v3)
+
+        case .capturePane(let start, let end):
+            var params: [String: String] = [:]
+            if let start { params["start"] = String(start) }
+            if let end { params["end"] = String(end) }
+            return CLISocketRequest(
+                id: requestID,
+                command: "capture-pane",
+                params: params.isEmpty ? nil : params
+            )
+
+        // MARK: Notification CLI (v3)
+
+        case .notificationList(let limit):
+            var params: [String: String]?
+            if let limit { params = ["limit": String(limit)] }
+            return CLISocketRequest(id: requestID, command: "notification-list", params: params)
+
+        case .notificationClear:
+            return CLISocketRequest(id: requestID, command: "notification-clear", params: nil)
+
+        // MARK: Remote Workspace (exposed v3)
+
+        case .remoteList:
+            return CLISocketRequest(id: requestID, command: "remote-list", params: nil)
+
+        case .remoteConnect(let name):
+            return CLISocketRequest(
+                id: requestID, command: "remote-connect", params: ["name": name]
+            )
+
+        case .remoteDisconnect(let name):
+            return CLISocketRequest(
+                id: requestID, command: "remote-disconnect", params: ["name": name]
+            )
+
+        case .remoteStatus(let name):
+            var params: [String: String]?
+            if let name { params = ["name": name] }
+            return CLISocketRequest(id: requestID, command: "remote-status", params: params)
+
+        case .remoteTunnels(let profile):
+            var params: [String: String]?
+            if let profile { params = ["profile": profile] }
+            return CLISocketRequest(id: requestID, command: "remote-tunnels", params: params)
+
+        // MARK: Plugin Management (exposed v3)
+
+        case .pluginList:
+            return CLISocketRequest(id: requestID, command: "plugin-list", params: nil)
+
+        case .pluginEnable(let id):
+            return CLISocketRequest(
+                id: requestID, command: "plugin-enable", params: ["id": id]
+            )
+
+        case .pluginDisable(let id):
+            return CLISocketRequest(
+                id: requestID, command: "plugin-disable", params: ["id": id]
+            )
+
+        // MARK: Browser (exposed v3)
+
+        case .browserNavigate(let url):
+            return CLISocketRequest(
+                id: requestID, command: "browser-navigate", params: ["url": url]
+            )
+
+        case .browserBack:
+            return CLISocketRequest(id: requestID, command: "browser-back", params: nil)
+
+        case .browserForward:
+            return CLISocketRequest(id: requestID, command: "browser-forward", params: nil)
+
+        case .browserReload:
+            return CLISocketRequest(id: requestID, command: "browser-reload", params: nil)
+
+        case .browserGetState:
+            return CLISocketRequest(id: requestID, command: "browser-get-state", params: nil)
+
+        case .browserEval(let script):
+            return CLISocketRequest(
+                id: requestID, command: "browser-eval", params: ["script": script]
+            )
+
+        case .browserGetText:
+            return CLISocketRequest(id: requestID, command: "browser-get-text", params: nil)
+
+        case .browserListTabs:
+            return CLISocketRequest(id: requestID, command: "browser-list-tabs", params: nil)
         }
     }
 }

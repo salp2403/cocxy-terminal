@@ -119,17 +119,19 @@ Cocxy sends **zero data** to any external server. No analytics. No crash reporti
 
 ### CLI Companion
 
-47 commands for scripting and automation via Unix Domain Socket.
+65 commands for scripting and automation via Unix Domain Socket.
 
 ```bash
 cocxy hooks install              # Auto-configure Claude Code hooks
 cocxy notify "Deploy complete"   # Trigger notification
 cocxy list-tabs                  # List all tabs as JSON
-cocxy remote-list                # List SSH profiles and status
-cocxy remote-connect prod-web    # Connect to a remote profile
-cocxy plugin-list                # List installed plugins
-cocxy dashboard-toggle           # Toggle agent dashboard
-cocxy config-project             # Show per-project overrides
+cocxy window list                # List all open windows
+cocxy session save my-workspace  # Save current session
+cocxy remote list                # List SSH profiles and status
+cocxy remote connect prod-web    # Connect to a remote profile
+cocxy plugin list                # List installed plugins
+cocxy dashboard toggle           # Toggle agent dashboard
+cocxy capture-pane               # Capture terminal content as text
 ```
 
 Run `cocxy help` for the full command reference.
@@ -276,7 +278,7 @@ swift run CocxyTerminal
 ### Test
 
 ```bash
-swift test    # 3,051 tests
+swift test    # 3,053 tests
 ```
 
 ## Architecture
@@ -289,8 +291,8 @@ Sources/
   Core/              # Terminal engine bridge, socket server, key input
   Domain/            # Detection engine, plugins, remote workspace, config
   UI/                # Windows, tabs, panels, overlays, animations
-CLI/                 # cocxy companion tool (47 commands)
-Tests/               # 3,051 test cases
+CLI/                 # cocxy companion tool (65 commands)
+Tests/               # 3,053 test cases
 ```
 
 ## Contributing

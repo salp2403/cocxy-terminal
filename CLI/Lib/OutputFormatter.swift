@@ -108,6 +108,106 @@ public enum OutputFormatter {
             return "Text sent."
         case .sendKey:
             return "Key sent."
+
+        // MARK: Window Management (v3)
+
+        case .windowNew:
+            return "Window created."
+        case .windowList:
+            return formatDataOrJSON(response: response)
+        case .windowFocus:
+            return "Window focused."
+        case .windowClose:
+            return "Window closed."
+        case .windowFullscreen:
+            return "Fullscreen toggled."
+
+        // MARK: Session Management (v3)
+
+        case .sessionSave:
+            return "Session saved."
+        case .sessionRestore:
+            return "Session restored."
+        case .sessionList:
+            return formatDataOrJSON(response: response)
+        case .sessionDelete:
+            return "Session deleted."
+
+        // MARK: Tab extended (v3)
+
+        case .tabDuplicate:
+            return "Tab duplicated."
+        case .tabPin:
+            return "Tab pin toggled."
+
+        // MARK: Config extended (v3)
+
+        case .configList:
+            return formatDataOrJSON(response: response)
+        case .configReload:
+            return "Configuration reloaded."
+        case .configProject:
+            return formatDataOrJSON(response: response)
+
+        // MARK: Split extended (v3)
+
+        case .splitSwap:
+            return "Panes swapped."
+        case .splitZoom:
+            return "Pane zoom toggled."
+
+        // MARK: Output (v3)
+
+        case .capturePane:
+            return formatDataOrJSON(response: response)
+
+        // MARK: Notification CLI (v3)
+
+        case .notificationList:
+            return formatDataOrJSON(response: response)
+        case .notificationClear:
+            return "Notifications cleared."
+
+        // MARK: Remote Workspace (exposed v3)
+
+        case .remoteList:
+            return formatDataOrJSON(response: response)
+        case .remoteConnect:
+            return "Connected."
+        case .remoteDisconnect:
+            return "Disconnected."
+        case .remoteStatus:
+            return formatDataOrJSON(response: response)
+        case .remoteTunnels:
+            return formatDataOrJSON(response: response)
+
+        // MARK: Plugin Management (exposed v3)
+
+        case .pluginList:
+            return formatDataOrJSON(response: response)
+        case .pluginEnable:
+            return "Plugin enabled."
+        case .pluginDisable:
+            return "Plugin disabled."
+
+        // MARK: Browser (exposed v3)
+
+        case .browserNavigate:
+            return "Navigated."
+        case .browserBack:
+            return "Navigated back."
+        case .browserForward:
+            return "Navigated forward."
+        case .browserReload:
+            return "Page reloaded."
+        case .browserGetState:
+            return formatDataOrJSON(response: response)
+        case .browserEval:
+            return formatDataOrJSON(response: response)
+        case .browserGetText:
+            return formatDataOrJSON(response: response)
+        case .browserListTabs:
+            return formatDataOrJSON(response: response)
         }
     }
 

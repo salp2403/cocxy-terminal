@@ -266,6 +266,10 @@ struct TerminalEngineConfig: Sendable {
     /// When provided, the bridge writes a temporary ghostty config file
     /// with these colors and loads it before finalization.
     let themePalette: ThemePalette?
+    /// Horizontal padding in points (applied to left and right).
+    let windowPaddingX: Double
+    /// Vertical padding in points (applied to top and bottom).
+    let windowPaddingY: Double
 
     init(
         fontFamily: String,
@@ -273,7 +277,9 @@ struct TerminalEngineConfig: Sendable {
         themeName: String,
         shell: String,
         workingDirectory: URL,
-        themePalette: ThemePalette? = nil
+        themePalette: ThemePalette? = nil,
+        windowPaddingX: Double = 8,
+        windowPaddingY: Double = 4
     ) {
         self.fontFamily = fontFamily
         self.fontSize = fontSize
@@ -281,6 +287,8 @@ struct TerminalEngineConfig: Sendable {
         self.shell = shell
         self.workingDirectory = workingDirectory
         self.themePalette = themePalette
+        self.windowPaddingX = windowPaddingX
+        self.windowPaddingY = windowPaddingY
     }
 }
 

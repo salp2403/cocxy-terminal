@@ -902,36 +902,46 @@ restore-on-launch = true</code></pre>
 
     <!-- CLI Companion -->
     <h2 id="cli-companion">CLI Companion</h2>
-    <p>The <code>cocxy</code> CLI provides 47 commands for scripting and automation via a local Unix domain socket.</p>
+    <p>The <code>cocxy</code> CLI provides 65 commands for scripting and automation via a local Unix domain socket.</p>
     <div class="code-wrap">
       <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
       <pre><code># Tab management
 cocxy new-tab --dir ~/projects/my-app
 cocxy list-tabs
-cocxy focus-tab &lt;id&gt;
-cocxy close-tab &lt;id&gt;
+cocxy tab duplicate
+cocxy tab pin
 
 # Agent hooks
 cocxy hooks install          # Configure Claude Code integration
 
+# Window and session management
+cocxy window list
+cocxy session save my-workspace
+cocxy session restore my-workspace
+
 # Panels and dashboards
-cocxy dashboard-toggle
-cocxy timeline-export --format json
+cocxy dashboard toggle
+cocxy timeline export &lt;tab-id&gt; --format json
 
 # Remote workspaces
-cocxy remote-list
-cocxy remote-connect prod-web
-cocxy remote-status
+cocxy remote list
+cocxy remote connect prod-web
+cocxy remote status
 
 # Plugins
-cocxy plugin-list
-cocxy plugin-enable my-plugin
+cocxy plugin list
+cocxy plugin enable my-plugin
 
-# Configuration
+# Configuration and themes
 cocxy theme set catppuccin-mocha
-cocxy config-project          # Show per-project overrides
+cocxy config list
+cocxy config reload
 
-# Run cocxy help for the full list of 47 commands</code></pre>
+# Output and notifications
+cocxy capture-pane
+cocxy notification list
+
+# Run cocxy help for the full list of 65 commands</code></pre>
     </div>
     <p>The CLI is automatically installed at <code>/opt/homebrew/bin/cocxy</code> when you install via Homebrew, or at <code>~/.local/bin/cocxy</code> via the app bundle.</p>
 

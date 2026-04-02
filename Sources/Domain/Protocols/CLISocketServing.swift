@@ -191,6 +191,63 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case browserGetText = "browser-get-text"
     /// List all open browser tabs.
     case browserListTabs = "browser-list-tabs"
+
+    // MARK: - Window Management (v3)
+
+    /// Create a new window.
+    case windowNew = "window-new"
+    /// List all open windows.
+    case windowList = "window-list"
+    /// Focus a window by index.
+    case windowFocus = "window-focus"
+    /// Close a window by index.
+    case windowClose = "window-close"
+    /// Toggle fullscreen for the focused window.
+    case windowFullscreen = "window-fullscreen"
+
+    // MARK: - Session Management (v3)
+
+    /// Save the current session to disk.
+    case sessionSave = "session-save"
+    /// Restore a saved session.
+    case sessionRestore = "session-restore"
+    /// List all saved sessions.
+    case sessionList = "session-list"
+    /// Delete a saved session.
+    case sessionDelete = "session-delete"
+
+    // MARK: - Tab extended (v3)
+
+    /// Duplicate the active tab.
+    case tabDuplicate = "tab-duplicate"
+    /// Pin or unpin a tab.
+    case tabPin = "tab-pin"
+
+    // MARK: - Config extended (v3)
+
+    /// List all configuration keys and their current values.
+    case configList = "config-list"
+    /// Reload configuration from disk.
+    case configReload = "config-reload"
+
+    // MARK: - Split extended (v3)
+
+    /// Swap two pane positions.
+    case splitSwap = "split-swap"
+    /// Toggle zoom on the active pane.
+    case splitZoom = "split-zoom"
+
+    // MARK: - Output (v3)
+
+    /// Capture the active pane's visible content as text.
+    case capturePane = "capture-pane"
+
+    // MARK: - Notification CLI (v3)
+
+    /// List recent notifications as JSON.
+    case notificationList = "notification-list"
+    /// Clear notification badge and unread count.
+    case notificationClear = "notification-clear"
 }
 
 // MARK: - CLI Response
