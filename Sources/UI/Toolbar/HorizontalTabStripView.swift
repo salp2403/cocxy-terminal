@@ -524,7 +524,7 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown:
+        case .markdown, .subagent:
             break
         }
 

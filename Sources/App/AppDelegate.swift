@@ -153,6 +153,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
     var remoteProfileStore: RemoteProfileStore?
 
+    /// Remote port scanner for detecting dev servers on SSH-connected hosts.
+    /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
+    var remotePortScanner: RemotePortScanner?
+
     // MARK: - Plugin Properties
 
     /// Plugin manager for plugin lifecycle operations.
@@ -218,6 +222,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Release plugins, remote workspace, browser, and update services.
         pluginManager = nil
+        remotePortScanner?.stopScanning()
+        remotePortScanner = nil
         remoteConnectionManager = nil
         remoteProfileStore = nil
         browserProfileManager = nil
@@ -528,6 +534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     command: nil
                 )
                 viewModel.markRunning(surfaceID: surfaceID)
+                surfaceView.syncSizeWithGhostty()
                 wc.tabSurfaceMap[tab.id] = surfaceID
                 wc.wireHandlersForRestoredTab(tabID: tab.id, surfaceID: surfaceID)
             } catch {

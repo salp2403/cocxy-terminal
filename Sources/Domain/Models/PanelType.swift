@@ -22,6 +22,9 @@ enum PanelType: String, Codable, Sendable, Equatable {
 
     /// A markdown document viewer.
     case markdown
+
+    /// A live subagent activity panel.
+    case subagent
 }
 
 // MARK: - Panel Info
@@ -40,10 +43,19 @@ struct PanelInfo: Equatable, Sendable {
     /// Optional file path for markdown panels.
     let filePath: URL?
 
-    init(type: PanelType, initialURL: URL? = nil, filePath: URL? = nil) {
+    /// Subagent identifier for linking the panel to dashboard data.
+    let subagentId: String?
+
+    /// Parent session identifier for linking the panel to dashboard data.
+    let sessionId: String?
+
+    init(type: PanelType, initialURL: URL? = nil, filePath: URL? = nil,
+         subagentId: String? = nil, sessionId: String? = nil) {
         self.type = type
         self.initialURL = initialURL
         self.filePath = filePath
+        self.subagentId = subagentId
+        self.sessionId = sessionId
     }
 
     static let terminal = PanelInfo(type: .terminal)
@@ -52,5 +64,8 @@ struct PanelInfo: Equatable, Sendable {
     }
     static func markdown(path: URL) -> PanelInfo {
         PanelInfo(type: .markdown, filePath: path)
+    }
+    static func subagent(id: String, sessionId: String) -> PanelInfo {
+        PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)
     }
 }

@@ -120,6 +120,20 @@ extension MainWindowController {
         case .markdown:
             let mdView = MarkdownContentView(filePath: panel.filePath)
             panelView = mdView
+        case .subagent:
+            guard let dashboardVM = injectedDashboardViewModel,
+                  let subagentId = panel.subagentId,
+                  let sessionId = panel.sessionId else { return }
+            let subView = SubagentContentView(
+                viewModel: dashboardVM,
+                subagentId: subagentId,
+                sessionId: sessionId
+            )
+            let capturedContentID = contentID
+            subView.onClose = { [weak self] in
+                self?.closeSubagentPanel(contentID: capturedContentID)
+            }
+            panelView = subView
         }
 
         panelContentViews[contentID] = panelView
@@ -217,6 +231,7 @@ extension MainWindowController {
                 command: nil
             )
             newViewModel.markRunning(surfaceID: surfaceID)
+            newSurfaceView.syncSizeWithGhostty()
         } catch {
             NSLog("[MainWindowController] Failed to create surface for split: %@",
                   String(describing: error))
@@ -602,6 +617,52 @@ extension MainWindowController {
                 first: firstView,
                 second: secondView
             )
+        }
+    }
+
+    // MARK: - Subagent Auto-Split
+
+    /// Spawns a subagent panel as a vertical split on the right side.
+    ///
+    /// Called automatically when a SubagentStart hook event arrives.
+    /// Creates a `SubagentContentView` and appends it to the split tree.
+    ///
+    /// - Parameters:
+    ///   - subagentId: The unique ID of the spawned subagent.
+    ///   - sessionId: The parent session's ID.
+    ///   - agentType: The subagent type (e.g., "Explore", "Plan").
+    func spawnSubagentPanel(subagentId: String, sessionId: String, agentType: String?) {
+        let panel = PanelInfo.subagent(id: subagentId, sessionId: sessionId)
+        performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
+        refreshTabStrip()
+    }
+
+    /// Closes a subagent panel by its content ID.
+    ///
+    /// Called when the user clicks the X button on a subagent panel,
+    /// or when the subagent finishes and the auto-cleanup timer fires.
+    func closeSubagentPanel(contentID: UUID) {
+        guard let sm = activeSplitManager else { return }
+        let leaves = sm.rootNode.allLeafIDs()
+        guard let targetLeaf = leaves.first(where: { $0.terminalID == contentID }) else { return }
+
+        // Focus the target leaf, then close it via the public split close API.
+        sm.focusLeaf(id: targetLeaf.leafID)
+        closeSplitAction(nil)
+        refreshTabStrip()
+    }
+
+    /// Removes all subagent panels for a given session.
+    ///
+    /// Called when the parent session ends to clean up subagent splits.
+    func removeSubagentPanels(forSession sessionId: String) {
+        let subagentContentIDs = panelContentViews.compactMap { (id, view) -> UUID? in
+            guard let subView = view as? SubagentContentView,
+                  subView.sessionId == sessionId else { return nil }
+            return id
+        }
+        for contentID in subagentContentIDs {
+            closeSubagentPanel(contentID: contentID)
         }
     }
 }

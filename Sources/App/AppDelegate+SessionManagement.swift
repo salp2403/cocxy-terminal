@@ -172,6 +172,7 @@ extension AppDelegate {
                         command: nil
                     )
                     viewModel.markRunning(surfaceID: surfaceID)
+                    surfaceView.syncSizeWithGhostty()
                     windowController.tabSurfaceMap[newTab.id] = surfaceID
 
                     // Wire OSC + output handlers via the public API.

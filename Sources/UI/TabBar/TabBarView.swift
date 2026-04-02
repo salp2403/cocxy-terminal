@@ -63,8 +63,12 @@ final class TabBarView: NSView {
     }()
 
     /// Header: app name + notification badge.
+    ///
+    /// Uses a custom subclass that returns `false` from `mouseDownCanMoveWindow`
+    /// so that clicks on header buttons are not intercepted by the window's
+    /// `isMovableByWindowBackground` drag behavior.
     private let headerView: NSView = {
-        let view = NSView()
+        let view = NonDraggableView()
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -83,11 +87,11 @@ final class TabBarView: NSView {
         return label
     }()
 
-    private let notificationBellImage: NSImageView = {
+    private let notificationBellImage: ClickableImageView = {
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
         let image = NSImage(systemSymbolName: "bell.fill", accessibilityDescription: "Notifications")?
             .withSymbolConfiguration(config)
-        let imageView = NSImageView(image: image ?? NSImage())
+        let imageView = ClickableImageView(image: image ?? NSImage())
         imageView.contentTintColor = CocxyColors.overlay1
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
@@ -556,5 +560,30 @@ final class TabBarView: NSView {
         }.count
         updateNotificationCount(notifCount)
     }
+}
+
+// MARK: - Non-Draggable View
+
+/// A plain NSView that opts out of `isMovableByWindowBackground`.
+///
+/// When a window has `isMovableByWindowBackground = true`, plain NSView
+/// containers report `mouseDownCanMoveWindow = true` by default, causing
+/// clicks on their child controls to start a window drag instead.
+/// This subclass overrides that behavior so that buttons and gesture
+/// recognizers inside the view work correctly.
+@MainActor
+final class NonDraggableView: NSView {
+    override var mouseDownCanMoveWindow: Bool { false }
+}
+
+// MARK: - Clickable Image View
+
+/// An NSImageView that opts out of `isMovableByWindowBackground` and
+/// accepts mouse events. Standard NSImageView is non-interactive
+/// and gets treated as window-draggable background.
+@MainActor
+final class ClickableImageView: NSImageView {
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 

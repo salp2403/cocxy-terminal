@@ -2,6 +2,7 @@
 // AppDelegate+RemoteWorkspace.swift - Remote workspace service initialization.
 
 import AppKit
+import Combine
 
 // MARK: - Remote Workspace Wiring
 
@@ -67,13 +68,45 @@ extension AppDelegate {
             executor: keyExecutor
         )
 
+        // Remote port scanner — detects dev servers on SSH-connected hosts.
+        let portScanner = RemotePortScanner(
+            multiplexer: multiplexer,
+            connectionManager: connectionManager
+        )
+
         self.remoteConnectionManager = connectionManager
         self.remoteProfileStore = profileStore
+        self.remotePortScanner = portScanner
 
         windowController?.remoteConnectionManager = connectionManager
         windowController?.remoteProfileStore = profileStore
         windowController?.tunnelManager = tunnelManager
         windowController?.sshKeyManager = keyManager
+        windowController?.remotePortScanner = portScanner
+
+        // Auto-start/stop port scanning when managed connections change.
+        connectionManager.$connections
+            .receive(on: DispatchQueue.main)
+            .sink { [weak portScanner] connections in
+                guard let scanner = portScanner else { return }
+
+                // Find the first connected profile to scan.
+                let connectedProfile = connections.first { _, state in
+                    if case .connected = state { return true }
+                    return false
+                }
+
+                if let (profileID, _) = connectedProfile {
+                    if !scanner.isScanning {
+                        scanner.startScanning(profileID: profileID)
+                    }
+                } else {
+                    if scanner.isScanning {
+                        scanner.stopScanning()
+                    }
+                }
+            }
+            .store(in: &hookCancellables)
     }
 }
 

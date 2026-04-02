@@ -74,6 +74,11 @@ struct HookEvent: Codable, Sendable {
         case toolInput = "tool_input"
         case toolResponse = "tool_response"
         case cwd
+        // Subagent event keys
+        case agentType = "agent_type"
+        case agentId = "agent_id"
+        // Task event keys
+        case taskDescription = "task_description"
         // Legacy format keys (camelCase, backward compatibility)
         case type
         case sessionIdCamel = "sessionId"
@@ -124,7 +129,25 @@ struct HookEvent: Codable, Sendable {
                     workingDirectory: cwd
                 ))
 
-            default:
+            case .subagentStart, .subagentStop:
+                let agentType = try? container.decode(String.self, forKey: .agentType)
+                let agentId = try? container.decode(String.self, forKey: .agentId)
+                self.data = .subagent(SubagentData(
+                    subagentId: agentId ?? UUID().uuidString,
+                    subagentType: agentType
+                ))
+
+            case .sessionEnd:
+                self.data = .stop(StopData())
+
+            case .taskCompleted:
+                let desc = try? container.decode(String.self, forKey: .taskDescription)
+                self.data = .taskCompleted(TaskCompletedData(taskDescription: desc))
+
+            case .teammateIdle:
+                self.data = .teammateIdle(TeammateIdleData())
+
+            case .userPromptSubmit:
                 self.data = .generic
             }
             return

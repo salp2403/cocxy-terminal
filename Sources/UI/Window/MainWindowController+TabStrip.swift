@@ -37,6 +37,7 @@ extension MainWindowController {
                     case .terminal: icon = "terminal.fill"
                     case .browser: icon = "globe"
                     case .markdown: icon = "doc.text"
+                    case .subagent: icon = "person.2"
                     }
                 } else {
                     switch panelType {
@@ -51,6 +52,9 @@ extension MainWindowController {
                     case .markdown:
                         title = "Markdown"
                         icon = "doc.text"
+                    case .subagent:
+                        title = "Agent"
+                        icon = "person.2"
                     }
                 }
 

@@ -44,7 +44,7 @@ final class RemotePortScanner: ObservableObject {
         8000, 8080, 8081, 8443, 8888, 9000, 9090
     ]
 
-    private let multiplexer: SSHMultiplexing
+    private let multiplexer: any SSHMultiplexing
     private let connectionManager: RemoteConnectionManager
     private var scanTimer: Timer?
     private var activeProfileID: UUID?
@@ -52,7 +52,7 @@ final class RemotePortScanner: ObservableObject {
     // MARK: - Initialization
 
     init(
-        multiplexer: SSHMultiplexing,
+        multiplexer: any SSHMultiplexing,
         connectionManager: RemoteConnectionManager,
         scanInterval: TimeInterval = 10.0
     ) {

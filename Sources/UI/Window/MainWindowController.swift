@@ -238,6 +238,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Port scanner for detecting active dev servers. Injected by AppDelegate.
     var portScanner: PortScannerImpl?
 
+    /// Remote port scanner for detecting dev servers on SSH-connected hosts.
+    var remotePortScanner: RemotePortScanner?
+
     /// Service that monitors foreground processes for SSH detection.
     private(set) var processMonitor: ProcessMonitorService?
 

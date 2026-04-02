@@ -292,6 +292,7 @@ extension MainWindowController {
             }
 
             if let tabID = targetTabID {
+                let previousSSH = tabManager.tab(for: tabID)?.sshSession
                 tabManager.updateTab(id: tabID) { tab in
                     tab.title = title
 
@@ -305,6 +306,17 @@ extension MainWindowController {
                         tab.processName = nil
                     }
                 }
+
+                // Wire/unwire SSH file drop handler based on session state.
+                let currentSSH = tabManager.tab(for: tabID)?.sshSession
+                if let surfaceView = tabSurfaceViews[tabID] {
+                    if let session = currentSSH, previousSSH == nil {
+                        surfaceView.onFileDrop = makeSSHFileDropHandler(session: session, tabID: tabID)
+                    } else if currentSSH == nil, previousSSH != nil {
+                        surfaceView.onFileDrop = nil
+                    }
+                }
+
                 tabBarViewModel?.syncWithManager()
                 refreshTabStrip()
             }
@@ -444,5 +456,97 @@ extension MainWindowController {
         let renderer = InlineImageRenderer(terminalView: surfaceView)
         inlineImageRenderers[ObjectIdentifier(surfaceView)] = renderer
         return renderer
+    }
+
+    // MARK: - SSH File Drop Handler
+
+    /// Creates an `onFileDrop` closure that uploads files to the SSH host via `scp`.
+    ///
+    /// When an SSH session is detected, this handler replaces the default
+    /// "paste file paths" behavior. Files are uploaded to the remote user's
+    /// home directory in a background process.
+    ///
+    /// - Parameters:
+    ///   - session: The detected SSH session info (user, host, port).
+    ///   - tabID: The tab where the SSH session is running.
+    /// - Returns: A closure that handles file drops and returns `true` on success.
+    func makeSSHFileDropHandler(session: SSHSessionInfo, tabID: TabID) -> ([URL]) -> Bool {
+        let notificationManager = injectedNotificationManager
+        let host = session.host
+        let user = session.user
+        let port = session.port
+        let capturedTabID = tabID
+
+        return { urls in
+            let localPaths = urls.map(\.path)
+            guard !localPaths.isEmpty else { return false }
+
+            Task.detached(priority: .userInitiated) {
+                let destination: String
+                if let user {
+                    destination = "\(user)@\(host):~/"
+                } else {
+                    destination = "\(host):~/"
+                }
+
+                var args = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
+                if let port {
+                    args += ["-P", String(port)]
+                }
+                args += localPaths
+                args.append(destination)
+
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/scp")
+                process.arguments = args
+                let stderrPipe = Pipe()
+                process.standardError = stderrPipe
+                process.standardOutput = FileHandle.nullDevice
+
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+
+                    let fileNames = urls.map(\.lastPathComponent).joined(separator: ", ")
+                    let succeeded = process.terminationStatus == 0
+
+                    await MainActor.run {
+                        if succeeded {
+                            let notification = CocxyNotification(
+                                type: .custom("ssh-upload"),
+                                tabId: capturedTabID,
+                                title: "Upload Complete",
+                                body: "\(fileNames) → \(host)"
+                            )
+                            notificationManager?.notify(notification)
+                        } else {
+                            let stderr = String(
+                                data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
+                                encoding: .utf8
+                            ) ?? "Unknown error"
+                            let notification = CocxyNotification(
+                                type: .custom("ssh-upload-error"),
+                                tabId: capturedTabID,
+                                title: "Upload Failed",
+                                body: String(stderr.prefix(200))
+                            )
+                            notificationManager?.notify(notification)
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        let notification = CocxyNotification(
+                            type: .custom("ssh-upload-error"),
+                            tabId: capturedTabID,
+                            title: "Upload Failed",
+                            body: error.localizedDescription
+                        )
+                        notificationManager?.notify(notification)
+                    }
+                }
+            }
+
+            return true
+        }
     }
 }

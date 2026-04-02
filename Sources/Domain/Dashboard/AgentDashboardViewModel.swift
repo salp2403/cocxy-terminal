@@ -36,14 +36,14 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     // MARK: - Published State
 
     /// All current sessions, sorted by priority then urgency.
-    private(set) var sessions: [AgentSessionInfo] = [] {
+    @Published private(set) var sessions: [AgentSessionInfo] = [] {
         didSet {
             sessionsSubject.send(sessions)
         }
     }
 
     /// Whether the dashboard panel is visible.
-    var isVisible: Bool = false
+    @Published var isVisible: Bool = false
 
     // MARK: - Publishers
 

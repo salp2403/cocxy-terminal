@@ -268,6 +268,22 @@ extension AppDelegate {
                 store.addEvent(timelineEvent)
             }
             .store(in: &hookCancellables)
+
+        // Auto-split subagent panels: when SubagentStart arrives, spawn a
+        // live activity panel on the right side. When SubagentStop arrives,
+        // the panel stays visible (showing finished state) until dismissed.
+        receiver.eventPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] hookEvent in
+                guard hookEvent.type == .subagentStart else { return }
+                guard case .subagent(let data) = hookEvent.data else { return }
+                self?.windowController?.spawnSubagentPanel(
+                    subagentId: data.subagentId,
+                    sessionId: hookEvent.sessionId,
+                    agentType: data.subagentType
+                )
+            }
+            .store(in: &hookCancellables)
     }
 
     // MARK: - Notification Wiring
