@@ -5,6 +5,18 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.31] - 2026-04-02
+
+### Added
+- Sidebar mini-stats: inline tool count, error count, and duration chips when an agent is active
+- Agent progress overlay: translucent pill in terminal corner showing real-time agent activity
+- Welcome panel redesigned with feature highlights grid, entrance animation, and app version
+- Subagent panel enter/exit animations (fade transitions, reduce-motion aware)
+
+### Changed
+- Subagent panel background now uses native vibrancy (NSVisualEffectView) for visual consistency
+- Welcome panel shortcut for Dashboard corrected to Cmd+Option+A
+
 ## [0.1.30] - 2026-04-02
 
 ### Fixed
