@@ -45,7 +45,7 @@ import SwiftUI
 /// - SeeAlso: `TerminalViewModel`
 /// - SeeAlso: `ConfigService`
 @MainActor
-final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate {
+final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate, DashboardTabNavigating {
 
     // MARK: - Properties
 
@@ -948,6 +948,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// This ensures that splits in tab 1 do not leak into tab 2 when switching.
     ///
     /// - Parameter tabID: The tab whose surface should become visible.
+    // MARK: - DashboardTabNavigating
+
+    func focusTab(id: TabID) {
+        handleTabSwitch(to: id)
+    }
+
     func handleTabSwitch(to tabID: TabID) {
         guard let targetSurfaceView = tabSurfaceViews[tabID] else { return }
         guard let container = terminalContainerView else { return }

@@ -138,6 +138,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         tabNavigator?.focusTab(id: tabId)
     }
 
+    /// Returns the tab UUID associated with a session, for targeting splits.
+    func tabIdForSession(_ sessionId: String) -> UUID? {
+        sessionDataStore[sessionId]?.tabId
+    }
+
     // MARK: - Hook Event Processing
 
     /// Processes a single hook event and updates the session store.

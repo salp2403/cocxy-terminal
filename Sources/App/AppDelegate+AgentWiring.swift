@@ -240,6 +240,9 @@ extension AppDelegate {
         // Cmd+Option+A shows real data instead of an empty view.
         windowController?.injectedDashboardViewModel = dashboardVM
 
+        // Wire tab navigation so "Go to Tab" in the dashboard works.
+        dashboardVM.tabNavigator = windowController
+
         // Timeline: subscribes to hook events.
         let timelineStore = AgentTimelineStoreImpl()
         self.agentTimelineStore = timelineStore
@@ -270,18 +273,31 @@ extension AppDelegate {
             .store(in: &hookCancellables)
 
         // Auto-split subagent panels: when SubagentStart arrives, spawn a
-        // live activity panel on the right side. When SubagentStop arrives,
-        // the panel stays visible (showing finished state) until dismissed.
+        // live activity panel in the correct tab. When SubagentStop arrives,
+        // auto-close the panel after a brief delay.
         receiver.eventPublisher
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] hookEvent in
-                guard hookEvent.type == .subagentStart else { return }
-                guard case .subagent(let data) = hookEvent.data else { return }
-                self?.windowController?.spawnSubagentPanel(
-                    subagentId: data.subagentId,
-                    sessionId: hookEvent.sessionId,
-                    agentType: data.subagentType
-                )
+            .sink { [weak self, weak dashboardVM] hookEvent in
+                guard let wc = self?.windowController else { return }
+
+                if hookEvent.type == .subagentStart,
+                   case .subagent(let data) = hookEvent.data {
+                    let targetTabId = dashboardVM?.tabIdForSession(hookEvent.sessionId)
+                    wc.spawnSubagentPanel(
+                        subagentId: data.subagentId,
+                        sessionId: hookEvent.sessionId,
+                        agentType: data.subagentType,
+                        targetTabId: targetTabId
+                    )
+                } else if hookEvent.type == .subagentStop,
+                          case .subagent(let data) = hookEvent.data {
+                    let subId = data.subagentId
+                    let sessId = hookEvent.sessionId
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        wc.closeSubagentPanelBySubagentId(subId, sessionId: sessId)
+                    }
+                }
             }
             .store(in: &hookCancellables)
     }

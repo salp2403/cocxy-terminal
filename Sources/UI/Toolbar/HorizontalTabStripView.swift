@@ -589,7 +589,11 @@ final class HorizontalTabStripView: NSView {
             let isEmptyArea = hitView === self || hitView == nil
                 || hitView === vibrancyView || hitView === solidOverlay
             if isEmptyArea {
-                window?.zoom(nil)
+                if let w = window, w.styleMask.contains(.fullScreen) {
+                    w.toggleFullScreen(nil)
+                } else {
+                    window?.zoom(nil)
+                }
                 return
             }
         }

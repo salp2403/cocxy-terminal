@@ -631,30 +631,42 @@ extension MainWindowController {
     ///   - subagentId: The unique ID of the spawned subagent.
     ///   - sessionId: The parent session's ID.
     ///   - agentType: The subagent type (e.g., "Explore", "Plan").
-    func spawnSubagentPanel(subagentId: String, sessionId: String, agentType: String?) {
+    func spawnSubagentPanel(subagentId: String, sessionId: String, agentType: String?, targetTabId: UUID? = nil) {
+        // Switch to the correct tab before creating the split.
+        if let targetId = targetTabId {
+            let targetTabID = TabID(rawValue: targetId)
+            if tabManager.activeTabID != targetTabID {
+                handleTabSwitch(to: targetTabID)
+            }
+        }
         let panel = PanelInfo.subagent(id: subagentId, sessionId: sessionId)
         performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
         refreshTabStrip()
     }
 
     /// Closes a subagent panel by its content ID.
-    ///
-    /// Called when the user clicks the X button on a subagent panel,
-    /// or when the subagent finishes and the auto-cleanup timer fires.
     func closeSubagentPanel(contentID: UUID) {
         guard let sm = activeSplitManager else { return }
         let leaves = sm.rootNode.allLeafIDs()
         guard let targetLeaf = leaves.first(where: { $0.terminalID == contentID }) else { return }
 
-        // Focus the target leaf, then close it via the public split close API.
         sm.focusLeaf(id: targetLeaf.leafID)
         closeSplitAction(nil)
         refreshTabStrip()
     }
 
-    /// Removes all subagent panels for a given session.
+    /// Closes a subagent panel by subagent ID and session ID.
     ///
-    /// Called when the parent session ends to clean up subagent splits.
+    /// Searches all panel content views for a matching `SubagentContentView`.
+    func closeSubagentPanelBySubagentId(_ subagentId: String, sessionId: String) {
+        guard let (contentID, _) = panelContentViews.first(where: { (_, view) in
+            guard let subView = view as? SubagentContentView else { return false }
+            return subView.subagentId == subagentId && subView.sessionId == sessionId
+        }) else { return }
+        closeSubagentPanel(contentID: contentID)
+    }
+
+    /// Removes all subagent panels for a given session.
     func removeSubagentPanels(forSession sessionId: String) {
         let subagentContentIDs = panelContentViews.compactMap { (id, view) -> UUID? in
             guard let subView = view as? SubagentContentView,

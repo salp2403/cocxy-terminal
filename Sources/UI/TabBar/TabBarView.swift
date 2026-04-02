@@ -87,14 +87,19 @@ final class TabBarView: NSView {
         return label
     }()
 
-    private let notificationBellImage: ClickableImageView = {
+    private let notificationBellButton: NSButton = {
+        let button = NSButton()
+        button.bezelStyle = .inline
+        button.isBordered = false
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
-        let image = NSImage(systemSymbolName: "bell.fill", accessibilityDescription: "Notifications")?
-            .withSymbolConfiguration(config)
-        let imageView = ClickableImageView(image: image ?? NSImage())
-        imageView.contentTintColor = CocxyColors.overlay1
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        return imageView
+        if let image = NSImage(systemSymbolName: "bell.fill", accessibilityDescription: "Notifications") {
+            button.image = image.withSymbolConfiguration(config)
+        }
+        button.contentTintColor = CocxyColors.overlay1
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.toolTip = "Notifications (Cmd+Shift+I)"
+        button.setAccessibilityLabel("Notifications")
+        return button
     }()
 
     private let notificationCountLabel: NSTextField = {
@@ -246,10 +251,7 @@ final class TabBarView: NSView {
         addSubview(headerView)
         headerView.addSubview(headerTitleLabel)
         headerView.addSubview(commandPaletteButton)
-        // Make bell clickeable for notification panel toggle.
-        let bellClick = NSClickGestureRecognizer(target: self, action: #selector(bellClicked))
-        notificationBellImage.addGestureRecognizer(bellClick)
-        headerView.addSubview(notificationBellImage)
+        headerView.addSubview(notificationBellButton)
         headerView.addSubview(notificationCountLabel)
         addSubview(headerSeparator)
 
@@ -284,16 +286,16 @@ final class TabBarView: NSView {
             headerTitleLabel.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
             headerTitleLabel.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
 
-            commandPaletteButton.trailingAnchor.constraint(equalTo: notificationBellImage.leadingAnchor, constant: -10),
+            commandPaletteButton.trailingAnchor.constraint(equalTo: notificationBellButton.leadingAnchor, constant: -10),
             commandPaletteButton.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
             commandPaletteButton.widthAnchor.constraint(equalToConstant: 20),
             commandPaletteButton.heightAnchor.constraint(equalToConstant: 20),
 
-            notificationBellImage.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
-            notificationBellImage.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
+            notificationBellButton.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
+            notificationBellButton.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
 
-            notificationCountLabel.centerXAnchor.constraint(equalTo: notificationBellImage.trailingAnchor, constant: 2),
-            notificationCountLabel.centerYAnchor.constraint(equalTo: notificationBellImage.topAnchor, constant: 2),
+            notificationCountLabel.centerXAnchor.constraint(equalTo: notificationBellButton.trailingAnchor, constant: 2),
+            notificationCountLabel.centerYAnchor.constraint(equalTo: notificationBellButton.topAnchor, constant: 2),
             notificationCountLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 14),
             notificationCountLabel.heightAnchor.constraint(equalToConstant: 14),
 
@@ -345,10 +347,10 @@ final class TabBarView: NSView {
         if count > 0 {
             notificationCountLabel.isHidden = false
             notificationCountLabel.stringValue = count > 9 ? "9+" : "\(count)"
-            notificationBellImage.contentTintColor = CocxyColors.blue
+            notificationBellButton.contentTintColor = CocxyColors.blue
         } else {
             notificationCountLabel.isHidden = true
-            notificationBellImage.contentTintColor = CocxyColors.overlay1
+            notificationBellButton.contentTintColor = CocxyColors.overlay1
         }
     }
 
@@ -359,7 +361,8 @@ final class TabBarView: NSView {
         newTabButton.action = #selector(handleNewTabButton)
         commandPaletteButton.target = self
         commandPaletteButton.action = #selector(handleCommandPaletteButton)
-
+        notificationBellButton.target = self
+        notificationBellButton.action = #selector(bellClicked)
     }
 
     @objc private func handleNewTabButton() {
