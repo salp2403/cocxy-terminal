@@ -780,7 +780,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let work = {
                     MainActor.assumeIsolated {
                         guard let manager = self?.notificationManager else { return }
-                        // Use the active tab as the source, or a sentinel tab ID.
                         let tabId = self?.windowController?.tabManager.activeTabID ?? TabID()
                         let notification = CocxyNotification(
                             type: .custom("cli"),
@@ -792,6 +791,180 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            },
+            // V3: Tab duplicate — create new tab with active tab's CWD.
+            tabDuplicateProvider: { [weak self] in
+                var result: (id: String, title: String)?
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let wc = self?.windowController,
+                              let activeTab = wc.tabManager.activeTab else { return }
+                        let newTab = wc.tabManager.addTab(
+                            workingDirectory: activeTab.workingDirectory
+                        )
+                        result = (id: newTab.id.rawValue.uuidString, title: newTab.title)
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return result
+            },
+            // V3: Tab pin — toggle pin on active or specific tab.
+            tabPinProvider: { [weak self] tabIDString in
+                var result: (id: String, isPinned: Bool)?
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let wc = self?.windowController else { return }
+                        let manager = wc.tabManager
+                        let targetID: TabID
+                        if let idStr = tabIDString, let uuid = UUID(uuidString: idStr) {
+                            targetID = TabID(rawValue: uuid)
+                        } else if let activeID = manager.activeTabID {
+                            targetID = activeID
+                        } else {
+                            return
+                        }
+                        manager.togglePin(id: targetID)
+                        let isPinned = manager.tab(for: targetID)?.isPinned ?? false
+                        result = (id: targetID.rawValue.uuidString, isPinned: isPinned)
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return result
+            },
+            // V3: Config reload — re-read config from disk.
+            configReloadProvider: { [weak self] in
+                var success = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let svc = self?.configService else { return }
+                        do {
+                            try svc.reload()
+                            success = true
+                        } catch {
+                            // success remains false
+                        }
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return success
+            },
+            // V3: Split info — list panes in active tab.
+            splitInfoProvider: { [weak self] in
+                var panes: [(leafID: String, terminalID: String, isFocused: Bool)] = []
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let wc = self?.windowController,
+                              let activeTabID = wc.tabManager.activeTabID else { return }
+                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                        let leaves = sm.rootNode.allLeafIDs()
+                        let focusedID = sm.focusedLeafID
+                        panes = leaves.map { leaf in
+                            (
+                                leafID: leaf.leafID.uuidString,
+                                terminalID: leaf.terminalID.uuidString,
+                                isFocused: leaf.leafID == focusedID
+                            )
+                        }
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return panes
+            },
+            // V3: Split swap — exchange two panes by index.
+            splitSwapProvider: { [weak self] indexA, indexB in
+                var swapped = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let wc = self?.windowController,
+                              let activeTabID = wc.tabManager.activeTabID else { return }
+                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                        let leafCount = sm.rootNode.allLeafIDs().count
+                        guard indexA >= 0, indexA < leafCount,
+                              indexB >= 0, indexB < leafCount,
+                              indexA != indexB else { return }
+                        sm.swapLeaves(at: indexA, with: indexB)
+                        swapped = true
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return swapped
+            },
+            // V3: Split zoom — toggle zoom on focused pane.
+            splitZoomProvider: { [weak self] in
+                var result: (success: Bool, isZoomed: Bool) = (false, false)
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let wc = self?.windowController,
+                              let activeTabID = wc.tabManager.activeTabID else { return }
+                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                        guard sm.rootNode.allLeafIDs().count > 1 else { return }
+                        sm.toggleZoom()
+                        result = (true, sm.isZoomed)
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return result
+            },
+            // V3: Session manager.
+            sessionManagerProvider: { [weak self] in self?.sessionManager },
+            // V3: Session capture — snapshot current app state.
+            sessionCaptureProvider: { [weak self] in
+                var session: Session?
+                let work = {
+                    MainActor.assumeIsolated {
+                        session = self?.captureCurrentSession()
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return session
+            },
+            // V3: Session restore — recreate tabs from saved session.
+            sessionRestoreProvider: { [weak self] name in
+                var restored = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let delegate = self,
+                              let sessionMgr = delegate.sessionManager,
+                              let wc = delegate.windowController else { return }
+
+                        let session: Session?
+                        do {
+                            if let name = name {
+                                session = try sessionMgr.loadSession(named: name)
+                            } else {
+                                session = try sessionMgr.loadLastSession()
+                            }
+                        } catch {
+                            return
+                        }
+
+                        guard let session = session,
+                              let windowState = session.windows.first else { return }
+
+                        // Create tabs for each saved tab state.
+                        for tabState in windowState.tabs {
+                            wc.tabManager.addTab(
+                                workingDirectory: tabState.workingDirectory
+                            )
+                        }
+                        restored = true
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return restored
+            },
+            // V3: Notification manager.
+            notificationManagerProvider: { [weak self] in self?.notificationManager },
+            // V3: Capture pane — return terminal output buffer lines.
+            capturePaneProvider: { [weak self] in
+                var lines: [String] = []
+                let work = {
+                    MainActor.assumeIsolated {
+                        lines = self?.windowController?.terminalOutputBuffer.lines ?? []
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return lines
             }
         )
 

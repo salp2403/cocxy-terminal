@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // AppSocketCommandHandler.swift - Production socket command dispatcher.
 
+import AppKit
 import Foundation
 
 // MARK: - Version Constant
@@ -98,6 +99,41 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// of silently returning "acknowledged".
     private let notifyDispatcher: @Sendable (String, String) -> Void
 
+    // MARK: - V3 Command Providers
+
+    /// Duplicates the active tab (creates new tab with same working directory).
+    private let tabDuplicateProvider: (@Sendable () -> (id: String, title: String)?)?
+
+    /// Toggles pin on a tab. Nil tabID = active tab. Returns (id, isPinned).
+    private let tabPinProvider: (@Sendable (String?) -> (id: String, isPinned: Bool)?)?
+
+    /// Reloads the configuration from disk. Returns true on success.
+    private let configReloadProvider: (@Sendable () -> Bool)?
+
+    /// Returns split pane info for the active tab.
+    private let splitInfoProvider: (@Sendable () -> [(leafID: String, terminalID: String, isFocused: Bool)])?
+
+    /// Swaps two panes by DFS index in the active tab. Returns true on success.
+    private let splitSwapProvider: (@Sendable (Int, Int) -> Bool)?
+
+    /// Toggles zoom on the focused pane. Returns (success, isZoomed).
+    private let splitZoomProvider: (@Sendable () -> (success: Bool, isZoomed: Bool))?
+
+    /// Provides the session manager for session CRUD operations.
+    private let sessionManagerProvider: (() -> (any SessionManaging)?)?
+
+    /// Captures the current application state as a Session snapshot.
+    private let sessionCaptureProvider: (@Sendable () -> Session?)?
+
+    /// Restores a session by name (nil = last). Returns true on success.
+    private let sessionRestoreProvider: (@Sendable (String?) -> Bool)?
+
+    /// Provides the notification manager for list/clear operations.
+    private let notificationManagerProvider: (() -> NotificationManagerImpl?)?
+
+    /// Returns the active pane's terminal output buffer content.
+    private let capturePaneProvider: (@Sendable () -> [String])?
+
     // MARK: - Initialization
 
     /// Creates an AppSocketCommandHandler with closure-based access to @MainActor services.
@@ -121,7 +157,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         remoteConnectionManagerProvider: (() -> RemoteConnectionManager?)? = nil,
         remoteProfileStoreProvider: (() -> (any RemoteProfileStoring)?)? = nil,
         pluginManagerProvider: (() -> PluginManager?)? = nil,
-        notifyDispatcher: (@Sendable (String, String) -> Void)? = nil
+        notifyDispatcher: (@Sendable (String, String) -> Void)? = nil,
+        tabDuplicateProvider: (@Sendable () -> (id: String, title: String)?)? = nil,
+        tabPinProvider: (@Sendable (String?) -> (id: String, isPinned: Bool)?)? = nil,
+        configReloadProvider: (@Sendable () -> Bool)? = nil,
+        splitInfoProvider: (@Sendable () -> [(leafID: String, terminalID: String, isFocused: Bool)])? = nil,
+        splitSwapProvider: (@Sendable (Int, Int) -> Bool)? = nil,
+        splitZoomProvider: (@Sendable () -> (success: Bool, isZoomed: Bool))? = nil,
+        sessionManagerProvider: (() -> (any SessionManaging)?)? = nil,
+        sessionCaptureProvider: (@Sendable () -> Session?)? = nil,
+        sessionRestoreProvider: (@Sendable (String?) -> Bool)? = nil,
+        notificationManagerProvider: (() -> NotificationManagerImpl?)? = nil,
+        capturePaneProvider: (@Sendable () -> [String])? = nil
     ) {
         self.configProvider = configProvider
         self.themeEngineProvider = themeEngineProvider
@@ -129,6 +176,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.remoteProfileStoreProvider = remoteProfileStoreProvider
         self.pluginManagerProvider = pluginManagerProvider
         self.notifyDispatcher = notifyDispatcher ?? { _, _ in }
+        self.tabDuplicateProvider = tabDuplicateProvider
+        self.tabPinProvider = tabPinProvider
+        self.configReloadProvider = configReloadProvider
+        self.splitInfoProvider = splitInfoProvider
+        self.splitSwapProvider = splitSwapProvider
+        self.splitZoomProvider = splitZoomProvider
+        self.sessionManagerProvider = sessionManagerProvider
+        self.sessionCaptureProvider = sessionCaptureProvider
+        self.sessionRestoreProvider = sessionRestoreProvider
+        self.notificationManagerProvider = notificationManagerProvider
+        self.capturePaneProvider = capturePaneProvider
         weak var weakTabManager = tabManager
         weak var weakBrowserVM = browserViewModel
 
@@ -399,21 +457,64 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case .notify:
             return handleNotify(request)
 
-        // Acknowledged commands (async UI actions)
+        // V3: Window management
+        case .windowNew:
+            return handleWindowNew(request)
+        case .windowList:
+            return handleWindowList(request)
+        case .windowFocus:
+            return handleWindowFocus(request)
+        case .windowClose:
+            return handleWindowClose(request)
+        case .windowFullscreen:
+            return handleWindowFullscreen(request)
+
+        // V3: Session management
+        case .sessionSave:
+            return handleSessionSave(request)
+        case .sessionRestore:
+            return handleSessionRestore(request)
+        case .sessionList:
+            return handleSessionList(request)
+        case .sessionDelete:
+            return handleSessionDelete(request)
+
+        // V3: Tab extended
+        case .tabDuplicate:
+            return handleTabDuplicate(request)
+        case .tabPin:
+            return handleTabPin(request)
+
+        // V3: Config extended
+        case .configList:
+            return handleConfigList(request)
+        case .configReload:
+            return handleConfigReload(request)
+
+        // V3: Split extended
+        case .splitSwap:
+            return handleSplitSwap(request)
+        case .splitZoom:
+            return handleSplitZoom(request)
+
+        // V3: Output capture
+        case .capturePane:
+            return handleCapturePane(request)
+
+        // V3: Notification CLI
+        case .notificationList:
+            return handleNotificationList(request)
+        case .notificationClear:
+            return handleNotificationClear(request)
+
+        // Acknowledged commands (v2 UI actions — need window controller wiring)
         case .split,
              .splitList, .splitFocus, .splitClose, .splitResize,
-             .splitSwap, .splitZoom,
              .dashboardShow, .dashboardHide, .dashboardToggle, .dashboardStatus,
              .timelineShow, .timelineExport,
              .search,
              .send, .sendKey,
-             .hooks, .hookHandler,
-             .windowNew, .windowList, .windowFocus, .windowClose, .windowFullscreen,
-             .sessionSave, .sessionRestore, .sessionList, .sessionDelete,
-             .tabDuplicate, .tabPin,
-             .configList, .configReload,
-             .capturePane,
-             .notificationList, .notificationClear:
+             .hooks, .hookHandler:
             return .ok(id: request.id, data: ["status": "acknowledged"])
         }
     }
@@ -1326,6 +1427,512 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case .tmux(let version): return "tmux (\(version))"
         case .screen: return "screen"
         case .none: return "none"
+        }
+    }
+
+    // MARK: - V3 Window Management Handlers
+
+    /// Creates a new tab (single-window architecture).
+    ///
+    /// Optional params: `dir` (working directory path).
+    private func handleWindowNew(_ request: SocketRequest) -> SocketResponse {
+        let directoryPath = request.params?["dir"]
+
+        if let path = directoryPath {
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir),
+                  isDir.boolValue else {
+                return .failure(id: request.id, error: "Directory does not exist: \(path)")
+            }
+        }
+
+        guard let result = tabCreateProvider(directoryPath) else {
+            return .failure(id: request.id, error: "Tab manager not available")
+        }
+
+        return .ok(id: request.id, data: [
+            "status": "created",
+            "id": result.id,
+            "title": result.title
+        ])
+    }
+
+    /// Lists all visible application windows.
+    private func handleWindowList(_ request: SocketRequest) -> SocketResponse {
+        var windowData: [[String: String]] = []
+        let work = {
+            MainActor.assumeIsolated {
+                for (index, window) in NSApplication.shared.windows.enumerated()
+                    where window.isVisible {
+                    let frame = window.frame
+                    windowData.append([
+                        "index": "\(index)",
+                        "title": window.title,
+                        "is_key": window.isKeyWindow ? "true" : "false",
+                        "is_main": window.isMainWindow ? "true" : "false",
+                        "is_fullscreen": window.styleMask.contains(.fullScreen)
+                            ? "true" : "false",
+                        "frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)),"
+                            + "\(Int(frame.size.width)),\(Int(frame.size.height))"
+                    ])
+                }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        var data: [String: String] = ["count": "\(windowData.count)"]
+        for (index, win) in windowData.enumerated() {
+            for (key, value) in win {
+                data["window_\(index)_\(key)"] = value
+            }
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Focuses a window by index or brings the main window to front.
+    ///
+    /// Optional params: `index` (0-based window index).
+    private func handleWindowFocus(_ request: SocketRequest) -> SocketResponse {
+        let indexString = request.params?["index"]
+        var focused = false
+        let work = {
+            MainActor.assumeIsolated {
+                let visibleWindows = NSApplication.shared.windows.filter { $0.isVisible }
+                if let indexStr = indexString, let index = Int(indexStr) {
+                    guard index >= 0, index < visibleWindows.count else { return }
+                    visibleWindows[index].makeKeyAndOrderFront(nil)
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    focused = true
+                } else {
+                    let target = visibleWindows.first(where: { $0.isMainWindow })
+                        ?? visibleWindows.first
+                    target?.makeKeyAndOrderFront(nil)
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    focused = target != nil
+                }
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        if focused {
+            return .ok(id: request.id, data: ["status": "focused"])
+        }
+        return .failure(id: request.id, error: "No visible window found")
+    }
+
+    /// Closes a window by index. Cannot close the last visible window.
+    ///
+    /// Required params: `index` (0-based window index).
+    private func handleWindowClose(_ request: SocketRequest) -> SocketResponse {
+        guard let indexStr = request.params?["index"],
+              let index = Int(indexStr) else {
+            return .failure(id: request.id, error: "Missing or invalid param: index")
+        }
+
+        var closed = false
+        var errorMessage = ""
+        let work = {
+            MainActor.assumeIsolated {
+                let visibleWindows = NSApplication.shared.windows.filter { $0.isVisible }
+                guard index >= 0, index < visibleWindows.count else {
+                    errorMessage = "Window index out of range (0..<\(visibleWindows.count))"
+                    return
+                }
+                guard visibleWindows.count > 1 else {
+                    errorMessage = "Cannot close the last window"
+                    return
+                }
+                visibleWindows[index].close()
+                closed = true
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        if closed {
+            return .ok(id: request.id, data: ["status": "closed"])
+        }
+        return .failure(id: request.id, error: errorMessage)
+    }
+
+    /// Toggles fullscreen on the key window.
+    private func handleWindowFullscreen(_ request: SocketRequest) -> SocketResponse {
+        var toggled = false
+        var isFullScreen = false
+        let work = {
+            MainActor.assumeIsolated {
+                guard let window = NSApplication.shared.keyWindow
+                    ?? NSApplication.shared.mainWindow else { return }
+                window.toggleFullScreen(nil)
+                isFullScreen = window.styleMask.contains(.fullScreen)
+                toggled = true
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        if toggled {
+            return .ok(id: request.id, data: [
+                "status": "toggled",
+                "fullscreen": isFullScreen ? "true" : "false"
+            ])
+        }
+        return .failure(id: request.id, error: "No window available")
+    }
+
+    // MARK: - V3 Session Management Handlers
+
+    /// Saves the current session with an optional name.
+    ///
+    /// Optional params: `name` (session name; nil saves as "last").
+    private func handleSessionSave(_ request: SocketRequest) -> SocketResponse {
+        let name = request.params?["name"]
+
+        guard let session = sessionCaptureProvider?() else {
+            return .failure(id: request.id, error: "Session capture not available")
+        }
+
+        guard let sessionManager = sessionManagerProvider?() else {
+            return .failure(id: request.id, error: "Session manager not available")
+        }
+
+        do {
+            try sessionManager.saveSession(session, named: name)
+            return .ok(id: request.id, data: [
+                "status": "saved",
+                "name": name ?? "last",
+                "tabs": "\(session.windows.first?.tabs.count ?? 0)"
+            ])
+        } catch {
+            return .failure(id: request.id, error: "Failed to save: \(error)")
+        }
+    }
+
+    /// Restores a session by name or the last auto-saved session.
+    ///
+    /// Optional params: `name` (session name; nil restores last).
+    private func handleSessionRestore(_ request: SocketRequest) -> SocketResponse {
+        let name = request.params?["name"]
+
+        // Try the full restore provider first (recreates tabs from session).
+        if let restorer = sessionRestoreProvider {
+            let restored = restorer(name)
+            if restored {
+                return .ok(id: request.id, data: [
+                    "status": "restored",
+                    "name": name ?? "last"
+                ])
+            }
+            return .failure(id: request.id, error: "Failed to restore session: \(name ?? "last")")
+        }
+
+        // Fallback: load and return session data without UI restoration.
+        guard let sessionManager = sessionManagerProvider?() else {
+            return .failure(id: request.id, error: "Session manager not available")
+        }
+
+        let session: Session?
+        do {
+            if let name = name {
+                session = try sessionManager.loadSession(named: name)
+            } else {
+                session = try sessionManager.loadLastSession()
+            }
+        } catch {
+            return .failure(id: request.id, error: "Failed to load: \(error)")
+        }
+
+        guard let session = session,
+              let windowState = session.windows.first else {
+            return .failure(id: request.id, error: "Session not found: \(name ?? "last")")
+        }
+
+        let formatter = ISO8601DateFormatter()
+        var data: [String: String] = [
+            "status": "loaded",
+            "name": name ?? "last",
+            "tabs": "\(windowState.tabs.count)",
+            "saved_at": formatter.string(from: session.savedAt)
+        ]
+        for (index, tab) in windowState.tabs.enumerated() {
+            data["tab_\(index)_dir"] = tab.workingDirectory.path
+            if let title = tab.title { data["tab_\(index)_title"] = title }
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Lists all saved sessions with metadata.
+    private func handleSessionList(_ request: SocketRequest) -> SocketResponse {
+        guard let sessionManager = sessionManagerProvider?() else {
+            return .failure(id: request.id, error: "Session manager not available")
+        }
+
+        let sessions = sessionManager.listSessions()
+        let formatter = ISO8601DateFormatter()
+
+        var data: [String: String] = ["count": "\(sessions.count)"]
+        for (index, meta) in sessions.enumerated() {
+            data["session_\(index)_name"] = meta.name
+            data["session_\(index)_date"] = formatter.string(from: meta.savedAt)
+            data["session_\(index)_windows"] = "\(meta.windowCount)"
+            data["session_\(index)_tabs"] = "\(meta.tabCount)"
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Deletes a saved session by name.
+    ///
+    /// Required params: `name`.
+    private func handleSessionDelete(_ request: SocketRequest) -> SocketResponse {
+        guard let name = request.params?["name"] else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+
+        guard let sessionManager = sessionManagerProvider?() else {
+            return .failure(id: request.id, error: "Session manager not available")
+        }
+
+        do {
+            try sessionManager.deleteSession(named: name)
+            return .ok(id: request.id, data: ["status": "deleted", "name": name])
+        } catch {
+            return .failure(id: request.id, error: "Failed to delete: \(error)")
+        }
+    }
+
+    // MARK: - V3 Tab Extended Handlers
+
+    /// Duplicates the active tab (new tab with same working directory).
+    private func handleTabDuplicate(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = tabDuplicateProvider else {
+            return .failure(id: request.id, error: "Tab duplicate not available")
+        }
+
+        guard let result = provider() else {
+            return .failure(id: request.id, error: "No active tab to duplicate")
+        }
+
+        return .ok(id: request.id, data: [
+            "status": "duplicated",
+            "id": result.id,
+            "title": result.title
+        ])
+    }
+
+    /// Toggles pin on a tab.
+    ///
+    /// Optional params: `id` (tab UUID; nil = active tab).
+    private func handleTabPin(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = tabPinProvider else {
+            return .failure(id: request.id, error: "Tab pin not available")
+        }
+
+        let tabID = request.params?["id"]
+        guard let result = provider(tabID) else {
+            return .failure(id: request.id, error: "Tab not found or tab manager not available")
+        }
+
+        return .ok(id: request.id, data: [
+            "status": result.isPinned ? "pinned" : "unpinned",
+            "id": result.id
+        ])
+    }
+
+    // MARK: - V3 Config Extended Handlers
+
+    /// Lists all configuration keys and their current values.
+    private func handleConfigList(_ request: SocketRequest) -> SocketResponse {
+        let config = configProvider?() ?? CocxyConfig.defaults
+
+        let keys = allConfigKeys
+        var data: [String: String] = ["count": "\(keys.count)"]
+        for key in keys {
+            if let value = resolveConfigValue(key: key, config: config) {
+                data[key] = value
+            }
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Reloads the configuration from disk.
+    private func handleConfigReload(_ request: SocketRequest) -> SocketResponse {
+        guard let reloader = configReloadProvider else {
+            return .failure(id: request.id, error: "Config service not available")
+        }
+
+        let success = reloader()
+        if success {
+            return .ok(id: request.id, data: ["status": "reloaded"])
+        }
+        return .failure(id: request.id, error: "Failed to reload configuration")
+    }
+
+    // MARK: - V3 Split Extended Handlers
+
+    /// Swaps two panes by their DFS indices.
+    ///
+    /// Required params: `indexA`, `indexB` (0-based pane indices).
+    private func handleSplitSwap(_ request: SocketRequest) -> SocketResponse {
+        guard let indexAStr = request.params?["indexA"],
+              let indexBStr = request.params?["indexB"],
+              let indexA = Int(indexAStr),
+              let indexB = Int(indexBStr) else {
+            return .failure(
+                id: request.id,
+                error: "Missing or invalid params: indexA, indexB (0-based pane indices)"
+            )
+        }
+
+        guard let provider = splitSwapProvider else {
+            return .failure(id: request.id, error: "Split manager not available")
+        }
+
+        let swapped = provider(indexA, indexB)
+        if swapped {
+            return .ok(id: request.id, data: [
+                "status": "swapped",
+                "indexA": "\(indexA)",
+                "indexB": "\(indexB)"
+            ])
+        }
+        return .failure(id: request.id, error: "Invalid pane indices or no splits active")
+    }
+
+    /// Toggles zoom on the focused pane.
+    private func handleSplitZoom(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = splitZoomProvider else {
+            return .failure(id: request.id, error: "Split manager not available")
+        }
+
+        let result = provider()
+        if result.success {
+            return .ok(id: request.id, data: [
+                "status": result.isZoomed ? "zoomed" : "unzoomed"
+            ])
+        }
+        return .failure(id: request.id, error: "No splits to zoom (single pane)")
+    }
+
+    // MARK: - V3 Output Capture Handler
+
+    /// Captures the active pane's visible terminal content as text.
+    ///
+    /// Optional params: `lines` (max lines to return, default 500, max 10000).
+    private func handleCapturePane(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = capturePaneProvider else {
+            return .failure(id: request.id, error: "Terminal output buffer not available")
+        }
+
+        let maxLines: Int
+        if let limitStr = request.params?["lines"], let limit = Int(limitStr) {
+            maxLines = min(max(limit, 1), 10_000)
+        } else {
+            maxLines = 500
+        }
+
+        let allLines = provider()
+        let lines = Array(allLines.suffix(maxLines))
+        let content = lines.joined(separator: "\n")
+
+        return .ok(id: request.id, data: [
+            "status": "captured",
+            "lines": "\(lines.count)",
+            "content": content
+        ])
+    }
+
+    // MARK: - V3 Notification CLI Handlers
+
+    /// Lists recent notifications as structured data.
+    private func handleNotificationList(_ request: SocketRequest) -> SocketResponse {
+        guard let managerProvider = notificationManagerProvider else {
+            return .failure(id: request.id, error: "Notification manager not available")
+        }
+
+        var notifications: [CocxyNotification] = []
+        let work = {
+            MainActor.assumeIsolated {
+                guard let manager = managerProvider() else { return }
+                notifications = manager.allNotifications()
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        let formatter = ISO8601DateFormatter()
+        var data: [String: String] = ["count": "\(notifications.count)"]
+        for (index, notif) in notifications.enumerated() {
+            data["notif_\(index)_id"] = notif.id.uuidString
+            data["notif_\(index)_type"] = notificationTypeString(notif.type)
+            data["notif_\(index)_title"] = notif.title
+            data["notif_\(index)_body"] = notif.body
+            data["notif_\(index)_timestamp"] = formatter.string(from: notif.timestamp)
+            data["notif_\(index)_read"] = notif.isRead ? "true" : "false"
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    /// Clears the notification badge and marks all notifications as read.
+    private func handleNotificationClear(_ request: SocketRequest) -> SocketResponse {
+        guard let managerProvider = notificationManagerProvider else {
+            return .failure(id: request.id, error: "Notification manager not available")
+        }
+
+        var remaining = 0
+        let work = {
+            MainActor.assumeIsolated {
+                guard let manager = managerProvider() else { return }
+                manager.markAllAsRead()
+                remaining = manager.unreadCount
+            }
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+
+        return .ok(id: request.id, data: [
+            "status": "cleared",
+            "unread": "\(remaining)"
+        ])
+    }
+
+    // MARK: - V3 Helpers
+
+    /// All known configuration key paths for config-list enumeration.
+    private var allConfigKeys: [String] {
+        [
+            "general.shell", "general.working-directory",
+            "general.confirm-close-process",
+            "appearance.theme", "appearance.font-family", "appearance.font-size",
+            "appearance.tab-position", "appearance.window-padding",
+            "appearance.background-opacity", "appearance.background-blur-radius",
+            "terminal.scrollback-lines", "terminal.cursor-style",
+            "terminal.cursor-blink", "terminal.cursor-opacity",
+            "terminal.mouse-hide-while-typing", "terminal.copy-on-select",
+            "terminal.clipboard-paste-protection",
+            "agent-detection.enabled", "agent-detection.osc-notifications",
+            "agent-detection.pattern-matching", "agent-detection.timing-heuristics",
+            "agent-detection.idle-timeout-seconds",
+            "notifications.macos-notifications", "notifications.sound",
+            "notifications.badge-on-tab", "notifications.flash-tab",
+            "notifications.show-dock-badge", "notifications.sound-finished",
+            "notifications.sound-attention", "notifications.sound-error",
+            "quick-terminal.enabled", "quick-terminal.hotkey",
+            "quick-terminal.position", "quick-terminal.height-percentage",
+            "quick-terminal.hide-on-deactivate", "quick-terminal.working-directory",
+            "quick-terminal.animation-duration", "quick-terminal.screen",
+            "keybindings.new-tab", "keybindings.close-tab",
+            "keybindings.next-tab", "keybindings.prev-tab",
+            "keybindings.split-vertical", "keybindings.split-horizontal",
+            "keybindings.goto-attention", "keybindings.toggle-quick-terminal",
+            "sessions.auto-save", "sessions.auto-save-interval",
+            "sessions.restore-on-launch"
+        ]
+    }
+
+    /// Converts a `NotificationType` to a CLI-friendly string.
+    private func notificationTypeString(_ type: NotificationType) -> String {
+        switch type {
+        case .agentNeedsAttention: return "agent_needs_attention"
+        case .agentError: return "agent_error"
+        case .agentFinished: return "agent_finished"
+        case .processExited(let code): return "process_exited_\(code)"
+        case .custom(let name): return "custom_\(name)"
         }
     }
 

@@ -89,6 +89,12 @@ final class TerminalSurfaceView: NSView {
     /// IDE-like cursor positioning within the prompt line.
     private(set) lazy var ideCursorController = IDECursorController(surfaceView: self)
 
+    // MARK: - Layout Tracking
+
+    /// Tracks the last backing-pixel size sent to ghostty, preventing
+    /// redundant `bridge.resize()` calls and detecting deferred layout changes.
+    private var lastNotifiedBackingSize: NSSize = .zero
+
     // MARK: - Initialization
 
     /// Creates a terminal surface view with the given ViewModel.
@@ -761,6 +767,21 @@ final class TerminalSurfaceView: NSView {
         updateNotificationRingFrame()
     }
 
+    /// Catches deferred AppKit layout changes that happen after the surface
+    /// is created (frame autosave restoration, fullSizeContentView titlebar
+    /// adjustments, sidebar toggle, etc.). Without this, setFrameSize fires
+    /// during showWindow() before surfaceID exists — the notification is
+    /// silently dropped — and syncSizeWithGhostty may run before AppKit has
+    /// finalized the view hierarchy geometry.
+    override func layout() {
+        super.layout()
+        guard viewModel.surfaceID != nil else { return }
+        let currentBacking = convertToBacking(bounds).size
+        if currentBacking != lastNotifiedBackingSize {
+            syncSizeWithGhostty()
+        }
+    }
+
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         updateContentScale()
@@ -853,11 +874,18 @@ final class TerminalSurfaceView: NSView {
     }
 
     /// Notifies libghostty that the surface size changed.
+    ///
+    /// Skips the call when the backing-pixel dimensions are identical to the
+    /// last notification, avoiding redundant `bridge.resize()` calls during
+    /// rapid layout passes (live resize, split dragging, etc.).
     private func notifySurfaceSizeChanged(_ newSize: NSSize) {
         guard let surfaceID = viewModel.surfaceID,
               let bridge = viewModel.bridge else { return }
 
         let backingSize = convertToBacking(NSRect(origin: .zero, size: newSize)).size
+        guard backingSize != lastNotifiedBackingSize else { return }
+        lastNotifiedBackingSize = backingSize
+
         let terminalSize = TerminalSize(
             columns: 0, // libghostty calculates columns from pixel size
             rows: 0,    // libghostty calculates rows from pixel size
