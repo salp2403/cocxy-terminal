@@ -111,7 +111,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     private let configReloadProvider: (@Sendable () -> Bool)?
 
     /// Returns split pane info for the active tab.
-    private let splitInfoProvider: (@Sendable () -> [(leafID: String, terminalID: String, isFocused: Bool)])?
+    let splitInfoProvider: (@Sendable () -> [(leafID: String, terminalID: String, isFocused: Bool)])?
 
     /// Swaps two panes by DFS index in the active tab. Returns true on success.
     private let splitSwapProvider: (@Sendable (Int, Int) -> Bool)?
@@ -133,6 +133,44 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Returns the active pane's terminal output buffer content.
     private let capturePaneProvider: (@Sendable () -> [String])?
+
+    // MARK: - V4 Command Providers (replacing acknowledged stubs)
+
+    /// Toggles the dashboard panel. Returns true if visible after toggle.
+    let dashboardToggleProvider: (@Sendable () -> Bool)?
+
+    /// Returns dashboard status: isVisible, sessionCount, activeCount.
+    let dashboardStatusProvider: (@Sendable () -> [String: String])?
+
+    /// Toggles the timeline panel.
+    let timelineToggleProvider: (@Sendable () -> Void)?
+
+    /// Exports timeline in the given format ("json" or "markdown"). Returns data.
+    let timelineExportProvider: (@Sendable (String) -> Data?)?
+
+    /// Creates a split pane. Bool param = isVertical. Returns true on success.
+    let splitCreateProvider: (@Sendable (Bool) -> Bool)?
+
+    /// Focuses a split pane by DFS index. Returns true if found.
+    let splitFocusProvider: (@Sendable (Int) -> Bool)?
+
+    /// Closes the focused split pane. Returns true on success.
+    let splitCloseProvider: (@Sendable () -> Bool)?
+
+    /// Resizes a split by setting ratio (0.1-0.9) on split ID. Returns true.
+    let splitResizeProvider: (@Sendable (String, CGFloat) -> Bool)?
+
+    /// Toggles the search bar.
+    let searchToggleProvider: (@Sendable () -> Void)?
+
+    /// Sends text directly to the active terminal PTY.
+    let sendTextProvider: (@Sendable (String) -> Bool)?
+
+    /// Sends a named key event to the active terminal.
+    let sendKeyProvider: (@Sendable (String) -> Bool)?
+
+    /// Opens an SSH session in a new tab. Params: (destination, port?, identityFile?).
+    let sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)?
 
     // MARK: - Initialization
 
@@ -168,7 +206,20 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         sessionCaptureProvider: (@Sendable () -> Session?)? = nil,
         sessionRestoreProvider: (@Sendable (String?) -> Bool)? = nil,
         notificationManagerProvider: (() -> NotificationManagerImpl?)? = nil,
-        capturePaneProvider: (@Sendable () -> [String])? = nil
+        capturePaneProvider: (@Sendable () -> [String])? = nil,
+        // V4 providers
+        dashboardToggleProvider: (@Sendable () -> Bool)? = nil,
+        dashboardStatusProvider: (@Sendable () -> [String: String])? = nil,
+        timelineToggleProvider: (@Sendable () -> Void)? = nil,
+        timelineExportProvider: (@Sendable (String) -> Data?)? = nil,
+        splitCreateProvider: (@Sendable (Bool) -> Bool)? = nil,
+        splitFocusProvider: (@Sendable (Int) -> Bool)? = nil,
+        splitCloseProvider: (@Sendable () -> Bool)? = nil,
+        splitResizeProvider: (@Sendable (String, CGFloat) -> Bool)? = nil,
+        searchToggleProvider: (@Sendable () -> Void)? = nil,
+        sendTextProvider: (@Sendable (String) -> Bool)? = nil,
+        sendKeyProvider: (@Sendable (String) -> Bool)? = nil,
+        sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)? = nil
     ) {
         self.configProvider = configProvider
         self.themeEngineProvider = themeEngineProvider
@@ -187,6 +238,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.sessionRestoreProvider = sessionRestoreProvider
         self.notificationManagerProvider = notificationManagerProvider
         self.capturePaneProvider = capturePaneProvider
+        self.dashboardToggleProvider = dashboardToggleProvider
+        self.dashboardStatusProvider = dashboardStatusProvider
+        self.timelineToggleProvider = timelineToggleProvider
+        self.timelineExportProvider = timelineExportProvider
+        self.splitCreateProvider = splitCreateProvider
+        self.splitFocusProvider = splitFocusProvider
+        self.splitCloseProvider = splitCloseProvider
+        self.splitResizeProvider = splitResizeProvider
+        self.searchToggleProvider = searchToggleProvider
+        self.sendTextProvider = sendTextProvider
+        self.sendKeyProvider = sendKeyProvider
+        self.sshProvider = sshProvider
         weak var weakTabManager = tabManager
         weak var weakBrowserVM = browserViewModel
 
@@ -507,15 +570,53 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case .notificationClear:
             return handleNotificationClear(request)
 
-        // Acknowledged commands (v2 UI actions — need window controller wiring)
-        case .split,
-             .splitList, .splitFocus, .splitClose, .splitResize,
-             .dashboardShow, .dashboardHide, .dashboardToggle, .dashboardStatus,
-             .timelineShow, .timelineExport,
-             .search,
-             .send, .sendKey,
-             .hooks, .hookHandler:
-            return .ok(id: request.id, data: ["status": "acknowledged"])
+        // Split management (v4)
+        case .split:
+            return handleSplitCreate(request)
+        case .splitList:
+            return handleSplitList(request)
+        case .splitFocus:
+            return handleSplitFocus(request)
+        case .splitClose:
+            return handleSplitClose(request)
+        case .splitResize:
+            return handleSplitResize(request)
+
+        // Dashboard (v4)
+        case .dashboardShow:
+            return handleDashboardShow(request)
+        case .dashboardHide:
+            return handleDashboardHide(request)
+        case .dashboardToggle:
+            return handleDashboardToggle(request)
+        case .dashboardStatus:
+            return handleDashboardStatus(request)
+
+        // Timeline (v4)
+        case .timelineShow:
+            return handleTimelineShow(request)
+        case .timelineExport:
+            return handleTimelineExport(request)
+
+        // Search (v4)
+        case .search:
+            return handleSearch(request)
+
+        // Terminal I/O (v4)
+        case .send:
+            return handleSend(request)
+        case .sendKey:
+            return handleSendKey(request)
+
+        // Hook management (v4)
+        case .hooks:
+            return handleHooksList(request)
+        case .hookHandler:
+            return handleHookHandler(request)
+
+        // SSH (v4)
+        case .ssh:
+            return handleSSH(request)
         }
     }
 

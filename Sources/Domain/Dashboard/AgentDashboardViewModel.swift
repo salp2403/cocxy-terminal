@@ -202,6 +202,37 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         rebuildSessions()
     }
 
+    /// Processes a detection engine state change using a stable session ID.
+    ///
+    /// Unlike `processDetectionSignal(agentName:state:tabId:)`, this method
+    /// derives the synthetic session ID from the agent name alone, ensuring
+    /// repeated signals update the same entry instead of creating orphans.
+    private func processPatternDetectionSignal(
+        agentName: String,
+        state: AgentStateMachine.State
+    ) {
+        let syntheticSessionId = "pattern-\(agentName)"
+
+        if sessionDataStore[syntheticSessionId] == nil {
+            let cwd = hookEventReceiver?.lastReceivedCwd
+            let projectName = extractProjectName(from: cwd)
+            let tabId = cwd.flatMap { tabIdForCwdProvider?($0) } ?? UUID()
+            let data = MutableSessionData(
+                id: syntheticSessionId,
+                projectName: projectName != "Unknown" ? projectName : agentName,
+                tabId: tabId,
+                state: mapStateMachineState(state),
+                agentName: agentName
+            )
+            sessionDataStore[syntheticSessionId] = data
+        } else {
+            sessionDataStore[syntheticSessionId]?.state = mapStateMachineState(state)
+            sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
+        }
+
+        rebuildSessions()
+    }
+
     // MARK: - Private: Event Handlers
 
     private func handleSessionStart(_ event: HookEvent) {
@@ -271,6 +302,20 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         if case .toolUse(let toolData) = event.data {
             let activity = formatToolActivity(toolData)
             sessionDataStore[event.sessionId]?.lastActivity = activity
+            sessionDataStore[event.sessionId]?.totalToolCalls += 1
+
+            // Track file impact.
+            trackFileImpact(sessionId: event.sessionId, toolData: toolData)
+
+            // Attribute tool use to single active subagent when unambiguous.
+            let filePath = toolData.toolInput?["file_path"] ?? toolData.toolInput?["path"]
+            attributeToolUseToSubagent(
+                sessionId: event.sessionId,
+                activity: activity,
+                toolName: toolData.toolName,
+                filePath: filePath,
+                timestamp: event.timestamp
+            )
         }
 
         sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
@@ -283,8 +328,22 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         sessionDataStore[event.sessionId]?.state = .error
 
         if case .toolUse(let toolData) = event.data {
-            let activity = "Error: \(toolData.error ?? toolData.toolName)"
+            let errorDesc = toolData.error ?? toolData.toolName
+            let activity = "Error: \(errorDesc)"
             sessionDataStore[event.sessionId]?.lastActivity = activity
+            sessionDataStore[event.sessionId]?.totalToolCalls += 1
+            sessionDataStore[event.sessionId]?.totalErrors += 1
+
+            // Track file impact even on failure.
+            trackFileImpact(sessionId: event.sessionId, toolData: toolData)
+
+            // Attribute error to single active subagent when unambiguous.
+            attributeErrorToSubagent(
+                sessionId: event.sessionId,
+                errorDescription: errorDesc,
+                toolName: toolData.toolName,
+                timestamp: event.timestamp
+            )
         }
 
         sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
@@ -298,7 +357,8 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             let subagent = SubagentInfo(
                 id: subagentData.subagentId,
                 type: subagentData.subagentType,
-                state: .working
+                state: .working,
+                startTime: event.timestamp
             )
             sessionDataStore[event.sessionId]?.subagents.append(subagent)
         }
@@ -311,8 +371,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         guard sessionDataStore[event.sessionId] != nil else { return }
 
         if case .subagent(let subagentData) = event.data {
-            sessionDataStore[event.sessionId]?.subagents.removeAll {
-                $0.id == subagentData.subagentId
+            if let index = sessionDataStore[event.sessionId]?.subagents.firstIndex(
+                where: { $0.id == subagentData.subagentId }
+            ) {
+                sessionDataStore[event.sessionId]?.subagents[index].state = .finished
+                sessionDataStore[event.sessionId]?.subagents[index].endTime = event.timestamp
             }
         }
 
@@ -339,6 +402,84 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
         sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
         rebuildSessions()
+    }
+
+    // MARK: - Private: Subagent Attribution
+
+    /// Attributes a tool use event to the single active subagent in a session.
+    ///
+    /// Only attributes when exactly one subagent is actively running.
+    /// When multiple subagents run in parallel, tool events cannot be
+    /// reliably attributed to a specific subagent.
+    private func attributeToolUseToSubagent(
+        sessionId: String,
+        activity: String,
+        toolName: String,
+        filePath: String?,
+        timestamp: Date
+    ) {
+        guard let subagents = sessionDataStore[sessionId]?.subagents else { return }
+        let activeIndices = subagents.indices.filter { subagents[$0].isActive }
+        guard activeIndices.count == 1 else { return }
+
+        let idx = activeIndices[0]
+        sessionDataStore[sessionId]?.subagents[idx].lastActivity = activity
+        sessionDataStore[sessionId]?.subagents[idx].lastActivityTime = timestamp
+        sessionDataStore[sessionId]?.subagents[idx].toolUseCount += 1
+
+        // Track file path for conflict detection.
+        if let path = filePath {
+            sessionDataStore[sessionId]?.subagents[idx].touchedFilePaths.insert(path)
+        }
+
+        // Add to activity feed with FIFO eviction.
+        let entry = ToolActivity(toolName: toolName, summary: activity, timestamp: timestamp)
+        sessionDataStore[sessionId]?.subagents[idx].activities.append(entry)
+        if sessionDataStore[sessionId]?.subagents[idx].activities.count ?? 0 > SubagentInfo.maxActivities {
+            sessionDataStore[sessionId]?.subagents[idx].activities.removeFirst()
+        }
+    }
+
+    /// Attributes a tool error to the single active subagent in a session.
+    private func attributeErrorToSubagent(
+        sessionId: String,
+        errorDescription: String,
+        toolName: String,
+        timestamp: Date
+    ) {
+        guard let subagents = sessionDataStore[sessionId]?.subagents else { return }
+        let activeIndices = subagents.indices.filter { subagents[$0].isActive }
+        guard activeIndices.count == 1 else { return }
+
+        let idx = activeIndices[0]
+        sessionDataStore[sessionId]?.subagents[idx].errorCount += 1
+        sessionDataStore[sessionId]?.subagents[idx].lastError = errorDescription
+        sessionDataStore[sessionId]?.subagents[idx].lastActivityTime = timestamp
+
+        // Add error to activity feed.
+        let entry = ToolActivity(
+            toolName: toolName, summary: errorDescription, timestamp: timestamp, isError: true
+        )
+        sessionDataStore[sessionId]?.subagents[idx].activities.append(entry)
+        if sessionDataStore[sessionId]?.subagents[idx].activities.count ?? 0 > SubagentInfo.maxActivities {
+            sessionDataStore[sessionId]?.subagents[idx].activities.removeFirst()
+        }
+    }
+
+    /// Tracks which files a tool call touches and what operations are performed.
+    private func trackFileImpact(sessionId: String, toolData: ToolUseData) {
+        guard let filePath = toolData.toolInput?["file_path"] ?? toolData.toolInput?["path"] else {
+            return
+        }
+        let operation: FileImpact.FileOperation
+        switch toolData.toolName.lowercased() {
+        case "read":  operation = .read
+        case "write": operation = .write
+        case "edit":  operation = .edit
+        case "bash":  operation = .bash
+        default:      operation = .read
+        }
+        sessionDataStore[sessionId]?.fileImpacts[filePath, default: []].insert(operation)
     }
 
     // MARK: - Private: Subscriptions
@@ -373,10 +514,13 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
                 // Read agentName from the context itself, not from the engine,
                 // to avoid a strong capture and ensure data consistency.
                 guard let agentName = context.agentName else { return }
-                self?.processDetectionSignal(
+                // Use the agent name directly for a stable synthetic session ID.
+                // Pattern detection is per-engine (global), not per-tab, so we
+                // don't have a real tab ID. Using agentName ensures repeated
+                // signals update the same session instead of creating orphans.
+                self?.processPatternDetectionSignal(
                     agentName: agentName,
-                    state: context.state,
-                    tabId: UUID()
+                    state: context.state
                 )
             }
             .store(in: &cancellables)
@@ -468,9 +612,22 @@ private struct MutableSessionData {
     var lastActivityTime: Date?
     var subagents: [SubagentInfo] = []
     var priority: AgentPriority = .standard
+    /// Files touched during this session. Key is full path, value is set of operations.
+    var fileImpacts: [String: Set<FileImpact.FileOperation>] = [:]
+    /// Total tool calls across the session (including subagent-attributed ones).
+    var totalToolCalls: Int = 0
+    /// Total errors across the session.
+    var totalErrors: Int = 0
 
     func toAgentSessionInfo() -> AgentSessionInfo {
-        AgentSessionInfo(
+        // Build file impact list sorted by path.
+        let impacts = fileImpacts.map { FileImpact(path: $0.key, operations: $0.value) }
+            .sorted { $0.fileName < $1.fileName }
+
+        // Detect file conflicts: files touched by multiple subagents.
+        let conflicts = detectFileConflicts()
+
+        return AgentSessionInfo(
             id: id,
             projectName: projectName,
             gitBranch: gitBranch,
@@ -481,7 +638,25 @@ private struct MutableSessionData {
             tabId: tabId,
             subagents: subagents,
             priority: priority,
-            model: model
+            model: model,
+            filesTouched: impacts,
+            fileConflicts: conflicts,
+            totalToolCalls: totalToolCalls,
+            totalErrors: totalErrors
         )
+    }
+
+    /// Detects files touched by more than one subagent in this session.
+    ///
+    /// Uses the `touchedFilePaths` set on each subagent, which is populated
+    /// from actual tool input file paths (not parsed from activity strings).
+    private func detectFileConflicts() -> [String] {
+        var fileToSubagents: [String: Set<String>] = [:]
+        for sub in subagents {
+            for path in sub.touchedFilePaths {
+                fileToSubagents[path, default: []].insert(sub.id)
+            }
+        }
+        return fileToSubagents.filter { $0.value.count > 1 }.map(\.key).sorted()
     }
 }

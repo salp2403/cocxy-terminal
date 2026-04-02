@@ -123,6 +123,48 @@ final class TerminalSurfaceView: NSView {
         // libghostty renders directly into the layer. We never need AppKit
         // to redraw the layer contents -- ghostty's renderer thread handles it.
         layerContentsRedrawPolicy = .never
+
+        // Accept file drops for SSH upload support.
+        registerForDraggedTypes([.fileURL])
+    }
+
+    // MARK: - File Drag-and-Drop
+
+    /// Closure called when files are dropped onto the terminal.
+    /// Receives the file URLs and returns true if they were handled (SSH upload).
+    /// When nil, file paths are pasted as text into the terminal.
+    var onFileDrop: (([URL]) -> Bool)?
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard sender.draggingPasteboard.canReadObject(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) else {
+            return []
+        }
+        return .copy
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let urls = sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL], !urls.isEmpty else {
+            return false
+        }
+
+        // If a handler is set (SSH session active), delegate to it.
+        if let handler = onFileDrop, handler(urls) {
+            return true
+        }
+
+        // Fallback: paste shell-escaped file paths as text into the terminal.
+        let paths = urls.map { "'\($0.path.replacingOccurrences(of: "'", with: "'\\''"))'" }
+            .joined(separator: " ")
+        guard let bridge = viewModel.bridge,
+              let surfaceID = viewModel.surfaceID else { return false }
+        bridge.performBindingAction("text:\(paths)", on: surfaceID)
+        return true
     }
 
     // MARK: - Notification Ring Methods

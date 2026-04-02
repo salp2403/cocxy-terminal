@@ -965,6 +965,255 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
                 return lines
+            },
+            // V4: Dashboard toggle — show/hide dashboard panel.
+            dashboardToggleProvider: { [weak self] in
+                var isVisible = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        self?.windowController?.toggleDashboard()
+                        isVisible = self?.windowController?.isDashboardVisible ?? false
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return isVisible
+            },
+            // V4: Dashboard status — session counts and visibility.
+            dashboardStatusProvider: { [weak self] in
+                var data: [String: String] = [:]
+                let work = {
+                    MainActor.assumeIsolated {
+                        let wc = self?.windowController
+                        data["visible"] = (wc?.isDashboardVisible ?? false) ? "true" : "false"
+                        let sessions = wc?.dashboardViewModel?.sessions ?? []
+                        data["session_count"] = "\(sessions.count)"
+                        data["active_count"] = "\(sessions.filter { $0.state == .working }.count)"
+                        data["error_count"] = "\(sessions.filter { $0.state == .error }.count)"
+                        let totalSubagents = sessions.flatMap(\.subagents).count
+                        data["subagent_count"] = "\(totalSubagents)"
+                        let activeSubagents = sessions.flatMap(\.subagents).filter(\.isActive).count
+                        data["active_subagent_count"] = "\(activeSubagents)"
+                        let totalFiles = sessions.flatMap(\.filesTouched).count
+                        data["total_files_touched"] = "\(totalFiles)"
+                        let totalConflicts = sessions.flatMap(\.fileConflicts).count
+                        data["file_conflicts"] = "\(totalConflicts)"
+                        let totalTools = sessions.reduce(0) { $0 + $1.totalToolCalls }
+                        data["total_tool_calls"] = "\(totalTools)"
+                        let totalErrors = sessions.reduce(0) { $0 + $1.totalErrors }
+                        data["total_errors"] = "\(totalErrors)"
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return data
+            },
+            // V4: Timeline toggle — show/hide timeline panel.
+            timelineToggleProvider: { [weak self] in
+                let work = {
+                    MainActor.assumeIsolated {
+                        self?.windowController?.toggleTimeline()
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            },
+            // V4: Timeline export — return serialized timeline data.
+            timelineExportProvider: { [weak self] format in
+                var result: Data?
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let store = self?.agentTimelineStore else { return }
+                        let events = store.allEvents
+                        if format == "json" {
+                            result = TimelineExporter.exportJSON(events: events)
+                        } else {
+                            let md = TimelineExporter.exportMarkdown(events: events)
+                            result = md.data(using: .utf8)
+                        }
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return result
+            },
+            // V4: Split create — add a new split pane.
+            splitCreateProvider: { [weak self] isVertical in
+                var created = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let wc = self?.windowController,
+                              let activeTabID = wc.tabManager.activeTabID else { return }
+                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                        let countBefore = sm.rootNode.allLeafIDs().count
+                        guard countBefore < SplitManager.maxPaneCount else { return }
+                        if isVertical {
+                            wc.splitVerticalAction(nil)
+                        } else {
+                            wc.splitHorizontalAction(nil)
+                        }
+                        created = sm.rootNode.allLeafIDs().count > countBefore
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return created
+            },
+            // V4: Split focus — focus a pane by DFS index.
+            splitFocusProvider: { [weak self] index in
+                var focused = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let wc = self?.windowController,
+                              let activeTabID = wc.tabManager.activeTabID else { return }
+                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                        let leaves = sm.rootNode.allLeafIDs()
+                        guard index >= 0, index < leaves.count else { return }
+                        sm.focusLeaf(id: leaves[index].leafID)
+                        focused = true
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return focused
+            },
+            // V4: Split close — close the focused pane.
+            splitCloseProvider: { [weak self] in
+                var closed = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let wc = self?.windowController,
+                              let activeTabID = wc.tabManager.activeTabID else { return }
+                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                        guard sm.rootNode.allLeafIDs().count > 1 else { return }
+                        wc.closeSplitAction(nil)
+                        closed = true
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return closed
+            },
+            // V4: Split resize — set ratio on a split node.
+            splitResizeProvider: { [weak self] splitIDStr, ratio in
+                var resized = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let uuid = UUID(uuidString: splitIDStr),
+                              let wc = self?.windowController,
+                              let activeTabID = wc.tabManager.activeTabID else { return }
+                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                        sm.setRatio(splitID: uuid, ratio: ratio)
+                        resized = true
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return resized
+            },
+            // V4: Search toggle — show/hide search bar.
+            searchToggleProvider: { [weak self] in
+                let work = {
+                    MainActor.assumeIsolated {
+                        self?.windowController?.toggleSearchBar()
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            },
+            // V4: Send text — write text to the active terminal's PTY.
+            sendTextProvider: { [weak self] text in
+                var sent = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let delegate = self,
+                              let bridge = delegate.bridge,
+                              let wc = delegate.windowController,
+                              let surfaceView = wc.focusedSplitSurfaceView,
+                              let surfaceID = surfaceView.viewModel.surfaceID else { return }
+                        sent = bridge.performBindingAction("text:\(text)", on: surfaceID)
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return sent
+            },
+            // V4: Send key — send a named key to the active terminal.
+            sendKeyProvider: { [weak self] keyName in
+                var sent = false
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let delegate = self,
+                              let bridge = delegate.bridge,
+                              let wc = delegate.windowController,
+                              let surfaceView = wc.focusedSplitSurfaceView,
+                              let surfaceID = surfaceView.viewModel.surfaceID else { return }
+                        let sequence: String?
+                        switch keyName.lowercased() {
+                        case "enter", "return":   sequence = "\r"
+                        case "tab":               sequence = "\t"
+                        case "escape", "esc":     sequence = "\u{1B}"
+                        case "backspace", "bs":   sequence = "\u{7F}"
+                        case "space":             sequence = " "
+                        case "up":                sequence = "\u{1B}[A"
+                        case "down":              sequence = "\u{1B}[B"
+                        case "right":             sequence = "\u{1B}[C"
+                        case "left":              sequence = "\u{1B}[D"
+                        case "delete", "del":     sequence = "\u{1B}[3~"
+                        case "home":              sequence = "\u{1B}[H"
+                        case "end":               sequence = "\u{1B}[F"
+                        case "pageup", "pgup":    sequence = "\u{1B}[5~"
+                        case "pagedown", "pgdn":  sequence = "\u{1B}[6~"
+                        case "insert", "ins":     sequence = "\u{1B}[2~"
+                        case "ctrl-c":            sequence = "\u{03}"
+                        case "ctrl-d":            sequence = "\u{04}"
+                        case "ctrl-z":            sequence = "\u{1A}"
+                        case "ctrl-l":            sequence = "\u{0C}"
+                        case "ctrl-a":            sequence = "\u{01}"
+                        case "ctrl-e":            sequence = "\u{05}"
+                        case "ctrl-k":            sequence = "\u{0B}"
+                        case "ctrl-u":            sequence = "\u{15}"
+                        case "ctrl-w":            sequence = "\u{17}"
+                        default:                  sequence = nil
+                        }
+                        guard let seq = sequence else { return }
+                        sent = bridge.performBindingAction("text:\(seq)", on: surfaceID)
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return sent
+            },
+            // V4: SSH — open SSH in a new tab.
+            sshProvider: { [weak self] destination, port, identityFile in
+                var result: (id: String, title: String)?
+                let work = {
+                    MainActor.assumeIsolated {
+                        guard let delegate = self,
+                              let wc = delegate.windowController else { return }
+                        var sshArgs = ["ssh"]
+                        if let port = port { sshArgs += ["-p", "\(port)"] }
+                        if let identity = identityFile { sshArgs += ["-i", identity] }
+                        sshArgs.append(destination)
+                        let sshCommand = sshArgs.joined(separator: " ")
+
+                        let newTab = wc.tabManager.addTab(
+                            workingDirectory: FileManager.default.homeDirectoryForCurrentUser
+                        )
+                        result = (id: newTab.id.rawValue.uuidString, title: destination)
+                        wc.tabManager.renameTab(id: newTab.id, newTitle: destination)
+
+                        // Focus the new tab to ensure its surface becomes active.
+                        wc.tabManager.setActive(id: newTab.id)
+
+                        // Send SSH command after shell initializes.
+                        // Only proceed if the target tab is still active after the
+                        // delay — if the user switched tabs, skip to avoid typing
+                        // the SSH command into the wrong terminal.
+                        let targetTabID = newTab.id
+                        Task { @MainActor [weak wc, weak delegate] in
+                            try? await Task.sleep(for: .milliseconds(500))
+                            guard let bridge = delegate?.bridge,
+                                  let wc = wc,
+                                  wc.tabManager.activeTabID == targetTabID else { return }
+                            let surfaceID = wc.terminalSurfaceView?.viewModel.surfaceID
+                                ?? wc.focusedSplitSurfaceView?.viewModel.surfaceID
+                            guard let sid = surfaceID else { return }
+                            bridge.performBindingAction("text:\(sshCommand)\r", on: sid)
+                        }
+                    }
+                }
+                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return result
             }
         )
 

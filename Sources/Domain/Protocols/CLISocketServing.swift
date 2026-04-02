@@ -248,6 +248,11 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case notificationList = "notification-list"
     /// Clear notification badge and unread count.
     case notificationClear = "notification-clear"
+
+    // MARK: SSH (v4)
+
+    /// `cocxy ssh user@host` — open SSH in a new tab.
+    case ssh
 }
 
 // MARK: - CLI Response

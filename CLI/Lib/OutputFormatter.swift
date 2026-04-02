@@ -208,6 +208,11 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .browserListTabs:
             return formatDataOrJSON(response: response)
+
+        // SSH (v4)
+        case .ssh:
+            let dest = response.data?["destination"] ?? ""
+            return "SSH session opened: \(dest)"
         }
     }
 

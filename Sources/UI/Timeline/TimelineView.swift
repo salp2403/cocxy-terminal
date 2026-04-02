@@ -35,14 +35,8 @@ import SwiftUI
 /// - SeeAlso: HU-108 (Agent Timeline View)
 struct TimelineView: View {
 
-    /// The timeline events to display.
-    let events: [TimelineEvent]
-
-    /// Callback for JSON export.
-    let onExportJSON: () -> Void
-
-    /// Callback for Markdown export.
-    let onExportMarkdown: () -> Void
+    /// Reactive ViewModel for live-updating timeline. Takes priority over static events.
+    @ObservedObject var viewModel: TimelineViewModel
 
     /// Navigation dispatcher for scrolling the terminal to an event's position.
     /// When nil, tap gestures on event rows are inactive.
@@ -54,6 +48,9 @@ struct TimelineView: View {
 
     /// Currently selected event type filter. Nil means show all.
     @State private var selectedFilter: TimelineEventType? = nil
+
+    /// Resolved event source from the reactive ViewModel.
+    private var events: [TimelineEvent] { viewModel.events }
 
     // MARK: - Body
 
@@ -87,8 +84,8 @@ struct TimelineView: View {
             Spacer()
 
             Menu {
-                Button("Export JSON") { onExportJSON() }
-                Button("Export Markdown") { onExportMarkdown() }
+                Button("Export JSON") { viewModel.onExportJSON() }
+                Button("Export Markdown") { viewModel.onExportMarkdown() }
             } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 11))
@@ -121,7 +118,8 @@ struct TimelineView: View {
                 filterChip(label: "All", type: nil)
                 filterChip(label: "Tools", type: .toolUse)
                 filterChip(label: "Errors", type: .toolFailure)
-                filterChip(label: "Prompts", type: .userPrompt)
+                filterChip(label: "Agents", type: .subagentStart)
+                filterChip(label: "Tasks", type: .taskCompleted)
                 filterChip(label: "Session", type: .sessionStart)
             }
             .padding(.horizontal, 12)
@@ -207,8 +205,14 @@ struct TimelineView: View {
     // MARK: - Filtered Events
 
     /// Events filtered by the selected type, or all if no filter is active.
+    ///
+    /// The "Agents" filter shows both subagentStart and subagentStop events
+    /// to provide a complete view of subagent lifecycle.
     private var filteredEvents: [TimelineEvent] {
         guard let filter = selectedFilter else { return events }
+        if filter == .subagentStart {
+            return events.filter { $0.type == .subagentStart || $0.type == .subagentStop }
+        }
         return events.filter { $0.type == filter }
     }
 }

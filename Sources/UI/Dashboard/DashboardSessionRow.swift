@@ -35,6 +35,10 @@ struct DashboardSessionRow: View {
                     if let activity = session.lastActivity, !activity.isEmpty {
                         activityLine(activity)
                     }
+                    sessionStatsLine
+                    if !session.fileConflicts.isEmpty {
+                        conflictWarning
+                    }
                     if !session.subagents.isEmpty {
                         subagentSection
                     }
@@ -164,28 +168,181 @@ struct DashboardSessionRow: View {
         }
     }
 
+    // MARK: - Session Stats
+
+    private var sessionStatsLine: some View {
+        HStack(spacing: 8) {
+            if session.totalToolCalls > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "wrench")
+                        .font(.system(size: 7))
+                    Text(verbatim: "\(session.totalToolCalls)")
+                        .font(.system(size: 8, design: .monospaced))
+                }
+                .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+            }
+            if session.totalErrors > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 7))
+                    Text(verbatim: "\(session.totalErrors)")
+                        .font(.system(size: 8, design: .monospaced))
+                }
+                .foregroundColor(CocxyColors.swiftUI(CocxyColors.red))
+            }
+            if !session.filesTouched.isEmpty {
+                HStack(spacing: 2) {
+                    Image(systemName: "doc")
+                        .font(.system(size: 7))
+                    Text(verbatim: "\(session.filesTouched.count) files")
+                        .font(.system(size: 8, design: .monospaced))
+                }
+                .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+            }
+            if !session.subagents.isEmpty {
+                HStack(spacing: 2) {
+                    Image(systemName: "person.2")
+                        .font(.system(size: 7))
+                    Text(verbatim: "\(session.subagents.count)")
+                        .font(.system(size: 8, design: .monospaced))
+                }
+                .foregroundColor(CocxyColors.swiftUI(CocxyColors.sky))
+            }
+        }
+    }
+
+    // MARK: - Conflict Warning
+
+    private var conflictWarning: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 8))
+                .foregroundColor(CocxyColors.swiftUI(CocxyColors.yellow))
+            Text("File conflict: \(session.fileConflicts.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: ", "))")
+                .font(.system(size: 8, weight: .medium))
+                .foregroundColor(CocxyColors.swiftUI(CocxyColors.yellow))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+
     // MARK: - Subagent Section
 
     private var subagentSection: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(session.subagents) { sub in
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.turn.down.right")
-                        .font(.system(size: 7))
-                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
-                    Circle()
-                        .fill(subagentColor(sub.state))
-                        .frame(width: 5, height: 5)
-                    Text(sub.type ?? "Subagent")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
-                    Text("(\(sub.id.prefix(8)))")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
-                }
+        VStack(alignment: .leading, spacing: 4) {
+            // Group active subagents first, finished last.
+            let sorted = session.subagents.sorted { lhs, rhs in
+                if lhs.isActive != rhs.isActive { return lhs.isActive }
+                return lhs.startTime > rhs.startTime
+            }
+            ForEach(sorted) { sub in
+                subagentRow(sub)
             }
         }
         .padding(.leading, 4)
+    }
+
+    private func subagentRow(_ sub: SubagentInfo) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                Image(systemName: subagentIcon(sub))
+                    .font(.system(size: 7))
+                    .foregroundColor(subagentIconColor(sub))
+                Circle()
+                    .fill(subagentColor(sub.state))
+                    .frame(width: 5, height: 5)
+                Text(sub.type ?? "Subagent")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
+                if sub.toolUseCount > 0 {
+                    Text(verbatim: "\(sub.toolUseCount) tools")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+                }
+                if sub.errorCount > 0 {
+                    Text(verbatim: "\(sub.errorCount) err")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.red))
+                }
+                Spacer(minLength: 0)
+                Text(subagentDurationString(sub.duration))
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+            }
+            // Show last activity for active subagents.
+            if sub.isActive, let activity = sub.lastActivity {
+                HStack(spacing: 3) {
+                    Image(systemName: toolIcon(for: activity))
+                        .font(.system(size: 7))
+                        .foregroundColor(subagentColor(sub.state))
+                    Text(activity)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.leading, 13)
+            }
+            // Show last error for errored subagents.
+            if let error = sub.lastError {
+                HStack(spacing: 3) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 7))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.red))
+                    Text(error)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.red))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .padding(.leading, 13)
+            }
+            // Activity feed — last 5 tool calls for this subagent.
+            if sub.activities.count > 1 {
+                subagentActivityFeed(sub.activities)
+            }
+        }
+        .opacity(sub.isActive ? 1.0 : 0.6)
+    }
+
+    /// Shows a compact activity feed for a subagent's recent tool calls.
+    private func subagentActivityFeed(_ activities: [ToolActivity]) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(activities.suffix(5)) { entry in
+                HStack(spacing: 3) {
+                    Text(activityTimeString(entry.timestamp))
+                        .font(.system(size: 7, design: .monospaced))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+                    Image(systemName: toolIcon(for: entry.summary))
+                        .font(.system(size: 6))
+                        .foregroundColor(
+                            entry.isError
+                                ? CocxyColors.swiftUI(CocxyColors.red)
+                                : CocxyColors.swiftUI(CocxyColors.overlay1)
+                        )
+                    Text(entry.summary)
+                        .font(.system(size: 7, design: .monospaced))
+                        .foregroundColor(
+                            entry.isError
+                                ? CocxyColors.swiftUI(CocxyColors.red)
+                                : CocxyColors.swiftUI(CocxyColors.overlay1)
+                        )
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        .padding(.leading, 13)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    private func activityTimeString(_ date: Date) -> String {
+        Self.timeFormatter.string(from: date)
     }
 
     // MARK: - Time Label
@@ -254,5 +411,29 @@ struct DashboardSessionRow: View {
         if interval < 3600 { return "\(Int(interval / 60))m" }
         if interval < 86400 { return "\(Int(interval / 3600))h" }
         return "\(Int(interval / 86400))d"
+    }
+
+    private func subagentIcon(_ sub: SubagentInfo) -> String {
+        if sub.isActive { return "arrow.turn.down.right" }
+        if sub.errorCount > 0 { return "exclamationmark.triangle" }
+        return "checkmark.circle"
+    }
+
+    private func subagentIconColor(_ sub: SubagentInfo) -> Color {
+        if sub.isActive { return CocxyColors.swiftUI(CocxyColors.overlay1) }
+        if sub.errorCount > 0 { return CocxyColors.swiftUI(CocxyColors.red) }
+        return CocxyColors.swiftUI(CocxyColors.green)
+    }
+
+    private func subagentDurationString(_ interval: TimeInterval) -> String {
+        if interval < 60 { return "\(Int(interval))s" }
+        if interval < 3600 {
+            let minutes = Int(interval / 60)
+            let seconds = Int(interval) % 60
+            return "\(minutes)m\(seconds)s"
+        }
+        let hours = Int(interval / 3600)
+        let minutes = (Int(interval) % 3600) / 60
+        return "\(hours)h\(minutes)m"
     }
 }

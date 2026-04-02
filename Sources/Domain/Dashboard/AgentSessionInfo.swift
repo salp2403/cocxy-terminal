@@ -76,14 +76,101 @@ enum AgentPriority: Int, Codable, Sendable, Comparable {
 /// Information about a nested subagent within a parent agent session.
 ///
 /// Claude Code can spawn subagents (e.g., for research or code review).
-/// These are displayed as nested items in the dashboard.
+/// These are displayed as nested items in the dashboard with rich status
+/// including duration, tool activity, and error tracking.
 struct SubagentInfo: Identifiable, Equatable, Sendable {
     /// Unique identifier for the subagent (matches hook event subagentId).
     let id: String
-    /// The type of subagent (e.g., "research", "code-review").
+    /// The type of subagent (e.g., "Explore", "Plan", "general-purpose").
     let type: String?
     /// Current state of the subagent.
-    let state: AgentDashboardState
+    var state: AgentDashboardState
+    /// When the subagent started running.
+    let startTime: Date
+    /// When the subagent finished (nil if still running).
+    var endTime: Date?
+    /// Description of the last tool activity (e.g., "Read: AppDelegate.swift").
+    var lastActivity: String?
+    /// Timestamp of the last tool activity.
+    var lastActivityTime: Date?
+    /// Number of tool calls attributed to this subagent.
+    var toolUseCount: Int = 0
+    /// Number of tool errors encountered.
+    var errorCount: Int = 0
+    /// Description of the last error, if any.
+    var lastError: String?
+    /// Recent tool activities for this subagent (max 20, FIFO).
+    var activities: [ToolActivity] = []
+    /// File paths touched by this subagent (for conflict detection).
+    var touchedFilePaths: Set<String> = []
+
+    /// Maximum activities kept per subagent to bound memory.
+    static let maxActivities = 20
+
+    /// Duration the subagent has been running, or total duration if finished.
+    var duration: TimeInterval {
+        let end = endTime ?? Date()
+        return end.timeIntervalSince(startTime)
+    }
+
+    /// Whether the subagent is still actively running.
+    var isActive: Bool {
+        state == .working || state == .launching
+    }
+}
+
+// MARK: - Tool Activity
+
+/// A single tool call recorded in the activity feed.
+///
+/// Provides the structured equivalent of "raw output" — each tool call
+/// with its target and result, organized and filterable.
+struct ToolActivity: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let toolName: String
+    let summary: String
+    let timestamp: Date
+    let isError: Bool
+
+    init(toolName: String, summary: String, timestamp: Date, isError: Bool = false) {
+        self.id = UUID()
+        self.toolName = toolName
+        self.summary = summary
+        self.timestamp = timestamp
+        self.isError = isError
+    }
+
+    /// Value-based equality excluding the auto-generated `id`.
+    /// Prevents unnecessary SwiftUI re-renders when activities have
+    /// identical content but different UUIDs.
+    static func == (lhs: ToolActivity, rhs: ToolActivity) -> Bool {
+        lhs.toolName == rhs.toolName
+        && lhs.summary == rhs.summary
+        && lhs.timestamp == rhs.timestamp
+        && lhs.isError == rhs.isError
+    }
+}
+
+// MARK: - File Impact
+
+/// Tracks how a file was accessed during a session.
+struct FileImpact: Equatable, Sendable {
+    let path: String
+    let fileName: String
+    var operations: Set<FileOperation>
+
+    enum FileOperation: String, Sendable, Hashable {
+        case read
+        case write
+        case edit
+        case bash
+    }
+
+    init(path: String, operations: Set<FileOperation> = []) {
+        self.path = path
+        self.fileName = URL(fileURLWithPath: path).lastPathComponent
+        self.operations = operations
+    }
 }
 
 // MARK: - Agent Session Info
@@ -118,4 +205,14 @@ struct AgentSessionInfo: Identifiable, Equatable, Sendable {
     let priority: AgentPriority
     /// Model name used by the agent (e.g., "claude-sonnet-4").
     let model: String?
+    /// Files touched during this session with operation types.
+    /// Populated by `toAgentSessionInfo()`; treat as immutable after construction.
+    var filesTouched: [FileImpact] = []
+    /// File paths touched by multiple subagents (conflict risk).
+    /// Populated by `toAgentSessionInfo()`; treat as immutable after construction.
+    var fileConflicts: [String] = []
+    /// Total tool calls across the session.
+    var totalToolCalls: Int = 0
+    /// Total errors across the session.
+    var totalErrors: Int = 0
 }

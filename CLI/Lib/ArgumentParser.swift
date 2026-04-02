@@ -252,6 +252,11 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy browser tabs`
     case browserListTabs
+
+    // MARK: - SSH (v4)
+
+    /// `cocxy ssh user@host [-p port] [-i identity]`
+    case ssh(destination: String, port: Int?, identityFile: String?)
 }
 
 // MARK: - Split Direction
@@ -363,6 +368,9 @@ public enum CLIArgumentParser {
 
         case "remote":
             return try parseRemote(arguments: Array(arguments.dropFirst()))
+
+        case "ssh":
+            return try parseSSH(arguments: Array(arguments.dropFirst()))
 
         case "plugin":
             return try parsePlugin(arguments: Array(arguments.dropFirst()))
@@ -1031,6 +1039,36 @@ public enum CLIArgumentParser {
                 reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, or tabs."
             )
         }
+    }
+
+    // MARK: - SSH Parser
+
+    /// Parses `cocxy ssh user@host [-p port] [-i identity]`.
+    ///
+    /// The destination can be `user@host`, `host`, or `user@host:port`.
+    private static func parseSSH(arguments: [String]) throws -> ParsedCommand {
+        guard let destination = arguments.first, !destination.isEmpty, !destination.hasPrefix("-") else {
+            throw CLIError.missingArgument(command: "ssh", argument: "destination (user@host)")
+        }
+
+        let rest = Array(arguments.dropFirst())
+        var port: Int?
+        var identityFile: String?
+        var idx = 0
+        while idx < rest.count {
+            switch rest[idx] {
+            case "-p" where idx + 1 < rest.count:
+                port = Int(rest[idx + 1])
+                idx += 2
+            case "-i" where idx + 1 < rest.count:
+                identityFile = rest[idx + 1]
+                idx += 2
+            default:
+                idx += 1
+            }
+        }
+
+        return .ssh(destination: destination, port: port, identityFile: identityFile)
     }
 
     // MARK: - Help Text

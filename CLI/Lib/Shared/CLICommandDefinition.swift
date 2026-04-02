@@ -134,6 +134,10 @@ public enum CLICommand: String, CaseIterable {
     case notificationList = "notification-list"
     case notificationClear = "notification-clear"
 
+    // MARK: - SSH (v4)
+
+    case ssh
+
     /// Human-readable description for --help output.
     public var helpDescription: String {
         switch self {
@@ -239,6 +243,7 @@ public enum CLICommand: String, CaseIterable {
         // Notification CLI
         case .notificationList: return "List recent notifications as JSON"
         case .notificationClear: return "Clear notification badge and unread count"
+        case .ssh: return "Open SSH session in a new tab"
         }
     }
 
@@ -347,6 +352,7 @@ public enum CLICommand: String, CaseIterable {
         // Notification CLI
         case .notificationList: return "cocxy notification list [--limit <n>]"
         case .notificationClear: return "cocxy notification clear"
+        case .ssh: return "cocxy ssh user@host [-p port] [-i key]"
         }
     }
 }

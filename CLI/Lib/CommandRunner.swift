@@ -541,6 +541,14 @@ public struct CommandRunner {
 
         case .browserListTabs:
             return CLISocketRequest(id: requestID, command: "browser-list-tabs", params: nil)
+
+        // MARK: SSH (v4)
+
+        case .ssh(let destination, let port, let identityFile):
+            var params: [String: String] = ["destination": destination]
+            if let port { params["port"] = "\(port)" }
+            if let identityFile { params["identity"] = identityFile }
+            return CLISocketRequest(id: requestID, command: "ssh", params: params)
         }
     }
 }

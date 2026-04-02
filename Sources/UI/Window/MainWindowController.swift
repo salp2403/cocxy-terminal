@@ -127,7 +127,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var smartRoutingHostingView: NSHostingView<AnyView>?
     var isSmartRoutingVisible: Bool = false
 
-    var timelineHostingView: NSHostingView<TimelineView>?
+    var timelineHostingView: NSView?
+    var timelineViewModel: TimelineViewModel?
     var isTimelineVisible: Bool = false
     private(set) lazy var timelineDispatcher: TimelineNavigationDispatcher = {
         let dispatcher = TimelineNavigationDispatcher()

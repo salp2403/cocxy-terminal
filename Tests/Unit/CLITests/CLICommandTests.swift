@@ -223,6 +223,26 @@ final class CLIArgumentParserTests: XCTestCase {
         let versionText = CLIArgumentParser.versionText()
         XCTAssertEqual(versionText, "cocxy 0.1.0-alpha")
     }
+    // MARK: - SSH Parsing
+
+    func testParseSSHWithDestination() throws {
+        let result = try CLIArgumentParser.parse(["ssh", "user@host"])
+        XCTAssertEqual(result, .ssh(destination: "user@host", port: nil, identityFile: nil))
+    }
+
+    func testParseSSHWithPortAndIdentity() throws {
+        let result = try CLIArgumentParser.parse(["ssh", "user@host", "-p", "2222", "-i", "~/.ssh/key"])
+        XCTAssertEqual(result, .ssh(destination: "user@host", port: 2222, identityFile: "~/.ssh/key"))
+    }
+
+    func testParseSSHWithBareHost() throws {
+        let result = try CLIArgumentParser.parse(["ssh", "myserver"])
+        XCTAssertEqual(result, .ssh(destination: "myserver", port: nil, identityFile: nil))
+    }
+
+    func testParseSSHWithoutDestinationThrows() {
+        XCTAssertThrowsError(try CLIArgumentParser.parse(["ssh"]))
+    }
 }
 
 // MARK: - Request Builder Tests
@@ -565,7 +585,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     // MARK: - 43. All commands exist (10 original + 21 v2 + 8 browser + 5 remote + 3 plugin + 18 v3 = 65)
 
     func testAllCommandsExist() {
-        XCTAssertEqual(CLICommand.allCases.count, 65)
+        XCTAssertEqual(CLICommand.allCases.count, 66)
     }
 
     // MARK: - 39. Raw values match server protocol

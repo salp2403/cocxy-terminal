@@ -55,7 +55,7 @@ final class AgentDashboardViewModelTests: XCTestCase {
     func testAgentSessionInfoCreationWithAllFields() {
         let tabId = UUID()
         let now = Date()
-        let subagent = SubagentInfo(id: "sub-1", type: "research", state: .working)
+        let subagent = SubagentInfo(id: "sub-1", type: "research", state: .working, startTime: now)
 
         let session = AgentSessionInfo(
             id: "session-1",
@@ -108,19 +108,26 @@ final class AgentDashboardViewModelTests: XCTestCase {
     // MARK: - Model Tests: SubagentInfo
 
     func testSubagentInfoCreation() {
-        let subagent = SubagentInfo(id: "sub-42", type: "code-review", state: .working)
+        let now = Date()
+        let subagent = SubagentInfo(id: "sub-42", type: "code-review", state: .working, startTime: now)
 
         XCTAssertEqual(subagent.id, "sub-42")
         XCTAssertEqual(subagent.type, "code-review")
         XCTAssertEqual(subagent.state, .working)
+        XCTAssertEqual(subagent.startTime, now)
+        XCTAssertNil(subagent.endTime)
+        XCTAssertTrue(subagent.isActive)
+        XCTAssertEqual(subagent.toolUseCount, 0)
+        XCTAssertEqual(subagent.errorCount, 0)
     }
 
     func testSubagentInfoWithNilType() {
-        let subagent = SubagentInfo(id: "sub-nil", type: nil, state: .idle)
+        let subagent = SubagentInfo(id: "sub-nil", type: nil, state: .idle, startTime: Date())
 
         XCTAssertEqual(subagent.id, "sub-nil")
         XCTAssertNil(subagent.type)
         XCTAssertEqual(subagent.state, .idle)
+        XCTAssertFalse(subagent.isActive)
     }
 
     // MARK: - Model Tests: Sessions Sorted Correctly
@@ -597,7 +604,7 @@ final class AgentDashboardViewModelTests: XCTestCase {
 
     // MARK: - ViewModel Tests: SubagentStop
 
-    func testSubagentStopRemovesSubagent() {
+    func testSubagentStopMarksFinishedInsteadOfRemoving() {
         // Create session with a subagent
         let startEvent = makeHookEvent(
             type: .sessionStart, sessionId: "sess-sub-stop",
@@ -611,14 +618,17 @@ final class AgentDashboardViewModelTests: XCTestCase {
         )
         sut.processHookEvent(subStart)
         XCTAssertEqual(sut.sessions.first?.subagents.count, 1)
+        XCTAssertEqual(sut.sessions.first?.subagents.first?.state, .working)
 
-        // Stop the subagent
+        // Stop the subagent — should mark finished, not remove
         let subStop = makeHookEvent(
             type: .subagentStop, sessionId: "sess-sub-stop",
             data: .subagent(SubagentData(subagentId: "sub-remove"))
         )
         sut.processHookEvent(subStop)
-        XCTAssertEqual(sut.sessions.first?.subagents.count, 0)
+        XCTAssertEqual(sut.sessions.first?.subagents.count, 1)
+        XCTAssertEqual(sut.sessions.first?.subagents.first?.state, .finished)
+        XCTAssertNotNil(sut.sessions.first?.subagents.first?.endTime)
     }
 
     // MARK: - Helpers

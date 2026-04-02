@@ -595,23 +595,26 @@ extension MainWindowController {
 
         timelineHostingView?.removeFromSuperview()
 
-        let events = injectedTimelineStore?.allEvents ?? []
-
-        var swiftUIView = TimelineView(
-            events: events,
-            onExportJSON: { [weak self] in
-                guard let store = self?.injectedTimelineStore else { return }
-                let json = store.allEvents
-                let data = TimelineExporter.exportJSON(events: json)
-                Self.saveExportedData(data, suggestedName: "timeline.json")
+        let store = injectedTimelineStore ?? AgentTimelineStoreImpl()
+        let vm = TimelineViewModel(
+            store: store,
+            onExportJSON: { [weak store] in
+                guard let store = store else { return }
+                let data = TimelineExporter.exportJSON(events: store.allEvents)
+                MainWindowController.saveExportedData(data, suggestedName: "timeline.json")
             },
-            onExportMarkdown: { [weak self] in
-                guard let store = self?.injectedTimelineStore else { return }
+            onExportMarkdown: { [weak store] in
+                guard let store = store else { return }
                 let markdown = TimelineExporter.exportMarkdown(events: store.allEvents)
                 if let data = markdown.data(using: .utf8) {
-                    Self.saveExportedData(data, suggestedName: "timeline.md")
+                    MainWindowController.saveExportedData(data, suggestedName: "timeline.md")
                 }
-            },
+            }
+        )
+        self.timelineViewModel = vm
+
+        var swiftUIView = TimelineView(
+            viewModel: vm,
             onDismiss: { [weak self] in self?.dismissTimeline() }
         )
         swiftUIView.navigationDispatcher = timelineDispatcher
@@ -647,6 +650,7 @@ extension MainWindowController {
               let overlayContainer = overlayContainerView else {
             timelineHostingView?.removeFromSuperview()
             timelineHostingView = nil
+            timelineViewModel = nil
             isTimelineVisible = false
             return
         }
@@ -663,6 +667,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.timelineHostingView?.removeFromSuperview()
                 self?.timelineHostingView = nil
+                self?.timelineViewModel = nil
             }
         })
     }

@@ -603,137 +603,191 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(response.error?.contains("message") == true)
     }
 
-    func test_splitCommand_returnsAcknowledged() {
+    // MARK: - V4 Commands: Without Providers Return Error
+
+    func test_splitCommand_withoutProvider_returnsError() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(id: "v4-1", command: "split", params: nil)
+        let response = handler.handleCommand(request)
+        XCTAssertFalse(response.success)
+    }
+
+    func test_splitCommand_withProvider_returnsCreated() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            splitCreateProvider: { _ in true }
+        )
+        let request = SocketRequest(id: "v4-2", command: "split", params: nil)
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "created")
+    }
+
+    func test_splitListCommand_withProvider_returnsPanes() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            splitInfoProvider: { [
+                (leafID: "leaf-1", terminalID: "term-1", isFocused: true),
+                (leafID: "leaf-2", terminalID: "term-2", isFocused: false)
+            ] }
+        )
+        let request = SocketRequest(id: "v4-3", command: "split-list", params: nil)
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "2")
+    }
+
+    func test_dashboardToggleCommand_withProvider_returnsToggled() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            dashboardToggleProvider: { true }
+        )
+        let request = SocketRequest(id: "v4-4", command: "dashboard-toggle", params: nil)
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "toggled")
+        XCTAssertEqual(response.data?["visible"], "true")
+    }
+
+    func test_dashboardStatusCommand_withProvider_returnsStatus() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            dashboardStatusProvider: { [
+                "visible": "true",
+                "session_count": "3",
+                "active_count": "1"
+            ] }
+        )
+        let request = SocketRequest(id: "v4-5", command: "dashboard-status", params: nil)
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["session_count"], "3")
+    }
+
+    func test_timelineShowCommand_withProvider_returnsShown() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            timelineToggleProvider: { }
+        )
+        let request = SocketRequest(id: "v4-6", command: "timeline-show", params: nil)
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "shown")
+    }
+
+    func test_searchCommand_withProvider_returnsToggled() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            searchToggleProvider: { }
+        )
+        let request = SocketRequest(id: "v4-7", command: "search", params: nil)
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "toggled")
+    }
+
+    func test_sendCommand_withProvider_returnsSent() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            sendTextProvider: { _ in true }
+        )
+        let request = SocketRequest(id: "v4-8", command: "send", params: ["text": "ls"])
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "sent")
+    }
+
+    func test_sendKeyCommand_withProvider_returnsSent() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            sendKeyProvider: { _ in true }
+        )
+        let request = SocketRequest(id: "v4-9", command: "send-key", params: ["key": "enter"])
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "sent")
+    }
+
+    func test_hooksCommand_returnsData() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(id: "v4-10", command: "hooks", params: nil)
+        let response = handler.handleCommand(request)
+        // hooks reads settings.json — succeeds even without provider
+        XCTAssertTrue(response.success)
+    }
+
+    func test_hookHandlerCommand_returnsReady() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(id: "v4-11", command: "hook-handler", params: nil)
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "ready")
+    }
+
+    func test_timelineExportCommand_withProvider_returnsExported() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            timelineExportProvider: { format in
+                "[]".data(using: .utf8)
+            }
+        )
         let request = SocketRequest(
-            id: "ack-2",
-            command: "split",
-            params: ["dir": "horizontal"]
+            id: "v4-12", command: "timeline-export",
+            params: ["format": "json"]
         )
         let response = handler.handleCommand(request)
-
         XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
+        XCTAssertEqual(response.data?["status"], "exported")
     }
 
-    func test_splitListCommand_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let request = SocketRequest(id: "ack-3", command: "split-list", params: nil)
-        let response = handler.handleCommand(request)
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
-    }
-
-    func test_dashboardToggleCommand_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let request = SocketRequest(id: "ack-4", command: "dashboard-toggle", params: nil)
-        let response = handler.handleCommand(request)
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
-    }
-
-    func test_timelineShowCommand_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let request = SocketRequest(id: "ack-5", command: "timeline-show", params: nil)
-        let response = handler.handleCommand(request)
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
-    }
-
-    func test_searchCommand_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let request = SocketRequest(id: "ack-6", command: "search", params: nil)
-        let response = handler.handleCommand(request)
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
-    }
-
-    func test_sendCommand_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+    func test_sshCommand_withProvider_returnsConnected() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            sshProvider: { destination, port, identity in
+                ("tab-id", destination)
+            }
+        )
         let request = SocketRequest(
-            id: "ack-7",
-            command: "send",
-            params: ["text": "ls -la"]
+            id: "ssh-1", command: "ssh",
+            params: ["destination": "user@host", "port": "2222"]
         )
         let response = handler.handleCommand(request)
-
         XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
+        XCTAssertEqual(response.data?["status"], "connected")
+        XCTAssertEqual(response.data?["destination"], "user@host")
     }
 
-    func test_sendKeyCommand_returnsAcknowledged() {
+    func test_sshCommand_withoutProvider_returnsFailure() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let request = SocketRequest(
-            id: "ack-8",
-            command: "send-key",
-            params: ["key": "ctrl+c"]
+        let request = SocketRequest(id: "ssh-2", command: "ssh", params: ["destination": "host"])
+        let response = handler.handleCommand(request)
+        XCTAssertFalse(response.success)
+    }
+
+    func test_sshCommand_withoutDestination_returnsFailure() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            sshProvider: { _, _, _ in ("id", "title") }
         )
+        let request = SocketRequest(id: "ssh-3", command: "ssh", params: nil)
         let response = handler.handleCommand(request)
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
+        XCTAssertFalse(response.success)
     }
 
-    func test_hooksCommand_returnsAcknowledged() {
+    func test_v4Commands_withoutProviders_returnFailure() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let request = SocketRequest(id: "ack-9", command: "hooks", params: nil)
-        let response = handler.handleCommand(request)
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
-    }
-
-    func test_hookHandlerCommand_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let request = SocketRequest(id: "ack-10", command: "hook-handler", params: nil)
-        let response = handler.handleCommand(request)
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
-    }
-
-    func test_allDashboardCommands_returnAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let dashboardCommands = [
-            "dashboard-show", "dashboard-hide", "dashboard-toggle", "dashboard-status"
+        let commands = [
+            "split", "split-list", "split-focus", "split-close", "split-resize",
+            "dashboard-show", "dashboard-hide", "dashboard-toggle", "dashboard-status",
+            "timeline-show", "timeline-export", "search", "send", "send-key", "ssh"
         ]
-        for command in dashboardCommands {
-            let request = SocketRequest(id: "dash-\(command)", command: command, params: nil)
+        for command in commands {
+            let request = SocketRequest(id: "nil-\(command)", command: command, params: nil)
             let response = handler.handleCommand(request)
-            XCTAssertTrue(response.success, "Command '\(command)' should succeed")
-            XCTAssertEqual(
-                response.data?["status"], "acknowledged",
-                "Command '\(command)' should return acknowledged"
+            XCTAssertFalse(
+                response.success,
+                "Command '\(command)' without provider should return failure"
             )
         }
-    }
-
-    func test_allSplitExtendedCommands_returnAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let splitCommands = [
-            "split-list", "split-focus", "split-close", "split-resize"
-        ]
-        for command in splitCommands {
-            let request = SocketRequest(id: "split-\(command)", command: command, params: nil)
-            let response = handler.handleCommand(request)
-            XCTAssertTrue(response.success, "Command '\(command)' should succeed")
-            XCTAssertEqual(
-                response.data?["status"], "acknowledged",
-                "Command '\(command)' should return acknowledged"
-            )
-        }
-    }
-
-    func test_timelineExportCommand_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
-        let request = SocketRequest(id: "ack-tl", command: "timeline-export", params: nil)
-        let response = handler.handleCommand(request)
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "acknowledged")
     }
 }

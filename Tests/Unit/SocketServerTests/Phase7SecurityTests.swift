@@ -244,8 +244,8 @@ final class Phase7SocketSecurityTests: XCTestCase {
         defer { server.stop() }
 
         let commands = CLICommandName.allCases.map { $0.rawValue }
-        XCTAssertEqual(commands.count, 65,
-                       "There should be exactly 65 commands in CLICommandName (10 original + 21 v2 + 8 browser + 5 remote + 3 plugin + 18 v3)")
+        XCTAssertEqual(commands.count, 66,
+                       "There should be exactly 66 commands in CLICommandName (10 original + 21 v2 + 8 browser + 5 remote + 3 plugin + 18 v3 + 1 ssh)")
 
         for command in commands {
             let request = SocketRequest(id: "all-\(command)", command: command, params: nil)

@@ -63,6 +63,10 @@ protocol AgentTimelineProviding: AnyObject {
     /// - Parameter sessionId: The session to query.
     /// - Returns: The event count.
     func eventCount(for sessionId: String) -> Int
+
+    /// Publisher that emits the full sorted event list across all sessions
+    /// whenever any event is added.
+    var allEventsPublisher: AnyPublisher<[TimelineEvent], Never> { get }
 }
 
 // MARK: - Agent Timeline Store Implementation
@@ -97,8 +101,15 @@ final class AgentTimelineStoreImpl: AgentTimelineProviding, @unchecked Sendable 
     /// Events organized by session ID. Protected by `lock`.
     private var eventsBySession: [String: [TimelineEvent]] = [:]
 
+    /// Cached sorted view of all events across all sessions.
+    /// Updated incrementally on each `addEvent` to avoid O(n log n) re-sort.
+    private var cachedAllEvents: [TimelineEvent] = []
+
     /// Subject for publishing changes. Key is session ID.
     private var subjects: [String: PassthroughSubject<[TimelineEvent], Never>] = [:]
+
+    /// Subject for publishing all events across all sessions on every change.
+    private let allEventsSubject = PassthroughSubject<[TimelineEvent], Never>()
 
     /// Lock for thread-safe access to mutable state.
     private let lock = NSLock()
@@ -124,9 +135,7 @@ final class AgentTimelineStoreImpl: AgentTimelineProviding, @unchecked Sendable 
     var allEvents: [TimelineEvent] {
         lock.lock()
         defer { lock.unlock() }
-        return eventsBySession.values
-            .flatMap { $0 }
-            .sorted { $0.timestamp < $1.timestamp }
+        return cachedAllEvents
     }
 
     func addEvent(_ event: TimelineEvent) {
@@ -134,21 +143,34 @@ final class AgentTimelineStoreImpl: AgentTimelineProviding, @unchecked Sendable 
 
         var sessionEvents = eventsBySession[event.sessionId] ?? []
 
-        // FIFO eviction: remove the oldest if at capacity
+        // FIFO eviction: remove the oldest if at capacity.
+        var evictedEvent: TimelineEvent?
         if sessionEvents.count >= maxEventsPerSession {
-            sessionEvents.removeFirst()
+            evictedEvent = sessionEvents.removeFirst()
         }
 
         sessionEvents.append(event)
         eventsBySession[event.sessionId] = sessionEvents
 
+        // Update cached all-events incrementally instead of full re-sort.
+        if let evicted = evictedEvent {
+            cachedAllEvents.removeAll { $0.id == evicted.id }
+        }
+        // Insert at the correct sorted position (by timestamp).
+        let insertIndex = cachedAllEvents.endIndex - cachedAllEvents.reversed().prefix(
+            while: { $0.timestamp > event.timestamp }
+        ).count
+        cachedAllEvents.insert(event, at: insertIndex)
+
         let currentEvents = sessionEvents
         let subject = getOrCreateSubject(for: event.sessionId)
+        let allSnapshot = cachedAllEvents
 
         lock.unlock()
 
         // Publish outside the lock to avoid potential deadlocks with subscribers.
         subject.send(currentEvents)
+        allEventsSubject.send(allSnapshot)
     }
 
     func eventsPublisher(for sessionId: String) -> AnyPublisher<[TimelineEvent], Never> {
@@ -172,15 +194,25 @@ final class AgentTimelineStoreImpl: AgentTimelineProviding, @unchecked Sendable 
         lock.lock()
         eventsBySession.removeValue(forKey: sessionId)
         let subject = subjects[sessionId]
+
+        // Rebuild cache after removing a session's events.
+        cachedAllEvents.removeAll { $0.sessionId == sessionId }
+        let allSnapshot = cachedAllEvents
+
         lock.unlock()
 
         subject?.send([])
+        allEventsSubject.send(allSnapshot)
     }
 
     func eventCount(for sessionId: String) -> Int {
         lock.lock()
         defer { lock.unlock() }
         return eventsBySession[sessionId]?.count ?? 0
+    }
+
+    var allEventsPublisher: AnyPublisher<[TimelineEvent], Never> {
+        allEventsSubject.eraseToAnyPublisher()
     }
 
     // MARK: - Private Helpers
