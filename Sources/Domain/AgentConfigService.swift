@@ -312,17 +312,21 @@ final class AgentConfigService {
     static func compile(_ config: AgentConfig) -> CompiledAgentConfig {
         var invalidPatterns: [String] = []
 
-        let launchRegexes = compilePatterns(config.launchPatterns, invalid: &invalidPatterns)
-        let waitingRegexes = compilePatterns(config.waitingPatterns, invalid: &invalidPatterns)
-        let errorRegexes = compilePatterns(config.errorPatterns, invalid: &invalidPatterns)
-        let finishedRegexes = compilePatterns(config.finishedIndicators, invalid: &invalidPatterns)
+        let launch = compilePatterns(config.launchPatterns, invalid: &invalidPatterns)
+        let waiting = compilePatterns(config.waitingPatterns, invalid: &invalidPatterns)
+        let errors = compilePatterns(config.errorPatterns, invalid: &invalidPatterns)
+        let finished = compilePatterns(config.finishedIndicators, invalid: &invalidPatterns)
 
         return CompiledAgentConfig(
             config: config,
-            launchPatterns: launchRegexes,
-            waitingPatterns: waitingRegexes,
-            errorPatterns: errorRegexes,
-            finishedIndicators: finishedRegexes,
+            launchPatterns: launch.regexes,
+            launchMatchers: launch.matchers,
+            waitingPatterns: waiting.regexes,
+            waitingMatchers: waiting.matchers,
+            errorPatterns: errors.regexes,
+            errorMatchers: errors.matchers,
+            finishedIndicators: finished.regexes,
+            finishedMatchers: finished.matchers,
             invalidPatterns: invalidPatterns
         )
     }
@@ -334,19 +338,127 @@ final class AgentConfigService {
     private static func compilePatterns(
         _ patterns: [String],
         invalid: inout [String]
-    ) -> [NSRegularExpression] {
+    ) -> (regexes: [NSRegularExpression], matchers: [CompiledPatternMatcher]) {
         var compiled: [NSRegularExpression] = []
+        var matchers: [CompiledPatternMatcher] = []
 
         for pattern in patterns {
             do {
                 let regex = try NSRegularExpression(pattern: pattern, options: [])
                 compiled.append(regex)
+                matchers.append(makeMatcher(from: pattern, regex: regex))
             } catch {
                 invalid.append(pattern)
             }
         }
 
-        return compiled
+        return (compiled, matchers)
+    }
+
+    private static func makeMatcher(
+        from pattern: String,
+        regex: NSRegularExpression
+    ) -> CompiledPatternMatcher {
+        if let literal = parseTrimmedEqualsPattern(pattern) {
+            return .trimmedEquals(literal)
+        }
+        if let segments = parseAnchoredOrderedSegments(pattern, separator: ".*") {
+            return .orderedContainsPrefix(segments)
+        }
+        if let segments = parseAnchoredOrderedSegments(pattern, separator: "\\s+") {
+            return .whitespaceSeparatedPrefix(segments)
+        }
+        if let literal = parseAnchoredWordPrefix(pattern) {
+            return .prefixWord(literal)
+        }
+        if let literal = parseAnchoredPrefix(pattern) {
+            return .prefix(literal)
+        }
+        if let segments = parseOrderedSegments(pattern, separator: ".*") {
+            return .orderedContains(segments)
+        }
+        if let segments = parseOrderedSegments(pattern, separator: "\\s+") {
+            return .whitespaceSeparated(segments)
+        }
+        if let literal = parseLiteralPattern(pattern) {
+            return .literal(literal)
+        }
+        return .regex(regex)
+    }
+
+    private static func parseTrimmedEqualsPattern(_ pattern: String) -> String? {
+        guard pattern.hasPrefix("^"), pattern.hasSuffix("\\s*$") else { return nil }
+        let start = pattern.index(after: pattern.startIndex)
+        let end = pattern.index(pattern.endIndex, offsetBy: -4)
+        return parseLiteralSegment(pattern[start..<end])
+    }
+
+    private static func parseAnchoredWordPrefix(_ pattern: String) -> String? {
+        guard pattern.hasPrefix("^"), pattern.hasSuffix("\\b") else { return nil }
+        let start = pattern.index(after: pattern.startIndex)
+        let end = pattern.index(pattern.endIndex, offsetBy: -2)
+        return parseLiteralSegment(pattern[start..<end])
+    }
+
+    private static func parseAnchoredPrefix(_ pattern: String) -> String? {
+        guard pattern.hasPrefix("^") else { return nil }
+        return parseLiteralSegment(pattern.dropFirst())
+    }
+
+    private static func parseLiteralPattern(_ pattern: String) -> String? {
+        parseLiteralSegment(pattern[...])
+    }
+
+    private static func parseAnchoredOrderedSegments(
+        _ pattern: String,
+        separator: String
+    ) -> [String]? {
+        guard pattern.hasPrefix("^") else { return nil }
+        return parseOrderedSegments(String(pattern.dropFirst()), separator: separator)
+    }
+
+    private static func parseOrderedSegments(
+        _ pattern: String,
+        separator: String
+    ) -> [String]? {
+        let segments = pattern.components(separatedBy: separator)
+        guard segments.count >= 2 else { return nil }
+
+        let parsed = segments.compactMap(parseLiteralSegment)
+        guard parsed.count == segments.count, parsed.allSatisfy({ !$0.isEmpty }) else { return nil }
+        return parsed
+    }
+
+    private static func parseLiteralSegment<S: StringProtocol>(_ segment: S) -> String? {
+        let regexMetacharacters: Set<Character> = ["^", "$", "*", "+", "?", ".", "(", ")", "[", "]", "{", "}", "|"]
+        var literal = ""
+        var isEscaped = false
+
+        for character in segment {
+            if isEscaped {
+                switch character {
+                case "\\", "^", "$", "*", "+", "?", ".", "(", ")", "[", "]", "{", "}", "|":
+                    literal.append(character)
+                default:
+                    return nil
+                }
+                isEscaped = false
+                continue
+            }
+
+            if character == "\\" {
+                isEscaped = true
+                continue
+            }
+
+            if regexMetacharacters.contains(character) {
+                return nil
+            }
+
+            literal.append(character)
+        }
+
+        return isEscaped ? nil : literal
     }
 
     // MARK: - Value Extractors

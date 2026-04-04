@@ -200,8 +200,8 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         )
         let response = handler.handleCommand(request)
 
-        // TabManager silently refuses to close the last tab, handler reports success.
-        XCTAssertTrue(response.success)
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Cannot close the last remaining tab")
         XCTAssertEqual(tabManager.tabs.count, 1)
     }
 
@@ -664,23 +664,86 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["session_count"], "3")
     }
 
-    func test_timelineShowCommand_withProvider_returnsShown() {
+    func test_timelineShowCommand_withProvider_returnsEvents() throws {
+        let event = TimelineEvent(
+            type: .toolUse,
+            sessionId: "session-1",
+            summary: "Read: Sources/App.swift"
+        )
         let handler = AppSocketCommandHandler(
             tabManager: nil, hookEventReceiver: nil,
-            timelineToggleProvider: { }
+            timelineQueryProvider: { tabID in
+                XCTAssertNil(tabID)
+                return TimelineQueryResult(
+                    tabID: nil,
+                    sessionIDs: ["session-1"],
+                    events: [event]
+                )
+            }
         )
         let request = SocketRequest(id: "v4-6", command: "timeline-show", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "shown")
+        XCTAssertEqual(response.data?["status"], "ok")
+        XCTAssertEqual(response.data?["count"], "1")
+        XCTAssertEqual(response.data?["sessionCount"], "1")
+
+        let eventsString = try XCTUnwrap(response.data?["events"])
+        let eventsData = try XCTUnwrap(eventsString.data(using: .utf8))
+        let decoded = try JSONDecoder().decode([TimelineEvent].self, from: eventsData)
+        XCTAssertEqual(decoded, [event])
     }
 
-    func test_searchCommand_withProvider_returnsToggled() {
+    func test_searchCommand_withQueryProvider_returnsResults() throws {
+        let result = SearchResult(
+            id: UUID(),
+            lineNumber: 42,
+            column: 7,
+            matchText: "needle",
+            contextBefore: "find ",
+            contextAfter: " in haystack"
+        )
+        let handler = AppSocketCommandHandler(
+            tabManager: nil, hookEventReceiver: nil,
+            searchProvider: { query, regex, caseSensitive, tabID in
+                XCTAssertEqual(query, "needle")
+                XCTAssertTrue(regex)
+                XCTAssertFalse(caseSensitive)
+                XCTAssertNil(tabID)
+                return SearchCommandResult(
+                    tabID: nil,
+                    lineCount: 120,
+                    results: [result]
+                )
+            }
+        )
+        let request = SocketRequest(
+            id: "v4-7",
+            command: "search",
+            params: [
+                "query": "needle",
+                "regex": "true",
+                "caseSensitive": "false"
+            ]
+        )
+        let response = handler.handleCommand(request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "ok")
+        XCTAssertEqual(response.data?["count"], "1")
+        XCTAssertEqual(response.data?["lines"], "120")
+
+        let resultsString = try XCTUnwrap(response.data?["results"])
+        let resultsData = try XCTUnwrap(resultsString.data(using: .utf8))
+        let decoded = try JSONDecoder().decode([SearchResult].self, from: resultsData)
+        XCTAssertEqual(decoded, [result])
+    }
+
+    func test_searchCommand_withoutQuery_withProvider_returnsToggled() {
         let handler = AppSocketCommandHandler(
             tabManager: nil, hookEventReceiver: nil,
             searchToggleProvider: { }
         )
-        let request = SocketRequest(id: "v4-7", command: "search", params: nil)
+        let request = SocketRequest(id: "v4-7-toggle", command: "search", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "toggled")
@@ -727,8 +790,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_timelineExportCommand_withProvider_returnsExported() {
         let handler = AppSocketCommandHandler(
             tabManager: nil, hookEventReceiver: nil,
-            timelineExportProvider: { format in
-                "[]".data(using: .utf8)
+            timelineExportProvider: { tabID, format in
+                XCTAssertNil(tabID)
+                XCTAssertEqual(format, "json")
+                return "[]".data(using: .utf8)
             }
         )
         let request = SocketRequest(

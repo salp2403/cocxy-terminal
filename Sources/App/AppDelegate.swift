@@ -714,7 +714,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak adapter] note in
             if let tabIdString = note.userInfo?["tabId"] as? String {
-                adapter?.handleNotificationClick(tabIdString: tabIdString)
+                MainActor.assumeIsolated {
+                    adapter?.handleNotificationClick(tabIdString: tabIdString)
+                }
             }
         }
 
@@ -775,452 +777,438 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Starts the CLI companion socket server and schedules a health check timer.
     private func initializeSocketServer() {
         let configService = self.configService
+        let delegateRef = WeakReference(self)
+        let configServiceRef = WeakReference(configService)
+        let sessionManagerRef = WeakReference(self.sessionManager)
+        let liveConfigProvider: (@Sendable () -> CocxyConfig)?
+        if configService != nil {
+            liveConfigProvider = {
+                syncOnMainActor {
+                    configServiceRef.value?.current ?? .defaults
+                }
+            }
+        } else {
+            liveConfigProvider = nil
+        }
         let handler = AppSocketCommandHandler(
             tabManager: windowController?.tabManager,
             hookEventReceiver: hookEventReceiver,
-            configProvider: configService.map { svc in { svc.current } },
-            themeEngineProvider: { [weak self] in self?.themeEngine },
-            remoteConnectionManagerProvider: { [weak self] in self?.remoteConnectionManager },
-            remoteProfileStoreProvider: { [weak self] in self?.remoteProfileStore },
-            pluginManagerProvider: { [weak self] in self?.pluginManager },
-            notifyDispatcher: { [weak self] title, body in
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let manager = self?.notificationManager else { return }
-                        let tabId = self?.windowController?.tabManager.activeTabID ?? TabID()
-                        let notification = CocxyNotification(
-                            type: .custom("cli"),
-                            tabId: tabId,
-                            title: title,
-                            body: body
-                        )
-                        manager.notify(notification)
+            configProvider: liveConfigProvider,
+            themeEngineProvider: {
+                if Thread.isMainThread {
+                    return MainActor.assumeIsolated {
+                        delegateRef.value?.themeEngine
                     }
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+                return DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        delegateRef.value?.themeEngine
+                    }
+                }
+            },
+            remoteConnectionManagerProvider: {
+                if Thread.isMainThread {
+                    return MainActor.assumeIsolated {
+                        delegateRef.value?.remoteConnectionManager
+                    }
+                }
+                return DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        delegateRef.value?.remoteConnectionManager
+                    }
+                }
+            },
+            remoteProfileStoreProvider: {
+                if Thread.isMainThread {
+                    return MainActor.assumeIsolated {
+                        delegateRef.value?.remoteProfileStore
+                    }
+                }
+                return DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        delegateRef.value?.remoteProfileStore
+                    }
+                }
+            },
+            pluginManagerProvider: {
+                if Thread.isMainThread {
+                    return MainActor.assumeIsolated {
+                        delegateRef.value?.pluginManager
+                    }
+                }
+                return DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        delegateRef.value?.pluginManager
+                    }
+                }
+            },
+            notifyDispatcher: { title, body in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let manager = delegate.notificationManager else { return }
+                    let tabId = delegate.windowController?.tabManager.activeTabID ?? TabID()
+                    let notification = CocxyNotification(
+                        type: .custom("cli"),
+                        tabId: tabId,
+                        title: title,
+                        body: body
+                    )
+                    manager.notify(notification)
+                }
             },
             // V3: Tab duplicate — create new tab with active tab's CWD.
-            tabDuplicateProvider: { [weak self] in
-                var result: (id: String, title: String)?
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let wc = self?.windowController,
-                              let activeTab = wc.tabManager.activeTab else { return }
-                        let newTab = wc.tabManager.addTab(
-                            workingDirectory: activeTab.workingDirectory
-                        )
-                        result = (id: newTab.id.rawValue.uuidString, title: newTab.title)
-                    }
+            tabDuplicateProvider: {
+                syncOnMainActor {
+                    guard let wc = delegateRef.value?.windowController,
+                          let activeTab = wc.tabManager.activeTab else { return nil }
+                    let newTab = wc.tabManager.addTab(
+                        workingDirectory: activeTab.workingDirectory
+                    )
+                    return (id: newTab.id.rawValue.uuidString, title: newTab.title)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return result
             },
             // V3: Tab pin — toggle pin on active or specific tab.
-            tabPinProvider: { [weak self] tabIDString in
-                var result: (id: String, isPinned: Bool)?
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let wc = self?.windowController else { return }
-                        let manager = wc.tabManager
-                        let targetID: TabID
-                        if let idStr = tabIDString, let uuid = UUID(uuidString: idStr) {
-                            targetID = TabID(rawValue: uuid)
-                        } else if let activeID = manager.activeTabID {
-                            targetID = activeID
-                        } else {
-                            return
-                        }
-                        manager.togglePin(id: targetID)
-                        let isPinned = manager.tab(for: targetID)?.isPinned ?? false
-                        result = (id: targetID.rawValue.uuidString, isPinned: isPinned)
+            tabPinProvider: { tabIDString in
+                syncOnMainActor {
+                    guard let wc = delegateRef.value?.windowController else { return nil }
+                    let manager = wc.tabManager
+                    let targetID: TabID
+                    if let idStr = tabIDString, let uuid = UUID(uuidString: idStr) {
+                        targetID = TabID(rawValue: uuid)
+                    } else if let activeID = manager.activeTabID {
+                        targetID = activeID
+                    } else {
+                        return nil
                     }
+                    manager.togglePin(id: targetID)
+                    let isPinned = manager.tab(for: targetID)?.isPinned ?? false
+                    return (id: targetID.rawValue.uuidString, isPinned: isPinned)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return result
             },
             // V3: Config reload — re-read config from disk.
-            configReloadProvider: { [weak self] in
-                var success = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let svc = self?.configService else { return }
-                        do {
-                            try svc.reload()
-                            success = true
-                        } catch {
-                            // success remains false
-                        }
+            configReloadProvider: {
+                syncOnMainActor {
+                    guard let svc = delegateRef.value?.configService else { return false }
+                    do {
+                        try svc.reload()
+                        return true
+                    } catch {
+                        return false
                     }
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return success
             },
             // V3: Split info — list panes in active tab.
-            splitInfoProvider: { [weak self] in
-                var panes: [(leafID: String, terminalID: String, isFocused: Bool)] = []
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let wc = self?.windowController,
-                              let activeTabID = wc.tabManager.activeTabID else { return }
-                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
-                        let leaves = sm.rootNode.allLeafIDs()
-                        let focusedID = sm.focusedLeafID
-                        panes = leaves.map { leaf in
-                            (
-                                leafID: leaf.leafID.uuidString,
-                                terminalID: leaf.terminalID.uuidString,
-                                isFocused: leaf.leafID == focusedID
-                            )
-                        }
+            splitInfoProvider: {
+                syncOnMainActor {
+                    guard let wc = delegateRef.value?.windowController,
+                          let activeTabID = wc.tabManager.activeTabID else { return [] }
+                    let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                    let leaves = sm.rootNode.allLeafIDs()
+                    let focusedID = sm.focusedLeafID
+                    return leaves.map { leaf in
+                        (
+                            leafID: leaf.leafID.uuidString,
+                            terminalID: leaf.terminalID.uuidString,
+                            isFocused: leaf.leafID == focusedID
+                        )
                     }
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return panes
             },
             // V3: Split swap — exchange two panes by index.
-            splitSwapProvider: { [weak self] indexA, indexB in
-                var swapped = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let wc = self?.windowController,
-                              let activeTabID = wc.tabManager.activeTabID else { return }
-                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
-                        let leafCount = sm.rootNode.allLeafIDs().count
-                        guard indexA >= 0, indexA < leafCount,
-                              indexB >= 0, indexB < leafCount,
-                              indexA != indexB else { return }
-                        sm.swapLeaves(at: indexA, with: indexB)
-                        swapped = true
-                    }
+            splitSwapProvider: { indexA, indexB in
+                syncOnMainActor {
+                    guard let wc = delegateRef.value?.windowController,
+                          let activeTabID = wc.tabManager.activeTabID else { return false }
+                    let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                    let leafCount = sm.rootNode.allLeafIDs().count
+                    guard indexA >= 0, indexA < leafCount,
+                          indexB >= 0, indexB < leafCount,
+                          indexA != indexB else { return false }
+                    sm.swapLeaves(at: indexA, with: indexB)
+                    wc.rebuildSplitViewHierarchy(for: activeTabID)
+                    return true
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return swapped
+            },
+            splitSwapByDirectionProvider: { direction in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let navDirection = NavigationDirection(commandValue: direction) else { return false }
+                    return delegate.swapSplit(in: navDirection)
+                }
             },
             // V3: Split zoom — toggle zoom on focused pane.
-            splitZoomProvider: { [weak self] in
-                var result: (success: Bool, isZoomed: Bool) = (false, false)
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let wc = self?.windowController,
-                              let activeTabID = wc.tabManager.activeTabID else { return }
-                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
-                        guard sm.rootNode.allLeafIDs().count > 1 else { return }
-                        sm.toggleZoom()
-                        result = (true, sm.isZoomed)
-                    }
+            splitZoomProvider: {
+                syncOnMainActor {
+                    guard let wc = delegateRef.value?.windowController,
+                          let activeTabID = wc.tabManager.activeTabID else { return (false, false) }
+                    let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                    guard sm.rootNode.allLeafIDs().count > 1 else { return (false, false) }
+                    sm.toggleZoom()
+                    return (true, sm.isZoomed)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return result
             },
             // V3: Session manager.
-            sessionManagerProvider: { [weak self] in self?.sessionManager },
+            sessionManagerProvider: {
+                sessionManagerRef.value
+            },
             // V3: Session capture — snapshot current app state.
-            sessionCaptureProvider: { [weak self] in
-                var session: Session?
-                let work = {
-                    MainActor.assumeIsolated {
-                        session = self?.captureCurrentSession()
-                    }
+            sessionCaptureProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.captureCurrentSession()
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return session
             },
             // V3: Session restore — recreate tabs from saved session.
-            sessionRestoreProvider: { [weak self] name in
-                var restored = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let delegate = self,
-                              let sessionMgr = delegate.sessionManager,
-                              let wc = delegate.windowController else { return }
+            sessionRestoreProvider: { name in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let sessionMgr = delegate.sessionManager,
+                          let wc = delegate.windowController else { return false }
 
-                        let session: Session?
-                        do {
-                            if let name = name {
-                                session = try sessionMgr.loadSession(named: name)
-                            } else {
-                                session = try sessionMgr.loadLastSession()
-                            }
-                        } catch {
-                            return
+                    let session: Session?
+                    do {
+                        if let name = name {
+                            session = try sessionMgr.loadSession(named: name)
+                        } else {
+                            session = try sessionMgr.loadLastSession()
                         }
-
-                        guard let session = session,
-                              let windowState = session.windows.first else { return }
-
-                        // Create tabs for each saved tab state.
-                        for tabState in windowState.tabs {
-                            wc.tabManager.addTab(
-                                workingDirectory: tabState.workingDirectory
-                            )
-                        }
-                        restored = true
+                    } catch {
+                        return false
                     }
+                    guard let session = session,
+                          let windowState = session.windows.first else { return false }
+
+                    for tabState in windowState.tabs {
+                        wc.tabManager.addTab(
+                            workingDirectory: tabState.workingDirectory
+                        )
+                    }
+                    return true
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return restored
             },
             // V3: Notification manager.
-            notificationManagerProvider: { [weak self] in self?.notificationManager },
-            // V3: Capture pane — return terminal output buffer lines.
-            capturePaneProvider: { [weak self] in
-                var lines: [String] = []
-                let work = {
-                    MainActor.assumeIsolated {
-                        lines = self?.windowController?.terminalOutputBuffer.lines ?? []
+            notificationManagerProvider: {
+                if Thread.isMainThread {
+                    return MainActor.assumeIsolated {
+                        delegateRef.value?.notificationManager
                     }
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return lines
+                return DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        delegateRef.value?.notificationManager
+                    }
+                }
+            },
+            // V3: Capture pane — return terminal output buffer lines.
+            capturePaneProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.windowController?.terminalOutputBuffer.lines ?? []
+                }
             },
             // V4: Dashboard toggle — show/hide dashboard panel.
-            dashboardToggleProvider: { [weak self] in
-                var isVisible = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        self?.windowController?.toggleDashboard()
-                        isVisible = self?.windowController?.isDashboardVisible ?? false
-                    }
+            dashboardToggleProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.windowController?.toggleDashboard()
+                    return delegateRef.value?.windowController?.isDashboardVisible ?? false
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return isVisible
             },
             // V4: Dashboard status — session counts and visibility.
-            dashboardStatusProvider: { [weak self] in
-                var data: [String: String] = [:]
-                let work = {
-                    MainActor.assumeIsolated {
-                        let wc = self?.windowController
-                        data["visible"] = (wc?.isDashboardVisible ?? false) ? "true" : "false"
-                        let sessions = wc?.dashboardViewModel?.sessions ?? []
-                        data["session_count"] = "\(sessions.count)"
-                        data["active_count"] = "\(sessions.filter { $0.state == .working }.count)"
-                        data["error_count"] = "\(sessions.filter { $0.state == .error }.count)"
-                        let totalSubagents = sessions.flatMap(\.subagents).count
-                        data["subagent_count"] = "\(totalSubagents)"
-                        let activeSubagents = sessions.flatMap(\.subagents).filter(\.isActive).count
-                        data["active_subagent_count"] = "\(activeSubagents)"
-                        let totalFiles = sessions.flatMap(\.filesTouched).count
-                        data["total_files_touched"] = "\(totalFiles)"
-                        let totalConflicts = sessions.flatMap(\.fileConflicts).count
-                        data["file_conflicts"] = "\(totalConflicts)"
-                        let totalTools = sessions.reduce(0) { $0 + $1.totalToolCalls }
-                        data["total_tool_calls"] = "\(totalTools)"
-                        let totalErrors = sessions.reduce(0) { $0 + $1.totalErrors }
-                        data["total_errors"] = "\(totalErrors)"
-                    }
+            dashboardStatusProvider: {
+                syncOnMainActor {
+                    let wc = delegateRef.value?.windowController
+                    var data: [String: String] = [:]
+                    data["visible"] = (wc?.isDashboardVisible ?? false) ? "true" : "false"
+                    let sessions = wc?.dashboardViewModel?.sessions ?? []
+                    data["session_count"] = "\(sessions.count)"
+                    data["active_count"] = "\(sessions.filter { $0.state == .working }.count)"
+                    data["error_count"] = "\(sessions.filter { $0.state == .error }.count)"
+                    let totalSubagents = sessions.flatMap(\.subagents).count
+                    data["subagent_count"] = "\(totalSubagents)"
+                    let activeSubagents = sessions.flatMap(\.subagents).filter(\.isActive).count
+                    data["active_subagent_count"] = "\(activeSubagents)"
+                    let totalFiles = sessions.flatMap(\.filesTouched).count
+                    data["total_files_touched"] = "\(totalFiles)"
+                    let totalConflicts = sessions.flatMap(\.fileConflicts).count
+                    data["file_conflicts"] = "\(totalConflicts)"
+                    let totalTools = sessions.reduce(0) { $0 + $1.totalToolCalls }
+                    data["total_tool_calls"] = "\(totalTools)"
+                    let totalErrors = sessions.reduce(0) { $0 + $1.totalErrors }
+                    data["total_errors"] = "\(totalErrors)"
+                    return data
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return data
             },
-            // V4: Timeline toggle — show/hide timeline panel.
-            timelineToggleProvider: { [weak self] in
-                let work = {
-                    MainActor.assumeIsolated {
-                        self?.windowController?.toggleTimeline()
-                    }
+            // V4: Timeline query — return events for a tab.
+            timelineQueryProvider: { tabIDString in
+                syncOnMainActor {
+                    delegateRef.value?.timelineQuery(for: tabIDString)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
             },
             // V4: Timeline export — return serialized timeline data.
-            timelineExportProvider: { [weak self] format in
-                var result: Data?
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let store = self?.agentTimelineStore else { return }
-                        let events = store.allEvents
-                        if format == "json" {
-                            result = TimelineExporter.exportJSON(events: events)
-                        } else {
-                            let md = TimelineExporter.exportMarkdown(events: events)
-                            result = md.data(using: .utf8)
-                        }
-                    }
+            timelineExportProvider: { tabIDString, format in
+                syncOnMainActor {
+                    delegateRef.value?.exportTimeline(for: tabIDString, format: format)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return result
             },
             // V4: Split create — add a new split pane.
-            splitCreateProvider: { [weak self] isVertical in
-                var created = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let wc = self?.windowController,
-                              let activeTabID = wc.tabManager.activeTabID else { return }
-                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
-                        let countBefore = sm.rootNode.allLeafIDs().count
-                        guard countBefore < SplitManager.maxPaneCount else { return }
-                        if isVertical {
-                            wc.splitVerticalAction(nil)
-                        } else {
-                            wc.splitHorizontalAction(nil)
-                        }
-                        created = sm.rootNode.allLeafIDs().count > countBefore
+            splitCreateProvider: { isVertical in
+                syncOnMainActor {
+                    guard let wc = delegateRef.value?.windowController,
+                          let activeTabID = wc.tabManager.activeTabID else { return false }
+                    let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                    let countBefore = sm.rootNode.allLeafIDs().count
+                    guard countBefore < SplitManager.maxPaneCount else { return false }
+                    if isVertical {
+                        wc.splitVerticalAction(nil)
+                    } else {
+                        wc.splitHorizontalAction(nil)
                     }
+                    return sm.rootNode.allLeafIDs().count > countBefore
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return created
             },
             // V4: Split focus — focus a pane by DFS index.
-            splitFocusProvider: { [weak self] index in
-                var focused = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let wc = self?.windowController,
-                              let activeTabID = wc.tabManager.activeTabID else { return }
-                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
-                        let leaves = sm.rootNode.allLeafIDs()
-                        guard index >= 0, index < leaves.count else { return }
-                        sm.focusLeaf(id: leaves[index].leafID)
-                        focused = true
-                    }
+            splitFocusProvider: { index in
+                syncOnMainActor {
+                    guard let wc = delegateRef.value?.windowController,
+                          let activeTabID = wc.tabManager.activeTabID else { return false }
+                    let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                    let leaves = sm.rootNode.allLeafIDs()
+                    guard index >= 0, index < leaves.count else { return false }
+                    sm.focusLeaf(id: leaves[index].leafID)
+                    return true
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return focused
+            },
+            // V4: Split focus — focus neighboring pane by direction.
+            splitFocusByDirectionProvider: { direction in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let navDirection = NavigationDirection(commandValue: direction) else { return false }
+                    return delegate.focusSplit(in: navDirection)
+                }
             },
             // V4: Split close — close the focused pane.
-            splitCloseProvider: { [weak self] in
-                var closed = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let wc = self?.windowController,
-                              let activeTabID = wc.tabManager.activeTabID else { return }
-                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
-                        guard sm.rootNode.allLeafIDs().count > 1 else { return }
-                        wc.closeSplitAction(nil)
-                        closed = true
-                    }
+            splitCloseProvider: {
+                syncOnMainActor {
+                    guard let wc = delegateRef.value?.windowController,
+                          let activeTabID = wc.tabManager.activeTabID else { return false }
+                    let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
+                    guard sm.rootNode.allLeafIDs().count > 1 else { return false }
+                    wc.closeSplitAction(nil)
+                    return true
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return closed
             },
             // V4: Split resize — set ratio on a split node.
-            splitResizeProvider: { [weak self] splitIDStr, ratio in
-                var resized = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let uuid = UUID(uuidString: splitIDStr),
-                              let wc = self?.windowController,
-                              let activeTabID = wc.tabManager.activeTabID else { return }
-                        let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
-                        sm.setRatio(splitID: uuid, ratio: ratio)
-                        resized = true
-                    }
+            splitResizeProvider: { splitIDStr, ratio in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let uuid = UUID(uuidString: splitIDStr) else { return false }
+                    return delegate.setSplitRatio(splitID: uuid, ratio: ratio)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return resized
+            },
+            // V4: Split resize — resize neighboring divider by direction and pixels.
+            splitResizeByDirectionProvider: { direction, pixels in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let navDirection = NavigationDirection(commandValue: direction) else { return false }
+                    return delegate.resizeSplit(in: navDirection, pixels: pixels)
+                }
             },
             // V4: Search toggle — show/hide search bar.
-            searchToggleProvider: { [weak self] in
-                let work = {
-                    MainActor.assumeIsolated {
-                        self?.windowController?.toggleSearchBar()
-                    }
+            searchToggleProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.windowController?.toggleSearchBar()
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+            },
+            // V4: Search query — return structured scrollback matches.
+            searchProvider: { query, regex, caseSensitive, tabIDString in
+                syncOnMainActor {
+                    delegateRef.value?.searchScrollback(
+                        query: query,
+                        regex: regex,
+                        caseSensitive: caseSensitive,
+                        tabIDString: tabIDString
+                    )
+                }
             },
             // V4: Send text — write text to the active terminal's PTY.
-            sendTextProvider: { [weak self] text in
-                var sent = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let delegate = self,
-                              let bridge = delegate.bridge,
-                              let wc = delegate.windowController,
-                              let surfaceView = wc.focusedSplitSurfaceView,
-                              let surfaceID = surfaceView.viewModel.surfaceID else { return }
-                        sent = bridge.performBindingAction("text:\(text)", on: surfaceID)
-                    }
+            sendTextProvider: { text in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let bridge = delegate.bridge,
+                          let wc = delegate.windowController,
+                          let surfaceView = wc.focusedSplitSurfaceView,
+                          let surfaceID = surfaceView.viewModel.surfaceID else { return false }
+                    return bridge.performBindingAction("text:\(text)", on: surfaceID)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return sent
             },
             // V4: Send key — send a named key to the active terminal.
-            sendKeyProvider: { [weak self] keyName in
-                var sent = false
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let delegate = self,
-                              let bridge = delegate.bridge,
-                              let wc = delegate.windowController,
-                              let surfaceView = wc.focusedSplitSurfaceView,
-                              let surfaceID = surfaceView.viewModel.surfaceID else { return }
-                        let sequence: String?
-                        switch keyName.lowercased() {
-                        case "enter", "return":   sequence = "\r"
-                        case "tab":               sequence = "\t"
-                        case "escape", "esc":     sequence = "\u{1B}"
-                        case "backspace", "bs":   sequence = "\u{7F}"
-                        case "space":             sequence = " "
-                        case "up":                sequence = "\u{1B}[A"
-                        case "down":              sequence = "\u{1B}[B"
-                        case "right":             sequence = "\u{1B}[C"
-                        case "left":              sequence = "\u{1B}[D"
-                        case "delete", "del":     sequence = "\u{1B}[3~"
-                        case "home":              sequence = "\u{1B}[H"
-                        case "end":               sequence = "\u{1B}[F"
-                        case "pageup", "pgup":    sequence = "\u{1B}[5~"
-                        case "pagedown", "pgdn":  sequence = "\u{1B}[6~"
-                        case "insert", "ins":     sequence = "\u{1B}[2~"
-                        case "ctrl-c":            sequence = "\u{03}"
-                        case "ctrl-d":            sequence = "\u{04}"
-                        case "ctrl-z":            sequence = "\u{1A}"
-                        case "ctrl-l":            sequence = "\u{0C}"
-                        case "ctrl-a":            sequence = "\u{01}"
-                        case "ctrl-e":            sequence = "\u{05}"
-                        case "ctrl-k":            sequence = "\u{0B}"
-                        case "ctrl-u":            sequence = "\u{15}"
-                        case "ctrl-w":            sequence = "\u{17}"
-                        default:                  sequence = nil
-                        }
-                        guard let seq = sequence else { return }
-                        sent = bridge.performBindingAction("text:\(seq)", on: surfaceID)
+            sendKeyProvider: { keyName in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let bridge = delegate.bridge,
+                          let wc = delegate.windowController,
+                          let surfaceView = wc.focusedSplitSurfaceView,
+                          let surfaceID = surfaceView.viewModel.surfaceID else { return false }
+                    let sequence: String?
+                    switch keyName.lowercased() {
+                    case "enter", "return":   sequence = "\r"
+                    case "tab":               sequence = "\t"
+                    case "escape", "esc":     sequence = "\u{1B}"
+                    case "backspace", "bs":   sequence = "\u{7F}"
+                    case "space":             sequence = " "
+                    case "up":                sequence = "\u{1B}[A"
+                    case "down":              sequence = "\u{1B}[B"
+                    case "right":             sequence = "\u{1B}[C"
+                    case "left":              sequence = "\u{1B}[D"
+                    case "delete", "del":     sequence = "\u{1B}[3~"
+                    case "home":              sequence = "\u{1B}[H"
+                    case "end":               sequence = "\u{1B}[F"
+                    case "pageup", "pgup":    sequence = "\u{1B}[5~"
+                    case "pagedown", "pgdn":  sequence = "\u{1B}[6~"
+                    case "insert", "ins":     sequence = "\u{1B}[2~"
+                    case "ctrl-c":            sequence = "\u{03}"
+                    case "ctrl-d":            sequence = "\u{04}"
+                    case "ctrl-z":            sequence = "\u{1A}"
+                    case "ctrl-l":            sequence = "\u{0C}"
+                    case "ctrl-a":            sequence = "\u{01}"
+                    case "ctrl-e":            sequence = "\u{05}"
+                    case "ctrl-k":            sequence = "\u{0B}"
+                    case "ctrl-u":            sequence = "\u{15}"
+                    case "ctrl-w":            sequence = "\u{17}"
+                    default:                  sequence = nil
                     }
+                    guard let seq = sequence else { return false }
+                    return bridge.performBindingAction("text:\(seq)", on: surfaceID)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return sent
             },
             // V4: SSH — open SSH in a new tab.
-            sshProvider: { [weak self] destination, port, identityFile in
-                var result: (id: String, title: String)?
-                let work = {
-                    MainActor.assumeIsolated {
-                        guard let delegate = self,
-                              let wc = delegate.windowController else { return }
-                        var sshArgs = ["ssh"]
-                        if let port = port { sshArgs += ["-p", "\(port)"] }
-                        if let identity = identityFile { sshArgs += ["-i", identity] }
-                        sshArgs.append(destination)
-                        let sshCommand = sshArgs.joined(separator: " ")
+            sshProvider: { destination, port, identityFile in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let wc = delegate.windowController else { return nil }
+                    var sshArgs = ["ssh"]
+                    if let port = port { sshArgs += ["-p", "\(port)"] }
+                    if let identity = identityFile { sshArgs += ["-i", identity] }
+                    sshArgs.append(destination)
+                    let sshCommand = sshArgs.joined(separator: " ")
 
-                        let newTab = wc.tabManager.addTab(
-                            workingDirectory: FileManager.default.homeDirectoryForCurrentUser
-                        )
-                        result = (id: newTab.id.rawValue.uuidString, title: destination)
-                        wc.tabManager.renameTab(id: newTab.id, newTitle: destination)
+                    let newTab = wc.tabManager.addTab(
+                        workingDirectory: FileManager.default.homeDirectoryForCurrentUser
+                    )
+                    wc.tabManager.renameTab(id: newTab.id, newTitle: destination)
+                    wc.tabManager.setActive(id: newTab.id)
 
-                        // Focus the new tab to ensure its surface becomes active.
-                        wc.tabManager.setActive(id: newTab.id)
-
-                        // Send SSH command after shell initializes.
-                        // Only proceed if the target tab is still active after the
-                        // delay — if the user switched tabs, skip to avoid typing
-                        // the SSH command into the wrong terminal.
-                        let targetTabID = newTab.id
-                        Task { @MainActor [weak wc, weak delegate] in
-                            try? await Task.sleep(for: .milliseconds(500))
-                            guard let bridge = delegate?.bridge,
-                                  let wc = wc,
-                                  wc.tabManager.activeTabID == targetTabID else { return }
-                            let surfaceID = wc.terminalSurfaceView?.viewModel.surfaceID
-                                ?? wc.focusedSplitSurfaceView?.viewModel.surfaceID
-                            guard let sid = surfaceID else { return }
-                            bridge.performBindingAction("text:\(sshCommand)\r", on: sid)
-                        }
+                    let targetTabID = newTab.id
+                    Task { @MainActor [weak wc, weak delegate] in
+                        try? await Task.sleep(for: .milliseconds(500))
+                        guard let bridge = delegate?.bridge,
+                              let wc = wc,
+                              wc.tabManager.activeTabID == targetTabID else { return }
+                        let surfaceID = wc.terminalSurfaceView?.viewModel.surfaceID
+                            ?? wc.focusedSplitSurfaceView?.viewModel.surfaceID
+                        guard let sid = surfaceID else { return }
+                        bridge.performBindingAction("text:\(sshCommand)\r", on: sid)
                     }
+                    return (id: newTab.id.rawValue.uuidString, title: destination)
                 }
-                if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-                return result
             }
         )
 
@@ -1246,7 +1234,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withTimeInterval: 30.0,
             repeats: true
         ) { [weak self] _ in
-            self?.socketServer?.restartIfNeeded()
+            MainActor.assumeIsolated {
+                self?.socketServer?.restartIfNeeded()
+            }
         }
     }
 

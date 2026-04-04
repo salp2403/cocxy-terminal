@@ -21,6 +21,22 @@ enum NavigationDirection: Sendable {
     case up
     /// Navigate to the pane below.
     case down
+
+    /// Parses the CLI/socket representation of a navigation direction.
+    init?(commandValue rawValue: String) {
+        switch rawValue.lowercased() {
+        case "left":
+            self = .left
+        case "right":
+            self = .right
+        case "up":
+            self = .up
+        case "down":
+            self = .down
+        default:
+            return nil
+        }
+    }
 }
 
 // MARK: - Split Keyboard Action

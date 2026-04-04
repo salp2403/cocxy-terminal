@@ -21,11 +21,15 @@ import Foundation
 /// - SeeAlso: ADR-004 (Agent detection strategy)
 final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
 
+    private static let queueKey = DispatchSpecificKey<UUID>()
+
     // MARK: - Properties
 
     private let defaultIdleTimeout: TimeInterval
     private let sustainedOutputThreshold: TimeInterval
     private let queue: DispatchQueue
+    private let queueID = UUID()
+    private let outputStateLock = NSLock()
 
     /// Callback for async signal emission (timers fire outside processBytes).
     var onSignalEmitted: ((DetectionSignal) -> Void)?
@@ -57,6 +61,10 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
     /// Whether the detector has been stopped.
     private var isStopped: Bool = false
 
+    /// Fast-path flag read from `processBytes` to avoid enqueuing work when
+    /// the current state cannot emit any timing-based heuristics.
+    private var acceptsOutput: Bool = false
+
     // MARK: - Initialization
 
     /// Creates a TimingHeuristicsDetector with configurable thresholds.
@@ -76,24 +84,11 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
             label: "com.cocxy.timing-heuristics",
             qos: .utility
         )
+        self.queue.setSpecific(key: Self.queueKey, value: queueID)
     }
 
     deinit {
-        // Synchronously cancel the timer on the detector's own queue.
-        // This guarantees that:
-        // 1. No timer event fires after deinit returns.
-        // 2. The DispatchSourceTimer is properly released (a resumed source
-        //    that is cancelled and released without draining can cause a crash
-        //    on some macOS versions if done off the source's queue).
-        //
-        // Using queue.sync here is safe because deinit is called only when
-        // the ref count reaches zero, meaning no other code can be calling
-        // queue.sync on this same queue from the outside anymore.
-        queue.sync {
-            isStopped = true
-            cancelIdleTimer()
-            onSignalEmitted = nil
-        }
+        performSynchronizedTeardown()
     }
 
     // MARK: - DetectionLayer
@@ -103,6 +98,12 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
     /// Returns empty array synchronously. Signals are emitted asynchronously
     /// via the `onSignalEmitted` callback when timers fire.
     func processBytes(_ data: Data) -> [DetectionSignal] {
+        outputStateLock.lock()
+        let shouldHandleOutput = acceptsOutput
+        outputStateLock.unlock()
+
+        guard shouldHandleOutput else { return [] }
+
         queue.async { [weak self] in
             self?.handleNewOutput()
         }
@@ -116,8 +117,10 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
     /// The timing detector needs to know the current state to decide
     /// whether to start/stop/reset timers.
     func notifyStateChanged(to newState: AgentStateMachine.State) {
+        setAcceptsOutput(shouldAcceptOutput(for: newState))
         queue.async { [weak self] in
             self?.currentState = newState
+            self?.updateOutputAcceptance()
             self?.evaluateTimerState()
         }
     }
@@ -140,8 +143,10 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
 
     /// Pauses the detector (terminal lost focus).
     func pause() {
+        setAcceptsOutput(false)
         queue.async { [weak self] in
             self?.isPaused = true
+            self?.updateOutputAcceptance()
             self?.cancelIdleTimer()
         }
     }
@@ -151,6 +156,7 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
         queue.async { [weak self] in
             guard let self = self else { return }
             self.isPaused = false
+            self.updateOutputAcceptance()
             // Restart timer if we were in a state that needs it
             if self.canEmitIdleTimeout() {
                 self.lastOutputTimestamp = Date()
@@ -167,13 +173,7 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
     /// Uses `queue.sync` to guarantee cleanup is complete before returning.
     /// This makes it safe to immediately nil the detector after calling stop().
     func stop() {
-        // queue.sync is safe here because stop() is called from the main actor
-        // or from the engine's teardown path, never from this object's own queue.
-        queue.sync {
-            isStopped = true
-            cancelIdleTimer()
-            onSignalEmitted = nil
-        }
+        performSynchronizedTeardown()
     }
 
     // MARK: - Private
@@ -299,5 +299,46 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
     /// Emits a signal via the callback.
     private func emitSignal(_ signal: DetectionSignal) {
         onSignalEmitted?(signal)
+    }
+
+    private func performSynchronizedTeardown() {
+        if DispatchQueue.getSpecific(key: Self.queueKey) == queueID {
+            tearDownOnQueue()
+            return
+        }
+
+        // Cleanup must run on the detector queue so the timer cannot outlive
+        // teardown, but syncing from the same queue would trap. We detect that
+        // case above and tear down inline instead.
+        queue.sync {
+            tearDownOnQueue()
+        }
+    }
+
+    private func tearDownOnQueue() {
+        isStopped = true
+        updateOutputAcceptance()
+        cancelIdleTimer()
+        onSignalEmitted = nil
+    }
+
+    private func updateOutputAcceptance() {
+        let shouldAcceptOutput = shouldAcceptOutput(for: currentState) && !isPaused && !isStopped
+        setAcceptsOutput(shouldAcceptOutput)
+    }
+
+    private func shouldAcceptOutput(for state: AgentStateMachine.State) -> Bool {
+        switch state {
+        case .agentLaunched, .working, .waitingInput, .finished:
+            return true
+        case .idle, .error:
+            return false
+        }
+    }
+
+    private func setAcceptsOutput(_ newValue: Bool) {
+        outputStateLock.lock()
+        acceptsOutput = newValue
+        outputStateLock.unlock()
     }
 }

@@ -81,7 +81,7 @@ final class TextSelectionManager {
         self.surfaceView = surfaceView
     }
 
-    deinit {
+    isolated deinit {
         autoScrollTimer?.invalidate()
         autoScrollTimer = nil
     }

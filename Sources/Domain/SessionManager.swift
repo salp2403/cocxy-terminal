@@ -30,7 +30,11 @@ import Foundation
 ///
 /// - SeeAlso: `SessionManaging` protocol
 /// - SeeAlso: `Session`, `WindowState`, `TabState`, `SplitNodeState`
-final class SessionManagerImpl: SessionManaging {
+///
+/// The concrete manager is shared by main-actor lifecycle code and background
+/// socket handlers. Mutable state is either immutable after initialization,
+/// guarded by `saveLock`, or confined to the internal serial queue.
+final class SessionManagerImpl: SessionManaging, @unchecked Sendable {
 
     // MARK: - Constants
 

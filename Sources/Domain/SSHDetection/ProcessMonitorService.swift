@@ -57,7 +57,7 @@ final class ProcessMonitorService: ObservableObject {
         self.pollInterval = pollInterval
     }
 
-    deinit {
+    isolated deinit {
         timer?.invalidate()
         timer = nil
     }

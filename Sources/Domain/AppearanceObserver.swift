@@ -41,9 +41,9 @@ final class SystemAppearanceProvider: AppearanceProviding {
             forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            let isDark = self.isDarkMode
+        ) { _ in
+            let appearance = UserDefaults.standard.string(forKey: "AppleInterfaceStyle")
+            let isDark = appearance?.lowercased() == "dark"
             callback(isDark)
         }
     }

@@ -65,13 +65,32 @@ extension AppSocketCommandHandler {
 
 extension AppSocketCommandHandler {
 
-    /// Shows the timeline panel.
+    /// Returns timeline events, optionally scoped to a tab.
     func handleTimelineShow(_ request: SocketRequest) -> SocketResponse {
-        guard let toggle = timelineToggleProvider else {
+        guard let provider = timelineQueryProvider else {
             return .failure(id: request.id, error: "Timeline not available")
         }
-        toggle()
-        return .ok(id: request.id, data: ["status": "shown"])
+
+        if let tabID = request.params?["tabId"],
+           UUID(uuidString: tabID) == nil {
+            return .failure(id: request.id, error: "Invalid UUID format for param: tabId")
+        }
+
+        guard let result = provider(request.params?["tabId"]),
+              let eventsJSON = encodedJSONString(result.events) else {
+            return .failure(id: request.id, error: "Tab not found or timeline unavailable")
+        }
+
+        var data: [String: String] = [
+            "status": "ok",
+            "count": "\(result.events.count)",
+            "sessionCount": "\(result.sessionIDs.count)",
+            "events": eventsJSON
+        ]
+        if let tabID = result.tabID {
+            data["tabId"] = tabID
+        }
+        return .ok(id: request.id, data: data)
     }
 
     /// Exports the timeline in JSON or Markdown format.
@@ -81,11 +100,18 @@ extension AppSocketCommandHandler {
         guard let exporter = timelineExportProvider else {
             return .failure(id: request.id, error: "Timeline not available")
         }
-        let format = request.params?["format"] ?? "json"
-        guard format == "json" || format == "markdown" else {
-            return .failure(id: request.id, error: "Invalid format: \(format). Use 'json' or 'markdown'")
+
+        if let tabID = request.params?["tabId"],
+           UUID(uuidString: tabID) == nil {
+            return .failure(id: request.id, error: "Invalid UUID format for param: tabId")
         }
-        guard let data = exporter(format) else {
+
+        let rawFormat = request.params?["format"] ?? "json"
+        guard let format = normalizedTimelineFormat(rawFormat) else {
+            return .failure(id: request.id, error: "Invalid format: \(rawFormat). Use 'json' or 'markdown'")
+        }
+
+        guard let data = exporter(request.params?["tabId"], format) else {
             return .failure(id: request.id, error: "No timeline data to export")
         }
         let content = String(data: data, encoding: .utf8) ?? ""
@@ -108,7 +134,7 @@ extension AppSocketCommandHandler {
         guard let provider = splitCreateProvider else {
             return .failure(id: request.id, error: "Split manager not available")
         }
-        let direction = request.params?["direction"] ?? "horizontal"
+        let direction = normalizedSplitCreateDirection(request.params?["direction"] ?? "horizontal")
         let isVertical = direction == "vertical"
         let created = provider(isVertical)
         if created {
@@ -139,18 +165,32 @@ extension AppSocketCommandHandler {
     ///
     /// Required params: `index` (0-based pane index).
     func handleSplitFocus(_ request: SocketRequest) -> SocketResponse {
-        guard let provider = splitFocusProvider else {
+        if let indexStr = request.params?["index"] {
+            guard let provider = splitFocusProvider else {
+                return .failure(id: request.id, error: "Split manager not available")
+            }
+            guard let index = Int(indexStr) else {
+                return .failure(id: request.id, error: "Missing or invalid param: index")
+            }
+            let focused = provider(index)
+            if focused {
+                return .ok(id: request.id, data: ["status": "focused", "index": "\(index)"])
+            }
+            return .failure(id: request.id, error: "Pane index out of range")
+        }
+
+        guard let direction = request.params?["direction"],
+              NavigationDirection(commandValue: direction) != nil else {
+            return .failure(id: request.id, error: "Missing or invalid param: direction (left|right|up|down)")
+        }
+        guard let provider = splitFocusByDirectionProvider else {
             return .failure(id: request.id, error: "Split manager not available")
         }
-        guard let indexStr = request.params?["index"],
-              let index = Int(indexStr) else {
-            return .failure(id: request.id, error: "Missing or invalid param: index")
+
+        if provider(direction.lowercased()) {
+            return .ok(id: request.id, data: ["status": "focused", "direction": direction.lowercased()])
         }
-        let focused = provider(index)
-        if focused {
-            return .ok(id: request.id, data: ["status": "focused", "index": "\(index)"])
-        }
-        return .failure(id: request.id, error: "Pane index out of range")
+        return .failure(id: request.id, error: "No pane exists in that direction")
     }
 
     /// Closes the currently focused split pane.
@@ -169,24 +209,45 @@ extension AppSocketCommandHandler {
     ///
     /// Required params: `id` (split node UUID), `ratio` (0.1-0.9).
     func handleSplitResize(_ request: SocketRequest) -> SocketResponse {
-        guard let provider = splitResizeProvider else {
+        if let splitID = request.params?["id"] {
+            guard let provider = splitResizeProvider else {
+                return .failure(id: request.id, error: "Split manager not available")
+            }
+            guard let ratioStr = request.params?["ratio"],
+                  let ratio = Double(ratioStr) else {
+                return .failure(id: request.id, error: "Missing or invalid param: ratio (0.1-0.9)")
+            }
+            let resized = provider(splitID, CGFloat(ratio))
+            if resized {
+                return .ok(id: request.id, data: [
+                    "status": "resized",
+                    "ratio": String(format: "%.2f", ratio)
+                ])
+            }
+            return .failure(id: request.id, error: "Invalid split ID or ratio out of range")
+        }
+
+        guard let direction = request.params?["direction"],
+              NavigationDirection(commandValue: direction) != nil else {
+            return .failure(id: request.id, error: "Missing or invalid param: direction (left|right|up|down)")
+        }
+        guard let pixelsStr = request.params?["pixels"],
+              let pixels = Double(pixelsStr),
+              pixels > 0 else {
+            return .failure(id: request.id, error: "Missing or invalid param: pixels (> 0)")
+        }
+        guard let provider = splitResizeByDirectionProvider else {
             return .failure(id: request.id, error: "Split manager not available")
         }
-        guard let splitID = request.params?["id"] else {
-            return .failure(id: request.id, error: "Missing required param: id")
-        }
-        guard let ratioStr = request.params?["ratio"],
-              let ratio = Double(ratioStr) else {
-            return .failure(id: request.id, error: "Missing or invalid param: ratio (0.1-0.9)")
-        }
-        let resized = provider(splitID, CGFloat(ratio))
-        if resized {
+
+        if provider(direction.lowercased(), CGFloat(pixels)) {
             return .ok(id: request.id, data: [
                 "status": "resized",
-                "ratio": String(format: "%.2f", ratio)
+                "direction": direction.lowercased(),
+                "pixels": String(Int(pixels))
             ])
         }
-        return .failure(id: request.id, error: "Invalid split ID or ratio out of range")
+        return .failure(id: request.id, error: "No adjacent pane exists in that direction")
     }
 }
 
@@ -196,12 +257,84 @@ extension AppSocketCommandHandler {
 
     /// Toggles the search bar in the active terminal.
     func handleSearch(_ request: SocketRequest) -> SocketResponse {
+        if let query = request.params?["query"] {
+            guard let provider = searchProvider else {
+                return .failure(id: request.id, error: "Search not available")
+            }
+            let regex = parseBool(request.params?["regex"]) ?? false
+            let caseSensitive = parseBool(request.params?["caseSensitive"]) ?? false
+
+            if let tabID = request.params?["tabId"],
+               UUID(uuidString: tabID) == nil {
+                return .failure(id: request.id, error: "Invalid UUID format for param: tabId")
+            }
+
+            guard let result = provider(query, regex, caseSensitive, request.params?["tabId"]),
+                  let resultsJSON = encodedJSONString(result.results) else {
+                return .failure(id: request.id, error: "Tab not found or search unavailable")
+            }
+
+            var data: [String: String] = [
+                "status": "ok",
+                "count": "\(result.results.count)",
+                "lines": "\(result.lineCount)",
+                "results": resultsJSON
+            ]
+            if let tabID = result.tabID {
+                data["tabId"] = tabID
+            }
+            return .ok(id: request.id, data: data)
+        }
+
         guard let toggle = searchToggleProvider else {
             return .failure(id: request.id, error: "Search not available")
         }
         toggle()
         return .ok(id: request.id, data: ["status": "toggled"])
     }
+}
+
+private func normalizedSplitCreateDirection(_ direction: String) -> String {
+    switch direction.lowercased() {
+    case "v", "vertical":
+        return "vertical"
+    default:
+        return "horizontal"
+    }
+}
+
+private func normalizedTimelineFormat(_ format: String) -> String? {
+    switch format.lowercased() {
+    case "json":
+        return "json"
+    case "md", "markdown":
+        return "markdown"
+    default:
+        return nil
+    }
+}
+
+private func parseBool(_ rawValue: String?) -> Bool? {
+    guard let rawValue else { return nil }
+    switch rawValue.lowercased() {
+    case "true", "1", "yes":
+        return true
+    case "false", "0", "no":
+        return false
+    default:
+        return nil
+    }
+}
+
+private func encodedJSONString<T: Encodable>(_ value: T) -> String? {
+    let encoder = JSONEncoder()
+    if #available(macOS 10.13, *) {
+        encoder.outputFormatting = [.sortedKeys]
+    }
+    guard let data = try? encoder.encode(value) else {
+        return nil
+    }
+    return String(data: data, encoding: .utf8)
 }
 
 // MARK: - V4 Terminal I/O Handlers

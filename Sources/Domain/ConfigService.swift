@@ -105,10 +105,14 @@ final class ConfigService: ConfigProviding {
     ///
     /// - Parameter fileProvider: The source of configuration file content.
     ///   Defaults to `DiskConfigFileProvider` for production use.
-    init(fileProvider: ConfigFileProviding = DiskConfigFileProvider()) {
+    init(
+        fileProvider: ConfigFileProviding = DiskConfigFileProvider(),
+        ghosttyConfigPath: String? = GhosttyConfigFallback.defaultConfigPath
+    ) {
         self.fileProvider = fileProvider
         self.parser = TOMLParser()
         self.configSubject = CurrentValueSubject(.defaults)
+        self.ghosttyConfigPath = ghosttyConfigPath
     }
 
     // MARK: - Loading
@@ -122,7 +126,7 @@ final class ConfigService: ConfigProviding {
     /// - Throws: `ConfigError.writeFailed` if the default config cannot be written.
     /// Path to the Ghostty config used as fallback. Nil disables the fallback.
     /// Exposed for testing so the fallback can be disabled or pointed at a fixture.
-    var ghosttyConfigPath: String? = GhosttyConfigFallback.defaultConfigPath
+    let ghosttyConfigPath: String?
 
     func reload() throws {
         guard let rawContent = fileProvider.readConfigFile() else {

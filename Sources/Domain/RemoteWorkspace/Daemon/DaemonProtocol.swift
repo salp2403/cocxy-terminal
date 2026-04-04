@@ -78,7 +78,7 @@ struct DaemonRequest: Codable, Sendable {
 ///
 /// Uses `JSONSerialization` instead of `Codable` because `data` can contain
 /// arbitrary nested structures (session lists, status info, etc.).
-struct DaemonResponse: Sendable {
+struct DaemonResponse: @unchecked Sendable {
 
     /// Whether the request succeeded.
     let ok: Bool

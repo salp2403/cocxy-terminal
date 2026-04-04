@@ -80,7 +80,7 @@ final class WorkspaceToolbarController: NSObject {
         setupToolbar()
     }
 
-    deinit {
+    isolated deinit {
         toolbar?.delegate = nil
         toolbar = nil
         onPanelSelected = nil

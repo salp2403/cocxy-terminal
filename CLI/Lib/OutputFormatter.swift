@@ -281,6 +281,15 @@ public enum OutputFormatter {
         guard let data = response.data else {
             return ""
         }
+        if let content = data["content"] {
+            return prettyPrintJSON(content)
+        }
+        if let events = data["events"] {
+            return prettyPrintJSON(events)
+        }
+        if let results = data["results"] {
+            return prettyPrintJSON(results)
+        }
         return formatDataAsJSON(data)
     }
 

@@ -41,7 +41,7 @@ jobs:
         run: swift build -c debug
 
       - name: Test
-        run: swift test --parallel --filter '!PerformanceTests'
+        run: swift test --parallel --skip PerformanceTests
 
       - name: Build Release
         run: swift build -c release

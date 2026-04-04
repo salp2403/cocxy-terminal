@@ -23,7 +23,7 @@ import Foundation
 /// - Running processes (a new shell is launched in the persisted directory).
 ///
 /// - SeeAlso: ARCHITECTURE.md Section 7.4
-protocol SessionManaging {
+protocol SessionManaging: Sendable {
 
     /// Saves the current session.
     ///

@@ -33,7 +33,7 @@ import Foundation
 /// - SeeAlso: `SplitContainer` for the NSView hierarchy.
 /// - SeeAlso: `SplitNodeState` in SessionManaging for the serializable version.
 /// - SeeAlso: `SplitManager` for the state management service.
-indirect enum SplitNode: Identifiable, Equatable {
+indirect enum SplitNode: Identifiable, Equatable, Sendable {
 
     /// The default maximum depth allowed for the split tree.
     static let defaultMaxDepth = 4

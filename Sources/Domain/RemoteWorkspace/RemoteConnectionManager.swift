@@ -35,10 +35,10 @@ final class RemoteConnectionManager: ObservableObject {
     // MARK: - Constants
 
     /// Maximum number of automatic reconnection attempts.
-    static let maxReconnectAttempts = 5
+    nonisolated static let maxReconnectAttempts = 5
 
     /// Maximum delay between reconnection attempts (in seconds).
-    static let maxBackoffDelay: TimeInterval = 30.0
+    nonisolated static let maxBackoffDelay: TimeInterval = 30.0
 
     // MARK: - Published State
 

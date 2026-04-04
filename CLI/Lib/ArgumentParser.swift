@@ -666,7 +666,7 @@ public enum CLIArgumentParser {
 
     /// Parses `cocxy search <query> [--regex] [--case-sensitive] [--tab <id>]`.
     private static func parseSearch(arguments: [String]) throws -> ParsedCommand {
-        var query: String?
+        var queryParts: [String] = []
         var regex = false
         var caseSensitive = false
         var tabID: String?
@@ -687,14 +687,13 @@ public enum CLIArgumentParser {
                 tabID = arguments[index + 1]
                 index += 2
             default:
-                if query == nil {
-                    query = arguments[index]
-                }
+                queryParts.append(arguments[index])
                 index += 1
             }
         }
 
-        guard let resolvedQuery = query else {
+        let resolvedQuery = queryParts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !resolvedQuery.isEmpty else {
             throw CLIError.missingArgument(command: "search", argument: "query")
         }
 
@@ -1102,6 +1101,7 @@ public enum CLIArgumentParser {
         lines.append("  cocxy tab rename <id> \"My Tab\"")
         lines.append("  cocxy dashboard toggle")
         lines.append("  cocxy search \"error\" --regex")
+        lines.append("  cocxy search \"network timeout\" --tab <id>")
         lines.append("  cocxy config get font.size")
         lines.append("  cocxy theme set dracula")
         lines.append("")

@@ -12,7 +12,7 @@ import Foundation
 ///
 /// - SeeAlso: `ScrollbackSearchEngine` (produces these results)
 /// - SeeAlso: `ScrollbackSearchBarViewModel` (consumes these results)
-struct SearchResult: Identifiable, Equatable, Sendable {
+struct SearchResult: Identifiable, Equatable, Sendable, Codable {
 
     /// Unique identifier for this result.
     let id: UUID

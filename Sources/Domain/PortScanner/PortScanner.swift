@@ -193,28 +193,17 @@ final class PortScannerImpl: ObservableObject {
             parameters.requiredInterfaceType = .loopback
 
             let connection = NWConnection(to: endpoint, using: parameters)
-
-            var hasResumed = false
-            let lock = NSLock()
-
-            func resumeOnce(with value: Bool) {
-                lock.lock()
-                defer { lock.unlock() }
-                guard !hasResumed else { return }
-                hasResumed = true
-                connection.cancel()
-                continuation.resume(returning: value)
-            }
+            let resumeState = ResumeState(connection: connection, continuation: continuation)
 
             connection.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    resumeOnce(with: true)
+                    resumeState.resume(with: true)
                 case .failed, .cancelled:
-                    resumeOnce(with: false)
+                    resumeState.resume(with: false)
                 case .waiting:
                     // Connection is waiting (e.g., no route). Treat as closed.
-                    resumeOnce(with: false)
+                    resumeState.resume(with: false)
                 default:
                     break
                 }
@@ -224,7 +213,7 @@ final class PortScannerImpl: ObservableObject {
 
             // Timeout: 200ms. If the connection has not reached .ready, give up.
             self.probeQueue.asyncAfter(deadline: .now() + .milliseconds(200)) {
-                resumeOnce(with: false)
+                resumeState.resume(with: false)
             }
         }
     }
@@ -286,5 +275,27 @@ final class PortScannerImpl: ObservableObject {
 
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8)
+    }
+}
+
+private final class ResumeState: @unchecked Sendable {
+    private let lock = NSLock()
+    private let connection: NWConnection
+    private let continuation: CheckedContinuation<Bool, Never>
+    private var hasResumed = false
+
+    init(connection: NWConnection, continuation: CheckedContinuation<Bool, Never>) {
+        self.connection = connection
+        self.continuation = continuation
+    }
+
+    func resume(with value: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !hasResumed else { return }
+        hasResumed = true
+        connection.cancel()
+        continuation.resume(returning: value)
     }
 }

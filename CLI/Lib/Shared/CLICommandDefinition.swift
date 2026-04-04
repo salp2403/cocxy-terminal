@@ -283,7 +283,7 @@ public enum CLICommand: String, CaseIterable {
         case .timelineExport: return "cocxy timeline export <tab-id> [--format json|md]"
 
         // Search
-        case .search: return "cocxy search <query> [--regex] [--case-sensitive]"
+        case .search: return "cocxy search <query> [--regex] [--case-sensitive] [--tab <id>]"
 
         // Config
         case .configGet: return "cocxy config get <key>"

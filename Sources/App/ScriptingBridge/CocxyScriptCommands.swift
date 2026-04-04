@@ -3,27 +3,30 @@
 
 import AppKit
 
+private func setScriptError(on command: NSScriptCommand, message: String) {
+    command.scriptErrorNumber = errOSAGeneralError
+    command.scriptErrorString = message
+}
+
 // MARK: - Make Tab Command
 
 /// Handles: `make new tab with command "ls" at "/path"`
 ///
 /// AppleScript commands always execute on the main thread. The bodies use
-/// `MainActor.assumeIsolated` to satisfy strict concurrency checking
-/// without introducing async overhead.
+/// `MainActor.assumeIsolated` synchronously without returning non-Sendable
+/// values across the isolation boundary.
 @objc(CocxyMakeTabCommand)
-class CocxyMakeTabCommand: NSScriptCommand {
+final class CocxyMakeTabCommand: NSScriptCommand, @unchecked Sendable {
 
     override func performDefaultImplementation() -> Any? {
-        MainActor.assumeIsolated {
-            let arguments = evaluatedArguments ?? [:]
-            let command = arguments["command"] as? String
-            let dirPath = arguments["workingDirectory"] as? String
+        let arguments = evaluatedArguments ?? [:]
+        let commandText = arguments["command"] as? String
+        let dirPath = arguments["workingDirectory"] as? String
 
+        let outcome: (result: ScriptableTab?, errorMessage: String?) = MainActor.assumeIsolated {
             guard let appDelegate = NSApp.delegate as? AppDelegate,
                   let windowController = appDelegate.windowController else {
-                scriptErrorNumber = errOSAGeneralError
-                scriptErrorString = "Application not ready"
-                return nil
+                return (nil, "Application not ready")
             }
 
             let workingDir: URL
@@ -36,16 +39,24 @@ class CocxyMakeTabCommand: NSScriptCommand {
             windowController.createTab(workingDirectory: workingDir)
 
             // If a command was specified, send it to the new tab's terminal.
-            if let cmd = command, !cmd.isEmpty,
+            if let cmd = commandText, !cmd.isEmpty,
                let activeID = windowController.tabManager.activeTabID,
                let surfaceID = windowController.tabSurfaceMap[activeID] {
                 windowController.bridge.sendText(cmd + "\r", to: surfaceID)
             }
 
             // Return the scriptable tab object for the new tab.
-            guard let newTabID = windowController.tabManager.activeTabID else { return nil }
-            return ScriptableTab(tabID: newTabID, tabManager: windowController.tabManager)
+            guard let newTabID = windowController.tabManager.activeTabID else {
+                return (nil, nil)
+            }
+            return (ScriptableTab(tabID: newTabID, tabManager: windowController.tabManager), nil)
         }
+
+        if let message = outcome.errorMessage {
+            setScriptError(on: self, message: message)
+            return nil
+        }
+        return outcome.result
     }
 }
 
@@ -53,28 +64,30 @@ class CocxyMakeTabCommand: NSScriptCommand {
 
 /// Handles: `run command "ls -la"`
 @objc(CocxyRunCommandCommand)
-class CocxyRunCommandCommand: NSScriptCommand {
+final class CocxyRunCommandCommand: NSScriptCommand, @unchecked Sendable {
 
     override func performDefaultImplementation() -> Any? {
-        MainActor.assumeIsolated {
-            guard let text = directParameter as? String, !text.isEmpty else {
-                scriptErrorNumber = errOSAGeneralError
-                scriptErrorString = "No command text provided"
-                return nil
+        let directText = directParameter as? String
+        let errorMessage: String? = MainActor.assumeIsolated {
+            guard let text = directText, !text.isEmpty else {
+                return "No command text provided"
             }
 
             guard let appDelegate = NSApp.delegate as? AppDelegate,
                   let windowController = appDelegate.windowController,
                   let activeID = windowController.tabManager.activeTabID,
                   let surfaceID = windowController.tabSurfaceMap[activeID] else {
-                scriptErrorNumber = errOSAGeneralError
-                scriptErrorString = "No active terminal"
-                return nil
+                return "No active terminal"
             }
 
             windowController.bridge.sendText(text + "\r", to: surfaceID)
             return nil
         }
+
+        if let errorMessage {
+            setScriptError(on: self, message: errorMessage)
+        }
+        return nil
     }
 }
 
@@ -82,28 +95,30 @@ class CocxyRunCommandCommand: NSScriptCommand {
 
 /// Handles: `split terminal direction "horizontal"`
 @objc(CocxySplitCommand)
-class CocxySplitCommand: NSScriptCommand {
+final class CocxySplitCommand: NSScriptCommand, @unchecked Sendable {
 
     override func performDefaultImplementation() -> Any? {
-        MainActor.assumeIsolated {
-            let arguments = evaluatedArguments ?? [:]
-            let direction = (arguments["direction"] as? String)?.lowercased() ?? "vertical"
+        let arguments = evaluatedArguments ?? [:]
+        let direction = (arguments["direction"] as? String)?.lowercased() ?? "vertical"
 
+        let errorMessage: String? = MainActor.assumeIsolated {
             guard let appDelegate = NSApp.delegate as? AppDelegate,
                   let windowController = appDelegate.windowController else {
-                scriptErrorNumber = errOSAGeneralError
-                scriptErrorString = "Application not ready"
-                return nil
+                return "Application not ready"
             }
 
             if direction == "horizontal" {
-                windowController.splitHorizontalAction(self)
+                windowController.splitHorizontalAction(nil)
             } else {
-                windowController.splitVerticalAction(self)
+                windowController.splitVerticalAction(nil)
             }
-
             return nil
         }
+
+        if let errorMessage {
+            setScriptError(on: self, message: errorMessage)
+        }
+        return nil
     }
 }
 
@@ -111,28 +126,29 @@ class CocxySplitCommand: NSScriptCommand {
 
 /// Handles: `focus tab 2` (1-based index)
 @objc(CocxyFocusTabCommand)
-class CocxyFocusTabCommand: NSScriptCommand {
+final class CocxyFocusTabCommand: NSScriptCommand, @unchecked Sendable {
 
     override func performDefaultImplementation() -> Any? {
-        MainActor.assumeIsolated {
-            guard let index = directParameter as? Int else {
-                scriptErrorNumber = errOSAGeneralError
-                scriptErrorString = "Tab index required"
-                return nil
+        let directIndex = directParameter as? Int
+        let errorMessage: String? = MainActor.assumeIsolated {
+            guard let index = directIndex else {
+                return "Tab index required"
             }
 
             guard let appDelegate = NSApp.delegate as? AppDelegate,
                   let windowController = appDelegate.windowController else {
-                scriptErrorNumber = errOSAGeneralError
-                scriptErrorString = "Application not ready"
-                return nil
+                return "Application not ready"
             }
 
             // Convert from 1-based (AppleScript) to 0-based (internal).
             let zeroBasedIndex = index - 1
             windowController.tabManager.gotoTab(at: zeroBasedIndex)
-
             return nil
         }
+
+        if let errorMessage {
+            setScriptError(on: self, message: errorMessage)
+        }
+        return nil
     }
 }

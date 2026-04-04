@@ -37,18 +37,20 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
     private let maxLineBuffer: Int
     private let lock = NSLock()
 
-    /// Circular buffer of recent lines.
-    private var recentLines: [String] = []
+    /// The number of active entries currently stored in the circular window.
+    private var recentLineWindowCount: Int = 0
 
-    /// Match history flags aligned with recentLines circular buffer.
-    /// Each Bool corresponds to a line in recentLines — true if that line matched.
-    private var launchMatchFlags: [String: [Bool]] = [:]
-    private var waitingMatchFlags: [Bool] = []
-    private var errorMatchFlags: [Bool] = []
-    private var finishedMatchFlags: [Bool] = []
+    /// The next slot to overwrite in the circular window.
+    private var nextWindowSlot: Int = 0
+
+    /// Match history flags aligned with the circular window slot.
+    private var launchMatchFlags: [[Bool]] = []
+    private var waitingMatchFlags: [Bool]
+    private var errorMatchFlags: [Bool]
+    private var finishedMatchFlags: [Bool]
 
     /// Window match counts (sum of true values in flags above).
-    private var launchMatchesInWindow: [String: Int] = [:]
+    private var launchMatchesInWindow: [Int] = []
     private var waitingMatchesInWindow: Int = 0
     private var errorMatchesInWindow: Int = 0
     private var finishedMatchesInWindow: Int = 0
@@ -70,7 +72,7 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
     var recentLineCount: Int {
         lock.lock()
         defer { lock.unlock() }
-        return recentLines.count
+        return recentLineWindowCount
     }
 
     // MARK: - Initialization
@@ -97,6 +99,10 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
         self.requiredConsecutiveMatches = max(1, requiredConsecutiveMatches)
         self.cooldownInterval = cooldownInterval
         self.maxLineBuffer = max(1, maxLineBuffer)
+        self.waitingMatchFlags = Array(repeating: false, count: self.maxLineBuffer)
+        self.errorMatchFlags = Array(repeating: false, count: self.maxLineBuffer)
+        self.finishedMatchFlags = Array(repeating: false, count: self.maxLineBuffer)
+        initializeLaunchBuffers(for: configs)
     }
 
     // MARK: - DetectionLayer
@@ -105,31 +111,36 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        guard let text = String(data: data, encoding: .utf8) else { return [] }
-
-        // Combine with any pending fragment from previous chunk
-        let fullText = pendingLineFragment + text
-        pendingLineFragment = ""
-
-        // Split into lines
-        let lines = fullText.components(separatedBy: "\n")
-
-        // If the data didn't end with a newline, the last element is a fragment
-        if !text.hasSuffix("\n") && lines.count > 1 {
-            pendingLineFragment = lines.last ?? ""
-        } else if !text.hasSuffix("\n") && lines.count == 1 {
-            pendingLineFragment = lines[0]
-            return []
+        if pendingLineFragment.isEmpty,
+           data.last == 0x0A,
+           !data.dropLast().contains(0x0A) {
+            let lineData = data.dropLast()
+            guard let line = decodeUTF8Text(lineData) else { return [] }
+            return processLine(line)
         }
 
-        // Process complete lines (all except the pending fragment)
-        let completeLineCount = text.hasSuffix("\n") ? lines.count : lines.count - 1
-        var signals: [DetectionSignal] = []
+        guard let text = decodeUTF8Text(data) else { return [] }
 
-        for i in 0..<completeLineCount {
-            let line = lines[i]
-            let lineSignals = processLine(line)
+        // Combine with any pending fragment from previous chunk
+        let fullText: String
+        if pendingLineFragment.isEmpty {
+            fullText = text
+        } else {
+            fullText = pendingLineFragment + text
+            pendingLineFragment = ""
+        }
+
+        var signals: [DetectionSignal] = []
+        var lineStart = fullText.startIndex
+
+        while let newlineIndex = fullText[lineStart...].firstIndex(of: "\n") {
+            let lineSignals = processLine(fullText[lineStart..<newlineIndex])
             signals.append(contentsOf: lineSignals)
+            lineStart = fullText.index(after: newlineIndex)
+        }
+
+        if lineStart < fullText.endIndex {
+            pendingLineFragment = String(fullText[lineStart...])
         }
 
         return signals
@@ -145,6 +156,7 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
         defer { lock.unlock() }
         configs = newConfigs
         resetAllCounters()
+        initializeLaunchBuffers(for: newConfigs)
     }
 
     // MARK: - Private
@@ -155,49 +167,46 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
     /// buffer. When a line scrolls out, its flag is removed and the window count
     /// decremented. Detection fires when the count within the window reaches the
     /// required threshold, regardless of whether matches are consecutive.
-    private func processLine(_ line: String) -> [DetectionSignal] {
-        // Phase 0: Evict oldest entry from sliding window if buffer is full.
-        if recentLines.count >= maxLineBuffer {
-            evictOldestMatchFlags()
+    private func processLine<S: StringProtocol>(_ line: S) -> [DetectionSignal] {
+        let slot = nextWindowSlot
+        if recentLineWindowCount >= maxLineBuffer {
+            evictMatchFlags(at: slot)
+        } else {
+            recentLineWindowCount += 1
         }
+        nextWindowSlot = (slot + 1) % maxLineBuffer
 
-        // Add to circular buffer.
-        recentLines.append(line)
-        if recentLines.count > maxLineBuffer {
-            recentLines.removeFirst(recentLines.count - maxLineBuffer)
-        }
-
-        let isBlankLine = line.trimmingCharacters(in: .whitespaces).isEmpty
+        let isBlankLine = line.allSatisfy { $0.isWhitespace }
 
         // Phase 1: Determine what matched across all configs.
-        var launchMatchedAgent: String?
+        var launchMatchedIndex: Int?
         var waitingMatched = false
         var errorMatchedAgent: String?
         var finishedMatched = false
 
         if !isBlankLine {
-            for compiled in configs {
+            for (index, compiled) in configs.enumerated() {
                 let agentName = compiled.config.name
 
-                if launchMatchedAgent == nil &&
-                   matchesAny(line: line, patterns: compiled.launchPatterns) {
-                    launchMatchedAgent = agentName
+                if launchMatchedIndex == nil &&
+                   matchesAny(line: line, matchers: compiled.launchMatchers) {
+                    launchMatchedIndex = index
                 }
 
                 if !waitingMatched &&
-                   matchesAny(line: line, patterns: compiled.waitingPatterns) {
+                   matchesAny(line: line, matchers: compiled.waitingMatchers) {
                     waitingMatched = true
                     lastWaitingAgent = agentName
                 }
 
                 if errorMatchedAgent == nil &&
-                   matchesAny(line: line, patterns: compiled.errorPatterns) {
+                   matchesAny(line: line, matchers: compiled.errorMatchers) {
                     errorMatchedAgent = agentName
                     lastErrorAgent = agentName
                 }
 
                 if !finishedMatched &&
-                   matchesAny(line: line, patterns: compiled.finishedIndicators) {
+                   matchesAny(line: line, matchers: compiled.finishedMatchers) {
                     finishedMatched = true
                     lastFinishedAgent = agentName
                 }
@@ -205,27 +214,28 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
         }
 
         // Phase 2: Append match flags to sliding window and update counts.
-        appendLaunchFlags(matchedAgent: launchMatchedAgent)
-        appendCategoryFlag(matched: waitingMatched, flags: &waitingMatchFlags,
+        appendLaunchFlags(matchedIndex: launchMatchedIndex, at: slot)
+        writeCategoryFlag(matched: waitingMatched, at: slot, flags: &waitingMatchFlags,
                            count: &waitingMatchesInWindow)
-        appendCategoryFlag(matched: errorMatchedAgent != nil, flags: &errorMatchFlags,
+        writeCategoryFlag(matched: errorMatchedAgent != nil, at: slot, flags: &errorMatchFlags,
                            count: &errorMatchesInWindow)
-        appendCategoryFlag(matched: finishedMatched, flags: &finishedMatchFlags,
+        writeCategoryFlag(matched: finishedMatched, at: slot, flags: &finishedMatchFlags,
                            count: &finishedMatchesInWindow)
 
         // Phase 3: Check thresholds and emit signals.
         var signals: [DetectionSignal] = []
-        let now = Date()
+        var timestamp: Date?
 
         // Launch: per-agent window count
-        for compiled in configs {
+        for (index, compiled) in configs.enumerated() {
             let agentName = compiled.config.name
-            let windowCount = launchMatchesInWindow[agentName] ?? 0
+            let windowCount = launchMatchesInWindow[index]
 
             guard windowCount >= requiredConsecutiveMatches else { continue }
 
             let cooldownKey = "\(agentName).launch"
             let lastEmission = lastEmissionByKey[cooldownKey] ?? .distantPast
+            let now = emissionTimestamp(cachedIn: &timestamp)
             guard now.timeIntervalSince(lastEmission) >= cooldownInterval else { continue }
 
             signals.append(DetectionSignal(
@@ -235,7 +245,7 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
                 timestamp: now
             ))
             lastEmissionByKey[cooldownKey] = now
-            clearLaunchFlags(for: agentName)
+            clearLaunchFlags(at: index)
         }
 
         // Waiting
@@ -243,6 +253,7 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
             let waitingAgent = lastWaitingAgent ?? "unknown"
             let cooldownKey = "\(waitingAgent).waiting"
             let lastEmission = lastEmissionByKey[cooldownKey] ?? .distantPast
+            let now = emissionTimestamp(cachedIn: &timestamp)
             if now.timeIntervalSince(lastEmission) >= cooldownInterval {
                 signals.append(DetectionSignal(
                     event: .promptDetected,
@@ -260,9 +271,10 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
             let errorAgent = lastErrorAgent ?? "unknown"
             let cooldownKey = "\(errorAgent).error"
             let lastEmission = lastEmissionByKey[cooldownKey] ?? .distantPast
+            let now = emissionTimestamp(cachedIn: &timestamp)
             if now.timeIntervalSince(lastEmission) >= cooldownInterval {
                 signals.append(DetectionSignal(
-                    event: .errorDetected(message: line),
+                    event: .errorDetected(message: String(line)),
                     confidence: 0.7,
                     source: .pattern(name: errorAgent),
                     timestamp: now
@@ -277,6 +289,7 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
             let finishedAgent = lastFinishedAgent ?? "unknown"
             let cooldownKey = "\(finishedAgent).finished"
             let lastEmission = lastEmissionByKey[cooldownKey] ?? .distantPast
+            let now = emissionTimestamp(cachedIn: &timestamp)
             if now.timeIntervalSince(lastEmission) >= cooldownInterval {
                 signals.append(DetectionSignal(
                     event: .completionDetected,
@@ -294,90 +307,122 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
 
     // MARK: - Sliding Window Helpers
 
-    /// Evicts the oldest match flags when the buffer reaches capacity.
-    private func evictOldestMatchFlags() {
-        // Launch flags: per-agent eviction
-        for agentName in launchMatchFlags.keys {
-            guard var flags = launchMatchFlags[agentName], !flags.isEmpty else { continue }
-            let evicted = flags.removeFirst()
+    /// Evicts the flags currently stored in the slot that is about to be reused.
+    private func evictMatchFlags(at slot: Int) {
+        for index in launchMatchFlags.indices {
+            let evicted = launchMatchFlags[index][slot]
             if evicted {
-                launchMatchesInWindow[agentName] = max(0, (launchMatchesInWindow[agentName] ?? 0) - 1)
+                launchMatchesInWindow[index] = max(0, launchMatchesInWindow[index] - 1)
             }
-            launchMatchFlags[agentName] = flags
+            launchMatchFlags[index][slot] = false
         }
 
-        evictOldestFlag(flags: &waitingMatchFlags, count: &waitingMatchesInWindow)
-        evictOldestFlag(flags: &errorMatchFlags, count: &errorMatchesInWindow)
-        evictOldestFlag(flags: &finishedMatchFlags, count: &finishedMatchesInWindow)
+        evictFlag(at: slot, flags: &waitingMatchFlags, count: &waitingMatchesInWindow)
+        evictFlag(at: slot, flags: &errorMatchFlags, count: &errorMatchesInWindow)
+        evictFlag(at: slot, flags: &finishedMatchFlags, count: &finishedMatchesInWindow)
     }
 
-    /// Evicts the oldest flag from a category and decrements count if needed.
-    private func evictOldestFlag(flags: inout [Bool], count: inout Int) {
-        guard !flags.isEmpty else { return }
-        let evicted = flags.removeFirst()
+    /// Evicts the flag from a category slot and decrements count if needed.
+    private func evictFlag(at slot: Int, flags: inout [Bool], count: inout Int) {
+        guard flags.indices.contains(slot) else { return }
+        let evicted = flags[slot]
         if evicted {
             count = max(0, count - 1)
         }
+        flags[slot] = false
     }
 
-    /// Appends launch match flags for all configured agents.
-    private func appendLaunchFlags(matchedAgent: String?) {
-        for compiled in configs {
-            let agentName = compiled.config.name
-            let didMatch = agentName == matchedAgent
-            var flags = launchMatchFlags[agentName] ?? []
-            flags.append(didMatch)
-            launchMatchFlags[agentName] = flags
+    /// Writes launch match flags for all configured agents into the current slot.
+    private func appendLaunchFlags(matchedIndex: Int?, at slot: Int) {
+        for index in launchMatchFlags.indices {
+            let didMatch = index == matchedIndex
+            launchMatchFlags[index][slot] = didMatch
             if didMatch {
-                launchMatchesInWindow[agentName] = (launchMatchesInWindow[agentName] ?? 0) + 1
+                launchMatchesInWindow[index] += 1
             }
         }
     }
 
-    /// Appends a match flag for a non-launch category and updates its count.
-    private func appendCategoryFlag(matched: Bool, flags: inout [Bool], count: inout Int) {
-        flags.append(matched)
+    /// Writes a match flag for a non-launch category and updates its count.
+    private func writeCategoryFlag(
+        matched: Bool,
+        at slot: Int,
+        flags: inout [Bool],
+        count: inout Int
+    ) {
+        flags[slot] = matched
         if matched {
             count += 1
         }
     }
 
     /// Clears all launch flags and window count for a specific agent after emission.
-    private func clearLaunchFlags(for agentName: String) {
-        let flagCount = launchMatchFlags[agentName]?.count ?? 0
-        launchMatchFlags[agentName] = Array(repeating: false, count: flagCount)
-        launchMatchesInWindow[agentName] = 0
+    private func clearLaunchFlags(at index: Int) {
+        launchMatchFlags[index] = Array(repeating: false, count: maxLineBuffer)
+        launchMatchesInWindow[index] = 0
     }
 
     /// Clears flags and count for a non-launch category after emission.
     private func clearCategoryFlags(flags: inout [Bool], count: inout Int) {
-        flags = Array(repeating: false, count: flags.count)
+        flags = Array(repeating: false, count: maxLineBuffer)
         count = 0
     }
 
-    /// Tests if a line matches any of the given compiled patterns.
-    private func matchesAny(line: String, patterns: [NSRegularExpression]) -> Bool {
-        let range = NSRange(line.startIndex..<line.endIndex, in: line)
-        return patterns.contains { regex in
-            regex.firstMatch(in: line, options: [], range: range) != nil
+    /// Tests if a line matches any of the given compiled matchers.
+    private func matchesAny<S: StringProtocol>(line: S, matchers: [CompiledPatternMatcher]) -> Bool {
+        for matcher in matchers {
+            if matcher.matches(line) {
+                return true
+            }
         }
+        return false
     }
 
     /// Resets all sliding window state and cooldown timestamps.
     private func resetAllCounters() {
-        recentLines.removeAll()
+        recentLineWindowCount = 0
+        nextWindowSlot = 0
         pendingLineFragment = ""
-        launchMatchFlags.removeAll()
-        launchMatchesInWindow.removeAll()
-        waitingMatchFlags.removeAll()
+        for index in launchMatchFlags.indices {
+            launchMatchFlags[index] = Array(repeating: false, count: maxLineBuffer)
+            launchMatchesInWindow[index] = 0
+        }
+        waitingMatchFlags = Array(repeating: false, count: maxLineBuffer)
         waitingMatchesInWindow = 0
-        errorMatchFlags.removeAll()
+        errorMatchFlags = Array(repeating: false, count: maxLineBuffer)
         errorMatchesInWindow = 0
-        finishedMatchFlags.removeAll()
+        finishedMatchFlags = Array(repeating: false, count: maxLineBuffer)
         finishedMatchesInWindow = 0
         lastEmissionByKey.removeAll()
         lastWaitingAgent = nil
         lastErrorAgent = nil
         lastFinishedAgent = nil
+    }
+
+    private func initializeLaunchBuffers(for configs: [CompiledAgentConfig]) {
+        launchMatchFlags = Array(
+            repeating: Array(repeating: false, count: maxLineBuffer),
+            count: configs.count
+        )
+        launchMatchesInWindow = Array(repeating: 0, count: configs.count)
+    }
+
+    private func emissionTimestamp(cachedIn timestamp: inout Date?) -> Date {
+        if let timestamp {
+            return timestamp
+        }
+
+        let now = Date()
+        timestamp = now
+        return now
+    }
+
+    private func decodeUTF8Text<C: Collection>(_ bytes: C) -> String?
+    where C.Element == UInt8 {
+        if bytes.allSatisfy({ $0 < 0x80 }) {
+            return String(decoding: bytes, as: UTF8.self)
+        }
+
+        return String(data: Data(bytes), encoding: .utf8)
     }
 }

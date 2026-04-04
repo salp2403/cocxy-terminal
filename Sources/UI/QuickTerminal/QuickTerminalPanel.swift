@@ -278,7 +278,9 @@ final class QuickTerminalPanel: NSPanel {
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             self.animator().setFrame(offScreenFrame, display: true)
         }, completionHandler: {
-            self.orderOut(nil)
+            MainActor.assumeIsolated {
+                self.orderOut(nil)
+            }
             completion()
         })
     }

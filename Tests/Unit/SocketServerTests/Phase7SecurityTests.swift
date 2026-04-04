@@ -400,8 +400,8 @@ final class Phase7CLIIntegrationTests: XCTestCase {
     func testBuildSplitRequestWithVerticalDirectionMapsCorrectly() {
         let request = runner.buildRequest(from: .split(direction: .vertical))
         XCTAssertEqual(request.command, "split")
-        XCTAssertEqual(request.params?["direction"], "v",
-                       "Vertical direction should serialize as 'v'")
+        XCTAssertEqual(request.params?["direction"], "vertical",
+                       "Vertical direction should serialize as 'vertical'")
     }
 
     // MARK: - TEST 15: CLI framing maxPayloadSize constant matches server constant

@@ -28,6 +28,22 @@ import Combine
 @MainActor
 final class SplitManager: ObservableObject {
 
+    struct ResizeTarget: Equatable {
+        let splitID: UUID
+        let ratioDeltaSign: CGFloat
+    }
+
+    private enum PathChildSide {
+        case first
+        case second
+    }
+
+    private struct PathEntry {
+        let splitID: UUID
+        let direction: SplitDirection
+        let childSide: PathChildSide
+    }
+
     // MARK: - Published State
 
     /// The root of the split tree. A single leaf when no splits are active.
@@ -262,6 +278,23 @@ final class SplitManager: ObservableObject {
         focusedLeafID = neighborID
     }
 
+    /// Focuses the neighboring pane in the requested direction.
+    ///
+    /// - Returns: `true` when a neighboring pane exists and becomes focused.
+    func focusInDirection(_ direction: NavigationDirection) -> Bool {
+        guard let currentFocusedID = focusedLeafID,
+              let neighborID = SplitNavigator.findNeighbor(
+                  of: currentFocusedID,
+                  direction: direction,
+                  in: rootNode
+              ) else {
+            return false
+        }
+
+        focusedLeafID = neighborID
+        return true
+    }
+
     /// Moves focus by the given offset in the leaf list (wraps around).
     private func navigate(offset: Int) {
         guard let currentFocusedID = focusedLeafID else { return }
@@ -292,6 +325,29 @@ final class SplitManager: ObservableObject {
         rootNode = rootNode.swappingLeaves(at: indexA, with: indexB)
     }
 
+    /// Swaps the focused pane with its adjacent pane in the given direction.
+    ///
+    /// - Returns: `true` when a neighboring pane exists and the swap succeeds.
+    func swapFocused(with direction: NavigationDirection) -> Bool {
+        guard let currentFocusedID = focusedLeafID,
+              let neighborID = SplitNavigator.findNeighbor(
+                  of: currentFocusedID,
+                  direction: direction,
+                  in: rootNode
+              ) else {
+            return false
+        }
+
+        let leaves = rootNode.allLeafIDs()
+        guard let indexA = leaves.firstIndex(where: { $0.leafID == currentFocusedID }),
+              let indexB = leaves.firstIndex(where: { $0.leafID == neighborID }) else {
+            return false
+        }
+
+        swapLeaves(at: indexA, with: indexB)
+        return true
+    }
+
     // MARK: - Focus
 
     /// Sets focus to the leaf with the given ID.
@@ -302,6 +358,11 @@ final class SplitManager: ObservableObject {
     func focusLeaf(id: UUID) {
         guard rootNode.findLeaf(id: id) != nil else { return }
         focusedLeafID = id
+    }
+
+    /// Returns the direct parent split ID for the given leaf.
+    func parentSplitID(of leafID: UUID) -> UUID? {
+        buildPath(to: leafID, in: rootNode)?.last?.splitID
     }
 
     // MARK: - Ratio
@@ -315,6 +376,31 @@ final class SplitManager: ObservableObject {
     ///   - ratio: The new ratio value.
     func setRatio(splitID: UUID, ratio: CGFloat) {
         rootNode = rootNode.updateRatio(splitID: splitID, ratio: ratio)
+    }
+
+    /// Resolves which logical divider should move when resizing the focused pane.
+    ///
+    /// - Returns: The split ID and delta sign, or `nil` when there is no
+    ///   adjacent pane in the requested direction.
+    func resizeTarget(for direction: NavigationDirection) -> ResizeTarget? {
+        guard let currentFocusedID = focusedLeafID,
+              let path = buildPath(to: currentFocusedID, in: rootNode) else {
+            return nil
+        }
+
+        for entry in path.reversed() {
+            guard splitMatches(entry.direction, navigationDirection: direction),
+                  supportsMovement(direction, childSide: entry.childSide) else {
+                continue
+            }
+
+            return ResizeTarget(
+                splitID: entry.splitID,
+                ratioDeltaSign: ratioDeltaSign(for: direction)
+            )
+        }
+
+        return nil
     }
 
     // MARK: - Equalize & Zoom
@@ -437,6 +523,75 @@ final class SplitManager: ObservableObject {
             equalizeSplits()
         case .toggleZoom:
             toggleZoom()
+        }
+    }
+
+    private func buildPath(to leafID: UUID, in node: SplitNode) -> [PathEntry]? {
+        var path: [PathEntry] = []
+        guard buildPath(to: leafID, in: node, path: &path) else {
+            return nil
+        }
+        return path
+    }
+
+    private func buildPath(
+        to leafID: UUID,
+        in node: SplitNode,
+        path: inout [PathEntry]
+    ) -> Bool {
+        switch node {
+        case .leaf(let id, _):
+            return id == leafID
+
+        case .split(let splitID, let direction, let first, let second, _):
+            path.append(PathEntry(splitID: splitID, direction: direction, childSide: .first))
+            if buildPath(to: leafID, in: first, path: &path) {
+                return true
+            }
+            path.removeLast()
+
+            path.append(PathEntry(splitID: splitID, direction: direction, childSide: .second))
+            if buildPath(to: leafID, in: second, path: &path) {
+                return true
+            }
+            path.removeLast()
+
+            return false
+        }
+    }
+
+    private func splitMatches(
+        _ splitDirection: SplitDirection,
+        navigationDirection: NavigationDirection
+    ) -> Bool {
+        switch (splitDirection, navigationDirection) {
+        case (.horizontal, .left), (.horizontal, .right):
+            return true
+        case (.vertical, .up), (.vertical, .down):
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func supportsMovement(
+        _ direction: NavigationDirection,
+        childSide: PathChildSide
+    ) -> Bool {
+        switch (direction, childSide) {
+        case (.right, .first), (.down, .first), (.left, .second), (.up, .second):
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func ratioDeltaSign(for direction: NavigationDirection) -> CGFloat {
+        switch direction {
+        case .right, .down:
+            return 1.0
+        case .left, .up:
+            return -1.0
         }
     }
 }

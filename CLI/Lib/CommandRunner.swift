@@ -232,7 +232,7 @@ public struct CommandRunner {
         case .split(let direction):
             var params: [String: String]? = nil
             if let direction {
-                params = ["direction": direction.rawValue]
+                params = ["direction": direction == .horizontal ? "horizontal" : "vertical"]
             }
             return CLISocketRequest(id: requestID, command: "split", params: params)
 
@@ -308,10 +308,11 @@ public struct CommandRunner {
             )
 
         case .timelineExport(let tabID, let format):
+            let normalizedFormat = format.lowercased() == "md" ? "markdown" : format.lowercased()
             return CLISocketRequest(
                 id: requestID,
                 command: "timeline-export",
-                params: ["tabId": tabID, "format": format]
+                params: ["tabId": tabID, "format": normalizedFormat]
             )
 
         // MARK: Search (v2)

@@ -19,7 +19,7 @@ import AppKit
 /// Other mutations are handled by command classes that call `TabManager`
 /// and `MainWindowController` directly.
 @objc(ScriptableTab)
-class ScriptableTab: NSObject {
+final class ScriptableTab: NSObject, @unchecked Sendable {
 
     /// The domain tab ID.
     let tabID: TabID
@@ -85,23 +85,26 @@ class ScriptableTab: NSObject {
     // MARK: - Object Specifier
 
     override var objectSpecifier: NSScriptObjectSpecifier? {
+        let specifierBox = LockedBox<NSScriptObjectSpecifier?>(nil)
         MainActor.assumeIsolated {
-            guard let tabManager = tabManager else { return nil }
+            guard let tabManager = tabManager else { return }
 
             let appDescription = NSApplication.shared.classDescription
             guard let classDescription = appDescription as? NSScriptClassDescription else {
-                return nil
+                return
             }
 
             let index = tabManager.tabs.firstIndex(where: { $0.id == tabID }) ?? 0
-
-            return NSIndexSpecifier(
-                containerClassDescription: classDescription,
-                containerSpecifier: nil,
-                key: "scriptableTabs",
-                index: index
-            )
+            specifierBox.withValue {
+                $0 = NSIndexSpecifier(
+                    containerClassDescription: classDescription,
+                    containerSpecifier: nil,
+                    key: "scriptableTabs",
+                    index: index
+                )
+            }
         }
+        return specifierBox.withValue { $0 }
     }
 
     // MARK: - Close Command

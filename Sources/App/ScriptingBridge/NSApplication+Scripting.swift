@@ -19,15 +19,17 @@ extension NSApplication {
     ///
     /// KVC key: `scriptableTabs` (matches .sdef element declaration).
     @objc var scriptableTabs: [ScriptableTab] {
+        var tabs: [ScriptableTab] = []
         MainActor.assumeIsolated {
             guard let appDelegate = delegate as? AppDelegate,
                   let windowController = appDelegate.windowController else {
-                return []
+                return
             }
 
-            return windowController.tabManager.tabs.map { tab in
+            tabs = windowController.tabManager.tabs.map { tab in
                 ScriptableTab(tabID: tab.id, tabManager: windowController.tabManager)
             }
         }
+        return tabs
     }
 }

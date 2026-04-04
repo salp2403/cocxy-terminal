@@ -316,7 +316,7 @@ final class RequestBuilderTests: XCTestCase {
         let request = runner.buildRequest(from: .split(direction: .horizontal))
 
         XCTAssertEqual(request.command, "split")
-        XCTAssertEqual(request.params?["direction"], "h")
+        XCTAssertEqual(request.params?["direction"], "horizontal")
     }
 
     // MARK: - 21. Split request without direction

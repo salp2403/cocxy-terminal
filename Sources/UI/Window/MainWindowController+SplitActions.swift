@@ -86,17 +86,22 @@ extension MainWindowController {
         let currentPaneCount = countSplitPanes()
         guard currentPaneCount < Self.maxPaneCount else { return }
         guard let focusedSurface = focusedSplitSurfaceView else { return }
+        let splitManager = activeSplitManager
+        let splitTargetLeafID = splitManager?.focusedLeafID
 
         // Update the domain model with panel type.
         let contentID: UUID?
         if appendToEnd {
-            contentID = activeSplitManager?.appendPanel(panel: panel, focusNewPanel: focusNewPanel)
+            contentID = splitManager?.appendPanel(panel: panel, focusNewPanel: focusNewPanel)
         } else {
-            contentID = activeSplitManager?.splitFocusedWithPanel(
+            contentID = splitManager?.splitFocusedWithPanel(
                 direction: isVertical ? .horizontal : .vertical,
                 panel: panel
             )
         }
+        let newSplitID = appendToEnd
+            ? nil
+            : splitTargetLeafID.flatMap { splitManager?.parentSplitID(of: $0) }
         guard let contentID else {
             return
         }
@@ -153,7 +158,8 @@ extension MainWindowController {
                     isVertical: isVertical,
                     frame: container.bounds,
                     first: focusedSurface,
-                    second: panelView
+                    second: panelView,
+                    splitID: newSplitID
                 )
                 container.addSubview(splitView, positioned: .below, relativeTo: nil)
                 self.activeSplitView = splitView
@@ -165,7 +171,8 @@ extension MainWindowController {
                     isVertical: isVertical,
                     frame: paneFrame,
                     first: focusedSurface,
-                    second: panelView
+                    second: panelView,
+                    splitID: newSplitID
                 )
                 if let index = subviewIndex {
                     parentSplit.insertArrangedSubview(nestedSplit, at: index)
@@ -208,11 +215,14 @@ extension MainWindowController {
 
         // Find the surface view that currently has focus.
         guard let focusedSurface = focusedSplitSurfaceView else { return }
+        let splitManager = activeSplitManager
+        let splitTargetLeafID = splitManager?.focusedLeafID
 
         // Update the domain model.
-        activeSplitManager?.handleSplitAction(
+        splitManager?.handleSplitAction(
             isVertical ? .splitHorizontal : .splitVertical
         )
+        let newSplitID = splitTargetLeafID.flatMap { splitManager?.parentSplitID(of: $0) }
 
         // Create new terminal for the second pane.
         let newViewModel = TerminalViewModel(bridge: bridge)
@@ -253,7 +263,8 @@ extension MainWindowController {
                 isVertical: isVertical,
                 frame: container.bounds,
                 first: focusedSurface,
-                second: newSurfaceView
+                second: newSurfaceView,
+                splitID: newSplitID
             )
 
             container.addSubview(splitView, positioned: .below, relativeTo: nil)
@@ -269,7 +280,8 @@ extension MainWindowController {
                 isVertical: isVertical,
                 frame: paneFrame,
                 first: focusedSurface,
-                second: newSurfaceView
+                second: newSurfaceView,
+                splitID: newSplitID
             )
 
             if let index = subviewIndex {
@@ -439,12 +451,17 @@ extension MainWindowController {
         isVertical: Bool,
         frame: NSRect,
         first: NSView,
-        second: NSView
+        second: NSView,
+        splitID: UUID? = nil,
+        ratio: CGFloat = 0.5
     ) -> NSSplitView {
         let splitView = NSSplitView(frame: frame)
         splitView.isVertical = isVertical
         splitView.dividerStyle = .thin
         splitView.autoresizingMask = [.width, .height]
+        if let splitID {
+            splitView.identifier = NSUserInterfaceItemIdentifier(splitID.uuidString)
+        }
 
         first.frame = NSRect(origin: .zero, size: frame.size)
         second.frame = NSRect(origin: .zero, size: frame.size)
@@ -462,11 +479,30 @@ extension MainWindowController {
                 ? splitView.bounds.width
                 : splitView.bounds.height
             guard totalSize > 0 else { return }
-            let position = (totalSize - splitView.dividerThickness) * 0.5
+            let position = (totalSize - splitView.dividerThickness) * SplitNode.clampRatio(ratio)
             splitView.setPosition(position, ofDividerAt: 0)
         }
 
         return splitView
+    }
+
+    /// Finds a rendered split view by its logical split node ID.
+    func findSplitView(withID splitID: UUID, in rootView: NSView? = nil) -> NSSplitView? {
+        let root = rootView ?? activeSplitView
+        let identifier = NSUserInterfaceItemIdentifier(splitID.uuidString)
+
+        guard let root else { return nil }
+        if let splitView = root as? NSSplitView, splitView.identifier == identifier {
+            return splitView
+        }
+
+        for subview in root.subviews {
+            if let match = findSplitView(withID: splitID, in: subview) {
+                return match
+            }
+        }
+
+        return nil
     }
 
     /// Collects all leaf views from the split hierarchy in visual order (DFS).
@@ -604,7 +640,7 @@ extension MainWindowController {
             return viewsByTerminalID[terminalID]
                 ?? panelContentViews[terminalID]
 
-        case .split(_, let direction, let first, let second, _):
+        case .split(let id, let direction, let first, let second, let ratio):
             guard let firstView = buildNSSplitView(from: first, viewsByTerminalID: viewsByTerminalID),
                   let secondView = buildNSSplitView(from: second, viewsByTerminalID: viewsByTerminalID) else {
                 return buildNSSplitView(from: first, viewsByTerminalID: viewsByTerminalID)
@@ -615,7 +651,9 @@ extension MainWindowController {
                 isVertical: direction == .horizontal,
                 frame: splitFrame,
                 first: firstView,
-                second: secondView
+                second: secondView,
+                splitID: id,
+                ratio: ratio
             )
         }
     }
@@ -674,9 +712,11 @@ extension MainWindowController {
                 context.timingFunction = CAMediaTimingFunction(name: .easeIn)
                 panelView.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
-                sm.focusLeaf(id: targetLeaf.leafID)
-                self?.closeSplitAction(nil)
-                self?.refreshTabStrip()
+                MainActor.assumeIsolated {
+                    sm.focusLeaf(id: targetLeaf.leafID)
+                    self?.closeSplitAction(nil)
+                    self?.refreshTabStrip()
+                }
             })
         } else {
             sm.focusLeaf(id: targetLeaf.leafID)

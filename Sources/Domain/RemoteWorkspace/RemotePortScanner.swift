@@ -61,7 +61,7 @@ final class RemotePortScanner: ObservableObject {
         self.scanInterval = scanInterval
     }
 
-    deinit {
+    isolated deinit {
         scanTimer?.invalidate()
     }
 

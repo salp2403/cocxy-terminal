@@ -20,6 +20,26 @@ enum CocxyVersion {
     }()
 }
 
+enum TabCloseOutcome: Sendable {
+    case closed
+    case lastTabBlocked
+    case pinnedBlocked
+    case notFound
+    case unavailable
+}
+
+struct TimelineQueryResult: Sendable {
+    let tabID: String?
+    let sessionIDs: [String]
+    let events: [TimelineEvent]
+}
+
+struct SearchCommandResult: Sendable {
+    let tabID: String?
+    let lineCount: Int
+    let results: [SearchResult]
+}
+
 // MARK: - App Socket Command Handler
 
 /// Production implementation of `SocketCommandHandling`.
@@ -54,8 +74,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Closure that focuses a tab by UUID string. Returns true if the tab was found.
     private let tabFocusProvider: @Sendable (String) -> Bool
 
-    /// Closure that closes a tab by UUID string. Returns true if executed.
-    private let tabCloseProvider: @Sendable (String) -> Bool
+    /// Closure that closes a tab by UUID string and reports the exact outcome.
+    private let tabCloseProvider: @Sendable (String) -> TabCloseOutcome
 
     /// Closure that creates a new tab with an optional working directory.
     /// Returns the new tab's (id, title) or nil if TabManager is unavailable.
@@ -116,11 +136,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Swaps two panes by DFS index in the active tab. Returns true on success.
     private let splitSwapProvider: (@Sendable (Int, Int) -> Bool)?
 
+    /// Swaps the focused pane with an adjacent pane in a direction.
+    private let splitSwapByDirectionProvider: (@Sendable (String) -> Bool)?
+
     /// Toggles zoom on the focused pane. Returns (success, isZoomed).
     private let splitZoomProvider: (@Sendable () -> (success: Bool, isZoomed: Bool))?
 
     /// Provides the session manager for session CRUD operations.
-    private let sessionManagerProvider: (() -> (any SessionManaging)?)?
+    private let sessionManagerProvider: (@Sendable () -> (any SessionManaging)?)?
 
     /// Captures the current application state as a Session snapshot.
     private let sessionCaptureProvider: (@Sendable () -> Session?)?
@@ -142,11 +165,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Returns dashboard status: isVisible, sessionCount, activeCount.
     let dashboardStatusProvider: (@Sendable () -> [String: String])?
 
-    /// Toggles the timeline panel.
-    let timelineToggleProvider: (@Sendable () -> Void)?
+    /// Queries timeline data, optionally scoped to a specific tab.
+    let timelineQueryProvider: (@Sendable (String?) -> TimelineQueryResult?)?
 
-    /// Exports timeline in the given format ("json" or "markdown"). Returns data.
-    let timelineExportProvider: (@Sendable (String) -> Data?)?
+    /// Exports timeline in the given format ("json" or "markdown"), optionally scoped to a tab.
+    let timelineExportProvider: (@Sendable (String?, String) -> Data?)?
 
     /// Creates a split pane. Bool param = isVertical. Returns true on success.
     let splitCreateProvider: (@Sendable (Bool) -> Bool)?
@@ -154,14 +177,23 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Focuses a split pane by DFS index. Returns true if found.
     let splitFocusProvider: (@Sendable (Int) -> Bool)?
 
+    /// Focuses the adjacent split pane in a navigation direction.
+    let splitFocusByDirectionProvider: (@Sendable (String) -> Bool)?
+
     /// Closes the focused split pane. Returns true on success.
     let splitCloseProvider: (@Sendable () -> Bool)?
 
     /// Resizes a split by setting ratio (0.1-0.9) on split ID. Returns true.
     let splitResizeProvider: (@Sendable (String, CGFloat) -> Bool)?
 
+    /// Resizes the focused pane in a direction by pixel delta.
+    let splitResizeByDirectionProvider: (@Sendable (String, CGFloat) -> Bool)?
+
     /// Toggles the search bar.
     let searchToggleProvider: (@Sendable () -> Void)?
+
+    /// Searches the scrollback buffer and returns structured results.
+    let searchProvider: (@Sendable (String, Bool, Bool, String?) -> SearchCommandResult?)?
 
     /// Sends text directly to the active terminal PTY.
     let sendTextProvider: (@Sendable (String) -> Bool)?
@@ -201,8 +233,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         configReloadProvider: (@Sendable () -> Bool)? = nil,
         splitInfoProvider: (@Sendable () -> [(leafID: String, terminalID: String, isFocused: Bool)])? = nil,
         splitSwapProvider: (@Sendable (Int, Int) -> Bool)? = nil,
+        splitSwapByDirectionProvider: (@Sendable (String) -> Bool)? = nil,
         splitZoomProvider: (@Sendable () -> (success: Bool, isZoomed: Bool))? = nil,
-        sessionManagerProvider: (() -> (any SessionManaging)?)? = nil,
+        sessionManagerProvider: (@Sendable () -> (any SessionManaging)?)? = nil,
         sessionCaptureProvider: (@Sendable () -> Session?)? = nil,
         sessionRestoreProvider: (@Sendable (String?) -> Bool)? = nil,
         notificationManagerProvider: (() -> NotificationManagerImpl?)? = nil,
@@ -210,13 +243,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         // V4 providers
         dashboardToggleProvider: (@Sendable () -> Bool)? = nil,
         dashboardStatusProvider: (@Sendable () -> [String: String])? = nil,
-        timelineToggleProvider: (@Sendable () -> Void)? = nil,
-        timelineExportProvider: (@Sendable (String) -> Data?)? = nil,
+        timelineQueryProvider: (@Sendable (String?) -> TimelineQueryResult?)? = nil,
+        timelineExportProvider: (@Sendable (String?, String) -> Data?)? = nil,
         splitCreateProvider: (@Sendable (Bool) -> Bool)? = nil,
         splitFocusProvider: (@Sendable (Int) -> Bool)? = nil,
+        splitFocusByDirectionProvider: (@Sendable (String) -> Bool)? = nil,
         splitCloseProvider: (@Sendable () -> Bool)? = nil,
         splitResizeProvider: (@Sendable (String, CGFloat) -> Bool)? = nil,
+        splitResizeByDirectionProvider: (@Sendable (String, CGFloat) -> Bool)? = nil,
         searchToggleProvider: (@Sendable () -> Void)? = nil,
+        searchProvider: (@Sendable (String, Bool, Bool, String?) -> SearchCommandResult?)? = nil,
         sendTextProvider: (@Sendable (String) -> Bool)? = nil,
         sendKeyProvider: (@Sendable (String) -> Bool)? = nil,
         sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)? = nil
@@ -232,6 +268,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.configReloadProvider = configReloadProvider
         self.splitInfoProvider = splitInfoProvider
         self.splitSwapProvider = splitSwapProvider
+        self.splitSwapByDirectionProvider = splitSwapByDirectionProvider
         self.splitZoomProvider = splitZoomProvider
         self.sessionManagerProvider = sessionManagerProvider
         self.sessionCaptureProvider = sessionCaptureProvider
@@ -240,193 +277,171 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.capturePaneProvider = capturePaneProvider
         self.dashboardToggleProvider = dashboardToggleProvider
         self.dashboardStatusProvider = dashboardStatusProvider
-        self.timelineToggleProvider = timelineToggleProvider
+        self.timelineQueryProvider = timelineQueryProvider
         self.timelineExportProvider = timelineExportProvider
         self.splitCreateProvider = splitCreateProvider
         self.splitFocusProvider = splitFocusProvider
+        self.splitFocusByDirectionProvider = splitFocusByDirectionProvider
         self.splitCloseProvider = splitCloseProvider
         self.splitResizeProvider = splitResizeProvider
+        self.splitResizeByDirectionProvider = splitResizeByDirectionProvider
         self.searchToggleProvider = searchToggleProvider
+        self.searchProvider = searchProvider
         self.sendTextProvider = sendTextProvider
         self.sendKeyProvider = sendKeyProvider
         self.sshProvider = sshProvider
-        weak var weakTabManager = tabManager
-        weak var weakBrowserVM = browserViewModel
+        let tabManagerRef = WeakReference(tabManager)
+        let browserViewModelRef = WeakReference(browserViewModel)
 
         // -- Browser view model provider --
         self.browserViewModelProvider = {
-            var vm: BrowserViewModel?
-            let work = {
-                MainActor.assumeIsolated {
-                    vm = weakBrowserVM
+            if Thread.isMainThread {
+                return MainActor.assumeIsolated {
+                    browserViewModelRef.value
                 }
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return vm
+            return DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    browserViewModelRef.value
+                }
+            }
         }
 
         // -- Tab count provider (read-only) --
         self.tabCountProvider = {
-            var count = 0
-            let work = {
-                MainActor.assumeIsolated {
-                    count = weakTabManager?.tabs.count ?? 0
-                }
+            syncOnMainActor {
+                tabManagerRef.value?.tabs.count ?? 0
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return count
         }
 
         // -- Tab info provider (read-only) --
         self.tabInfoProvider = {
-            var info: [(id: String, title: String, isActive: Bool)] = []
-            let work = {
-                MainActor.assumeIsolated {
-                    guard let tabs = weakTabManager?.tabs else { return }
-                    info = tabs.map { (
-                        id: $0.id.rawValue.uuidString,
-                        title: $0.title,
-                        isActive: $0.isActive
-                    )}
-                }
+            syncOnMainActor {
+                guard let tabs = tabManagerRef.value?.tabs else { return [] }
+                return tabs.map { (
+                    id: $0.id.rawValue.uuidString,
+                    title: $0.title,
+                    isActive: $0.isActive
+                )}
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return info
         }
 
         // -- Focus tab by UUID string --
         self.tabFocusProvider = { uuidString in
             guard let uuid = UUID(uuidString: uuidString) else { return false }
-            var found = false
-            let work = {
-                MainActor.assumeIsolated {
-                    guard let manager = weakTabManager else { return }
-                    let tabID = TabID(rawValue: uuid)
-                    guard manager.tabs.contains(where: { $0.id == tabID }) else { return }
-                    manager.setActive(id: tabID)
-                    found = true
-                }
+            return syncOnMainActor {
+                guard let manager = tabManagerRef.value else { return false }
+                let tabID = TabID(rawValue: uuid)
+                guard manager.tabs.contains(where: { $0.id == tabID }) else { return false }
+                manager.setActive(id: tabID)
+                return true
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return found
         }
 
         // -- Close tab by UUID string --
         self.tabCloseProvider = { uuidString in
-            guard let uuid = UUID(uuidString: uuidString) else { return false }
-            var handled = false
-            let work = {
-                MainActor.assumeIsolated {
-                    guard let manager = weakTabManager else { return }
-                    let tabID = TabID(rawValue: uuid)
-                    manager.removeTab(id: tabID)
-                    handled = true
+            guard let uuid = UUID(uuidString: uuidString) else { return .notFound }
+            return syncOnMainActor {
+                guard let manager = tabManagerRef.value else {
+                    return .unavailable
                 }
+
+                let tabID = TabID(rawValue: uuid)
+                guard let index = manager.tabs.firstIndex(where: { $0.id == tabID }) else {
+                    return .notFound
+                }
+                guard manager.tabs.count > 1 else {
+                    return .lastTabBlocked
+                }
+                guard !manager.tabs[index].isPinned else {
+                    return .pinnedBlocked
+                }
+
+                manager.removeTab(id: tabID)
+                return manager.tabs.contains(where: { $0.id == tabID }) ? .unavailable : .closed
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return handled
         }
 
         // -- Create new tab with optional directory --
         self.tabCreateProvider = { directoryPath in
-            var result: (id: String, title: String)?
-            let work = {
-                MainActor.assumeIsolated {
-                    guard let manager = weakTabManager else { return }
-                    let workingDirectory: URL
-                    if let path = directoryPath {
-                        workingDirectory = URL(fileURLWithPath: path)
-                    } else {
-                        workingDirectory = FileManager.default.homeDirectoryForCurrentUser
-                    }
-                    let newTab = manager.addTab(workingDirectory: workingDirectory)
-                    result = (id: newTab.id.rawValue.uuidString, title: newTab.title)
+            syncOnMainActor {
+                guard let manager = tabManagerRef.value else { return nil }
+                let workingDirectory: URL
+                if let path = directoryPath {
+                    workingDirectory = URL(fileURLWithPath: path)
+                } else {
+                    workingDirectory = FileManager.default.homeDirectoryForCurrentUser
                 }
+                let newTab = manager.addTab(workingDirectory: workingDirectory)
+                return (id: newTab.id.rawValue.uuidString, title: newTab.title)
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return result
         }
 
         // -- Rename tab by UUID string --
         self.tabRenameProvider = { uuidString, newName in
             guard let uuid = UUID(uuidString: uuidString) else { return false }
-            var found = false
-            let work = {
-                MainActor.assumeIsolated {
-                    guard let manager = weakTabManager else { return }
-                    let tabID = TabID(rawValue: uuid)
-                    guard manager.tabs.contains(where: { $0.id == tabID }) else { return }
-                    manager.renameTab(id: tabID, newTitle: newName)
-                    found = true
-                }
+            return syncOnMainActor {
+                guard let manager = tabManagerRef.value else { return false }
+                let tabID = TabID(rawValue: uuid)
+                guard manager.tabs.contains(where: { $0.id == tabID }) else { return false }
+                manager.renameTab(id: tabID, newTitle: newName)
+                return true
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return found
         }
 
         // -- Move tab to new position --
         self.tabMoveProvider = { uuidString, destinationIndex in
             guard let uuid = UUID(uuidString: uuidString) else { return false }
-            var moved = false
-            let work = {
-                MainActor.assumeIsolated {
-                    guard let manager = weakTabManager else { return }
-                    let tabID = TabID(rawValue: uuid)
-                    guard let fromIndex = manager.tabs.firstIndex(
-                        where: { $0.id == tabID }
-                    ) else { return }
-                    guard destinationIndex >= 0,
-                          destinationIndex < manager.tabs.count else { return }
-                    manager.moveTab(from: fromIndex, to: destinationIndex)
-                    moved = true
-                }
+            return syncOnMainActor {
+                guard let manager = tabManagerRef.value else { return false }
+                let tabID = TabID(rawValue: uuid)
+                guard let fromIndex = manager.tabs.firstIndex(
+                    where: { $0.id == tabID }
+                ) else { return false }
+                guard destinationIndex >= 0,
+                      destinationIndex < manager.tabs.count else { return false }
+                manager.moveTab(from: fromIndex, to: destinationIndex)
+                return true
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return moved
         }
 
         // -- Project config from active tab (read-only) --
         self.projectConfigProvider = {
-            var result: [String: String]?
-            let work = {
-                MainActor.assumeIsolated {
-                    guard let manager = weakTabManager,
-                          let activeID = manager.activeTabID,
-                          let tab = manager.tab(for: activeID),
-                          let config = tab.projectConfig else { return }
+            syncOnMainActor {
+                guard let manager = tabManagerRef.value,
+                      let activeID = manager.activeTabID,
+                      let tab = manager.tab(for: activeID),
+                      let config = tab.projectConfig else { return nil }
 
-                    var data: [String: String] = [:]
-                    if let fontSize = config.fontSize {
-                        data["font-size"] = String(fontSize)
-                    }
-                    if let padding = config.windowPadding {
-                        data["window-padding"] = String(padding)
-                    }
-                    if let paddingX = config.windowPaddingX {
-                        data["window-padding-x"] = String(paddingX)
-                    }
-                    if let paddingY = config.windowPaddingY {
-                        data["window-padding-y"] = String(paddingY)
-                    }
-                    if let opacity = config.backgroundOpacity {
-                        data["background-opacity"] = String(opacity)
-                    }
-                    if let blur = config.backgroundBlurRadius {
-                        data["background-blur-radius"] = String(blur)
-                    }
-                    if let patterns = config.agentDetectionExtraPatterns {
-                        data["agent-detection-extra-patterns"] = patterns.joined(separator: ", ")
-                    }
-                    if let keybindings = config.keybindingOverrides {
-                        for (key, value) in keybindings {
-                            data["keybinding.\(key)"] = value
-                        }
-                    }
-                    result = data
+                var data: [String: String] = [:]
+                if let fontSize = config.fontSize {
+                    data["font-size"] = String(fontSize)
                 }
+                if let padding = config.windowPadding {
+                    data["window-padding"] = String(padding)
+                }
+                if let paddingX = config.windowPaddingX {
+                    data["window-padding-x"] = String(paddingX)
+                }
+                if let paddingY = config.windowPaddingY {
+                    data["window-padding-y"] = String(paddingY)
+                }
+                if let opacity = config.backgroundOpacity {
+                    data["background-opacity"] = String(opacity)
+                }
+                if let blur = config.backgroundBlurRadius {
+                    data["background-blur-radius"] = String(blur)
+                }
+                if let patterns = config.agentDetectionExtraPatterns {
+                    data["agent-detection-extra-patterns"] = patterns.joined(separator: ", ")
+                }
+                if let keybindings = config.keybindingOverrides {
+                    for (key, value) in keybindings {
+                        data["keybinding.\(key)"] = value
+                    }
+                }
+                return data
             }
-            if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
-            return result
         }
 
         self.hookEventReceiver = hookEventReceiver
@@ -694,10 +709,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Invalid UUID format for param: id")
         }
 
-        let handled = tabCloseProvider(tabIDString)
-        if handled {
+        switch tabCloseProvider(tabIDString) {
+        case .closed:
             return .ok(id: request.id, data: ["status": "closed"])
-        } else {
+        case .lastTabBlocked:
+            return .failure(id: request.id, error: "Cannot close the last remaining tab")
+        case .pinnedBlocked:
+            return .failure(id: request.id, error: "Cannot close a pinned tab")
+        case .notFound:
+            return .failure(id: request.id, error: "Tab not found")
+        case .unavailable:
             return .failure(id: request.id, error: "Tab manager not available")
         }
     }
@@ -870,13 +891,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Returns the list of all available themes (built-in + custom).
     private func handleThemeList(_ request: SocketRequest) -> SocketResponse {
-        var themes: [ThemeMetadata] = []
-        let work = {
-            MainActor.assumeIsolated {
-                themes = self.themeEngineProvider?()?.availableThemes ?? []
+        let themes: [ThemeMetadata]
+        if Thread.isMainThread {
+            themes = MainActor.assumeIsolated {
+                self.themeEngineProvider?()?.availableThemes ?? []
+            }
+        } else {
+            themes = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    self.themeEngineProvider?()?.availableThemes ?? []
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         var data: [String: String] = ["count": "\(themes.count)"]
         for (index, theme) in themes.enumerated() {
@@ -894,19 +920,30 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Missing required param: name")
         }
 
-        var applied = false
-        let work = {
-            MainActor.assumeIsolated {
-                guard let engine = self.themeEngineProvider?() else { return }
+        let applied: Bool
+        if Thread.isMainThread {
+            applied = MainActor.assumeIsolated {
+                guard let engine = self.themeEngineProvider?() else { return false }
                 do {
                     try engine.apply(themeName: themeName)
-                    applied = true
+                    return true
                 } catch {
-                    // applied remains false
+                    return false
+                }
+            }
+        } else {
+            applied = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    guard let engine = self.themeEngineProvider?() else { return false }
+                    do {
+                        try engine.apply(themeName: themeName)
+                        return true
+                    } catch {
+                        return false
+                    }
                 }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         if applied {
             return .ok(id: request.id, data: [
@@ -1148,13 +1185,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        var state: [String: String] = [:]
-        let work = {
-            MainActor.assumeIsolated {
-                state = viewModel.getState()
+        let state: [String: String]
+        if Thread.isMainThread {
+            state = MainActor.assumeIsolated {
+                viewModel.getState()
+            }
+        } else {
+            state = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.getState()
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: state)
     }
@@ -1180,12 +1222,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        let work = {
+        if Thread.isMainThread {
             MainActor.assumeIsolated {
                 viewModel.evaluateJavaScript(script)
             }
+        } else {
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.evaluateJavaScript(script)
+                }
+            }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: ["status": "evaluated"])
     }
@@ -1199,12 +1246,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        let work = {
+        if Thread.isMainThread {
             MainActor.assumeIsolated {
                 viewModel.evaluateJavaScript("document.body.innerText")
             }
+        } else {
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.evaluateJavaScript("document.body.innerText")
+                }
+            }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: ["status": "evaluated"])
     }
@@ -1215,13 +1267,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        var tabList: [[String: String]] = []
-        let work = {
-            MainActor.assumeIsolated {
-                tabList = viewModel.getTabList()
+        let tabList: [[String: String]]
+        if Thread.isMainThread {
+            tabList = MainActor.assumeIsolated {
+                viewModel.getTabList()
+            }
+        } else {
+            tabList = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.getTabList()
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         var data: [String: String] = ["count": "\(tabList.count)"]
         for (index, tab) in tabList.enumerated() {
@@ -1237,15 +1294,22 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Lists all installed plugins with their enabled/disabled state.
     private func handlePluginList(_ request: SocketRequest) -> SocketResponse {
-        var pluginData: [(id: String, name: String, enabled: Bool)] = []
-        let work = {
-            MainActor.assumeIsolated {
-                guard let manager = self.pluginManagerProvider?() else { return }
+        let pluginData: [(id: String, name: String, enabled: Bool)]
+        if Thread.isMainThread {
+            pluginData = MainActor.assumeIsolated {
+                guard let manager = self.pluginManagerProvider?() else { return [] }
                 manager.scanPlugins()
-                pluginData = manager.plugins.map { ($0.id, $0.manifest.name, $0.isEnabled) }
+                return manager.plugins.map { ($0.id, $0.manifest.name, $0.isEnabled) }
+            }
+        } else {
+            pluginData = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    guard let manager = self.pluginManagerProvider?() else { return [] }
+                    manager.scanPlugins()
+                    return manager.plugins.map { ($0.id, $0.manifest.name, $0.isEnabled) }
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         var data: [String: String] = ["count": "\(pluginData.count)"]
         for (index, plugin) in pluginData.enumerated() {
@@ -1262,22 +1326,34 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Usage: plugin-enable {\"id\": \"<plugin-id>\"}")
         }
 
-        var resultMessage = ""
-        let work = {
-            MainActor.assumeIsolated {
+        let resultMessage: String
+        if Thread.isMainThread {
+            resultMessage = MainActor.assumeIsolated {
                 guard let manager = self.pluginManagerProvider?() else {
-                    resultMessage = "Plugin manager not initialized"
-                    return
+                    return "Plugin manager not initialized"
                 }
                 do {
                     try manager.enablePlugin(id: pluginID)
-                    resultMessage = "enabled"
+                    return "enabled"
                 } catch {
-                    resultMessage = "Failed: \(error)"
+                    return "Failed: \(error)"
+                }
+            }
+        } else {
+            resultMessage = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    guard let manager = self.pluginManagerProvider?() else {
+                        return "Plugin manager not initialized"
+                    }
+                    do {
+                        try manager.enablePlugin(id: pluginID)
+                        return "enabled"
+                    } catch {
+                        return "Failed: \(error)"
+                    }
                 }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         if resultMessage == "enabled" {
             return .ok(id: request.id, data: ["plugin": pluginID, "status": "enabled"])
@@ -1291,22 +1367,34 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Usage: plugin-disable {\"id\": \"<plugin-id>\"}")
         }
 
-        var resultMessage = ""
-        let work = {
-            MainActor.assumeIsolated {
+        let resultMessage: String
+        if Thread.isMainThread {
+            resultMessage = MainActor.assumeIsolated {
                 guard let manager = self.pluginManagerProvider?() else {
-                    resultMessage = "Plugin manager not initialized"
-                    return
+                    return "Plugin manager not initialized"
                 }
                 do {
                     try manager.disablePlugin(id: pluginID)
-                    resultMessage = "disabled"
+                    return "disabled"
                 } catch {
-                    resultMessage = "Failed: \(error)"
+                    return "Failed: \(error)"
+                }
+            }
+        } else {
+            resultMessage = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    guard let manager = self.pluginManagerProvider?() else {
+                        return "Plugin manager not initialized"
+                    }
+                    do {
+                        try manager.disablePlugin(id: pluginID)
+                        return "disabled"
+                    } catch {
+                        return "Failed: \(error)"
+                    }
                 }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         if resultMessage == "disabled" {
             return .ok(id: request.id, data: ["plugin": pluginID, "status": "disabled"])
@@ -1330,15 +1418,24 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         // Read connection states from MainActor context.
-        var connectionStates: [UUID: RemoteConnectionManager.ConnectionState] = [:]
-        let work = {
-            MainActor.assumeIsolated {
+        let connectionStates: [UUID: RemoteConnectionManager.ConnectionState]
+        if Thread.isMainThread {
+            connectionStates = MainActor.assumeIsolated {
                 if let manager = self.remoteConnectionManagerProvider?() {
-                    connectionStates = manager.connections
+                    return manager.connections
+                }
+                return [:]
+            }
+        } else {
+            connectionStates = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    if let manager = self.remoteConnectionManagerProvider?() {
+                        return manager.connections
+                    }
+                    return [:]
                 }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         var data: [String: String] = ["count": "\(profiles.count)"]
         for (index, profile) in profiles.enumerated() {
@@ -1419,17 +1516,29 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Returns connection status for all profiles or a specific one.
     private func handleRemoteStatus(_ request: SocketRequest) -> SocketResponse {
-        var connectionStates: [UUID: RemoteConnectionManager.ConnectionState] = [:]
-        var supportMap: [UUID: RemoteShellSupport] = [:]
-        let work = {
-            MainActor.assumeIsolated {
+        let stateSnapshot: (
+            connectionStates: [UUID: RemoteConnectionManager.ConnectionState],
+            supportMap: [UUID: RemoteShellSupport]
+        )
+        if Thread.isMainThread {
+            stateSnapshot = MainActor.assumeIsolated {
                 if let manager = self.remoteConnectionManagerProvider?() {
-                    connectionStates = manager.connections
-                    supportMap = manager.remoteSupport
+                    return (manager.connections, manager.remoteSupport)
+                }
+                return ([:], [:])
+            }
+        } else {
+            stateSnapshot = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    if let manager = self.remoteConnectionManagerProvider?() {
+                        return (manager.connections, manager.remoteSupport)
+                    }
+                    return ([:], [:])
                 }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
+        let connectionStates = stateSnapshot.connectionStates
+        let supportMap = stateSnapshot.supportMap
 
         // If a specific profile is requested.
         if let identifier = request.params?["name"] {
@@ -1476,15 +1585,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Lists active remote sessions across all connected profiles.
     private func handleRemoteTunnels(_ request: SocketRequest) -> SocketResponse {
-        var tunnelData: [[String: String]] = []
-        let work = {
-            MainActor.assumeIsolated {
-                guard let manager = self.remoteConnectionManagerProvider?() else { return }
+        let tunnelData: [[String: String]]
+        if Thread.isMainThread {
+            tunnelData = MainActor.assumeIsolated {
+                guard let manager = self.remoteConnectionManagerProvider?() else { return [] }
+                var tunnels: [[String: String]] = []
                 for (profileID, state) in manager.connections {
                     if case .connected = state {
                         let sessions = manager.savedSessionRecords(profileID: profileID)
                         for session in sessions {
-                            tunnelData.append([
+                            tunnels.append([
                                 "profile_id": profileID.uuidString,
                                 "session_name": session.sessionName,
                                 "profile_title": session.profileDisplayTitle,
@@ -1492,9 +1602,29 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                         }
                     }
                 }
+                return tunnels
+            }
+        } else {
+            tunnelData = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    guard let manager = self.remoteConnectionManagerProvider?() else { return [] }
+                    var tunnels: [[String: String]] = []
+                    for (profileID, state) in manager.connections {
+                        if case .connected = state {
+                            let sessions = manager.savedSessionRecords(profileID: profileID)
+                            for session in sessions {
+                                tunnels.append([
+                                    "profile_id": profileID.uuidString,
+                                    "session_name": session.sessionName,
+                                    "profile_title": session.profileDisplayTitle,
+                                ])
+                            }
+                        }
+                    }
+                    return tunnels
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         var data: [String: String] = ["count": "\(tunnelData.count)"]
         for (index, tunnel) in tunnelData.enumerated() {
@@ -1560,13 +1690,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Lists all visible application windows.
     private func handleWindowList(_ request: SocketRequest) -> SocketResponse {
-        var windowData: [[String: String]] = []
-        let work = {
-            MainActor.assumeIsolated {
+        let windowData: [[String: String]]
+        if Thread.isMainThread {
+            windowData = MainActor.assumeIsolated {
+                var windowsData: [[String: String]] = []
                 for (index, window) in NSApplication.shared.windows.enumerated()
                     where window.isVisible {
                     let frame = window.frame
-                    windowData.append([
+                    windowsData.append([
                         "index": "\(index)",
                         "title": window.title,
                         "is_key": window.isKeyWindow ? "true" : "false",
@@ -1577,9 +1708,30 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                             + "\(Int(frame.size.width)),\(Int(frame.size.height))"
                     ])
                 }
+                return windowsData
+            }
+        } else {
+            windowData = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    var windowsData: [[String: String]] = []
+                    for (index, window) in NSApplication.shared.windows.enumerated()
+                        where window.isVisible {
+                        let frame = window.frame
+                        windowsData.append([
+                            "index": "\(index)",
+                            "title": window.title,
+                            "is_key": window.isKeyWindow ? "true" : "false",
+                            "is_main": window.isMainWindow ? "true" : "false",
+                            "is_fullscreen": window.styleMask.contains(.fullScreen)
+                                ? "true" : "false",
+                            "frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)),"
+                                + "\(Int(frame.size.width)),\(Int(frame.size.height))"
+                        ])
+                    }
+                    return windowsData
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         var data: [String: String] = ["count": "\(windowData.count)"]
         for (index, win) in windowData.enumerated() {
@@ -1595,25 +1747,42 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Optional params: `index` (0-based window index).
     private func handleWindowFocus(_ request: SocketRequest) -> SocketResponse {
         let indexString = request.params?["index"]
-        var focused = false
-        let work = {
-            MainActor.assumeIsolated {
+        let focused: Bool
+        if Thread.isMainThread {
+            focused = MainActor.assumeIsolated {
                 let visibleWindows = NSApplication.shared.windows.filter { $0.isVisible }
                 if let indexStr = indexString, let index = Int(indexStr) {
-                    guard index >= 0, index < visibleWindows.count else { return }
+                    guard index >= 0, index < visibleWindows.count else { return false }
                     visibleWindows[index].makeKeyAndOrderFront(nil)
                     NSApplication.shared.activate(ignoringOtherApps: true)
-                    focused = true
+                    return true
                 } else {
                     let target = visibleWindows.first(where: { $0.isMainWindow })
                         ?? visibleWindows.first
                     target?.makeKeyAndOrderFront(nil)
                     NSApplication.shared.activate(ignoringOtherApps: true)
-                    focused = target != nil
+                    return target != nil
+                }
+            }
+        } else {
+            focused = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    let visibleWindows = NSApplication.shared.windows.filter { $0.isVisible }
+                    if let indexStr = indexString, let index = Int(indexStr) {
+                        guard index >= 0, index < visibleWindows.count else { return false }
+                        visibleWindows[index].makeKeyAndOrderFront(nil)
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                        return true
+                    } else {
+                        let target = visibleWindows.first(where: { $0.isMainWindow })
+                            ?? visibleWindows.first
+                        target?.makeKeyAndOrderFront(nil)
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                        return target != nil
+                    }
                 }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         if focused {
             return .ok(id: request.id, data: ["status": "focused"])
@@ -1630,50 +1799,66 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Missing or invalid param: index")
         }
 
-        var closed = false
-        var errorMessage = ""
-        let work = {
-            MainActor.assumeIsolated {
+        let closeResult: (closed: Bool, errorMessage: String)
+        if Thread.isMainThread {
+            closeResult = MainActor.assumeIsolated {
                 let visibleWindows = NSApplication.shared.windows.filter { $0.isVisible }
                 guard index >= 0, index < visibleWindows.count else {
-                    errorMessage = "Window index out of range (0..<\(visibleWindows.count))"
-                    return
+                    return (false, "Window index out of range (0..<\(visibleWindows.count))")
                 }
                 guard visibleWindows.count > 1 else {
-                    errorMessage = "Cannot close the last window"
-                    return
+                    return (false, "Cannot close the last window")
                 }
                 visibleWindows[index].close()
-                closed = true
+                return (true, "")
+            }
+        } else {
+            closeResult = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    let visibleWindows = NSApplication.shared.windows.filter { $0.isVisible }
+                    guard index >= 0, index < visibleWindows.count else {
+                        return (false, "Window index out of range (0..<\(visibleWindows.count))")
+                    }
+                    guard visibleWindows.count > 1 else {
+                        return (false, "Cannot close the last window")
+                    }
+                    visibleWindows[index].close()
+                    return (true, "")
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
-        if closed {
+        if closeResult.closed {
             return .ok(id: request.id, data: ["status": "closed"])
         }
-        return .failure(id: request.id, error: errorMessage)
+        return .failure(id: request.id, error: closeResult.errorMessage)
     }
 
     /// Toggles fullscreen on the key window.
     private func handleWindowFullscreen(_ request: SocketRequest) -> SocketResponse {
-        var toggled = false
-        var isFullScreen = false
-        let work = {
-            MainActor.assumeIsolated {
+        let fullscreenResult: (toggled: Bool, isFullScreen: Bool)
+        if Thread.isMainThread {
+            fullscreenResult = MainActor.assumeIsolated {
                 guard let window = NSApplication.shared.keyWindow
-                    ?? NSApplication.shared.mainWindow else { return }
+                    ?? NSApplication.shared.mainWindow else { return (false, false) }
                 window.toggleFullScreen(nil)
-                isFullScreen = window.styleMask.contains(.fullScreen)
-                toggled = true
+                return (true, window.styleMask.contains(.fullScreen))
+            }
+        } else {
+            fullscreenResult = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    guard let window = NSApplication.shared.keyWindow
+                        ?? NSApplication.shared.mainWindow else { return (false, false) }
+                    window.toggleFullScreen(nil)
+                    return (true, window.styleMask.contains(.fullScreen))
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
-        if toggled {
+        if fullscreenResult.toggled {
             return .ok(id: request.id, data: [
                 "status": "toggled",
-                "fullscreen": isFullScreen ? "true" : "false"
+                "fullscreen": fullscreenResult.isFullScreen ? "true" : "false"
             ])
         }
         return .failure(id: request.id, error: "No window available")
@@ -1872,29 +2057,43 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     ///
     /// Required params: `indexA`, `indexB` (0-based pane indices).
     private func handleSplitSwap(_ request: SocketRequest) -> SocketResponse {
-        guard let indexAStr = request.params?["indexA"],
-              let indexBStr = request.params?["indexB"],
-              let indexA = Int(indexAStr),
-              let indexB = Int(indexBStr) else {
-            return .failure(
-                id: request.id,
-                error: "Missing or invalid params: indexA, indexB (0-based pane indices)"
-            )
+        if let indexAStr = request.params?["indexA"],
+           let indexBStr = request.params?["indexB"],
+           let indexA = Int(indexAStr),
+           let indexB = Int(indexBStr) {
+            guard let provider = splitSwapProvider else {
+                return .failure(id: request.id, error: "Split manager not available")
+            }
+
+            let swapped = provider(indexA, indexB)
+            if swapped {
+                return .ok(id: request.id, data: [
+                    "status": "swapped",
+                    "indexA": "\(indexA)",
+                    "indexB": "\(indexB)"
+                ])
+            }
+            return .failure(id: request.id, error: "Invalid pane indices or no splits active")
         }
 
-        guard let provider = splitSwapProvider else {
+        guard let direction = request.params?["direction"],
+              NavigationDirection(commandValue: direction) != nil else {
+            return .failure(
+                id: request.id,
+                error: "Missing or invalid params: indexA/indexB or direction (left|right|up|down)"
+            )
+        }
+        guard let provider = splitSwapByDirectionProvider else {
             return .failure(id: request.id, error: "Split manager not available")
         }
 
-        let swapped = provider(indexA, indexB)
-        if swapped {
+        if provider(direction.lowercased()) {
             return .ok(id: request.id, data: [
                 "status": "swapped",
-                "indexA": "\(indexA)",
-                "indexB": "\(indexB)"
+                "direction": direction.lowercased()
             ])
         }
-        return .failure(id: request.id, error: "Invalid pane indices or no splits active")
+        return .failure(id: request.id, error: "No pane exists in that direction")
     }
 
     /// Toggles zoom on the focused pane.
@@ -1948,14 +2147,20 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Notification manager not available")
         }
 
-        var notifications: [CocxyNotification] = []
-        let work = {
-            MainActor.assumeIsolated {
-                guard let manager = managerProvider() else { return }
-                notifications = manager.allNotifications()
+        let notifications: [CocxyNotification]
+        if Thread.isMainThread {
+            notifications = MainActor.assumeIsolated {
+                guard let manager = managerProvider() else { return [] }
+                return manager.allNotifications()
+            }
+        } else {
+            notifications = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    guard let manager = managerProvider() else { return [] }
+                    return manager.allNotifications()
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         let formatter = ISO8601DateFormatter()
         var data: [String: String] = ["count": "\(notifications.count)"]
@@ -1976,15 +2181,22 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Notification manager not available")
         }
 
-        var remaining = 0
-        let work = {
-            MainActor.assumeIsolated {
-                guard let manager = managerProvider() else { return }
+        let remaining: Int
+        if Thread.isMainThread {
+            remaining = MainActor.assumeIsolated {
+                guard let manager = managerProvider() else { return 0 }
                 manager.markAllAsRead()
-                remaining = manager.unreadCount
+                return manager.unreadCount
+            }
+        } else {
+            remaining = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    guard let manager = managerProvider() else { return 0 }
+                    manager.markAllAsRead()
+                    return manager.unreadCount
+                }
             }
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: [
             "status": "cleared",
