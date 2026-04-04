@@ -29,12 +29,12 @@ extension MainWindowController {
 
     /// The currently focused split pane's surface view.
     /// Defaults to terminalSurfaceView when no split is active.
-    var focusedSplitSurfaceView: TerminalSurfaceView? {
+    var focusedSplitSurfaceView: TerminalHostView? {
         guard let responder = window?.firstResponder else {
             return terminalSurfaceView
         }
-        // Walk the responder chain to find a TerminalSurfaceView.
-        if let surface = responder as? TerminalSurfaceView {
+        // Walk the responder chain to find a terminal host view.
+        if let surface = responder as? TerminalHostView {
             return surface
         }
         return terminalSurfaceView
@@ -225,11 +225,14 @@ extension MainWindowController {
         let newSplitID = splitTargetLeafID.flatMap { splitManager?.parentSplitID(of: $0) }
 
         // Create new terminal for the second pane.
-        let newViewModel = TerminalViewModel(bridge: bridge)
+        let newViewModel = TerminalViewModel(engine: bridge)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         newViewModel.setDefaultFontSize(configuredFontSize)
-        let newSurfaceView = TerminalSurfaceView(viewModel: newViewModel)
+        let newSurfaceView = TerminalHostViewFactory.makeView(
+            engine: bridge,
+            viewModel: newViewModel
+        )
 
         let workingDirectory = tabManager.activeTab?.workingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
@@ -241,7 +244,8 @@ extension MainWindowController {
                 command: nil
             )
             newViewModel.markRunning(surfaceID: surfaceID)
-            newSurfaceView.syncSizeWithGhostty()
+            newSurfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+            newSurfaceView.syncSizeWithTerminal()
         } catch {
             NSLog("[MainWindowController] Failed to create surface for split: %@",
                   String(describing: error))
@@ -251,6 +255,14 @@ extension MainWindowController {
         // Track the new pane.
         splitSurfaceViews[surfaceID] = newSurfaceView
         splitViewModels[surfaceID] = newViewModel
+        if let activeTabID = tabManager.activeTabID {
+            wireSurfaceHandlers(
+                for: surfaceID,
+                tabID: activeTabID,
+                in: newSurfaceView,
+                initialWorkingDirectory: workingDirectory
+            )
+        }
 
         // Determine the parent of the focused surface view.
         let parentView = focusedSurface.superview ?? container
@@ -333,7 +345,7 @@ extension MainWindowController {
             let focusedSurfaceID = splitSurfaceViews.first { $0.value === focusedSurface }?.key
 
             // If the focused surface is the primary, close a secondary instead.
-            let surfaceToClose: TerminalSurfaceView
+            let surfaceToClose: TerminalHostView
             let surfaceIDToDestroy: SurfaceID?
             if focusedSurfaceID != nil {
                 surfaceToClose = focusedSurface
@@ -347,6 +359,7 @@ extension MainWindowController {
 
             // Destroy the surface in the engine.
             if let sid = surfaceIDToDestroy {
+                clearSurfaceTracking(for: sid)
                 bridge.destroySurface(sid)
                 splitViewModels[sid]?.markStopped()
                 splitSurfaceViews.removeValue(forKey: sid)

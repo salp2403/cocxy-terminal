@@ -4,6 +4,53 @@
 import XCTest
 @testable import CocxyTerminal
 
+@MainActor
+private final class QuickTerminalTestEngine: TerminalEngine {
+    private(set) var createdSurfaceIDs: [SurfaceID] = []
+    private(set) var destroyedSurfaceIDs: [SurfaceID] = []
+    private(set) var workingDirectories: [URL?] = []
+
+    func initialize(config: TerminalEngineConfig) throws {}
+
+    func createSurface(
+        in view: NativeTerminalView,
+        workingDirectory: URL?,
+        command: String?
+    ) throws -> SurfaceID {
+        let surfaceID = SurfaceID()
+        createdSurfaceIDs.append(surfaceID)
+        workingDirectories.append(workingDirectory)
+        return surfaceID
+    }
+
+    func destroySurface(_ id: SurfaceID) {
+        destroyedSurfaceIDs.append(id)
+    }
+
+    @discardableResult
+    func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool { false }
+
+    func sendText(_ text: String, to surface: SurfaceID) {}
+
+    func sendPreeditText(_ text: String, to surface: SurfaceID) {}
+
+    func resize(_ surface: SurfaceID, to size: TerminalSize) {}
+
+    func tick() {}
+
+    func setOutputHandler(
+        for surface: SurfaceID,
+        handler: @escaping @Sendable (Data) -> Void
+    ) {}
+
+    func setOSCHandler(
+        for surface: SurfaceID,
+        handler: @escaping @Sendable (OSCNotification) -> Void
+    ) {}
+
+    func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {}
+}
+
 // MARK: - Quick Terminal Controller Tests
 
 /// Tests for `QuickTerminalController`.
@@ -217,5 +264,76 @@ final class QuickTerminalControllerTests: XCTestCase {
                        "Re-setup must reset visibility to hidden")
         XCTAssertEqual(sut.currentSlideEdge, .left,
                        "Re-setup must apply new config")
+    }
+
+    func testShowWithBridgeCreatesSurfaceOnlyOnce() {
+        let engine = QuickTerminalTestEngine()
+        sut.setup(bridge: engine, config: .defaults)
+
+        sut.show()
+        sut.hide()
+        sut.show()
+
+        XCTAssertEqual(
+            engine.createdSurfaceIDs.count,
+            1,
+            "Quick terminal should keep its surface alive across hide/show toggles"
+        )
+    }
+
+    func testTearDownDestroysCreatedSurface() {
+        let engine = QuickTerminalTestEngine()
+        sut.setup(bridge: engine, config: .defaults)
+        sut.show()
+
+        guard let createdSurfaceID = engine.createdSurfaceIDs.first else {
+            XCTFail("show() should create a quick terminal surface")
+            return
+        }
+
+        sut.tearDown()
+
+        XCTAssertEqual(
+            engine.destroyedSurfaceIDs,
+            [createdSurfaceID],
+            "tearDown must destroy the quick terminal surface when one was created"
+        )
+    }
+
+    func testShowUsesConfiguredQuickTerminalWorkingDirectory() {
+        let engine = QuickTerminalTestEngine()
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            notifications: .defaults,
+            quickTerminal: QuickTerminalConfig(
+                enabled: true,
+                hotkey: "cmd+grave",
+                position: .top,
+                heightPercentage: 40,
+                hideOnDeactivate: true,
+                workingDirectory: "~/Projects",
+                animationDuration: 0.15,
+                screen: .mouse
+            ),
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+
+        sut.setup(bridge: engine, config: config)
+        sut.show()
+
+        guard let workingDirectory = engine.workingDirectories.first ?? nil else {
+            XCTFail("show() should capture the configured quick terminal working directory")
+            return
+        }
+
+        XCTAssertEqual(
+            workingDirectory.path,
+            (("~/Projects") as NSString).expandingTildeInPath,
+            "Quick terminal must spawn from its configured working directory"
+        )
     }
 }

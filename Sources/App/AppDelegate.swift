@@ -47,9 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Properties
 
-    /// The terminal engine bridge. Created during app launch.
-    /// Exposed for testing purposes.
-    private(set) var bridge: GhosttyBridge?
+    /// The terminal engine. Created during app launch.
+    /// Can be GhosttyBridge or CocxyCoreBridge depending on config.
+    private(set) var bridge: (any TerminalEngine)?
 
     /// The main window controller. Created during app launch.
     /// Exposed for testing purposes.
@@ -332,9 +332,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Bridge Initialization
 
-    /// Initializes the GhosttyBridge with configuration from ConfigService.
+    /// Initializes the terminal engine bridge based on the configured engine type.
+    ///
+    /// Reads `engineType` from GeneralConfig. Defaults to GhosttyBridge for stability.
+    /// CocxyCoreBridge is used when `engine = "cocxycore"` is set in config.toml.
     private func initializeBridge() {
-        let newBridge = GhosttyBridge()
+        let engineType = configService?.current.general.engineType ?? .ghostty
+        let newBridge: any TerminalEngine = engineType == .cocxycore
+            ? CocxyCoreBridge()
+            : GhosttyBridge()
 
         let fontFamily = configService?.current.appearance.fontFamily
             ?? AppearanceConfig.defaults.fontFamily
@@ -374,7 +380,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try newBridge.initialize(config: config)
             self.bridge = newBridge
         } catch {
-            NSLog("[AppDelegate] Failed to initialize GhosttyBridge: %@",
+            NSLog("[AppDelegate] Failed to initialize terminal engine %@: %@",
+                  String(describing: type(of: newBridge)),
                   String(describing: error))
             // The app can still show a window with an error state.
             // For now, we proceed without a bridge.
@@ -412,6 +419,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 1. Resolve the new theme palette.
         guard let theme = try? themeEngine?.themeByName(themeName) else {
             NSLog("[AppDelegate] Theme not found: %@", themeName)
+            return
+        }
+
+        if let cocxyBridge = bridge as? CocxyCoreBridge {
+            applyCocxyCoreTheme(theme.palette, bridge: cocxyBridge)
+            applyThemeUI(windowController, palette: theme.palette)
+            for controller in additionalWindowControllers {
+                applyThemeUI(controller, palette: theme.palette)
+            }
+            NSLog("[AppDelegate] Theme switched to: %@", themeName)
             return
         }
 
@@ -469,8 +486,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bridge = nil
     }
 
-    private func createBridgeForTheme(_ themeName: String, palette: ThemePalette) -> GhosttyBridge? {
-        let newBridge = GhosttyBridge()
+    private func createBridgeForTheme(_ themeName: String, palette: ThemePalette) -> (any TerminalEngine)? {
+        let engineType = configService?.current.general.engineType ?? .ghostty
+        let newBridge: any TerminalEngine = engineType == .cocxycore
+            ? CocxyCoreBridge()
+            : GhosttyBridge()
         let fontFamily = configService?.current.appearance.fontFamily
             ?? AppearanceConfig.defaults.fontFamily
         let fontSize = configService?.current.appearance.fontSize
@@ -502,12 +522,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
         self.bridge = newBridge
+        if let config = configService?.current {
+            let wasQuickTerminalVisible = quickTerminalController?.isVisible ?? false
+            quickTerminalController?.setup(bridge: newBridge, config: config)
+            if wasQuickTerminalVisible {
+                quickTerminalController?.show()
+            }
+        }
         return newBridge
     }
 
     private func recreateTabSurfaces(
         windowController wc: MainWindowController,
-        bridge newBridge: GhosttyBridge,
+        bridge newBridge: any TerminalEngine,
         snapshots: [ThemeSwitchTabSnapshot]
     ) {
         wc.bridge = newBridge
@@ -518,11 +545,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ? snapshots[index]
                 : ThemeSwitchTabSnapshot(id: tab.id, title: tab.title, workingDirectory: tab.workingDirectory)
 
-            let viewModel = TerminalViewModel(bridge: newBridge)
+            let viewModel = TerminalViewModel(engine: newBridge)
             let configuredFontSize = configService?.current.appearance.fontSize
                 ?? AppearanceConfig.defaults.fontSize
             viewModel.setDefaultFontSize(configuredFontSize)
-            let surfaceView = TerminalSurfaceView(viewModel: viewModel)
+            let surfaceView = TerminalHostViewFactory.makeView(
+                engine: newBridge,
+                viewModel: viewModel
+            )
 
             wc.tabViewModels[tab.id] = viewModel
             wc.tabSurfaceViews[tab.id] = surfaceView
@@ -534,7 +564,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     command: nil
                 )
                 viewModel.markRunning(surfaceID: surfaceID)
-                surfaceView.syncSizeWithGhostty()
+                surfaceView.configureSurfaceIfNeeded(bridge: newBridge, surfaceID: surfaceID)
+                surfaceView.syncSizeWithTerminal()
                 wc.tabSurfaceMap[tab.id] = surfaceID
                 wc.wireHandlersForRestoredTab(tabID: tab.id, surfaceID: surfaceID)
             } catch {
@@ -563,6 +594,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let appearance = configService?.current.appearance {
             wc.tabBarView?.setSidebarTransparent(appearance.backgroundOpacity < 1.0)
+        }
+    }
+
+    private func applyCocxyCoreTheme(
+        _ palette: ThemePalette,
+        bridge: CocxyCoreBridge
+    ) {
+        for surfaceID in bridge.allSurfaceIDs {
+            bridge.applyTheme(palette, to: surfaceID)
+        }
+
+        let allControllers = [windowController].compactMap { $0 } + additionalWindowControllers
+        for controller in allControllers {
+            for surfaceView in controller.tabSurfaceViews.values {
+                surfaceView.requestImmediateRedraw()
+            }
+            for surfaceView in controller.splitSurfaceViews.values {
+                surfaceView.requestImmediateRedraw()
+            }
         }
     }
 
@@ -1135,8 +1185,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           let bridge = delegate.bridge,
                           let wc = delegate.windowController,
                           let surfaceView = wc.focusedSplitSurfaceView,
-                          let surfaceID = surfaceView.viewModel.surfaceID else { return false }
-                    return bridge.performBindingAction("text:\(text)", on: surfaceID)
+                          let surfaceID = surfaceView.terminalViewModel?.surfaceID else { return false }
+                    bridge.sendText(text, to: surfaceID)
+                    return true
                 }
             },
             // V4: Send key — send a named key to the active terminal.
@@ -1146,7 +1197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           let bridge = delegate.bridge,
                           let wc = delegate.windowController,
                           let surfaceView = wc.focusedSplitSurfaceView,
-                          let surfaceID = surfaceView.viewModel.surfaceID else { return false }
+                          let surfaceID = surfaceView.terminalViewModel?.surfaceID else { return false }
                     let sequence: String?
                     switch keyName.lowercased() {
                     case "enter", "return":   sequence = "\r"
@@ -1176,7 +1227,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     default:                  sequence = nil
                     }
                     guard let seq = sequence else { return false }
-                    return bridge.performBindingAction("text:\(seq)", on: surfaceID)
+                    bridge.sendText(seq, to: surfaceID)
+                    return true
                 }
             },
             // V4: SSH — open SSH in a new tab.
@@ -1202,10 +1254,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         guard let bridge = delegate?.bridge,
                               let wc = wc,
                               wc.tabManager.activeTabID == targetTabID else { return }
-                        let surfaceID = wc.terminalSurfaceView?.viewModel.surfaceID
-                            ?? wc.focusedSplitSurfaceView?.viewModel.surfaceID
+                        let surfaceID = wc.terminalSurfaceView?.terminalViewModel?.surfaceID
+                            ?? wc.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
                         guard let sid = surfaceID else { return }
-                        bridge.performBindingAction("text:\(sshCommand)\r", on: sid)
+                        bridge.sendText("\(sshCommand)\r", to: sid)
                     }
                     return (id: newTab.id.rawValue.uuidString, title: destination)
                 }

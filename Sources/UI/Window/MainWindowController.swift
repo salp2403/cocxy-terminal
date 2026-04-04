@@ -52,13 +52,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// The ViewModel driving the terminal surface in this window.
     let terminalViewModel: TerminalViewModel
 
-    /// The terminal surface view that renders the terminal.
+    /// The terminal host view that renders the active terminal surface.
     /// Mutable from extensions (TabLifecycle needs to nil it during tab close).
-    internal var terminalSurfaceView: TerminalSurfaceView?
+    internal var terminalSurfaceView: TerminalHostView?
 
-    /// Reference to the terminal engine bridge. Mutable so AppDelegate can
-    /// replace it during theme switching (requires a fresh ghostty instance).
-    var bridge: GhosttyBridge
+    /// Reference to the terminal engine. Mutable so AppDelegate can
+    /// replace it during theme switching.
+    var bridge: any TerminalEngine
 
     /// Optional reference to the configuration service.
     let configService: ConfigService?
@@ -87,9 +87,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Internal access for session restoration in AppDelegate.
     var tabSurfaceMap: [TabID: SurfaceID] = [:]
 
-    /// Maps tab IDs to their terminal surface views.
+    /// Maps tab IDs to their terminal host views.
     /// Internal access for session restoration in AppDelegate.
-    var tabSurfaceViews: [TabID: TerminalSurfaceView] = [:]
+    var tabSurfaceViews: [TabID: TerminalHostView] = [:]
 
     /// Maps tab IDs to their terminal view models.
     /// Internal access for session restoration in AppDelegate.
@@ -207,14 +207,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Per-tab output buffers keyed by tab ID.
     var tabOutputBuffers: [TabID: TerminalOutputBuffer] = [:]
 
+    /// Last known working directory for every live terminal surface.
+    ///
+    /// Tabs expose a single working directory at the model level, but split
+    /// panes can diverge after `cd` commands. Tracking surface-scoped CWDs lets
+    /// CocxyCore semantic callbacks resolve the correct directory without
+    /// assuming all panes in a tab share the same location forever.
+    var surfaceWorkingDirectories: [SurfaceID: URL] = [:]
+
     /// Per-tab command duration trackers keyed by tab ID.
     /// Each tracker parses OSC 133 ;B (start) and ;D (finish) from raw terminal output.
     var tabCommandTrackers: [TabID: CommandDurationTracker] = [:]
 
-    /// Per-tab inline image OSC detectors keyed by tab ID.
-    /// Each detector parses OSC 1337 sequences with a 16MB buffer (vs 4KB
-    /// in the general `OSCSequenceDetector`) to handle large image payloads.
-    var tabImageDetectors: [TabID: InlineImageOSCDetector] = [:]
+    /// Per-surface inline image detectors keyed by surface ID.
+    ///
+    /// Inline image payloads need to render back into the originating surface,
+    /// so split panes cannot safely share a single detector instance.
+    var surfaceImageDetectors: [SurfaceID: InlineImageOSCDetector] = [:]
 
     /// The container view that wraps the terminal area and overlays.
     var terminalContainerView: NSView?
@@ -269,8 +278,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Nil when there is a single pane.
     var activeSplitView: NSSplitView?
 
-    /// All split surface views keyed by their surface ID, for recursive splits.
-    var splitSurfaceViews: [SurfaceID: TerminalSurfaceView] = [:]
+    /// All split terminal host views keyed by their surface ID, for recursive splits.
+    var splitSurfaceViews: [SurfaceID: TerminalHostView] = [:]
 
     /// All split view models keyed by their surface ID, for recursive splits.
     var splitViewModels: [SurfaceID: TerminalViewModel] = [:]
@@ -289,9 +298,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// and stored here. On return, it is restored to the container.
     var savedTabSplitViews: [TabID: NSSplitView] = [:]
 
-    /// Saved split surface views per tab. Keyed by tab ID, each value
-    /// maps surface IDs to their TerminalSurfaceView instances.
-    var savedTabSplitSurfaceViews: [TabID: [SurfaceID: TerminalSurfaceView]] = [:]
+    /// Saved split host views per tab. Keyed by tab ID, each value
+    /// maps surface IDs to their terminal host view instances.
+    var savedTabSplitSurfaceViews: [TabID: [SurfaceID: TerminalHostView]] = [:]
 
     /// Saved split view models per tab.
     var savedTabSplitViewModels: [TabID: [SurfaceID: TerminalViewModel]] = [:]
@@ -306,11 +315,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// - Parameters:
     ///   - bridge: The terminal engine bridge used for surface creation.
     ///   - configService: Optional configuration service for reading window settings.
-    init(bridge: GhosttyBridge, configService: ConfigService? = nil, tabManager: TabManager? = nil) {
+    init(bridge: any TerminalEngine, configService: ConfigService? = nil, tabManager: TabManager? = nil) {
         self.bridge = bridge
         self.configService = configService
         self.tabManager = tabManager ?? TabManager()
-        self.terminalViewModel = TerminalViewModel(bridge: bridge)
+        self.terminalViewModel = TerminalViewModel(engine: bridge)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         terminalViewModel.setDefaultFontSize(configuredFontSize)
@@ -472,8 +481,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         return sidebar
     }
 
-    private func buildTerminalSurface() -> TerminalSurfaceView {
-        let surfaceView = TerminalSurfaceView(viewModel: terminalViewModel)
+    private func buildTerminalSurface() -> TerminalHostView {
+        let surfaceView = TerminalHostViewFactory.makeView(
+            engine: bridge,
+            viewModel: terminalViewModel
+        )
         self.terminalSurfaceView = surfaceView
         return surfaceView
     }
@@ -541,7 +553,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         return strip
     }
 
-    private func buildTerminalArea(in outerContainer: NSView, surfaceView: TerminalSurfaceView) -> NSView {
+    private func buildTerminalArea(in outerContainer: NSView, surfaceView: TerminalHostView) -> NSView {
         let stripH = Self.tabStripHeight
         let terminalArea = NSView(frame: NSRect(
             x: 0, y: 0,
@@ -924,7 +936,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     ///
     /// - Parameter tabID: The tab to look up.
     /// - Returns: The surface view, or nil if no mapping exists.
-    func surfaceViewForTab(_ tabID: TabID) -> TerminalSurfaceView? {
+    func surfaceViewForTab(_ tabID: TabID) -> TerminalHostView? {
         tabSurfaceViews[tabID]
     }
 
@@ -1059,6 +1071,58 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         restartProjectConfigWatcher(for: tab)
     }
 
+    /// Returns the working directory associated with a specific terminal surface.
+    ///
+    /// Used by CocxyCore's semantic layer to map surface-scoped events back to
+    /// the owning tab, including split panes that inherit the tab directory.
+    func workingDirectory(for surfaceID: SurfaceID) -> URL? {
+        if let surfaceWorkingDirectory = surfaceWorkingDirectories[surfaceID] {
+            return surfaceWorkingDirectory
+        }
+
+        if let tabID = tabSurfaceMap.first(where: { $0.value == surfaceID })?.key {
+            return tabManager.tab(for: tabID)?.workingDirectory
+        }
+
+        if splitSurfaceViews[surfaceID] != nil {
+            let activeTabID = displayedTabID ?? tabManager.activeTabID
+            return activeTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+        }
+
+        for (tabID, savedViews) in savedTabSplitSurfaceViews where savedViews[surfaceID] != nil {
+            return tabManager.tab(for: tabID)?.workingDirectory
+        }
+
+        return nil
+    }
+
+    /// Returns the terminal host view that owns a surface ID, if it is still tracked.
+    ///
+    /// This is used for surface-scoped UI callbacks such as inline image
+    /// rendering and shell prompt overlays so split panes do not accidentally
+    /// target the primary terminal view.
+    func surfaceView(for surfaceID: SurfaceID) -> TerminalHostView? {
+        if terminalViewModel.surfaceID == surfaceID {
+            return terminalSurfaceView
+        }
+
+        if let splitView = splitSurfaceViews[surfaceID] {
+            return splitView
+        }
+
+        if let tabID = tabSurfaceMap.first(where: { $0.value == surfaceID })?.key {
+            return tabSurfaceViews[tabID]
+        }
+
+        for views in savedTabSplitSurfaceViews.values {
+            if let splitView = views[surfaceID] {
+                return splitView
+            }
+        }
+
+        return nil
+    }
+
     /// Restarts the file watcher for the active tab's `.cocxy.toml`.
     ///
     /// Stops any existing watcher and starts a new one pointing to the
@@ -1175,19 +1239,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Increases the terminal font size by one step. Wired to Cmd++ via the View menu.
     @objc func zoomInAction(_ sender: Any?) {
         terminalViewModel.zoomIn()
-        terminalSurfaceView?.ideCursorController.updateCellDimensions()
+        terminalSurfaceView?.updateInteractionMetrics()
     }
 
     /// Decreases the terminal font size by one step. Wired to Cmd+- via the View menu.
     @objc func zoomOutAction(_ sender: Any?) {
         terminalViewModel.zoomOut()
-        terminalSurfaceView?.ideCursorController.updateCellDimensions()
+        terminalSurfaceView?.updateInteractionMetrics()
     }
 
     /// Resets the terminal font size to the configured default. Wired to Cmd+0 via the View menu.
     @objc func resetZoomAction(_ sender: Any?) {
         terminalViewModel.resetZoom()
-        terminalSurfaceView?.ideCursorController.updateCellDimensions()
+        terminalSurfaceView?.updateInteractionMetrics()
     }
 
     // MARK: - Tab Bar Toggle

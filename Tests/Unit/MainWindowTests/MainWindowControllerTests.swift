@@ -33,8 +33,19 @@ final class MainWindowControllerCreationTests: XCTestCase {
         let bridge = GhosttyBridge()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertTrue(
-            controller.terminalViewModel.bridge === bridge,
-            "ViewModel must hold a reference to the bridge"
+            controller.terminalViewModel.ghosttyBridge === bridge,
+            "ViewModel must hold a reference to the engine"
+        )
+    }
+
+    func testWindowControllerUsesCocxyCoreHostViewWhenBridgeIsCocxyCore() {
+        let bridge = CocxyCoreBridge()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        XCTAssertTrue(
+            controller.terminalSurfaceView is CocxyCoreView,
+            "Main window should build a CocxyCoreView when CocxyCore is the selected engine"
         )
     }
 }

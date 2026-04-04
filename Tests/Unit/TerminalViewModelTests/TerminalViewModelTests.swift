@@ -149,20 +149,20 @@ final class TerminalViewModelRunningStateTests: XCTestCase {
 @MainActor
 final class TerminalViewModelBridgeTests: XCTestCase {
 
-    func testCanBeCreatedWithBridge() {
+    func testCanBeCreatedWithEngine() {
         let bridge = GhosttyBridge()
-        let viewModel = TerminalViewModel(bridge: bridge)
+        let viewModel = TerminalViewModel(engine: bridge)
         XCTAssertTrue(
-            viewModel.bridge === bridge,
-            "ViewModel must hold a reference to the provided bridge"
+            viewModel.ghosttyBridge === bridge,
+            "ViewModel must hold a reference to the provided engine"
         )
     }
 
-    func testCanBeCreatedWithoutBridge() {
+    func testCanBeCreatedWithoutEngine() {
         let viewModel = TerminalViewModel()
         XCTAssertNil(
-            viewModel.bridge,
-            "Bridge must be nil when not provided"
+            viewModel.engine,
+            "Engine must be nil when not provided"
         )
     }
 }

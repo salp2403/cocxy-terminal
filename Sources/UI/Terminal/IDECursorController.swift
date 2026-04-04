@@ -39,8 +39,14 @@ final class IDECursorController {
 
     // MARK: - Properties
 
-    /// The terminal surface view this controller enhances.
-    private weak var surfaceView: TerminalSurfaceView?
+    /// The host view this controller enhances.
+    private weak var hostView: NSView?
+
+    /// Returns the current terminal font size.
+    private let fontSizeProvider: () -> CGFloat
+
+    /// Sends the requested arrow-key movement to the active terminal engine.
+    private let arrowKeySender: ([ArrowDirection]) -> Void
 
     /// Whether IDE cursor positioning is currently enabled.
     var isEnabled: Bool = true
@@ -78,16 +84,42 @@ final class IDECursorController {
 
     // MARK: - Initialization
 
-    init(surfaceView: TerminalSurfaceView) {
-        self.surfaceView = surfaceView
+    init(
+        hostView: NSView,
+        fontSizeProvider: @escaping () -> CGFloat,
+        arrowKeySender: @escaping ([ArrowDirection]) -> Void
+    ) {
+        self.hostView = hostView
+        self.fontSizeProvider = fontSizeProvider
+        self.arrowKeySender = arrowKeySender
         updateCellDimensions()
+    }
+
+    convenience init(surfaceView: TerminalSurfaceView) {
+        self.init(
+            hostView: surfaceView,
+            fontSizeProvider: { [weak surfaceView] in
+                surfaceView?.viewModel.currentFontSize ?? 14.0
+            },
+            arrowKeySender: { [weak surfaceView] arrows in
+                guard let surfaceView,
+                      let surfaceID = surfaceView.viewModel.surfaceID,
+                      let bridge = surfaceView.viewModel.ghosttyBridge,
+                      !arrows.isEmpty else { return }
+
+                let csiCode = arrows[0] == .left ? "D" : "C"
+                for _ in arrows {
+                    bridge.performBindingAction("csi:\(csiCode)", on: surfaceID)
+                }
+            }
+        )
     }
 
     // MARK: - Cell Dimensions
 
     /// Updates the cell dimensions based on the current font size.
     func updateCellDimensions() {
-        let fontSize = surfaceView?.viewModel.currentFontSize ?? 14.0
+        let fontSize = fontSizeProvider()
         // Standard monospace font metrics: width ~0.6x height, height ~1.2x size.
         cellWidth = fontSize * 0.6
         cellHeight = fontSize * 1.2
@@ -131,7 +163,7 @@ final class IDECursorController {
 
     /// Installs the IDE cursor indicator layer into the surface view if not already present.
     private func installIndicatorIfNeeded() {
-        guard indicatorLayer == nil, let layer = surfaceView?.layer else { return }
+        guard indicatorLayer == nil, let layer = hostView?.layer else { return }
         let indicator = IDECursorIndicatorLayer()
         indicator.cursorHeight = cellHeight
         layer.addSublayer(indicator)
@@ -145,7 +177,7 @@ final class IDECursorController {
     /// so `promptRow * cellHeight` places the layer at the correct row.
     private func updateIndicatorPosition() {
         guard let indicator = indicatorLayer, isOnPromptLine,
-              let viewBounds = surfaceView?.bounds else { return }
+              let viewBounds = hostView?.bounds else { return }
         let rowY = topPadding + CGFloat(promptRow) * cellHeight
         indicator.frame = CGRect(
             x: 0, y: rowY,
@@ -193,9 +225,7 @@ final class IDECursorController {
     /// - Parameter location: Click location in the terminal view.
     /// - Returns: `true` if arrow keys were sent (click was on prompt line).
     func handleClickToPosition(at location: CGPoint) -> Bool {
-        guard let view = surfaceView,
-              let surfaceID = view.viewModel.surfaceID,
-              let bridge = view.viewModel.bridge else {
+        guard let view = hostView else {
             return false
         }
 
@@ -208,11 +238,7 @@ final class IDECursorController {
             return true
         }
 
-        // Send arrow key events via CSI sequences (D = left, C = right).
-        let csiCode = arrows[0] == .left ? "D" : "C"
-        for _ in arrows {
-            bridge.performBindingAction("csi:\(csiCode)", on: surfaceID)
-        }
+        arrowKeySender(arrows)
 
         // Update our tracked cursor position.
         let delta = arrows.count * (arrows[0] == .right ? 1 : -1)

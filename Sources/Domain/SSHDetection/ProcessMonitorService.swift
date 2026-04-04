@@ -57,11 +57,6 @@ final class ProcessMonitorService: ObservableObject {
         self.pollInterval = pollInterval
     }
 
-    isolated deinit {
-        timer?.invalidate()
-        timer = nil
-    }
-
     // MARK: - Lifecycle
 
     /// Starts monitoring foreground processes.
@@ -72,7 +67,11 @@ final class ProcessMonitorService: ObservableObject {
         timer = Timer.scheduledTimer(
             withTimeInterval: pollInterval,
             repeats: true
-        ) { [weak self] _ in
+        ) { [weak self] timer in
+            guard self != nil else {
+                timer.invalidate()
+                return
+            }
             Task { @MainActor in
                 self?.pollProcesses()
             }

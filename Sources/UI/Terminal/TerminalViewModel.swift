@@ -69,18 +69,25 @@ final class TerminalViewModel: ObservableObject {
 
     // MARK: - Dependencies
 
-    /// Reference to the terminal engine bridge.
+    /// Reference to the terminal engine.
     /// Used to forward commands and query surface state.
-    private(set) weak var bridge: GhosttyBridge?
+    private(set) weak var engine: (any TerminalEngine)?
+
+    /// Convenience accessor for callers that need the concrete GhosttyBridge
+    /// (e.g., TerminalSurfaceView which calls ghostty-specific methods).
+    var ghosttyBridge: GhosttyBridge? { engine as? GhosttyBridge }
+
+    /// Convenience accessor for callers that need the concrete CocxyCoreBridge.
+    var cocxyCoreBridge: CocxyCoreBridge? { engine as? CocxyCoreBridge }
 
     // MARK: - Initialization
 
-    /// Creates a TerminalViewModel with an optional bridge reference.
+    /// Creates a TerminalViewModel with an optional engine reference.
     ///
-    /// - Parameter bridge: The terminal engine bridge. Can be nil for testing
-    ///   or when the bridge has not been initialized yet.
-    init(bridge: GhosttyBridge? = nil) {
-        self.bridge = bridge
+    /// - Parameter engine: The terminal engine. Can be nil for testing
+    ///   or when the engine has not been initialized yet.
+    init(engine: (any TerminalEngine)? = nil) {
+        self.engine = engine
     }
 
     // MARK: - State Updates

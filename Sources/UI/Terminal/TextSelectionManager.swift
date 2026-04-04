@@ -81,11 +81,6 @@ final class TextSelectionManager {
         self.surfaceView = surfaceView
     }
 
-    isolated deinit {
-        autoScrollTimer?.invalidate()
-        autoScrollTimer = nil
-    }
-
     // MARK: - Cmd+Click URL/Path Opening
 
     /// Handles a Cmd+click event by detecting and opening URLs/paths.
@@ -248,7 +243,11 @@ final class TextSelectionManager {
         autoScrollTimer = Timer.scheduledTimer(
             withTimeInterval: Self.autoScrollInterval,
             repeats: true
-        ) { [weak self] _ in
+        ) { [weak self] timer in
+            guard self != nil else {
+                timer.invalidate()
+                return
+            }
             Task { @MainActor in
                 self?.performAutoScroll()
             }
@@ -264,7 +263,7 @@ final class TextSelectionManager {
     private func performAutoScroll() {
         guard let view = surfaceView,
               let surfaceID = view.viewModel.surfaceID,
-              let bridge = view.viewModel.bridge else {
+              let bridge = view.viewModel.ghosttyBridge else {
             return
         }
 

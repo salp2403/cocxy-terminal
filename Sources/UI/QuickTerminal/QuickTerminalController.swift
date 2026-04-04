@@ -48,16 +48,19 @@ final class QuickTerminalController {
     private var panel: QuickTerminalPanel?
 
     /// The terminal surface view hosted inside the panel.
-    private var terminalView: TerminalSurfaceView?
+    private var terminalView: TerminalHostView?
 
-    /// Reference to the terminal engine bridge for surface creation.
-    private weak var bridge: GhosttyBridge?
+    /// Reference to the terminal engine for surface creation.
+    private weak var bridge: (any TerminalEngine)?
 
     /// The current slide edge, read from config.
     private(set) var currentSlideEdge: QuickTerminalPosition = .top
 
     /// The current height percent (0.0-1.0), read from config.
     private(set) var currentHeightPercent: CGFloat = 0.4
+
+    /// Working directory used when the quick terminal surface is first spawned.
+    private var workingDirectory = FileManager.default.homeDirectoryForCurrentUser
 
     /// Global event monitor handle (for when app is not focused).
     private var globalMonitor: Any?
@@ -81,8 +84,9 @@ final class QuickTerminalController {
     ///   - bridge: The terminal engine bridge for surface creation. Can be nil
     ///     for testing.
     ///   - config: The application configuration to read quick terminal settings from.
-    func setup(bridge: GhosttyBridge?, config: CocxyConfig) {
+    func setup(bridge: (any TerminalEngine)?, config: CocxyConfig) {
         // Tear down previous panel if any.
+        destroySurfaceIfNeeded()
         panel?.close()
         panel = nil
         terminalView = nil
@@ -94,6 +98,7 @@ final class QuickTerminalController {
         let qtConfig = config.quickTerminal
         currentSlideEdge = qtConfig.position
         currentHeightPercent = CGFloat(qtConfig.heightPercentage) / 100.0
+        workingDirectory = Self.resolveWorkingDirectory(from: config)
 
         // Create the panel.
         let newPanel = QuickTerminalPanel()
@@ -102,9 +107,17 @@ final class QuickTerminalController {
         self.panel = newPanel
 
         // Create the terminal view inside the panel.
-        let terminalViewModel = TerminalViewModel(bridge: bridge)
+        let terminalViewModel = TerminalViewModel(engine: bridge)
         terminalViewModel.setDefaultFontSize(config.appearance.fontSize)
-        let surfaceView = TerminalSurfaceView(viewModel: terminalViewModel)
+        let surfaceView: TerminalHostView
+        if let bridge {
+            surfaceView = TerminalHostViewFactory.makeView(
+                engine: bridge,
+                viewModel: terminalViewModel
+            )
+        } else {
+            surfaceView = TerminalSurfaceView(viewModel: terminalViewModel)
+        }
         surfaceView.translatesAutoresizingMaskIntoConstraints = false
 
         newPanel.contentView = surfaceView
@@ -130,6 +143,11 @@ final class QuickTerminalController {
 
         let screenFrame = currentScreenFrame()
         panel.slideIn(screenFrame: screenFrame)
+        ensureSurfaceCreated()
+        terminalView?.syncSizeWithTerminal()
+        if let terminalView {
+            panel.makeFirstResponder(terminalView)
+        }
         isVisible = true
     }
 
@@ -188,6 +206,7 @@ final class QuickTerminalController {
             self.localMonitor = nil
         }
 
+        destroySurfaceIfNeeded()
         panel?.close()
         panel = nil
         terminalView = nil
@@ -200,6 +219,43 @@ final class QuickTerminalController {
     private func currentScreenFrame() -> NSRect {
         let screen = NSScreen.main ?? NSScreen.screens.first
         return screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
+    }
+
+    private func ensureSurfaceCreated() {
+        guard let bridge,
+              let terminalView,
+              terminalView.terminalViewModel?.surfaceID == nil else { return }
+
+        do {
+            let surfaceID = try bridge.createSurface(
+                in: terminalView,
+                workingDirectory: workingDirectory,
+                command: nil
+            )
+            terminalView.terminalViewModel?.markRunning(surfaceID: surfaceID)
+            terminalView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+            terminalView.syncSizeWithTerminal()
+        } catch {
+            NSLog(
+                "[QuickTerminalController] Failed to create quick terminal surface: %@",
+                String(describing: error)
+            )
+        }
+    }
+
+    private func destroySurfaceIfNeeded() {
+        guard let bridge,
+              let surfaceID = terminalView?.terminalViewModel?.surfaceID else { return }
+        bridge.destroySurface(surfaceID)
+        terminalView?.terminalViewModel?.markStopped()
+    }
+
+    private static func resolveWorkingDirectory(from config: CocxyConfig) -> URL {
+        let rawPath = config.quickTerminal.workingDirectory.isEmpty
+            ? config.general.workingDirectory
+            : config.quickTerminal.workingDirectory
+        let expandedPath = (rawPath as NSString).expandingTildeInPath
+        return URL(fileURLWithPath: expandedPath, isDirectory: true)
     }
 
     /// Checks if a keyboard event matches the quick terminal hotkey (Cmd+`).

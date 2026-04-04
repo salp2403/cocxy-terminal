@@ -165,6 +165,17 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
         return true
     }
 
+    /// Publishes an already-decoded hook event through the same pipeline used
+    /// for socket-delivered JSON. This is used by internal producers such as
+    /// CocxyCore's semantic adapter, which already operate on typed events.
+    func receive(_ event: HookEvent) {
+        lastReceivedSessionId = event.sessionId
+        lastReceivedCwd = event.cwd
+        updateSessionTracking(for: event)
+        incrementReceivedCount()
+        eventSubject.send(event)
+    }
+
     // MARK: - Private Helpers
 
     private func updateSessionTracking(for event: HookEvent) {

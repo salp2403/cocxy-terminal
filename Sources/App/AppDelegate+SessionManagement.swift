@@ -157,11 +157,14 @@ extension AppDelegate {
 
             // Create ViewModel, SurfaceView, and wire handlers for restored tab.
             if let bridge = bridge {
-                let viewModel = TerminalViewModel(bridge: bridge)
+                let viewModel = TerminalViewModel(engine: bridge)
                 let configuredFontSize = configService?.current.appearance.fontSize
                     ?? AppearanceConfig.defaults.fontSize
                 viewModel.setDefaultFontSize(configuredFontSize)
-                let surfaceView = TerminalSurfaceView(viewModel: viewModel)
+                let surfaceView = TerminalHostViewFactory.makeView(
+                    engine: bridge,
+                    viewModel: viewModel
+                )
                 windowController.tabViewModels[newTab.id] = viewModel
                 windowController.tabSurfaceViews[newTab.id] = surfaceView
 
@@ -172,7 +175,8 @@ extension AppDelegate {
                         command: nil
                     )
                     viewModel.markRunning(surfaceID: surfaceID)
-                    surfaceView.syncSizeWithGhostty()
+                    surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+                    surfaceView.syncSizeWithTerminal()
                     windowController.tabSurfaceMap[newTab.id] = surfaceID
 
                     // Wire OSC + output handlers via the public API.

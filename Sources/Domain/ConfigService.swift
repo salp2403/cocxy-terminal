@@ -275,10 +275,14 @@ final class ConfigService: ConfigProviding {
         let table = extractTable("general", from: parsed)
         let defaults = GeneralConfig.defaults
 
+        let engineStr = stringValue(table["engine"]) ?? defaults.engineType.rawValue
+        let engine = EngineType(rawValue: engineStr) ?? defaults.engineType
+
         return GeneralConfig(
             shell: stringValue(table["shell"]) ?? defaults.shell,
             workingDirectory: stringValue(table["working-directory"]) ?? defaults.workingDirectory,
-            confirmCloseProcess: boolValue(table["confirm-close-process"]) ?? defaults.confirmCloseProcess
+            confirmCloseProcess: boolValue(table["confirm-close-process"]) ?? defaults.confirmCloseProcess,
+            engineType: engine
         )
     }
 

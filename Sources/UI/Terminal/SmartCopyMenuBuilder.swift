@@ -32,14 +32,12 @@ enum SmartCopyMenuBuilder {
     /// - Parameters:
     ///   - text: The text content around the click position (e.g., current visible line).
     ///   - clipboardService: Service for clipboard operations.
-    ///   - bridge: Terminal engine for paste operations.
-    ///   - surfaceID: Target surface for paste operations.
+    ///   - paste: Optional paste action for the active terminal engine.
     /// - Returns: A configured NSMenu ready for display.
     static func buildMenu(
         nearText text: String,
         clipboardService: ClipboardServiceProtocol,
-        bridge: GhosttyBridge?,
-        surfaceID: SurfaceID?
+        paste: (() -> Void)? = nil
     ) -> NSMenu {
         let menu = NSMenu()
         let detections = detectContent(in: text)
@@ -66,11 +64,9 @@ enum SmartCopyMenuBuilder {
 
         let pasteItem = NSMenuItem(title: "Paste", action: nil, keyEquivalent: "v")
         pasteItem.keyEquivalentModifierMask = [.command]
-        if let bridge, let surfaceID {
+        if let paste {
             let pasteAction = SmartCopyAction(clipboard: clipboardService) {
-                if let text = clipboardService.read() {
-                    bridge.sendText(text, to: surfaceID)
-                }
+                paste()
             }
             pasteItem.target = pasteAction
             pasteItem.action = #selector(SmartCopyAction.execute)

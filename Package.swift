@@ -17,6 +17,7 @@ let package = Package(
             name: "CocxyTerminal",
             dependencies: [
                 "GhosttyKit",
+                "CocxyCoreKit",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources",
@@ -41,6 +42,10 @@ let package = Package(
         .binaryTarget(
             name: "GhosttyKit",
             path: "libs/GhosttyKit.xcframework"
+        ),
+        .binaryTarget(
+            name: "CocxyCoreKit",
+            path: "libs/CocxyCoreKit.xcframework"
         ),
 
         // MARK: - CLI Companion

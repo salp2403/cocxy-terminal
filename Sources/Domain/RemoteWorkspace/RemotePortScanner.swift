@@ -61,10 +61,6 @@ final class RemotePortScanner: ObservableObject {
         self.scanInterval = scanInterval
     }
 
-    isolated deinit {
-        scanTimer?.invalidate()
-    }
-
     // MARK: - Scanning Lifecycle
 
     /// Starts scanning a remote host for listening ports.
@@ -79,7 +75,11 @@ final class RemotePortScanner: ObservableObject {
         Task { await performScan() }
 
         // Schedule periodic scanning.
-        scanTimer = Timer.scheduledTimer(withTimeInterval: scanInterval, repeats: true) { [weak self] _ in
+        scanTimer = Timer.scheduledTimer(withTimeInterval: scanInterval, repeats: true) { [weak self] timer in
+            guard self != nil else {
+                timer.invalidate()
+                return
+            }
             Task { @MainActor [weak self] in
                 await self?.performScan()
             }

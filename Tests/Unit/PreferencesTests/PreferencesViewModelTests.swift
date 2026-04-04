@@ -55,7 +55,7 @@ final class PreferencesViewModelTests: XCTestCase {
 
     func testInitWithCustomConfig() {
         let config = CocxyConfig(
-            general: GeneralConfig(shell: "/bin/bash", workingDirectory: "/tmp", confirmCloseProcess: false),
+            general: GeneralConfig(shell: "/bin/bash", workingDirectory: "/tmp", confirmCloseProcess: false, engineType: .ghostty),
             appearance: AppearanceConfig(
                 theme: "dracula", fontFamily: "Fira Code", fontSize: 16,
                 tabPosition: .top, windowPadding: 12,

@@ -122,6 +122,16 @@ struct CocxyConfig: Codable, Sendable, Equatable {
 // MARK: - General Config
 
 /// `[general]` section of the configuration.
+/// Terminal engine backend selection.
+///
+/// Defaults to `.ghostty` for stability. Set to `.cocxycore` in
+/// `[general]` config to use the native CocxyCore engine.
+/// Takes effect on next app launch.
+enum EngineType: String, Codable, Sendable, Equatable {
+    case ghostty
+    case cocxycore
+}
+
 struct GeneralConfig: Codable, Sendable, Equatable {
     /// Path to the shell executable.
     let shell: String
@@ -129,12 +139,15 @@ struct GeneralConfig: Codable, Sendable, Equatable {
     let workingDirectory: String
     /// Whether to confirm before closing a tab with a running process.
     let confirmCloseProcess: Bool
+    /// Terminal engine backend. Default is ghostty for stability.
+    let engineType: EngineType
 
     static var defaults: GeneralConfig {
         GeneralConfig(
             shell: "/bin/zsh",
             workingDirectory: "~",
-            confirmCloseProcess: true
+            confirmCloseProcess: true,
+            engineType: .ghostty
         )
     }
 }

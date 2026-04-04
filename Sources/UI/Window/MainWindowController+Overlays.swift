@@ -476,7 +476,16 @@ extension MainWindowController {
             .removeDuplicates()
             .sink { [weak self, weak viewModel] _ in
                 guard let self, let viewModel else { return }
-                viewModel.performSearch(in: self.terminalOutputBuffer.lines)
+                let searchLines: [String]
+                if let surfaceID = self.activeSearchSurfaceID(),
+                   let cocxyBridge = self.bridge as? CocxyCoreBridge {
+                    let historyLines = cocxyBridge.historyLines(for: surfaceID)
+                    searchLines = historyLines.isEmpty ? self.terminalOutputBuffer.lines : historyLines
+                } else {
+                    searchLines = self.terminalOutputBuffer.lines
+                }
+
+                viewModel.performSearch(in: searchLines)
             }
 
         searchBarHostingView?.removeFromSuperview()
@@ -487,8 +496,7 @@ extension MainWindowController {
             }
         )
         swiftUIView.onNavigateToResult = { [weak self] result in
-            guard let self,
-                  let surfaceID = self.terminalViewModel.surfaceID else { return }
+            guard let self, let surfaceID = self.activeSearchSurfaceID() else { return }
             // Scroll to the line containing the search match.
             // Uses ghostty's native scroll API via binding_action.
             self.bridge.scrollToSearchResult(
@@ -512,9 +520,14 @@ extension MainWindowController {
         searchBarHostingView?.removeFromSuperview()
         searchBarHostingView = nil
         isSearchBarVisible = false
-        if let surfaceView = terminalSurfaceView {
+        if let surfaceView = focusedSplitSurfaceView ?? terminalSurfaceView {
             window?.makeFirstResponder(surfaceView)
         }
+    }
+
+    private func activeSearchSurfaceID() -> SurfaceID? {
+        focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+            ?? terminalSurfaceView?.terminalViewModel?.surfaceID
     }
 
     // MARK: - Smart Routing Overlay (Cmd+Shift+U)

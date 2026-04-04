@@ -22,11 +22,14 @@ extension MainWindowController {
             ?? FileManager.default.homeDirectoryForCurrentUser
         let newTab = tabManager.addTab(workingDirectory: dir)
 
-        let viewModel = TerminalViewModel(bridge: bridge)
+        let viewModel = TerminalViewModel(engine: bridge)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         viewModel.setDefaultFontSize(configuredFontSize)
-        let surfaceView = TerminalSurfaceView(viewModel: viewModel)
+        let surfaceView = TerminalHostViewFactory.makeView(
+            engine: bridge,
+            viewModel: viewModel
+        )
 
         tabViewModels[newTab.id] = viewModel
         tabSurfaceViews[newTab.id] = surfaceView
@@ -91,6 +94,7 @@ extension MainWindowController {
 
         // Destroy the primary ghostty surface.
         if let surfaceID = tabSurfaceMap[tabID] {
+            clearSurfaceTracking(for: surfaceID)
             bridge.destroySurface(surfaceID)
         }
         tabViewModels[tabID]?.markStopped()
@@ -98,7 +102,7 @@ extension MainWindowController {
         // Destroy split surfaces belonging to this tab.
         // If the tab is currently active, split state is in the live properties.
         // Otherwise, it is in the saved per-tab dictionaries.
-        let tabSplitSurfaces: [SurfaceID: TerminalSurfaceView]
+        let tabSplitSurfaces: [SurfaceID: TerminalHostView]
         let tabSplitVMs: [SurfaceID: TerminalViewModel]
 
         if isClosingActiveTab {
@@ -118,6 +122,7 @@ extension MainWindowController {
         }
 
         for (surfaceID, _) in tabSplitSurfaces {
+            clearSurfaceTracking(for: surfaceID)
             bridge.destroySurface(surfaceID)
             tabSplitVMs[surfaceID]?.markStopped()
         }
@@ -138,7 +143,6 @@ extension MainWindowController {
         // Clean up per-tab resources to prevent memory leaks.
         tabOutputBuffers.removeValue(forKey: tabID)
         tabCommandTrackers.removeValue(forKey: tabID)
-        tabImageDetectors.removeValue(forKey: tabID)
         tabSplitCoordinator.removeSplitManager(for: tabID)
         processMonitor?.unregisterTab(tabID)
 
@@ -157,7 +161,7 @@ extension MainWindowController {
     /// Shared by `createTab`, `newTabAction`, and session restoration.
     func createAndWireSurface(
         for tabID: TabID,
-        in surfaceView: TerminalSurfaceView,
+        in surfaceView: TerminalHostView,
         viewModel: TerminalViewModel,
         workingDirectory: URL?
     ) {
@@ -172,7 +176,8 @@ extension MainWindowController {
                 command: nil
             )
             viewModel.markRunning(surfaceID: surfaceID)
-            surfaceView.syncSizeWithGhostty()
+            surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+            surfaceView.syncSizeWithTerminal()
             tabSurfaceMap[tabID] = surfaceID
 
             // Register the tab with the process monitor for SSH detection.
@@ -180,56 +185,12 @@ extension MainWindowController {
             if let shellPID = findNewShellPID(current: childrenAfter, previous: childrenBefore) {
                 processMonitor?.registerTab(tabID, shellPID: shellPID)
             }
-
-            let capturedTabID = tabID
-            bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
-                Task { @MainActor in
-                    self?.handleOSCNotification(notification, fromTabID: capturedTabID)
-                }
-            }
-
-            let buffer = TerminalOutputBuffer()
-            tabOutputBuffers[tabID] = buffer
-            let engine = injectedAgentDetectionEngine
-
-            // Track command durations via OSC 133 ;B (start) and ;D (finish).
-            let commandTracker = CommandDurationTracker { [weak self] notification in
-                Task { @MainActor in
-                    self?.handleOSCNotification(notification, fromTabID: capturedTabID)
-                }
-            }
-            tabCommandTrackers[tabID] = commandTracker
-
-            let imageDetector = InlineImageOSCDetector { [weak self] payload in
-                Task { @MainActor in
-                    self?.handleOSCNotification(.inlineImage(payload), fromTabID: capturedTabID)
-                }
-            }
-            tabImageDetectors[tabID] = imageDetector
-
-            bridge.setOutputHandler(for: surfaceID) { [weak buffer, weak engine, weak commandTracker, weak imageDetector] data in
-                engine?.processTerminalOutput(data)
-                commandTracker?.processBytes(data)
-                imageDetector?.processBytes(data)
-                Task { @MainActor in
-                    buffer?.append(data)
-                }
-            }
-
-            // Wire Smart Copy output provider for right-click context menu.
-            surfaceView.outputBufferProvider = { [weak buffer] in
-                buffer?.lines ?? []
-            }
-
-            // Wire user input callback for agent detection.
-            surfaceView.onUserInputSubmitted = { [weak engine] in
-                engine?.notifyUserInput()
-            }
-
-            // Wire CWD provider for relative path resolution on Cmd+click.
-            surfaceView.textSelectionManager.workingDirectoryProvider = { [weak self] in
-                self?.tabManager.tab(for: tabID)?.workingDirectory
-            }
+            wireSurfaceHandlers(
+                for: surfaceID,
+                tabID: tabID,
+                in: surfaceView,
+                initialWorkingDirectory: workingDirectory ?? tabManager.tab(for: tabID)?.workingDirectory
+            )
         } catch {
             NSLog("[MainWindowController] Failed to create surface for tab: %@",
                   String(describing: error))

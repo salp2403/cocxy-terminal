@@ -714,7 +714,7 @@ final class NotificationRingIntegrationTests: XCTestCase {
 
     func testNotificationRingIsInactiveByDefault() {
         let bridge = GhosttyBridge()
-        let viewModel = TerminalViewModel(bridge: bridge)
+        let viewModel = TerminalViewModel(engine: bridge)
         let surfaceView = TerminalSurfaceView(viewModel: viewModel)
 
         XCTAssertFalse(
@@ -725,7 +725,7 @@ final class NotificationRingIntegrationTests: XCTestCase {
 
     func testShowNotificationRingActivatesIt() {
         let bridge = GhosttyBridge()
-        let viewModel = TerminalViewModel(bridge: bridge)
+        let viewModel = TerminalViewModel(engine: bridge)
         let surfaceView = TerminalSurfaceView(viewModel: viewModel)
 
         surfaceView.showNotificationRing()
@@ -738,7 +738,7 @@ final class NotificationRingIntegrationTests: XCTestCase {
 
     func testHideNotificationRingDeactivatesIt() {
         let bridge = GhosttyBridge()
-        let viewModel = TerminalViewModel(bridge: bridge)
+        let viewModel = TerminalViewModel(engine: bridge)
         let surfaceView = TerminalSurfaceView(viewModel: viewModel)
 
         surfaceView.showNotificationRing()
@@ -752,7 +752,7 @@ final class NotificationRingIntegrationTests: XCTestCase {
 
     func testShowHideShowCycleIsStable() {
         let bridge = GhosttyBridge()
-        let viewModel = TerminalViewModel(bridge: bridge)
+        let viewModel = TerminalViewModel(engine: bridge)
         let surfaceView = TerminalSurfaceView(viewModel: viewModel)
 
         surfaceView.showNotificationRing()
@@ -772,7 +772,7 @@ final class NotificationRingIntegrationTests: XCTestCase {
 
     func testHideNotificationRingWhenAlreadyHiddenIsNoOp() {
         let bridge = GhosttyBridge()
-        let viewModel = TerminalViewModel(bridge: bridge)
+        let viewModel = TerminalViewModel(engine: bridge)
         let surfaceView = TerminalSurfaceView(viewModel: viewModel)
 
         // Hide without showing first: must not crash.

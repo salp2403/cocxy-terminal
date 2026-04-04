@@ -161,7 +161,7 @@ final class TerminalSurfaceView: NSView {
         // Fallback: paste shell-escaped file paths as text into the terminal.
         let paths = urls.map { "'\($0.path.replacingOccurrences(of: "'", with: "'\\''"))'" }
             .joined(separator: " ")
-        guard let bridge = viewModel.bridge,
+        guard let bridge = viewModel.ghosttyBridge,
               let surfaceID = viewModel.surfaceID else { return false }
         bridge.performBindingAction("text:\(paths)", on: surfaceID)
         return true
@@ -282,7 +282,7 @@ final class TerminalSurfaceView: NSView {
 
     override func keyDown(with event: NSEvent) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.keyDown(with: event)
             return
         }
@@ -447,7 +447,7 @@ final class TerminalSurfaceView: NSView {
 
     override func keyUp(with event: NSEvent) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.keyUp(with: event)
             return
         }
@@ -465,7 +465,7 @@ final class TerminalSurfaceView: NSView {
         }
 
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.flagsChanged(with: event)
             return
         }
@@ -527,7 +527,7 @@ final class TerminalSurfaceView: NSView {
         viewModel.recordMouseDown(clickCount: event.clickCount)
 
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.mouseDown(with: event)
             return
         }
@@ -553,7 +553,7 @@ final class TerminalSurfaceView: NSView {
         textSelectionManager.dragDidEnd()
 
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.mouseUp(with: event)
             return
         }
@@ -657,7 +657,7 @@ final class TerminalSurfaceView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.mouseMoved(with: event)
             return
         }
@@ -684,7 +684,7 @@ final class TerminalSurfaceView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.mouseDragged(with: event)
             return
         }
@@ -727,7 +727,7 @@ final class TerminalSurfaceView: NSView {
 
     override func scrollWheel(with event: NSEvent) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.scrollWheel(with: event)
             return
         }
@@ -748,7 +748,7 @@ final class TerminalSurfaceView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.rightMouseDown(with: event)
             return
         }
@@ -776,8 +776,13 @@ final class TerminalSurfaceView: NSView {
             let menu = SmartCopyMenuBuilder.buildMenu(
                 nearText: clipboardText,
                 clipboardService: self.clipboardService,
-                bridge: self.viewModel.bridge,
-                surfaceID: self.viewModel.surfaceID
+                paste: { [weak self] in
+                    guard let self,
+                          let bridge = self.viewModel.ghosttyBridge,
+                          let surfaceID = self.viewModel.surfaceID,
+                          let text = self.clipboardService.read() else { return }
+                    bridge.sendText(text, to: surfaceID)
+                }
             )
 
             NSMenu.popUpContextMenu(menu, with: event, for: self)
@@ -786,7 +791,7 @@ final class TerminalSurfaceView: NSView {
 
     override func rightMouseUp(with event: NSEvent) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else {
+              let bridge = viewModel.ghosttyBridge else {
             super.rightMouseUp(with: event)
             return
         }
@@ -902,7 +907,7 @@ final class TerminalSurfaceView: NSView {
     /// Notifies libghostty that the surface focus changed.
     private func notifySurfaceFocusChanged(focused: Bool) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else { return }
+              let bridge = viewModel.ghosttyBridge else { return }
         bridge.notifyFocusChanged(surfaceID: surfaceID, focused: focused)
     }
 
@@ -922,7 +927,7 @@ final class TerminalSurfaceView: NSView {
     /// rapid layout passes (live resize, split dragging, etc.).
     private func notifySurfaceSizeChanged(_ newSize: NSSize) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else { return }
+              let bridge = viewModel.ghosttyBridge else { return }
 
         let backingSize = convertToBacking(NSRect(origin: .zero, size: newSize)).size
         guard backingSize != lastNotifiedBackingSize else { return }
@@ -948,7 +953,7 @@ final class TerminalSurfaceView: NSView {
 
         // Also notify libghostty of the scale change.
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else { return }
+              let bridge = viewModel.ghosttyBridge else { return }
         bridge.notifyContentScaleChanged(
             surfaceID: surfaceID,
             scaleFactor: Double(window.backingScaleFactor)
@@ -965,7 +970,7 @@ final class TerminalSurfaceView: NSView {
     /// Sends a control character to the active terminal surface.
     private func sendControlCharacter(_ char: String) {
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else { return }
+              let bridge = viewModel.ghosttyBridge else { return }
         bridge.sendText(char, to: surfaceID)
     }
 
@@ -1025,6 +1030,35 @@ final class TerminalSurfaceView: NSView {
     }
 }
 
+// MARK: - Terminal Hosting View
+
+extension TerminalSurfaceView: TerminalHostingView {
+    var terminalViewModel: TerminalViewModel? { viewModel }
+
+    func syncSizeWithTerminal() {
+        syncSizeWithGhostty()
+    }
+
+    func handleShellPrompt(row: Int, column: Int) {
+        ideCursorController.shellPromptDetected(row: row, column: column)
+    }
+
+    func updateInteractionMetrics() {
+        ideCursorController.updateCellDimensions()
+    }
+
+    func configureSurfaceIfNeeded(
+        bridge: any TerminalEngine,
+        surfaceID: SurfaceID
+    ) {
+        // Ghostty requires no additional post-create host view wiring.
+    }
+
+    func requestImmediateRedraw() {
+        // Ghostty owns its renderer loop internally.
+    }
+}
+
 // MARK: - NSTextInputClient Conformance
 
 extension TerminalSurfaceView: @preconcurrency NSTextInputClient {
@@ -1055,7 +1089,7 @@ extension TerminalSurfaceView: @preconcurrency NSTextInputClient {
 
         // Send the text to libghostty via the bridge.
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else { return }
+              let bridge = viewModel.ghosttyBridge else { return }
 
         bridge.sendText(text, to: surfaceID)
     }
@@ -1083,7 +1117,7 @@ extension TerminalSurfaceView: @preconcurrency NSTextInputClient {
 
         // Send preedit text to libghostty for display.
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else { return }
+              let bridge = viewModel.ghosttyBridge else { return }
 
         bridge.sendPreeditText(text, to: surfaceID)
     }
@@ -1094,7 +1128,7 @@ extension TerminalSurfaceView: @preconcurrency NSTextInputClient {
 
         // Clear preedit in libghostty.
         guard let surfaceID = viewModel.surfaceID,
-              let bridge = viewModel.bridge else { return }
+              let bridge = viewModel.ghosttyBridge else { return }
 
         bridge.sendPreeditText("", to: surfaceID)
     }

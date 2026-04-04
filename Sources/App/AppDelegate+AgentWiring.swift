@@ -85,9 +85,11 @@ extension AppDelegate {
               let windowController = windowController else { return }
 
         windowController.injectedAgentDetectionEngine = engine
+        wireCocxyCoreBridgeIfNeeded()
         wireHookReceiverToEngine(engine)
         wireAgentDetectionToTabs(engine)
         wireAgentDashboardAndTimeline(engine)
+        wireCocxyCoreSemanticTimelineIfNeeded()
     }
 
     // MARK: - Hook Event Wiring
@@ -314,6 +316,54 @@ extension AppDelegate {
                 }
             }
             .store(in: &hookCancellables)
+    }
+
+    // MARK: - CocxyCore Semantic Wiring
+
+    /// Wires CocxyCore's semantic adapter into the existing hook-based graph.
+    ///
+    /// Hook events feed the detection engine and dashboard, while timeline
+    /// events enrich the timeline store with CocxyCore-native semantic data.
+    private func wireCocxyCoreBridgeIfNeeded() {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let receiver = hookEventReceiver else { return }
+
+        cocxyBridge.setCwdProvider { [weak self] surfaceID in
+            self?.workingDirectoryForSurface(surfaceID)
+        }
+
+        cocxyBridge.semanticAdapter.eventPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak receiver] event in
+                receiver?.receive(event)
+            }
+            .store(in: &hookCancellables)
+    }
+
+    private func wireCocxyCoreSemanticTimelineIfNeeded() {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let timelineStore = agentTimelineStore else { return }
+
+        cocxyBridge.semanticAdapter.timelinePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak timelineStore] event in
+                timelineStore?.addEvent(event)
+            }
+            .store(in: &hookCancellables)
+    }
+
+    private func workingDirectoryForSurface(_ surfaceID: SurfaceID) -> String? {
+        if let url = windowController?.workingDirectory(for: surfaceID) {
+            return url.path
+        }
+
+        for controller in additionalWindowControllers {
+            if let url = controller.workingDirectory(for: surfaceID) {
+                return url.path
+            }
+        }
+
+        return nil
     }
 
     // MARK: - Notification Wiring

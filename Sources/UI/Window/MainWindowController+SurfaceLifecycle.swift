@@ -32,7 +32,8 @@ extension MainWindowController {
                 command: nil
             )
             terminalViewModel.markRunning(surfaceID: surfaceID)
-            surfaceView.syncSizeWithGhostty()
+            surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+            surfaceView.syncSizeWithTerminal()
 
             // Register the first tab's surface in all tracking dictionaries.
             // This ensures destroyAllSurfaces can find it without special-casing.
@@ -47,68 +48,12 @@ extension MainWindowController {
                 if let shellPID = findNewShellPID(current: childrenAfter, previous: childrenBefore) {
                     processMonitor?.registerTab(firstTabID, shellPID: shellPID)
                 }
-            }
-
-            // Wire OSC handler for title/directory/prompt changes.
-            // Captures the tab ID so updates target the correct tab,
-            // not just the active tab (critical for multi-tab).
-            if let firstTabID = tabManager.tabs.first?.id {
-                let capturedTabID = firstTabID
-                bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
-                    Task { @MainActor in
-                        self?.handleOSCNotification(notification, fromTabID: capturedTabID)
-                    }
-                }
-            }
-
-            // Wire output handler for scrollback search and agent detection.
-            if let firstTabID = tabManager.tabs.first?.id {
-                let buffer = TerminalOutputBuffer()
-                tabOutputBuffers[firstTabID] = buffer
-                terminalOutputBuffer = buffer
-                let engine = injectedAgentDetectionEngine
-
-                // Track command durations via OSC 133 ;B (start) and ;D (finish).
-                let trackerTabID = firstTabID
-                let commandTracker = CommandDurationTracker { [weak self] notification in
-                    Task { @MainActor in
-                        self?.handleOSCNotification(notification, fromTabID: trackerTabID)
-                    }
-                }
-                tabCommandTrackers[firstTabID] = commandTracker
-
-                let imageDetector = InlineImageOSCDetector { [weak self] payload in
-                    Task { @MainActor in
-                        self?.handleOSCNotification(.inlineImage(payload), fromTabID: trackerTabID)
-                    }
-                }
-                tabImageDetectors[firstTabID] = imageDetector
-
-                bridge.setOutputHandler(for: surfaceID) { [weak buffer, weak engine, weak commandTracker, weak imageDetector] data in
-                    engine?.processTerminalOutput(data)
-                    commandTracker?.processBytes(data)
-                    imageDetector?.processBytes(data)
-                    Task { @MainActor in
-                        buffer?.append(data)
-                    }
-                }
-
-                // Wire Smart Copy output provider for right-click context menu.
-                surfaceView.outputBufferProvider = { [weak buffer] in
-                    buffer?.lines ?? []
-                }
-
-                // Wire user input callback for agent detection.
-                // Triggers waitingInput → working when the user presses Enter.
-                surfaceView.onUserInputSubmitted = { [weak engine] in
-                    engine?.notifyUserInput()
-                }
-
-                // Wire CWD provider for relative path resolution on Cmd+click.
-                let tabID = firstTabID
-                surfaceView.textSelectionManager.workingDirectoryProvider = { [weak self] in
-                    self?.tabManager.tab(for: tabID)?.workingDirectory
-                }
+                wireSurfaceHandlers(
+                    for: surfaceID,
+                    tabID: firstTabID,
+                    in: surfaceView,
+                    initialWorkingDirectory: tabManager.tab(for: firstTabID)?.workingDirectory
+                )
             }
         } catch {
             NSLog("[MainWindowController] Failed to create terminal surface: %@",
@@ -116,11 +61,132 @@ extension MainWindowController {
         }
     }
 
+    // MARK: - Shared Handler Wiring
+
+    /// Wires OSC/output callbacks and auxiliary helpers for any terminal surface.
+    ///
+    /// Tabs, restored tabs, and split panes all share the same per-tab
+    /// pipelines for search, agent detection, command timing, and inline image
+    /// parsing. Keeping this in one place prevents subtle drift between the
+    /// different surface creation paths.
+    func wireSurfaceHandlers(
+        for surfaceID: SurfaceID,
+        tabID: TabID,
+        in surfaceView: TerminalHostView,
+        initialWorkingDirectory: URL?
+    ) {
+        if let initialWorkingDirectory {
+            surfaceWorkingDirectories[surfaceID] = initialWorkingDirectory
+        }
+
+        let capturedTabID = tabID
+        let capturedSurfaceID = surfaceID
+
+        bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleOSCNotification(
+                    notification,
+                    fromTabID: capturedTabID,
+                    surfaceID: capturedSurfaceID
+                )
+            }
+        }
+
+        let buffer: TerminalOutputBuffer
+        if let existingBuffer = tabOutputBuffers[tabID] {
+            buffer = existingBuffer
+        } else {
+            let newBuffer = TerminalOutputBuffer()
+            tabOutputBuffers[tabID] = newBuffer
+            buffer = newBuffer
+        }
+
+        if tabID == tabManager.activeTabID {
+            terminalOutputBuffer = buffer
+        }
+
+        let engine = injectedAgentDetectionEngine
+        let commandTracker = commandTracker(for: tabID)
+        let imageDetector = imageDetector(for: surfaceID, tabID: tabID)
+
+        bridge.setOutputHandler(
+            for: surfaceID
+        ) { [weak buffer, weak engine, weak commandTracker, weak imageDetector] data in
+            engine?.processTerminalOutput(data)
+            commandTracker?.processBytes(data)
+            imageDetector?.processBytes(data)
+            Task { @MainActor in
+                buffer?.append(data)
+            }
+        }
+
+        if let surfaceView = surfaceView as? TerminalSurfaceView {
+            surfaceView.outputBufferProvider = { [weak buffer] in
+                buffer?.lines ?? []
+            }
+
+            surfaceView.textSelectionManager.workingDirectoryProvider = { [weak self] in
+                self?.workingDirectory(for: capturedSurfaceID)
+            }
+        } else if let surfaceView = surfaceView as? CocxyCoreView {
+            surfaceView.outputBufferProvider = { [weak buffer] in
+                buffer?.lines ?? []
+            }
+        }
+
+        surfaceView.onUserInputSubmitted = { [weak engine] in
+            engine?.notifyUserInput()
+        }
+    }
+
+    private func commandTracker(for tabID: TabID) -> CommandDurationTracker {
+        if let existingTracker = tabCommandTrackers[tabID] {
+            return existingTracker
+        }
+
+        let tracker = CommandDurationTracker { [weak self] notification in
+            Task { @MainActor in
+                self?.handleOSCNotification(notification, fromTabID: tabID)
+            }
+        }
+        tabCommandTrackers[tabID] = tracker
+        return tracker
+    }
+
+    private func imageDetector(for surfaceID: SurfaceID, tabID: TabID) -> InlineImageOSCDetector {
+        if let existingDetector = surfaceImageDetectors[surfaceID] {
+            return existingDetector
+        }
+
+        let detector = InlineImageOSCDetector { [weak self] payload in
+            Task { @MainActor in
+                self?.handleOSCNotification(
+                    .inlineImage(payload),
+                    fromTabID: tabID,
+                    surfaceID: surfaceID
+                )
+            }
+        }
+        surfaceImageDetectors[surfaceID] = detector
+        return detector
+    }
+
+    func clearSurfaceTracking(for surfaceID: SurfaceID) {
+        if let surfaceView = surfaceView(for: surfaceID) {
+            let key = ObjectIdentifier(surfaceView)
+            inlineImageRenderers[key]?.clearAllImages()
+            inlineImageRenderers.removeValue(forKey: key)
+        }
+        surfaceImageDetectors.removeValue(forKey: surfaceID)
+        surfaceWorkingDirectories.removeValue(forKey: surfaceID)
+    }
+
     // MARK: - Surface Destruction
 
     /// Destroys the terminal surface and cleans up resources.
     func destroyTerminalSurface() {
         guard let surfaceID = terminalViewModel.surfaceID else { return }
+        clearSurfaceTracking(for: surfaceID)
         bridge.destroySurface(surfaceID)
         terminalViewModel.markStopped()
     }
@@ -171,6 +237,7 @@ extension MainWindowController {
 
         // Destroy each surface exactly once.
         for surfaceID in surfacesToDestroy {
+            clearSurfaceTracking(for: surfaceID)
             bridge.destroySurface(surfaceID)
         }
 
@@ -179,7 +246,7 @@ extension MainWindowController {
         tabViewModels.removeAll()
         tabOutputBuffers.removeAll()
         tabCommandTrackers.removeAll()
-        tabImageDetectors.removeAll()
+        surfaceImageDetectors.removeAll()
         panelContentViews.removeAll()
 
         // Clear all inline image overlays before releasing surface views.
@@ -204,45 +271,13 @@ extension MainWindowController {
     ///   - tabID: The tab to wire handlers for.
     ///   - surfaceID: The ghostty surface ID associated with the tab.
     func wireHandlersForRestoredTab(tabID: TabID, surfaceID: SurfaceID) {
-        let capturedTabID = tabID
-        bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
-            Task { @MainActor in
-                self?.handleOSCNotification(notification, fromTabID: capturedTabID)
-            }
-        }
-
-        // Wire user input callback on the restored tab's surface view.
-        let engine = injectedAgentDetectionEngine
         if let surfaceView = tabSurfaceViews[tabID] {
-            surfaceView.onUserInputSubmitted = { [weak engine] in
-                engine?.notifyUserInput()
-            }
-        }
-
-        let buffer = TerminalOutputBuffer()
-        tabOutputBuffers[tabID] = buffer
-
-        let commandTracker = CommandDurationTracker { [weak self] notification in
-            Task { @MainActor in
-                self?.handleOSCNotification(notification, fromTabID: capturedTabID)
-            }
-        }
-        tabCommandTrackers[tabID] = commandTracker
-
-        let imageDetector = InlineImageOSCDetector { [weak self] payload in
-            Task { @MainActor in
-                self?.handleOSCNotification(.inlineImage(payload), fromTabID: capturedTabID)
-            }
-        }
-        tabImageDetectors[tabID] = imageDetector
-
-        bridge.setOutputHandler(for: surfaceID) { [weak buffer, weak engine, weak commandTracker, weak imageDetector] data in
-            engine?.processTerminalOutput(data)
-            commandTracker?.processBytes(data)
-            imageDetector?.processBytes(data)
-            Task { @MainActor in
-                buffer?.append(data)
-            }
+            wireSurfaceHandlers(
+                for: surfaceID,
+                tabID: tabID,
+                in: surfaceView,
+                initialWorkingDirectory: tabManager.tab(for: tabID)?.workingDirectory
+            )
         }
     }
 
@@ -277,7 +312,8 @@ extension MainWindowController {
     ///     This ensures background tabs receive correct title/directory updates.
     func handleOSCNotification(
         _ notification: OSCNotification,
-        fromTabID sourceTabID: TabID? = nil
+        fromTabID sourceTabID: TabID? = nil,
+        surfaceID sourceSurfaceID: SurfaceID? = nil
     ) {
         // Use the source tab when known, fall back to active tab.
         let targetTabID = sourceTabID ?? tabManager.activeTabID
@@ -347,18 +383,32 @@ extension MainWindowController {
 
             // Notify IDE cursor controller only for the active tab.
             if (sourceTabID == nil || sourceTabID == tabManager.activeTabID),
-               let surfaceView = terminalSurfaceView {
-                let cursorCtrl = surfaceView.ideCursorController
-                let viewHeight = surfaceView.bounds.height
-                let cellHeight = cursorCtrl.cellHeight
-                let promptRow = cellHeight > 0 ? max(0, Int(viewHeight / cellHeight) - 1) : 0
-                cursorCtrl.shellPromptDetected(row: promptRow, column: 2)
+               let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
+                    ?? terminalSurfaceView {
+                let promptRow: Int
+                if let surfaceView = surfaceView as? TerminalSurfaceView {
+                    let cursorCtrl = surfaceView.ideCursorController
+                    let viewHeight = surfaceView.bounds.height
+                    let cellHeight = cursorCtrl.cellHeight
+                    promptRow = cellHeight > 0 ? max(0, Int(viewHeight / cellHeight) - 1) : 0
+                } else if let surfaceView = surfaceView as? CocxyCoreView {
+                    let cursorCtrl = surfaceView.ideCursorController
+                    let viewHeight = surfaceView.bounds.height
+                    let cellHeight = cursorCtrl.cellHeight
+                    promptRow = cellHeight > 0 ? max(0, Int(viewHeight / cellHeight) - 1) : 0
+                } else {
+                    promptRow = 0
+                }
+                surfaceView.handleShellPrompt(row: promptRow, column: 2)
             }
 
             feedDetectionEngine(oscCode: 133, payload: "A")
 
         case .currentDirectory(let directoryURL):
             guard let tabID = targetTabID else { break }
+            if let sourceSurfaceID {
+                surfaceWorkingDirectories[sourceSurfaceID] = directoryURL
+            }
             let gitProvider = GitInfoProviderImpl()
             let branch = gitProvider.currentBranch(at: directoryURL)
             tabManager.updateTab(id: tabID) { tab in
@@ -403,8 +453,9 @@ extension MainWindowController {
             refreshStatusBar()
 
         case .inlineImage(let payload):
-            guard let surfaceView = terminalSurfaceView,
-                  let imageData = OSC1337Parser.parse(payload) else { break }
+            guard let imageData = OSC1337Parser.parse(payload),
+                  let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
+                    ?? terminalSurfaceView else { break }
             let renderer = inlineImageRenderer(for: surfaceView)
             let position = surfaceView.bounds.height - 20
             renderer.renderImage(imageData, at: position)
@@ -449,7 +500,7 @@ extension MainWindowController {
     /// Renderers are lazily created and cached per surface view instance.
     /// When a surface view is deallocated, the weak reference in the
     /// renderer's initializer ensures cleanup.
-    private func inlineImageRenderer(for surfaceView: TerminalSurfaceView) -> InlineImageRenderer {
+    private func inlineImageRenderer(for surfaceView: NSView) -> InlineImageRenderer {
         if let existing = inlineImageRenderers[ObjectIdentifier(surfaceView)] {
             return existing
         }

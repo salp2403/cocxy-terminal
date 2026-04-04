@@ -137,6 +137,24 @@ final class TabSurfaceMappingTests: XCTestCase {
         )
     }
 
+    func testCreateTabUsesCocxyCoreHostViewWhenBridgeIsCocxyCore() {
+        let bridge = CocxyCoreBridge()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.createTab()
+
+        guard let newTabID = controller.tabManager.activeTabID else {
+            XCTFail("After createTab, there must be an active tab")
+            return
+        }
+
+        XCTAssertTrue(
+            controller.surfaceViewForTab(newTabID) is CocxyCoreView,
+            "Tabs created while CocxyCore is active must use CocxyCoreView host views"
+        )
+    }
+
     // MARK: - Tab Switching Changes Terminal View
 
     func testSwitchingTabChangesActiveTerminalSurfaceView() {
@@ -151,7 +169,7 @@ final class TabSurfaceMappingTests: XCTestCase {
         let firstSurfaceView = controller.surfaceViewForTab(firstTabID)
 
         controller.newTabAction(nil)
-        guard let secondTabID = controller.tabManager.activeTabID else {
+        guard controller.tabManager.activeTabID != nil else {
             XCTFail("After newTabAction, there must be an active tab")
             return
         }
@@ -268,6 +286,34 @@ final class TabSurfaceMappingTests: XCTestCase {
         controller.closeTabAction(nil)
         XCTAssertEqual(controller.surfaceViewCount, 2)
     }
+
+    // MARK: - Surface Working Directory Tracking
+
+    func testWorkingDirectoryForSurfacePrefersSurfaceScopedDirectory() {
+        let bridge = GhosttyBridge()
+        let controller = MainWindowController(bridge: bridge)
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab")
+            return
+        }
+
+        let tabDirectory = URL(fileURLWithPath: "/tmp/tab-root", isDirectory: true)
+        let splitDirectory = URL(fileURLWithPath: "/tmp/tab-root/split-pane", isDirectory: true)
+        let surfaceID = SurfaceID()
+
+        controller.tabManager.updateTab(id: firstTabID) { tab in
+            tab.workingDirectory = tabDirectory
+        }
+        controller.tabSurfaceMap[firstTabID] = surfaceID
+        controller.surfaceWorkingDirectories[surfaceID] = splitDirectory
+
+        XCTAssertEqual(
+            controller.workingDirectory(for: surfaceID),
+            splitDirectory,
+            "Surface-specific CWD tracking must override the tab-level working directory"
+        )
+    }
 }
 
 // MARK: - Tab Navigation Surface Switching Tests
@@ -288,11 +334,10 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         let firstSurfaceView = controller.surfaceViewForTab(firstTabID)
 
         controller.newTabAction(nil)
-        guard let secondTabID = controller.tabManager.activeTabID else {
+        guard controller.tabManager.activeTabID != nil else {
             XCTFail("After newTabAction, there must be an active tab")
             return
         }
-        let secondSurfaceView = controller.surfaceViewForTab(secondTabID)
 
         // Switch back to first via nextTab (wraps around with 2 tabs).
         controller.nextTabAction(nil)

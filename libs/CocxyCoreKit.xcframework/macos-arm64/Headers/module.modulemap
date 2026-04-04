@@ -1,0 +1,4 @@
+module CocxyCoreKit {
+    umbrella header "cocxycore.h"
+    export *
+}
