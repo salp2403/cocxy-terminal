@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.7.0 (Host Integration + GPU Data Pipeline)
+ * Version: 0.8.0 (Cross-Platform + Terminal Protocol v2)
  */
 
 #ifndef COCXYCORE_H
@@ -20,6 +20,19 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+/* Version constants. */
+#define COCXYCORE_VERSION_MAJOR 0
+#define COCXYCORE_VERSION_MINOR 8
+#define COCXYCORE_VERSION_PATCH 0
+#define COCXYCORE_VERSION_STRING "0.8.0"
+
+/* Platform detection. */
+#if defined(__APPLE__)
+    #define COCXYCORE_PLATFORM_MACOS 1
+#elif defined(__linux__)
+    #define COCXYCORE_PLATFORM_LINUX 1
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -1311,6 +1324,85 @@ size_t cocxycore_shell_integration_env_name(uint32_t index, uint8_t* buf, size_t
 
 /** Copy a shell integration env var value by index. */
 size_t cocxycore_shell_integration_env_value(uint32_t index, uint8_t* buf, size_t buf_len);
+
+/* ====================================================================
+ * Terminal Protocol v2 (OSC 7770/7771)
+ * ==================================================================== */
+
+/**
+ * Callback for inbound Protocol v2 messages (OSC 7770).
+ * @param msg_type     Message type string (e.g., "agent.status").
+ * @param msg_type_len Length of the type string.
+ * @param payload      Raw JSON payload.
+ * @param payload_len  Length of the JSON payload.
+ * @param ctx          User-provided context pointer.
+ */
+typedef void (*cocxycore_protocol_v2_callback)(
+    const char* msg_type,
+    size_t msg_type_len,
+    const char* payload,
+    size_t payload_len,
+    void* ctx
+);
+
+/** Register a callback for inbound Protocol v2 messages (OSC 7770). */
+void cocxycore_terminal_set_protocol_v2_callback(
+    cocxycore_terminal* term,
+    cocxycore_protocol_v2_callback cb,
+    void* ctx
+);
+
+/**
+ * Send a Protocol v2 message from terminal to agent (OSC 7771).
+ * Writes the generated escape sequence to buf.
+ * Returns the number of bytes written, or 0 on failure.
+ */
+size_t cocxycore_terminal_send_protocol_v2(
+    cocxycore_terminal* term,
+    const char* msg_type,
+    size_t msg_type_len,
+    const char* json_data,
+    size_t json_len,
+    uint8_t* buf,
+    size_t buf_len
+);
+
+/**
+ * Request agent capabilities exchange (OSC 7771 terminal.capabilities).
+ * Returns bytes written to buf.
+ */
+size_t cocxycore_terminal_request_capabilities(
+    cocxycore_terminal* term,
+    uint8_t* buf,
+    size_t buf_len
+);
+
+/**
+ * Generate a viewport response (OSC 7771 terminal.viewport).
+ * Returns bytes written to buf.
+ */
+size_t cocxycore_terminal_generate_viewport(
+    cocxycore_terminal* term,
+    uint8_t* buf,
+    size_t buf_len,
+    const char* request_id,
+    size_t request_id_len
+);
+
+/* ====================================================================
+ * Platform-agnostic GPU pipeline aliases
+ * ==================================================================== */
+
+/**
+ * Build the GPU frame data (dispatches to Metal on macOS, OpenGL on Linux).
+ * Alias for cocxycore_terminal_build_metal_frame on macOS.
+ */
+#ifdef COCXYCORE_PLATFORM_MACOS
+#define cocxycore_terminal_build_frame cocxycore_terminal_build_metal_frame
+#define cocxycore_terminal_frame_atlas_info cocxycore_terminal_metal_atlas_info
+#define cocxycore_terminal_frame_copy_atlas cocxycore_terminal_metal_copy_atlas_bitmap
+#define cocxycore_terminal_frame_clear_dirty cocxycore_terminal_metal_clear_atlas_dirty
+#endif
 
 #ifdef __cplusplus
 }

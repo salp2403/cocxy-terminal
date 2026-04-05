@@ -107,7 +107,9 @@ struct CocxyCoreCompatibilityMatrixTests {
         try String(repeating: "rsync-phase6\n", count: 50_000)
             .write(to: rsyncSource, atomically: true, encoding: .utf8)
         let rsyncDest = tempDir.appendingPathComponent("rsync-dest.txt")
-        let repoPath = FileManager.default.currentDirectoryPath
+        let sourceRepoPath = FileManager.default.currentDirectoryPath
+        let repoFixture = try createGitFixtureRepo(in: tempDir)
+        let repoPath = repoFixture.repoURL.path
 
         let scenarios: [CompatibilityScenario] = [
             .init(
@@ -141,8 +143,8 @@ struct CocxyCoreCompatibilityMatrixTests {
             .init(
                 name: "git status in the repo",
                 requiredCommands: ["git"],
-                scriptBody: "cd \(shQuote(repoPath)) && exec git status --short",
-                expectedSubstrings: ["Sources/"]
+                scriptBody: "cd \(shQuote(repoPath)) && exec git -c color.status=false status --short -- \(shQuote(repoFixture.trackedFileName))",
+                expectedSubstrings: [repoFixture.trackedFileName]
             ),
             .init(
                 name: "git log returns the latest commit",
@@ -153,8 +155,8 @@ struct CocxyCoreCompatibilityMatrixTests {
             .init(
                 name: "git diff stat reports local changes",
                 requiredCommands: ["git"],
-                scriptBody: "cd \(shQuote(repoPath)) && exec git diff --stat -- Sources/App/AppDelegate.swift",
-                expectedSubstrings: ["AppDelegate.swift"]
+                scriptBody: "cd \(shQuote(repoPath)) && exec git diff --stat -- \(shQuote(repoFixture.trackedFileName))",
+                expectedSubstrings: [repoFixture.trackedFileName]
             ),
             .init(
                 name: "git confirms the repo work tree",
@@ -165,7 +167,7 @@ struct CocxyCoreCompatibilityMatrixTests {
             .init(
                 name: "ripgrep finds CocxyCoreBridge in Sources",
                 requiredCommands: ["rg"],
-                scriptBody: "exec rg --max-count 1 CocxyCoreBridge \(shQuote(repoPath + "/Sources"))",
+                scriptBody: "exec rg --max-count 1 CocxyCoreBridge \(shQuote(sourceRepoPath + "/Sources"))",
                 expectedSubstrings: ["CocxyCoreBridge"]
             ),
             .init(
@@ -312,6 +314,11 @@ private struct CompatibilityInput {
     let text: String
 }
 
+private struct GitFixtureRepo {
+    let repoURL: URL
+    let trackedFileName: String
+}
+
 @MainActor
 private func runScenarios(
     _ scenarios: [CompatibilityScenario],
@@ -373,6 +380,59 @@ private func executablePath(for command: String) -> String? {
         }
     }
     return nil
+}
+
+@MainActor
+private func createGitFixtureRepo(in tempDir: URL) throws -> GitFixtureRepo {
+    guard let gitPath = executablePath(for: "git") else {
+        throw NSError(domain: "CocxyCoreCompatibilityMatrixTests", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "git is required to build the compatibility fixture"
+        ])
+    }
+
+    let repoURL = tempDir.appendingPathComponent("git-fixture", isDirectory: true)
+    try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
+
+    let trackedFileName = "tracked.txt"
+    let trackedFileURL = repoURL.appendingPathComponent(trackedFileName)
+    try "tracked baseline\n".write(to: trackedFileURL, atomically: true, encoding: .utf8)
+
+    try runProcess(gitPath, arguments: ["init"], currentDirectory: repoURL)
+    try runProcess(gitPath, arguments: ["config", "user.name", "CocxyCore Tests"], currentDirectory: repoURL)
+    try runProcess(gitPath, arguments: ["config", "user.email", "tests@cocxy.dev"], currentDirectory: repoURL)
+    try runProcess(gitPath, arguments: ["add", trackedFileName], currentDirectory: repoURL)
+    try runProcess(gitPath, arguments: ["commit", "-m", "Initial fixture"], currentDirectory: repoURL)
+
+    try "tracked baseline\nmodified line\n".write(to: trackedFileURL, atomically: true, encoding: .utf8)
+
+    return GitFixtureRepo(repoURL: repoURL, trackedFileName: trackedFileName)
+}
+
+@MainActor
+private func runProcess(
+    _ executable: String,
+    arguments: [String],
+    currentDirectory: URL
+) throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    process.currentDirectoryURL = currentDirectory
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    try process.run()
+    process.waitUntilExit()
+
+    guard process.terminationStatus == 0 else {
+        let message = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        throw NSError(domain: "CocxyCoreCompatibilityMatrixTests", code: Int(process.terminationStatus), userInfo: [
+            NSLocalizedDescriptionKey: message.isEmpty ? "Process failed: \(arguments.joined(separator: " "))" : message
+        ])
+    }
 }
 
 @MainActor
