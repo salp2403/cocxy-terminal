@@ -1201,6 +1201,12 @@ bool cocxycore_terminal_get_font_metrics(
     cocxycore_font_metrics* out
 );
 
+/** Enable or disable typographic ligatures for the current font shaper. */
+void cocxycore_terminal_set_ligatures(cocxycore_terminal* term, bool enabled);
+
+/** Query whether ligatures are currently enabled. */
+bool cocxycore_terminal_get_ligatures(const cocxycore_terminal* term);
+
 /* -- Frame building -- */
 
 /**
@@ -1259,6 +1265,18 @@ typedef struct {
     uint8_t _pad[3];
 } cocxycore_metal_atlas_info;
 
+/* -- Platform-agnostic GPU data pipeline -- */
+
+/**
+ * GPU pipeline data types shared across macOS (Metal) and Linux (OpenGL).
+ *
+ * The current layouts are binary-compatible with the Metal-oriented structs,
+ * so consumers can use one set of types when targeting both platforms.
+ */
+typedef cocxycore_metal_cell cocxycore_gpu_cell;
+typedef cocxycore_metal_cursor cocxycore_gpu_cursor;
+typedef cocxycore_metal_atlas_info cocxycore_gpu_atlas_info;
+
 /**
  * Build the Metal-oriented GPU data pipeline.
  * Requires a font to be configured first.
@@ -1301,6 +1319,67 @@ size_t cocxycore_terminal_metal_copy_atlas_bitmap(
 
 /** Mark the atlas as uploaded/clean. */
 void cocxycore_terminal_metal_clear_atlas_dirty(cocxycore_terminal* term);
+
+/**
+ * Build the platform-agnostic GPU data pipeline.
+ *
+ * This uses the shared GPU cell/atlas layout on both macOS and Linux.
+ * It intentionally does NOT reuse cocxycore_terminal_build_frame, which
+ * remains the generic render-frame builder.
+ */
+bool cocxycore_terminal_build_gpu_frame(
+    cocxycore_terminal* term,
+    uint32_t atlas_width,
+    uint32_t atlas_height
+);
+
+/** Get platform-agnostic per-cell GPU data from the last built GPU frame. */
+void cocxycore_terminal_gpu_cell(
+    const cocxycore_terminal* term,
+    uint16_t row,
+    uint16_t col,
+    cocxycore_gpu_cell* out
+);
+
+/** Get platform-agnostic GPU cursor data from the last built GPU frame. */
+void cocxycore_terminal_gpu_cursor(
+    const cocxycore_terminal* term,
+    cocxycore_gpu_cursor* out
+);
+
+/** Get the current platform-agnostic GPU atlas state. */
+bool cocxycore_terminal_gpu_atlas_info(
+    const cocxycore_terminal* term,
+    cocxycore_gpu_atlas_info* out
+);
+
+/**
+ * Copy the current GPU atlas bitmap into buf.
+ * Returns the total byte count required; output is truncated to buf_len.
+ */
+size_t cocxycore_terminal_gpu_copy_atlas_bitmap(
+    const cocxycore_terminal* term,
+    uint8_t* buf,
+    size_t buf_len
+);
+
+/** Mark the GPU atlas as uploaded/clean. */
+void cocxycore_terminal_gpu_clear_atlas_dirty(cocxycore_terminal* term);
+
+/**
+ * Returns the ligature span at (row, col) from the last GPU frame build.
+ * Returns 0 when the cell is not a ligature head.
+ */
+uint8_t cocxycore_terminal_ligature_span_at(
+    const cocxycore_terminal* term,
+    uint16_t row,
+    uint16_t col
+);
+
+/** Ligature cache profiling counters. */
+uint32_t cocxycore_ligature_cache_hits(const cocxycore_terminal* term);
+uint32_t cocxycore_ligature_cache_misses(const cocxycore_terminal* term);
+void cocxycore_ligature_cache_reset_stats(cocxycore_terminal* term);
 
 /* -- Clipboard / shell integration helpers -- */
 
@@ -1388,21 +1467,6 @@ size_t cocxycore_terminal_generate_viewport(
     const char* request_id,
     size_t request_id_len
 );
-
-/* ====================================================================
- * Platform-agnostic GPU pipeline aliases
- * ==================================================================== */
-
-/**
- * Build the GPU frame data (dispatches to Metal on macOS, OpenGL on Linux).
- * Alias for cocxycore_terminal_build_metal_frame on macOS.
- */
-#ifdef COCXYCORE_PLATFORM_MACOS
-#define cocxycore_terminal_build_frame cocxycore_terminal_build_metal_frame
-#define cocxycore_terminal_frame_atlas_info cocxycore_terminal_metal_atlas_info
-#define cocxycore_terminal_frame_copy_atlas cocxycore_terminal_metal_copy_atlas_bitmap
-#define cocxycore_terminal_frame_clear_dirty cocxycore_terminal_metal_clear_atlas_dirty
-#endif
 
 #ifdef __cplusplus
 }
