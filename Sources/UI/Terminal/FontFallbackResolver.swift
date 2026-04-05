@@ -16,9 +16,9 @@ import AppKit
 /// 1. The requested family
 /// 2. "Menlo" (system default monospace)
 ///
-/// libghostty handles its own font rendering via Metal, so this resolver
+/// CocxyCore handles terminal font rendering itself, so this resolver
 /// is primarily used for:
-/// - Validating font availability before passing to ghostty config
+/// - Validating font availability before passing it into terminal config
 /// - UI elements outside the terminal surface (tab labels, overlays)
 ///
 /// - SeeAlso: `AppearanceConfig.fontFamily`

@@ -161,10 +161,7 @@ extension AppDelegate {
                 let configuredFontSize = configService?.current.appearance.fontSize
                     ?? AppearanceConfig.defaults.fontSize
                 viewModel.setDefaultFontSize(configuredFontSize)
-                let surfaceView = TerminalHostViewFactory.makeView(
-                    engine: bridge,
-                    viewModel: viewModel
-                )
+                let surfaceView = CocxyCoreView(viewModel: viewModel)
                 windowController.tabViewModels[newTab.id] = viewModel
                 windowController.tabSurfaceViews[newTab.id] = surfaceView
 

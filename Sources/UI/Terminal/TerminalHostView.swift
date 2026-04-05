@@ -5,12 +5,11 @@ import AppKit
 
 // MARK: - Terminal Host View
 
-/// Common contract implemented by engine-specific terminal host views.
+/// Common contract implemented by terminal host views.
 ///
-/// `TerminalSurfaceView` and `CocxyCoreView` both render a terminal surface,
-/// participate in tab/split lifecycle, and expose the same small set of hooks
-/// the window controller needs. This keeps the rest of the UI layer agnostic
-/// to whether the active engine is Ghostty or CocxyCore.
+/// `CocxyCoreView` renders a terminal surface, participates in tab/split
+/// lifecycle, and exposes the small set of hooks the window controller needs.
+/// The protocol remains as a seam for tests and future host-view refactors.
 @MainActor
 protocol TerminalHostingView: AnyObject {
     var terminalViewModel: TerminalViewModel? { get }
@@ -30,18 +29,3 @@ protocol TerminalHostingView: AnyObject {
 }
 
 typealias TerminalHostView = NSView & TerminalHostingView
-
-// MARK: - Terminal Host View Factory
-
-@MainActor
-enum TerminalHostViewFactory {
-    static func makeView(
-        engine: any TerminalEngine,
-        viewModel: TerminalViewModel
-    ) -> TerminalHostView {
-        if engine is CocxyCoreBridge {
-            return CocxyCoreView(viewModel: viewModel)
-        }
-        return TerminalSurfaceView(viewModel: viewModel)
-    }
-}

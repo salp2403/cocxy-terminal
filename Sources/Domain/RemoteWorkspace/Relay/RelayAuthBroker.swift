@@ -342,33 +342,33 @@ final class RelayAuthBroker {
         closeFlag: RelayCloseFlag
     ) {
         source.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
-            [weak self] data, _, isComplete, error in
-
+            data, _, isComplete, error in
             if let data, !data.isEmpty {
                 dest.send(content: data, completion: .contentProcessed { sendError in
                     if sendError != nil {
                         source.cancel()
                         dest.cancel()
-                        Task { @MainActor in
-                            if closeFlag.close() {
-                                self?.activeConnections = max(0, (self?.activeConnections ?? 1) - 1)
-                            }
+                        Task { @MainActor [weak self] in
+                            self?.finishRelay(closeFlag)
                         }
                         return
                     }
-                    Task { @MainActor in
+                    Task { @MainActor [weak self] in
                         self?.pipeData(from: source, to: dest, closeFlag: closeFlag)
                     }
                 })
             } else if isComplete || error != nil {
                 source.cancel()
                 dest.cancel()
-                Task { @MainActor in
-                    if closeFlag.close() {
-                        self?.activeConnections = max(0, (self?.activeConnections ?? 1) - 1)
-                    }
+                Task { @MainActor [weak self] in
+                    self?.finishRelay(closeFlag)
                 }
             }
         }
+    }
+
+    private func finishRelay(_ closeFlag: RelayCloseFlag) {
+        guard closeFlag.close() else { return }
+        activeConnections = max(0, activeConnections - 1)
     }
 }

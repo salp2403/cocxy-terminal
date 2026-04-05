@@ -197,6 +197,7 @@ final class WorkspaceToolbarController: NSObject {
         }
         button.imagePosition = .imageLeading
         button.font = .systemFont(ofSize: 11, weight: tab.isFocused ? .semibold : .regular)
+        button.translatesAutoresizingMaskIntoConstraints = false
 
         // Style based on focus state.
         if tab.isFocused {
@@ -206,8 +207,11 @@ final class WorkspaceToolbarController: NSObject {
         }
 
         item.view = button
-        item.minSize = NSSize(width: 80, height: 24)
-        item.maxSize = NSSize(width: 160, height: 24)
+        NSLayoutConstraint.activate([
+            button.heightAnchor.constraint(equalToConstant: 24),
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 80),
+            button.widthAnchor.constraint(lessThanOrEqualToConstant: 160),
+        ])
 
         return item
     }
@@ -228,10 +232,13 @@ final class WorkspaceToolbarController: NSObject {
         button.contentTintColor = CocxyColors.overlay0
         button.target = self
         button.action = #selector(addPanelClicked(_:))
+        button.translatesAutoresizingMaskIntoConstraints = false
 
         item.view = button
-        item.minSize = NSSize(width: 28, height: 24)
-        item.maxSize = NSSize(width: 28, height: 24)
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 28),
+            button.heightAnchor.constraint(equalToConstant: 24),
+        ])
 
         return item
     }

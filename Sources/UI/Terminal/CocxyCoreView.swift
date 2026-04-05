@@ -8,7 +8,7 @@ import CocxyCoreKit
 
 /// NSView subclass that hosts a CocxyCore terminal with Metal-accelerated rendering.
 ///
-/// This view is the CocxyCore equivalent of `TerminalSurfaceView`. It owns:
+/// It owns:
 /// - A `CAMetalLayer` for GPU rendering.
 /// - A `MetalTerminalRenderer` that draws CocxyCore's frame data.
 /// - Keyboard, mouse, and scroll event forwarding to `CocxyCoreBridge`.
@@ -22,7 +22,7 @@ import CocxyCoreKit
 ///
 /// ## Event routing
 ///
-/// Keyboard events follow the same classification as TerminalSurfaceView:
+/// Keyboard events follow the terminal host-view classification pipeline:
 /// 1. `KeyInputAction.classify()` → .copy, .paste, .selectAll, .clearScreen, .sendToTerminal
 /// 2. Special keys (arrows, backspace, enter, etc.) → `cocxycore_terminal_encode_key()`
 /// 3. Regular characters → `cocxycore_terminal_encode_char()`
@@ -59,10 +59,9 @@ final class CocxyCoreView: NSView {
     /// Closure called when files are dropped onto the terminal.
     var onFileDrop: (([URL]) -> Bool)?
 
-    /// Optional output buffer provider retained for feature parity with the
-    /// Ghostty-backed surface view. Current Smart Copy behavior still uses the
-    /// clipboard selection content first, but keeping this hook avoids losing
-    /// controller wiring when the active engine switches.
+    /// Optional output buffer provider retained for controller integrations
+    /// such as Smart Copy. Selection content still has priority, but this
+    /// hook preserves feature wiring for host-driven actions.
     var outputBufferProvider: (() -> [String])?
 
     /// IDE-like cursor positioning support for shell prompts.
@@ -110,6 +109,11 @@ final class CocxyCoreView: NSView {
     // MARK: - Constants
 
     private static let scrollSpeedFactor: CGFloat = 0.15
+
+    private var contentPadding: (x: CGFloat, y: CGFloat) {
+        guard let bridge else { return (8, 4) }
+        return (bridge.configuredPaddingX, bridge.configuredPaddingY)
+    }
 
     // MARK: - Initialization
 
@@ -232,7 +236,8 @@ final class CocxyCoreView: NSView {
             renderer?.updateViewportSize(
                 bounds.size,
                 scale: scale,
-                paddingX: 8, paddingY: 4
+                paddingX: Float(contentPadding.x),
+                paddingY: Float(contentPadding.y)
             )
         }
 
@@ -278,8 +283,9 @@ final class CocxyCoreView: NSView {
               metrics.cell_width > 0, metrics.cell_height > 0 else { return }
 
         let scale = Float(window?.backingScaleFactor ?? 2.0)
-        let paddingX: Float = 8 * scale
-        let paddingY: Float = 4 * scale
+        let padding = contentPadding
+        let paddingX = Float(padding.x) * scale
+        let paddingY = Float(padding.y) * scale
         let availableWidth = Float(backingSize.width) - paddingX * 2
         let availableHeight = Float(backingSize.height) - paddingY * 2
 
@@ -814,6 +820,7 @@ extension CocxyCoreView: TerminalHostingView {
     }
 
     func updateInteractionMetrics() {
+        lastNotifiedBackingSize = .zero
         syncSizeWithTerminal()
         refreshIDECursorMetrics()
     }

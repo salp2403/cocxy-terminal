@@ -33,7 +33,7 @@ import AppKit
 /// - Tab characters: assumed to be 8-column aligned.
 ///
 /// - SeeAlso: `TextSelectionManager` for the broader selection system.
-/// - SeeAlso: `TerminalSurfaceView` for event integration.
+/// - SeeAlso: `CocxyCoreView` for event integration.
 @MainActor
 final class IDECursorController {
 
@@ -95,26 +95,6 @@ final class IDECursorController {
         updateCellDimensions()
     }
 
-    convenience init(surfaceView: TerminalSurfaceView) {
-        self.init(
-            hostView: surfaceView,
-            fontSizeProvider: { [weak surfaceView] in
-                surfaceView?.viewModel.currentFontSize ?? 14.0
-            },
-            arrowKeySender: { [weak surfaceView] arrows in
-                guard let surfaceView,
-                      let surfaceID = surfaceView.viewModel.surfaceID,
-                      let bridge = surfaceView.viewModel.ghosttyBridge,
-                      !arrows.isEmpty else { return }
-
-                let csiCode = arrows[0] == .left ? "D" : "C"
-                for _ in arrows {
-                    bridge.performBindingAction("csi:\(csiCode)", on: surfaceID)
-                }
-            }
-        )
-    }
-
     // MARK: - Cell Dimensions
 
     /// Updates the cell dimensions based on the current font size.
@@ -173,7 +153,7 @@ final class IDECursorController {
     /// Updates the indicator layer position to match the current cursor column and prompt row.
     ///
     /// The layer frame is sized to exactly one cell row at the prompt position.
-    /// Since `TerminalSurfaceView.isFlipped == true`, y increases downward,
+    /// Since the host terminal view is flipped, y increases downward,
     /// so `promptRow * cellHeight` places the layer at the correct row.
     private func updateIndicatorPosition() {
         guard let indicator = indicatorLayer, isOnPromptLine,

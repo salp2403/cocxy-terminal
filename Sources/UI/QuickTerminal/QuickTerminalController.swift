@@ -50,6 +50,9 @@ final class QuickTerminalController {
     /// The terminal surface view hosted inside the panel.
     private var terminalView: TerminalHostView?
 
+    /// View model retained for the lifetime of the quick terminal surface.
+    private var terminalViewModel: TerminalViewModel?
+
     /// Reference to the terminal engine for surface creation.
     private weak var bridge: (any TerminalEngine)?
 
@@ -90,6 +93,7 @@ final class QuickTerminalController {
         panel?.close()
         panel = nil
         terminalView = nil
+        terminalViewModel = nil
         isVisible = false
 
         self.bridge = bridge
@@ -109,15 +113,8 @@ final class QuickTerminalController {
         // Create the terminal view inside the panel.
         let terminalViewModel = TerminalViewModel(engine: bridge)
         terminalViewModel.setDefaultFontSize(config.appearance.fontSize)
-        let surfaceView: TerminalHostView
-        if let bridge {
-            surfaceView = TerminalHostViewFactory.makeView(
-                engine: bridge,
-                viewModel: terminalViewModel
-            )
-        } else {
-            surfaceView = TerminalSurfaceView(viewModel: terminalViewModel)
-        }
+        self.terminalViewModel = terminalViewModel
+        let surfaceView = CocxyCoreView(viewModel: terminalViewModel)
         surfaceView.translatesAutoresizingMaskIntoConstraints = false
 
         newPanel.contentView = surfaceView
@@ -210,6 +207,7 @@ final class QuickTerminalController {
         panel?.close()
         panel = nil
         terminalView = nil
+        terminalViewModel = nil
         isVisible = false
     }
 
@@ -224,7 +222,7 @@ final class QuickTerminalController {
     private func ensureSurfaceCreated() {
         guard let bridge,
               let terminalView,
-              terminalView.terminalViewModel?.surfaceID == nil else { return }
+              terminalViewModel?.surfaceID == nil else { return }
 
         do {
             let surfaceID = try bridge.createSurface(
@@ -232,7 +230,7 @@ final class QuickTerminalController {
                 workingDirectory: workingDirectory,
                 command: nil
             )
-            terminalView.terminalViewModel?.markRunning(surfaceID: surfaceID)
+            terminalViewModel?.markRunning(surfaceID: surfaceID)
             terminalView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
             terminalView.syncSizeWithTerminal()
         } catch {
@@ -245,9 +243,9 @@ final class QuickTerminalController {
 
     private func destroySurfaceIfNeeded() {
         guard let bridge,
-              let surfaceID = terminalView?.terminalViewModel?.surfaceID else { return }
+              let surfaceID = terminalViewModel?.surfaceID else { return }
         bridge.destroySurface(surfaceID)
-        terminalView?.terminalViewModel?.markStopped()
+        terminalViewModel?.markStopped()
     }
 
     private static func resolveWorkingDirectory(from config: CocxyConfig) -> URL {

@@ -14,7 +14,6 @@ final class SplitEqualizeZoomTests: XCTestCase {
         manager.splitFocused(direction: .horizontal)
 
         // Change ratio away from 0.5.
-        let leaves = manager.rootNode.allLeafIDs()
         if case .split(let id, _, _, _, _) = manager.rootNode {
             manager.setRatio(splitID: id, ratio: 0.7)
         }

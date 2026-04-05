@@ -141,87 +141,83 @@ extension AppDelegate {
         let settingsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/settings.json").path
 
-        do {
-            var settings = readOrCreateSettings(at: settingsPath)
-            var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
+        var settings = readOrCreateSettings(at: settingsPath)
+        var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
 
-            let eventTypes = [
-                "SessionStart", "SessionEnd", "Stop",
-                "PreToolUse", "PostToolUse", "PostToolUseFailure",
-                "SubagentStart", "SubagentStop",
-                "Notification", "TeammateIdle",
-                "TaskCompleted", "UserPromptSubmit"
-            ]
+        let eventTypes = [
+            "SessionStart", "SessionEnd", "Stop",
+            "PreToolUse", "PostToolUse", "PostToolUseFailure",
+            "SubagentStart", "SubagentStop",
+            "Notification", "TeammateIdle",
+            "TaskCompleted", "UserPromptSubmit"
+        ]
 
-            var modified = false
+        var modified = false
 
-            for eventType in eventTypes {
-                var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
+        for eventType in eventTypes {
+            var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
 
-                // Find ALL cocxy hook entries (not just the first).
-                // Previous versions could create duplicates that were never
-                // cleaned up, causing each event to be processed N times.
-                let cocxyIndices = eventHooks.indices.filter { idx in
-                    guard let commands = eventHooks[idx]["hooks"] as? [[String: Any]] else {
-                        return false
-                    }
-                    return commands.contains {
-                        guard let cmd = $0["command"] as? String else { return false }
-                        return cmd.contains("cocxy") && cmd.contains("hook-handler")
-                    }
+            // Find ALL cocxy hook entries (not just the first).
+            // Previous versions could create duplicates that were never
+            // cleaned up, causing each event to be processed N times.
+            let cocxyIndices = eventHooks.indices.filter { idx in
+                guard let commands = eventHooks[idx]["hooks"] as? [[String: Any]] else {
+                    return false
                 }
-
-                if cocxyIndices.isEmpty {
-                    // No cocxy hook exists — install exactly one.
-                    let entry: [String: Any] = [
-                        "matcher": "",
-                        "hooks": [
-                            ["type": "command", "command": hookCommand]
-                        ]
-                    ]
-                    eventHooks.append(entry)
-                    hooks[eventType] = eventHooks
-                    modified = true
-                } else {
-                    // Cocxy hook(s) exist. Keep exactly ONE with the correct
-                    // path; remove all duplicates.
-                    let correctEntry: [String: Any] = [
-                        "matcher": "",
-                        "hooks": [
-                            ["type": "command", "command": hookCommand]
-                        ]
-                    ]
-
-                    // Check if the first entry already has the correct command.
-                    let firstIdx = cocxyIndices[0]
-                    let firstCommands = eventHooks[firstIdx]["hooks"] as? [[String: Any]]
-                    let isCorrect = firstCommands?.contains {
-                        ($0["command"] as? String) == hookCommand
-                    } == true
-
-                    // Remove all cocxy entries (in reverse to preserve indices).
-                    for idx in cocxyIndices.reversed() {
-                        eventHooks.remove(at: idx)
-                    }
-
-                    // Re-add exactly one correct entry.
-                    eventHooks.append(correctEntry)
-                    hooks[eventType] = eventHooks
-
-                    // Mark modified if we removed duplicates or updated the path.
-                    if cocxyIndices.count > 1 || !isCorrect {
-                        modified = true
-                    }
+                return commands.contains {
+                    guard let cmd = $0["command"] as? String else { return false }
+                    return cmd.contains("cocxy") && cmd.contains("hook-handler")
                 }
             }
 
-            guard modified else { return }
+            if cocxyIndices.isEmpty {
+                // No cocxy hook exists — install exactly one.
+                let entry: [String: Any] = [
+                    "matcher": "",
+                    "hooks": [
+                        ["type": "command", "command": hookCommand]
+                    ]
+                ]
+                eventHooks.append(entry)
+                hooks[eventType] = eventHooks
+                modified = true
+            } else {
+                // Cocxy hook(s) exist. Keep exactly ONE with the correct
+                // path; remove all duplicates.
+                let correctEntry: [String: Any] = [
+                    "matcher": "",
+                    "hooks": [
+                        ["type": "command", "command": hookCommand]
+                    ]
+                ]
 
-            settings["hooks"] = hooks
-            writeSettings(settings, to: settingsPath)
-        } catch {
-            // Fail silently — hook installation is best-effort.
+                // Check if the first entry already has the correct command.
+                let firstIdx = cocxyIndices[0]
+                let firstCommands = eventHooks[firstIdx]["hooks"] as? [[String: Any]]
+                let isCorrect = firstCommands?.contains {
+                    ($0["command"] as? String) == hookCommand
+                } == true
+
+                // Remove all cocxy entries (in reverse to preserve indices).
+                for idx in cocxyIndices.reversed() {
+                    eventHooks.remove(at: idx)
+                }
+
+                // Re-add exactly one correct entry.
+                eventHooks.append(correctEntry)
+                hooks[eventType] = eventHooks
+
+                // Mark modified if we removed duplicates or updated the path.
+                if cocxyIndices.count > 1 || !isCorrect {
+                    modified = true
+                }
+            }
         }
+
+        guard modified else { return }
+
+        settings["hooks"] = hooks
+        writeSettings(settings, to: settingsPath)
     }
 
     /// Reads settings.json or returns an empty dictionary if it doesn't exist.

@@ -209,6 +209,37 @@ struct CocxyCoreBridgeTests {
 
         #expect(String(data: received.data, encoding: .utf8)?.contains("ping") == true)
     }
+
+    @Test("updateDefaults stores shell and padding for future surfaces")
+    func updateDefaultsStoresFutureSurfaceConfig() throws {
+        let bridge = try makeBridge()
+
+        bridge.updateDefaults(
+            shell: "/bin/bash",
+            windowPaddingX: 20,
+            windowPaddingY: 10
+        )
+
+        #expect(bridge.configuredPaddingX == 20)
+        #expect(bridge.configuredPaddingY == 10)
+    }
+
+    @Test("applyFont updates the live terminal font metrics")
+    func applyFontUpdatesLiveMetrics() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        var before = cocxycore_font_metrics()
+        #expect(cocxycore_terminal_get_font_metrics(state.terminal, &before) == true)
+
+        bridge.applyFont(family: "Menlo", size: 24)
+
+        var after = cocxycore_font_metrics()
+        #expect(cocxycore_terminal_get_font_metrics(state.terminal, &after) == true)
+        #expect(after.cell_height >= before.cell_height)
+    }
 }
 
 @MainActor

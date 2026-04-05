@@ -20,75 +20,75 @@ import XCTest
 /// - Oversized payloads (above 16MB) are discarded.
 final class InlineImageOSCDetectorTests: XCTestCase {
 
+    private func makePayloadBox() -> LockedBox<String?> {
+        LockedBox(nil)
+    }
+
+    private func makeDetector(received: LockedBox<String?>) -> InlineImageOSCDetector {
+        InlineImageOSCDetector { payload in
+            received.withValue { $0 = payload }
+        }
+    }
+
     // MARK: - BEL Terminator
 
     func testDetectsOSC1337WithBELTerminator() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         let bytes: [UInt8] = [0x1B, 0x5D]
             + Array("1337;File=inline=1:AAAA".utf8)
             + [0x07]
         detector.processBytes(Data(bytes))
 
-        XCTAssertEqual(received, "File=inline=1:AAAA")
+        XCTAssertEqual(received.withValue { $0 }, "File=inline=1:AAAA")
     }
 
     // MARK: - ST Terminator
 
     func testDetectsOSC1337WithSTTerminator() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         let bytes: [UInt8] = [0x1B, 0x5D]
             + Array("1337;File=inline=1:BBBB".utf8)
             + [0x1B, 0x5C]
         detector.processBytes(Data(bytes))
 
-        XCTAssertEqual(received, "File=inline=1:BBBB")
+        XCTAssertEqual(received.withValue { $0 }, "File=inline=1:BBBB")
     }
 
     // MARK: - Non-1337 Filtering
 
     func testIgnoresNon1337OSC() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         let bytes: [UInt8] = [0x1B, 0x5D]
             + Array("133;A".utf8)
             + [0x07]
         detector.processBytes(Data(bytes))
 
-        XCTAssertNil(received, "OSC 133 should be ignored by the image detector")
+        XCTAssertNil(received.withValue { $0 }, "OSC 133 should be ignored by the image detector")
     }
 
     func testIgnoresOSC9() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         let bytes: [UInt8] = [0x1B, 0x5D]
             + Array("9;notification".utf8)
             + [0x07]
         detector.processBytes(Data(bytes))
 
-        XCTAssertNil(received, "OSC 9 should be ignored by the image detector")
+        XCTAssertNil(received.withValue { $0 }, "OSC 9 should be ignored by the image detector")
     }
 
     // MARK: - Large Payloads
 
     func testHandlesPayloadAbove4KBLimit() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         let largeData = String(repeating: "A", count: 100_000)
         let bytes: [UInt8] = [0x1B, 0x5D]
@@ -96,64 +96,59 @@ final class InlineImageOSCDetectorTests: XCTestCase {
             + [0x07]
         detector.processBytes(Data(bytes))
 
-        XCTAssertNotNil(received, "100KB payload should be handled")
-        XCTAssertTrue(received!.contains(largeData))
+        let payload = received.withValue { $0 }
+        XCTAssertNotNil(payload, "100KB payload should be handled")
+        XCTAssertTrue(payload?.contains(largeData) == true)
     }
 
     // MARK: - Incremental Processing
 
     func testIncrementalProcessingAcrossChunks() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         detector.processBytes(Data([0x1B, 0x5D]))
         detector.processBytes(Data(Array("1337;".utf8)))
         detector.processBytes(Data(Array("File=inline=1:DATA".utf8)))
-        XCTAssertNil(received, "Should not emit before terminator")
+        XCTAssertNil(received.withValue { $0 }, "Should not emit before terminator")
 
         detector.processBytes(Data([0x07]))
-        XCTAssertEqual(received, "File=inline=1:DATA")
+        XCTAssertEqual(received.withValue { $0 }, "File=inline=1:DATA")
     }
 
     // MARK: - Reset
 
     func testResetClearsPartialState() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         detector.processBytes(Data([0x1B, 0x5D] + Array("1337;partial".utf8)))
         detector.reset()
         detector.processBytes(Data([0x07]))
 
-        XCTAssertNil(received, "Reset should discard partial payload")
+        XCTAssertNil(received.withValue { $0 }, "Reset should discard partial payload")
     }
 
     // MARK: - Empty Payload
 
     func testEmptyPayloadIsNotEmitted() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         let bytes: [UInt8] = [0x1B, 0x5D]
             + Array("1337;".utf8)
             + [0x07]
         detector.processBytes(Data(bytes))
 
-        XCTAssertNil(received, "Empty payload should not trigger handler")
+        XCTAssertNil(received.withValue { $0 }, "Empty payload should not trigger handler")
     }
 
     // MARK: - Multiple Sequences
 
     func testMultipleSequencesInSingleChunk() {
-        var received: [String] = []
+        let received = LockedBox<[String]>([])
         let detector = InlineImageOSCDetector { payload in
-            received.append(payload)
+            received.withValue { $0.append(payload) }
         }
 
         let first: [UInt8] = [0x1B, 0x5D]
@@ -164,18 +159,17 @@ final class InlineImageOSCDetectorTests: XCTestCase {
             + [0x1B, 0x5C]
         detector.processBytes(Data(first + second))
 
-        XCTAssertEqual(received.count, 2)
-        XCTAssertEqual(received[0], "File=1:AAA")
-        XCTAssertEqual(received[1], "File=2:BBB")
+        let payloads = received.withValue { $0 }
+        XCTAssertEqual(payloads.count, 2)
+        XCTAssertEqual(payloads[0], "File=1:AAA")
+        XCTAssertEqual(payloads[1], "File=2:BBB")
     }
 
     // MARK: - Interleaved Non-OSC Data
 
     func testIgnoresPlainTextBetweenSequences() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         let plainText = Array("Hello, world! Some terminal output.\r\n".utf8)
         let oscSequence: [UInt8] = [0x1B, 0x5D]
@@ -183,16 +177,14 @@ final class InlineImageOSCDetectorTests: XCTestCase {
             + [0x07]
         detector.processBytes(Data(plainText + oscSequence))
 
-        XCTAssertEqual(received, "File=inline=1:IMG")
+        XCTAssertEqual(received.withValue { $0 }, "File=inline=1:IMG")
     }
 
     // MARK: - Oversized Payload
 
     func testDiscardsPayloadExceeding16MB() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         // 16MB + 1 byte exceeds the limit.
         let oversizedData = String(repeating: "X", count: 16 * 1024 * 1024 + 1)
@@ -202,22 +194,20 @@ final class InlineImageOSCDetectorTests: XCTestCase {
             + [0x07]
         detector.processBytes(Data(bytes))
 
-        XCTAssertNil(received, "Payload exceeding 16MB should be discarded")
+        XCTAssertNil(received.withValue { $0 }, "Payload exceeding 16MB should be discarded")
     }
 
     // MARK: - Non-Digit Code
 
     func testRejectsNonDigitOSCCode() {
-        var received: String?
-        let detector = InlineImageOSCDetector { payload in
-            received = payload
-        }
+        let received = makePayloadBox()
+        let detector = makeDetector(received: received)
 
         let bytes: [UInt8] = [0x1B, 0x5D]
             + Array("abc;payload".utf8)
             + [0x07]
         detector.processBytes(Data(bytes))
 
-        XCTAssertNil(received, "Non-digit OSC code should be rejected")
+        XCTAssertNil(received.withValue { $0 }, "Non-digit OSC code should be rejected")
     }
 }

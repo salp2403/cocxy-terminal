@@ -12,7 +12,7 @@ import AppKit
 final class MainWindowControllerCreationTests: XCTestCase {
 
     func testWindowControllerCanBeCreatedWithBridge() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertNotNil(
             controller,
@@ -21,7 +21,7 @@ final class MainWindowControllerCreationTests: XCTestCase {
     }
 
     func testWindowControllerHoldsReferenceToViewModel() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertNotNil(
             controller.terminalViewModel,
@@ -30,10 +30,10 @@ final class MainWindowControllerCreationTests: XCTestCase {
     }
 
     func testWindowControllerViewModelHasBridge() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertTrue(
-            controller.terminalViewModel.ghosttyBridge === bridge,
+            controller.terminalViewModel.engine === bridge,
             "ViewModel must hold a reference to the engine"
         )
     }
@@ -57,7 +57,7 @@ final class MainWindowControllerCreationTests: XCTestCase {
 final class MainWindowControllerWindowTests: XCTestCase {
 
     func testWindowHasCorrectTitle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         XCTAssertEqual(
@@ -68,7 +68,7 @@ final class MainWindowControllerWindowTests: XCTestCase {
     }
 
     func testWindowHasMinimumSize() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         let minSize = controller.window?.minSize ?? .zero
@@ -84,13 +84,13 @@ final class MainWindowControllerWindowTests: XCTestCase {
         )
     }
 
-    func testWindowContentViewContainsTerminalSurfaceView() {
-        let bridge = GhosttyBridge()
+    func testWindowContentViewContainsTerminalHostView() {
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         XCTAssertNotNil(
             controller.terminalSurfaceView,
-            "Window must contain a TerminalSurfaceView (inside the split layout)"
+            "Window must contain a terminal host view inside the split layout"
         )
         XCTAssertNotNil(
             controller.tabBarView,
@@ -99,7 +99,7 @@ final class MainWindowControllerWindowTests: XCTestCase {
     }
 
     func testWindowHasTransparentTitlebar() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         XCTAssertTrue(
@@ -109,7 +109,7 @@ final class MainWindowControllerWindowTests: XCTestCase {
     }
 
     func testWindowHasFullSizeContentView() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         let styleMask = controller.window?.styleMask ?? []

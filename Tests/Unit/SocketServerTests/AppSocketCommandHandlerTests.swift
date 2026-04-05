@@ -549,14 +549,14 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     // MARK: - Group 4: Acknowledged Commands
 
     func test_notifyCommand_dispatchesAndReturnsNotificationSent() {
-        var dispatchedTitle: String?
-        var dispatchedBody: String?
+        let dispatchedTitle = LockedBox<String?>(nil)
+        let dispatchedBody = LockedBox<String?>(nil)
         let handler = AppSocketCommandHandler(
             tabManager: nil,
             hookEventReceiver: nil,
             notifyDispatcher: { title, body in
-                dispatchedTitle = title
-                dispatchedBody = body
+                dispatchedTitle.withValue { $0 = title }
+                dispatchedBody.withValue { $0 = body }
             }
         )
         let request = SocketRequest(
@@ -568,16 +568,18 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "notification sent")
-        XCTAssertEqual(dispatchedTitle, "Cocxy")
-        XCTAssertEqual(dispatchedBody, "Build done")
+        XCTAssertEqual(dispatchedTitle.withValue { $0 }, "Cocxy")
+        XCTAssertEqual(dispatchedBody.withValue { $0 }, "Build done")
     }
 
     func test_notifyCommand_withCustomTitle() {
-        var dispatchedTitle: String?
+        let dispatchedTitle = LockedBox<String?>(nil)
         let handler = AppSocketCommandHandler(
             tabManager: nil,
             hookEventReceiver: nil,
-            notifyDispatcher: { title, _ in dispatchedTitle = title }
+            notifyDispatcher: { title, _ in
+                dispatchedTitle.withValue { $0 = title }
+            }
         )
         let request = SocketRequest(
             id: "ack-1b",
@@ -587,7 +589,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let response = handler.handleCommand(request)
 
         XCTAssertTrue(response.success)
-        XCTAssertEqual(dispatchedTitle, "Deploy")
+        XCTAssertEqual(dispatchedTitle.withValue { $0 }, "Deploy")
     }
 
     func test_notifyCommand_withoutMessage_returnsError() {

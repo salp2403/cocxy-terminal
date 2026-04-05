@@ -5,16 +5,16 @@ import Foundation
 
 // MARK: - Terminal Engine Protocol
 
-/// Contract for the bridge between libghostty's C API and Swift.
+/// Contract for the bridge between the native terminal engine and Swift.
 ///
-/// The concrete implementation (`GhosttyBridge`) wraps all interactions with
-/// `ghostty_app`, `ghostty_surface` and their callbacks. This protocol allows
-/// the domain layer to remain decoupled from the specific terminal engine,
-/// enabling testing with fakes and a potential future swap (e.g., SwiftTerm).
+/// The concrete implementation (`CocxyCoreBridge`) wraps CocxyCore's C API and
+/// exposes a small, testable surface to the rest of the app. The protocol
+/// keeps the domain layer decoupled from engine details and allows unit tests
+/// to inject lightweight fakes.
 ///
-/// Threading: Implementations must dispatch all callbacks to the main thread.
-/// libghostty uses 4 threads per surface (main, renderer, I/O, read);
-/// the bridge is responsible for thread-safety at the boundary.
+/// Threading: implementations must dispatch all callbacks to the main thread.
+/// The bridge is responsible for keeping terminal I/O and Swift UI state
+/// synchronized safely at the boundary.
 ///
 /// - SeeAlso: ADR-001 (Terminal Engine selection)
 /// - SeeAlso: ARCHITECTURE.md Section 7.1
@@ -150,8 +150,8 @@ struct SurfaceID: Hashable, Codable, Sendable {
 
 /// Terminal dimensions in both character cells and pixels.
 ///
-/// Both representations are needed because libghostty uses pixel dimensions
-/// for GPU rendering while the PTY uses character cell dimensions.
+/// Both representations are needed because the renderer uses pixel dimensions
+/// while the PTY uses character cell dimensions.
 struct TerminalSize: Equatable, Sendable {
     /// Number of character columns.
     let columns: UInt16
@@ -181,9 +181,9 @@ struct KeyEvent: Sendable {
     /// Whether this event is part of an IME composition sequence.
     let isComposing: Bool
     /// The Unicode codepoint of the key without Shift applied.
-    /// Used by libghostty for correct key translation.
+    /// Used by the terminal engine for layout-aware key translation.
     let unshiftedCodepoint: UInt32
-    /// Raw consumed modifiers value from ghostty_surface_key_translation_mods.
+    /// Raw consumed modifiers value used for engine-side modifier tracking.
     /// Set by the view layer after querying the bridge for translation mods.
     let consumedModsRaw: UInt32
 
@@ -241,7 +241,7 @@ enum OSCNotification: Sendable {
     /// Inline image data from an OSC 1337 sequence (iTerm2 protocol).
     /// Contains the raw payload after "1337;" for parsing by the UI layer.
     case inlineImage(String)
-    /// The shell process exited (GHOSTTY_ACTION_SHOW_CHILD_EXITED).
+    /// The shell process exited.
     /// Used to transition the agent detection engine to idle state.
     case processExited
 }
@@ -249,8 +249,7 @@ enum OSCNotification: Sendable {
 /// Configuration passed to `TerminalEngine.initialize(config:)`.
 ///
 /// This is a snapshot of the engine-relevant subset of `CocxyConfig`.
-/// Changes after initialization are applied via engine-specific APIs
-/// (e.g., font changes require surface recreation in libghostty).
+/// Changes after initialization are applied via engine-specific APIs.
 struct TerminalEngineConfig: Sendable {
     /// Font family name (e.g., "JetBrainsMono Nerd Font").
     let fontFamily: String
@@ -263,8 +262,8 @@ struct TerminalEngineConfig: Sendable {
     /// Default working directory for new surfaces.
     let workingDirectory: URL
     /// Optional theme palette to apply to the terminal.
-    /// When provided, the bridge writes a temporary ghostty config file
-    /// with these colors and loads it before finalization.
+    /// When provided, the bridge applies these colors directly through
+    /// the native engine API.
     let themePalette: ThemePalette?
     /// Horizontal padding in points (applied to left and right).
     let windowPaddingX: Double
@@ -290,6 +289,28 @@ struct TerminalEngineConfig: Sendable {
         self.windowPaddingX = windowPaddingX
         self.windowPaddingY = windowPaddingY
     }
+
+    func replacing(
+        fontFamily: String? = nil,
+        fontSize: Double? = nil,
+        themeName: String? = nil,
+        shell: String? = nil,
+        workingDirectory: URL? = nil,
+        themePalette: ThemePalette? = nil,
+        windowPaddingX: Double? = nil,
+        windowPaddingY: Double? = nil
+    ) -> TerminalEngineConfig {
+        TerminalEngineConfig(
+            fontFamily: fontFamily ?? self.fontFamily,
+            fontSize: fontSize ?? self.fontSize,
+            themeName: themeName ?? self.themeName,
+            shell: shell ?? self.shell,
+            workingDirectory: workingDirectory ?? self.workingDirectory,
+            themePalette: themePalette ?? self.themePalette,
+            windowPaddingX: windowPaddingX ?? self.windowPaddingX,
+            windowPaddingY: windowPaddingY ?? self.windowPaddingY
+        )
+    }
 }
 
 /// Errors that can occur during terminal engine operations.
@@ -307,7 +328,7 @@ enum TerminalEngineError: Error, Sendable {
 /// In production this will be an `NSView` subclass from AppKit.
 /// It is defined here as a protocol so the domain layer does not import AppKit.
 ///
-/// - Note: The concrete type will be `TerminalSurfaceView` (T-005).
+/// - Note: The concrete type is an `NSView` subclass such as `CocxyCoreView`.
 #if canImport(AppKit)
 import AppKit
 typealias NativeTerminalView = NSView

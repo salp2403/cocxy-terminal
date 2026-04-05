@@ -8,7 +8,7 @@ import UserNotifications
 /// Main application delegate for Cocxy Terminal.
 ///
 /// Responsibilities:
-/// - Initialize the `GhosttyBridge` terminal engine at launch.
+/// - Initialize the terminal engine at launch.
 /// - Create and manage the main window via `MainWindowController`.
 /// - Coordinate app lifecycle events (launch, terminate, activate).
 /// - Trigger session save/restore at appropriate lifecycle points.
@@ -29,8 +29,8 @@ import UserNotifications
 ///
 /// ```
 /// applicationDidFinishLaunching
-///   -> Create GhosttyBridge
-///   -> Initialize bridge (config + ghostty_app)
+///   -> Create CocxyCoreBridge
+///   -> Initialize bridge with config
 ///   -> Initialize agent detection engine (before window!)
 ///   -> Create MainWindowController
 ///   -> Show window
@@ -40,7 +40,7 @@ import UserNotifications
 /// applicationWillTerminate
 ///   -> Destroy terminal surface
 ///   -> MainWindowController = nil
-///   -> Bridge = nil (deinit frees ghostty_app + config)
+///   -> Bridge = nil (deinit frees terminal resources)
 /// ```
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -48,7 +48,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Properties
 
     /// The terminal engine. Created during app launch.
-    /// Can be GhosttyBridge or CocxyCoreBridge depending on config.
     private(set) var bridge: (any TerminalEngine)?
 
     /// The main window controller. Created during app launch.
@@ -332,15 +331,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Bridge Initialization
 
-    /// Initializes the terminal engine bridge based on the configured engine type.
-    ///
-    /// Reads `engineType` from GeneralConfig. Defaults to GhosttyBridge for stability.
-    /// CocxyCoreBridge is used when `engine = "cocxycore"` is set in config.toml.
+    /// Initializes the terminal engine bridge.
     private func initializeBridge() {
-        let engineType = configService?.current.general.engineType ?? .ghostty
-        let newBridge: any TerminalEngine = engineType == .cocxycore
-            ? CocxyCoreBridge()
-            : GhosttyBridge()
+        let newBridge: any TerminalEngine = CocxyCoreBridge()
 
         let fontFamily = configService?.current.appearance.fontFamily
             ?? AppearanceConfig.defaults.fontFamily
@@ -390,23 +383,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Theme Switching
 
-    /// Switches the terminal theme by recreating the bridge and all surfaces.
+    /// Switches the terminal theme in place.
     ///
-    /// This is the only way to change ghostty's color palette at runtime:
-    /// the C API requires a fresh `ghostty_config` + `ghostty_app` pair.
-    ///
-    /// The method preserves the user's workspace state:
-    /// 1. Captures each tab's working directory and title.
-    /// 2. Destroys all surfaces and the old bridge.
-    /// 3. Creates a new bridge with the target theme palette.
-    /// 4. Recreates a surface for every tab at its saved working directory.
-    /// 5. Restores the active tab and re-wires all handlers.
-    ///
-    /// Shell sessions restart — there is no way around this because ghostty
-    /// owns the PTY and the PTY is bound to the surface.
+    /// CocxyCore applies theme changes without recreating surfaces, so existing
+    /// tabs and windows keep their PTYs and visual state intact.
     ///
     /// - Parameter themeName: Display name of the target theme (e.g., "One Dark").
-    /// Snapshot of tab state captured before theme switch destroys surfaces.
     private struct ThemeSwitchTabSnapshot {
         let id: TabID
         let title: String
@@ -416,53 +398,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func switchTheme(to themeName: String) {
         guard let windowController = windowController else { return }
 
-        // 1. Resolve the new theme palette.
         guard let theme = try? themeEngine?.themeByName(themeName) else {
             NSLog("[AppDelegate] Theme not found: %@", themeName)
             return
         }
 
-        if let cocxyBridge = bridge as? CocxyCoreBridge {
-            applyCocxyCoreTheme(theme.palette, bridge: cocxyBridge)
-            applyThemeUI(windowController, palette: theme.palette)
-            for controller in additionalWindowControllers {
-                applyThemeUI(controller, palette: theme.palette)
-            }
-            NSLog("[AppDelegate] Theme switched to: %@", themeName)
+        guard let cocxyBridge = bridge as? CocxyCoreBridge else {
+            NSLog("[AppDelegate] Theme switch requested before CocxyCore bridge was ready")
             return
         }
 
-        // 2. Capture state, destroy surfaces, rebuild with new theme.
-        let (snapshots, activeIndex) = captureTabState(windowController)
-        destroyAllSurfaces(windowController)
-
-        guard let newBridge = createBridgeForTheme(themeName, palette: theme.palette) else {
-            return
-        }
-
-        recreateTabSurfaces(
-            windowController: windowController,
-            bridge: newBridge,
-            snapshots: snapshots
+        cocxyBridge.updateDefaults(
+            themeName: theme.metadata.name,
+            themePalette: theme.palette
         )
-
-        // 2b. Recreate surfaces for additional windows (Cmd+N windows).
-        for controller in additionalWindowControllers {
-            let (addSnapshots, _) = captureTabState(controller)
-            recreateTabSurfaces(
-                windowController: controller,
-                bridge: newBridge,
-                snapshots: addSnapshots
-            )
-            controller.bridge = newBridge
-        }
-
-        // 3. Restore focus and update UI.
-        windowController.injectedAgentDetectionEngine = agentDetectionEngine
-        restoreActiveTab(windowController, tabs: windowController.tabManager.tabs, activeIndex: activeIndex)
+        applyCocxyCoreTheme(theme.palette, bridge: cocxyBridge)
         applyThemeUI(windowController, palette: theme.palette)
+        for controller in additionalWindowControllers {
+            applyThemeUI(controller, palette: theme.palette)
+        }
+        if let config = configService?.current {
+            let wasQuickTerminalVisible = quickTerminalController?.isVisible ?? false
+            quickTerminalController?.setup(bridge: cocxyBridge, config: config)
+            if wasQuickTerminalVisible {
+                quickTerminalController?.show()
+            }
+        }
 
         NSLog("[AppDelegate] Theme switched to: %@", themeName)
+    }
+
+    func applyBridgeConfigurationChanges(from oldConfig: CocxyConfig?, to newConfig: CocxyConfig) {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge else { return }
+
+        let resolvedTheme = try? themeEngine?.themeByName(newConfig.appearance.theme)
+        cocxyBridge.updateDefaults(
+            fontFamily: newConfig.appearance.fontFamily,
+            fontSize: newConfig.appearance.fontSize,
+            themeName: resolvedTheme?.metadata.name ?? newConfig.appearance.theme,
+            themePalette: resolvedTheme?.palette,
+            shell: newConfig.general.shell,
+            windowPaddingX: newConfig.appearance.effectivePaddingX,
+            windowPaddingY: newConfig.appearance.effectivePaddingY
+        )
+
+        let fontChanged =
+            oldConfig?.appearance.fontFamily != newConfig.appearance.fontFamily ||
+            oldConfig?.appearance.fontSize != newConfig.appearance.fontSize
+        let paddingChanged =
+            oldConfig?.appearance.effectivePaddingX != newConfig.appearance.effectivePaddingX ||
+            oldConfig?.appearance.effectivePaddingY != newConfig.appearance.effectivePaddingY
+        let themeChanged = oldConfig?.appearance.theme != newConfig.appearance.theme
+
+        if fontChanged {
+            cocxyBridge.applyFont(
+                family: newConfig.appearance.fontFamily,
+                size: newConfig.appearance.fontSize
+            )
+        }
+
+        if themeChanged {
+            switchTheme(to: newConfig.appearance.theme)
+        }
+
+        if fontChanged || paddingChanged {
+            refreshTerminalHostMetrics(using: newConfig)
+        }
     }
 
     // MARK: - Theme Switch Helpers
@@ -487,10 +488,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func createBridgeForTheme(_ themeName: String, palette: ThemePalette) -> (any TerminalEngine)? {
-        let engineType = configService?.current.general.engineType ?? .ghostty
-        let newBridge: any TerminalEngine = engineType == .cocxycore
-            ? CocxyCoreBridge()
-            : GhosttyBridge()
+        let newBridge: any TerminalEngine = CocxyCoreBridge()
         let fontFamily = configService?.current.appearance.fontFamily
             ?? AppearanceConfig.defaults.fontFamily
         let fontSize = configService?.current.appearance.fontSize
@@ -549,10 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let configuredFontSize = configService?.current.appearance.fontSize
                 ?? AppearanceConfig.defaults.fontSize
             viewModel.setDefaultFontSize(configuredFontSize)
-            let surfaceView = TerminalHostViewFactory.makeView(
-                engine: newBridge,
-                viewModel: viewModel
-            )
+            let surfaceView = CocxyCoreView(viewModel: viewModel)
 
             wc.tabViewModels[tab.id] = viewModel
             wc.tabSurfaceViews[tab.id] = surfaceView
@@ -594,6 +589,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let appearance = configService?.current.appearance {
             wc.tabBarView?.setSidebarTransparent(appearance.backgroundOpacity < 1.0)
+        }
+    }
+
+    private func refreshTerminalHostMetrics(using config: CocxyConfig) {
+        let allControllers = [windowController].compactMap { $0 } + additionalWindowControllers
+        for controller in allControllers {
+            controller.terminalViewModel.setDefaultFontSize(config.appearance.fontSize)
+            for viewModel in controller.tabViewModels.values {
+                viewModel.setDefaultFontSize(config.appearance.fontSize)
+            }
+            for viewModel in controller.splitViewModels.values {
+                viewModel.setDefaultFontSize(config.appearance.fontSize)
+            }
+            for surfaceView in controller.tabSurfaceViews.values {
+                surfaceView.updateInteractionMetrics()
+                surfaceView.requestImmediateRedraw()
+            }
+            for surfaceView in controller.splitSurfaceViews.values {
+                surfaceView.updateInteractionMetrics()
+                surfaceView.requestImmediateRedraw()
+            }
+        }
+
+        if let bridge {
+            let wasQuickTerminalVisible = quickTerminalController?.isVisible ?? false
+            quickTerminalController?.setup(bridge: bridge, config: config)
+            if wasQuickTerminalVisible {
+                quickTerminalController?.show()
+            }
         }
     }
 

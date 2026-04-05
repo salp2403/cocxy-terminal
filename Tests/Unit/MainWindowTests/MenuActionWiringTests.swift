@@ -160,7 +160,7 @@ final class MenuActionWiringTests: XCTestCase {
 final class ZoomActionBehaviorTests: XCTestCase {
 
     func testZoomInIncreasesFontSize() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let initialSize = controller.terminalViewModel.currentFontSize
 
@@ -174,7 +174,7 @@ final class ZoomActionBehaviorTests: XCTestCase {
     }
 
     func testZoomOutDecreasesFontSize() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Zoom in first so we have room to zoom out.
@@ -192,7 +192,7 @@ final class ZoomActionBehaviorTests: XCTestCase {
     }
 
     func testResetZoomRestoresDefaultFontSize() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let defaultSize = controller.terminalViewModel.currentFontSize
 
@@ -225,7 +225,7 @@ final class ZoomActionBehaviorTests: XCTestCase {
 final class TabBarToggleTests: XCTestCase {
 
     func testTabBarIsVisibleByDefault() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertFalse(
@@ -235,7 +235,7 @@ final class TabBarToggleTests: XCTestCase {
     }
 
     func testToggleTabBarHidesSidebar() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -248,7 +248,7 @@ final class TabBarToggleTests: XCTestCase {
     }
 
     func testToggleTabBarTwiceRestoresSidebar() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -270,7 +270,7 @@ final class TabBarToggleTests: XCTestCase {
 final class OSCNotificationForwardingTests: XCTestCase {
 
     func testInjectedNotificationManagerIsNilByDefault() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertNil(
@@ -280,7 +280,7 @@ final class OSCNotificationForwardingTests: XCTestCase {
     }
 
     func testInjectedNotificationManagerCanBeSet() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         let config = CocxyConfig.defaults

@@ -5,7 +5,7 @@ import Foundation
 
 // MARK: - CLI Socket Serving Protocol
 
-/// Server that listens on a Unix Domain Socket for commands from `cocxy-cli`.
+/// Server that listens on a Unix Domain Socket for commands from `cocxy`.
 ///
 /// Security measures (addressing cmux vulnerabilities #385-#390):
 /// 1. Socket file permissions are `0600` (owner-only read/write).

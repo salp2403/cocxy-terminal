@@ -26,10 +26,7 @@ extension MainWindowController {
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         viewModel.setDefaultFontSize(configuredFontSize)
-        let surfaceView = TerminalHostViewFactory.makeView(
-            engine: bridge,
-            viewModel: viewModel
-        )
+        let surfaceView = CocxyCoreView(viewModel: viewModel)
 
         tabViewModels[newTab.id] = viewModel
         tabSurfaceViews[newTab.id] = surfaceView
@@ -92,7 +89,7 @@ extension MainWindowController {
     func performCloseTab(_ tabID: TabID) {
         let isClosingActiveTab = (tabID == tabManager.activeTabID)
 
-        // Destroy the primary ghostty surface.
+        // Destroy the primary terminal surface.
         if let surfaceID = tabSurfaceMap[tabID] {
             clearSurfaceTracking(for: surfaceID)
             bridge.destroySurface(surfaceID)
@@ -156,7 +153,7 @@ extension MainWindowController {
 
     // MARK: - Surface Wiring
 
-    /// Creates a ghostty surface and wires OSC + output handlers.
+    /// Creates a terminal surface and wires OSC + output handlers.
     ///
     /// Shared by `createTab`, `newTabAction`, and session restoration.
     func createAndWireSurface(
@@ -167,7 +164,7 @@ extension MainWindowController {
     ) {
         do {
             // Snapshot child PIDs before surface creation so we can
-            // identify the new shell process spawned by ghostty.
+            // identify the new shell process spawned for this tab.
             let childrenBefore = snapshotChildPIDs()
 
             let surfaceID = try bridge.createSurface(

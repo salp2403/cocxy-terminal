@@ -308,7 +308,7 @@ struct RemoteConnectionView: View {
             }
         )
         .onAppear { viewModel.loadProfiles() }
-        .onChange(of: viewModel.selectedProfileID) { _ in
+        .onChange(of: viewModel.selectedProfileID) { _, _ in
             sftpBrowserVM = nil
         }
         .sheet(isPresented: $viewModel.isEditorPresented) {

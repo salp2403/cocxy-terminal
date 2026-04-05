@@ -8,14 +8,8 @@ import Combine
 
 /// Manages visual themes for both terminal surfaces and Cocxy UI elements.
 ///
-/// The theme system has three layers (ADR-007):
-/// 1. **Built-in themes** — compiled into the app, always available.
-/// 2. **Custom user themes** — TOML files in `~/.config/cocxy/themes/`.
-/// 3. **Ghostty import** — reads existing Ghostty themes as fallback.
-///
-/// When a Ghostty theme is imported, it only provides ANSI colors. The UI
-/// colors (tab backgrounds, badges, etc.) are derived automatically from
-/// the foreground and background colors.
+/// The theme system supports built-in themes, custom user themes, and legacy
+/// imported theme metadata.
 ///
 /// Supports automatic dark/light switching based on macOS appearance changes.
 ///
@@ -75,13 +69,51 @@ enum ThemeVariant: String, Codable, Sendable {
 }
 
 /// Origin of a theme definition.
-enum ThemeSource: Codable, Sendable, Equatable {
+enum ThemeSource: Sendable, Equatable {
     /// Compiled into the application binary.
     case builtIn
-    /// Imported from a Ghostty theme file.
-    case ghosttyImport
+    /// Imported from a legacy external theme file.
+    case legacyImport
     /// User-defined theme at the given file URL.
     case custom(URL)
+}
+
+extension ThemeSource: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case url
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(String.self, forKey: .type) {
+        case "builtIn":
+            self = .builtIn
+        case "legacyImport", "ghosttyImport":
+            self = .legacyImport
+        case "custom":
+            self = .custom(try container.decode(URL.self, forKey: .url))
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .type,
+                in: container,
+                debugDescription: "Unknown theme source type"
+            )
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .builtIn:
+            try container.encode("builtIn", forKey: .type)
+        case .legacyImport:
+            try container.encode("legacyImport", forKey: .type)
+        case .custom(let url):
+            try container.encode("custom", forKey: .type)
+            try container.encode(url, forKey: .url)
+        }
+    }
 }
 
 // MARK: - Theme Palette

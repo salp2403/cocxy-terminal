@@ -5,7 +5,7 @@ import AppKit
 
 // MARK: - Surface Lifecycle
 
-/// Extension that manages the lifecycle of ghostty terminal surfaces:
+/// Extension that manages the lifecycle of terminal surfaces:
 /// creation, destruction, handler wiring, and OSC notification processing.
 ///
 /// Extracted from MainWindowController to isolate terminal engine
@@ -23,7 +23,7 @@ extension MainWindowController {
 
         do {
             // Snapshot child PIDs before surface creation to identify
-            // the new shell process spawned by ghostty.
+            // the new shell process spawned for the first tab.
             let childrenBefore = snapshotChildPIDs()
 
             let surfaceID = try bridge.createSurface(
@@ -120,15 +120,7 @@ extension MainWindowController {
             }
         }
 
-        if let surfaceView = surfaceView as? TerminalSurfaceView {
-            surfaceView.outputBufferProvider = { [weak buffer] in
-                buffer?.lines ?? []
-            }
-
-            surfaceView.textSelectionManager.workingDirectoryProvider = { [weak self] in
-                self?.workingDirectory(for: capturedSurfaceID)
-            }
-        } else if let surfaceView = surfaceView as? CocxyCoreView {
+        if let surfaceView = surfaceView as? CocxyCoreView {
             surfaceView.outputBufferProvider = { [weak buffer] in
                 buffer?.lines ?? []
             }
@@ -269,7 +261,7 @@ extension MainWindowController {
     ///
     /// - Parameters:
     ///   - tabID: The tab to wire handlers for.
-    ///   - surfaceID: The ghostty surface ID associated with the tab.
+    ///   - surfaceID: The surface ID associated with the tab.
     func wireHandlersForRestoredTab(tabID: TabID, surfaceID: SurfaceID) {
         if let surfaceView = tabSurfaceViews[tabID] {
             wireSurfaceHandlers(
@@ -386,12 +378,7 @@ extension MainWindowController {
                let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
                     ?? terminalSurfaceView {
                 let promptRow: Int
-                if let surfaceView = surfaceView as? TerminalSurfaceView {
-                    let cursorCtrl = surfaceView.ideCursorController
-                    let viewHeight = surfaceView.bounds.height
-                    let cellHeight = cursorCtrl.cellHeight
-                    promptRow = cellHeight > 0 ? max(0, Int(viewHeight / cellHeight) - 1) : 0
-                } else if let surfaceView = surfaceView as? CocxyCoreView {
+                if let surfaceView = surfaceView as? CocxyCoreView {
                     let cursorCtrl = surfaceView.ideCursorController
                     let viewHeight = surfaceView.bounds.height
                     let cellHeight = cursorCtrl.cellHeight
@@ -477,10 +464,9 @@ extension MainWindowController {
 
     /// Synthesizes an OSC escape sequence and feeds it to the agent detection engine.
     ///
-    /// libghostty processes terminal output internally and only exposes parsed
-    /// events via action callbacks. The detection engine expects raw bytes
-    /// containing OSC sequences. This method bridges the gap by reconstructing
-    /// the OSC bytes from the already-parsed action data.
+    /// The terminal host view surfaces parsed events to Swift callbacks, while
+    /// the detection engine expects raw OSC bytes. This method bridges the gap
+    /// by reconstructing the OSC sequence from the already-parsed action data.
     ///
     /// - Parameters:
     ///   - oscCode: The OSC code (0 = title, 7 = pwd, 9 = notification, 133 = prompt).

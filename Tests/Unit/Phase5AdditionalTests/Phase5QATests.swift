@@ -671,6 +671,7 @@ final class Phase5QATests: XCTestCase {
         let group = DispatchGroup()
         let queue = DispatchQueue(label: "test.concurrent", attributes: .concurrent)
         let saveCount = 20
+        let manager = sessionManager!
 
         for i in 0..<saveCount {
             group.enter()
@@ -688,7 +689,7 @@ final class Phase5QATests: XCTestCase {
                     ]
                 )
                 // saveAsync es fire-and-forget en ioQueue (serial) -- no corrompe.
-                self.sessionManager.saveAsync(session)
+                manager.saveAsync(session)
                 group.leave()
             }
         }

@@ -359,12 +359,13 @@ final class AgentDetectionEngineTests: XCTestCase {
         // Send output from multiple threads concurrently
         let iterations = 100
         let group = DispatchGroup()
+        let engineRef = WeakReference(sut)
 
         for i in 0..<iterations {
             group.enter()
             DispatchQueue.global(qos: .userInteractive).async {
                 let data = "output line \(i)\n".data(using: .utf8)!
-                self.sut.processTerminalOutput(data)
+                engineRef.value?.processTerminalOutput(data)
                 group.leave()
             }
         }

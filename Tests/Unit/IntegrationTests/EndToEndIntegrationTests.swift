@@ -15,7 +15,7 @@ import AppKit
 final class TabLifecycleIntegrationTests: XCTestCase {
 
     func testInitialControllerHasExactlyOneTab() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertEqual(
@@ -26,7 +26,7 @@ final class TabLifecycleIntegrationTests: XCTestCase {
     }
 
     func testAddTabIncreasesTabCountToTwo() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.newTabAction(nil)
@@ -39,7 +39,7 @@ final class TabLifecycleIntegrationTests: XCTestCase {
     }
 
     func testCloseTabReturnsToOneTab() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.newTabAction(nil)
@@ -56,7 +56,7 @@ final class TabLifecycleIntegrationTests: XCTestCase {
     }
 
     func testCreateAddCloseFullCycle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Phase 1: initial state.
@@ -75,7 +75,7 @@ final class TabLifecycleIntegrationTests: XCTestCase {
     }
 
     func testSurfaceViewsSyncedWithTabManagerAfterAdd() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertEqual(
@@ -94,7 +94,7 @@ final class TabLifecycleIntegrationTests: XCTestCase {
     }
 
     func testViewModelsSyncedWithTabManagerAfterAdd() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertEqual(
@@ -113,7 +113,7 @@ final class TabLifecycleIntegrationTests: XCTestCase {
     }
 
     func testSurfaceViewsSyncedWithTabManagerAfterClose() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.newTabAction(nil)
@@ -127,7 +127,7 @@ final class TabLifecycleIntegrationTests: XCTestCase {
     }
 
     func testViewModelsSyncedWithTabManagerAfterClose() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.newTabAction(nil)
@@ -148,7 +148,7 @@ final class TabLifecycleIntegrationTests: XCTestCase {
 final class CommandPaletteLifecycleIntegrationTests: XCTestCase {
 
     func testToggleCommandPaletteMakesItVisible() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleCommandPalette()
@@ -160,7 +160,7 @@ final class CommandPaletteLifecycleIntegrationTests: XCTestCase {
     }
 
     func testDismissCommandPaletteMakesItHidden() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleCommandPalette()
@@ -176,7 +176,7 @@ final class CommandPaletteLifecycleIntegrationTests: XCTestCase {
     }
 
     func testCommandPaletteViewModelIsLazilyCreated() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertNil(
@@ -193,7 +193,7 @@ final class CommandPaletteLifecycleIntegrationTests: XCTestCase {
     }
 
     func testToggleTwiceReturnsToHidden() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleCommandPalette()
@@ -214,7 +214,7 @@ final class CommandPaletteLifecycleIntegrationTests: XCTestCase {
 final class OverlayMutualExclusionIntegrationTests: XCTestCase {
 
     func testDashboardBecomesVisibleOnToggle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleDashboard()
@@ -226,7 +226,7 @@ final class OverlayMutualExclusionIntegrationTests: XCTestCase {
     }
 
     func testNotificationPanelBecomesVisibleOnToggle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleNotificationPanel()
@@ -238,7 +238,7 @@ final class OverlayMutualExclusionIntegrationTests: XCTestCase {
     }
 
     func testDashboardAndNotificationPanelCanCoexist() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleDashboard()
@@ -255,7 +255,7 @@ final class OverlayMutualExclusionIntegrationTests: XCTestCase {
     }
 
     func testDismissActiveOverlayDismissesOneAtATime() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleDashboard()
@@ -281,7 +281,7 @@ final class OverlayMutualExclusionIntegrationTests: XCTestCase {
     }
 
     func testAllOverlaysHiddenAfterFullDismissCycle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleDashboard()
@@ -309,7 +309,7 @@ final class OverlayMutualExclusionIntegrationTests: XCTestCase {
 final class BrowserPanelIntegrationTests: XCTestCase {
 
     func testToggleBrowserMakesItVisible() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleBrowser()
@@ -321,7 +321,7 @@ final class BrowserPanelIntegrationTests: XCTestCase {
     }
 
     func testDismissBrowserMakesItHidden() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleBrowser()
@@ -334,7 +334,7 @@ final class BrowserPanelIntegrationTests: XCTestCase {
     }
 
     func testBrowserViewModelCreatedWithDefaultURL() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleBrowser()
@@ -351,7 +351,7 @@ final class BrowserPanelIntegrationTests: XCTestCase {
     }
 
     func testBrowserToggleTwiceReturnsToHidden() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.toggleBrowser()
@@ -371,7 +371,7 @@ final class BrowserPanelIntegrationTests: XCTestCase {
 final class AgentDetectionInjectionIntegrationTests: XCTestCase {
 
     func testAgentDetectionEngineIsNilByDefault() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertNil(
@@ -381,7 +381,7 @@ final class AgentDetectionInjectionIntegrationTests: XCTestCase {
     }
 
     func testAgentDetectionEngineCanBeInjected() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         let engine = AgentDetectionEngineImpl(compiledConfigs: [])
@@ -394,7 +394,7 @@ final class AgentDetectionInjectionIntegrationTests: XCTestCase {
     }
 
     func testInjectedEngineIsTheSameInstance() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         let engine = AgentDetectionEngineImpl(compiledConfigs: [])
@@ -407,7 +407,7 @@ final class AgentDetectionInjectionIntegrationTests: XCTestCase {
     }
 
     func testEngineWithEmptyConfigsDoesNotCrash() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         let engine = AgentDetectionEngineImpl(compiledConfigs: [])
@@ -432,7 +432,7 @@ final class AgentDetectionInjectionIntegrationTests: XCTestCase {
 final class TabManagerStateConsistencyIntegrationTests: XCTestCase {
 
     func testCreateFiveTabsCountIsFive() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Start with 1, add 4 more.
@@ -448,7 +448,7 @@ final class TabManagerStateConsistencyIntegrationTests: XCTestCase {
     }
 
     func testSurfaceViewsMatchTabCountAtFive() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         for _ in 0..<4 {
@@ -463,7 +463,7 @@ final class TabManagerStateConsistencyIntegrationTests: XCTestCase {
     }
 
     func testCloseThreeFromFiveLeavesTwo() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Create 5 tabs total.
@@ -486,7 +486,7 @@ final class TabManagerStateConsistencyIntegrationTests: XCTestCase {
     }
 
     func testSurfaceViewsMatchTabCountAfterBulkClose() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         for _ in 0..<4 {
@@ -505,7 +505,7 @@ final class TabManagerStateConsistencyIntegrationTests: XCTestCase {
     }
 
     func testSurfaceViewsSyncedAtEachStep() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Verify sync at each step of creation.
@@ -572,7 +572,7 @@ final class SessionCaptureIntegrationTests: XCTestCase {
     }
 
     func testControllerWithThreeTabsHasThreeTabsForCapture() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Add 2 more tabs (total 3).
@@ -595,7 +595,7 @@ final class SessionCaptureIntegrationTests: XCTestCase {
     }
 
     func testControllerTabsHaveValidWorkingDirectories() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         controller.newTabAction(nil)
@@ -708,25 +708,25 @@ final class PortScannerLifecycleIntegrationTests: XCTestCase {
 
 // MARK: - 9. Notification Ring Integration
 
-/// Tests the notification ring visibility on TerminalSurfaceView.
+/// Tests the notification ring visibility on the terminal host view.
 @MainActor
 final class NotificationRingIntegrationTests: XCTestCase {
 
     func testNotificationRingIsInactiveByDefault() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let viewModel = TerminalViewModel(engine: bridge)
-        let surfaceView = TerminalSurfaceView(viewModel: viewModel)
+        let surfaceView = CocxyCoreView(viewModel: viewModel)
 
         XCTAssertFalse(
             surfaceView.isNotificationRingActive,
-            "Notification ring must be inactive on a new TerminalSurfaceView"
+            "Notification ring must be inactive on a new terminal host view"
         )
     }
 
     func testShowNotificationRingActivatesIt() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let viewModel = TerminalViewModel(engine: bridge)
-        let surfaceView = TerminalSurfaceView(viewModel: viewModel)
+        let surfaceView = CocxyCoreView(viewModel: viewModel)
 
         surfaceView.showNotificationRing()
 
@@ -737,9 +737,9 @@ final class NotificationRingIntegrationTests: XCTestCase {
     }
 
     func testHideNotificationRingDeactivatesIt() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let viewModel = TerminalViewModel(engine: bridge)
-        let surfaceView = TerminalSurfaceView(viewModel: viewModel)
+        let surfaceView = CocxyCoreView(viewModel: viewModel)
 
         surfaceView.showNotificationRing()
         surfaceView.hideNotificationRing()
@@ -751,9 +751,9 @@ final class NotificationRingIntegrationTests: XCTestCase {
     }
 
     func testShowHideShowCycleIsStable() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let viewModel = TerminalViewModel(engine: bridge)
-        let surfaceView = TerminalSurfaceView(viewModel: viewModel)
+        let surfaceView = CocxyCoreView(viewModel: viewModel)
 
         surfaceView.showNotificationRing()
         XCTAssertTrue(surfaceView.isNotificationRingActive,
@@ -771,9 +771,9 @@ final class NotificationRingIntegrationTests: XCTestCase {
     }
 
     func testHideNotificationRingWhenAlreadyHiddenIsNoOp() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let viewModel = TerminalViewModel(engine: bridge)
-        let surfaceView = TerminalSurfaceView(viewModel: viewModel)
+        let surfaceView = CocxyCoreView(viewModel: viewModel)
 
         // Hide without showing first: must not crash.
         surfaceView.hideNotificationRing()
@@ -792,7 +792,7 @@ final class NotificationRingIntegrationTests: XCTestCase {
 final class StatusBarDataIntegrationTests: XCTestCase {
 
     func testComputeAgentSummaryWithAllIdleTabs() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         let summary = controller.computeAgentSummary()
@@ -816,7 +816,7 @@ final class StatusBarDataIntegrationTests: XCTestCase {
     }
 
     func testComputeAgentSummaryCountsWorkingTab() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Set the first tab to .working state.
@@ -837,7 +837,7 @@ final class StatusBarDataIntegrationTests: XCTestCase {
     }
 
     func testComputeAgentSummaryCountsWaitingTab() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         guard let firstTabID = controller.tabManager.tabs.first?.id else {
@@ -857,7 +857,7 @@ final class StatusBarDataIntegrationTests: XCTestCase {
     }
 
     func testComputeAgentSummaryCountsErrorTab() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         guard let firstTabID = controller.tabManager.tabs.first?.id else {
@@ -877,7 +877,7 @@ final class StatusBarDataIntegrationTests: XCTestCase {
     }
 
     func testComputeAgentSummaryCountsFinishedTab() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         guard let firstTabID = controller.tabManager.tabs.first?.id else {
@@ -897,7 +897,7 @@ final class StatusBarDataIntegrationTests: XCTestCase {
     }
 
     func testComputeAgentSummaryCountsLaunchedAsWorking() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         guard let firstTabID = controller.tabManager.tabs.first?.id else {
@@ -917,7 +917,7 @@ final class StatusBarDataIntegrationTests: XCTestCase {
     }
 
     func testComputeAgentSummaryAcrossMultipleTabs() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Create 3 additional tabs (total 4).

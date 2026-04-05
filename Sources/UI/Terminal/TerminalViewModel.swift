@@ -15,8 +15,8 @@ import Combine
 /// ## Data flow
 ///
 /// ```
-/// GhosttyBridge output -> TerminalViewModel -> AgentDetectionEngine
-///                                           -> NotificationManager
+/// Terminal engine output -> TerminalViewModel -> AgentDetectionEngine
+///                                            -> NotificationManager
 /// ```
 ///
 /// ## Lifecycle
@@ -29,7 +29,7 @@ import Combine
 /// ```
 ///
 /// - SeeAlso: ADR-002 (MVVM pattern)
-/// - SeeAlso: `TerminalSurfaceView` (the view this model drives)
+/// - SeeAlso: `CocxyCoreView` (the view this model drives)
 @MainActor
 final class TerminalViewModel: ObservableObject {
 
@@ -72,10 +72,6 @@ final class TerminalViewModel: ObservableObject {
     /// Reference to the terminal engine.
     /// Used to forward commands and query surface state.
     private(set) weak var engine: (any TerminalEngine)?
-
-    /// Convenience accessor for callers that need the concrete GhosttyBridge
-    /// (e.g., TerminalSurfaceView which calls ghostty-specific methods).
-    var ghosttyBridge: GhosttyBridge? { engine as? GhosttyBridge }
 
     /// Convenience accessor for callers that need the concrete CocxyCoreBridge.
     var cocxyCoreBridge: CocxyCoreBridge? { engine as? CocxyCoreBridge }

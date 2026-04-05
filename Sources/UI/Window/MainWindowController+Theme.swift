@@ -9,11 +9,10 @@ import AppKit
 /// configuration change application.
 extension MainWindowController {
 
-    /// Cycles through terminal color schemes by recreating the terminal engine.
+    /// Cycles through terminal color schemes in place.
     ///
-    /// This destroys all ghostty surfaces, creates a new bridge with the target
-    /// theme palette, and recreates surfaces for every tab. Shell sessions restart
-    /// but working directories are preserved.
+    /// CocxyCore applies theme updates without tearing down live surfaces, so
+    /// PTYs and scrollback remain intact while the palette changes.
     func toggleTheme() {
         guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
 
@@ -63,25 +62,25 @@ extension MainWindowController {
         // Apply vibrancy/opacity changes to all chrome components.
         applyEffectiveAppearance(config.appearance)
 
-        // Determine if a bridge restart is needed by comparing against the
-        // last applied config. libghostty embeds theme, font, cursor, padding,
-        // and shell at init time — these cannot be changed at runtime.
+        // Determine which runtime-facing terminal settings changed. CocxyCore
+        // can apply theme and font updates in place, while shell defaults only
+        // affect surfaces created after the change.
         let old = lastAppliedConfig
-        let needsBridgeRestart =
+        let runtimeTerminalConfigChanged =
             old?.appearance.theme != config.appearance.theme ||
             old?.appearance.fontFamily != config.appearance.fontFamily ||
             old?.appearance.fontSize != config.appearance.fontSize ||
             old?.appearance.windowPadding != config.appearance.windowPadding ||
             old?.appearance.windowPaddingX != config.appearance.windowPaddingX ||
             old?.appearance.windowPaddingY != config.appearance.windowPaddingY ||
-            old?.terminal.cursorStyle != config.terminal.cursorStyle ||
-            old?.terminal.cursorBlink != config.terminal.cursorBlink ||
             old?.general.shell != config.general.shell
 
         lastAppliedConfig = config
 
-        if needsBridgeRestart, let appDelegate = NSApp.delegate as? AppDelegate {
-            appDelegate.switchTheme(to: themeName)
+        if runtimeTerminalConfigChanged,
+           let appDelegate = NSApp.delegate as? AppDelegate,
+           appDelegate.windowController === self {
+            appDelegate.applyBridgeConfigurationChanges(from: old, to: config)
         }
     }
 

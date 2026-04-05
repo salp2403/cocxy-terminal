@@ -12,7 +12,7 @@ import AppKit
 final class CommandPaletteIntegrationTests: XCTestCase {
 
     func testToggleCommandPaletteCreatesOverlay() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -25,7 +25,7 @@ final class CommandPaletteIntegrationTests: XCTestCase {
     }
 
     func testToggleCommandPaletteTwiceDismissesOverlay() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -39,7 +39,7 @@ final class CommandPaletteIntegrationTests: XCTestCase {
     }
 
     func testCommandPaletteActionIsObjCCallable() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -60,7 +60,7 @@ final class CommandPaletteIntegrationTests: XCTestCase {
 final class DashboardIntegrationTests: XCTestCase {
 
     func testToggleDashboardCreatesPanel() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -73,7 +73,7 @@ final class DashboardIntegrationTests: XCTestCase {
     }
 
     func testToggleDashboardTwiceHidesPanel() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -87,7 +87,7 @@ final class DashboardIntegrationTests: XCTestCase {
     }
 
     func testDashboardActionIsObjCCallable() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -107,7 +107,7 @@ final class DashboardIntegrationTests: XCTestCase {
 final class SearchBarIntegrationTests: XCTestCase {
 
     func testToggleSearchBarCreatesBar() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -120,7 +120,7 @@ final class SearchBarIntegrationTests: XCTestCase {
     }
 
     func testToggleSearchBarTwiceHidesBar() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -134,7 +134,7 @@ final class SearchBarIntegrationTests: XCTestCase {
     }
 
     func testSearchBarActionIsObjCCallable() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -154,7 +154,7 @@ final class SearchBarIntegrationTests: XCTestCase {
 final class SmartRoutingIntegrationTests: XCTestCase {
 
     func testShowSmartRoutingCreatesOverlay() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -167,7 +167,7 @@ final class SmartRoutingIntegrationTests: XCTestCase {
     }
 
     func testDismissSmartRoutingHidesOverlay() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -181,7 +181,7 @@ final class SmartRoutingIntegrationTests: XCTestCase {
     }
 
     func testSmartRoutingActionIsObjCCallable() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -201,7 +201,7 @@ final class SmartRoutingIntegrationTests: XCTestCase {
 final class TimelineIntegrationTests: XCTestCase {
 
     func testToggleTimelineCreatesPanel() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -214,7 +214,7 @@ final class TimelineIntegrationTests: XCTestCase {
     }
 
     func testToggleTimelineTwiceHidesPanel() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -228,7 +228,7 @@ final class TimelineIntegrationTests: XCTestCase {
     }
 
     func testTimelineActionIsObjCCallable() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -248,7 +248,7 @@ final class TimelineIntegrationTests: XCTestCase {
 final class AboutDialogIntegrationTests: XCTestCase {
 
     func testShowAboutPanelIsCallable() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         // Just verify the method exists and doesn't crash.
         // We can't easily assert the panel appeared in tests.
@@ -261,12 +261,12 @@ final class AboutDialogIntegrationTests: XCTestCase {
 
 // MARK: - Window Overlays Don't Break Terminal Tests
 
-/// Tests that adding/removing overlays does not break the terminal surface view.
+/// Tests that adding/removing overlays does not break the terminal host view.
 @MainActor
 final class OverlayTerminalCoexistenceTests: XCTestCase {
 
-    func testTerminalSurfaceViewRemainsAfterCommandPaletteToggle() {
-        let bridge = GhosttyBridge()
+    func testTerminalHostViewRemainsAfterCommandPaletteToggle() {
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -274,12 +274,12 @@ final class OverlayTerminalCoexistenceTests: XCTestCase {
 
         XCTAssertNotNil(
             controller.terminalSurfaceView,
-            "Terminal surface view must remain after command palette toggle"
+            "Terminal host view must remain after command palette toggle"
         )
     }
 
-    func testTerminalSurfaceViewRemainsAfterDashboardToggle() {
-        let bridge = GhosttyBridge()
+    func testTerminalHostViewRemainsAfterDashboardToggle() {
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -287,12 +287,12 @@ final class OverlayTerminalCoexistenceTests: XCTestCase {
 
         XCTAssertNotNil(
             controller.terminalSurfaceView,
-            "Terminal surface view must remain after dashboard toggle"
+            "Terminal host view must remain after dashboard toggle"
         )
     }
 
-    func testTerminalSurfaceViewRemainsAfterSearchBarToggle() {
-        let bridge = GhosttyBridge()
+    func testTerminalHostViewRemainsAfterSearchBarToggle() {
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -300,12 +300,12 @@ final class OverlayTerminalCoexistenceTests: XCTestCase {
 
         XCTAssertNotNil(
             controller.terminalSurfaceView,
-            "Terminal surface view must remain after search bar toggle"
+            "Terminal host view must remain after search bar toggle"
         )
     }
 
     func testTabBarViewRemainsAfterAllOverlaysToggled() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 

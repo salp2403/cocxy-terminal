@@ -8,9 +8,9 @@ import Foundation
 
 /// Concrete implementation of `ThemeProviding`.
 ///
-/// Manages built-in themes, custom user themes from TOML files, and
-/// automatic import from Ghostty theme configuration. Supports auto-switch
-/// between dark and light variants based on macOS appearance changes.
+/// Manages built-in themes and custom user themes from TOML files.
+/// Supports auto-switch between dark and light variants based on macOS
+/// appearance changes.
 ///
 /// Built-in themes:
 /// - Catppuccin Mocha (dark)

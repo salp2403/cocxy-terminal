@@ -106,13 +106,11 @@ final class ConfigService: ConfigProviding {
     /// - Parameter fileProvider: The source of configuration file content.
     ///   Defaults to `DiskConfigFileProvider` for production use.
     init(
-        fileProvider: ConfigFileProviding = DiskConfigFileProvider(),
-        ghosttyConfigPath: String? = GhosttyConfigFallback.defaultConfigPath
+        fileProvider: ConfigFileProviding = DiskConfigFileProvider()
     ) {
         self.fileProvider = fileProvider
         self.parser = TOMLParser()
         self.configSubject = CurrentValueSubject(.defaults)
-        self.ghosttyConfigPath = ghosttyConfigPath
     }
 
     // MARK: - Loading
@@ -124,23 +122,10 @@ final class ConfigService: ConfigProviding {
     /// Invalid values are clamped to valid ranges (not rejected).
     ///
     /// - Throws: `ConfigError.writeFailed` if the default config cannot be written.
-    /// Path to the Ghostty config used as fallback. Nil disables the fallback.
-    /// Exposed for testing so the fallback can be disabled or pointed at a fixture.
-    let ghosttyConfigPath: String?
 
     func reload() throws {
         guard let rawContent = fileProvider.readConfigFile() else {
-            // No cocxy config exists. Try Ghostty config as fallback
-            // so users who already have Ghostty configured see a familiar
-            // terminal on first launch.
-            if let path = ghosttyConfigPath,
-               let ghosttyValues = GhosttyConfigFallback.read(from: path) {
-                let config = GhosttyConfigFallback.applyToDefaults(ghosttyValues)
-                configSubject.send(config)
-                NSLog("[ConfigService] Loaded appearance from Ghostty config fallback")
-            } else {
-                configSubject.send(.defaults)
-            }
+            configSubject.send(.defaults)
             try createDefaultConfigFile()
             return
         }
@@ -275,14 +260,10 @@ final class ConfigService: ConfigProviding {
         let table = extractTable("general", from: parsed)
         let defaults = GeneralConfig.defaults
 
-        let engineStr = stringValue(table["engine"]) ?? defaults.engineType.rawValue
-        let engine = EngineType(rawValue: engineStr) ?? defaults.engineType
-
         return GeneralConfig(
             shell: stringValue(table["shell"]) ?? defaults.shell,
             workingDirectory: stringValue(table["working-directory"]) ?? defaults.workingDirectory,
-            confirmCloseProcess: boolValue(table["confirm-close-process"]) ?? defaults.confirmCloseProcess,
-            engineType: engine
+            confirmCloseProcess: boolValue(table["confirm-close-process"]) ?? defaults.confirmCloseProcess
         )
     }
 

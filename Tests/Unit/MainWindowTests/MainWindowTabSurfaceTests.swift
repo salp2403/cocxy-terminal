@@ -20,7 +20,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     // MARK: - Initial Tab Registration
 
     func testInitialTabHasSurfaceViewMapping() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // The first tab should already have a surface view in the mapping.
@@ -36,7 +36,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     }
 
     func testInitialTabSurfaceViewIsTheCurrentTerminalSurface() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         guard let firstTabID = controller.tabManager.tabs.first?.id else {
@@ -52,7 +52,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     }
 
     func testInitialTabHasViewModelMapping() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         guard let firstTabID = controller.tabManager.tabs.first?.id else {
@@ -69,7 +69,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     // MARK: - New Tab Creates Surface
 
     func testNewTabActionCreatesSurfaceViewMapping() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -95,7 +95,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     }
 
     func testNewTabActionCreatesDistinctSurfaceView() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -115,12 +115,12 @@ final class TabSurfaceMappingTests: XCTestCase {
 
         XCTAssertFalse(
             firstSurfaceView === secondSurfaceView,
-            "Each tab must have its own distinct TerminalSurfaceView"
+            "Each tab must have its own distinct terminal host view"
         )
     }
 
     func testNewTabActionCreatesViewModel() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -157,8 +157,8 @@ final class TabSurfaceMappingTests: XCTestCase {
 
     // MARK: - Tab Switching Changes Terminal View
 
-    func testSwitchingTabChangesActiveTerminalSurfaceView() {
-        let bridge = GhosttyBridge()
+    func testSwitchingTabChangesActiveTerminalHostView() {
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -181,12 +181,12 @@ final class TabSurfaceMappingTests: XCTestCase {
 
         XCTAssertTrue(
             controller.terminalSurfaceView === firstSurfaceView,
-            "After switching to a tab, the terminal surface view must be that tab's surface"
+            "After switching to a tab, the active terminal host view must be that tab's surface"
         )
     }
 
     func testSwitchingTabUpdatesContainerSubview() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -208,7 +208,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     // MARK: - Close Tab Cleanup
 
     func testCloseTabRemovesSurfaceViewMapping() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -229,7 +229,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     }
 
     func testCloseTabRemovesViewModelMapping() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -248,7 +248,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     }
 
     func testCloseTabSwitchesToRemainingTab() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -270,7 +270,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     // MARK: - Tab Count Consistency
 
     func testSurfaceViewCountMatchesTabCount() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -290,7 +290,7 @@ final class TabSurfaceMappingTests: XCTestCase {
     // MARK: - Surface Working Directory Tracking
 
     func testWorkingDirectoryForSurfacePrefersSurfaceScopedDirectory() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         guard let firstTabID = controller.tabManager.tabs.first?.id else {
@@ -323,7 +323,7 @@ final class TabSurfaceMappingTests: XCTestCase {
 final class TabNavigationSurfaceSwitchTests: XCTestCase {
 
     func testNextTabActionSwitchesTerminalSurface() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -350,7 +350,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
     }
 
     func testPreviousTabActionSwitchesTerminalSurface() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -373,7 +373,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
     }
 
     func testGotoTabBySelectorSwitchesTerminalSurface() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 

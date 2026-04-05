@@ -109,7 +109,7 @@ extension AppDelegate {
 
         receiver.eventPublisher
             .receive(on: DispatchQueue.main)
-            .sink { [weak engine, weak receiver, weak self] event in
+            .sink { [weak engine, weak self] event in
                 guard let tabManager = self?.windowController?.tabManager else {
                     // Window not yet available; forward the event to the engine
                     // without tab filtering.
@@ -173,7 +173,7 @@ extension AppDelegate {
         var sessionToTab: [String: TabID] = [:]
 
         engine.stateChanged
-            .sink { [weak windowController, weak self] context in
+            .sink { [weak windowController] context in
                 guard let tabManager = windowController?.tabManager else { return }
                 let agentState = context.state.toTabAgentState
 

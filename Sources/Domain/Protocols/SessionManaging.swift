@@ -18,7 +18,7 @@ import Foundation
 /// - Quick terminal state (open/closed, directory).
 ///
 /// What is NOT persisted:
-/// - Terminal scrollback content (too heavy; libghostty does not expose it trivially).
+/// - Terminal scrollback content (too heavy for session snapshots).
 /// - Agent state (ephemeral; reconstructed from live detection).
 /// - Running processes (a new shell is launched in the persisted directory).
 ///

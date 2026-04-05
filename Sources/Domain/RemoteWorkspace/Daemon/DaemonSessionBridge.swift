@@ -28,7 +28,7 @@ final class DaemonSessionBridge: ObservableObject {
     // MARK: - I/O Callbacks
 
     /// Called when output data is received from the remote session.
-    /// The consumer (e.g., TerminalSurfaceView) registers this to display output.
+    /// The consumer terminal host view registers this to display output.
     var onOutput: SessionOutputHandler?
 
     /// Called when the session disconnects unexpectedly.
@@ -121,7 +121,7 @@ final class DaemonSessionBridge: ObservableObject {
         readTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self, self.isAttached, self.connection.isConnected else {
-                    await self?.handleDisconnect()
+                    self?.handleDisconnect()
                     return
                 }
 

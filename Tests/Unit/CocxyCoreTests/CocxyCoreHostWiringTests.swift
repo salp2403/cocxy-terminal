@@ -8,24 +8,13 @@ import Testing
 @MainActor
 struct CocxyCoreHostWiringTests {
 
-    @Test("TerminalHostViewFactory returns CocxyCoreView for CocxyCoreBridge")
-    func factoryReturnsCocxyCoreView() throws {
+    @Test("CocxyCore host view is CocxyCoreView")
+    func hostViewIsCocxyCoreView() throws {
         let bridge = try makeBridge()
         let viewModel = TerminalViewModel(engine: bridge)
-
-        let view = TerminalHostViewFactory.makeView(engine: bridge, viewModel: viewModel)
+        let view: TerminalHostView = CocxyCoreView(viewModel: viewModel)
 
         #expect(view is CocxyCoreView)
-    }
-
-    @Test("TerminalHostViewFactory returns TerminalSurfaceView for GhosttyBridge")
-    func factoryReturnsGhosttyView() {
-        let bridge = GhosttyBridge()
-        let viewModel = TerminalViewModel(engine: bridge)
-
-        let view = TerminalHostViewFactory.makeView(engine: bridge, viewModel: viewModel)
-
-        #expect(view is TerminalSurfaceView)
     }
 
     @Test("wireSurfaceHandlers installs an outputBufferProvider on CocxyCoreView")

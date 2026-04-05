@@ -124,17 +124,17 @@ final class TextSelectionRelativePathTests: XCTestCase {
     // MARK: - WorkingDirectoryProvider Integration
 
     func testWorkingDirectoryProviderDefaultsToNil() {
-        let surfaceView = TerminalSurfaceView()
-        XCTAssertNil(surfaceView.textSelectionManager.workingDirectoryProvider)
+        let manager = TextSelectionManager(hostView: NSView())
+        XCTAssertNil(manager.workingDirectoryProvider)
     }
 
     func testWorkingDirectoryProviderCanBeSet() {
-        let surfaceView = TerminalSurfaceView()
+        let manager = TextSelectionManager(hostView: NSView())
         let testURL = URL(fileURLWithPath: "/tmp/test-project")
-        surfaceView.textSelectionManager.workingDirectoryProvider = { testURL }
-        XCTAssertNotNil(surfaceView.textSelectionManager.workingDirectoryProvider)
+        manager.workingDirectoryProvider = { testURL }
+        XCTAssertNotNil(manager.workingDirectoryProvider)
         XCTAssertEqual(
-            surfaceView.textSelectionManager.workingDirectoryProvider?(),
+            manager.workingDirectoryProvider?(),
             testURL
         )
     }

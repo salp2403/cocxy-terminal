@@ -282,8 +282,7 @@ final class PreferencesViewModel: ObservableObject {
             general: GeneralConfig(
                 shell: shell,
                 workingDirectory: workingDirectory,
-                confirmCloseProcess: confirmCloseProcess,
-                engineType: savedConfig.general.engineType
+                confirmCloseProcess: confirmCloseProcess
             ),
             appearance: AppearanceConfig(
                 theme: theme,

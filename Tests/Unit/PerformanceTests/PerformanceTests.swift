@@ -626,9 +626,9 @@ final class PerformanceTests: XCTestCase {
         let osc9: [UInt8] = [0x1B, 0x5D] + Array("9;Task complete".utf8) + [0x07]
 
         // Compose three template blocks with different OSC sequences.
-        var block1 = Array(repeating: textLine, count: 3).joined()
-        var block2 = Array(repeating: textLine, count: 3).joined()
-        var block3 = Array(repeating: textLine, count: 3).joined()
+        let block1 = Array(repeating: textLine, count: 3).joined()
+        let block2 = Array(repeating: textLine, count: 3).joined()
+        let block3 = Array(repeating: textLine, count: 3).joined()
 
         let block1Bytes = Array(block1.utf8) + osc133A
         let block2Bytes = Array(block2.utf8) + osc133D

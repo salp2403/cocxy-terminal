@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Controls the main application window layout.
 ///
-/// The window contains a `TerminalSurfaceView` as its content view,
+/// The window contains a `CocxyCoreView` as its content view,
 /// connected to a `TerminalViewModel` that manages the terminal state.
 ///
 /// ## Window configuration
@@ -41,7 +41,7 @@ import SwiftUI
 /// - `+RemoteWorkspace.swift` — Remote workspace panel lifecycle.
 /// - `+BrowserPro.swift` — Browser Pro overlay panels (history, bookmarks).
 ///
-/// - SeeAlso: `TerminalSurfaceView`
+/// - SeeAlso: `CocxyCoreView`
 /// - SeeAlso: `TerminalViewModel`
 /// - SeeAlso: `ConfigService`
 @MainActor
@@ -482,10 +482,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func buildTerminalSurface() -> TerminalHostView {
-        let surfaceView = TerminalHostViewFactory.makeView(
-            engine: bridge,
-            viewModel: terminalViewModel
-        )
+        let surfaceView = CocxyCoreView(viewModel: terminalViewModel)
         self.terminalSurfaceView = surfaceView
         return surfaceView
     }
@@ -750,10 +747,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     /// Initializes the process monitor for SSH/process detection.
-    ///
-    /// The monitor subscribes to process changes but does NOT start polling
-    /// automatically. Shell PID registration requires GhosttyBridge to expose
-    /// the PTY child PID, which is not yet available.
     ///
     /// Starts the process monitor service and subscribes to process changes.
     ///
@@ -1024,7 +1017,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             terminalOutputBuffer = buffer
         }
 
-        // 4. Resize is handled automatically by TerminalSurfaceView.setFrameSize
+        // 4. Resize is handled automatically by the active terminal host view
         // when the view is laid out in the container. That path uses actual backing
         // pixel dimensions from the view, which is more accurate than the approximate
         // cell sizes we computed here before. Calling resize twice caused a brief

@@ -11,8 +11,14 @@ final class IDECursorControllerTests: XCTestCase {
 
     private func makeController() -> IDECursorController {
         let vm = TerminalViewModel()
-        let view = TerminalSurfaceView(viewModel: vm)
-        let controller = IDECursorController(surfaceView: view)
+        let view = CocxyCoreView(viewModel: vm)
+        let controller = IDECursorController(
+            hostView: view,
+            fontSizeProvider: { [weak vm] in
+                vm?.currentFontSize ?? 14.0
+            },
+            arrowKeySender: { _ in }
+        )
         // Set known cell dimensions for predictable tests.
         controller.setCellDimensions(width: 8.0, height: 16.0)
         controller.leftPadding = 0
@@ -192,7 +198,6 @@ final class IDECursorControllerTests: XCTestCase {
 final class TextSelectionManagerTests: XCTestCase {
 
     func testURLDetectionHTTP() {
-        let manager = makeManager()
         // The URL detection is internal, test via the pattern matching.
         let text = "https://example.com/path?q=1"
         XCTAssertTrue(textContainsURL(text))
@@ -209,7 +214,7 @@ final class TextSelectionManagerTests: XCTestCase {
     }
 
     func testFilePathDetectionTilde() {
-        let text = "~/.config/ghostty/config"
+        let text = "~/.config/cocxy/config.toml"
         XCTAssertTrue(textContainsFilePath(text))
     }
 
@@ -227,9 +232,7 @@ final class TextSelectionManagerTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeManager() -> TextSelectionManager {
-        let vm = TerminalViewModel()
-        let view = TerminalSurfaceView(viewModel: vm)
-        return TextSelectionManager(surfaceView: view)
+        TextSelectionManager(hostView: NSView())
     }
 
     private static let urlPattern = try! NSRegularExpression(

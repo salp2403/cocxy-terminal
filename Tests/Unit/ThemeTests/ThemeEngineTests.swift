@@ -24,6 +24,25 @@ import Combine
 ///
 /// - SeeAlso: ADR-007 (Theme system)
 
+final class ThemeSourceCodingTests: XCTestCase {
+
+    func testLegacyImportEncodesWithStableModernMarker() throws {
+        let data = try JSONEncoder().encode(ThemeSource.legacyImport)
+        let payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: String]
+        )
+
+        XCTAssertEqual(payload["type"], "legacyImport")
+    }
+
+    func testLegacyImportDecodesHistoricalGhosttyMarker() throws {
+        let data = Data(#"{"type":"ghosttyImport"}"#.utf8)
+        let decoded = try JSONDecoder().decode(ThemeSource.self, from: data)
+
+        XCTAssertEqual(decoded, .legacyImport)
+    }
+}
+
 // MARK: - In-Memory Theme File Provider
 
 /// Test double that provides theme TOML content from memory.

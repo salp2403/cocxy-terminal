@@ -192,12 +192,13 @@ final class HookEventReceiverTests: XCTestCase {
     func testConcurrentReceiveDoesNotCrash() {
         let iterations = 100
         let group = DispatchGroup()
+        let receiverRef = WeakReference(sut)
 
         for i in 0..<iterations {
             group.enter()
             DispatchQueue.global(qos: .userInteractive).async {
-                let json = self.makeSessionStartJSON(sessionId: "sess-thread-\(i)")
-                _ = self.sut.receiveRawJSON(Data(json.utf8))
+                let json = Self.makeSessionStartJSON(sessionId: "sess-thread-\(i)")
+                _ = receiverRef.value?.receiveRawJSON(Data(json.utf8))
                 group.leave()
             }
         }
@@ -217,6 +218,10 @@ final class HookEventReceiverTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeSessionStartJSON(sessionId: String) -> String {
+        Self.makeSessionStartJSON(sessionId: sessionId)
+    }
+
+    nonisolated private static func makeSessionStartJSON(sessionId: String) -> String {
         """
         {
             "type": "SessionStart",

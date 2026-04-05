@@ -12,7 +12,7 @@ import AppKit
 final class MainWindowStyleMaskTests: XCTestCase {
 
     func testWindowHasTitledStyle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let styleMask = controller.window?.styleMask ?? []
         XCTAssertTrue(
@@ -22,7 +22,7 @@ final class MainWindowStyleMaskTests: XCTestCase {
     }
 
     func testWindowHasClosableStyle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let styleMask = controller.window?.styleMask ?? []
         XCTAssertTrue(
@@ -32,7 +32,7 @@ final class MainWindowStyleMaskTests: XCTestCase {
     }
 
     func testWindowHasMiniaturizableStyle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let styleMask = controller.window?.styleMask ?? []
         XCTAssertTrue(
@@ -42,7 +42,7 @@ final class MainWindowStyleMaskTests: XCTestCase {
     }
 
     func testWindowHasResizableStyle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let styleMask = controller.window?.styleMask ?? []
         XCTAssertTrue(
@@ -52,7 +52,7 @@ final class MainWindowStyleMaskTests: XCTestCase {
     }
 
     func testWindowHasFullSizeContentViewStyle() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let styleMask = controller.window?.styleMask ?? []
         XCTAssertTrue(
@@ -69,7 +69,7 @@ final class MainWindowStyleMaskTests: XCTestCase {
 final class MainWindowTitlebarTests: XCTestCase {
 
     func testTitlebarAppearsTransparent() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertTrue(
             controller.window?.titlebarAppearsTransparent ?? false,
@@ -78,7 +78,7 @@ final class MainWindowTitlebarTests: XCTestCase {
     }
 
     func testDefaultTitleIsCocxyTerminal() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertEqual(
             controller.window?.title,
@@ -95,7 +95,7 @@ final class MainWindowTitlebarTests: XCTestCase {
 final class MainWindowSizeTests: XCTestCase {
 
     func testWindowHasMinimumWidth() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let minSize = controller.window?.minSize ?? .zero
         XCTAssertGreaterThanOrEqual(
@@ -106,7 +106,7 @@ final class MainWindowSizeTests: XCTestCase {
     }
 
     func testWindowHasMinimumHeight() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let minSize = controller.window?.minSize ?? .zero
         XCTAssertGreaterThanOrEqual(
@@ -117,7 +117,7 @@ final class MainWindowSizeTests: XCTestCase {
     }
 
     func testWindowHasFrameAutosaveName() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         let autosaveName = controller.window?.frameAutosaveName ?? ""
         XCTAssertFalse(
@@ -127,7 +127,7 @@ final class MainWindowSizeTests: XCTestCase {
     }
 
     func testWindowIsNotReleasedWhenClosed() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertFalse(
             controller.window?.isReleasedWhenClosed ?? true,
@@ -143,7 +143,7 @@ final class MainWindowSizeTests: XCTestCase {
 final class MainWindowDelegateTests: XCTestCase {
 
     func testWindowDelegateIsSetToController() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertTrue(
             controller.window?.delegate === controller,
@@ -154,7 +154,7 @@ final class MainWindowDelegateTests: XCTestCase {
     func testWindowWillCloseCallsDestroyTerminalSurface() {
         // This test verifies that closing the window triggers cleanup.
         // We verify by checking the viewModel state after close notification.
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Mark the viewModel as running so we can verify it stops.
@@ -180,7 +180,7 @@ final class MainWindowDelegateTests: XCTestCase {
 final class MainWindowBackgroundTests: XCTestCase {
 
     func testWindowHasNonNilBackgroundColor() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         XCTAssertNotNil(
             controller.window?.backgroundColor,
@@ -196,7 +196,7 @@ final class MainWindowBackgroundTests: XCTestCase {
 final class MainWindowConfigIntegrationTests: XCTestCase {
 
     func testWindowControllerAcceptsConfigService() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let fileProvider = InMemoryConfigFileProvider(content: nil)
         let configService = ConfigService(fileProvider: fileProvider)
         let controller = MainWindowController(bridge: bridge, configService: configService)
@@ -215,7 +215,7 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
         let configService = ConfigService(fileProvider: fileProvider)
         try configService.reload()
 
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge, configService: configService)
 
         // The window should have a reasonable size (not zero).

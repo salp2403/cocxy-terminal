@@ -16,7 +16,7 @@ import AppKit
 final class HelpActionTests: XCTestCase {
 
     func testMainWindowControllerRespondsToOpenHelpAction() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertTrue(
@@ -26,7 +26,7 @@ final class HelpActionTests: XCTestCase {
     }
 
     func testOpenHelpActionDoesNotCrash() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         // Should not crash even when docs directory does not exist.

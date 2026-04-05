@@ -96,24 +96,19 @@ if [ -d "${PROJECT_ROOT}/Resources/Sounds" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Sounds" "${RESOURCES}/Sounds"
 fi
 
-# Step 7: Copy shell integration scripts.
-if [ -d "${PROJECT_ROOT}/libs/ghostty-resources/shell-integration" ]; then
-    cp -R "${PROJECT_ROOT}/libs/ghostty-resources/shell-integration" "${RESOURCES}/shell-integration"
-fi
-
-# Step 8: Also build the CLI companion and place it in Resources.
+# Step 7: Also build the CLI companion and place it in Resources.
 echo "==> Building CLI companion..."
-swift build --target cocxy-cli ${SWIFT_FLAGS} 2>&1 | tail -1
-if [ -f "${BUILD_DIR}/cocxy-cli" ]; then
-    cp "${BUILD_DIR}/cocxy-cli" "${RESOURCES}/cocxy"
+swift build --target cocxy ${SWIFT_FLAGS} 2>&1 | tail -1
+if [ -f "${BUILD_DIR}/cocxy" ]; then
+    cp "${BUILD_DIR}/cocxy" "${RESOURCES}/cocxy"
     echo "    CLI companion: ${RESOURCES}/cocxy"
 fi
 
-# Step 9: Ad-hoc code sign (required for local execution on modern macOS).
+# Step 8: Ad-hoc code sign (required for local execution on modern macOS).
 echo "==> Signing app bundle (ad-hoc)..."
 codesign --force --deep --sign - "${APP_BUNDLE}" 2>/dev/null || true
 
-# Step 10: Print summary.
+# Step 9: Print summary.
 echo ""
 echo "==> Build complete!"
 echo "    App: ${APP_BUNDLE}"

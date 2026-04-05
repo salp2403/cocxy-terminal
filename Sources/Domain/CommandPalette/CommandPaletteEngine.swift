@@ -57,6 +57,14 @@ protocol CommandPaletteSearching: AnyObject, Sendable {
 /// - SeeAlso: ADR-008 Section 3.3
 final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendable {
 
+    private final class WeakCoordinatorBox: @unchecked Sendable {
+        weak var coordinator: CommandPaletteCoordinatorImpl?
+
+        init(_ coordinator: CommandPaletteCoordinatorImpl?) {
+            self.coordinator = coordinator
+        }
+    }
+
     // MARK: - State (lock-protected)
 
     /// Lock protecting all mutable state.
@@ -190,9 +198,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
     /// When a coordinator is set, built-in actions delegate to the coordinator's methods.
     /// When the coordinator is nil, handlers are safe no-ops.
     private func registerBuiltInActions() {
-        // Capture coordinator weakly to avoid retain cycles.
-        // If coordinator is nil at call time, the handler is a silent no-op.
-        weak var coord = coordinator
+        let coordinatorBox = WeakCoordinatorBox(coordinator)
 
         let builtIns: [CommandAction] = [
             CommandAction(
@@ -201,7 +207,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 description: "Open a new terminal tab",
                 shortcut: "Cmd+T",
                 category: .tabs,
-                handler: { coord?.newTab() }
+                handler: { coordinatorBox.coordinator?.newTab() }
             ),
             CommandAction(
                 id: "tabs.close",
@@ -209,7 +215,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 description: "Close the current tab",
                 shortcut: "Cmd+W",
                 category: .tabs,
-                handler: { coord?.closeTab() }
+                handler: { coordinatorBox.coordinator?.closeTab() }
             ),
             CommandAction(
                 id: "tabs.next",
@@ -233,7 +239,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 description: "Split the current pane vertically",
                 shortcut: "Cmd+D",
                 category: .splits,
-                handler: { coord?.splitVertical() }
+                handler: { coordinatorBox.coordinator?.splitVertical() }
             ),
             CommandAction(
                 id: "splits.horizontal",
@@ -241,7 +247,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 description: "Split the current pane horizontally",
                 shortcut: "Cmd+D",
                 category: .splits,
-                handler: { coord?.splitHorizontal() }
+                handler: { coordinatorBox.coordinator?.splitHorizontal() }
             ),
             CommandAction(
                 id: "dashboard.toggle",
@@ -249,7 +255,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 description: "Show or hide the agent dashboard panel",
                 shortcut: "Cmd+Option+D",
                 category: .dashboard,
-                handler: { coord?.toggleDashboard() }
+                handler: { coordinatorBox.coordinator?.toggleDashboard() }
             ),
             CommandAction(
                 id: "navigation.quickswitch",

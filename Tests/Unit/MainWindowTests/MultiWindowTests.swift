@@ -17,7 +17,7 @@ import AppKit
 final class MultiWindowTests: XCTestCase {
 
     func testMainWindowControllerRespondsToNewWindowAction() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
         XCTAssertTrue(

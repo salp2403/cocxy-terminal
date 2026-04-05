@@ -11,7 +11,7 @@ import XCTest
 /// The action classifier determines what happens when a key is pressed:
 /// - Terminal input: characters and control sequences sent to the PTY
 /// - Application commands: copy, paste, select all, clear screen
-/// - Passthrough: events forwarded to libghostty without interception
+/// - Passthrough: events forwarded to the terminal engine without interception
 final class KeyInputActionTests: XCTestCase {
 
     // MARK: - Cmd+C = Copy (not Ctrl+C)

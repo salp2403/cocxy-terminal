@@ -13,19 +13,21 @@ import AppKit
 /// - **Auto-scroll** when dragging near the top/bottom edges of the terminal.
 /// - **Selection highlight overlay** to highlight matches of selected text.
 ///
-/// These features complement (not replace) libghostty's built-in selection
-/// logic. The manager intercepts mouse events before they reach ghostty and
-/// adds the extra behavior without disrupting normal selection flow.
+/// These features complement the host view's own selection handling and can
+/// be layered on top without tying the logic to a specific engine.
 ///
-/// - SeeAlso: `TerminalSurfaceView` for event routing.
+/// - SeeAlso: `CocxyCoreView` for event routing.
 /// - SeeAlso: `SelectionHighlightLayer` for visual overlays.
 @MainActor
 final class TextSelectionManager {
 
     // MARK: - Properties
 
-    /// The terminal surface view this manager enhances.
-    private weak var surfaceView: TerminalSurfaceView?
+    /// The terminal host view this manager enhances.
+    private weak var hostView: NSView?
+
+    /// Sends scroll requests when a drag selection reaches the view edges.
+    private let scrollByRows: (Int) -> Void
 
     /// Timer for auto-scroll during edge drag.
     private var autoScrollTimer: Timer?
@@ -77,16 +79,16 @@ final class TextSelectionManager {
 
     // MARK: - Initialization
 
-    init(surfaceView: TerminalSurfaceView) {
-        self.surfaceView = surfaceView
+    init(hostView: NSView, scrollByRows: @escaping (Int) -> Void = { _ in }) {
+        self.hostView = hostView
+        self.scrollByRows = scrollByRows
     }
 
     // MARK: - Cmd+Click URL/Path Opening
 
     /// Handles a Cmd+click event by detecting and opening URLs/paths.
     ///
-    /// Checks the clipboard content after the click (libghostty may have
-    /// selected a word under the cursor) and attempts to open it.
+    /// Checks the clipboard content after the click and attempts to open it.
     ///
     /// - Parameters:
     ///   - location: Click location in the surface view.
@@ -95,20 +97,20 @@ final class TextSelectionManager {
     func handleCmdClick(at location: CGPoint, modifiers: NSEvent.ModifierFlags) -> Bool {
         guard modifiers.contains(.command) else { return false }
 
-        // Ghostty selects the word under cursor on click and copies to clipboard.
-        // We read the clipboard after a small delay to get the selected text,
-        // then detect if it's a URL or file path and open it.
+        // Some host views copy the current selection to the clipboard as part
+        // of their click handling. Read it after a short delay, then detect
+        // whether it is a URL or file path worth opening.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             self?.attemptOpenFromClipboard()
         }
 
-        return false // Let the event pass through to ghostty for selection.
+        return false // Let the event continue to the host view.
     }
 
     /// Reads the clipboard and attempts to open its content as a URL or file path.
     ///
-    /// Called after Cmd+click with a delay to allow ghostty to process the
-    /// word selection and update the clipboard.
+    /// Called after Cmd+click with a delay to allow the host view to process
+    /// selection updates and refresh the clipboard.
     private func attemptOpenFromClipboard() {
         guard let text = NSPasteboard.general.string(forType: .string) else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -211,7 +213,7 @@ final class TextSelectionManager {
     ///
     /// - Parameter location: Current mouse position in the surface view's coordinates.
     func dragDidMove(to location: CGPoint) {
-        guard isDragging, let view = surfaceView else { return }
+        guard isDragging, let view = hostView else { return }
 
         let viewHeight = view.bounds.height
         let margin = Self.autoScrollEdgeMargin
@@ -261,18 +263,9 @@ final class TextSelectionManager {
     }
 
     private func performAutoScroll() {
-        guard let view = surfaceView,
-              let surfaceID = view.viewModel.surfaceID,
-              let bridge = view.viewModel.ghosttyBridge else {
-            return
-        }
-
-        bridge.sendScrollEvent(
-            deltaX: 0,
-            deltaY: autoScrollDelta,
-            modifiers: KeyModifiers(),
-            to: surfaceID
-        )
+        let deltaRows = Int(autoScrollDelta.rounded(.toNearestOrAwayFromZero))
+        guard deltaRows != 0 else { return }
+        scrollByRows(deltaRows)
     }
 }
 

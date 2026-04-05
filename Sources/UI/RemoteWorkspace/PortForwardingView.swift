@@ -252,7 +252,7 @@ struct PortForwardingView: View {
             forward = .dynamic(localPort: localPort)
         }
 
-        let tunnel = tunnelManager.addTunnel(forward: forward, for: profileID)
+        _ = tunnelManager.addTunnel(forward: forward, for: profileID)
         onForwardPort?(forward, profileID)
 
         withAnimation(.easeOut(duration: 0.15)) {

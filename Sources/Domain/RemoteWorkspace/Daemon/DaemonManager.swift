@@ -86,10 +86,7 @@ final class DaemonManagerImpl: DaemonManaging, ObservableObject {
         }
 
         // Read the daemon's TCP port from its port file — NOT start a new daemon.
-        guard let executor = deployer as? DaemonDeployer else {
-            throw DaemonProtocolError.connectionLost
-        }
-        let portStr = try await executor.readRemotePort(profileID: profileID)
+        let portStr = try await deployer.readRemotePort(profileID: profileID)
         guard let port = Int(portStr.trimmingCharacters(in: .whitespacesAndNewlines)),
               port > 0, port <= 65535 else {
             throw DaemonProtocolError.invalidResponse

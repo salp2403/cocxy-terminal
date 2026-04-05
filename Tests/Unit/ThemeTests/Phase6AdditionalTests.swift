@@ -6,7 +6,7 @@
 //  - CodableColor edge cases: string vacío, solo "#", longitud errónea, lower/upper
 //  - Theme round-trip: TOML -> parse -> serialize -> comparar
 //  - Auto-switch integration: cambio de apariencia -> engine elige tema correcto
-//  - Ghostty edge cases: solo palette, background ausente, claves desconocidas
+//  - Imported-theme edge cases: solo palette, background ausente, claves desconocidas
 //  - Hot-reload robustness: archivo sin contenido, reload múltiple, debounce cancelado
 //  - Config cascade: tema vía hot-reload -> config reflejada
 
@@ -604,132 +604,7 @@ final class AutoSwitchIntegrationTests: XCTestCase {
     }
 }
 
-// MARK: - 6. Ghostty import edge cases
-
-final class GhosttyThemeImporterEdgeCaseTests: XCTestCase {
-
-    // Fichero con solo palette entries, sin background ni foreground
-    func testOnlyPaletteUsesDefaultsForBaseColors() throws {
-        let content = """
-        palette = 0=#45475a
-        palette = 1=#f38ba8
-        palette = 2=#a6e3a1
-        palette = 3=#f9e2af
-        palette = 4=#89b4fa
-        palette = 5=#f5c2e7
-        palette = 6=#94e2d5
-        palette = 7=#bac2de
-        palette = 8=#585b70
-        palette = 9=#f38ba8
-        palette = 10=#a6e3a1
-        palette = 11=#f9e2af
-        palette = 12=#89b4fa
-        palette = 13=#f5c2e7
-        palette = 14=#94e2d5
-        palette = 15=#a6adc8
-        """
-
-        let theme = try GhosttyThemeImporter.importFromContent(content, themeName: "only-palette")
-
-        // Los defaults deben aplicarse
-        XCTAssertEqual(theme.palette.background, "#000000",
-            "Background ausente debe usar default #000000")
-        XCTAssertEqual(theme.palette.foreground, "#ffffff",
-            "Foreground ausente debe usar default #ffffff")
-        // Los colores de palette sí se deben haber parseado
-        XCTAssertEqual(theme.palette.ansiColors[0], "#45475a")
-        XCTAssertEqual(theme.palette.ansiColors[15], "#a6adc8")
-    }
-
-    // Fichero vacío: todos los campos deben tener defaults
-    func testEmptyFileProducesAllDefaults() throws {
-        let theme = try GhosttyThemeImporter.importFromContent("", themeName: "empty")
-
-        XCTAssertEqual(theme.palette.background, "#000000")
-        XCTAssertEqual(theme.palette.foreground, "#ffffff")
-        XCTAssertEqual(theme.palette.ansiColors.count, 16)
-        XCTAssertFalse(theme.palette.background.isEmpty)
-    }
-
-    // Background ausente pero foreground presente
-    func testMissingBackgroundUsesDefault() throws {
-        let content = "foreground = #cdd6f4"
-
-        let theme = try GhosttyThemeImporter.importFromContent(content, themeName: "no-bg")
-
-        XCTAssertEqual(theme.palette.background, "#000000",
-            "Background ausente debe usar #000000")
-        XCTAssertEqual(theme.palette.foreground, "#cdd6f4")
-    }
-
-    // Claves desconocidas (unknown keys) deben ignorarse sin error
-    func testUnknownKeysAreIgnored() throws {
-        let content = """
-        background = #1e1e2e
-        foreground = #cdd6f4
-        unknown-key = some-value
-        another-unknown = #123456
-        custom-widget = enabled
-        """
-
-        let theme = try GhosttyThemeImporter.importFromContent(content, themeName: "unknown-keys")
-
-        XCTAssertEqual(theme.palette.background, "#1e1e2e",
-            "Claves desconocidas no deben corromper el parsing de las conocidas")
-        XCTAssertEqual(theme.palette.foreground, "#cdd6f4")
-    }
-
-    // Variant detection: fondo claro -> .light
-    func testLightBackgroundDetectedAsLightVariant() throws {
-        let content = "background = #eff1f5\nforeground = #4c4f69"
-
-        let theme = try GhosttyThemeImporter.importFromContent(content, themeName: "latte-light")
-
-        XCTAssertEqual(theme.metadata.variant, .light,
-            "Fondo claro (#eff1f5) debe detectarse como variante light")
-    }
-
-    // Variant detection: fondo oscuro -> .dark
-    func testDarkBackgroundDetectedAsDarkVariant() throws {
-        let content = "background = #1e1e2e\nforeground = #cdd6f4"
-
-        let theme = try GhosttyThemeImporter.importFromContent(content, themeName: "mocha-dark")
-
-        XCTAssertEqual(theme.metadata.variant, .dark,
-            "Fondo oscuro (#1e1e2e) debe detectarse como variante dark")
-    }
-
-    // Source debe ser .ghosttyImport
-    func testImportedThemeHasGhosttyImportSource() throws {
-        let content = "background = #1e1e2e\nforeground = #cdd6f4"
-
-        let theme = try GhosttyThemeImporter.importFromContent(content, themeName: "ghostty-source")
-
-        guard case .ghosttyImport = theme.metadata.source else {
-            XCTFail("Source debe ser .ghosttyImport, fue \(theme.metadata.source)")
-            return
-        }
-    }
-
-    // palette = N=#hex con espacios alrededor del = interno también
-    func testPaletteEntryWithSpacesAroundInternalEquals() throws {
-        let content = """
-        background = #000000
-        foreground = #ffffff
-        palette = 5 = #ff79c6
-        """
-
-        // El parser usa firstIndex(of: "=") para el primer = y
-        // luego splitea en el = interno. Con spaces puede que no parsee bien.
-        // Este test documenta el comportamiento actual: si no parsea, usa default.
-        let theme = try GhosttyThemeImporter.importFromContent(content, themeName: "palette-spaces")
-
-        // Solo verificamos que no crashea y produce un tema válido
-        XCTAssertEqual(theme.palette.ansiColors.count, 16)
-    }
-}
-
-// MARK: - 7. Hot-reload robustness
+// MARK: - 6. Hot-reload robustness
 
 final class ConfigWatcherRobustnessTests: XCTestCase {
 

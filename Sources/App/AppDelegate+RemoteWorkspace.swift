@@ -180,7 +180,7 @@ final class DaemonDeployAdapter: DaemonDeployExecuting {
     }
 
     func uploadFile(localPath: String, remotePath: String, profileID: UUID) async throws {
-        guard let manager = connectionManager else {
+        guard connectionManager != nil else {
             throw DaemonProtocolError.connectionLost
         }
         // Upload via SFTPClient using the profile's SSH ControlMaster.

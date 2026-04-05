@@ -53,7 +53,7 @@ If you need to coordinate disclosure timing (e.g., conference presentation), men
 - **Regex denial of service:** A pattern in `agents.toml` that causes catastrophic backtracking and hangs the application.
 - **Data leakage:** Any transmission of user data to external servers (this would violate a core design principle).
 - **Information disclosure:** Reading terminal output from another user's session on a shared system.
-- **Dependency supply chain issues:** Vulnerabilities in libghostty that affect Cocxy.
+- **Dependency supply chain issues:** Vulnerabilities in CocxyCoreKit, Sparkle, or other shipped binary dependencies that affect Cocxy.
 
 ### What Does NOT Qualify
 

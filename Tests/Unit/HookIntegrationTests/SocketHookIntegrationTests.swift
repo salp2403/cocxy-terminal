@@ -118,8 +118,6 @@ final class SocketHookIntegrationTests: XCTestCase {
     // MARK: - Hook Event Command with Missing Payload
 
     func testSocketRequestWithMissingPayloadFieldFails() {
-        let receiver = HookEventReceiverImpl()
-
         // Request with no "payload" key in params
         let request = SocketRequest(
             id: "req-2",

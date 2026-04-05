@@ -59,8 +59,7 @@ final class TabCloseConfirmationTests: XCTestCase {
         let config = GeneralConfig(
             shell: "/bin/zsh",
             workingDirectory: "~",
-            confirmCloseProcess: false,
-            engineType: .ghostty
+            confirmCloseProcess: false
         )
         XCTAssertFalse(config.confirmCloseProcess,
                        "confirmCloseProcess must respect explicit false")

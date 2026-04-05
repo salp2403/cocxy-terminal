@@ -150,10 +150,10 @@ final class TerminalViewModelRunningStateTests: XCTestCase {
 final class TerminalViewModelBridgeTests: XCTestCase {
 
     func testCanBeCreatedWithEngine() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let viewModel = TerminalViewModel(engine: bridge)
         XCTAssertTrue(
-            viewModel.ghosttyBridge === bridge,
+            viewModel.engine === bridge,
             "ViewModel must hold a reference to the provided engine"
         )
     }

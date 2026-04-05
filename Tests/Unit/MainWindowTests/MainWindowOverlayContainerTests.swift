@@ -19,7 +19,7 @@ import AppKit
 final class OverlayContainerTests: XCTestCase {
 
     func testWindowHasOverlayContainer() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -30,7 +30,7 @@ final class OverlayContainerTests: XCTestCase {
     }
 
     func testOverlayContainerIsAboveSplitView() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -54,7 +54,7 @@ final class OverlayContainerTests: XCTestCase {
     }
 
     func testCommandPaletteIsAddedToOverlayContainer() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -72,7 +72,7 @@ final class OverlayContainerTests: XCTestCase {
     }
 
     func testDashboardIsAddedToOverlayContainer() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -90,7 +90,7 @@ final class OverlayContainerTests: XCTestCase {
     }
 
     func testSmartRoutingIsAddedToOverlayContainer() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -108,7 +108,7 @@ final class OverlayContainerTests: XCTestCase {
     }
 
     func testDismissingOverlayRemovesFromContainer() {
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 
@@ -129,7 +129,7 @@ final class OverlayContainerTests: XCTestCase {
     func testSearchBarRemainsInTerminalContainer() {
         // The search bar is a thin strip at the top of the terminal,
         // so it stays in the terminal container, not the overlay container.
-        let bridge = GhosttyBridge()
+        let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
 

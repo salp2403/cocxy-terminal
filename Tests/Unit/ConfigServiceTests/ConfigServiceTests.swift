@@ -61,10 +61,7 @@ final class ConfigServiceMissingFileTests: XCTestCase {
 
     func testMissingFileReturnsDefaults() throws {
         let fileProvider = InMemoryConfigFileProvider(content: nil)
-        let service = ConfigService(
-            fileProvider: fileProvider,
-            ghosttyConfigPath: nil
-        )  // Disable Ghostty fallback for test isolation.
+        let service = ConfigService(fileProvider: fileProvider)
         try service.reload()
 
         let config = service.current
@@ -73,10 +70,7 @@ final class ConfigServiceMissingFileTests: XCTestCase {
 
     func testMissingFileCreatesDefaultFileViaProvider() throws {
         let fileProvider = InMemoryConfigFileProvider(content: nil)
-        let service = ConfigService(
-            fileProvider: fileProvider,
-            ghosttyConfigPath: nil
-        )  // Disable Ghostty fallback for test isolation.
+        let service = ConfigService(fileProvider: fileProvider)
         try service.reload()
 
         XCTAssertNotNil(

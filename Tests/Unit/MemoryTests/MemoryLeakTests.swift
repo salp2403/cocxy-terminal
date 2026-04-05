@@ -4,10 +4,9 @@
 // Verifies create-use-destroy cycles using weak references.
 // Pattern: create object -> use it -> set strong ref to nil -> assert weak ref is nil.
 //
-// NOTE: GhosttyBridge tests are structural (compile-only) because the bridge
-// requires a real libghostty native library (GhosttyKit.xcframework) which is
-// not available in the test host process. The lifecycle pattern is tested for
-// all other components that do not require the native library.
+// NOTE: Native engine lifecycle coverage lives in the dedicated CocxyCore
+// suites. This file keeps its focus on higher-level Swift object graphs and
+// retain-cycle detection.
 
 import XCTest
 import Combine
@@ -24,7 +23,7 @@ final class MemoryLeakTests: XCTestCase {
     @MainActor
     func test_tabManager_lifecycle_doesNotLeak() {
         var tabManager: TabManager? = TabManager()
-        weak var weakRef = tabManager
+        let weakRef = WeakReference(tabManager)
 
         // Use the object: add 10 tabs.
         for _ in 0..<10 {
@@ -42,7 +41,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         tabManager = nil
 
-        XCTAssertNil(weakRef, "TabManager was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "TabManager was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 2: SplitManager Lifecycle
@@ -51,7 +50,7 @@ final class MemoryLeakTests: XCTestCase {
     @MainActor
     func test_splitManager_lifecycle_doesNotLeak() {
         var splitManager: SplitManager? = SplitManager()
-        weak var weakRef = splitManager
+        let weakRef = WeakReference(splitManager)
 
         // Use the object: 4 splits.
         for direction in [SplitDirection.horizontal, .vertical, .horizontal, .vertical] {
@@ -68,7 +67,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         splitManager = nil
 
-        XCTAssertNil(weakRef, "SplitManager was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "SplitManager was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 3: TabSplitCoordinator Lifecycle
@@ -77,7 +76,7 @@ final class MemoryLeakTests: XCTestCase {
     @MainActor
     func test_tabSplitCoordinator_lifecycle_doesNotLeak() {
         var coordinator: TabSplitCoordinator? = TabSplitCoordinator()
-        weak var weakRef = coordinator
+        let weakRef = WeakReference(coordinator)
 
         // Create 5 SplitManagers via the coordinator.
         let tabIDs = (0..<5).map { _ in TabID() }
@@ -95,7 +94,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         coordinator = nil
 
-        XCTAssertNil(weakRef, "TabSplitCoordinator was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "TabSplitCoordinator was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 4: TabSplitCoordinator SplitManager Cleanup
@@ -108,7 +107,7 @@ final class MemoryLeakTests: XCTestCase {
         let tabID = TabID()
 
         var splitManager: SplitManager? = coordinator.splitManager(for: tabID)
-        weak var weakSplitRef = splitManager
+        let weakSplitRef = WeakReference(splitManager)
 
         // Perform some operations.
         splitManager?.splitFocused(direction: .horizontal)
@@ -117,7 +116,7 @@ final class MemoryLeakTests: XCTestCase {
         splitManager = nil
         coordinator.removeSplitManager(for: tabID)
 
-        XCTAssertNil(weakSplitRef,
+        XCTAssertNil(weakSplitRef.value,
             "SplitManager was not released after removal from TabSplitCoordinator.")
     }
 
@@ -133,7 +132,7 @@ final class MemoryLeakTests: XCTestCase {
             coalescenceWindow: 0.0,
             rateLimitPerTab: 0.0
         )
-        weak var weakRef = manager
+        let weakRef = WeakReference(manager)
 
         // Use the object: send 5 notifications for different tabs.
         for _ in 0..<5 {
@@ -155,7 +154,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         manager = nil
 
-        XCTAssertNil(weakRef, "NotificationManagerImpl was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "NotificationManagerImpl was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 6: AgentDetectionEngine Lifecycle
@@ -167,7 +166,7 @@ final class MemoryLeakTests: XCTestCase {
             compiledConfigs: [],
             debounceInterval: 0.0
         )
-        weak var weakRef = engine
+        let weakRef = WeakReference(engine)
 
         // Use the object: inject signals and reset.
         engine?.injectSignal(DetectionSignal(
@@ -181,7 +180,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         engine = nil
 
-        XCTAssertNil(weakRef, "AgentDetectionEngineImpl was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "AgentDetectionEngineImpl was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 7: AgentDetectionEngine Combine Subscription Cleanup
@@ -193,7 +192,7 @@ final class MemoryLeakTests: XCTestCase {
             compiledConfigs: [],
             debounceInterval: 0.0
         )
-        weak var weakRef = engine
+        let weakRef = WeakReference(engine)
 
         var cancellables = Set<AnyCancellable>()
         var receivedTransitions = 0
@@ -218,7 +217,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         engine = nil
 
-        XCTAssertNil(weakRef, "AgentDetectionEngineImpl leaked after subscription cancellation.")
+        XCTAssertNil(weakRef.value, "AgentDetectionEngineImpl leaked after subscription cancellation.")
     }
 
     // MARK: - Test 8: ConfigWatcher Lifecycle
@@ -233,7 +232,7 @@ final class MemoryLeakTests: XCTestCase {
             configService: configService,
             fileProvider: fileProvider
         )
-        weak var weakRef = watcher
+        let weakRef = WeakReference(watcher)
 
         // Use the object.
         watcher?.startWatching()
@@ -247,7 +246,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         watcher = nil
 
-        XCTAssertNil(weakRef, "ConfigWatcher was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "ConfigWatcher was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 9: ConfigWatcher Debounce WorkItem Does Not Retain Self
@@ -265,7 +264,7 @@ final class MemoryLeakTests: XCTestCase {
             fileProvider: fileProvider
         )
         watcher?.debounceInterval = 60.0 // Long interval -- work item stays pending.
-        weak var weakRef = watcher
+        let weakRef = WeakReference(watcher)
 
         // Schedule a reload (creates a pending DispatchWorkItem).
         watcher?.scheduleReload()
@@ -274,7 +273,7 @@ final class MemoryLeakTests: XCTestCase {
         watcher = nil
 
         // The work item captures [weak self], so the watcher should be released.
-        XCTAssertNil(weakRef,
+        XCTAssertNil(weakRef.value,
             "ConfigWatcher leaked: pending debounce work item holds strong reference to self.")
     }
 
@@ -286,7 +285,7 @@ final class MemoryLeakTests: XCTestCase {
             defaultIdleTimeout: 60.0,
             sustainedOutputThreshold: 2.0
         )
-        weak var weakRef = detector
+        let weakRef = WeakReference(detector)
 
         // Simulate timer activity: put the detector in a state where timers would fire.
         detector?.notifyStateChanged(to: .working)
@@ -298,7 +297,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         detector = nil
 
-        XCTAssertNil(weakRef, "TimingHeuristicsDetector was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "TimingHeuristicsDetector was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 11: TimingHeuristicsDetector Dealloc Without Stop Does Not Crash
@@ -310,7 +309,7 @@ final class MemoryLeakTests: XCTestCase {
             defaultIdleTimeout: 60.0,
             sustainedOutputThreshold: 2.0
         )
-        weak var weakRef = detector
+        let weakRef = WeakReference(detector)
 
         // Put in working state so a timer is scheduled.
         detector?.notifyStateChanged(to: .working)
@@ -326,7 +325,7 @@ final class MemoryLeakTests: XCTestCase {
         }
         waitForExpectations(timeout: 1.0)
 
-        XCTAssertNil(weakRef,
+        XCTAssertNil(weakRef.value,
             "TimingHeuristicsDetector was not deallocated via deinit path.")
     }
 
@@ -341,7 +340,7 @@ final class MemoryLeakTests: XCTestCase {
             compiledConfigs: [],
             debounceInterval: 0.0
         )
-        weak var weakEngine = engine
+        let weakEngine = WeakReference(engine)
 
         // Engine internally sets onSignalEmitted on the timing detector with [weak self].
         // Trigger activity to ensure the callback is wired up.
@@ -353,7 +352,7 @@ final class MemoryLeakTests: XCTestCase {
 
         engine = nil
 
-        XCTAssertNil(weakEngine,
+        XCTAssertNil(weakEngine.value,
             "AgentDetectionEngineImpl leaked: onSignalEmitted callback holds strong reference.")
     }
 
@@ -365,7 +364,7 @@ final class MemoryLeakTests: XCTestCase {
             .appendingPathComponent("cocxy-memleak-test-\(UUID().uuidString)")
 
         var manager: SessionManagerImpl? = SessionManagerImpl(sessionsDirectory: tempDir)
-        weak var weakRef = manager
+        let weakRef = WeakReference(manager)
 
         defer {
             try? FileManager.default.removeItem(at: tempDir)
@@ -387,7 +386,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         manager = nil
 
-        XCTAssertNil(weakRef, "SessionManagerImpl was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "SessionManagerImpl was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 14: SessionManager Auto-Save Timer Does Not Retain Self
@@ -399,7 +398,7 @@ final class MemoryLeakTests: XCTestCase {
             .appendingPathComponent("cocxy-memleak-test-\(UUID().uuidString)")
 
         var manager: SessionManagerImpl? = SessionManagerImpl(sessionsDirectory: tempDir)
-        weak var weakRef = manager
+        let weakRef = WeakReference(manager)
 
         defer {
             try? FileManager.default.removeItem(at: tempDir)
@@ -424,7 +423,7 @@ final class MemoryLeakTests: XCTestCase {
         }
         waitForExpectations(timeout: 1.0)
 
-        XCTAssertNil(weakRef,
+        XCTAssertNil(weakRef.value,
             "SessionManagerImpl leaked: DispatchSourceTimer event handler holds strong reference.")
     }
 
@@ -434,7 +433,7 @@ final class MemoryLeakTests: XCTestCase {
     @MainActor
     func test_quickTerminalController_lifecycle_doesNotLeak() {
         var controller: QuickTerminalController? = QuickTerminalController()
-        weak var weakRef = controller
+        let weakRef = WeakReference(controller)
 
         // Use without a bridge (bridge is weak and optional).
         controller?.setup(bridge: nil, config: CocxyConfig.defaults)
@@ -447,7 +446,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         controller = nil
 
-        XCTAssertNil(weakRef, "QuickTerminalController was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "QuickTerminalController was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 16: QuickTerminalController TearDown Is Idempotent
@@ -483,7 +482,7 @@ final class MemoryLeakTests: XCTestCase {
             socketPath: tempSocketPath,
             commandHandler: mockHandler
         )
-        weak var weakRef = server
+        let weakRef = WeakReference(server)
 
         defer {
             try? FileManager.default.removeItem(atPath: tempSocketPath)
@@ -499,7 +498,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate.
         server = nil
 
-        XCTAssertNil(weakRef, "SocketServerImpl was not deallocated: retain cycle suspected.")
+        XCTAssertNil(weakRef.value, "SocketServerImpl was not deallocated: retain cycle suspected.")
     }
 
     // MARK: - Test 18: SocketServer File Descriptor Closed on Stop
@@ -547,7 +546,7 @@ final class MemoryLeakTests: XCTestCase {
             coalescenceWindow: 0.0,
             rateLimitPerTab: 0.0
         )
-        weak var weakRef = manager
+        let weakRef = WeakReference(manager)
 
         var cancellables = Set<AnyCancellable>()
 
@@ -568,7 +567,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate manager.
         manager = nil
 
-        XCTAssertNil(weakRef, "NotificationManagerImpl leaked after Combine subscription cancellation.")
+        XCTAssertNil(weakRef.value, "NotificationManagerImpl leaked after Combine subscription cancellation.")
     }
 
     // MARK: - Test 20: AppearanceObserver stopObserving Releases Provider Reference
@@ -608,7 +607,7 @@ final class MemoryLeakTests: XCTestCase {
             compiledConfigs: [],
             debounceInterval: 0.0
         )
-        weak var weakRef = engine
+        let weakRef = WeakReference(engine)
 
         // Enqueue async work by injecting a batch signal.
         engine?.injectSignalBatch([
@@ -629,7 +628,7 @@ final class MemoryLeakTests: XCTestCase {
         }
         waitForExpectations(timeout: 1.0)
 
-        XCTAssertNil(weakRef,
+        XCTAssertNil(weakRef.value,
             "AgentDetectionEngineImpl leaked: processTerminalOutput closure holds strong reference.")
     }
 }

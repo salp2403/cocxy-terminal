@@ -11,9 +11,9 @@ import Foundation
 /// to the approximate position where that event occurred and optionally highlights
 /// the affected file.
 ///
-/// The concrete implementation depends on the terminal engine (libghostty scrollback API).
-/// A stub implementation (`TimelineNavigatorStub`) is provided for testing and as a
-/// placeholder until the real scrollback integration is connected.
+/// The concrete implementation depends on the active terminal engine's
+/// scrollback/navigation support. A stub implementation (`TimelineNavigatorStub`)
+/// is provided for testing and as a placeholder until the real integration is connected.
 ///
 /// - SeeAlso: `TimelineNavigationDispatcher` (dispatch helper with nil-safety)
 /// - SeeAlso: `TimelineNavigatorStub` (logging stub for development)
@@ -76,7 +76,7 @@ final class TimelineNavigationDispatcher {
 ///
 /// Records all calls for inspection. Intended for:
 /// - Unit tests (as a spy/stub hybrid).
-/// - Development builds (until the real libghostty scrollback API is connected).
+/// - Development builds before a production navigator is connected.
 ///
 /// - SeeAlso: `TimelineNavigating`
 final class TimelineNavigatorStub: TimelineNavigating {

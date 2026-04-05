@@ -16,16 +16,17 @@ let package = Package(
         .executableTarget(
             name: "CocxyTerminal",
             dependencies: [
-                "GhosttyKit",
                 "CocxyCoreKit",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources",
+            resources: [
+                .process("App/Assets.xcassets"),
+            ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency")
             ],
             linkerSettings: [
-                .linkedLibrary("c++"),
                 .linkedFramework("Metal"),
                 .linkedFramework("QuartzCore"),
                 .linkedFramework("IOSurface"),
@@ -38,10 +39,6 @@ let package = Package(
             dependencies: ["CocxyTerminal"],
             path: "Tests",
             exclude: ["Unit/CLITests"]
-        ),
-        .binaryTarget(
-            name: "GhosttyKit",
-            path: "libs/GhosttyKit.xcframework"
         ),
         .binaryTarget(
             name: "CocxyCoreKit",

@@ -27,8 +27,6 @@ app: build
 	@mkdir -p "$(MACOS_DIR)" "$(RESOURCES_DIR)"
 	@# Copy binary
 	@cp "$(BUILD_DIR)/CocxyTerminal" "$(MACOS_DIR)/Cocxy Terminal"
-	@# Copy libghostty
-	@cp .build/arm64-apple-macosx/release/libghostty-fat.a "$(RESOURCES_DIR)/" 2>/dev/null || true
 	@# Generate Info.plist
 	@cat > "$(CONTENTS_DIR)/Info.plist" << 'PLIST'\
 <?xml version="1.0" encoding="UTF-8"?>\

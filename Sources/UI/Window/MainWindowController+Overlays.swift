@@ -498,7 +498,7 @@ extension MainWindowController {
         swiftUIView.onNavigateToResult = { [weak self] result in
             guard let self, let surfaceID = self.activeSearchSurfaceID() else { return }
             // Scroll to the line containing the search match.
-            // Uses ghostty's native scroll API via binding_action.
+            // Uses the active terminal engine's scrollback navigation API.
             self.bridge.scrollToSearchResult(
                 surfaceID: surfaceID,
                 lineNumber: result.lineNumber

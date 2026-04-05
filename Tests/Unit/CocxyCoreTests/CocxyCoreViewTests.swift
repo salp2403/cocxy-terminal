@@ -26,7 +26,7 @@ struct CocxyCoreViewTests {
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
 
         view.configureSurfaceIfNeeded(
-            bridge: GhosttyBridge(),
+            bridge: MockTerminalEngine(),
             surfaceID: SurfaceID()
         )
 

@@ -103,7 +103,7 @@ Plugins respond to 8 terminal events (session start/end, agent detected, state c
 
 ### GPU Terminal
 
-High-performance rendering powered by libghostty and Metal.
+High-performance rendering powered by CocxyCore and Metal.
 
 - **Metal-Accelerated** -- GPU rendering for smooth scrolling at 120 fps
 - **Multi-Tab + Splits** -- Vertical sidebar with git branch, agent state, and horizontal/vertical splits
@@ -211,7 +211,7 @@ Custom agents can be added via `agents.toml`.
 ~/.config/cocxy/
   config.toml          # Fonts, theme, keybindings, terminal behavior
   agents.toml          # Agent detection patterns and thresholds
-  themes/*.toml        # Custom themes (Ghostty-compatible format)
+  themes/*.toml        # Custom themes
   plugins/             # Plugin directories with manifest.toml
   sessions/            # Auto-saved session state
   remotes/             # SSH connection profiles
@@ -244,7 +244,7 @@ window-padding-y = 2
 
 ### Themes
 
-Ships with Catppuccin (Mocha and Latte), One Dark, Solarized, and more. Also imports Ghostty `.toml` theme files. Drop a theme into `~/.config/cocxy/themes/` and it appears immediately.
+Ships with Catppuccin (Mocha and Latte), One Dark, Solarized, and more. Drop a theme into `~/.config/cocxy/themes/` and it appears immediately.
 
 ## Building from Source
 
@@ -253,17 +253,13 @@ Ships with Catppuccin (Mocha and Latte), One Dark, Solarized, and more. Also imp
 - macOS 14.0 (Sonoma) or later
 - Xcode 16 or later
 - Swift 5.10+
-- Zig 0.15.2+ (for compiling libghostty)
+- Swift Package Manager dependencies
 
 ### Build
 
 ```bash
 git clone https://github.com/salp2403/cocxy-terminal.git
 cd cocxy-terminal
-
-# Build the terminal engine (5-10 minutes on first run)
-chmod +x scripts/build-libghostty.sh
-./scripts/build-libghostty.sh
 
 # Build the app
 swift build
@@ -278,12 +274,12 @@ swift run CocxyTerminal
 ### Test
 
 ```bash
-swift test    # 3,053 tests
+swift test    # 500+ Swift tests
 ```
 
 ## Architecture
 
-MVVM + Coordinators with Swift protocols as contracts between modules. Zero third-party Swift dependencies (only libghostty for rendering and Sparkle for updates).
+MVVM + Coordinators with Swift protocols as contracts between modules. Zero third-party Swift dependencies in app code, with CocxyCoreKit and Sparkle as the packaged runtime dependencies.
 
 ```
 Sources/

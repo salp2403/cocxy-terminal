@@ -25,13 +25,13 @@ import CocxyCoreKit
 ///
 /// ## Threading model
 ///
-/// - **Background (QoS userInteractive)**: PTY read via DispatchSource.
-///   Feeds bytes to terminal, reads responses, dispatches redraw to main.
+/// - **Background (QoS userInteractive)**: PTY read via `DispatchSource`.
+///   Feeds bytes to the terminal, reads responses, dispatches redraw to main.
 /// - **Main thread**: All callbacks, UI updates, and public API calls.
 ///
-/// Unlike GhosttyBridge (4 threads per surface), CocxyCoreBridge uses a single
-/// DispatchSource per surface. Terminal state mutation happens on the source's
-/// queue; callbacks are dispatched to main thread before touching Swift state.
+/// CocxyCore uses a single read source per surface. Terminal state mutation
+/// happens on the source's queue; callbacks are dispatched to main before
+/// touching Swift-owned state.
 @MainActor
 final class CocxyCoreBridge: TerminalEngine {
 
@@ -77,6 +77,12 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// All active surface IDs (for bulk operations like theme change).
     var allSurfaceIDs: [SurfaceID] { Array(surfaces.keys) }
+
+    /// Current horizontal content padding in points.
+    var configuredPaddingX: CGFloat { CGFloat(config?.windowPaddingX ?? 8.0) }
+
+    /// Current vertical content padding in points.
+    var configuredPaddingY: CGFloat { CGFloat(config?.windowPaddingY ?? 4.0) }
 
     // MARK: - Constants
 
@@ -375,8 +381,8 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Apply a theme change without destroying surfaces.
     ///
-    /// CocxyCore supports runtime theme updates — no surface recreation needed.
-    /// This is a major improvement over GhosttyBridge.
+    /// CocxyCore supports runtime theme updates, so the active surface can
+    /// redraw immediately without teardown/recreation.
     func applyTheme(_ palette: ThemePalette, to surface: SurfaceID) {
         guard let state = surfaces[surface] else { return }
 
@@ -399,6 +405,51 @@ final class CocxyCoreBridge: TerminalEngine {
         let sel = Self.parseHexColor(palette.selectionBackground)
         cocxycore_terminal_set_selection_color(state.terminal, sel.r, sel.g, sel.b, 128)
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    /// Updates the stored defaults used for newly created surfaces.
+    ///
+    /// Existing surfaces are unaffected unless a dedicated apply method
+    /// (for example `applyTheme` or `applyFont`) is also called.
+    func updateDefaults(
+        fontFamily: String? = nil,
+        fontSize: Double? = nil,
+        themeName: String? = nil,
+        themePalette: ThemePalette? = nil,
+        shell: String? = nil,
+        windowPaddingX: Double? = nil,
+        windowPaddingY: Double? = nil
+    ) {
+        guard let currentConfig = config else { return }
+        config = currentConfig.replacing(
+            fontFamily: fontFamily,
+            fontSize: fontSize,
+            themeName: themeName,
+            shell: shell,
+            themePalette: themePalette,
+            windowPaddingX: windowPaddingX,
+            windowPaddingY: windowPaddingY
+        )
+    }
+
+    /// Apply a font change to all live surfaces and future surfaces.
+    func applyFont(family: String, size: Double) {
+        updateDefaults(fontFamily: family, fontSize: size)
+
+        for state in surfaces.values {
+            let scale = Float(state.hostView?.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0)
+            _ = family.withCString { familyPtr in
+                cocxycore_terminal_set_font(
+                    state.terminal,
+                    familyPtr,
+                    Float(size),
+                    scale,
+                    true
+                )
+            }
+            (state.hostView as? TerminalHostView)?.updateInteractionMetrics()
+            (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        }
     }
 
     /// Check if PTY child process is still alive.
@@ -516,9 +567,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Build shell integration environment variables.
     ///
-    /// CRITICAL RULE: NEVER set GHOSTTY_ZSH_ZDOTDIR="" (empty string).
-    /// See feedback_zdotdir_empty_string.md — causes zsh to look for .zshrc
-    /// in the current directory instead of $HOME, breaking Prezto/YADR/OMZ.
+    /// The PTY inherits the host process environment, so user-defined values
+    /// such as `ZDOTDIR`, `HOME`, and `SHELL` flow through naturally. This
+    /// method only layers CocxyCore's own integration markers on top.
     private func buildShellIntegrationEnvVars() -> [String: String] {
         var env: [String: String] = [:]
 
@@ -539,13 +590,6 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         env["TERM"] = "xterm-256color"
-
-        // ZDOTDIR: Only set if the user's environment already has it.
-        // GUI apps (launched from Dock) do NOT have ZDOTDIR.
-        if let existingZdotdir = ProcessInfo.processInfo.environment["ZDOTDIR"] {
-            env["GHOSTTY_ZSH_ZDOTDIR"] = existingZdotdir
-        }
-        // NEVER: env["GHOSTTY_ZSH_ZDOTDIR"] = ""
 
         return env
     }

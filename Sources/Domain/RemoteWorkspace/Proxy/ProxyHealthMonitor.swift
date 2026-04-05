@@ -144,6 +144,19 @@ final class ProxyHealthMonitor {
 @MainActor
 final class TCPHealthProbe: HealthProbing {
 
+    private final class ProbeCompletionState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var completed = false
+
+        func completeIfNeeded() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !completed else { return false }
+            completed = true
+            return true
+        }
+    }
+
     private let targetHost: String
     private let targetPort: UInt16
     private let timeoutSeconds: TimeInterval
@@ -166,18 +179,17 @@ final class TCPHealthProbe: HealthProbing {
                 using: .tcp
             )
 
-            var completed = false
+            let completionState = ProbeCompletionState()
             let queue = DispatchQueue(label: "com.cocxy.healthprobe")
 
             connection.stateUpdateHandler = { state in
-                guard !completed else { return }
                 switch state {
                 case .ready:
-                    completed = true
+                    guard completionState.completeIfNeeded() else { return }
                     connection.cancel()
                     continuation.resume(returning: true)
                 case .failed, .cancelled:
-                    completed = true
+                    guard completionState.completeIfNeeded() else { return }
                     continuation.resume(returning: false)
                 default:
                     break
@@ -188,8 +200,7 @@ final class TCPHealthProbe: HealthProbing {
 
             // Timeout fallback.
             queue.asyncAfter(deadline: .now() + self.timeoutSeconds) {
-                guard !completed else { return }
-                completed = true
+                guard completionState.completeIfNeeded() else { return }
                 connection.cancel()
                 continuation.resume(returning: false)
             }

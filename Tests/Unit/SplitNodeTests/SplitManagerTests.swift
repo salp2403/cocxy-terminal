@@ -173,7 +173,6 @@ final class SplitManagerTests: XCTestCase {
         let manager = SplitManager()
         _ = manager.splitFocused(direction: .horizontal)
 
-        let allLeafIDs = manager.rootNode.allLeafIDs().map { $0.leafID }
         let currentFocused = manager.focusedLeafID!
 
         // Navigate twice (with 2 panes) should return to original.

@@ -77,7 +77,7 @@ final class TabBarViewModel: ObservableObject {
 
     /// Closure invoked to create a new tab with full surface setup.
     /// Wired by `MainWindowController` to route through `createTab()` which
-    /// creates the ghostty surface, PTY, and view hierarchy.
+    /// creates the terminal surface, PTY, and view hierarchy.
     var onAddTab: (() -> Void)?
 
     /// Closure invoked when a tab should be closed with full resource cleanup.
@@ -171,7 +171,7 @@ final class TabBarViewModel: ObservableObject {
     /// Creates a new tab with full surface setup.
     ///
     /// Delegates to `onAddTab` when wired, which routes through
-    /// `MainWindowController.createTab()` to create the ghostty surface,
+    /// `MainWindowController.createTab()` to create the terminal surface,
     /// PTY process, and view hierarchy. Falls back to model-only creation
     /// when the closure is not set (tests).
     func addNewTab() {

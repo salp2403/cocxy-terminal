@@ -23,8 +23,10 @@ final class HorizontalTabStripDragInteractionTests: XCTestCase {
             frame: NSRect(x: 0, y: 0, width: 120, height: 28)
         )
         // NSDraggingSource conformance is required for drag initiation.
-        XCTAssertTrue(container is NSDraggingSource,
-                      "DraggableTabContainer must conform to NSDraggingSource")
+        XCTAssertTrue(
+            container.responds(to: #selector(DraggableTabContainer.draggingSession(_:sourceOperationMaskFor:))),
+            "DraggableTabContainer must expose the NSDraggingSource drag mask callback"
+        )
     }
 
     func testDraggableContainerStoresTabIndex() {

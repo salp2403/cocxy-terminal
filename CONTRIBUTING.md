@@ -61,21 +61,14 @@ Open an issue using the **Feature Request** template. Describe the problem you a
    cd cocxy-terminal
    ```
 
-2. Build libghostty (takes 5-10 minutes on first run):
-
-   ```bash
-   chmod +x scripts/build-libghostty.sh
-   ./scripts/build-libghostty.sh
-   ```
-
-3. Build and run:
+2. Build and run:
 
    ```bash
    swift build
    swift run CocxyTerminal
    ```
 
-4. Run the test suite:
+3. Run the test suite:
 
    ```bash
    swift test
@@ -246,12 +239,12 @@ Changes that affect user-visible behavior need a corresponding update in `docs/u
 
 ## Dependency Policy
 
-Cocxy Terminal has a strict zero-external-dependencies policy for Swift packages:
+Cocxy Terminal keeps its dependency surface intentionally small:
 
-- **No Swift Package Manager dependencies.** The project uses only Apple frameworks and the Swift standard library.
-- **No Node, npm, or web tooling.** This is a native macOS app.
-- **libghostty is the sole external dependency.** It is compiled as an xcframework and vendored in `libs/`. Its version is pinned in `scripts/build-libghostty.sh`.
+- **CocxyCoreKit is the sole terminal engine dependency.** It is vendored as an xcframework in `libs/` and built from the `cocxycore` repository.
+- **Sparkle is the only third-party Swift package.** It is used exclusively for application updates.
+- **No Node, npm, or web build tooling is required** for the native macOS app.
 
-**Rationale:** External dependencies increase attack surface, complicate reproducible builds, and add maintenance burden. Every dependency is a potential supply chain vector.
+**Rationale:** Fewer dependencies reduce attack surface, keep builds more reproducible, and lower long-term maintenance burden. Every dependency should have a clear product reason to exist.
 
 If you believe an exception is justified, open an issue explaining the use case and the alternatives you have considered.

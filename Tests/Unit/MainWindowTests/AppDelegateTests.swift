@@ -7,7 +7,7 @@ import AppKit
 
 // MARK: - AppDelegate Bridge Initialization Tests
 
-/// Tests that the AppDelegate correctly initializes the GhosttyBridge.
+/// Tests that the AppDelegate exposes bridge lifecycle state correctly.
 @MainActor
 final class AppDelegateBridgeTests: XCTestCase {
 

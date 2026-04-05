@@ -135,7 +135,7 @@ final class MenuBarStatusItem {
             noAgents.isEnabled = false
             menu.insertItem(noAgents, at: 0)
         } else {
-            for (index, session) in sessions.reversed().enumerated() {
+            for session in sessions.reversed() {
                 let title: String
                 if let activity = session.activity {
                     title = "\(session.name) — \(session.state) — \(activity)"

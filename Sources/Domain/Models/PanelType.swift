@@ -14,7 +14,7 @@ import Foundation
 /// - SeeAlso: `SplitManager` for panel type tracking.
 /// - SeeAlso: `SplitContainer` for rendering different panel types.
 enum PanelType: String, Codable, Sendable, Equatable {
-    /// A terminal emulator surface (GPU-accelerated via libghostty).
+    /// A terminal emulator surface backed by the native renderer.
     case terminal
 
     /// An embedded web browser (WKWebView).

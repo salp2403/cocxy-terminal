@@ -64,8 +64,8 @@ struct TabCWDMatchingTests {
     @Test("Parent directory does NOT match (prevents cross-terminal contamination)")
     func parentDirectoryDoesNotMatch() {
         // Tab is at home directory, hook event is from a project subdirectory.
-        // This MUST NOT match, otherwise Claude Code running in Ghostty
-        // at ~/project would contaminate a Cocxy tab at ~.
+        // This MUST NOT match, otherwise Claude Code running at ~/project
+        // would contaminate a Cocxy tab at ~.
         let homeTab = makeTab(title: "home", directory: "/Users/dev")
         let tabs = [homeTab]
 
@@ -159,4 +159,3 @@ struct TabCWDMatchingTests {
         #expect(result == nil, "Sibling directories must NOT match")
     }
 }
-
