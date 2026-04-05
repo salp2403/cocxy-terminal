@@ -28,26 +28,6 @@ jobs:
           echo "VERSION=$NIGHTLY_VERSION" >> "$GITHUB_OUTPUT"
           echo "Nightly version: $NIGHTLY_VERSION"
 
-      - name: Cache libghostty
-        id: cache-ghostty
-        uses: actions/cache@v4
-        with:
-          path: |
-            libs/GhosttyKit.xcframework
-            libs/ghostty-resources
-          key: ghostty-universal-${{ runner.os }}-${{ hashFiles('scripts/build-libghostty.sh') }}
-
-      - name: Install build dependencies
-        if: steps.cache-ghostty.outputs.cache-hit != 'true'
-        run: |
-          brew install zig gettext
-
-      - name: Build libghostty
-        if: steps.cache-ghostty.outputs.cache-hit != 'true'
-        run: |
-          chmod +x scripts/build-libghostty.sh
-          ./scripts/build-libghostty.sh --universal
-
       - name: Import Developer ID certificate
         env:
           CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_P12 }}
@@ -136,8 +116,6 @@ jobs:
 
           [ -d Resources/Themes ] && cp -R Resources/Themes "$RESOURCES_DIR/" || true
           [ -f Resources/AppIcon.png ] && cp Resources/AppIcon.png "$RESOURCES_DIR/" || true
-          [ -d libs/ghostty-resources/shell-integration ] && \
-            cp -R libs/ghostty-resources/shell-integration "$RESOURCES_DIR/" || true
           [ -f Resources/CocxyTerminal.sdef ] && \
             cp Resources/CocxyTerminal.sdef "$RESOURCES_DIR/" || true
 
