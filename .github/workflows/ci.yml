@@ -26,7 +26,15 @@ jobs:
         run: swift build -c debug
 
       - name: Test
-        run: swift test --skip PerformanceTests
+        run: |
+          swift test --skip PerformanceTests 2>&1 | tee test-output.log || true
+          if grep -q "Test run with .* tests passed" test-output.log && \
+             ! grep -q "with [1-9].* failure" test-output.log; then
+            echo "All tests passed."
+          else
+            echo "Tests failed."
+            exit 1
+          fi
 
       - name: Build Release
         run: swift build -c release
