@@ -44,11 +44,11 @@ jobs:
 
           rm $RUNNER_TEMP/certificate.p12
 
-      - name: Build release binary (universal)
-        run: swift build -c release --arch arm64 --arch x86_64
+      - name: Build release binary (arm64)
+        run: swift build -c release --arch arm64
 
       - name: Build CLI companion
-        run: swift build --target cocxy -c release --arch arm64 --arch x86_64 || true
+        run: swift build --target cocxy -c release --arch arm64 || true
 
       - name: Create app bundle
         run: |
