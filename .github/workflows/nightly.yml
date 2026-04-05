@@ -65,7 +65,7 @@ jobs:
           FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
           mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 
-          cp ".build/apple/Products/Release/CocxyTerminal" "$MACOS_DIR/Cocxy Terminal Nightly"
+          cp ".build/arm64-apple-macosx/release/CocxyTerminal" "$MACOS_DIR/Cocxy Terminal Nightly"
 
           SPARKLE_FW=$(find .build/artifacts -name "Sparkle.framework" -path "*/macos-*" -type d | head -1)
           if [ -n "$SPARKLE_FW" ]; then
@@ -77,8 +77,8 @@ jobs:
 
           install_name_tool -add_rpath @executable_path/../Frameworks "$MACOS_DIR/Cocxy Terminal Nightly" 2>/dev/null || true
 
-          if [ -f ".build/apple/Products/Release/cocxy" ]; then
-            cp ".build/apple/Products/Release/cocxy" "$RESOURCES_DIR/cocxy"
+          if [ -f ".build/arm64-apple-macosx/release/cocxy" ]; then
+            cp ".build/arm64-apple-macosx/release/cocxy" "$RESOURCES_DIR/cocxy"
           fi
 
           # Nightly-specific Info.plist
