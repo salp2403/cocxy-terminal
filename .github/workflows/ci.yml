@@ -27,7 +27,15 @@ jobs:
 
       - name: Test
         run: |
-          swift test --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks
+          set +e
+          swift test --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks 2>&1 | tee test-output.log
+          set -e
+          if grep -q "Test run with .* tests passed" test-output.log; then
+            echo "All Swift Testing tests passed."
+            exit 0
+          fi
+          echo "Tests failed — see output above."
+          exit 1
 
       - name: Build Release
         run: swift build -c release
