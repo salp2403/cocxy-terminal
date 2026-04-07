@@ -5,20 +5,51 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.35] - 2026-04-07
+## [0.1.35] - 2026-04-06
 
 ### Added
-- CocxyCoreKit v0.10.0 — image protocol support, SIGPIPE fix
+- Inline image rendering via Sixel and Kitty graphics protocols
+- CocxyCoreKit v0.10.0 with 14 new C API exports for image control, atlas query, and quad frame access
+- Metal two-pass image rendering: background images before glyphs, foreground images after
+- Image atlas with shelf-packing, free-region recycling, coalescing, and dirty tracking
+- Sixel parser with RGB/HLS color, repeat/newline operators, aspect ratio, and background mode
+- Kitty graphics protocol: transmit (f=24/32/100), display, delete, query, chunked transfers, zlib, PNG decode
+- LRU image eviction with configurable memory budget
+- Z-index based image layering with O(n log n) stable sort
+
+### Fixed
+- CLI hook-handler SIGPIPE crash (exit code 141) during socket communication race conditions
 
 ## [0.1.34] - 2026-04-05
 
 ### Added
-- CocxyCoreKit v0.9.0 — ligature rendering C API
+- CocxyCoreKit v0.9.0 with ligature rendering C API (7 new exports)
+- Ligature scanner for ASCII operator detection (-> => != == etc.)
+- Shaped run cache with FNV-1a hash and generation-based LRU (512 slots)
+- CoreText shaping via dlopen for macOS, HarfBuzz shaping for Linux
+- Two-pass GPU rendering: base glyphs + ligature overlay (non-destructive)
+
+### Fixed
+- CI test verification now checks output instead of exit code (PTY cleanup SIGHUP workaround)
+- CocxyCorePerformanceBenchmarks skipped in CI to avoid latency threshold failures
 
 ## [0.1.33] - 2026-04-05
 
-### Fixed
-- Enable Git LFS in checkout for all workflows
+### Added
+- CocxyCore as sole terminal engine — Ghostty dependency fully removed
+- CocxyCoreKit v0.8.0 xcframework with cross-platform engine and compatibility matrix
+- Dual-engine architecture with feature flag for gradual migration (Phase 6)
+- Directional split navigation, compiled pattern matcher, Sendable cleanup
+
+### Changed
+- CI/Release/Nightly workflows updated: removed Ghostty build steps, arm64-only builds
+- Binary output paths corrected for `.build/arm64-apple-macosx/release/`
+- libcocxycore.a migrated to Git LFS (2.5 MB binary → 132 byte pointer)
+- Git LFS checkout enabled in all CI workflows
+
+### Removed
+- GhosttyBridge, GhosttyKeyConverter, TerminalSurfaceView, and all Ghostty build scripts (115 files, -8362 lines)
+- GhosttyKit and libc++ dependencies from Package.swift
 
 ## [0.1.31] - 2026-04-02
 
