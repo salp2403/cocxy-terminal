@@ -32,6 +32,7 @@ final class MetalTerminalRenderer {
     private let commandQueue: MTLCommandQueue
     private let bgPipeline: MTLRenderPipelineState
     private let glyphPipeline: MTLRenderPipelineState
+    private let imagePipeline: MTLRenderPipelineState
     private let cursorPipeline: MTLRenderPipelineState
 
     // MARK: - Buffers
@@ -42,14 +43,21 @@ final class MetalTerminalRenderer {
     /// Single-instance buffer for the cursor quad.
     private var cursorBuffer: MTLBuffer?
 
+    /// Instance data for inline image quads.
+    private var imageQuadBuffer: MTLBuffer?
+
     /// Projection uniforms (viewport size for clip-space conversion).
     private var uniformBuffer: MTLBuffer?
 
     /// Glyph atlas texture (R8Unorm — single channel alpha).
     private var atlasTexture: MTLTexture?
 
+    /// Inline image atlas texture (RGBA8).
+    private var imageAtlasTexture: MTLTexture?
+
     /// Sampler state for atlas texture.
     private let atlasSampler: MTLSamplerState
+    private let imageSampler: MTLSamplerState
 
     // MARK: - State
 
@@ -57,7 +65,10 @@ final class MetalTerminalRenderer {
     private var cols: UInt16 = 0
     private var lastAtlasGeneration: UInt32 = 0
     private var cellCount: Int = 0
+    private var imageQuadCount: Int = 0
+    private var backgroundImageCount: Int = 0
     private var viewportSize: SIMD2<Float> = .zero
+    private var lastImageAtlasGeneration: UInt32 = 0
 
     /// Atlas dimensions requested from CocxyCore.
     private(set) var atlasWidth: UInt32 = 2048
@@ -96,6 +107,22 @@ final class MetalTerminalRenderer {
         var shape: UInt8
         var visible: UInt8
         var _pad1: UInt8 = 0; var _pad2: UInt8 = 0
+    }
+
+    struct ImageQuadInstance {
+        var x: Float
+        var y: Float
+        var width: Float
+        var height: Float
+        var u0: Float
+        var v0: Float
+        var u1: Float
+        var v1: Float
+        var page: UInt8
+        var _pad1: UInt8 = 0
+        var _pad2: UInt8 = 0
+        var _pad3: UInt8 = 0
+        var zIndex: Int32
     }
 
     /// Uniforms passed to all shaders.
@@ -148,6 +175,17 @@ final class MetalTerminalRenderer {
         glyphDesc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
         self.glyphPipeline = try dev.makeRenderPipelineState(descriptor: glyphDesc)
 
+        let imageDesc = MTLRenderPipelineDescriptor()
+        imageDesc.vertexFunction = library.makeFunction(name: "image_vertex")
+        imageDesc.fragmentFunction = library.makeFunction(name: "image_fragment")
+        imageDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
+        imageDesc.colorAttachments[0].isBlendingEnabled = true
+        imageDesc.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        imageDesc.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        imageDesc.colorAttachments[0].sourceAlphaBlendFactor = .one
+        imageDesc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        self.imagePipeline = try dev.makeRenderPipelineState(descriptor: imageDesc)
+
         // Cursor pipeline (solid color with alpha blending for hollow cursors)
         let cursorDesc = MTLRenderPipelineDescriptor()
         cursorDesc.vertexFunction = library.makeFunction(name: "cursor_vertex")
@@ -171,6 +209,16 @@ final class MetalTerminalRenderer {
         }
         self.atlasSampler = sampler
 
+        let imageSamplerDesc = MTLSamplerDescriptor()
+        imageSamplerDesc.minFilter = .linear
+        imageSamplerDesc.magFilter = .linear
+        imageSamplerDesc.sAddressMode = .clampToEdge
+        imageSamplerDesc.tAddressMode = .clampToEdge
+        guard let imageSampler = dev.makeSamplerState(descriptor: imageSamplerDesc) else {
+            throw MetalRendererError.samplerFailed
+        }
+        self.imageSampler = imageSampler
+
         // Uniform buffer (small, reused every frame)
         guard let ub = dev.makeBuffer(
             length: MemoryLayout<Uniforms>.stride,
@@ -193,6 +241,9 @@ final class MetalTerminalRenderer {
         // Reallocate cell buffer for new grid size
         let byteCount = cellCount * MemoryLayout<CellInstance>.stride
         cellBuffer = device.makeBuffer(length: max(byteCount, 1), options: .storageModeShared)
+        imageQuadBuffer = nil
+        imageQuadCount = 0
+        backgroundImageCount = 0
     }
 
     /// Update viewport size. Call when the view is resized.
@@ -251,6 +302,18 @@ final class MetalTerminalRenderer {
         )
 
         // Pass 2: Glyphs (only if atlas exists)
+        if imageQuadCount > 0, imageAtlasTexture != nil, let imageQuadBuffer {
+            encoder.setRenderPipelineState(imagePipeline)
+            encoder.setVertexBuffer(imageQuadBuffer, offset: 0, index: 0)
+            encoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+            encoder.setFragmentTexture(imageAtlasTexture, index: 0)
+            encoder.setFragmentSamplerState(imageSampler, index: 0)
+            encoder.drawPrimitives(
+                type: .triangle, vertexStart: 0, vertexCount: 6,
+                instanceCount: backgroundImageCount
+            )
+        }
+
         if atlasTexture != nil {
             encoder.setRenderPipelineState(glyphPipeline)
             encoder.setVertexBuffer(cellBuffer, offset: 0, index: 0)
@@ -260,6 +323,23 @@ final class MetalTerminalRenderer {
             encoder.drawPrimitives(
                 type: .triangle, vertexStart: 0, vertexCount: 6,
                 instanceCount: instanceCount
+            )
+        }
+
+        if imageQuadCount > backgroundImageCount,
+           imageAtlasTexture != nil,
+           let imageQuadBuffer {
+            encoder.setRenderPipelineState(imagePipeline)
+            encoder.setVertexBuffer(imageQuadBuffer, offset: 0, index: 0)
+            encoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+            encoder.setFragmentTexture(imageAtlasTexture, index: 0)
+            encoder.setFragmentSamplerState(imageSampler, index: 0)
+            encoder.drawPrimitives(
+                type: .triangle,
+                vertexStart: 0,
+                vertexCount: 6,
+                instanceCount: imageQuadCount - backgroundImageCount,
+                baseInstance: backgroundImageCount
             )
         }
 
@@ -299,7 +379,9 @@ final class MetalTerminalRenderer {
         else { return false }
 
         uploadAtlasIfNeeded(terminal: terminal)
+        uploadImageAtlasIfNeeded(terminal: terminal)
         fillCellBuffer(terminal: terminal, buffer: cellBuffer)
+        fillImageQuadBuffer(terminal: terminal)
 
         let cursorInst = readCursor(terminal: terminal)
         ensureCursorBuffer()
@@ -317,6 +399,8 @@ final class MetalTerminalRenderer {
         cursorBuffer = nil
         uniformBuffer = nil
         atlasTexture = nil
+        imageQuadBuffer = nil
+        imageAtlasTexture = nil
     }
 
     // MARK: - Private: Data Upload
@@ -345,6 +429,65 @@ final class MetalTerminalRenderer {
                 )
                 idx += 1
             }
+        }
+    }
+
+    private func fillImageQuadBuffer(terminal: OpaquePointer) {
+        let count = Int(cocxycore_frame_image_quad_count(terminal))
+        guard count > 0 else {
+            imageQuadCount = 0
+            backgroundImageCount = 0
+            imageQuadBuffer = nil
+            return
+        }
+
+        var backgroundQuads: [ImageQuadInstance] = []
+        backgroundQuads.reserveCapacity(count)
+        var foregroundQuads: [ImageQuadInstance] = []
+        foregroundQuads.reserveCapacity(count)
+
+        var quad = cocxycore_image_quad()
+        for index in 0..<count {
+            guard cocxycore_frame_image_quad(terminal, UInt16(index), &quad) else { continue }
+
+            let instance = ImageQuadInstance(
+                x: quad.x,
+                y: quad.y,
+                width: quad.width,
+                height: quad.height,
+                u0: quad.u0,
+                v0: quad.v0,
+                u1: quad.u1,
+                v1: quad.v1,
+                page: quad.page,
+                zIndex: quad.z_index
+            )
+
+            if quad.z_index < 0 {
+                backgroundQuads.append(instance)
+            } else {
+                foregroundQuads.append(instance)
+            }
+        }
+
+        let orderedQuads = backgroundQuads + foregroundQuads
+        imageQuadCount = orderedQuads.count
+        backgroundImageCount = backgroundQuads.count
+
+        guard imageQuadCount > 0 else {
+            imageQuadBuffer = nil
+            return
+        }
+
+        let byteCount = imageQuadCount * MemoryLayout<ImageQuadInstance>.stride
+        if imageQuadBuffer == nil || imageQuadBuffer?.length != byteCount {
+            imageQuadBuffer = device.makeBuffer(length: byteCount, options: .storageModeShared)
+        }
+        guard let imageQuadBuffer else { return }
+
+        let ptr = imageQuadBuffer.contents().assumingMemoryBound(to: ImageQuadInstance.self)
+        for (index, quad) in orderedQuads.enumerated() {
+            ptr[index] = quad
         }
     }
 
@@ -427,6 +570,45 @@ final class MetalTerminalRenderer {
         lastAtlasGeneration = info.generation
     }
 
+    private func uploadImageAtlasIfNeeded(terminal: OpaquePointer) {
+        var info = cocxycore_image_atlas_info()
+        guard cocxycore_image_get_atlas_info(terminal, &info) else { return }
+
+        let needsUpload = info.dirty || info.generation != lastImageAtlasGeneration
+
+        if imageAtlasTexture == nil ||
+           imageAtlasTexture?.width != Int(info.width) ||
+           imageAtlasTexture?.height != Int(info.height) {
+            let texDesc = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba8Unorm,
+                width: Int(info.width),
+                height: Int(info.height),
+                mipmapped: false
+            )
+            texDesc.usage = .shaderRead
+            texDesc.storageMode = .shared
+            imageAtlasTexture = device.makeTexture(descriptor: texDesc)
+        }
+
+        guard needsUpload, let imageAtlasTexture else { return }
+
+        let byteCount = Int(info.width) * Int(info.height) * 4
+        var bitmap = [UInt8](repeating: 0, count: byteCount)
+        let copied = cocxycore_image_copy_atlas_bitmap(terminal, &bitmap, byteCount)
+
+        if copied > 0 {
+            imageAtlasTexture.replace(
+                region: MTLRegionMake2D(0, 0, Int(info.width), Int(info.height)),
+                mipmapLevel: 0,
+                withBytes: bitmap,
+                bytesPerRow: Int(info.width) * 4
+            )
+        }
+
+        cocxycore_image_clear_atlas_dirty(terminal)
+        lastImageAtlasGeneration = info.generation
+    }
+
     // MARK: - Metal Shader Source
 
     /// Metal Shading Language source compiled at runtime.
@@ -459,6 +641,14 @@ final class MetalTerminalRenderer {
         uchar4 bg;
         uint8_t flags;
         uint8_t _pad1, _pad2, _pad3;
+    };
+
+    struct ImageQuadInstance {
+        float x, y, width, height;
+        float u0, v0, u1, v1;
+        uint8_t page;
+        uint8_t _pad1, _pad2, _pad3;
+        int zIndex;
     };
 
     struct CursorInstance {
@@ -553,6 +743,39 @@ final class MetalTerminalRenderer {
         return float4(in.fgColor.rgb, in.fgColor.a * alpha);
     }
 
+    // ── Image pass ────────────────────────────────────────────────────
+
+    struct ImageOut {
+        float4 position [[position]];
+        float2 uv;
+    };
+
+    vertex ImageOut image_vertex(
+        uint vid [[vertex_id]],
+        uint iid [[instance_id]],
+        const device ImageQuadInstance* quads [[buffer(0)]],
+        constant Uniforms& u [[buffer(1)]]
+    ) {
+        ImageQuadInstance q = quads[iid];
+        float2 corner = quadOffsets[vid];
+        float2 pos = float2(q.x + u.paddingX, q.y + u.paddingY) + corner * float2(q.width, q.height);
+
+        ImageOut out;
+        out.position = pixelToClip(pos, float2(u.viewportWidth, u.viewportHeight));
+        out.uv = float2(q.u0, q.v0) + corner * float2(q.u1 - q.u0, q.v1 - q.v0);
+        return out;
+    }
+
+    fragment float4 image_fragment(
+        ImageOut in [[stage_in]],
+        texture2d<float> atlas [[texture(0)]],
+        sampler s [[sampler(0)]]
+    ) {
+        float4 color = atlas.sample(s, in.uv);
+        if (color.a < 0.004) discard_fragment();
+        return color;
+    }
+
     // ── Cursor pass ───────────────────────────────────────────────────
 
     struct CursorOut {
@@ -599,12 +822,16 @@ extension MetalTerminalRenderer {
         let rows: UInt16
         let cols: UInt16
         let cellCount: Int
+        let imageQuadCount: Int
+        let backgroundImageCount: Int
         let viewportWidth: Float
         let viewportHeight: Float
         let hasCellBuffer: Bool
+        let hasImageQuadBuffer: Bool
         let hasCursorBuffer: Bool
         let hasUniformBuffer: Bool
         let hasAtlasTexture: Bool
+        let hasImageAtlasTexture: Bool
         let atlasGeneration: UInt32
     }
 
@@ -613,12 +840,16 @@ extension MetalTerminalRenderer {
             rows: rows,
             cols: cols,
             cellCount: cellCount,
+            imageQuadCount: imageQuadCount,
+            backgroundImageCount: backgroundImageCount,
             viewportWidth: viewportSize.x,
             viewportHeight: viewportSize.y,
             hasCellBuffer: cellBuffer != nil,
+            hasImageQuadBuffer: imageQuadBuffer != nil,
             hasCursorBuffer: cursorBuffer != nil,
             hasUniformBuffer: uniformBuffer != nil,
             hasAtlasTexture: atlasTexture != nil,
+            hasImageAtlasTexture: imageAtlasTexture != nil,
             atlasGeneration: lastAtlasGeneration
         )
     }

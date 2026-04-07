@@ -130,6 +130,47 @@ struct MetalTerminalRendererTests {
         #expect(renderer.debugState.hasCursorBuffer == true)
     }
 
+    @Test("prepareFrameResources uploads inline image quads and atlas data")
+    func prepareFrameResourcesUploadsInlineImages() throws {
+        let renderer = try MetalTerminalRenderer()
+        let terminal = try makeConfiguredTerminal(text: "")
+        defer { cocxycore_terminal_destroy(terminal) }
+
+        let kittyImage = "\u{1B}_Ga=T,f=32,s=1,v=1;/wAA/w==\u{1B}\\"
+        let bytes = Array(kittyImage.utf8)
+        cocxycore_terminal_feed(terminal, bytes, bytes.count)
+
+        let prepared = renderer.prepareFrameResources(terminal: terminal)
+        let state = renderer.debugState
+
+        #expect(prepared == true)
+        #expect(state.hasImageAtlasTexture == true)
+        #expect(state.hasImageQuadBuffer == true)
+        #expect(state.imageQuadCount == 1)
+        #expect(state.backgroundImageCount == 0)
+    }
+
+    @Test("prepareFrameResources partitions background and foreground image quads")
+    func prepareFrameResourcesPartitionsImageLayers() throws {
+        let renderer = try MetalTerminalRenderer()
+        let terminal = try makeConfiguredTerminal(text: "")
+        defer { cocxycore_terminal_destroy(terminal) }
+
+        let backgroundImage = "\u{1B}_Ga=T,f=32,s=1,v=1,z=-1;/wAA/w==\u{1B}\\"
+        let foregroundImage = "\u{1B}_Ga=T,f=32,s=1,v=1,z=2;/wAA/w==\u{1B}\\"
+        let backgroundBytes = Array(backgroundImage.utf8)
+        let foregroundBytes = Array(foregroundImage.utf8)
+        cocxycore_terminal_feed(terminal, backgroundBytes, backgroundBytes.count)
+        cocxycore_terminal_feed(terminal, foregroundBytes, foregroundBytes.count)
+
+        let prepared = renderer.prepareFrameResources(terminal: terminal)
+        let state = renderer.debugState
+
+        #expect(prepared == true)
+        #expect(state.imageQuadCount == 2)
+        #expect(state.backgroundImageCount == 1)
+    }
+
     @Test("cleanup releases atlas and working buffers")
     func cleanupReleasesWorkingBuffers() throws {
         let renderer = try MetalTerminalRenderer()

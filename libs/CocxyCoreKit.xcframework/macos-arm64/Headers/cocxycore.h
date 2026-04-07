@@ -1233,6 +1233,82 @@ void cocxycore_terminal_frame_cursor(
     cocxycore_render_cursor* out
 );
 
+/* -- Inline image protocols (Sixel + Kitty graphics) -- */
+
+typedef struct {
+    uint32_t image_id;
+    uint32_t width;
+    uint32_t height;
+    uint32_t byte_size;
+    uint8_t source;
+    uint8_t _pad;
+    uint16_t placement_count;
+} cocxycore_image_info;
+
+typedef struct {
+    float x, y, width, height;
+    float u0, v0, u1, v1;
+    uint8_t page;
+    uint8_t _pad[3];
+    int32_t z_index;
+} cocxycore_image_quad;
+
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t generation;
+    bool dirty;
+    uint8_t _pad[3];
+} cocxycore_image_atlas_info;
+
+/** Number of currently stored inline images. */
+uint32_t cocxycore_image_count(const cocxycore_terminal* term);
+/** Query metadata for a stored image by id. Returns false when not found. */
+bool cocxycore_image_get_info(
+    const cocxycore_terminal* term,
+    uint32_t image_id,
+    cocxycore_image_info* out
+);
+/** Delete a stored image and all of its placements. */
+void cocxycore_image_delete(cocxycore_terminal* term, uint32_t image_id);
+/** Delete all stored images and placements, resetting the image atlas. */
+void cocxycore_image_delete_all(cocxycore_terminal* term);
+/** Total bytes currently used by stored RGBA image payloads. */
+uint64_t cocxycore_image_memory_used(const cocxycore_terminal* term);
+/** Set the maximum in-memory budget for stored image payloads. */
+void cocxycore_image_set_memory_limit(cocxycore_terminal* term, uint64_t max_bytes);
+/** Enable or disable Kitty file/temp-file transfers. */
+void cocxycore_image_set_file_transfer(cocxycore_terminal* term, bool enabled);
+/** Enable or disable Sixel decoding. */
+void cocxycore_image_enable_sixel(cocxycore_terminal* term, bool enabled);
+/** Enable or disable Kitty graphics decoding. */
+void cocxycore_image_enable_kitty(cocxycore_terminal* term, bool enabled);
+/** Whether Sixel decoding is currently enabled. */
+bool cocxycore_image_sixel_enabled(const cocxycore_terminal* term);
+/** Whether Kitty graphics decoding is currently enabled. */
+bool cocxycore_image_kitty_enabled(const cocxycore_terminal* term);
+/** Query the image atlas dimensions, generation, and dirty state. */
+bool cocxycore_image_get_atlas_info(
+    const cocxycore_terminal* term,
+    cocxycore_image_atlas_info* out
+);
+/** Copy the full RGBA atlas bitmap into `buf`. Returns bytes copied. */
+size_t cocxycore_image_copy_atlas_bitmap(
+    const cocxycore_terminal* term,
+    uint8_t* buf,
+    size_t buf_len
+);
+/** Clear the dirty flag after the host has uploaded the atlas texture. */
+void cocxycore_image_clear_atlas_dirty(cocxycore_terminal* term);
+/** Number of image quads emitted by the last GPU frame build. */
+uint16_t cocxycore_frame_image_quad_count(const cocxycore_terminal* term);
+/** Fetch an image quad from the last GPU frame build by index. */
+bool cocxycore_frame_image_quad(
+    const cocxycore_terminal* term,
+    uint16_t index,
+    cocxycore_image_quad* out
+);
+
 /* -- Metal-oriented GPU data pipeline -- */
 
 /** Metal-ready per-cell instance data. */
