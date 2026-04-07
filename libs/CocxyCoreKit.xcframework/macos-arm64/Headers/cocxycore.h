@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.8.0 (Cross-Platform + Terminal Protocol v2)
+ * Version: 0.11.0 (GPU Search — NFA regex + CPU fallback)
  */
 
 #ifndef COCXYCORE_H
@@ -517,6 +517,69 @@ bool cocxycore_terminal_search_prev(
     bool case_sensitive,
     cocxycore_buffer_range* out
 );
+
+/* -- GPU Search (regex-capable, GPU-accelerated search) -- */
+
+/** Opaque handle to the GPU search engine. */
+typedef struct cocxycore_gpu_search cocxycore_gpu_search;
+
+/** Search match result (cell coordinates). */
+typedef struct {
+    uint32_t row;
+    uint16_t start_col;
+    uint16_t end_col;
+} cocxycore_search_match;
+
+/**
+ * Create a GPU search engine for a terminal instance.
+ * Returns NULL if the terminal has no scrollback or allocation fails.
+ * The engine uses CPU fallback if GPU compute is unavailable.
+ */
+cocxycore_gpu_search* cocxycore_gpu_search_init(cocxycore_terminal* term);
+
+/** Destroy the GPU search engine and release resources. */
+void cocxycore_gpu_search_destroy(cocxycore_gpu_search* engine);
+
+/**
+ * Synchronize the search engine with the terminal's scrollback state.
+ * Call after feeding data that may have scrolled content.
+ */
+void cocxycore_gpu_search_sync(cocxycore_gpu_search* engine, cocxycore_terminal* term);
+
+/**
+ * Synchronous regex search.
+ * @param pattern      Regex pattern (or literal if is_regex=false).
+ * @param pattern_len  Pattern length in bytes.
+ * @param is_regex     If true, pattern is interpreted as regex.
+ * @param case_insensitive  If true, matching is case-insensitive.
+ * @param direction    0 = forward (oldest to newest), 1 = reverse.
+ * @param from_row     Starting row for search.
+ * @param from_col     Starting column for search.
+ * @param max_results  Maximum number of matches (0 = engine default).
+ * @param out_matches  Caller-provided buffer for results.
+ * @param search_time_us  If non-NULL, receives elapsed time in microseconds.
+ * @return Number of matches found.
+ */
+uint32_t cocxycore_gpu_search_find(
+    cocxycore_gpu_search* engine,
+    cocxycore_terminal* term,
+    const char* pattern,
+    uint32_t pattern_len,
+    bool is_regex,
+    bool case_insensitive,
+    uint8_t direction,
+    uint32_t from_row,
+    uint16_t from_col,
+    uint32_t max_results,
+    cocxycore_search_match* out_matches,
+    uint64_t* search_time_us
+);
+
+/** Check whether GPU acceleration is active. */
+bool cocxycore_gpu_search_is_gpu_active(const cocxycore_gpu_search* engine);
+
+/** Get the number of rows currently indexed in the search buffer. */
+uint32_t cocxycore_gpu_search_indexed_rows(const cocxycore_gpu_search* engine);
 
 /* -- Preedit / IME -- */
 
