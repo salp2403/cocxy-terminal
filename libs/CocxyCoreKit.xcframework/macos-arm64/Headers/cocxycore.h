@@ -854,6 +854,7 @@ typedef enum {
     COCXYCORE_SOURCE_NOTIFICATION,
     COCXYCORE_SOURCE_PATTERN_MATCH,
     COCXYCORE_SOURCE_CWD_CHANGE,
+    COCXYCORE_SOURCE_PLUGIN,
 } cocxycore_semantic_source;
 
 /** Semantic block types. */
@@ -1606,6 +1607,163 @@ size_t cocxycore_terminal_generate_viewport(
     const char* request_id,
     size_t request_id_len
 );
+
+/* ===================================================================== */
+/* Plugin Extension API                                                  */
+/* ===================================================================== */
+
+/** Plugin API version. Increment on breaking changes. */
+#define COCXYCORE_PLUGIN_API_VERSION 1
+
+/* -- Tagged patterns (plugin-owned pattern registration) -- */
+
+/**
+ * Register a tagged pattern associated with a plugin.
+ * The tag allows bulk removal of all patterns owned by a plugin.
+ *
+ * @param term        Terminal instance.
+ * @param type        Pattern type (cocxycore_pattern_type).
+ * @param mode        Match mode (cocxycore_match_mode).
+ * @param text        Pattern text.
+ * @param len         Length of pattern text.
+ * @param confidence  Confidence level (0.0-1.0).
+ * @param tag         Plugin tag (opaque uint32, 0 = untagged).
+ * @return True on success, false if registry is full.
+ */
+bool cocxycore_terminal_add_pattern_tagged(
+    cocxycore_terminal* term,
+    uint8_t type,
+    uint8_t mode,
+    const uint8_t* text,
+    size_t len,
+    float confidence,
+    uint32_t tag
+);
+
+/** Remove all patterns with the specified tag. */
+void cocxycore_terminal_clear_patterns_by_tag(
+    cocxycore_terminal* term,
+    uint32_t tag
+);
+
+/* -- Hook event system -- */
+
+/** Hook event types. */
+typedef enum {
+    COCXYCORE_HOOK_PROCESS_START = 0,
+    COCXYCORE_HOOK_PROCESS_EXIT,
+    COCXYCORE_HOOK_DIRECTORY_CHANGE,
+    COCXYCORE_HOOK_TITLE_CHANGE,
+    COCXYCORE_HOOK_BELL,
+    COCXYCORE_HOOK_CLIPBOARD,
+    COCXYCORE_HOOK_SEMANTIC_EVENT,
+    COCXYCORE_HOOK_PROTOCOL_V2,
+    COCXYCORE_HOOK_RESIZE,
+    COCXYCORE_HOOK_FOCUS_CHANGE,
+} cocxycore_hook_event_type;
+
+/** Hook event payload. */
+typedef struct {
+    uint8_t event_type;         /**< cocxycore_hook_event_type */
+    uint8_t _pad[3];
+    uint32_t tag;               /**< Plugin tag that registered this hook */
+    uint64_t timestamp;         /**< Nanoseconds (monotonic) */
+    const uint8_t* data_ptr;    /**< Event-specific payload (read-only, callback lifetime only) */
+    size_t data_len;            /**< Payload length in bytes */
+} cocxycore_hook_event;
+
+/** Hook callback type. */
+typedef void (*cocxycore_hook_callback)(
+    const cocxycore_hook_event* event,
+    void* context
+);
+
+/**
+ * Register an event hook with a tag.
+ * Multiple hooks for the same event type are allowed.
+ * Returns false if the hook table is full (max 128 hooks).
+ *
+ * @param term       Terminal instance.
+ * @param event_type Event type to observe.
+ * @param callback   Function to call when the event fires.
+ * @param context    User context pointer.
+ * @param tag        Plugin tag (for bulk removal).
+ */
+bool cocxycore_terminal_add_hook(
+    cocxycore_terminal* term,
+    uint8_t event_type,
+    cocxycore_hook_callback callback,
+    void* context,
+    uint32_t tag
+);
+
+/** Remove all hooks with the specified tag. */
+void cocxycore_terminal_remove_hooks_by_tag(
+    cocxycore_terminal* term,
+    uint32_t tag
+);
+
+/* -- Line observer pipeline -- */
+
+/**
+ * Line observer callback. Invoked after each completed screen line
+ * is processed by the semantic layer (if enabled).
+ *
+ * @param line       UTF-8 text of the completed line.
+ * @param line_len   Length in bytes.
+ * @param row        Absolute row number.
+ * @param context    User context pointer.
+ */
+typedef void (*cocxycore_line_observer_callback)(
+    const uint8_t* line,
+    size_t line_len,
+    uint32_t row,
+    void* context
+);
+
+/**
+ * Register a line observer. Up to 16 observers can be registered.
+ * Requires the semantic layer to be enabled.
+ * Returns false if the observer table is full or semantic not enabled.
+ */
+bool cocxycore_terminal_add_line_observer(
+    cocxycore_terminal* term,
+    cocxycore_line_observer_callback callback,
+    void* context,
+    uint32_t tag
+);
+
+/** Remove all line observers with the specified tag. */
+void cocxycore_terminal_remove_line_observers_by_tag(
+    cocxycore_terminal* term,
+    uint32_t tag
+);
+
+/* -- Semantic event injection -- */
+
+/**
+ * Inject a semantic event from a plugin.
+ * The event is dispatched to the consumer callback and recorded
+ * in the semantic scrollback exactly like engine-generated events.
+ *
+ * @param term   Terminal instance.
+ * @param event  Event to inject (source must be COCXYCORE_SOURCE_PLUGIN).
+ * @return True on success, false if semantic layer is not enabled.
+ */
+bool cocxycore_terminal_inject_semantic_event(
+    cocxycore_terminal* term,
+    const cocxycore_semantic_event* event
+);
+
+/* -- Focus notification -- */
+
+/**
+ * Notify the terminal of a focus change. Dispatches to hook subscribers.
+ *
+ * @param term    Terminal instance.
+ * @param focused True if the terminal gained focus.
+ */
+void cocxycore_terminal_notify_focus(cocxycore_terminal* term, bool focused);
 
 #ifdef __cplusplus
 }
