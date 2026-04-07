@@ -187,6 +187,10 @@ struct AgentSessionInfo: Identifiable, Equatable, Sendable {
     let id: String
     /// Name of the project directory where the agent is working.
     let projectName: String
+    /// The window currently owning the tab for this session, when known.
+    let windowID: WindowID?
+    /// Human-readable window label for dashboard display.
+    let windowLabel: String?
     /// Current git branch in the working directory, if any.
     let gitBranch: String?
     /// Name of the detected agent (e.g., "Claude Code", "Codex").
@@ -215,4 +219,42 @@ struct AgentSessionInfo: Identifiable, Equatable, Sendable {
     var totalToolCalls: Int = 0
     /// Total errors across the session.
     var totalErrors: Int = 0
+
+    init(
+        id: String,
+        projectName: String,
+        windowID: WindowID? = nil,
+        windowLabel: String? = nil,
+        gitBranch: String?,
+        agentName: String?,
+        state: AgentDashboardState,
+        lastActivity: String?,
+        lastActivityTime: Date?,
+        tabId: UUID,
+        subagents: [SubagentInfo],
+        priority: AgentPriority,
+        model: String?,
+        filesTouched: [FileImpact] = [],
+        fileConflicts: [String] = [],
+        totalToolCalls: Int = 0,
+        totalErrors: Int = 0
+    ) {
+        self.id = id
+        self.projectName = projectName
+        self.windowID = windowID
+        self.windowLabel = windowLabel
+        self.gitBranch = gitBranch
+        self.agentName = agentName
+        self.state = state
+        self.lastActivity = lastActivity
+        self.lastActivityTime = lastActivityTime
+        self.tabId = tabId
+        self.subagents = subagents
+        self.priority = priority
+        self.model = model
+        self.filesTouched = filesTouched
+        self.fileConflicts = fileConflicts
+        self.totalToolCalls = totalToolCalls
+        self.totalErrors = totalErrors
+    }
 }

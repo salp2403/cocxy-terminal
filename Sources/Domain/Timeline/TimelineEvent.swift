@@ -67,6 +67,12 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
     /// Claude Code session ID that this event belongs to.
     let sessionId: String
 
+    /// The window that owned the originating tab when the event was captured.
+    let windowID: WindowID?
+
+    /// Human-readable window label for UI display.
+    let windowLabel: String?
+
     /// Tool name if applicable (e.g., "Write", "Read", "Bash", "Edit").
     let toolName: String?
 
@@ -99,6 +105,8 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
         timestamp: Date = Date(),
         type: TimelineEventType,
         sessionId: String,
+        windowID: WindowID? = nil,
+        windowLabel: String? = nil,
         toolName: String? = nil,
         filePath: String? = nil,
         summary: String,
@@ -109,6 +117,8 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
         self.timestamp = timestamp
         self.type = type
         self.sessionId = sessionId
+        self.windowID = windowID
+        self.windowLabel = windowLabel
         self.toolName = toolName
         self.filePath = filePath
         self.summary = summary
@@ -120,7 +130,11 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
     ///
     /// Centralizes the mapping logic so both `AppDelegate` and any future
     /// wiring point can convert hook events consistently.
-    static func from(hookEvent: HookEvent) -> TimelineEvent {
+    static func from(
+        hookEvent: HookEvent,
+        windowID: WindowID? = nil,
+        windowLabel: String? = nil
+    ) -> TimelineEvent {
         let eventType: TimelineEventType
         var toolName: String?
         var filePath: String?
@@ -206,6 +220,8 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
             timestamp: hookEvent.timestamp,
             type: eventType,
             sessionId: hookEvent.sessionId,
+            windowID: windowID,
+            windowLabel: windowLabel,
             toolName: toolName,
             filePath: filePath,
             summary: summary,

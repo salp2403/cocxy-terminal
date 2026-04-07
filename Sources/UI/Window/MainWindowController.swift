@@ -49,6 +49,37 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     // MARK: - Properties
 
+    /// Unique identifier for this window. Stable for the window's lifetime.
+    /// Used by the session registry to track session ownership.
+    let windowID = WindowID()
+
+    /// Reference to the central session registry for multi-window sync.
+    /// Injected by AppDelegate after window creation. When nil, multi-window
+    /// features are gracefully disabled (single-window fallback).
+    var sessionRegistry: (any SessionRegistering)?
+
+    /// Aggregator for cross-window notification counts. Injected by AppDelegate.
+    /// Provides "N in other windows" count for the sidebar footer.
+    var notificationAggregator: (any GlobalNotificationAggregating)? {
+        didSet { subscribeToRemoteUnreadCount() }
+    }
+
+    /// Cancellable for the remote unread count subscription.
+    private var remoteUnreadCancellable: AnyCancellable?
+
+    /// Event bus for receiving cross-window events (theme sync, config
+    /// reload, focus session). Injected by AppDelegate.
+    var windowEventBus: (any WindowEventBroadcasting)? {
+        didSet { subscribeToWindowEvents() }
+    }
+
+    /// Cancellable for the window event bus subscription.
+    private var eventBusCancellable: AnyCancellable?
+
+    /// Maps tab IDs to their corresponding session IDs in the registry.
+    /// Populated when a tab is created and cleaned up when it's closed.
+    var tabSessionMap: [TabID: SessionID] = [:]
+
     /// The ViewModel driving the terminal surface in this window.
     let terminalViewModel: TerminalViewModel
 
@@ -466,10 +497,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         let tabBarVM = TabBarViewModel(tabManager: tabManager)
         tabBarVM.onAddTab = { [weak self] in self?.createTab() }
         tabBarVM.onCloseTab = { [weak self] tabID in self?.closeTab(tabID) }
+        tabBarVM.dragDataProvider = { [weak self] tabID in
+            guard let self else { return nil }
+            return SessionDragData(
+                sessionID: self.sessionIDForTab(tabID),
+                tabID: tabID,
+                sourceWindowID: self.windowID
+            )
+        }
 
         let sidebar = TabBarView(viewModel: tabBarVM)
         sidebar.onCommandPalette = { [weak self] in self?.toggleCommandPalette() }
         sidebar.onNotificationPanel = { [weak self] in self?.toggleNotificationPanel() }
+        sidebar.onAcceptTabDrop = { [weak self] dragData in
+            self?.handleTabDrop(dragData) ?? false
+        }
         if let appearance = configService?.current.appearance {
             sidebar.setSidebarTransparent(appearance.backgroundOpacity < 1.0)
         }
@@ -746,6 +788,64 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             .store(in: &cancellables)
     }
 
+    /// Subscribes to remote unread count changes from the aggregator.
+    ///
+    /// Updates the sidebar footer label with the count of unread
+    /// notifications in OTHER windows.
+    private func subscribeToRemoteUnreadCount() {
+        remoteUnreadCancellable?.cancel()
+        guard let aggregator = notificationAggregator else { return }
+
+        remoteUnreadCancellable = aggregator.windowUnreadPublisher
+            .map { _ in () }
+            .merge(with: aggregator.totalUnreadPublisher.map { _ in () })
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let remote = aggregator.remoteUnreadCount(excluding: self.windowID)
+                self.tabBarView?.updateRemoteUnreadCount(remote)
+            }
+
+        // Set initial value.
+        let remote = aggregator.remoteUnreadCount(excluding: windowID)
+        tabBarView?.updateRemoteUnreadCount(remote)
+    }
+
+    /// Subscribes to cross-window events from the event bus.
+    ///
+    /// Each window listens for events that require a response:
+    /// - `.focusSession`: The owning window activates the tab.
+    /// - Other events are handled by AppDelegate globally.
+    private func subscribeToWindowEvents() {
+        eventBusCancellable?.cancel()
+        guard let bus = windowEventBus else { return }
+
+        eventBusCancellable = bus.events
+            .sink { [weak self] event in
+                self?.handleWindowEvent(event)
+            }
+    }
+
+    /// Processes a single event from the window event bus.
+    private func handleWindowEvent(_ event: WindowEvent) {
+        switch event {
+        case .focusSession(let sessionID):
+            // Only act if this window owns the session.
+            guard let entry = sessionRegistry?.session(for: sessionID),
+                  entry.ownerWindowID == windowID else { return }
+            // Bring window to front and switch to the tab.
+            NSApp.activate(ignoringOtherApps: true)
+            window?.makeKeyAndOrderFront(nil)
+            handleTabSwitch(to: entry.tabID)
+
+        case .themeChanged, .fontChanged, .configReloaded,
+             .globalShortcut, .custom:
+            // These are handled at the AppDelegate level which already
+            // iterates all window controllers. Individual windows do not
+            // need to react to these bus events directly.
+            break
+        }
+    }
+
     /// Initializes the process monitor for SSH/process detection.
     ///
     /// Starts the process monitor service and subscribes to process changes.
@@ -831,6 +931,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     func windowWillClose(_ notification: Notification) {
+        // Deregister this window from the session registry. This cascades:
+        // all sessions owned by this window are removed and removal events
+        // are published so other windows can update their UI.
+        sessionRegistry?.removeWindow(windowID)
+
         processMonitor?.stop()
 
         // Nil-ify all overlay ViewModels to break closure retain cycles.
@@ -861,6 +966,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         searchQueryCancellable?.cancel()
         searchQueryCancellable = nil
+        eventBusCancellable?.cancel()
+        eventBusCancellable = nil
+        remoteUnreadCancellable?.cancel()
+        remoteUnreadCancellable = nil
 
         destroyAllSurfaces()
 
@@ -923,6 +1032,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         injectedAgentDetectionEngine?.pauseTimingDetector()
     }
 
+    // MARK: - Tab-to-Session Mapping
+
+    /// Returns the session ID associated with a tab in the registry.
+    ///
+    /// Falls back to a synthetic `SessionID` based on the tab's raw UUID
+    /// when no mapping exists (pre-registry tabs or tests without registry).
+    ///
+    /// - Parameter tabID: The tab to look up.
+    /// - Returns: The session ID for this tab.
+    func sessionIDForTab(_ tabID: TabID) -> SessionID {
+        if let existing = tabSessionMap[tabID] {
+            return existing
+        }
+        // Deterministic fallback: derive from tabID UUID so the same tab
+        // always produces the same session ID, even without a registry.
+        return SessionID(rawValue: tabID.rawValue)
+    }
+
     // MARK: - Tab-to-Surface Mapping
 
     /// Returns the terminal surface view associated with the given tab.
@@ -958,8 +1085,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// - Parameter tabID: The tab whose surface should become visible.
     // MARK: - DashboardTabNavigating
 
-    func focusTab(id: TabID) {
+    func focusTab(id: TabID) -> Bool {
+        guard tabManager.tab(for: id) != nil else { return false }
         handleTabSwitch(to: id)
+        return true
     }
 
     func handleTabSwitch(to tabID: TabID) {
@@ -1025,6 +1154,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         window?.makeFirstResponder(targetSurfaceView)
         targetSurfaceView.hideNotificationRing()
+
+        // Propagate read state to the session registry so other windows
+        // can clear their badge counts for this session.
+        sessionRegistry?.markRead(sessionIDForTab(tabID))
 
         refreshStatusBar()
         refreshTabStrip()
@@ -1281,15 +1414,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// registers it with the `AppDelegate` for lifecycle management.
     @objc func newWindowAction(_ sender: Any?) {
         guard let appDelegate = NSApp.delegate as? AppDelegate,
-              let existingBridge = appDelegate.bridge else {
+              let newController = appDelegate.makeWindowController(registerInitialSession: true) else {
             NSLog("[MainWindowController] Cannot create new window: no bridge available")
             return
         }
 
-        let newController = MainWindowController(
-            bridge: existingBridge,
-            configService: configService
-        )
         newController.showWindow(nil)
         newController.window?.center()
         newController.createTerminalSurface()

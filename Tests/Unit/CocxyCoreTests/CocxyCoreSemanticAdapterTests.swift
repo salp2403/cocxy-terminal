@@ -46,6 +46,28 @@ struct CocxyCoreSemanticAdapterTests {
         #expect(timeline?.summary == "Agent launched: Claude")
     }
 
+    @Test("Timeline events inherit window metadata from the provider")
+    func timelineEventsIncludeWindowMetadata() {
+        let adapter = CocxyCoreSemanticAdapter()
+        let capture = SemanticCapture(adapter: adapter)
+        let surfaceID = makeSurfaceID("00000000-0000-0000-0000-000000000099")
+        let windowID = WindowID()
+
+        adapter.windowMetadataProvider = { candidateSurfaceID, cwd in
+            #expect(candidateSurfaceID == surfaceID)
+            #expect(cwd == "/tmp/project")
+            return (windowID, "Window 3")
+        }
+
+        withSemanticEvent(type: .toolStarted, detail: "Read") { event in
+            adapter.processSemanticEvent(event, for: surfaceID, cwd: "/tmp/project")
+        }
+
+        let timeline = capture.timeline.last
+        #expect(timeline?.windowID == windowID)
+        #expect(timeline?.windowLabel == "Window 3")
+    }
+
     @Test("Agent waiting emits a UserPromptSubmit hook")
     func agentWaitingEmitsUserPromptSubmitHook() {
         let adapter = CocxyCoreSemanticAdapter()

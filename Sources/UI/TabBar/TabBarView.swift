@@ -166,6 +166,17 @@ final class TabBarView: NSView {
         return stack
     }()
 
+    /// Label showing notifications from other windows.
+    private let remoteUnreadLabel: NSTextField = {
+        let label = NSTextField(labelWithString: "")
+        label.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        label.textColor = CocxyColors.overlay1
+        label.alignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isHidden = true
+        return label
+    }()
+
     private let newTabButton: NSButton = {
         let button = NSButton()
         button.bezelStyle = .inline
@@ -211,6 +222,23 @@ final class TabBarView: NSView {
     var onCommandPalette: (() -> Void)?
     var onNotificationPanel: (() -> Void)?
 
+    /// Invoked when a tab is dropped from another window.
+    /// The closure receives the drag data and returns true if accepted.
+    var onAcceptTabDrop: ((SessionDragData) -> Bool)?
+
+    /// Updates the "N in other windows" indicator in the sidebar footer.
+    /// Called by MainWindowController when the aggregator publishes changes.
+    func updateRemoteUnreadCount(_ count: Int) {
+        if count > 0 {
+            remoteUnreadLabel.isHidden = false
+            remoteUnreadLabel.stringValue = count == 1
+                ? "1 notification in other windows"
+                : "\(count) notifications in other windows"
+        } else {
+            remoteUnreadLabel.isHidden = true
+        }
+    }
+
     // MARK: - State
 
     private let viewModel: TabBarViewModel
@@ -227,6 +255,7 @@ final class TabBarView: NSView {
         setupActions()
         subscribeToChanges()
         rebuildTabItems()
+        registerForDraggedTypes([.cocxySession])
     }
 
     @available(*, unavailable)
@@ -257,6 +286,7 @@ final class TabBarView: NSView {
 
         // Scroll area
         addSubview(scrollView)
+        addSubview(remoteUnreadLabel)
         addSubview(newTabButton)
 
         // Use flipped clip view so content starts from the top.
@@ -308,7 +338,12 @@ final class TabBarView: NSView {
             scrollView.topAnchor.constraint(equalTo: headerSeparator.bottomAnchor, constant: 6),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: newTabButton.topAnchor, constant: -4),
+            scrollView.bottomAnchor.constraint(equalTo: remoteUnreadLabel.topAnchor, constant: -2),
+
+            // Remote unread indicator (above the new tab button)
+            remoteUnreadLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            remoteUnreadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            remoteUnreadLabel.bottomAnchor.constraint(equalTo: newTabButton.topAnchor, constant: -4),
 
             // Tab stack inside the flipped document view.
             tabStackView.topAnchor.constraint(equalTo: documentView.topAnchor),
@@ -543,6 +578,9 @@ final class TabBarView: NSView {
                 itemView.onRename = { [weak self] tabID, newTitle in
                     self?.viewModel.renameTab(id: tabID, newTitle: newTitle)
                 }
+                itemView.onDragData = { [weak self] in
+                    self?.viewModel.dragDataForTab(id: item.id)
+                }
 
                 tabStackView.insertArrangedSubview(itemView, at: index)
                 tabItemViews[item.id] = itemView
@@ -562,6 +600,32 @@ final class TabBarView: NSView {
             !$0.isActive && ($0.agentState == .waitingInput || $0.hasUnreadNotification)
         }.count
         updateNotificationCount(notifCount)
+    }
+}
+
+// MARK: - NSDraggingDestination
+
+extension TabBarView {
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        // Validate that the pasteboard contains a Cocxy session.
+        guard SessionDragData.from(pasteboard: sender.draggingPasteboard) != nil else {
+            return []
+        }
+        return .move
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard SessionDragData.from(pasteboard: sender.draggingPasteboard) != nil else {
+            return []
+        }
+        return .move
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let dragData = SessionDragData.from(pasteboard: sender.draggingPasteboard) else {
+            return false
+        }
+        return onAcceptTabDrop?(dragData) ?? false
     }
 }
 

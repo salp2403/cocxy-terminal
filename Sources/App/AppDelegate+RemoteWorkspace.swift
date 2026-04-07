@@ -77,12 +77,16 @@ extension AppDelegate {
         self.remoteConnectionManager = connectionManager
         self.remoteProfileStore = profileStore
         self.remotePortScanner = portScanner
+        self.tunnelManager = tunnelManager
+        self.sshKeyManager = keyManager
 
-        windowController?.remoteConnectionManager = connectionManager
-        windowController?.remoteProfileStore = profileStore
-        windowController?.tunnelManager = tunnelManager
-        windowController?.sshKeyManager = keyManager
-        windowController?.remotePortScanner = portScanner
+        for controller in allWindowControllers {
+            controller.remoteConnectionManager = connectionManager
+            controller.remoteProfileStore = profileStore
+            controller.tunnelManager = tunnelManager
+            controller.sshKeyManager = keyManager
+            controller.remotePortScanner = portScanner
+        }
 
         // Auto-start/stop port scanning when managed connections change.
         connectionManager.$connections

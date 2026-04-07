@@ -406,7 +406,8 @@ private final class MockEdgeCaseNavigator: DashboardTabNavigating {
     private(set) var focusedTabIds: [TabID] = []
     var focusTabCallCount: Int { focusedTabIds.count }
 
-    func focusTab(id: TabID) {
+    func focusTab(id: TabID) -> Bool {
         focusedTabIds.append(id)
+        return true
     }
 }

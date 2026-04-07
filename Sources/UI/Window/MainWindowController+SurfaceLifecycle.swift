@@ -347,6 +347,9 @@ extension MainWindowController {
 
                 tabBarViewModel?.syncWithManager()
                 refreshTabStrip()
+
+                let registryTitle = tabManager.tab(for: tabID)?.displayTitle ?? title
+                sessionRegistry?.updateTitle(sessionIDForTab(tabID), title: registryTitle)
             }
 
             // Feed the title to the agent detection engine.
@@ -405,6 +408,10 @@ extension MainWindowController {
             tabBarViewModel?.syncWithManager()
             refreshStatusBar()
             refreshTabStrip()
+            sessionRegistry?.updateWorkingDirectory(
+                sessionIDForTab(tabID),
+                directory: directoryURL
+            )
 
             // Reload project config for the new working directory.
             let projectService = ProjectConfigService()

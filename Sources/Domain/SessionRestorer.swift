@@ -35,12 +35,11 @@ enum SessionRestorer {
 
     // MARK: - Public API
 
-    /// Restores tabs and window state from a saved session.
+    /// Restores tabs and window state from the first window in a session.
     ///
-    /// The restorer processes the first window in the session (multi-window
-    /// support will come in a future iteration). Each tab is validated:
-    /// directories are checked for existence, and the split tree is converted
-    /// from `SplitNodeState` to `SplitNode`.
+    /// For single-window restore or the primary window of a multi-window
+    /// session. Each tab is validated: directories are checked for existence,
+    /// and the split tree is converted from `SplitNodeState` to `SplitNode`.
     ///
     /// - Parameters:
     ///   - session: The session to restore from.
@@ -55,7 +54,6 @@ enum SessionRestorer {
         splitCoordinator: TabSplitCoordinator,
         screenBounds: CodableRect
     ) -> RestorationResult {
-        // Handle empty session.
         guard let windowState = session.windows.first else {
             return RestorationResult(
                 restoredTabs: [],
@@ -64,8 +62,49 @@ enum SessionRestorer {
                 isFullScreen: false
             )
         }
+        return restoreWindow(from: windowState, screenBounds: screenBounds)
+    }
 
-        // Handle empty tabs.
+    /// Restores all windows from a session.
+    ///
+    /// Returns one `RestorationResult` per `WindowState` in the session,
+    /// plus the index of the window that should be key (focused).
+    ///
+    /// - Parameters:
+    ///   - session: The session to restore from.
+    ///   - screenBounds: The current screen bounds for frame validation.
+    /// - Returns: A `MultiWindowRestorationResult` with all windows.
+    static func restoreAllWindows(
+        from session: Session,
+        screenBounds: CodableRect
+    ) -> MultiWindowRestorationResult {
+        guard !session.windows.isEmpty else {
+            return MultiWindowRestorationResult(
+                windows: [],
+                focusedWindowIndex: 0
+            )
+        }
+
+        let windows = session.windows.map { windowState in
+            restoreWindow(from: windowState, screenBounds: screenBounds)
+        }
+
+        let focusedIndex = session.focusedWindowIndex >= 0
+            && session.focusedWindowIndex < windows.count
+            ? session.focusedWindowIndex
+            : 0
+
+        return MultiWindowRestorationResult(
+            windows: windows,
+            focusedWindowIndex: focusedIndex
+        )
+    }
+
+    /// Restores a single window from its saved state.
+    static func restoreWindow(
+        from windowState: WindowState,
+        screenBounds: CodableRect
+    ) -> RestorationResult {
         guard !windowState.tabs.isEmpty else {
             return RestorationResult(
                 restoredTabs: [],
@@ -78,12 +117,10 @@ enum SessionRestorer {
             )
         }
 
-        // Restore each tab.
         let restoredTabs = windowState.tabs.map { tabState in
             restoreTab(from: tabState)
         }
 
-        // Validate active tab index.
         let validActiveIndex: Int
         if windowState.activeTabIndex >= 0
             && windowState.activeTabIndex < restoredTabs.count {
@@ -92,7 +129,6 @@ enum SessionRestorer {
             validActiveIndex = 0
         }
 
-        // Validate window frame.
         let validFrame = validateFrame(
             windowState.frame,
             screenBounds: screenBounds
@@ -113,14 +149,35 @@ enum SessionRestorer {
     /// Validates the working directory and converts the split tree.
     private static func restoreTab(from tabState: TabState) -> RestoredTab {
         let validatedDirectory = validateDirectory(tabState.workingDirectory)
-        let splitNode = tabState.splitTree.toSplitNode()
+        let validatedSplitTree = validateSplitTree(tabState.splitTree)
+        let splitNode = validatedSplitTree.toSplitNode()
 
         return RestoredTab(
             tabID: tabState.id,
+            sessionID: tabState.sessionID,
             title: tabState.title ?? "Terminal",
             workingDirectory: validatedDirectory,
+            splitTreeState: validatedSplitTree,
             splitNode: splitNode
         )
+    }
+
+    private static func validateSplitTree(_ state: SplitNodeState) -> SplitNodeState {
+        switch state {
+        case .leaf(let workingDirectory, let command):
+            return .leaf(
+                workingDirectory: validateDirectory(workingDirectory),
+                command: command
+            )
+
+        case .split(let direction, let first, let second, let ratio):
+            return .split(
+                direction: direction,
+                first: validateSplitTree(first),
+                second: validateSplitTree(second),
+                ratio: ratio
+            )
+        }
     }
 
     /// Validates that a directory exists. Falls back to home if it does not.
@@ -196,6 +253,17 @@ struct RestorationResult: Sendable {
 
 // MARK: - Restored Tab
 
+/// The output of a multi-window session restoration.
+///
+/// Contains one `RestorationResult` per window, plus which window should
+/// be made key (focused) after all windows are created.
+struct MultiWindowRestorationResult: Sendable {
+    /// One result per window, in the same order as the session's windows.
+    let windows: [RestorationResult]
+    /// Index of the window that should be key after restoration.
+    let focusedWindowIndex: Int
+}
+
 /// A single tab reconstructed from session state.
 ///
 /// Contains the validated working directory, the converted split tree,
@@ -203,10 +271,14 @@ struct RestorationResult: Sendable {
 struct RestoredTab: Sendable {
     /// The original tab ID from the session.
     let tabID: TabID
+    /// Stable session ID restored from disk (or synthesized for v1 sessions).
+    let sessionID: SessionID
     /// The tab's display title.
     let title: String
     /// The validated working directory (falls back to home if the saved path was missing).
     let workingDirectory: URL
+    /// The serialized split tree used to rebuild surfaces during restore.
+    let splitTreeState: SplitNodeState
     /// The split tree converted from `SplitNodeState` to `SplitNode`.
     let splitNode: SplitNode
 }

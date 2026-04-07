@@ -45,8 +45,10 @@ extension AppDelegate {
         self.browserHistoryStore = historyStore
         self.browserBookmarkStore = bookmarkStore
 
-        windowController?.browserProfileManager = profileManager
-        windowController?.browserHistoryStore = historyStore
-        windowController?.browserBookmarkStore = bookmarkStore
+        for controller in allWindowControllers {
+            controller.browserProfileManager = profileManager
+            controller.browserHistoryStore = historyStore
+            controller.browserBookmarkStore = bookmarkStore
+        }
     }
 }

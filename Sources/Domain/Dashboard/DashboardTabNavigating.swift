@@ -22,5 +22,5 @@ protocol DashboardTabNavigating: AnyObject {
     ///
     /// - Parameter id: The tab identifier to focus.
     @MainActor
-    func focusTab(id: TabID)
+    func focusTab(id: TabID) -> Bool
 }

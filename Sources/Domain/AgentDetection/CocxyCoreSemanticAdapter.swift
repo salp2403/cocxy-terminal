@@ -63,6 +63,11 @@ final class CocxyCoreSemanticAdapter {
     private let eventSubject = PassthroughSubject<HookEvent, Never>()
     private let timelineSubject = PassthroughSubject<TimelineEvent, Never>()
 
+    /// Resolves stable window metadata for a surface/cwd pair.
+    /// Injected by AppDelegate so timeline events can participate in
+    /// multi-window filtering and presentation.
+    var windowMetadataProvider: ((SurfaceID, String?) -> (WindowID?, String?))?
+
     /// Synthetic session ID per surface. CocxyCore doesn't have the CLI agent's
     /// session concept, so we create a stable ID per surface for routing.
     private var sessionIDs: [SurfaceID: String] = [:]
@@ -87,6 +92,7 @@ final class CocxyCoreSemanticAdapter {
         let sessionId = sessionID(for: surfaceID)
         let detail = extractDetail(from: event)
         let timestamp = Date()
+        let (windowID, windowLabel) = windowMetadataProvider?(surfaceID, cwd) ?? (nil, nil)
 
         switch Int32(event.event_type) {
         // Shell integration events (0-2) are already handled by CocxyCoreBridge
@@ -94,13 +100,15 @@ final class CocxyCoreSemanticAdapter {
         case 0: // PROMPT_SHOWN
             emitTimeline(
                 type: .agentResponse, sessionId: sessionId,
-                summary: "Prompt shown", timestamp: timestamp
+                summary: "Prompt shown", timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         case 1: // COMMAND_STARTED
             emitTimeline(
                 type: .agentResponse, sessionId: sessionId,
-                summary: "Command started", timestamp: timestamp
+                summary: "Command started", timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         case 2: // COMMAND_FINISHED
@@ -108,7 +116,8 @@ final class CocxyCoreSemanticAdapter {
             let summary = exitCode.map { "Command finished (exit \($0))" } ?? "Command finished"
             emitTimeline(
                 type: .agentResponse, sessionId: sessionId,
-                summary: summary, timestamp: timestamp
+                summary: summary, timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         // Agent-level events (3-7) → synthesize HookEvents for detection engine
@@ -125,7 +134,8 @@ final class CocxyCoreSemanticAdapter {
             )
             emitTimeline(
                 type: .sessionStart, sessionId: sessionId,
-                summary: "Agent launched: \(agentName)", timestamp: timestamp
+                summary: "Agent launched: \(agentName)", timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         case 4: // AGENT_OUTPUT
@@ -151,14 +161,16 @@ final class CocxyCoreSemanticAdapter {
             )
             emitTimeline(
                 type: .agentResponse, sessionId: sessionId,
-                summary: "Waiting for input", timestamp: timestamp
+                summary: "Waiting for input", timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         case 6: // AGENT_ERROR
             emitTimeline(
                 type: .toolFailure, sessionId: sessionId,
                 summary: detail ?? "Agent error",
-                timestamp: timestamp, isError: true
+                timestamp: timestamp, isError: true,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         case 7: // AGENT_FINISHED
@@ -172,7 +184,8 @@ final class CocxyCoreSemanticAdapter {
             )
             emitTimeline(
                 type: .sessionEnd, sessionId: sessionId,
-                summary: "Agent finished: \(agentName)", timestamp: timestamp
+                summary: "Agent finished: \(agentName)", timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
             agentNames.removeValue(forKey: surfaceID)
 
@@ -193,7 +206,8 @@ final class CocxyCoreSemanticAdapter {
             emitTimeline(
                 type: .toolUse, sessionId: sessionId,
                 toolName: toolName,
-                summary: "Tool started: \(toolName)", timestamp: timestamp
+                summary: "Tool started: \(toolName)", timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         case 9: // TOOL_FINISHED
@@ -212,7 +226,8 @@ final class CocxyCoreSemanticAdapter {
             emitTimeline(
                 type: .toolUse, sessionId: sessionId,
                 toolName: toolName,
-                summary: "Tool finished: \(toolName)", timestamp: timestamp
+                summary: "Tool finished: \(toolName)", timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         // Info events (10-13) → timeline only, no state change
@@ -222,7 +237,8 @@ final class CocxyCoreSemanticAdapter {
                     type: .toolUse, sessionId: sessionId,
                     filePath: path,
                     summary: "File: \(URL(fileURLWithPath: path).lastPathComponent)",
-                    timestamp: timestamp
+                    timestamp: timestamp,
+                    windowID: windowID, windowLabel: windowLabel
                 )
             }
 
@@ -230,13 +246,15 @@ final class CocxyCoreSemanticAdapter {
             emitTimeline(
                 type: .toolFailure, sessionId: sessionId,
                 summary: detail ?? "Error detected",
-                timestamp: timestamp, isError: true
+                timestamp: timestamp, isError: true,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         case 12: // PROGRESS_UPDATE
             emitTimeline(
                 type: .agentResponse, sessionId: sessionId,
-                summary: detail ?? "Progress update", timestamp: timestamp
+                summary: detail ?? "Progress update", timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         default:
@@ -255,6 +273,7 @@ final class CocxyCoreSemanticAdapter {
     ) {
         let sessionId = sessionID(for: surfaceID)
         let timestamp = Date()
+        let (windowID, windowLabel) = windowMetadataProvider?(surfaceID, cwd) ?? (nil, nil)
 
         switch Int32(event.event_type) {
         case 0: // CHILD_SPAWNED
@@ -271,14 +290,16 @@ final class CocxyCoreSemanticAdapter {
             emitTimeline(
                 type: .subagentStart, sessionId: sessionId,
                 summary: "Subprocess spawned (PID \(event.pid))",
-                timestamp: timestamp
+                timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         case 1: // CHILD_EXITED
             emitTimeline(
                 type: .subagentStop, sessionId: sessionId,
                 summary: "Subprocess exited (PID \(event.pid), code \(event.exit_code))",
-                timestamp: timestamp
+                timestamp: timestamp,
+                windowID: windowID, windowLabel: windowLabel
             )
 
         default:
@@ -339,13 +360,17 @@ final class CocxyCoreSemanticAdapter {
         filePath: String? = nil,
         summary: String,
         timestamp: Date,
-        isError: Bool = false
+        isError: Bool = false,
+        windowID: WindowID? = nil,
+        windowLabel: String? = nil
     ) {
         let event = TimelineEvent(
             id: UUID(),
             timestamp: timestamp,
             type: type,
             sessionId: sessionId,
+            windowID: windowID,
+            windowLabel: windowLabel,
             toolName: toolName,
             filePath: filePath,
             summary: summary,

@@ -38,6 +38,18 @@ extension MainWindowController {
             workingDirectory: dir
         )
 
+        // Register this session with the multi-window registry so other
+        // windows can see it in the dashboard and notification aggregator.
+        let sessionID = SessionID()
+        tabSessionMap[newTab.id] = sessionID
+        sessionRegistry?.registerSession(SessionEntry(
+            sessionID: sessionID,
+            ownerWindowID: windowID,
+            tabID: newTab.id,
+            title: newTab.displayTitle,
+            workingDirectory: dir
+        ))
+
         // Load project config from .cocxy.toml if present in the tab's directory.
         let projectConfigService = ProjectConfigService()
         if let projectConfig = projectConfigService.loadConfig(for: dir) {
@@ -88,6 +100,11 @@ extension MainWindowController {
     /// - Parameter tabID: The tab to close.
     func performCloseTab(_ tabID: TabID) {
         let isClosingActiveTab = (tabID == tabManager.activeTabID)
+
+        // Remove this session from the multi-window registry before
+        // destroying surfaces, so other windows receive the removal
+        // event while the session ID is still valid.
+        sessionRegistry?.removeSession(sessionIDForTab(tabID))
 
         // Destroy the primary terminal surface.
         if let surfaceID = tabSurfaceMap[tabID] {
@@ -141,6 +158,7 @@ extension MainWindowController {
         tabOutputBuffers.removeValue(forKey: tabID)
         tabCommandTrackers.removeValue(forKey: tabID)
         tabSplitCoordinator.removeSplitManager(for: tabID)
+        tabSessionMap.removeValue(forKey: tabID)
         processMonitor?.unregisterTab(tabID)
 
         // Remove from TabManager (activates next tab).

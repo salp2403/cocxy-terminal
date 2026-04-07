@@ -70,9 +70,33 @@ struct Session: Codable, Sendable {
     let savedAt: Date
     /// State of all open windows.
     let windows: [WindowState]
+    /// Index of the window that was key (focused) at save time.
+    /// Defaults to 0 for v1 sessions.
+    let focusedWindowIndex: Int
 
     /// Current schema version. Increment when the format changes.
-    static let currentVersion = 1
+    static let currentVersion = 2
+
+    init(
+        version: Int = Self.currentVersion,
+        savedAt: Date = Date(),
+        windows: [WindowState],
+        focusedWindowIndex: Int = 0
+    ) {
+        self.version = version
+        self.savedAt = savedAt
+        self.windows = windows
+        self.focusedWindowIndex = focusedWindowIndex
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        savedAt = try container.decode(Date.self, forKey: .savedAt)
+        windows = try container.decode([WindowState].self, forKey: .windows)
+        // v1 sessions do not have focusedWindowIndex — default to 0.
+        focusedWindowIndex = try container.decodeIfPresent(Int.self, forKey: .focusedWindowIndex) ?? 0
+    }
 }
 
 /// State of a single application window.
@@ -85,18 +109,75 @@ struct WindowState: Codable, Sendable {
     let tabs: [TabState]
     /// Index of the currently active tab.
     let activeTabIndex: Int
+    /// Stable identifier for this window. Fresh UUID assigned on v1 migration.
+    let windowID: WindowID?
+    /// Display index (for multi-monitor placement). Nil for v1 sessions.
+    let displayIndex: Int?
+
+    init(
+        frame: CodableRect,
+        isFullScreen: Bool,
+        tabs: [TabState],
+        activeTabIndex: Int,
+        windowID: WindowID? = nil,
+        displayIndex: Int? = nil
+    ) {
+        self.frame = frame
+        self.isFullScreen = isFullScreen
+        self.tabs = tabs
+        self.activeTabIndex = activeTabIndex
+        self.windowID = windowID
+        self.displayIndex = displayIndex
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        frame = try container.decode(CodableRect.self, forKey: .frame)
+        isFullScreen = try container.decode(Bool.self, forKey: .isFullScreen)
+        tabs = try container.decode([TabState].self, forKey: .tabs)
+        activeTabIndex = try container.decode(Int.self, forKey: .activeTabIndex)
+        // v1 sessions do not have these fields.
+        windowID = try container.decodeIfPresent(WindowID.self, forKey: .windowID)
+        displayIndex = try container.decodeIfPresent(Int.self, forKey: .displayIndex)
+    }
 }
 
 /// State of a single tab within a window.
 struct TabState: Codable, Sendable {
     /// Unique identifier for this tab.
     let id: TabID
+    /// Stable session identifier used by the multi-window registry.
+    /// v1 sessions do not have this field and migrate to a fresh UUID.
+    let sessionID: SessionID
     /// User-visible title, if manually set.
     let title: String?
     /// Working directory of the tab's primary terminal.
     let workingDirectory: URL
     /// Layout of the split panes inside this tab.
     let splitTree: SplitNodeState
+
+    init(
+        id: TabID,
+        sessionID: SessionID = SessionID(),
+        title: String?,
+        workingDirectory: URL,
+        splitTree: SplitNodeState
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.title = title
+        self.workingDirectory = workingDirectory
+        self.splitTree = splitTree
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(TabID.self, forKey: .id)
+        sessionID = try container.decodeIfPresent(SessionID.self, forKey: .sessionID) ?? SessionID()
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        workingDirectory = try container.decode(URL.self, forKey: .workingDirectory)
+        splitTree = try container.decode(SplitNodeState.self, forKey: .splitTree)
+    }
 }
 
 /// Recursive tree structure representing split pane layouts.

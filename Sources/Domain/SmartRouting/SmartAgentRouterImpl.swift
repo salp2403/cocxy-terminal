@@ -82,6 +82,6 @@ final class SmartAgentRouterImpl: SmartAgentRouting {
             return
         }
         let tabId = TabID(rawValue: session.tabId)
-        tabNavigator?.focusTab(id: tabId)
+        _ = tabNavigator?.focusTab(id: tabId)
     }
 }

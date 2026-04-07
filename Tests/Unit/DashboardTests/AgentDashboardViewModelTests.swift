@@ -195,6 +195,94 @@ final class AgentDashboardViewModelTests: XCTestCase {
         XCTAssertEqual(sut.sessions.first?.state, .launching)
     }
 
+    func testSessionStartResolvesWindowMetadataFromProviders() {
+        let fixedTabID = UUID()
+        let fixedWindowID = WindowID()
+        sut.tabIdForCwdProvider = { cwd in
+            cwd == "/Users/test/my-project" ? fixedTabID : nil
+        }
+        sut.windowIDForTabProvider = { tabID in
+            tabID == fixedTabID ? fixedWindowID : nil
+        }
+        sut.windowLabelProvider = { windowID in
+            windowID == fixedWindowID ? "Window 2" : nil
+        }
+
+        let event = makeHookEvent(
+            type: .sessionStart,
+            sessionId: "sess-windowed",
+            data: .sessionStart(SessionStartData(
+                model: "claude-sonnet-4",
+                agentType: "claude-code",
+                workingDirectory: "/Users/test/my-project"
+            ))
+        )
+
+        sut.processHookEvent(event)
+
+        XCTAssertEqual(sut.sessions.first?.tabId, fixedTabID)
+        XCTAssertEqual(sut.sessions.first?.windowID, fixedWindowID)
+        XCTAssertEqual(sut.sessions.first?.windowLabel, "Window 2")
+    }
+
+    func testSessionStartPrefersSessionResolverOverCwdResolver() {
+        let boundTabID = UUID()
+        let cwdResolvedTabID = UUID()
+
+        sut.tabIdResolver = { sessionID, cwd in
+            sessionID == "sess-bound" && cwd == "/Users/test/shared-project"
+                ? boundTabID
+                : nil
+        }
+        sut.tabIdForCwdProvider = { _ in cwdResolvedTabID }
+
+        let event = makeHookEvent(
+            type: .sessionStart,
+            sessionId: "sess-bound",
+            data: .sessionStart(SessionStartData(
+                workingDirectory: "/Users/test/shared-project"
+            ))
+        )
+
+        sut.processHookEvent(event)
+
+        XCTAssertEqual(sut.sessions.first?.tabId, boundTabID)
+    }
+
+    func testWindowMetadataRefreshesWhenSessionMovesWindows() {
+        let fixedTabID = UUID()
+        let firstWindowID = WindowID()
+        let secondWindowID = WindowID()
+        sut.tabIdForCwdProvider = { _ in fixedTabID }
+        sut.windowIDForTabProvider = { _ in firstWindowID }
+        sut.windowLabelProvider = { windowID in
+            switch windowID {
+            case firstWindowID:
+                return "Window 1"
+            case secondWindowID:
+                return "Window 2"
+            default:
+                return nil
+            }
+        }
+
+        let event = makeHookEvent(
+            type: .sessionStart,
+            sessionId: "sess-move",
+            data: .sessionStart(SessionStartData(
+                workingDirectory: "/Users/test/multi-window"
+            ))
+        )
+        sut.processHookEvent(event)
+        XCTAssertEqual(sut.sessions.first?.windowLabel, "Window 1")
+
+        sut.windowIDForTabProvider = { _ in secondWindowID }
+        sut.setPriority(.focus, for: "sess-move")
+
+        XCTAssertEqual(sut.sessions.first?.windowID, secondWindowID)
+        XCTAssertEqual(sut.sessions.first?.windowLabel, "Window 2")
+    }
+
     // MARK: - ViewModel Tests: Hook PostToolUse
 
     func testPostToolUseUpdatesLastActivity() {

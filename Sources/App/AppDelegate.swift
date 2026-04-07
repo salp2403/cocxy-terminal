@@ -66,6 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Exposed for testing purposes.
     private(set) var notificationManager: NotificationManagerImpl?
 
+    /// Shared cross-window tab router used by notifications and the dashboard.
+    var windowTabRouter: WindowControllerTabRouter?
+
     /// The dock badge controller. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var dockBadgeController: DockBadgeController?
@@ -118,10 +121,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Menu bar status item showing agent count.
     private(set) var menuBarItem: MenuBarStatusItem?
 
+    /// Central session registry for multi-window synchronization.
+    /// Tracks all terminal sessions across all windows, enabling
+    /// cross-window tab drag, synchronized badges, and shared agent state.
+    private(set) var sessionRegistry: SessionRegistryImpl?
+
+    /// Event bus for cross-window communication (theme sync, config
+    /// reload, focus session). Created alongside the session registry.
+    private(set) var windowEventBus: WindowEventBusImpl?
+
+    /// Aggregates notification unread counts across all windows.
+    /// Uses the session registry as its data source.
+    private(set) var notificationAggregator: GlobalNotificationAggregatorImpl?
+
+    /// Aggregates agent state across all windows. Used by the dashboard
+    /// to show agents from all windows, not just the current one.
+    private(set) var agentStateAggregator: AgentStateAggregatorImpl?
+
     /// Additional window controllers for multi-window support.
     /// Each entry retains a MainWindowController to prevent deallocation.
     /// Internal access so `MainWindowController.newWindowAction` can append.
     var additionalWindowControllers: [MainWindowController] = []
+
+    /// Best-effort routing cache from Claude hook session IDs to Cocxy tabs.
+    ///
+    /// Hook events identify Claude sessions, not Cocxy tabs. In multi-window
+    /// setups we bind the first resolved tab for a hook session and reuse that
+    /// binding for later state changes, notifications, and dashboard/timeline
+    /// presentation. This avoids repeatedly falling back to CWD matching.
+    var hookSessionTabBindings: [String: TabID] = [:]
 
     /// Cancellables for hook-to-engine wiring and agent-to-tab wiring.
     var hookCancellables = Set<AnyCancellable>()
@@ -156,6 +184,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
     var remotePortScanner: RemotePortScanner?
 
+    /// SSH tunnel manager shared across all windows.
+    /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
+    var tunnelManager: SSHTunnelManager?
+
+    /// SSH key manager shared across all windows.
+    /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
+    var sshKeyManager: SSHKeyManager?
+
     // MARK: - Plugin Properties
 
     /// Plugin manager for plugin lifecycle operations.
@@ -188,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMainMenu()
         initializeBridge()
         initializeAgentDetectionEngine()
+        initializeSessionRegistry()
         createMainWindow()
         wireAgentDetectionToWindow()
         initializeNotificationStack()
@@ -257,6 +294,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         additionalWindowControllers.removeAll()
         windowController?.destroyAllSurfaces()
         windowController = nil
+        agentStateAggregator = nil
+        notificationAggregator = nil
+        windowEventBus = nil
+        sessionRegistry = nil
         bridge = nil
     }
 
@@ -292,6 +333,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let wc = windowController, wc.window?.isVisible == true {
                 wc.showWindow(nil)
             } else {
+                if sessionRegistry == nil {
+                    initializeSessionRegistry()
+                }
                 // Window was closed — recreate it.
                 // Clear existing Combine subscriptions to prevent duplicate
                 // subscribers accumulating on engine.stateChanged.
@@ -327,6 +371,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Continue with defaults -- ConfigService handles this gracefully.
         }
         self.configService = service
+    }
+
+    // MARK: - Session Registry Initialization
+
+    /// Creates the central session registry for multi-window synchronization.
+    ///
+    /// The registry is a lightweight singleton that tracks session metadata
+    /// across all windows. It must be created before any window so that
+    /// `MainWindowController` can register sessions during tab creation.
+    private func initializeSessionRegistry() {
+        let registry = SessionRegistryImpl()
+        sessionRegistry = registry
+        windowEventBus = WindowEventBusImpl()
+        notificationAggregator = GlobalNotificationAggregatorImpl(registry: registry)
+        agentStateAggregator = AgentStateAggregatorImpl(registry: registry)
     }
 
     // MARK: - Bridge Initialization
@@ -424,6 +483,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 quickTerminalController?.show()
             }
         }
+
+        // Broadcast theme change through the event bus so subscribers
+        // (dashboard, plugins, future extensions) can react.
+        windowEventBus?.broadcast(.themeChanged(themeName: themeName))
 
         NSLog("[AppDelegate] Theme switched to: %@", themeName)
     }
@@ -644,21 +707,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Creates and displays the main application window.
     private func createMainWindow() {
-        guard let bridge = bridge else {
+        guard let controller = makeWindowController(registerInitialSession: true) else {
             // Bridge initialization failed. Show a placeholder window.
             createFallbackWindow()
             return
         }
-
-        let controller = MainWindowController(
-            bridge: bridge,
-            configService: configService
-        )
-        // Inject the agent detection engine BEFORE creating the first
-        // surface so the output handler captures a live reference.
-        // Without this, the closure captures nil and terminal output
-        // never reaches the detection system.
-        controller.injectedAgentDetectionEngine = agentDetectionEngine
 
         controller.showWindow(nil)
         controller.window?.center()
@@ -673,6 +726,196 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         self.windowController = controller
+    }
+
+    // MARK: - Shared Window Wiring
+
+    var allWindowControllers: [MainWindowController] {
+        [windowController].compactMap { $0 } + additionalWindowControllers
+    }
+
+    func controllerContainingTab(_ tabID: TabID) -> MainWindowController? {
+        allWindowControllers.first { $0.tabManager.tab(for: tabID) != nil }
+    }
+
+    func controllerContainingSurface(_ surfaceID: SurfaceID) -> MainWindowController? {
+        allWindowControllers.first { controller in
+            controller.tabSurfaceMap.values.contains(surfaceID)
+            || controller.savedTabSplitSurfaceViews.values.contains(where: { $0[surfaceID] != nil })
+            || controller.splitSurfaceViews[surfaceID] != nil
+        }
+    }
+
+    func controllerContainingWorkingDirectory(_ directory: String) -> MainWindowController? {
+        let normalizedPath = URL(fileURLWithPath: directory).standardized.path
+        return allWindowControllers.first { controller in
+            controller.tabManager.tabs.contains {
+                $0.workingDirectory.standardized.path == normalizedPath
+            } || controller.surfaceWorkingDirectories.values.contains {
+                $0.standardized.path == normalizedPath
+            }
+        }
+    }
+
+    func tabIDForWorkingDirectory(_ directory: String) -> TabID? {
+        let normalizedPath = URL(fileURLWithPath: directory).standardized.path
+
+        for controller in allWindowControllers {
+            if let tab = controller.tabManager.tabs.first(where: {
+                $0.workingDirectory.standardized.path == normalizedPath
+            }) {
+                return tab.id
+            }
+
+            if let matchedSurfaceID = controller.surfaceWorkingDirectories.first(where: {
+                $0.value.standardized.path == normalizedPath
+            })?.key {
+                if let tabID = controller.tabSurfaceMap.first(where: { $0.value == matchedSurfaceID })?.key {
+                    return tabID
+                }
+                if let tabID = controller.savedTabSplitSurfaceViews.first(where: { $0.value[matchedSurfaceID] != nil })?.key {
+                    return tabID
+                }
+                if controller.splitSurfaceViews[matchedSurfaceID] != nil {
+                    return controller.displayedTabID ?? controller.tabManager.activeTabID
+                }
+            }
+        }
+
+        return nil
+    }
+
+    func focusedWindowController() -> MainWindowController? {
+        if let keyController = NSApp.keyWindow?.windowController as? MainWindowController {
+            return keyController
+        }
+        return allWindowControllers.first(where: { $0.window?.isMainWindow == true }) ?? windowController
+    }
+
+    func bindHookSession(_ sessionID: String, to tabID: TabID) {
+        hookSessionTabBindings[sessionID] = tabID
+    }
+
+    func unbindHookSession(_ sessionID: String) {
+        hookSessionTabBindings.removeValue(forKey: sessionID)
+    }
+
+    func resolvedControllerAndTab(
+        forHookSessionID sessionID: String?,
+        cwd: String?
+    ) -> (controller: MainWindowController, tabID: TabID)? {
+        if let sessionID,
+           let boundTabID = hookSessionTabBindings[sessionID],
+           let boundController = controllerContainingTab(boundTabID) {
+            return (boundController, boundTabID)
+        }
+
+        guard let cwd,
+              let tabID = tabIDForWorkingDirectory(cwd),
+              let controller = controllerContainingTab(tabID) else {
+            return nil
+        }
+
+        if let sessionID {
+            bindHookSession(sessionID, to: tabID)
+        }
+        return (controller, tabID)
+    }
+
+    func windowIDForTab(_ tabUUID: UUID) -> WindowID? {
+        controllerContainingTab(TabID(rawValue: tabUUID))?.windowID
+    }
+
+    func windowIDForWorkingDirectory(_ directory: String) -> WindowID? {
+        if let tabID = tabIDForWorkingDirectory(directory) {
+            return controllerContainingTab(tabID)?.windowID
+        }
+        return controllerContainingWorkingDirectory(directory)?.windowID
+    }
+
+    func windowDisplayName(for windowID: WindowID?) -> String? {
+        guard let windowID else { return nil }
+        guard let index = allWindowControllers.firstIndex(where: { $0.windowID == windowID }) else {
+            return nil
+        }
+        return "Window \(index + 1)"
+    }
+
+    func configureSharedServices(
+        for controller: MainWindowController,
+        registerWindow: Bool = true
+    ) {
+        controller.injectedAgentDetectionEngine = agentDetectionEngine
+        controller.injectedDashboardViewModel = agentDashboardViewModel
+        controller.injectedTimelineStore = agentTimelineStore
+        controller.injectedNotificationManager = notificationManager
+        controller.windowEventBus = windowEventBus
+        controller.notificationAggregator = notificationAggregator
+        controller.portScanner = portScanner
+        controller.remoteConnectionManager = remoteConnectionManager
+        controller.remoteProfileStore = remoteProfileStore
+        controller.tunnelManager = tunnelManager
+        controller.sshKeyManager = sshKeyManager
+        controller.remotePortScanner = remotePortScanner
+        controller.browserProfileManager = browserProfileManager
+        controller.browserHistoryStore = browserHistoryStore
+        controller.browserBookmarkStore = browserBookmarkStore
+        controller.sparkleUpdater = sparkleUpdater
+
+        if let registry = sessionRegistry {
+            controller.sessionRegistry = registry
+            if registerWindow {
+                registry.registerWindow(controller.windowID)
+            }
+        }
+
+        if let manager = notificationManager {
+            controller.tabBarViewModel?.setNotificationManager(manager)
+        }
+    }
+
+    @discardableResult
+    func registerSession(
+        for tab: Tab,
+        in controller: MainWindowController,
+        sessionID: SessionID? = nil,
+        titleOverride: String? = nil
+    ) -> SessionID {
+        let resolvedSessionID = sessionID
+            ?? controller.tabSessionMap[tab.id]
+            ?? SessionID()
+        controller.tabSessionMap[tab.id] = resolvedSessionID
+
+        let resolvedTitle = titleOverride ?? tab.displayTitle
+
+        sessionRegistry?.registerSession(SessionEntry(
+            sessionID: resolvedSessionID,
+            ownerWindowID: controller.windowID,
+            tabID: tab.id,
+            title: resolvedTitle,
+            workingDirectory: tab.workingDirectory,
+            agentState: tab.agentState,
+            detectedAgentName: tab.detectedAgent?.name,
+            hasUnreadNotification: tab.hasUnreadNotification
+        ))
+
+        return resolvedSessionID
+    }
+
+    func makeWindowController(registerInitialSession: Bool) -> MainWindowController? {
+        guard let bridge = bridge else { return nil }
+
+        let controller = MainWindowController(
+            bridge: bridge,
+            configService: configService
+        )
+        configureSharedServices(for: controller, registerWindow: true)
+
+        if registerInitialSession, let initialTab = controller.tabManager.tabs.first {
+            registerSession(for: initialTab, in: controller)
+        }
+
+        return controller
     }
 
     /// Creates a fallback window when the bridge failed to initialize.
@@ -735,7 +978,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = configService?.current ?? .defaults
 
         // 1. Create a tab router adapter that delegates to the window controller.
-        let tabRouter = WindowControllerTabRouter(windowController: windowController)
+        let tabRouter = windowTabRouter ?? WindowControllerTabRouter(appDelegate: self)
+        self.windowTabRouter = tabRouter
 
         // 2. Create the notification adapter (bridges to macOS notifications).
         let adapter = MacOSNotificationAdapter(
@@ -752,10 +996,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.notificationManager = manager
 
-        // 4. Create the dock badge controller and bind to the notification manager.
+        // 3b. Create the global notification aggregator. It reads unread
+        // state from the session registry and provides cross-window counts.
+        let notificationAggregator = self.notificationAggregator
+
+        // 3c. Forward notification events to the session registry so other
+        // windows can see unread state via the aggregator.
+        if let registry = sessionRegistry {
+            manager.notificationsPublisher
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self, weak registry] notification in
+                    guard let self, let registry else { return }
+                    guard let wc = self.controllerContainingTab(notification.tabId) else { return }
+                    let sessionID = wc.sessionIDForTab(notification.tabId)
+                    registry.markUnread(sessionID)
+                }
+                .store(in: &hookCancellables)
+        }
+
+        // 4. Create the dock badge controller. When the global aggregator
+        // exists, use it as the count source (aggregates all windows).
+        // Fall back to the single manager for backwards compatibility.
+        let badgeSource: any UnreadCountPublishing = notificationAggregator ?? manager
         let dockBadge = DockBadgeController(
             dockTile: SystemDockTile(),
-            unreadCountSource: manager,
+            unreadCountSource: badgeSource,
             config: config
         )
         dockBadge.bind()
@@ -763,11 +1028,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 5. Inject the notification manager into the window controller
         // so OSC notifications are forwarded to the notification pipeline.
-        windowController.injectedNotificationManager = manager
-
-        // 5b. Inject notification manager into the tab bar ViewModel so
-        // each tab can display its unread notification count and preview.
-        windowController.tabBarViewModel?.setNotificationManager(manager)
+        for controller in allWindowControllers {
+            controller.injectedNotificationManager = manager
+            controller.notificationAggregator = notificationAggregator
+            controller.tabBarViewModel?.setNotificationManager(manager)
+        }
 
         // 6. Create the quick switch controller and wire to the window controller.
         let quickSwitch = QuickSwitchController(
@@ -806,14 +1071,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func initializePortScanner() {
         let scanner = PortScannerImpl()
         self.portScanner = scanner
-        windowController?.portScanner = scanner
+        for controller in allWindowControllers {
+            controller.portScanner = scanner
+        }
         scanner.startScanning(interval: 5.0)
 
         // Refresh status bar when ports change.
         scanner.portsChangedPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.windowController?.refreshStatusBar()
+                self?.allWindowControllers.forEach { $0.refreshStatusBar() }
             }
             .store(in: &hookCancellables)
     }
@@ -1400,17 +1667,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Routes notification click actions to the correct tab by delegating
 /// to the window controller's tab manager.
 @MainActor
-final class WindowControllerTabRouter: NotificationTabRouting {
-    private weak var windowController: MainWindowController?
+final class WindowControllerTabRouter: NotificationTabRouting, DashboardTabNavigating {
+    private weak var appDelegate: AppDelegate?
 
-    init(windowController: MainWindowController) {
-        self.windowController = windowController
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
     }
 
     func activateTab(id: TabID) {
-        windowController?.tabManager.setActive(id: id)
-        windowController?.showWindow(nil)
-        windowController?.window?.makeKeyAndOrderFront(nil)
+        guard let controller = appDelegate?.controllerContainingTab(id) else { return }
+        controller.tabManager.setActive(id: id)
+        NSApp.activate(ignoringOtherApps: true)
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+
+    func focusTab(id: TabID) -> Bool {
+        guard appDelegate?.controllerContainingTab(id) != nil else { return false }
+        activateTab(id: id)
+        return true
     }
 }
 

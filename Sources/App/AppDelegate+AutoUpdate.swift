@@ -12,7 +12,9 @@ extension AppDelegate {
     func setupAutoUpdate() {
         let updater = SparkleUpdater()
         self.sparkleUpdater = updater
-        windowController?.sparkleUpdater = updater
+        for controller in allWindowControllers {
+            controller.sparkleUpdater = updater
+        }
     }
 
     /// Menu action: triggers a user-initiated update check.

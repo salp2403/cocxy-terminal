@@ -668,6 +668,21 @@ extension MainWindowController {
         }
     }
 
+    /// Builds a detached split hierarchy that can be stored for a background tab.
+    ///
+    /// The returned view is not added to the container; callers can place it
+    /// into `savedTabSplitViews` and let `handleTabSwitch` restore it later.
+    func makeStoredSplitView(
+        from rootNode: SplitNode,
+        viewsByTerminalID: [UUID: NSView]
+    ) -> NSSplitView? {
+        guard let view = buildNSSplitView(from: rootNode, viewsByTerminalID: viewsByTerminalID)
+        else {
+            return nil
+        }
+        return view as? NSSplitView
+    }
+
     // MARK: - Subagent Auto-Split
 
     /// Spawns a subagent panel as a vertical split on the right side.

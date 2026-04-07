@@ -150,6 +150,18 @@ struct DashboardSessionRow: View {
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.mauve))
                     .lineLimit(1)
             }
+
+            if let windowLabel = session.windowLabel {
+                Text(windowLabel)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(CocxyColors.swiftUI(CocxyColors.surface1))
+                    )
+            }
         }
     }
 
@@ -395,6 +407,7 @@ struct DashboardSessionRow: View {
 
     private var accessibilityDescription: String {
         var parts = [session.projectName]
+        if let windowLabel = session.windowLabel { parts.append(windowLabel) }
         if let agent = session.agentName { parts.append(agent) }
         if let branch = session.gitBranch { parts.append("branch \(branch)") }
         parts.append(DashboardStateIndicator.accessibilityLabel(for: session.state))

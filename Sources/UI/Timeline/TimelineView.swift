@@ -35,6 +35,22 @@ import SwiftUI
 /// - SeeAlso: HU-108 (Agent Timeline View)
 struct TimelineView: View {
 
+    private enum WindowScope: String, CaseIterable, Identifiable {
+        case all
+        case current
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all:
+                return "All Windows"
+            case .current:
+                return "This Window"
+            }
+        }
+    }
+
     /// Reactive ViewModel for live-updating timeline. Takes priority over static events.
     @ObservedObject var viewModel: TimelineViewModel
 
@@ -46,8 +62,13 @@ struct TimelineView: View {
     /// When nil, no close button is shown (backwards compatible).
     var onDismiss: (() -> Void)? = nil
 
+    /// The window hosting this timeline panel, used for local filtering.
+    var currentWindowID: WindowID? = nil
+
     /// Currently selected event type filter. Nil means show all.
     @State private var selectedFilter: TimelineEventType? = nil
+
+    @State private var selectedScope: WindowScope = .all
 
     /// Resolved event source from the reactive ViewModel.
     private var events: [TimelineEvent] { viewModel.events }
@@ -83,6 +104,10 @@ struct TimelineView: View {
 
             Spacer()
 
+            if currentWindowID != nil {
+                scopePicker
+            }
+
             Menu {
                 Button("Export JSON") { viewModel.onExportJSON() }
                 Button("Export Markdown") { viewModel.onExportMarkdown() }
@@ -108,6 +133,27 @@ struct TimelineView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var scopePicker: some View {
+        HStack(spacing: 4) {
+            ForEach(WindowScope.allCases) { scope in
+                Button(scope.title) {
+                    selectedScope = scope
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: selectedScope == scope ? .semibold : .regular))
+                .foregroundColor(selectedScope == scope ? .primary : .secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(selectedScope == scope
+                              ? Color.accentColor.opacity(0.18)
+                              : Color.clear)
+                )
+            }
+        }
     }
 
     // MARK: - Filter Bar
@@ -188,10 +234,14 @@ struct TimelineView: View {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 32))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No timeline events")
+            Text(selectedScope == .current ? "No events in this window" : "No timeline events")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Agent actions will appear here\nas they happen in real-time.")
+            Text(
+                selectedScope == .current
+                ? "Switch to All Windows to inspect activity\nfrom every window."
+                : "Agent actions will appear here\nas they happen in real-time."
+            )
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -209,10 +259,17 @@ struct TimelineView: View {
     /// The "Agents" filter shows both subagentStart and subagentStop events
     /// to provide a complete view of subagent lifecycle.
     private var filteredEvents: [TimelineEvent] {
-        guard let filter = selectedFilter else { return events }
-        if filter == .subagentStart {
-            return events.filter { $0.type == .subagentStart || $0.type == .subagentStop }
+        let scopedEvents: [TimelineEvent]
+        if selectedScope == .current, let currentWindowID {
+            scopedEvents = events.filter { $0.windowID == currentWindowID }
+        } else {
+            scopedEvents = events
         }
-        return events.filter { $0.type == filter }
+
+        guard let filter = selectedFilter else { return scopedEvents }
+        if filter == .subagentStart {
+            return scopedEvents.filter { $0.type == .subagentStart || $0.type == .subagentStop }
+        }
+        return scopedEvents.filter { $0.type == filter }
     }
 }

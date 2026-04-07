@@ -264,7 +264,8 @@ private final class MockPhase11Dashboard: AgentDashboardProviding {
 private final class MockPhase11Navigator: DashboardTabNavigating {
     private(set) var focusCallCount = 0
 
-    func focusTab(id: TabID) {
+    func focusTab(id: TabID) -> Bool {
         focusCallCount += 1
+        return true
     }
 }

@@ -255,6 +255,58 @@ final class TabManager: ObservableObject, TabActivating {
         activateTabAtIndex(index)
     }
 
+    // MARK: - External Tab Insertion (Cross-Window Transfer)
+
+    /// Inserts a pre-existing tab received from another window.
+    ///
+    /// Unlike `addTab()`, this does NOT create a new tab from scratch.
+    /// The caller provides a fully formed `Tab` that was previously owned
+    /// by another `TabManager`. The tab is appended and activated.
+    ///
+    /// Used exclusively by cross-window tab drag-and-drop. The surface,
+    /// view model, and split state are transferred separately by the
+    /// `MainWindowController`.
+    ///
+    /// - Parameter tab: The tab to insert. Its `id` must not already exist.
+    func insertExternalTab(_ tab: Tab) {
+        // Reject if a tab with this ID already exists (defensive guard).
+        guard !tabs.contains(where: { $0.id == tab.id }) else { return }
+
+        deactivateCurrentTab()
+        var inserted = tab
+        inserted.isActive = true
+        tabs.append(inserted)
+        activeTabID = inserted.id
+    }
+
+    /// Detaches a tab for transfer to another window.
+    ///
+    /// Removes the tab from the internal list without the safety guard
+    /// that prevents closing the last tab (the destination window will
+    /// hold the tab). Returns the detached tab, or `nil` if not found.
+    ///
+    /// - Parameter id: The tab to detach.
+    /// - Returns: The detached tab with `isActive` set to `false`.
+    func detachTab(id: TabID) -> Tab? {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return nil }
+
+        // Pinned tabs cannot be transferred.
+        guard !tabs[index].isPinned else { return nil }
+
+        let wasActive = tabs[index].isActive
+        var detached = tabs.remove(at: index)
+        detached.isActive = false
+
+        if wasActive && !tabs.isEmpty {
+            let newActiveIndex = min(index, tabs.count - 1)
+            activateTabAtIndex(newActiveIndex)
+        } else if tabs.isEmpty {
+            activeTabID = nil
+        }
+
+        return detached
+    }
+
     // MARK: - Lookup
 
     /// Returns the tab with the given ID, or nil if not found.

@@ -23,6 +23,10 @@ final class TabItemView: NSView {
     var onContextMenu: (() -> NSMenu?)?
     var onRename: ((TabID, String) -> Void)?
 
+    /// Provides the drag data for cross-window tab transfer.
+    /// Returns nil if dragging is not allowed (e.g., pinned tab).
+    var onDragData: (() -> SessionDragData?)?
+
     /// When true, shows a confirmation alert before closing the tab.
     /// Set by the parent view based on `confirmCloseProcess` config.
     var shouldConfirmClose: Bool = false
@@ -597,6 +601,12 @@ final class TabItemView: NSView {
 
     // MARK: - Mouse Interaction
 
+    /// Stored mouse-down location for drag detection.
+    private var mouseDownLocation: NSPoint?
+
+    /// Minimum distance (points) the mouse must travel before a drag starts.
+    private static let dragThreshold: CGFloat = 5
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
@@ -609,9 +619,62 @@ final class TabItemView: NSView {
             return
         }
 
+        // Store for drag detection in mouseDragged.
+        mouseDownLocation = event.locationInWindow
+
         // Select immediately on single click — no delay.
         // Double-click rename is handled above via clickCount.
         onSelect?()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let startLocation = mouseDownLocation else { return }
+
+        // Only start a drag after the threshold is exceeded.
+        let dx = event.locationInWindow.x - startLocation.x
+        let dy = event.locationInWindow.y - startLocation.y
+        let distance = sqrt(dx * dx + dy * dy)
+        guard distance >= Self.dragThreshold else { return }
+
+        // Clear to prevent re-triggering.
+        mouseDownLocation = nil
+
+        beginDragSession(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        mouseDownLocation = nil
+    }
+
+    // MARK: - Drag Source
+
+    /// Initiates an NSDraggingSession for cross-window tab transfer.
+    private func beginDragSession(with event: NSEvent) {
+        guard let dragData = onDragData?(),
+              let jsonData = dragData.pasteboardData() else { return }
+
+        let pasteboardItem = NSPasteboardItem()
+        pasteboardItem.setData(jsonData, forType: .cocxySession)
+
+        let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
+
+        // Create a snapshot of this view as the drag image.
+        let snapshot = snapshotForDrag()
+        draggingItem.setDraggingFrame(bounds, contents: snapshot)
+
+        beginDraggingSession(with: [draggingItem], event: event, source: self)
+    }
+
+    /// Creates a semi-transparent snapshot of this tab item for the drag image.
+    private func snapshotForDrag() -> NSImage {
+        let image = NSImage(size: bounds.size)
+        image.lockFocus()
+        if let context = NSGraphicsContext.current?.cgContext {
+            context.setAlpha(0.7)
+            layer?.render(in: context)
+        }
+        image.unlockFocus()
+        return image
     }
 
     // MARK: - Inline Rename
@@ -696,6 +759,18 @@ final class TabItemView: NSView {
     }
 
     override var focusRingMaskBounds: NSRect { bounds }
+}
+
+// MARK: - NSDraggingSource Conformance
+
+extension TabItemView: NSDraggingSource {
+    func draggingSession(
+        _ session: NSDraggingSession,
+        sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
+        // Allow move within the app (same or different window).
+        context == .withinApplication ? .move : []
+    }
 }
 
 // MARK: - Flipped Views for Top-Aligned Scroll Content

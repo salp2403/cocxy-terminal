@@ -39,6 +39,22 @@ import Combine
 /// - SeeAlso: `DashboardStateIndicator` (state -> color/symbol mapping)
 struct DashboardPanelView: View {
 
+    private enum WindowScope: String, CaseIterable, Identifiable {
+        case all
+        case current
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all:
+                return "All Windows"
+            case .current:
+                return "This Window"
+            }
+        }
+    }
+
     /// The ViewModel driving this panel.
     @ObservedObject var viewModel: AgentDashboardViewModel
 
@@ -46,8 +62,13 @@ struct DashboardPanelView: View {
     /// When provided, overrides the default viewModel.toggleVisibility() behavior.
     var onDismiss: (() -> Void)? = nil
 
+    /// The window hosting this panel. Used for local filtering.
+    var currentWindowID: WindowID? = nil
+
     /// Fixed width of the dashboard panel.
     static let panelWidth: CGFloat = 320
+
+    @State private var selectedScope: WindowScope = .all
 
     // MARK: - Body
 
@@ -80,6 +101,10 @@ struct DashboardPanelView: View {
 
             Spacer()
 
+            if currentWindowID != nil {
+                scopePicker
+            }
+
             Button(action: {
                 if let onDismiss {
                     onDismiss()
@@ -99,16 +124,37 @@ struct DashboardPanelView: View {
         .padding(.vertical, 8)
     }
 
+    private var scopePicker: some View {
+        HStack(spacing: 4) {
+            ForEach(WindowScope.allCases) { scope in
+                Button(scope.title) {
+                    selectedScope = scope
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: selectedScope == scope ? .semibold : .regular))
+                .foregroundColor(selectedScope == scope ? .primary : .secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(selectedScope == scope
+                              ? Color.accentColor.opacity(0.18)
+                              : Color.clear)
+                )
+            }
+        }
+    }
+
     // MARK: - Session List
 
     private var sessionListView: some View {
         Group {
-            if viewModel.sessions.isEmpty {
+            if displayedSessions.isEmpty {
                 emptyStateView
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(viewModel.sessions) { session in
+                        ForEach(displayedSessions) { session in
                             DashboardSessionRow(
                                 session: session,
                                 onNavigate: {
@@ -135,10 +181,14 @@ struct DashboardPanelView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 32))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No active agents")
+            Text(selectedScope == .current ? "No agents in this window" : "No active agents")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Run an AI agent in the terminal\nto see its activity here.")
+            Text(
+                selectedScope == .current
+                ? "Switch to All Windows to see activity\nfrom the rest of the app."
+                : "Run an AI agent in the terminal\nto see its activity here."
+            )
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -147,6 +197,13 @@ struct DashboardPanelView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
+    }
+
+    private var displayedSessions: [AgentSessionInfo] {
+        guard selectedScope == .current, let currentWindowID else {
+            return viewModel.sessions
+        }
+        return viewModel.sessions.filter { $0.windowID == currentWindowID }
     }
 }
 

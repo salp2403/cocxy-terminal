@@ -84,6 +84,9 @@ extension AppDelegate {
         fileMenu.addItem(withTitle: "New Window",
                          action: #selector(MainWindowController.newWindowAction(_:)),
                          keyEquivalent: "n")
+        fileMenu.addItem(withTitle: "Move Tab to New Window",
+                         action: #selector(MainWindowController.moveActiveTabToNewWindowAction(_:)),
+                         keyEquivalent: "")
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(withTitle: "Close Tab",
                          action: #selector(MainWindowController.closeTabAction(_:)),

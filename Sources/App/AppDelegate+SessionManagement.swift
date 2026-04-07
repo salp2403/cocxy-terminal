@@ -42,39 +42,76 @@ extension AppDelegate {
 
     /// Captures the current application state as a `Session`.
     ///
-    /// Gathers window frame, tab list, split trees and quick terminal state.
+    /// Gathers window frames, tab lists, split trees for ALL windows.
     /// Used both for auto-save and for the final save before termination.
     func captureCurrentSession() -> Session {
-        // Build tab states from the window controller if available.
-        var tabStates: [TabState] = []
-        var activeTabIndex = 0
+        let allControllers = [windowController].compactMap { $0 } + additionalWindowControllers
+        var windowStates: [WindowState] = []
+        var focusedIndex = 0
 
-        if let windowController = windowController {
-            let tabManager = windowController.tabManager
-            let splitCoordinator = windowController.tabSplitCoordinator
+        for (windowIndex, controller) in allControllers.enumerated() {
+            let state = captureWindowState(controller)
+            windowStates.append(state)
 
-            for (index, tab) in tabManager.tabs.enumerated() {
-                if tab.isActive {
-                    activeTabIndex = index
-                }
-
-                let splitManager = splitCoordinator.splitManager(for: tab.id)
-                let splitState = splitManager.rootNode.toSessionState(
-                    workingDirectoryResolver: { _ in tab.workingDirectory }
-                )
-
-                tabStates.append(TabState(
-                    id: tab.id,
-                    title: tab.title,
-                    workingDirectory: tab.workingDirectory,
-                    splitTree: splitState
-                ))
+            // Track which window is the key window.
+            if controller.window?.isKeyWindow == true {
+                focusedIndex = windowIndex
             }
         }
 
-        // Build window frame from the current window position.
+        // If no controllers, produce a single empty window state.
+        if windowStates.isEmpty {
+            windowStates.append(WindowState(
+                frame: CodableRect(x: 100, y: 100, width: 1200, height: 800),
+                isFullScreen: false,
+                tabs: [],
+                activeTabIndex: 0
+            ))
+        }
+
+        return Session(
+            version: Session.currentVersion,
+            savedAt: Date(),
+            windows: windowStates,
+            focusedWindowIndex: focusedIndex
+        )
+    }
+
+    /// Captures the state of a single window controller.
+    private func captureWindowState(_ controller: MainWindowController) -> WindowState {
+        let tabManager = controller.tabManager
+        let splitCoordinator = controller.tabSplitCoordinator
+        var tabStates: [TabState] = []
+        var activeTabIndex = 0
+
+        for (index, tab) in tabManager.tabs.enumerated() {
+            if tab.isActive {
+                activeTabIndex = index
+            }
+
+            let splitManager = splitCoordinator.splitManager(for: tab.id)
+            let splitState = splitManager.rootNode.toSessionState(
+                workingDirectoryResolver: { terminalID in
+                    leafDirectoryMap(
+                        for: tab.id,
+                        in: controller,
+                        rootNode: splitManager.rootNode,
+                        fallbackDirectory: tab.workingDirectory
+                    )[terminalID] ?? tab.workingDirectory
+                }
+            )
+
+            tabStates.append(TabState(
+                id: tab.id,
+                sessionID: controller.sessionIDForTab(tab.id),
+                title: tab.title,
+                workingDirectory: tab.workingDirectory,
+                splitTree: splitState
+            ))
+        }
+
         let windowFrame: CodableRect
-        if let window = windowController?.window {
+        if let window = controller.window {
             let frame = window.frame
             windowFrame = CodableRect(
                 x: frame.origin.x,
@@ -86,19 +123,16 @@ extension AppDelegate {
             windowFrame = CodableRect(x: 100, y: 100, width: 1200, height: 800)
         }
 
-        let isFullScreen = windowController?.window?.styleMask.contains(.fullScreen) ?? false
+        let isFullScreen = controller.window?.styleMask.contains(.fullScreen) ?? false
+        let displayIndex = displayIndex(for: controller.window?.screen)
 
-        let windowState = WindowState(
+        return WindowState(
             frame: windowFrame,
             isFullScreen: isFullScreen,
             tabs: tabStates,
-            activeTabIndex: activeTabIndex
-        )
-
-        return Session(
-            version: Session.currentVersion,
-            savedAt: Date(),
-            windows: [windowState]
+            activeTabIndex: activeTabIndex,
+            windowID: controller.windowID,
+            displayIndex: displayIndex
         )
     }
 
@@ -108,6 +142,7 @@ extension AppDelegate {
     ///
     /// Loads the last session from SessionManager, validates it via
     /// SessionRestorer, and recreates tabs with their working directories.
+    /// For multi-window sessions, creates additional window controllers.
     func restoreSessionOnLaunch() {
         let config = configService?.current ?? .defaults
         guard config.sessions.restoreOnLaunch else { return }
@@ -116,25 +151,81 @@ extension AppDelegate {
 
         guard let session = try? sessionManager.loadLastSession() else { return }
 
-        let screenBounds: CodableRect
+        let restorationPairs = session.windows.map { windowState in
+            (
+                windowState,
+                SessionRestorer.restoreWindow(
+                    from: windowState,
+                    screenBounds: screenBounds(forDisplayIndex: windowState.displayIndex)
+                )
+            )
+        }
+
+        // Restore the primary window (index 0) — it already exists.
+        if let primaryResult = restorationPairs.first?.1 {
+            restoreTabsIntoController(windowController, from: primaryResult)
+        }
+
+        // Restore additional windows (index 1+).
+        for (_, result) in restorationPairs.dropFirst() {
+            guard !result.restoredTabs.isEmpty else { continue }
+            guard let controller = makeWindowController(registerInitialSession: false) else { continue }
+
+            controller.showWindow(nil)
+            restoreTabsIntoController(controller, from: result)
+
+            additionalWindowControllers.append(controller)
+        }
+
+        // Focus the correct window.
+        let allControllers = [windowController] + additionalWindowControllers
+        let focusedIndex = min(max(session.focusedWindowIndex, 0), max(allControllers.count - 1, 0))
+        if focusedIndex >= 0, focusedIndex < allControllers.count {
+            allControllers[focusedIndex].window?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    // MARK: - Restore Helpers
+
+    /// Returns the current main screen bounds as a `CodableRect`.
+    private func currentScreenBounds() -> CodableRect {
         if let screen = NSScreen.main {
             let frame = screen.visibleFrame
-            screenBounds = CodableRect(
+            return CodableRect(
                 x: frame.origin.x,
                 y: frame.origin.y,
                 width: frame.size.width,
                 height: frame.size.height
             )
-        } else {
-            screenBounds = CodableRect(x: 0, y: 0, width: 1920, height: 1080)
         }
+        return CodableRect(x: 0, y: 0, width: 1920, height: 1080)
+    }
 
-        let result = SessionRestorer.restore(
-            from: session,
-            into: windowController.tabManager,
-            splitCoordinator: windowController.tabSplitCoordinator,
-            screenBounds: screenBounds
-        )
+    private func screenBounds(forDisplayIndex displayIndex: Int?) -> CodableRect {
+        if let displayIndex,
+           displayIndex >= 0,
+           displayIndex < NSScreen.screens.count {
+            let frame = NSScreen.screens[displayIndex].visibleFrame
+            return CodableRect(
+                x: frame.origin.x,
+                y: frame.origin.y,
+                width: frame.size.width,
+                height: frame.size.height
+            )
+        }
+        return currentScreenBounds()
+    }
+
+    /// Restores tabs from a `RestorationResult` into an existing controller.
+    ///
+    /// The controller must already have one tab (from `createMainWindow`).
+    /// Additional restored tabs are created with surfaces and handlers.
+    private func restoreTabsIntoController(
+        _ controller: MainWindowController,
+        from result: RestorationResult
+    ) {
+        guard !result.restoredTabs.isEmpty else { return }
+        guard let bridge = bridge else { return }
 
         // Restore window frame.
         let frame = NSRect(
@@ -143,70 +234,260 @@ extension AppDelegate {
             width: result.windowFrame.width,
             height: result.windowFrame.height
         )
-        windowController.window?.setFrame(frame, display: true)
+        controller.window?.setFrame(frame, display: true)
 
-        // Restore additional tabs (the first tab already exists from createMainWindow).
-        // Skip the first restored tab since it maps to the existing initial tab.
-        for (index, restoredTab) in result.restoredTabs.dropFirst().enumerated() {
-            let newTab = windowController.tabManager.addTab(
-                workingDirectory: restoredTab.workingDirectory
+        resetControllerForRestore(controller)
+
+        let gitProvider = GitInfoProviderImpl()
+        let projectConfigService = ProjectConfigService()
+
+        for restoredTab in result.restoredTabs {
+            let restoredModel = Tab(
+                id: restoredTab.tabID,
+                title: restoredTab.title,
+                workingDirectory: restoredTab.workingDirectory,
+                gitBranch: gitProvider.currentBranch(at: restoredTab.workingDirectory)
             )
-            windowController.tabManager.updateTab(id: newTab.id) { tab in
-                tab.title = restoredTab.title
-            }
+            controller.tabManager.insertExternalTab(restoredModel)
+            registerSession(
+                for: restoredModel,
+                in: controller,
+                sessionID: restoredTab.sessionID,
+                titleOverride: restoredTab.title
+            )
 
-            // Create ViewModel, SurfaceView, and wire handlers for restored tab.
-            if let bridge = bridge {
-                let viewModel = TerminalViewModel(engine: bridge)
-                let configuredFontSize = configService?.current.appearance.fontSize
-                    ?? AppearanceConfig.defaults.fontSize
-                viewModel.setDefaultFontSize(configuredFontSize)
-                let surfaceView = CocxyCoreView(viewModel: viewModel)
-                windowController.tabViewModels[newTab.id] = viewModel
-                windowController.tabSurfaceViews[newTab.id] = surfaceView
-
-                do {
-                    let surfaceID = try bridge.createSurface(
-                        in: surfaceView,
-                        workingDirectory: restoredTab.workingDirectory,
-                        command: nil
-                    )
-                    viewModel.markRunning(surfaceID: surfaceID)
-                    surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
-                    surfaceView.syncSizeWithTerminal()
-                    windowController.tabSurfaceMap[newTab.id] = surfaceID
-
-                    // Wire OSC + output handlers via the public API.
-                    windowController.wireHandlersForRestoredTab(
-                        tabID: newTab.id,
-                        surfaceID: surfaceID
-                    )
-                } catch {
-                    NSLog("[AppDelegate] Failed to create surface for restored tab %d: %@",
-                          index + 1, String(describing: error))
+            if let projectConfig = projectConfigService.loadConfig(for: restoredTab.workingDirectory) {
+                controller.tabManager.updateTab(id: restoredTab.tabID) { tab in
+                    tab.projectConfig = projectConfig
                 }
             }
+
+            restoreSurfaces(
+                for: restoredTab,
+                in: controller,
+                bridge: bridge
+            )
         }
 
-        // Update the first tab's title if we have restored tabs.
-        if let firstRestoredTab = result.restoredTabs.first,
-           let firstTabID = windowController.tabManager.tabs.first?.id {
-            windowController.tabManager.updateTab(id: firstTabID) { tab in
-                tab.title = firstRestoredTab.title
+        let safeActiveIndex = min(max(result.activeTabIndex, 0), result.restoredTabs.count - 1)
+        let activeTabID = result.restoredTabs[safeActiveIndex].tabID
+        controller.tabManager.setActive(id: activeTabID)
+        controller.handleTabSwitch(to: activeTabID)
+
+        // Enter full screen if saved.
+        if result.isFullScreen, controller.window?.styleMask.contains(.fullScreen) == false {
+            controller.window?.toggleFullScreen(nil)
+        }
+
+        controller.tabBarViewModel?.syncWithManager()
+        if let surfaceView = controller.terminalSurfaceView {
+            controller.window?.makeFirstResponder(surfaceView)
+        }
+    }
+
+    private func restoreSurfaces(
+        for restoredTab: RestoredTab,
+        in controller: MainWindowController,
+        bridge: any TerminalEngine
+    ) {
+        let leafInfos = restoredTab.splitNode.allLeafIDs()
+        guard !leafInfos.isEmpty else { return }
+
+        let leafDirectories = leafWorkingDirectories(in: restoredTab.splitTreeState)
+        let configuredFontSize = configService?.current.appearance.fontSize
+            ?? AppearanceConfig.defaults.fontSize
+
+        var viewsByTerminalID: [UUID: NSView] = [:]
+        var storedSplitSurfaces: [SurfaceID: TerminalHostView] = [:]
+        var storedSplitViewModels: [SurfaceID: TerminalViewModel] = [:]
+
+        for (index, leafInfo) in leafInfos.enumerated() {
+            let workingDirectory = index < leafDirectories.count
+                ? leafDirectories[index]
+                : restoredTab.workingDirectory
+            let isPrimaryLeaf = index == 0
+
+            let viewModel: TerminalViewModel
+            let surfaceView: TerminalHostView
+
+            if isPrimaryLeaf,
+               controller.tabManager.tabs.first?.id == restoredTab.tabID,
+               let existingSurfaceView = controller.terminalSurfaceView {
+                viewModel = controller.terminalViewModel
+                viewModel.setDefaultFontSize(configuredFontSize)
+                surfaceView = existingSurfaceView
+            } else {
+                let newViewModel = TerminalViewModel(engine: bridge)
+                newViewModel.setDefaultFontSize(configuredFontSize)
+                viewModel = newViewModel
+                surfaceView = CocxyCoreView(viewModel: newViewModel)
+            }
+
+            do {
+                let surfaceID = try bridge.createSurface(
+                    in: surfaceView,
+                    workingDirectory: workingDirectory,
+                    command: nil
+                )
+                viewModel.markRunning(surfaceID: surfaceID)
+                surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+                surfaceView.syncSizeWithTerminal()
+                controller.wireHandlersForRestoredTab(
+                    tabID: restoredTab.tabID,
+                    surfaceID: surfaceID
+                )
+
+                if isPrimaryLeaf {
+                    controller.tabSurfaceMap[restoredTab.tabID] = surfaceID
+                    controller.tabSurfaceViews[restoredTab.tabID] = surfaceView
+                    controller.tabViewModels[restoredTab.tabID] = viewModel
+                } else {
+                    storedSplitSurfaces[surfaceID] = surfaceView
+                    storedSplitViewModels[surfaceID] = viewModel
+                }
+
+                viewsByTerminalID[leafInfo.terminalID] = surfaceView
+            } catch {
+                NSLog(
+                    "[AppDelegate] Failed to restore surface for tab %@ pane %d: %@",
+                    restoredTab.tabID.rawValue.uuidString,
+                    index,
+                    String(describing: error)
+                )
             }
         }
 
-        // Activate the correct tab.
-        if result.activeTabIndex < windowController.tabManager.tabs.count {
-            let targetTab = windowController.tabManager.tabs[result.activeTabIndex]
-            windowController.tabManager.setActive(id: targetTab.id)
+        let splitManager = controller.tabSplitCoordinator.splitManager(for: restoredTab.tabID)
+        splitManager.restoreLayout(
+            rootNode: restoredTab.splitNode,
+            focusedLeafID: restoredTab.splitNode.allLeafIDs().first?.leafID
+        )
+
+        guard leafInfos.count > 1 else { return }
+
+        if let splitView = controller.makeStoredSplitView(
+            from: restoredTab.splitNode,
+            viewsByTerminalID: viewsByTerminalID
+        ) {
+            controller.savedTabSplitViews[restoredTab.tabID] = splitView
+        }
+        if !storedSplitSurfaces.isEmpty {
+            controller.savedTabSplitSurfaceViews[restoredTab.tabID] = storedSplitSurfaces
+        }
+        if !storedSplitViewModels.isEmpty {
+            controller.savedTabSplitViewModels[restoredTab.tabID] = storedSplitViewModels
+        }
+    }
+
+    private func resetControllerForRestore(_ controller: MainWindowController) {
+        if let registry = sessionRegistry {
+            let ownedSessionIDs = registry.sessions(in: controller.windowID).map(\.sessionID)
+            for sessionID in ownedSessionIDs {
+                registry.removeSession(sessionID)
+            }
         }
 
-        // Enter full screen if the session was full screen.
-        if result.isFullScreen {
-            windowController.window?.toggleFullScreen(nil)
+        let existingTabIDs = controller.tabManager.tabs.map(\.id)
+        for tabID in existingTabIDs {
+            controller.processMonitor?.unregisterTab(tabID)
+            controller.tabSplitCoordinator.removeSplitManager(for: tabID)
         }
 
-        windowController.tabBarViewModel?.syncWithManager()
+        controller.destroyAllSurfaces()
+        controller.tabSessionMap.removeAll()
+        controller.tabSurfaceMap.removeAll()
+        controller.tabSurfaceViews.removeAll()
+        controller.tabViewModels.removeAll()
+        controller.tabOutputBuffers.removeAll()
+        controller.tabCommandTrackers.removeAll()
+        controller.surfaceWorkingDirectories.removeAll()
+        controller.savedTabSplitViews.removeAll()
+        controller.savedTabSplitSurfaceViews.removeAll()
+        controller.savedTabSplitViewModels.removeAll()
+        controller.savedTabPanelContentViews.removeAll()
+        controller.splitSurfaceViews.removeAll()
+        controller.splitViewModels.removeAll()
+        controller.panelContentViews.removeAll()
+        controller.activeSplitView = nil
+        controller.displayedTabID = nil
+        controller.terminalSurfaceView?.removeFromSuperview()
+
+        while let tabID = controller.tabManager.tabs.first?.id {
+            _ = controller.tabManager.detachTab(id: tabID)
+        }
+    }
+
+    private func leafWorkingDirectories(in state: SplitNodeState) -> [URL] {
+        switch state {
+        case .leaf(let workingDirectory, _):
+            return [workingDirectory]
+        case .split(_, let first, let second, _):
+            return leafWorkingDirectories(in: first) + leafWorkingDirectories(in: second)
+        }
+    }
+
+    private func leafDirectoryMap(
+        for tabID: TabID,
+        in controller: MainWindowController,
+        rootNode: SplitNode,
+        fallbackDirectory: URL
+    ) -> [UUID: URL] {
+        let leafInfos = rootNode.allLeafIDs()
+        guard !leafInfos.isEmpty else { return [:] }
+
+        let isDisplayed = controller.displayedTabID == tabID
+        let primaryView = controller.tabSurfaceViews[tabID]
+        let primarySurfaceID = controller.tabSurfaceMap[tabID]
+        let splitSurfaces = isDisplayed
+            ? controller.splitSurfaceViews
+            : (controller.savedTabSplitSurfaceViews[tabID] ?? [:])
+
+        let orderedViews: [NSView]
+        if isDisplayed {
+            orderedViews = controller.collectLeafViews()
+        } else if let savedSplitView = controller.savedTabSplitViews[tabID] {
+            orderedViews = collectLeafViews(from: savedSplitView)
+        } else if let primaryView {
+            orderedViews = [primaryView]
+        } else {
+            orderedViews = []
+        }
+
+        var mapping: [UUID: URL] = [:]
+
+        for (leafInfo, view) in zip(leafInfos, orderedViews) {
+            let directory: URL
+            if let terminalView = view as? TerminalHostView {
+                let surfaceID: SurfaceID?
+                if let primaryView, terminalView === primaryView {
+                    surfaceID = primarySurfaceID
+                } else {
+                    surfaceID = splitSurfaces.first(where: { $0.value === terminalView })?.key
+                }
+                directory = surfaceID.flatMap { controller.surfaceWorkingDirectories[$0] }
+                    ?? fallbackDirectory
+            } else {
+                directory = fallbackDirectory
+            }
+            mapping[leafInfo.terminalID] = directory
+        }
+
+        for leafInfo in leafInfos where mapping[leafInfo.terminalID] == nil {
+            mapping[leafInfo.terminalID] = fallbackDirectory
+        }
+
+        return mapping
+    }
+
+    private func collectLeafViews(from rootView: NSView) -> [NSView] {
+        if let splitView = rootView as? NSSplitView {
+            return splitView.subviews.flatMap { collectLeafViews(from: $0) }
+        }
+        return [rootView]
+    }
+
+    private func displayIndex(for screen: NSScreen?) -> Int? {
+        guard let screen else { return nil }
+        return NSScreen.screens.firstIndex(where: { $0 === screen })
     }
 }

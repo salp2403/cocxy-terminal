@@ -114,6 +114,11 @@ final class FileMenuItemTests: XCTestCase {
         XCTAssertNotNil(closeTab, "File menu must have 'Close Tab' item")
     }
 
+    func testFileMenuHasMoveTabToNewWindowItem() {
+        let moveTab = fileMenu.items.first(where: { $0.title == "Move Tab to New Window" })
+        XCTAssertNotNil(moveTab, "File menu must have 'Move Tab to New Window' item")
+    }
+
     func testCloseTabHasCorrectShortcut() {
         let closeTab = fileMenu.items.first(where: { $0.title == "Close Tab" })
         XCTAssertEqual(closeTab?.keyEquivalent, "w", "Close Tab shortcut must be Cmd+W")

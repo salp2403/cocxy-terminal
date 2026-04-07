@@ -178,6 +178,30 @@ final class TimelineStoreTests: XCTestCase {
         XCTAssertFalse(retrieved.first?.isError ?? true)
     }
 
+    func testHookEventMappingPreservesWindowMetadata() {
+        let windowID = WindowID()
+        let hookEvent = HookEvent(
+            type: .postToolUse,
+            sessionId: "sess-window",
+            timestamp: Date(),
+            data: .toolUse(ToolUseData(
+                toolName: "Write",
+                toolInput: ["file_path": "/Users/test/Sources/App.swift"]
+            ))
+        )
+
+        let event = TimelineEvent.from(
+            hookEvent: hookEvent,
+            windowID: windowID,
+            windowLabel: "Window 2"
+        )
+        sut.addEvent(event)
+
+        let retrieved = sut.events(for: "sess-window")
+        XCTAssertEqual(retrieved.first?.windowID, windowID)
+        XCTAssertEqual(retrieved.first?.windowLabel, "Window 2")
+    }
+
     // MARK: - Test 9: Pattern Detection Fallback Event
 
     func testPatternDetectionFallbackEventAddedAsStateChange() {

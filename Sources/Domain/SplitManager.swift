@@ -105,6 +105,24 @@ final class SplitManager: ObservableObject {
         self.focusedLeafID = leafID
     }
 
+    /// Restores the manager from a pre-built split tree.
+    ///
+    /// Used during session restore and cross-window state handoff so the
+    /// logical split model matches the reconstructed view hierarchy.
+    func restoreLayout(
+        rootNode: SplitNode,
+        focusedLeafID: UUID? = nil,
+        panelTypes: [UUID: PanelInfo] = [:],
+        panelTitles: [UUID: String] = [:]
+    ) {
+        self.rootNode = rootNode
+        self.focusedLeafID = focusedLeafID ?? rootNode.allLeafIDs().first?.leafID
+        self.panelTypes = panelTypes
+        self.panelTitles = panelTitles
+        self.savedZoomRatios.removeAll()
+        self.isZoomed = false
+    }
+
     // MARK: - Split Operations
 
     /// Splits the currently focused leaf in the given direction.

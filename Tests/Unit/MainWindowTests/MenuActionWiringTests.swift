@@ -132,6 +132,23 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testMoveTabToNewWindowHasAction() {
+        let moveTab = fileMenu.items.first(where: { $0.title == "Move Tab to New Window" })
+        XCTAssertNotNil(
+            moveTab?.action,
+            "Move Tab to New Window menu item must have a non-nil action"
+        )
+    }
+
+    func testMoveTabToNewWindowActionPointsToCorrectSelector() {
+        let moveTab = fileMenu.items.first(where: { $0.title == "Move Tab to New Window" })
+        XCTAssertEqual(
+            moveTab?.action,
+            #selector(MainWindowController.moveActiveTabToNewWindowAction(_:)),
+            "Move Tab to New Window must be wired to moveActiveTabToNewWindowAction:"
+        )
+    }
+
     // MARK: - Help
 
     func testHelpHasAction() {

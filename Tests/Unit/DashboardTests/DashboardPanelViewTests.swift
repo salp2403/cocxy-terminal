@@ -13,11 +13,14 @@ final class MockDashboardTabNavigator: DashboardTabNavigating {
     /// Tab IDs that were requested to focus, in order.
     private(set) var focusedTabIds: [TabID] = []
 
+    var shouldSucceed = true
+
     /// Number of times focusTab was called.
     var focusTabCallCount: Int { focusedTabIds.count }
 
-    func focusTab(id: TabID) {
+    func focusTab(id: TabID) -> Bool {
         focusedTabIds.append(id)
+        return shouldSucceed
     }
 }
 
@@ -236,6 +239,38 @@ final class DashboardPanelViewTests: XCTestCase {
 
         // Should not crash
         viewModelWithoutNav.navigateToSession("sess-no-nav")
+    }
+
+    func testNavigateToSessionSkipsCrossWindowCallbackWhenLocalNavigationSucceeds() {
+        let startEvent = makeSessionStartEvent(sessionId: "sess-local")
+        sut.processHookEvent(startEvent)
+
+        var crossWindowCallCount = 0
+        sut.onCrossWindowNavigate = { _ in
+            crossWindowCallCount += 1
+        }
+
+        navigator.shouldSucceed = true
+        sut.navigateToSession("sess-local")
+
+        XCTAssertEqual(crossWindowCallCount, 0,
+                       "Cross-window callback should not fire when local navigation succeeds")
+    }
+
+    func testNavigateToSessionFallsBackToCrossWindowCallbackWhenLocalNavigationFails() {
+        let startEvent = makeSessionStartEvent(sessionId: "sess-remote")
+        sut.processHookEvent(startEvent)
+
+        var broadcastedTabID: UUID?
+        sut.onCrossWindowNavigate = { tabID in
+            broadcastedTabID = tabID
+        }
+
+        navigator.shouldSucceed = false
+        sut.navigateToSession("sess-remote")
+
+        XCTAssertEqual(broadcastedTabID, sut.sessions.first?.tabId,
+                       "Cross-window callback should receive the session tab UUID when local navigation fails")
     }
 
     // MARK: - Integration Tests (7+)

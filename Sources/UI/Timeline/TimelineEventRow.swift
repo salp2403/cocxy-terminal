@@ -43,6 +43,9 @@ struct TimelineEventRow: View {
             timestampLabel
             iconView
             actionLabel
+            if let windowLabel = event.windowLabel {
+                windowBadge(windowLabel)
+            }
             Spacer()
             filePathLabel
             durationLabel
@@ -80,6 +83,18 @@ struct TimelineEventRow: View {
             .foregroundColor(event.isError ? .red : .primary)
             .lineLimit(1)
             .frame(minWidth: 60, alignment: .leading)
+    }
+
+    private func windowBadge(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 9, weight: .medium))
+            .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule()
+                    .fill(Color(nsColor: CocxyColors.surface1))
+            )
     }
 
     // MARK: - File Path
@@ -177,6 +192,9 @@ struct TimelineEventRow: View {
             parts.append(event.isError ? "Error: \(toolName)" : toolName)
         } else {
             parts.append(event.summary)
+        }
+        if let windowLabel = event.windowLabel {
+            parts.append(windowLabel)
         }
         if let path = event.filePath {
             parts.append(truncatedFilePath(path))

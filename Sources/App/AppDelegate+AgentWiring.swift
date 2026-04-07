@@ -96,63 +96,61 @@ extension AppDelegate {
 
     /// Connects the hook event receiver to the agent detection engine.
     ///
-    /// Forwards events whose `cwd` matches a Cocxy tab. When no exact match
-    /// is found, falls back to parent-directory matching (the tab's CWD is a
-    /// prefix of the event's CWD) and then to the active tab. This handles
-    /// the common production case where shell integration hasn't updated the
-    /// tab's working directory via OSC 7.
-    ///
-    /// Uses a weak capture of `self` and resolves `windowController?.tabManager`
-    /// lazily inside the sink closure to avoid retaining the tab manager eagerly.
+    /// Forwards events whose session/CWD resolve to a Cocxy tab across ANY window.
+    /// The first successful resolution binds the Claude hook session ID to that
+    /// tab so later events can route without repeatedly falling back to CWD scans.
     func wireHookReceiverToEngine(_ engine: AgentDetectionEngineImpl) {
         guard let receiver = hookEventReceiver else { return }
 
         receiver.eventPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak engine, weak self] event in
-                guard let tabManager = self?.windowController?.tabManager else {
-                    // Window not yet available; forward the event to the engine
-                    // without tab filtering.
+                guard let self else {
                     engine?.processHookEvent(event)
                     return
                 }
 
-                // Match the event to a Cocxy tab by working directory.
-                if let cwd = event.cwd {
-                    let matchingTab = Self.findMatchingTab(
-                        cwd: cwd,
-                        tabs: tabManager.tabs,
-                        activeTabID: tabManager.activeTabID
-                    )
-                    guard let matchingTab else { return }
+                let resolved = self.resolvedControllerAndTab(
+                    forHookSessionID: event.sessionId,
+                    cwd: event.cwd
+                )
 
-                    // Update the tab's agentActivity and stats with tool details
-                    // for real-time visibility in the sidebar.
-                    if case .toolUse(let toolData) = event.data {
-                        let filePath = toolData.toolInput?["file_path"]
-                            ?? toolData.toolInput?["path"]
-                            ?? toolData.toolInput?["command"]?.prefix(40).description
-                        let activity: String
-                        if let file = filePath {
-                            let fileName = URL(fileURLWithPath: file).lastPathComponent
-                            activity = "\(toolData.toolName): \(fileName)"
-                        } else {
-                            activity = toolData.toolName
-                        }
-                        let isError = event.type == .postToolUseFailure
-                        tabManager.updateTab(id: matchingTab.id) { tab in
-                            tab.agentActivity = activity
-                            tab.agentToolCount += 1
-                            if isError {
-                                tab.agentErrorCount += 1
-                            }
-                        }
-                        // Refresh progress overlay and sidebar with new tool counts.
-                        self?.windowController?.updateAgentProgressOverlay()
-                        self?.windowController?.tabBarViewModel?.syncWithManager()
-                    }
+                // Drop hook events from sessions not running inside Cocxy tabs.
+                if event.cwd != nil, resolved == nil {
+                    return
                 }
+
+                // Update the tab's agentActivity and stats with tool details
+                // for real-time visibility in the sidebar.
+                if let resolved, case .toolUse(let toolData) = event.data {
+                    let filePath = toolData.toolInput?["file_path"]
+                        ?? toolData.toolInput?["path"]
+                        ?? toolData.toolInput?["command"]?.prefix(40).description
+                    let activity: String
+                    if let file = filePath {
+                        let fileName = URL(fileURLWithPath: file).lastPathComponent
+                        activity = "\(toolData.toolName): \(fileName)"
+                    } else {
+                        activity = toolData.toolName
+                    }
+                    let isError = event.type == .postToolUseFailure
+                    resolved.controller.tabManager.updateTab(id: resolved.tabID) { tab in
+                        tab.agentActivity = activity
+                        tab.agentToolCount += 1
+                        if isError {
+                            tab.agentErrorCount += 1
+                        }
+                    }
+                    // Refresh progress overlay and sidebar with new tool counts.
+                    resolved.controller.updateAgentProgressOverlay()
+                    resolved.controller.tabBarViewModel?.syncWithManager()
+                }
+
                 engine?.processHookEvent(event)
+
+                if event.type == .sessionEnd {
+                    self.unbindHookSession(event.sessionId)
+                }
             }
             .store(in: &hookCancellables)
     }
@@ -167,47 +165,33 @@ extension AppDelegate {
     /// session's `cwd`. This prevents cross-tab pollution: if Claude runs
     /// in tab 1 but the user is viewing tab 2, only tab 1's indicator changes.
     func wireAgentDetectionToTabs(_ engine: AgentDetectionEngineImpl) {
-        guard windowController != nil else { return }
-
-        // Map session IDs to tab IDs for accurate routing.
-        var sessionToTab: [String: TabID] = [:]
-
         engine.stateChanged
-            .sink { [weak windowController] context in
-                guard let tabManager = windowController?.tabManager else { return }
+            .sink { [weak self] context in
+                guard let self else { return }
                 let agentState = context.state.toTabAgentState
 
-                // Determine which tab this state change belongs to.
-                // Hook-triggered transitions carry sessionId/cwd per-context
-                // (race-free). Pattern/timing transitions fall back to active tab.
-                let targetTabID: TabID?
-                if let hookSessionId = context.hookSessionId,
-                   let hookCwd = context.hookCwd {
-                    if let cached = sessionToTab[hookSessionId] {
-                        targetTabID = cached
-                    } else {
-                        let matchingTab = Self.findMatchingTab(
-                            cwd: hookCwd,
-                            tabs: tabManager.tabs,
-                            activeTabID: tabManager.activeTabID
-                        )
-                        if let tab = matchingTab {
-                            sessionToTab[hookSessionId] = tab.id
-                            targetTabID = tab.id
-                        } else {
-                            return
-                        }
-                    }
+                let target: (controller: MainWindowController, tabID: TabID)?
+                if let hookSessionId = context.hookSessionId {
+                    target = self.resolvedControllerAndTab(
+                        forHookSessionID: hookSessionId,
+                        cwd: context.hookCwd
+                    )
                 } else {
                     // No hook context — this is a pattern-based detection.
                     // Only apply to the active tab (pattern detection reads
-                    // the active surface's output).
-                    targetTabID = tabManager.activeTabID
+                    // the focused surface's output).
+                    guard let controller = self.focusedWindowController(),
+                          let activeTabID = controller.tabManager.activeTabID else {
+                        return
+                    }
+                    target = (controller, activeTabID)
                 }
 
-                guard let tabID = targetTabID else { return }
+                guard let target else { return }
 
-                tabManager.updateTab(id: tabID) { tab in
+                let controller = target.controller
+                let tabID = target.tabID
+                controller.tabManager.updateTab(id: tabID) { tab in
                     tab.agentState = agentState
                     // Reset tool/error counters when agent finishes or goes idle.
                     if agentState == .idle {
@@ -215,11 +199,21 @@ extension AppDelegate {
                         tab.agentErrorCount = 0
                     }
                 }
-                windowController?.tabBarViewModel?.syncWithManager()
-                windowController?.refreshStatusBar()
-                windowController?.updateAgentProgressOverlay()
 
-                windowController?.updateNotificationRing(
+                // Propagate agent state to the session registry so the
+                // AgentStateAggregator can provide cross-window visibility.
+                let sessionID = controller.sessionIDForTab(tabID)
+                controller.sessionRegistry?.updateAgentState(
+                    sessionID,
+                    state: agentState,
+                    agentName: context.agentName
+                )
+
+                controller.tabBarViewModel?.syncWithManager()
+                controller.refreshStatusBar()
+                controller.updateAgentProgressOverlay()
+
+                controller.updateNotificationRing(
                     for: tabID,
                     agentState: agentState
                 )
@@ -239,51 +233,98 @@ extension AppDelegate {
         )
         self.agentDashboardViewModel = dashboardVM
 
-        // Provide tab CWDs so the dashboard can filter out external sessions.
+        // Provide tab CWDs from ALL windows so the dashboard can filter
+        // out hook events from Claude sessions running outside Cocxy.
         dashboardVM.tabCwdProvider = { [weak self] in
-            self?.windowController?.tabManager.tabs.map { $0.workingDirectory.path } ?? []
+            guard let self else { return [] }
+            var cwds: [String] = []
+            for controller in self.allWindowControllers {
+                cwds.append(contentsOf: controller.tabManager.tabs.map { $0.workingDirectory.path })
+                cwds.append(contentsOf: controller.surfaceWorkingDirectories.values.map(\.path))
+            }
+            return cwds
         }
 
-        // Resolve CWD → tab ID for accurate dashboard navigation.
+        // Resolve CWD → tab ID searching ALL windows for accurate
+        // cross-window dashboard navigation.
         dashboardVM.tabIdForCwdProvider = { [weak self] cwd in
-            let cwdStd = URL(fileURLWithPath: cwd).standardized.path
-            return self?.windowController?.tabManager.tabs.first {
-                $0.workingDirectory.standardized.path == cwdStd
-            }?.id.rawValue
+            self?.tabIDForWorkingDirectory(cwd)?.rawValue
         }
 
-        // Inject the dashboard VM into the window controller so
-        // Cmd+Option+A shows real data instead of an empty view.
-        windowController?.injectedDashboardViewModel = dashboardVM
+        dashboardVM.tabIdResolver = { [weak self] sessionID, cwd in
+            self?.resolvedControllerAndTab(
+                forHookSessionID: sessionID,
+                cwd: cwd
+            )?.tabID.rawValue
+        }
 
-        // Wire tab navigation so "Go to Tab" in the dashboard works.
-        dashboardVM.tabNavigator = windowController
+        dashboardVM.windowIDForTabProvider = { [weak self] tabUUID in
+            self?.windowIDForTab(tabUUID)
+        }
+
+        dashboardVM.windowLabelProvider = { [weak self] windowID in
+            self?.windowDisplayName(for: windowID)
+        }
+
+        // Inject the dashboard VM into all windows so multi-window
+        // panels render the same shared state.
+        for controller in allWindowControllers {
+            controller.injectedDashboardViewModel = dashboardVM
+        }
+
+        if windowTabRouter == nil {
+            windowTabRouter = WindowControllerTabRouter(appDelegate: self)
+        }
+
+        // Wire tab navigation so "Go to Tab" in the dashboard works
+        // across all windows, not just the main one.
+        dashboardVM.tabNavigator = windowTabRouter
+
+        // Wire cross-window navigation via the event bus so clicking
+        // a session from another window still works if the shared router
+        // is unavailable for any reason.
+        dashboardVM.onCrossWindowNavigate = { [weak self] tabUUID in
+            guard let self, self.windowTabRouter == nil, let registry = self.sessionRegistry,
+                  let bus = self.windowEventBus else { return }
+            let tabID = TabID(rawValue: tabUUID)
+            // Look up the session by scanning the registry for this tab.
+            let allSessions = registry.allSessions
+            guard let entry = allSessions.first(where: { $0.tabID == tabID }) else { return }
+            bus.broadcast(.focusSession(sessionID: entry.sessionID))
+        }
 
         // Timeline: subscribes to hook events.
         let timelineStore = AgentTimelineStoreImpl()
         self.agentTimelineStore = timelineStore
 
-        // Inject the timeline store into the window controller so
-        // Cmd+Shift+T shows real events.
-        windowController?.injectedTimelineStore = timelineStore
+        // Inject the timeline store into all windows so timeline panels
+        // share a single event stream across the app.
+        for controller in allWindowControllers {
+            controller.injectedTimelineStore = timelineStore
+        }
 
         guard let receiver = hookEventReceiver else { return }
 
-        let timelineTabManager = windowController?.tabManager
         receiver.eventPublisher
             .receive(on: DispatchQueue.main)
-            .sink { [weak timelineStore, weak timelineTabManager] hookEvent in
-                guard let store = timelineStore else { return }
+            .sink { [weak self, weak timelineStore] hookEvent in
+                guard let self, let store = timelineStore else { return }
+                let resolved = self.resolvedControllerAndTab(
+                    forHookSessionID: hookEvent.sessionId,
+                    cwd: hookEvent.cwd
+                )
+
                 // Only log events from sessions running inside Cocxy tabs.
-                if let cwd = hookEvent.cwd,
-                   let tabs = timelineTabManager?.tabs {
-                    let cwdURL = URL(fileURLWithPath: cwd).standardized
-                    let hasMatchingTab = tabs.contains { tab in
-                        tab.workingDirectory.standardized.path == cwdURL.path
-                    }
-                    guard hasMatchingTab else { return }
+                if hookEvent.cwd != nil, resolved == nil {
+                    return
                 }
-                let timelineEvent = TimelineEvent.from(hookEvent: hookEvent)
+
+                let eventWindowID = resolved?.controller.windowID
+                let timelineEvent = TimelineEvent.from(
+                    hookEvent: hookEvent,
+                    windowID: eventWindowID,
+                    windowLabel: self.windowDisplayName(for: eventWindowID)
+                )
                 store.addEvent(timelineEvent)
             }
             .store(in: &hookCancellables)
@@ -294,12 +335,15 @@ extension AppDelegate {
         receiver.eventPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak dashboardVM] hookEvent in
-                guard let wc = self?.windowController else { return }
+                guard let self else { return }
 
                 if hookEvent.type == .subagentStart,
                    case .subagent(let data) = hookEvent.data {
                     let targetTabId = dashboardVM?.tabIdForSession(hookEvent.sessionId)
-                    wc.spawnSubagentPanel(
+                    let targetController = targetTabId
+                        .flatMap { self.controllerContainingTab(TabID(rawValue: $0)) }
+                        ?? self.windowController
+                    targetController?.spawnSubagentPanel(
                         subagentId: data.subagentId,
                         sessionId: hookEvent.sessionId,
                         agentType: data.subagentType,
@@ -311,7 +355,11 @@ extension AppDelegate {
                     let sessId = hookEvent.sessionId
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 2_000_000_000)
-                        wc.closeSubagentPanelBySubagentId(subId, sessionId: sessId)
+                        let targetTabId = dashboardVM?.tabIdForSession(sessId)
+                        let targetController = targetTabId
+                            .flatMap { self.controllerContainingTab(TabID(rawValue: $0)) }
+                            ?? self.windowController
+                        targetController?.closeSubagentPanelBySubagentId(subId, sessionId: sessId)
                     }
                 }
             }
@@ -330,6 +378,18 @@ extension AppDelegate {
 
         cocxyBridge.setCwdProvider { [weak self] surfaceID in
             self?.workingDirectoryForSurface(surfaceID)
+        }
+
+        cocxyBridge.semanticAdapter.windowMetadataProvider = { [weak self] surfaceID, cwd in
+            guard let self else { return (nil, nil) }
+            if let controller = self.controllerContainingSurface(surfaceID) {
+                return (controller.windowID, self.windowDisplayName(for: controller.windowID))
+            }
+            if let cwd,
+               let controller = self.controllerContainingWorkingDirectory(cwd) {
+                return (controller.windowID, self.windowDisplayName(for: controller.windowID))
+            }
+            return (nil, nil)
         }
 
         cocxyBridge.semanticAdapter.eventPublisher
@@ -378,36 +438,36 @@ extension AppDelegate {
     /// `initializeNotificationStack()` since it depends on both.
     func wireAgentDetectionToNotifications() {
         guard let engine = agentDetectionEngine,
-              let notificationManager = notificationManager,
-              let windowController = windowController else { return }
+              let notificationManager = notificationManager else { return }
 
         var previousStateByTab: [TabID: AgentState] = [:]
 
         engine.stateChanged
             .receive(on: DispatchQueue.main)
-            .sink { [weak windowController, weak notificationManager] context in
-                guard let tabManager = windowController?.tabManager,
-                      let manager = notificationManager else { return }
+            .sink { [weak self, weak notificationManager] context in
+                guard let self, let manager = notificationManager else { return }
 
                 let agentState = context.state.toTabAgentState
 
-                // Determine the target tab (same logic as wireAgentDetectionToTabs).
-                let targetTabID: TabID?
-                if let hookCwd = context.hookCwd {
-                    targetTabID = Self.findMatchingTab(
-                        cwd: hookCwd,
-                        tabs: tabManager.tabs,
-                        activeTabID: tabManager.activeTabID
-                    )?.id
+                let target: (controller: MainWindowController, tabID: TabID)?
+                if let hookSessionId = context.hookSessionId {
+                    target = self.resolvedControllerAndTab(
+                        forHookSessionID: hookSessionId,
+                        cwd: context.hookCwd
+                    )
                 } else {
-                    targetTabID = tabManager.activeTabID
+                    guard let controller = self.focusedWindowController(),
+                          let activeTabID = controller.tabManager.activeTabID else {
+                        return
+                    }
+                    target = (controller, activeTabID)
                 }
 
-                guard let tabID = targetTabID,
-                      let tab = tabManager.tab(for: tabID) else { return }
+                guard let target,
+                      let tab = target.controller.tabManager.tab(for: target.tabID) else { return }
 
-                let previousState = previousStateByTab[tabID] ?? .idle
-                previousStateByTab[tabID] = agentState
+                let previousState = previousStateByTab[target.tabID] ?? .idle
+                previousStateByTab[target.tabID] = agentState
 
                 // Only notify on meaningful transitions (skip idle→idle, etc.).
                 guard agentState != previousState else { return }
@@ -415,7 +475,7 @@ extension AppDelegate {
                 manager.handleStateChange(
                     state: agentState,
                     previousState: previousState,
-                    for: tabID,
+                    for: target.tabID,
                     tabTitle: tab.title,
                     agentName: context.agentName
                 )

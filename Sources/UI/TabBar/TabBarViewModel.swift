@@ -86,6 +86,10 @@ final class TabBarViewModel: ObservableObject {
     /// route through `closeTab(_:)` which destroys surfaces, buffers, and splits.
     var onCloseTab: ((TabID) -> Void)?
 
+    /// Provides drag data for a specific tab. Wired by MainWindowController
+    /// so the view model can generate SessionDragData without importing AppKit.
+    var dragDataProvider: ((TabID) -> SessionDragData?)?
+
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
 
@@ -397,6 +401,18 @@ final class TabBarViewModel: ObservableObject {
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes)m" }
         return "\(minutes / 60)h\(minutes % 60)m"
+    }
+
+    // MARK: - Drag Data
+
+    /// Returns the drag data for a tab, or nil if it cannot be dragged.
+    ///
+    /// Pinned tabs cannot be dragged between windows.
+    func dragDataForTab(id: TabID) -> SessionDragData? {
+        guard let tab = tabManager.tab(for: id), !tab.isPinned else {
+            return nil
+        }
+        return dragDataProvider?(id)
     }
 
     /// Returns a relative time string (e.g., "2m", "1h", "now").

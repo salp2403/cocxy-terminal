@@ -391,7 +391,8 @@ extension MainWindowController {
         dashboardHostingView?.removeFromSuperview()
         let swiftUIView = DashboardPanelView(
             viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissDashboard() }
+            onDismiss: { [weak self] in self?.dismissDashboard() },
+            currentWindowID: windowID
         )
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
@@ -628,7 +629,8 @@ extension MainWindowController {
 
         var swiftUIView = TimelineView(
             viewModel: vm,
-            onDismiss: { [weak self] in self?.dismissTimeline() }
+            onDismiss: { [weak self] in self?.dismissTimeline() },
+            currentWindowID: windowID
         )
         swiftUIView.navigationDispatcher = timelineDispatcher
         let hostingView = NSHostingView(rootView: swiftUIView)

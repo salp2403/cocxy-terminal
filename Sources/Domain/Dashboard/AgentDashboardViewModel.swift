@@ -70,6 +70,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// When nil, navigation calls are silently ignored.
     weak var tabNavigator: DashboardTabNavigating?
 
+    /// Callback for cross-window navigation. When set and the local
+    /// `tabNavigator` cannot find the tab, this callback is invoked
+    /// with the tab UUID to broadcast a focusSession event.
+    var onCrossWindowNavigate: ((UUID) -> Void)?
+
     /// Reference to the hook event receiver for accessing session context
     /// (cwd, session_id) when auto-creating sessions from tool use events.
     private weak var hookEventReceiver: HookEventReceiverImpl?
@@ -81,6 +86,18 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     /// Resolves a working directory to the tab ID that owns it.
     var tabIdForCwdProvider: ((String) -> UUID?)?
+
+    /// Resolves a hook session ID plus optional working directory to the
+    /// tab that currently owns the session. Used for multi-window routing
+    /// when multiple tabs may share the same working directory.
+    var tabIdResolver: ((String, String?) -> UUID?)?
+
+    /// Resolves a tab UUID to the window that currently owns it.
+    /// Injected by AppDelegate for cross-window dashboard presentation.
+    var windowIDForTabProvider: ((UUID) -> WindowID?)?
+
+    /// Resolves a stable window label for UI display.
+    var windowLabelProvider: ((WindowID?) -> String?)?
 
     // MARK: - Initialization
 
@@ -135,7 +152,16 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     func navigateToSession(_ sessionId: String) {
         guard let data = sessionDataStore[sessionId] else { return }
         let tabId = TabID(rawValue: data.tabId)
-        tabNavigator?.focusTab(id: tabId)
+
+        // Try local navigation first. If this window owns the tab,
+        // focusTab will switch to it directly.
+        let handledLocally = tabNavigator?.focusTab(id: tabId) ?? false
+        guard !handledLocally else { return }
+
+        // For cross-window sessions, the local navigator may not find
+        // the tab. Broadcast via the callback so the owning window
+        // can activate and switch to the tab.
+        onCrossWindowNavigate?(data.tabId)
     }
 
     /// Returns the tab UUID associated with a session, for targeting splits.
@@ -252,7 +278,9 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         }
 
         let projectName = extractProjectName(from: workingDirectory)
-        let resolvedTabId = workingDirectory.flatMap { tabIdForCwdProvider?($0) } ?? UUID()
+        let resolvedTabId = tabIdResolver?(event.sessionId, workingDirectory)
+            ?? workingDirectory.flatMap { tabIdForCwdProvider?($0) }
+            ?? UUID()
 
         let data = MutableSessionData(
             id: event.sessionId,
@@ -291,7 +319,9 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         // send SessionStart before tool use events (e.g., hooks installed mid-session).
         if sessionDataStore[event.sessionId] == nil {
             let projectName = extractProjectName(from: event.cwd)
-            let resolvedTabId = event.cwd.flatMap { tabIdForCwdProvider?($0) } ?? UUID()
+            let resolvedTabId = tabIdResolver?(event.sessionId, event.cwd)
+                ?? event.cwd.flatMap { tabIdForCwdProvider?($0) }
+                ?? UUID()
             let data = MutableSessionData(
                 id: event.sessionId,
                 projectName: projectName,
@@ -536,7 +566,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// Rebuilds the sorted `sessions` array from the mutable data store.
     private func rebuildSessions() {
         sessions = sessionDataStore.values
-            .map { $0.toAgentSessionInfo() }
+            .map { data in
+                let windowID = windowIDForTabProvider?(data.tabId)
+                let windowLabel = windowLabelProvider?(windowID)
+                return data.toAgentSessionInfo(windowID: windowID, windowLabel: windowLabel)
+            }
             .sorted { lhs, rhs in
                 if lhs.priority != rhs.priority {
                     return lhs.priority < rhs.priority
@@ -624,7 +658,7 @@ private struct MutableSessionData {
     /// Total errors across the session.
     var totalErrors: Int = 0
 
-    func toAgentSessionInfo() -> AgentSessionInfo {
+    func toAgentSessionInfo(windowID: WindowID?, windowLabel: String?) -> AgentSessionInfo {
         // Build file impact list sorted by path.
         let impacts = fileImpacts.map { FileImpact(path: $0.key, operations: $0.value) }
             .sorted { $0.fileName < $1.fileName }
@@ -635,6 +669,8 @@ private struct MutableSessionData {
         return AgentSessionInfo(
             id: id,
             projectName: projectName,
+            windowID: windowID,
+            windowLabel: windowLabel,
             gitBranch: gitBranch,
             agentName: agentName,
             state: state,
