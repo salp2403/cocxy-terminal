@@ -5,6 +5,22 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.39] - 2026-04-07
+
+### Added
+- Multi-window session synchronization (Phase 8G)
+- Central SessionRegistry tracking all terminal sessions across windows
+- Tab drag-and-drop between windows with zero PTY data loss
+- Cross-window notification badge synchronization
+- Cross-window agent state aggregation in dashboard and timeline
+- "All Windows" / "This Window" scope picker in dashboard and timeline
+- Window labels on dashboard rows and timeline events
+- WindowEventBus for cross-window theme, config, and focus events
+- "Move Tab to New Window" command in File menu
+- Remote unread count indicator in sidebar footer
+- Multi-window session save/restore (Session model v2)
+- 103 new tests for multi-window functionality (646 total, 56 suites)
+
 ## [0.1.38] - 2026-04-07
 
 ### Added
