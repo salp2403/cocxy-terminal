@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.11.0 (GPU Search — NFA regex + CPU fallback)
+ * Version: 0.13.0 (Web Terminal — WebSocket streaming + WebGL client)
  */
 
 #ifndef COCXYCORE_H
@@ -23,9 +23,9 @@
 
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
-#define COCXYCORE_VERSION_MINOR 8
+#define COCXYCORE_VERSION_MINOR 13
 #define COCXYCORE_VERSION_PATCH 0
-#define COCXYCORE_VERSION_STRING "0.8.0"
+#define COCXYCORE_VERSION_STRING "0.13.0"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -256,6 +256,38 @@ uint16_t cocxycore_terminal_cols(const cocxycore_terminal* term);
  * @param cols  New number of columns.
  */
 bool cocxycore_terminal_resize(cocxycore_terminal* term, uint16_t rows, uint16_t cols);
+
+/**
+ * Attach a PTY to the terminal for web relay and host-driven input forwarding.
+ * Subsequent helper APIs use this PTY when relaying keyboard/mouse/clipboard
+ * input back to the running shell process.
+ *
+ * @param term  Terminal instance.
+ * @param pty   PTY instance to attach.
+ * @return True if the PTY was attached, false on NULL arguments.
+ */
+bool cocxycore_terminal_attach_pty(cocxycore_terminal* term, cocxycore_pty* pty);
+
+/**
+ * Detach the currently attached PTY, if any.
+ *
+ * @param term  Terminal instance.
+ */
+void cocxycore_terminal_detach_pty(cocxycore_terminal* term);
+
+/**
+ * Write raw bytes to the PTY currently attached to the terminal.
+ *
+ * @param term  Terminal instance.
+ * @param data  Byte buffer to write.
+ * @param len   Number of bytes to write.
+ * @return Number of bytes written. Returns 0 when no PTY is attached.
+ */
+size_t cocxycore_terminal_write_attached_pty(
+    cocxycore_terminal* term,
+    const uint8_t* data,
+    size_t len
+);
 
 /* -- Cursor -- */
 
@@ -1764,6 +1796,113 @@ bool cocxycore_terminal_inject_semantic_event(
  * @param focused True if the terminal gained focus.
  */
 void cocxycore_terminal_notify_focus(cocxycore_terminal* term, bool focused);
+
+/* ===================================================================== */
+/* Web Terminal API (Phase 8F)                                           */
+/* ===================================================================== */
+
+/** Web terminal API version. */
+#define COCXYCORE_WEB_API_VERSION 1
+
+/** Server configuration. */
+typedef struct {
+    char bind_address[64];       /**< IP to bind (default: "127.0.0.1") */
+    uint32_t bind_address_len;   /**< Length of bind_address string */
+    uint16_t port;               /**< TCP port (default: 7770, 0 = OS assigns) */
+    char auth_token[128];        /**< Bearer token (empty = no auth) */
+    uint32_t auth_token_len;     /**< Length of auth_token string */
+    uint16_t max_connections;    /**< Max simultaneous connections (default: 4) */
+    uint32_t max_frame_rate;     /**< Max frame rate in fps (default: 60) */
+} cocxycore_web_config;
+
+/** Opaque web server handle. */
+typedef struct cocxycore_web_server cocxycore_web_server;
+
+/* -- Server lifecycle -- */
+
+/**
+ * Create a web terminal server.
+ * Returns NULL if config is invalid (e.g., remote bind without auth token).
+ */
+cocxycore_web_server* cocxycore_web_create(
+    const cocxycore_web_config* config
+);
+
+/** Destroy the server. Stops it and frees all resources. */
+void cocxycore_web_destroy(cocxycore_web_server* server);
+
+/**
+ * Start the server on a background thread.
+ * Returns false if the port is already in use.
+ */
+bool cocxycore_web_start(cocxycore_web_server* server);
+
+/** Stop the server. Closes all active connections. */
+void cocxycore_web_stop(cocxycore_web_server* server);
+
+/**
+ * Attach a terminal to the server for frame streaming.
+ * The server streams frames from this terminal and relays input to its PTY.
+ * Only one terminal per server (1:1 mapping).
+ */
+bool cocxycore_web_attach_terminal(
+    cocxycore_web_server* server,
+    cocxycore_terminal* terminal
+);
+
+/** Detach the terminal from the server. */
+void cocxycore_web_detach_terminal(cocxycore_web_server* server);
+
+/* -- Connection management -- */
+
+/** Get the number of active WebSocket connections. */
+uint16_t cocxycore_web_connection_count(
+    const cocxycore_web_server* server
+);
+
+/**
+ * Connection event callback type.
+ * @param event_type  0=connect, 1=disconnect, 2=auth_fail
+ * @param conn_id     Connection identifier
+ * @param context     User-provided context pointer
+ */
+typedef void (*cocxycore_web_event_callback)(
+    uint8_t event_type,
+    uint16_t conn_id,
+    void* context
+);
+
+/** Set the connection event callback. */
+void cocxycore_web_set_event_callback(
+    cocxycore_web_server* server,
+    cocxycore_web_event_callback callback,
+    void* context
+);
+
+/* -- Server status -- */
+
+/** Check if the server is running. */
+bool cocxycore_web_is_running(const cocxycore_web_server* server);
+
+/**
+ * Get the actual port the server is listening on.
+ * Useful when port 0 was specified (OS assigns a port).
+ */
+uint16_t cocxycore_web_port(const cocxycore_web_server* server);
+
+/* -- Frame streaming control -- */
+
+/**
+ * Force a full frame send to all connected clients.
+ * Useful after terminal resize or theme change.
+ */
+void cocxycore_web_force_full_frame(cocxycore_web_server* server);
+
+/** Set the maximum frame rate for streaming (fps). */
+void cocxycore_web_set_max_fps(
+    cocxycore_web_server* server,
+    uint32_t fps
+);
 
 #ifdef __cplusplus
 }

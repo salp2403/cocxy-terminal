@@ -161,6 +161,12 @@ final class CocxyCoreBridge: TerminalEngine {
             throw TerminalEngineError.surfaceCreationFailed(reason: "PTY spawn failed")
         }
 
+        guard cocxycore_terminal_attach_pty(terminal, pty) else {
+            cocxycore_pty_destroy(pty)
+            cocxycore_terminal_destroy(terminal)
+            throw TerminalEngineError.surfaceCreationFailed(reason: "Failed to attach PTY to terminal")
+        }
+
         // 5. Enable process tracking
         let childPid = cocxycore_pty_child_pid(pty)
         if childPid > 0 {
