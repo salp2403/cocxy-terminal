@@ -138,6 +138,14 @@ public enum CLICommand: String, CaseIterable {
 
     case ssh
 
+    /// Whether this command is internal (hidden from --help).
+    public var isInternal: Bool {
+        switch self {
+        case .hookEvent: return true
+        default: return false
+        }
+    }
+
     /// Human-readable description for --help output.
     public var helpDescription: String {
         switch self {

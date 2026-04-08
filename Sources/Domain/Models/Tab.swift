@@ -103,6 +103,20 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         lastCommandStartedAt != nil && lastCommandDuration == nil
     }
 
+    /// Marks a new command as started. Resets duration and exit code
+    /// to ensure `isCommandRunning` returns true immediately.
+    mutating func markCommandStarted(at date: Date = Date()) {
+        lastCommandDuration = nil
+        lastCommandExitCode = nil
+        lastCommandStartedAt = date
+    }
+
+    /// Marks the current command as finished with the given duration and exit code.
+    mutating func markCommandFinished(duration: TimeInterval, exitCode: Int?) {
+        lastCommandDuration = duration
+        lastCommandExitCode = exitCode
+    }
+
     init(
         id: TabID = TabID(),
         title: String = "Terminal",

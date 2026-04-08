@@ -192,6 +192,19 @@ final class SmartRoutingIntegrationTests: XCTestCase {
             "showSmartRoutingAction must show the smart routing overlay"
         )
     }
+
+    func testShowSmartRoutingMakesOverlayFirstResponder() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.showSmartRouting()
+
+        XCTAssertTrue(
+            controller.window?.firstResponder === controller.smartRoutingHostingView,
+            "Smart routing overlay should become first responder so keyboard navigation works immediately"
+        )
+    }
 }
 
 // MARK: - Timeline Integration Tests

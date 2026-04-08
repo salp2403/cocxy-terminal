@@ -222,6 +222,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         tabManager: TabManager?,
         hookEventReceiver: HookEventReceiverImpl?,
         browserViewModel: BrowserViewModel? = nil,
+        browserViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
+        tabCountProviderOverride: (@Sendable () -> Int)? = nil,
+        tabInfoProviderOverride: (@Sendable () -> [(id: String, title: String, isActive: Bool)])? = nil,
+        tabFocusProviderOverride: (@Sendable (String) -> Bool)? = nil,
+        tabCloseProviderOverride: (@Sendable (String) -> TabCloseOutcome)? = nil,
+        tabCreateProviderOverride: (@Sendable (String?) -> (id: String, title: String)?)? = nil,
+        tabRenameProviderOverride: (@Sendable (String, String) -> Bool)? = nil,
+        tabMoveProviderOverride: (@Sendable (String, Int) -> Bool)? = nil,
+        projectConfigProviderOverride: (@Sendable () -> [String: String]?)? = nil,
         configProvider: (@Sendable () -> CocxyConfig)? = nil,
         themeEngineProvider: (() -> ThemeEngineImpl?)? = nil,
         remoteConnectionManagerProvider: (() -> RemoteConnectionManager?)? = nil,
@@ -294,153 +303,189 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         let browserViewModelRef = WeakReference(browserViewModel)
 
         // -- Browser view model provider --
-        self.browserViewModelProvider = {
-            if Thread.isMainThread {
-                return MainActor.assumeIsolated {
-                    browserViewModelRef.value
+        if let browserViewModelProviderOverride {
+            self.browserViewModelProvider = browserViewModelProviderOverride
+        } else {
+            self.browserViewModelProvider = {
+                if Thread.isMainThread {
+                    return MainActor.assumeIsolated {
+                        browserViewModelRef.value
+                    }
                 }
-            }
-            return DispatchQueue.main.sync {
-                MainActor.assumeIsolated {
-                    browserViewModelRef.value
+                return DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        browserViewModelRef.value
+                    }
                 }
             }
         }
 
         // -- Tab count provider (read-only) --
-        self.tabCountProvider = {
-            syncOnMainActor {
-                tabManagerRef.value?.tabs.count ?? 0
+        if let tabCountProviderOverride {
+            self.tabCountProvider = tabCountProviderOverride
+        } else {
+            self.tabCountProvider = {
+                syncOnMainActor {
+                    tabManagerRef.value?.tabs.count ?? 0
+                }
             }
         }
 
         // -- Tab info provider (read-only) --
-        self.tabInfoProvider = {
-            syncOnMainActor {
-                guard let tabs = tabManagerRef.value?.tabs else { return [] }
-                return tabs.map { (
-                    id: $0.id.rawValue.uuidString,
-                    title: $0.title,
-                    isActive: $0.isActive
-                )}
+        if let tabInfoProviderOverride {
+            self.tabInfoProvider = tabInfoProviderOverride
+        } else {
+            self.tabInfoProvider = {
+                syncOnMainActor {
+                    guard let tabs = tabManagerRef.value?.tabs else { return [] }
+                    return tabs.map { (
+                        id: $0.id.rawValue.uuidString,
+                        title: $0.title,
+                        isActive: $0.isActive
+                    )}
+                }
             }
         }
 
         // -- Focus tab by UUID string --
-        self.tabFocusProvider = { uuidString in
-            guard let uuid = UUID(uuidString: uuidString) else { return false }
-            return syncOnMainActor {
-                guard let manager = tabManagerRef.value else { return false }
-                let tabID = TabID(rawValue: uuid)
-                guard manager.tabs.contains(where: { $0.id == tabID }) else { return false }
-                manager.setActive(id: tabID)
-                return true
+        if let tabFocusProviderOverride {
+            self.tabFocusProvider = tabFocusProviderOverride
+        } else {
+            self.tabFocusProvider = { uuidString in
+                guard let uuid = UUID(uuidString: uuidString) else { return false }
+                return syncOnMainActor {
+                    guard let manager = tabManagerRef.value else { return false }
+                    let tabID = TabID(rawValue: uuid)
+                    guard manager.tabs.contains(where: { $0.id == tabID }) else { return false }
+                    manager.setActive(id: tabID)
+                    return true
+                }
             }
         }
 
         // -- Close tab by UUID string --
-        self.tabCloseProvider = { uuidString in
-            guard let uuid = UUID(uuidString: uuidString) else { return .notFound }
-            return syncOnMainActor {
-                guard let manager = tabManagerRef.value else {
-                    return .unavailable
-                }
+        if let tabCloseProviderOverride {
+            self.tabCloseProvider = tabCloseProviderOverride
+        } else {
+            self.tabCloseProvider = { uuidString in
+                guard let uuid = UUID(uuidString: uuidString) else { return .notFound }
+                return syncOnMainActor {
+                    guard let manager = tabManagerRef.value else {
+                        return .unavailable
+                    }
 
-                let tabID = TabID(rawValue: uuid)
-                guard let index = manager.tabs.firstIndex(where: { $0.id == tabID }) else {
-                    return .notFound
-                }
-                guard manager.tabs.count > 1 else {
-                    return .lastTabBlocked
-                }
-                guard !manager.tabs[index].isPinned else {
-                    return .pinnedBlocked
-                }
+                    let tabID = TabID(rawValue: uuid)
+                    guard let index = manager.tabs.firstIndex(where: { $0.id == tabID }) else {
+                        return .notFound
+                    }
+                    guard manager.tabs.count > 1 else {
+                        return .lastTabBlocked
+                    }
+                    guard !manager.tabs[index].isPinned else {
+                        return .pinnedBlocked
+                    }
 
-                manager.removeTab(id: tabID)
-                return manager.tabs.contains(where: { $0.id == tabID }) ? .unavailable : .closed
+                    manager.removeTab(id: tabID)
+                    return manager.tabs.contains(where: { $0.id == tabID }) ? .unavailable : .closed
+                }
             }
         }
 
         // -- Create new tab with optional directory --
-        self.tabCreateProvider = { directoryPath in
-            syncOnMainActor {
-                guard let manager = tabManagerRef.value else { return nil }
-                let workingDirectory: URL
-                if let path = directoryPath {
-                    workingDirectory = URL(fileURLWithPath: path)
-                } else {
-                    workingDirectory = FileManager.default.homeDirectoryForCurrentUser
+        if let tabCreateProviderOverride {
+            self.tabCreateProvider = tabCreateProviderOverride
+        } else {
+            self.tabCreateProvider = { directoryPath in
+                syncOnMainActor {
+                    guard let manager = tabManagerRef.value else { return nil }
+                    let workingDirectory: URL
+                    if let path = directoryPath {
+                        workingDirectory = URL(fileURLWithPath: path)
+                    } else {
+                        workingDirectory = FileManager.default.homeDirectoryForCurrentUser
+                    }
+                    let newTab = manager.addTab(workingDirectory: workingDirectory)
+                    return (id: newTab.id.rawValue.uuidString, title: newTab.title)
                 }
-                let newTab = manager.addTab(workingDirectory: workingDirectory)
-                return (id: newTab.id.rawValue.uuidString, title: newTab.title)
             }
         }
 
         // -- Rename tab by UUID string --
-        self.tabRenameProvider = { uuidString, newName in
-            guard let uuid = UUID(uuidString: uuidString) else { return false }
-            return syncOnMainActor {
-                guard let manager = tabManagerRef.value else { return false }
-                let tabID = TabID(rawValue: uuid)
-                guard manager.tabs.contains(where: { $0.id == tabID }) else { return false }
-                manager.renameTab(id: tabID, newTitle: newName)
-                return true
+        if let tabRenameProviderOverride {
+            self.tabRenameProvider = tabRenameProviderOverride
+        } else {
+            self.tabRenameProvider = { uuidString, newName in
+                guard let uuid = UUID(uuidString: uuidString) else { return false }
+                return syncOnMainActor {
+                    guard let manager = tabManagerRef.value else { return false }
+                    let tabID = TabID(rawValue: uuid)
+                    guard manager.tabs.contains(where: { $0.id == tabID }) else { return false }
+                    manager.renameTab(id: tabID, newTitle: newName)
+                    return true
+                }
             }
         }
 
         // -- Move tab to new position --
-        self.tabMoveProvider = { uuidString, destinationIndex in
-            guard let uuid = UUID(uuidString: uuidString) else { return false }
-            return syncOnMainActor {
-                guard let manager = tabManagerRef.value else { return false }
-                let tabID = TabID(rawValue: uuid)
-                guard let fromIndex = manager.tabs.firstIndex(
-                    where: { $0.id == tabID }
-                ) else { return false }
-                guard destinationIndex >= 0,
-                      destinationIndex < manager.tabs.count else { return false }
-                manager.moveTab(from: fromIndex, to: destinationIndex)
-                return true
+        if let tabMoveProviderOverride {
+            self.tabMoveProvider = tabMoveProviderOverride
+        } else {
+            self.tabMoveProvider = { uuidString, destinationIndex in
+                guard let uuid = UUID(uuidString: uuidString) else { return false }
+                return syncOnMainActor {
+                    guard let manager = tabManagerRef.value else { return false }
+                    let tabID = TabID(rawValue: uuid)
+                    guard let fromIndex = manager.tabs.firstIndex(
+                        where: { $0.id == tabID }
+                    ) else { return false }
+                    guard destinationIndex >= 0,
+                          destinationIndex < manager.tabs.count else { return false }
+                    manager.moveTab(from: fromIndex, to: destinationIndex)
+                    return true
+                }
             }
         }
 
         // -- Project config from active tab (read-only) --
-        self.projectConfigProvider = {
-            syncOnMainActor {
-                guard let manager = tabManagerRef.value,
-                      let activeID = manager.activeTabID,
-                      let tab = manager.tab(for: activeID),
-                      let config = tab.projectConfig else { return nil }
+        if let projectConfigProviderOverride {
+            self.projectConfigProvider = projectConfigProviderOverride
+        } else {
+            self.projectConfigProvider = {
+                syncOnMainActor {
+                    guard let manager = tabManagerRef.value,
+                          let activeID = manager.activeTabID,
+                          let tab = manager.tab(for: activeID),
+                          let config = tab.projectConfig else { return nil }
 
-                var data: [String: String] = [:]
-                if let fontSize = config.fontSize {
-                    data["font-size"] = String(fontSize)
-                }
-                if let padding = config.windowPadding {
-                    data["window-padding"] = String(padding)
-                }
-                if let paddingX = config.windowPaddingX {
-                    data["window-padding-x"] = String(paddingX)
-                }
-                if let paddingY = config.windowPaddingY {
-                    data["window-padding-y"] = String(paddingY)
-                }
-                if let opacity = config.backgroundOpacity {
-                    data["background-opacity"] = String(opacity)
-                }
-                if let blur = config.backgroundBlurRadius {
-                    data["background-blur-radius"] = String(blur)
-                }
-                if let patterns = config.agentDetectionExtraPatterns {
-                    data["agent-detection-extra-patterns"] = patterns.joined(separator: ", ")
-                }
-                if let keybindings = config.keybindingOverrides {
-                    for (key, value) in keybindings {
-                        data["keybinding.\(key)"] = value
+                    var data: [String: String] = [:]
+                    if let fontSize = config.fontSize {
+                        data["font-size"] = String(fontSize)
                     }
+                    if let padding = config.windowPadding {
+                        data["window-padding"] = String(padding)
+                    }
+                    if let paddingX = config.windowPaddingX {
+                        data["window-padding-x"] = String(paddingX)
+                    }
+                    if let paddingY = config.windowPaddingY {
+                        data["window-padding-y"] = String(paddingY)
+                    }
+                    if let opacity = config.backgroundOpacity {
+                        data["background-opacity"] = String(opacity)
+                    }
+                    if let blur = config.backgroundBlurRadius {
+                        data["background-blur-radius"] = String(blur)
+                    }
+                    if let patterns = config.agentDetectionExtraPatterns {
+                        data["agent-detection-extra-patterns"] = patterns.joined(separator: ", ")
+                    }
+                    if let keybindings = config.keybindingOverrides {
+                        for (key, value) in keybindings {
+                            data["keybinding.\(key)"] = value
+                        }
+                    }
+                    return data
                 }
-                return data
             }
         }
 
@@ -1843,16 +1888,20 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             fullscreenResult = MainActor.assumeIsolated {
                 guard let window = NSApplication.shared.keyWindow
                     ?? NSApplication.shared.mainWindow else { return (false, false) }
+                // toggleFullScreen is animated — styleMask updates AFTER the animation.
+                // Report the INVERTED current state as the target state.
+                let willBeFullScreen = !window.styleMask.contains(.fullScreen)
                 window.toggleFullScreen(nil)
-                return (true, window.styleMask.contains(.fullScreen))
+                return (true, willBeFullScreen)
             }
         } else {
             fullscreenResult = DispatchQueue.main.sync {
                 MainActor.assumeIsolated {
                     guard let window = NSApplication.shared.keyWindow
                         ?? NSApplication.shared.mainWindow else { return (false, false) }
+                    let willBeFullScreen = !window.styleMask.contains(.fullScreen)
                     window.toggleFullScreen(nil)
-                    return (true, window.styleMask.contains(.fullScreen))
+                    return (true, willBeFullScreen)
                 }
             }
         }
@@ -2293,7 +2342,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             }
 
             // Update the matching field in the target section.
-            if inTargetSection && trimmed.hasPrefix("\(field) =") {
+            // Match both "field = value" and "field=value" (TOML allows both).
+            let fieldPrefix = trimmed.hasPrefix("\(field) =") || trimmed.hasPrefix("\(field)=")
+            if inTargetSection && fieldPrefix {
                 let quotedValue: String
                 if newValue == "true" || newValue == "false" || Int(newValue) != nil
                     || Double(newValue) != nil {

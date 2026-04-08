@@ -167,4 +167,32 @@ final class CommandPaletteCoordinatorTests: XCTestCase {
         XCTAssertEqual(tabManager.tabs.count, tabCountAfterAdd - 1,
                         "closeTab must remove the active tab via TabManager")
     }
+
+    func testQuickSwitchActionUsesQuickSwitchCoordinatorPath() {
+        let tabManager = TabManager()
+        let splitManager = SplitManager()
+        let dashboardViewModel = AgentDashboardViewModel()
+        let coordinator = CommandPaletteCoordinatorImpl(
+            tabManager: tabManager,
+            splitManager: splitManager,
+            dashboardViewModel: dashboardViewModel,
+            themeEngine: nil
+        )
+
+        var quickSwitchTriggered = false
+        coordinator.onQuickSwitch = { quickSwitchTriggered = true }
+
+        let engine = CommandPaletteEngineImpl(coordinator: coordinator)
+        guard let quickSwitchAction = engine.allActions.first(where: { $0.id == "navigation.quickswitch" }) else {
+            XCTFail("Built-in 'navigation.quickswitch' action must exist")
+            return
+        }
+
+        engine.execute(quickSwitchAction)
+
+        XCTAssertTrue(
+            quickSwitchTriggered,
+            "Executing 'navigation.quickswitch' must use the quick switch path"
+        )
+    }
 }

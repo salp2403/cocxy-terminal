@@ -313,7 +313,20 @@ extension AppDelegate {
     ///
     /// The controller must already have one tab (from `createMainWindow`).
     /// Additional restored tabs are created with surfaces and handlers.
-    private func restoreTabsIntoController(
+    func restoreSession(_ session: Session, into controller: MainWindowController) -> Bool {
+        guard let windowState = session.windows.first else { return false }
+
+        let result = SessionRestorer.restoreWindow(
+            from: windowState,
+            screenBounds: screenBounds(forDisplayIndex: windowState.displayIndex)
+        )
+        guard !result.restoredTabs.isEmpty else { return false }
+
+        restoreTabsIntoController(controller, from: result)
+        return true
+    }
+
+    func restoreTabsIntoController(
         _ controller: MainWindowController,
         from result: RestorationResult
     ) {

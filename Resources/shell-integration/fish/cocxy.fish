@@ -22,13 +22,15 @@ end
 function __cocxy_fish_report_pwd --on-variable PWD
     if test "$__cocxy_fish_last_reported_cwd" != "$PWD"
         set -g __cocxy_fish_last_reported_cwd "$PWD"
-        __cocxy_fish_print "\e]7;$PWD\a"
+        set -l encoded_pwd (string escape --style=url -- "$PWD")
+        __cocxy_fish_print "\e]7;file://$encoded_pwd\a"
     end
 end
 
 function __cocxy_fish_prompt --on-event fish_prompt
+    set -l __cocxy_last_status $status
     if test "$__cocxy_fish_executing" = "1"
-        __cocxy_fish_print "\e]133;D;$status\a"
+        __cocxy_fish_print "\e]133;D;$__cocxy_last_status\a"
         set -g __cocxy_fish_executing 0
     end
 

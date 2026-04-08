@@ -183,13 +183,19 @@ final class CocxyCoreView: NSView {
 
     // MARK: - Render Loop
 
+    /// Retained self pointer for the CVDisplayLink callback. Released in stopDisplayLink.
+    private var displayLinkSelfPtr: UnsafeMutableRawPointer?
+
     private func startDisplayLink() {
         guard displayLink == nil else { return }
 
         CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
         guard let link = displayLink else { return }
 
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        // passRetained prevents use-after-free if the display link callback
+        // fires between deinit starting and stopDisplayLink completing.
+        let selfPtr = Unmanaged.passRetained(self).toOpaque()
+        displayLinkSelfPtr = selfPtr
         CVDisplayLinkSetOutputCallback(link, { (_, _, _, _, _, userInfo) -> CVReturn in
             guard let userInfo = userInfo else { return kCVReturnError }
             let view = Unmanaged<CocxyCoreView>.fromOpaque(userInfo).takeUnretainedValue()
@@ -207,6 +213,10 @@ final class CocxyCoreView: NSView {
     private func stopDisplayLink() {
         guard let link = displayLink else { return }
         CVDisplayLinkStop(link)
+        if let ptr = displayLinkSelfPtr {
+            Unmanaged<CocxyCoreView>.fromOpaque(ptr).release()
+            displayLinkSelfPtr = nil
+        }
         displayLink = nil
     }
 
@@ -696,8 +706,9 @@ final class CocxyCoreView: NSView {
         }
 
         let scale = Float(window?.backingScaleFactor ?? 2.0)
-        let paddingX: Float = 8
-        let paddingY: Float = 4
+        let padding = contentPadding
+        let paddingX = Float(padding.x)
+        let paddingY = Float(padding.y)
 
         let col = UInt16(max(0, (Float(location.x) - paddingX) / (metrics.cell_width / scale)))
         let row = UInt16(max(0, (Float(location.y) - paddingY) / (metrics.cell_height / scale)))

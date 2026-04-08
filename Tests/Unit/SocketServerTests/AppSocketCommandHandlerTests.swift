@@ -249,6 +249,47 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(response.error?.contains("not available") == true)
     }
 
+    @MainActor
+    func test_tabDuplicate_withProvider_returnsDuplicatedTabMetadata() {
+        let expectedID = UUID().uuidString
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            tabDuplicateProvider: { (id: expectedID, title: "Duplicated Tab") }
+        )
+        let request = SocketRequest(id: "td-1", command: "tab-duplicate", params: nil)
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "duplicated")
+        XCTAssertEqual(response.data?["id"], expectedID)
+        XCTAssertEqual(response.data?["title"], "Duplicated Tab")
+    }
+
+    @MainActor
+    func test_sessionRestore_withProviderSuccess_returnsRestored() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            sessionRestoreProvider: { name in
+                XCTAssertEqual(name, "workbench")
+                return true
+            }
+        )
+        let request = SocketRequest(
+            id: "sr-1",
+            command: "session-restore",
+            params: ["name": "workbench"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "restored")
+        XCTAssertEqual(response.data?["name"], "workbench")
+    }
+
     // MARK: tab-rename
 
     @MainActor

@@ -379,12 +379,11 @@ struct ProjectConfigWatcherTests {
         #expect(watcher.isWatching == false)
     }
 
-    @Test("Start watching on non-existent file still marks as watching")
-    func nonExistentFileStillWatching() {
+    @Test("Start watching on non-existent file does not mark as watching")
+    func nonExistentFileNotWatching() {
         let watcher = ProjectConfigWatcher(configFilePath: "/tmp/nonexistent-\(UUID().uuidString)")
         watcher.startWatching { }
-        #expect(watcher.isWatching == true)
-        watcher.stopWatching()
+        #expect(watcher.isWatching == false)
     }
 
     @Test("Double start is idempotent")

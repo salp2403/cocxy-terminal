@@ -221,6 +221,25 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertTrue(response.error?.contains("not available") == true)
     }
 
+    func test_browserNavigate_withProviderOverride_usesDynamicBrowserViewModel() {
+        let providedViewModel: BrowserViewModel? = viewModel
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModelProviderOverride: { providedViewModel }
+        )
+        let request = SocketRequest(
+            id: "bn-4",
+            command: "browser-navigate",
+            params: ["url": "https://cocxy.dev"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(viewModel.urlString, "https://cocxy.dev")
+    }
+
     func test_browserBack_returnsSuccess() {
         let handler = AppSocketCommandHandler(
             tabManager: nil,

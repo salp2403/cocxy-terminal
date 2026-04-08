@@ -221,7 +221,7 @@ final class CLIArgumentParserTests: XCTestCase {
 
     func testVersionTextContainsVersionNumber() {
         let versionText = CLIArgumentParser.versionText()
-        XCTAssertEqual(versionText, "cocxy 0.1.0-alpha")
+        XCTAssertEqual(versionText, "cocxy 0.1.45")
     }
     // MARK: - SSH Parsing
 
@@ -498,7 +498,7 @@ final class CommandRunnerTests: XCTestCase {
         let result = runner.run(arguments: ["--version"])
 
         XCTAssertEqual(result.exitCode, 0)
-        XCTAssertEqual(result.stdout, "cocxy 0.1.0-alpha")
+        XCTAssertEqual(result.stdout, "cocxy 0.1.45")
         XCTAssertTrue(result.stderr.isEmpty)
     }
 

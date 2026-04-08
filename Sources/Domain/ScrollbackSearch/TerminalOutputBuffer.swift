@@ -109,14 +109,14 @@ final class TerminalOutputBuffer {
     /// and simple two-byte sequences (ESC + single char).
     private static let ansiPattern = #"\x1B(?:\[[0-9;?]*[A-Za-z]|\][^\x07\x1B]*(?:\x07|\x1B\\)|[A-Za-z])"#
 
+    private static let ansiRegex: NSRegularExpression? = try? NSRegularExpression(pattern: ansiPattern)
+
     /// Strips ANSI escape codes from the given string.
     ///
     /// - Parameter text: Raw terminal text potentially containing escape codes.
     /// - Returns: The text with all ANSI sequences removed.
     static func stripANSIEscapeCodes(_ text: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: ansiPattern) else {
-            return text
-        }
+        guard let regex = ansiRegex else { return text }
         let range = NSRange(text.startIndex..., in: text)
         return regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
     }

@@ -203,6 +203,7 @@ final class CocxyCoreBridge: TerminalEngine {
             masterFd: masterFd,
             terminal: terminal,
             pty: pty,
+            contextBox: contextBox,
             surfaceID: surfaceID
         )
 
@@ -226,11 +227,9 @@ final class CocxyCoreBridge: TerminalEngine {
         // Clean up semantic adapter state for this surface.
         semanticAdapter.surfaceDestroyed(id)
 
-        // Order: cancel I/O first, then PTY, then terminal, then context.
+        // Resource teardown is deferred to the source's cancel handler so
+        // any in-flight read callback drains before the raw pointers vanish.
         state.readSource.cancel()
-        cocxycore_pty_destroy(state.pty)
-        cocxycore_terminal_destroy(state.terminal)
-        state.contextBox.release()
     }
 
     @discardableResult
@@ -289,8 +288,9 @@ final class CocxyCoreBridge: TerminalEngine {
             let row = cocxycore_terminal_cursor_row(state.terminal)
             let col = cocxycore_terminal_cursor_col(state.terminal)
             let bytes = Array(text.utf8)
+            let displayWidth = Self.terminalDisplayWidth(of: text)
             cocxycore_terminal_preedit_set(
-                state.terminal, row, col, bytes, bytes.count, UInt16(bytes.count)
+                state.terminal, row, col, bytes, bytes.count, displayWidth
             )
         }
     }
@@ -574,6 +574,11 @@ final class CocxyCoreBridge: TerminalEngine {
         shell: String,
         workingDirectory: URL
     ) -> OpaquePointer? {
+        // INVARIANT: This method mutates global process state (cwd, env vars)
+        // and MUST run on the main actor to prevent concurrent access.
+        // @MainActor on the class guarantees serialization for now.
+        dispatchPrecondition(condition: .onQueue(.main))
+
         // CocxyCore's current C API inherits cwd/env from the host process at
         // fork time. Scope those mutations carefully and restore them
         // immediately after spawn so other modules/windows do not observe them.
@@ -747,6 +752,7 @@ final class CocxyCoreBridge: TerminalEngine {
         masterFd: Int32,
         terminal: OpaquePointer,
         pty: OpaquePointer,
+        contextBox: Unmanaged<CallbackContext>,
         surfaceID: SurfaceID
     ) -> DispatchSourceRead {
         let source = DispatchSource.makeReadSource(
@@ -784,6 +790,12 @@ final class CocxyCoreBridge: TerminalEngine {
                 self?.surfaces[surfaceID]?.outputHandler?(data)
                 self?.probeWorkingDirectoryAfterOutputIfNeeded(for: surfaceID)
             }
+        }
+
+        source.setCancelHandler {
+            cocxycore_pty_destroy(pty)
+            cocxycore_terminal_destroy(terminal)
+            contextBox.release()
         }
 
         return source
@@ -1194,5 +1206,29 @@ final class CocxyCoreBridge: TerminalEngine {
     private static func environmentValue(for key: String) -> String? {
         guard let pointer = getenv(key) else { return nil }
         return String(cString: pointer)
+    }
+
+    /// Calculates the terminal display width (in columns) for a string.
+    /// ASCII characters use 1 column; East Asian wide characters use 2.
+    static func terminalDisplayWidth(of text: String) -> UInt16 {
+        var width: UInt16 = 0
+        for scalar in text.unicodeScalars {
+            let v = scalar.value
+            if (0x1100...0x115F).contains(v) ||   // Hangul Jamo
+               (0x2E80...0xA4CF).contains(v) ||   // CJK Radicals through Yi
+               (0xAC00...0xD7A3).contains(v) ||   // Hangul Syllables
+               (0xF900...0xFAFF).contains(v) ||   // CJK Compatibility Ideographs
+               (0xFE10...0xFE19).contains(v) ||   // Vertical forms
+               (0xFE30...0xFE6F).contains(v) ||   // CJK Compatibility Forms
+               (0xFF01...0xFF60).contains(v) ||   // Fullwidth Forms
+               (0xFFE0...0xFFE6).contains(v) ||   // Fullwidth Signs
+               (0x20000...0x2FA1F).contains(v) || // CJK Extension B through F
+               (0x30000...0x3134F).contains(v) {  // CJK Extension G
+                width += 2
+            } else if scalar.properties.generalCategory != .control {
+                width += 1
+            }
+        }
+        return width
     }
 }

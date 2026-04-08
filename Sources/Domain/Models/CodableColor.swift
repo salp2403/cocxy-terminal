@@ -14,7 +14,7 @@ import AppKit
 /// The domain layer (`ThemePalette`) stores colors as plain `String` hex values.
 ///
 /// - SeeAlso: `ThemePalette` (domain layer, hex strings only)
-struct CodableColor: Equatable, Sendable {
+struct CodableColor: Hashable, Sendable {
 
     /// The hex string representation (e.g., "#1e1e2e" or "#1e1e2eff").
     let hex: String
@@ -85,6 +85,10 @@ struct CodableColor: Equatable, Sendable {
 
     static func == (lhs: CodableColor, rhs: CodableColor) -> Bool {
         lhs.normalizedHex == rhs.normalizedHex
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(normalizedHex)
     }
 
     private var normalizedHex: String {

@@ -25,6 +25,9 @@ final class ConfigWatcher {
     /// The file provider used to read config content (for reload).
     private let fileProvider: ConfigFileProviding
 
+    /// Absolute path to the config file being watched.
+    private let configPath: String
+
     /// Whether the watcher is currently active.
     private(set) var isWatching: Bool = false
 
@@ -34,6 +37,9 @@ final class ConfigWatcher {
 
     /// The dispatch source monitoring the config file.
     private var fileSource: DispatchSourceFileSystemObject?
+
+    /// Dispatch source for parent directory (when target file doesn't exist yet).
+    private var directorySource: DispatchSourceFileSystemObject?
 
     /// Work item for debounced reload.
     private var debounceWorkItem: DispatchWorkItem?
@@ -48,6 +54,8 @@ final class ConfigWatcher {
     init(configService: ConfigService, fileProvider: ConfigFileProviding) {
         self.configService = configService
         self.fileProvider = fileProvider
+        self.configPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/cocxy/config.toml").path
     }
 
     deinit {
@@ -67,39 +75,11 @@ final class ConfigWatcher {
     func startWatching() {
         guard !isWatching else { return }
 
-        let configPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/cocxy/config.toml").path
-
-        guard FileManager.default.fileExists(atPath: configPath) else {
-            // File doesn't exist yet. Mark as watching so we don't retry,
-            // but there's nothing to observe until the file is created.
-            isWatching = true
-            return
+        if FileManager.default.fileExists(atPath: configPath) {
+            guard startFileWatching() else { return }
+        } else {
+            guard startDirectoryWatching() else { return }
         }
-
-        let fd = open(configPath, O_EVTONLY)
-        guard fd >= 0 else {
-            NSLog("[ConfigWatcher] Failed to open config file for watching: %@", configPath)
-            isWatching = true
-            return
-        }
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .rename, .delete],
-            queue: DispatchQueue.main
-        )
-
-        source.setEventHandler { [weak self] in
-            self?.scheduleReload()
-        }
-
-        source.setCancelHandler {
-            close(fd)
-        }
-
-        source.resume()
-        self.fileSource = source
         isWatching = true
     }
 
@@ -109,7 +89,103 @@ final class ConfigWatcher {
         debounceWorkItem = nil
         fileSource?.cancel()
         fileSource = nil
+        directorySource?.cancel()
+        directorySource = nil
         isWatching = false
+    }
+
+    // MARK: - Private Watching Helpers
+
+    /// Starts watching the config file directly via file descriptor.
+    @discardableResult
+    private func startFileWatching() -> Bool {
+        directorySource?.cancel()
+        directorySource = nil
+
+        let fd = open(configPath, O_EVTONLY)
+        guard fd >= 0 else {
+            NSLog("[ConfigWatcher] Failed to open config file for watching: %@", configPath)
+            return false
+        }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete],
+            queue: DispatchQueue.main
+        )
+
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            let events = source.data
+            if events.contains(.rename) || events.contains(.delete) {
+                // Atomic write (vim/emacs): file inode changed. Restart to track new inode.
+                self.scheduleRestartFileWatching()
+            } else {
+                self.scheduleReload()
+            }
+        }
+
+        source.setCancelHandler {
+            close(fd)
+        }
+
+        source.resume()
+        self.fileSource = source
+        return true
+    }
+
+    /// Watches the parent directory for file creation when the target doesn't exist yet.
+    @discardableResult
+    private func startDirectoryWatching() -> Bool {
+        let parentDir = (configPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(
+            atPath: parentDir, withIntermediateDirectories: true, attributes: nil
+        )
+
+        let dirFd = open(parentDir, O_EVTONLY)
+        guard dirFd >= 0 else { return false }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: dirFd,
+            eventMask: .write,
+            queue: DispatchQueue.main
+        )
+
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            if FileManager.default.fileExists(atPath: self.configPath) {
+                self.startFileWatching()
+                self.scheduleReload()
+            }
+        }
+
+        source.setCancelHandler {
+            close(dirFd)
+        }
+
+        source.resume()
+        self.directorySource = source
+        return true
+    }
+
+    /// Debounced restart of file watching after rename/delete (atomic write recovery).
+    private func scheduleRestartFileWatching() {
+        debounceWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.fileSource?.cancel()
+            self.fileSource = nil
+            if FileManager.default.fileExists(atPath: self.configPath) {
+                self.startFileWatching()
+                self.handleFileChange()
+            } else {
+                self.startDirectoryWatching()
+            }
+        }
+        debounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + debounceInterval, execute: workItem
+        )
     }
 
     // MARK: - File Change Handling
@@ -165,6 +241,9 @@ final class AgentConfigWatcher {
     /// The file provider for agent config (used to resolve the file path).
     private let fileProvider: AgentConfigFileProviding
 
+    /// Absolute path to the agent config file being watched.
+    private let configPath: String
+
     /// Whether the watcher is currently active.
     private(set) var isWatching: Bool = false
 
@@ -177,6 +256,9 @@ final class AgentConfigWatcher {
 
     /// The dispatch source monitoring the agent config file.
     private var fileSource: DispatchSourceFileSystemObject?
+
+    /// Dispatch source for parent directory (when target file doesn't exist yet).
+    private var directorySource: DispatchSourceFileSystemObject?
 
     /// Work item for debounced reload.
     private var debounceWorkItem: DispatchWorkItem?
@@ -191,6 +273,8 @@ final class AgentConfigWatcher {
     init(agentConfigService: AgentConfigService, fileProvider: AgentConfigFileProviding) {
         self.agentConfigService = agentConfigService
         self.fileProvider = fileProvider
+        self.configPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/cocxy/agents.toml").path
     }
 
     deinit {
@@ -210,36 +294,11 @@ final class AgentConfigWatcher {
     func startWatching() {
         guard !isWatching else { return }
 
-        let configPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/cocxy/agents.toml").path
-
-        guard FileManager.default.fileExists(atPath: configPath) else {
-            isWatching = true
-            return
+        if FileManager.default.fileExists(atPath: configPath) {
+            guard startFileWatching() else { return }
+        } else {
+            guard startDirectoryWatching() else { return }
         }
-
-        let fd = open(configPath, O_EVTONLY)
-        guard fd >= 0 else {
-            isWatching = true
-            return
-        }
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .rename, .delete],
-            queue: DispatchQueue.main
-        )
-
-        source.setEventHandler { [weak self] in
-            self?.scheduleReload()
-        }
-
-        source.setCancelHandler {
-            close(fd)
-        }
-
-        source.resume()
-        self.fileSource = source
         isWatching = true
     }
 
@@ -249,7 +308,96 @@ final class AgentConfigWatcher {
         debounceWorkItem = nil
         fileSource?.cancel()
         fileSource = nil
+        directorySource?.cancel()
+        directorySource = nil
         isWatching = false
+    }
+
+    // MARK: - Private Watching Helpers
+
+    @discardableResult
+    private func startFileWatching() -> Bool {
+        directorySource?.cancel()
+        directorySource = nil
+
+        let fd = open(configPath, O_EVTONLY)
+        guard fd >= 0 else { return false }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete],
+            queue: DispatchQueue.main
+        )
+
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            let events = source.data
+            if events.contains(.rename) || events.contains(.delete) {
+                self.scheduleRestartFileWatching()
+            } else {
+                self.scheduleReload()
+            }
+        }
+
+        source.setCancelHandler {
+            close(fd)
+        }
+
+        source.resume()
+        self.fileSource = source
+        return true
+    }
+
+    @discardableResult
+    private func startDirectoryWatching() -> Bool {
+        let parentDir = (configPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(
+            atPath: parentDir, withIntermediateDirectories: true, attributes: nil
+        )
+
+        let dirFd = open(parentDir, O_EVTONLY)
+        guard dirFd >= 0 else { return false }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: dirFd,
+            eventMask: .write,
+            queue: DispatchQueue.main
+        )
+
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            if FileManager.default.fileExists(atPath: self.configPath) {
+                self.startFileWatching()
+                self.handleFileChange()
+            }
+        }
+
+        source.setCancelHandler {
+            close(dirFd)
+        }
+
+        source.resume()
+        self.directorySource = source
+        return true
+    }
+
+    private func scheduleRestartFileWatching() {
+        debounceWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.fileSource?.cancel()
+            self.fileSource = nil
+            if FileManager.default.fileExists(atPath: self.configPath) {
+                self.startFileWatching()
+                self.handleFileChange()
+            } else {
+                self.startDirectoryWatching()
+            }
+        }
+        debounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + debounceInterval, execute: workItem
+        )
     }
 
     // MARK: - File Change Handling
@@ -257,19 +405,12 @@ final class AgentConfigWatcher {
     /// Directly handles a file change event. Called by the dispatch source
     /// or by tests to simulate a file change.
     ///
-    /// Pre-validates the TOML content before calling `agentConfigService.reload()`.
-    /// This prevents the service from silently falling back to defaults when
-    /// the user saves an invalid file. Only valid TOML triggers a reload.
+    /// Delegates to `agentConfigService.reload()` which handles validation
+    /// internally. If the file is invalid, the service preserves its current
+    /// state rather than falling back to defaults.
     func handleFileChange() {
-        guard let content = fileProvider.readAgentConfigFile() else {
-            lastReloadSucceeded = false
-            return
-        }
-
-        let parser = TOMLParser()
         do {
-            _ = try parser.parse(content)
-            try agentConfigService.reload()
+            try agentConfigService.reloadIfValid()
             lastReloadSucceeded = true
         } catch {
             lastReloadSucceeded = false

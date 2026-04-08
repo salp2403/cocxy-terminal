@@ -24,6 +24,12 @@ protocol CommandPaletteCoordinating: AnyObject {
     /// Close the currently active tab.
     func closeTab()
 
+    /// Switch to the next tab.
+    func nextTab()
+
+    /// Switch to the previous tab.
+    func previousTab()
+
     /// Split the focused pane vertically.
     func splitVertical()
 
@@ -35,6 +41,9 @@ protocol CommandPaletteCoordinating: AnyObject {
 
     /// Toggle the quick terminal overlay.
     func toggleQuickTerminal()
+
+    /// Jump to the most urgent unread/attention tab.
+    func performQuickSwitch()
 
     /// Switch the active theme by name.
     ///
@@ -70,6 +79,16 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
     /// When set, `closeTab()` delegates here instead of calling `tabManager.removeTab` directly.
     var onCloseTab: ((TabID) -> Void)?
 
+    /// Closure for creating a tab with full surface wiring (PTY, view, handlers).
+    /// Without this, `newTab()` only creates the domain model.
+    var onNewTab: (() -> Void)?
+
+    /// Closures for AppKit-layer overlays that cannot be referenced from the domain layer.
+    var onQuickTerminal: (() -> Void)?
+    var onQuickSwitch: (() -> Void)?
+    var onScrollbackSearch: (() -> Void)?
+    var onTimeline: (() -> Void)?
+
     // MARK: - Initialization
 
     /// Creates a coordinator wired to the real managers.
@@ -94,7 +113,11 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
     // MARK: - CommandPaletteCoordinating
 
     func newTab() {
-        tabManager?.addTab()
+        if let onNewTab {
+            onNewTab()
+        } else {
+            tabManager?.addTab()
+        }
     }
 
     func closeTab() {
@@ -105,6 +128,14 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
         } else {
             tabManager.removeTab(id: activeId)
         }
+    }
+
+    func nextTab() {
+        tabManager?.nextTab()
+    }
+
+    func previousTab() {
+        tabManager?.previousTab()
     }
 
     func splitVertical() {
@@ -120,9 +151,11 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
     }
 
     func toggleQuickTerminal() {
-        // Placeholder: Quick Terminal toggle requires the QuickTerminalController,
-        // which is wired at the AppKit layer. This will be connected when the
-        // full coordinator graph is assembled in AppDelegate.
+        onQuickTerminal?()
+    }
+
+    func performQuickSwitch() {
+        onQuickSwitch?()
     }
 
     func switchTheme(name: String) {
@@ -130,12 +163,10 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
     }
 
     func showScrollbackSearch() {
-        // Placeholder: Scrollback search requires the SearchOverlayController,
-        // which is wired at the AppKit layer.
+        onScrollbackSearch?()
     }
 
     func showTimeline() {
-        // Placeholder: Timeline panel toggle requires the TimelinePanelController,
-        // which is wired at the AppKit layer.
+        onTimeline?()
     }
 }

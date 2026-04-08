@@ -301,6 +301,7 @@ struct CocxyCoreBridgeTests {
 
         #expect(bridge.parseWorkingDirectoryURL("file:///Users/test/project")?.path == "/Users/test/project")
         #expect(bridge.parseWorkingDirectoryURL("file://localhost/Users/test/project")?.path == "/Users/test/project")
+        #expect(bridge.parseWorkingDirectoryURL("file:///Users/test/My%20Project")?.path == "/Users/test/My Project")
         #expect(bridge.parseWorkingDirectoryURL("/Users/test/project")?.path == "/Users/test/project")
     }
 

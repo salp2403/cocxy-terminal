@@ -5,6 +5,52 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.46] - 2026-04-08
+
+### Fixed
+- Data race in CommandPaletteEngine between execute() and search() on shared state
+- ConfigWatcher/AgentConfigWatcher silently stop watching after atomic write (vim/emacs rename)
+- ConfigWatcher marks isWatching=true when config file does not exist yet
+- ProjectConfigWatcher same isWatching bug — now returns false for non-existent files
+- Command Palette "New Tab" creates blank tab without terminal surface
+- paneSnapshotFromFirstResponder filters out terminal panes in split focus sync
+- Mouse click-to-cell mapping uses hardcoded padding instead of configured values
+- IME preedit overlay width incorrect for CJK characters (UTF-8 bytes vs display columns)
+- CLI version stuck at 0.1.0-alpha instead of matching app version
+- AppearanceObserver auto dark/light theme switch not applied to terminal surfaces
+- Fish shell integration does not restore XDG_CONFIG_HOME after bootstrap
+- Fish OSC 133;D reports exit status 0 instead of real command exit code
+- CLI config set truncates multi-word values like font family names
+- handleWindowFullscreen reports inverted fullscreen state (async toggle)
+- ANSI escape regex recompiled on every call in TerminalOutputBuffer
+- AnyCodableValue silently drops nested arrays and objects in hook event data
+- PatternMatchingDetector can miss patterns when UTF-8 character split across chunks
+- destroySurface race condition between read source cancel and PTY teardown
+- Port scanner and remote workspace subscriptions lost after window re-creation
+- Tab.isCommandRunning can show stale state without atomic field reset
+- AgentConfigWatcher double-parses TOML on reload
+- CVDisplayLink passUnretained pointer risk during teardown
+- windowWillClose missing nil cleanup for sidebar and tab bar callbacks
+- CodableColor Hashable inconsistent with custom Equatable
+- CommandPaletteCoordinator placeholder methods now use proper closures
+- Bash shell integration sources user .bashrc in non-interactive mode
+- Quick switch palette action incorrectly wired to quick terminal
+- CWD reporting uses raw path instead of URL-encoded format in OSC 7
+
+### Added
+- URI percent-encoding for OSC 7 CWD reporting in all three shells (zsh, bash, fish)
+- Tab.markCommandStarted/markCommandFinished methods for safe state transitions
+- CocxyCoreBridge.terminalDisplayWidth for correct CJK column width calculation
+- ConfigWatcher parent directory watching when target config file doesn't yet exist
+- isInternal property on CLICommand to hide internal commands from --help
+- reloadIfValid on AgentConfigService to preserve state on malformed TOML
+- MockClipboardService restricted to debug builds only
+- spawnPty main-thread precondition assertion
+
+### Changed
+- Shell integration scripts now capture exit status before any conditional checks
+- Command Palette coordinator fully wired with closures for all AppKit-layer actions
+
 ## [0.1.45] - 2026-04-08
 
 ### Added

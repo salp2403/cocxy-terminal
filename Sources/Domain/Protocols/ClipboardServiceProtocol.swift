@@ -30,10 +30,10 @@ import Foundation
     func clear()
 }
 
+#if DEBUG
 // MARK: - Mock Clipboard Service
 
-/// In-memory clipboard for testing. Thread-safe is not needed because tests
-/// run on a single thread.
+/// In-memory clipboard for testing. Only available in debug builds.
 final class MockClipboardService: ClipboardServiceProtocol {
 
     private var content: String?
@@ -50,3 +50,4 @@ final class MockClipboardService: ClipboardServiceProtocol {
         content = nil
     }
 }
+#endif

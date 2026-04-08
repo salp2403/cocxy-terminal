@@ -21,13 +21,14 @@ extension NSApplication {
     @objc var scriptableTabs: [ScriptableTab] {
         var tabs: [ScriptableTab] = []
         MainActor.assumeIsolated {
-            guard let appDelegate = delegate as? AppDelegate,
-                  let windowController = appDelegate.windowController else {
+            guard let appDelegate = delegate as? AppDelegate else {
                 return
             }
 
-            tabs = windowController.tabManager.tabs.map { tab in
-                ScriptableTab(tabID: tab.id, tabManager: windowController.tabManager)
+            tabs = appDelegate.allWindowControllers.flatMap { controller in
+                controller.tabManager.tabs.map { tab in
+                    ScriptableTab(tabID: tab.id, tabManager: controller.tabManager)
+                }
             }
         }
         return tabs

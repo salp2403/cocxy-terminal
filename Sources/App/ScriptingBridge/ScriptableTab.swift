@@ -87,14 +87,17 @@ final class ScriptableTab: NSObject, @unchecked Sendable {
     override var objectSpecifier: NSScriptObjectSpecifier? {
         let specifierBox = LockedBox<NSScriptObjectSpecifier?>(nil)
         MainActor.assumeIsolated {
-            guard let tabManager = tabManager else { return }
+            guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
 
             let appDescription = NSApplication.shared.classDescription
             guard let classDescription = appDescription as? NSScriptClassDescription else {
                 return
             }
 
-            let index = tabManager.tabs.firstIndex(where: { $0.id == tabID }) ?? 0
+            let allTabIDs = appDelegate.allWindowControllers.flatMap { controller in
+                controller.tabManager.tabs.map(\.id)
+            }
+            let index = allTabIDs.firstIndex(of: tabID) ?? 0
             specifierBox.withValue {
                 $0 = NSIndexSpecifier(
                     containerClassDescription: classDescription,
@@ -111,7 +114,12 @@ final class ScriptableTab: NSObject, @unchecked Sendable {
 
     @objc func handleCloseCommand(_ command: NSCloseCommand) {
         MainActor.assumeIsolated {
-            tabManager?.removeTab(id: tabID)
+            guard let appDelegate = NSApp.delegate as? AppDelegate,
+                  let controller = appDelegate.controllerContainingTab(tabID) else {
+                tabManager?.removeTab(id: tabID)
+                return
+            }
+            controller.closeTab(tabID)
         }
     }
 }

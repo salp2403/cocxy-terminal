@@ -41,13 +41,14 @@ extension MainWindowController {
 
         commandPaletteHostingView?.removeFromSuperview()
         let swiftUIView = CommandPaletteView(viewModel: viewModel)
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = FocusableHostingView(rootView: swiftUIView)
         hostingView.frame = overlayContainer.bounds
         hostingView.autoresizingMask = [.width, .height]
         self.commandPaletteHostingView = hostingView
 
         overlayContainer.addSubview(hostingView)
         isCommandPaletteVisible = true
+        window?.makeFirstResponder(hostingView)
     }
 
     /// Creates a CommandPaletteEngine with all actions wired to real handlers.
@@ -70,7 +71,7 @@ extension MainWindowController {
                 category: .tabs,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
-                    Task { @MainActor in self?.tabManager.addTab() }
+                    Task { @MainActor in self?.createTab() }
                 }
             ),
             CommandAction(
@@ -558,13 +559,14 @@ extension MainWindowController {
                 swiftUIView
             }
         )
-        let hostingView = NSHostingView(rootView: overlayView)
+        let hostingView = FocusableHostingView(rootView: overlayView)
         hostingView.frame = overlayContainer.bounds
         hostingView.autoresizingMask = [.width, .height]
         self.smartRoutingHostingView = hostingView
 
         overlayContainer.addSubview(hostingView)
         isSmartRoutingVisible = true
+        window?.makeFirstResponder(hostingView)
     }
 
     func dismissSmartRouting() {

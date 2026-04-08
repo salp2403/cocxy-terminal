@@ -7,15 +7,58 @@ import Foundation
 extension AppDelegate {
 
     @MainActor
+    func activeBrowserViewModelForCLI() -> BrowserViewModel? {
+        (focusedWindowController() ?? windowController)?.activeBrowserViewModel()
+    }
+
+    @MainActor
+    func duplicateFocusedTabForCLI() -> (id: String, title: String)? {
+        guard let controller = focusedWindowController() ?? windowController else { return nil }
+
+        let sourceDirectory = controller.tabManager.activeTab?.workingDirectory
+        controller.createTab(workingDirectory: sourceDirectory)
+
+        guard let newTabID = controller.visibleTabID ?? controller.tabManager.activeTabID,
+              let tab = controller.tabManager.tab(for: newTabID) else {
+            return nil
+        }
+
+        return (id: newTabID.rawValue.uuidString, title: tab.displayTitle)
+    }
+
+    @MainActor
+    func restoreSessionFromCLI(named name: String?) -> Bool {
+        guard let sessionManager,
+              let controller = focusedWindowController() ?? windowController else {
+            return false
+        }
+
+        let session: Session
+        do {
+            if let name {
+                guard let loaded = try sessionManager.loadSession(named: name) else { return false }
+                session = loaded
+            } else {
+                guard let loaded = try sessionManager.loadLastSession() else { return false }
+                session = loaded
+            }
+        } catch {
+            return false
+        }
+
+        return restoreSession(session, into: controller)
+    }
+
+    @MainActor
     func timelineQuery(for tabIDString: String?) -> TimelineQueryResult? {
         guard let store = agentTimelineStore else { return nil }
 
         if let tabIDString {
-            guard let tabUUID = UUID(uuidString: tabIDString),
-                  let windowController,
-                  windowController.tabManager.tabs.contains(where: { $0.id.rawValue == tabUUID }) else {
+            guard let tabUUID = UUID(uuidString: tabIDString) else {
                 return nil
             }
+            let tabID = TabID(rawValue: tabUUID)
+            guard controllerContainingTab(tabID) != nil else { return nil }
 
             let sessionIDs = Set(
                 agentDashboardViewModel?.sessions
@@ -59,22 +102,21 @@ extension AppDelegate {
         caseSensitive: Bool,
         tabIDString: String?
     ) -> SearchCommandResult? {
-        guard let windowController else { return nil }
-
         let resolvedTabID: String?
         let lines: [String]
 
         if let tabIDString {
             guard let tabUUID = UUID(uuidString: tabIDString) else { return nil }
             let tabID = TabID(rawValue: tabUUID)
-            guard windowController.tabManager.tabs.contains(where: { $0.id == tabID }) else {
+            guard let controller = controllerContainingTab(tabID) else {
                 return nil
             }
-            lines = windowController.tabOutputBuffers[tabID]?.lines ?? []
+            lines = controller.tabOutputBuffers[tabID]?.lines ?? []
             resolvedTabID = tabIDString
         } else {
-            lines = windowController.terminalOutputBuffer.lines
-            resolvedTabID = windowController.tabManager.activeTabID?.rawValue.uuidString
+            guard let controller = focusedWindowController() ?? windowController else { return nil }
+            lines = controller.terminalOutputBuffer.lines
+            resolvedTabID = (controller.visibleTabID ?? controller.tabManager.activeTabID)?.rawValue.uuidString
         }
 
         let engine = ScrollbackSearchEngineImpl()
@@ -94,7 +136,7 @@ extension AppDelegate {
 
     @MainActor
     func focusSplit(in direction: NavigationDirection) -> Bool {
-        guard let windowController,
+        guard let windowController = focusedWindowController() ?? windowController,
               let activeTabID = windowController.tabManager.activeTabID else {
             return false
         }
@@ -105,7 +147,7 @@ extension AppDelegate {
 
     @MainActor
     func swapSplit(in direction: NavigationDirection) -> Bool {
-        guard let windowController,
+        guard let windowController = focusedWindowController() ?? windowController,
               let activeTabID = windowController.tabManager.activeTabID else {
             return false
         }
@@ -121,7 +163,7 @@ extension AppDelegate {
 
     @MainActor
     func resizeSplit(in direction: NavigationDirection, pixels: CGFloat) -> Bool {
-        guard let windowController,
+        guard let windowController = focusedWindowController() ?? windowController,
               let activeTabID = windowController.tabManager.activeTabID else {
             return false
         }
@@ -142,7 +184,7 @@ extension AppDelegate {
 
     @MainActor
     func setSplitRatio(splitID: UUID, ratio: CGFloat) -> Bool {
-        guard let windowController,
+        guard let windowController = focusedWindowController() ?? windowController,
               windowController.tabManager.activeTabID != nil else {
             return false
         }

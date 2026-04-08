@@ -68,6 +68,9 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
     /// Incomplete line buffer for handling data that doesn't end with newline.
     private var pendingLineFragment: String = ""
 
+    /// Incomplete UTF-8 bytes preserved across chunks.
+    private var pendingUTF8Bytes: [UInt8] = []
+
     /// Exposed for tests: the number of lines in the circular buffer.
     var recentLineCount: Int {
         lock.lock()
@@ -112,6 +115,7 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
         defer { lock.unlock() }
 
         if pendingLineFragment.isEmpty,
+           pendingUTF8Bytes.isEmpty,
            data.last == 0x0A,
            !data.dropLast().contains(0x0A) {
             let lineData = data.dropLast()
@@ -119,7 +123,9 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
             return processLine(line)
         }
 
-        guard let text = decodeUTF8Text(data) else { return [] }
+        guard let decoded = decodeBufferedUTF8(data) else { return [] }
+        let text = decoded.text
+        pendingUTF8Bytes = decoded.trailingBytes
 
         // Combine with any pending fragment from previous chunk
         let fullText: String
@@ -383,6 +389,7 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
         recentLineWindowCount = 0
         nextWindowSlot = 0
         pendingLineFragment = ""
+        pendingUTF8Bytes.removeAll(keepingCapacity: true)
         for index in launchMatchFlags.indices {
             launchMatchFlags[index] = Array(repeating: false, count: maxLineBuffer)
             launchMatchesInWindow[index] = 0
@@ -424,5 +431,36 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
         }
 
         return String(data: Data(bytes), encoding: .utf8)
+    }
+
+    private func decodeBufferedUTF8(_ data: Data) -> (text: String, trailingBytes: [UInt8])? {
+        let combinedBytes: [UInt8]
+        if pendingUTF8Bytes.isEmpty {
+            combinedBytes = Array(data)
+        } else {
+            combinedBytes = pendingUTF8Bytes + data
+        }
+
+        if combinedBytes.isEmpty {
+            return ("", [])
+        }
+
+        if combinedBytes.allSatisfy({ $0 < 0x80 }) {
+            return (String(decoding: combinedBytes, as: UTF8.self), [])
+        }
+
+        let maxTrailingBytes = min(3, combinedBytes.count)
+        for trailingCount in 0...maxTrailingBytes {
+            let prefixEnd = combinedBytes.count - trailingCount
+            let prefix = combinedBytes[..<prefixEnd]
+            guard let text = String(data: Data(prefix), encoding: .utf8) else {
+                continue
+            }
+
+            let trailing = trailingCount > 0 ? Array(combinedBytes[prefixEnd...]) : []
+            return (text, trailing)
+        }
+
+        return nil
     }
 }

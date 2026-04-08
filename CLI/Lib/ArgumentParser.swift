@@ -276,7 +276,7 @@ public enum SplitDirection: String, Equatable {
 public enum CLIArgumentParser {
 
     /// The current CLI version string.
-    public static let version = "0.1.0-alpha"
+    public static let version = "0.1.45"
 
     /// Parses command-line arguments into a `ParsedCommand`.
     ///
@@ -727,7 +727,9 @@ public enum CLIArgumentParser {
                 }
                 throw CLIError.missingArgument(command: "config set", argument: "value")
             }
-            return .configSet(key: rest[0], value: rest[1])
+            // Join remaining args to support multi-word values like "JetBrains Mono".
+            let value = rest.dropFirst().joined(separator: " ")
+            return .configSet(key: rest[0], value: value)
 
         case "path":
             return .configPath
@@ -1081,7 +1083,7 @@ public enum CLIArgumentParser {
         lines.append("  cocxy <command> [options]")
         lines.append("")
         lines.append("COMMANDS:")
-        for command in CLICommand.allCases {
+        for command in CLICommand.allCases where !command.isInternal {
             let padding = String(
                 repeating: " ",
                 count: max(1, 52 - command.usageExample.count)

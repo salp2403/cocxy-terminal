@@ -83,6 +83,11 @@ final class DiskAgentConfigFileProvider: AgentConfigFileProviding {
 /// - SeeAlso: `AgentConfig`, `CompiledAgentConfig`
 final class AgentConfigService {
 
+    enum ReloadError: Error {
+        case missingFile
+        case invalidToml
+    }
+
     // MARK: - Properties
 
     private let fileProvider: AgentConfigFileProviding
@@ -130,6 +135,22 @@ final class AgentConfigService {
         }
 
         let configs = parseAgentConfigs(rawContent)
+        let compiled = configs.map { AgentConfigService.compile($0) }
+        configSubject.send(compiled)
+    }
+
+    /// Reloads agent configs only when the on-disk file exists and parses cleanly.
+    ///
+    /// Used by hot-reload watchers so malformed edits do not silently replace the
+    /// current runtime configuration with defaults. On failure, the existing
+    /// compiled configs remain untouched and the caller can surface the reload
+    /// error to the user.
+    func reloadIfValid() throws {
+        guard let rawContent = fileProvider.readAgentConfigFile() else {
+            throw ReloadError.missingFile
+        }
+
+        let configs = try parseAgentConfigsOrThrow(rawContent)
         let compiled = configs.map { AgentConfigService.compile($0) }
         configSubject.send(compiled)
     }
@@ -262,14 +283,26 @@ final class AgentConfigService {
     /// Each top-level table in the TOML becomes one agent config.
     /// Invalid or incomplete agent definitions are skipped.
     private func parseAgentConfigs(_ rawContent: String) -> [AgentConfig] {
+        do {
+            return try parseAgentConfigsOrThrow(rawContent)
+        } catch {
+            // Malformed TOML: fall back to defaults during cold load.
+            return AgentConfigService.defaultAgentConfigs()
+        }
+    }
+
+    private func parseAgentConfigsOrThrow(_ rawContent: String) throws -> [AgentConfig] {
         let parsed: [String: TOMLValue]
         do {
             parsed = try parser.parse(rawContent)
         } catch {
-            // Malformed TOML: fall back to defaults
-            return AgentConfigService.defaultAgentConfigs()
+            throw ReloadError.invalidToml
         }
 
+        return buildAgentConfigs(from: parsed)
+    }
+
+    private func buildAgentConfigs(from parsed: [String: TOMLValue]) -> [AgentConfig] {
         var configs: [AgentConfig] = []
 
         for (key, value) in parsed {
@@ -300,7 +333,6 @@ final class AgentConfigService {
             configs.append(config)
         }
 
-        // Sort by name for deterministic order
         return configs.sorted { $0.name < $1.name }
     }
 

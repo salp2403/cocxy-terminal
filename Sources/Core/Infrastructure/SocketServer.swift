@@ -281,7 +281,7 @@ final class SocketServerImpl: CLISocketServing {
         // 5. Explicit chmod as defense-in-depth (socket already created with 0600 via umask).
         chmod(socketPath, SocketServerConstants.socketPermissions)
 
-        // 5. Start listening.
+        // 6. Start listening.
         guard Darwin.listen(fd, SocketServerConstants.listenBacklog) == 0 else {
             Darwin.close(fd)
             throw CLISocketError.bindFailed(

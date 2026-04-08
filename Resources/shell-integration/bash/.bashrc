@@ -6,6 +6,10 @@ if [[ -n "${COCXY_BASH_ORIG_HOME+set}" ]]; then
   unset COCXY_BASH_ORIG_HOME
 fi
 
+# Only source user config and shell integration in interactive mode.
+# Non-interactive bash -c commands should not load prompt/hook machinery.
+[[ "$-" == *i* ]] || return 0
+
 _cocxy_user_bashrc="${HOME}/.bashrc"
 if [[ -r "${_cocxy_user_bashrc}" ]]; then
   # shellcheck source=/dev/null

@@ -168,17 +168,17 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
 
     @MainActor
     func execute(_ action: CommandAction) {
-        // Update frequency count (no lock needed — @MainActor serializes access).
+        // Lock protects shared mutable state read by search() from any thread.
+        lock.lock()
         executionCounts[action.id, default: 0] += 1
-
-        // Update recent actions (most recent first, max 5).
         recentActionIds.removeAll { $0 == action.id }
         recentActionIds.insert(action.id, at: 0)
         if recentActionIds.count > 5 {
             recentActionIds = Array(recentActionIds.prefix(5))
         }
+        lock.unlock()
 
-        // Execute the handler (outside the lock to avoid deadlocks).
+        // Execute outside lock to avoid deadlocks if handler triggers search().
         action.handler()
     }
 
@@ -223,7 +223,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 description: "Switch to the next tab",
                 shortcut: "Ctrl+Tab",
                 category: .tabs,
-                handler: {}
+                handler: { coordinatorBox.coordinator?.nextTab() }
             ),
             CommandAction(
                 id: "tabs.previous",
@@ -231,7 +231,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 description: "Switch to the previous tab",
                 shortcut: "Ctrl+Shift+Tab",
                 category: .tabs,
-                handler: {}
+                handler: { coordinatorBox.coordinator?.previousTab() }
             ),
             CommandAction(
                 id: "splits.vertical",
@@ -263,7 +263,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 description: "Jump to the most urgent agent session",
                 shortcut: "Cmd+Shift+A",
                 category: .navigation,
-                handler: {}
+                handler: { coordinatorBox.coordinator?.performQuickSwitch() }
             ),
         ]
 

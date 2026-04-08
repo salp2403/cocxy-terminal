@@ -100,6 +100,11 @@ final class AppearanceObserver {
     /// Weak reference to the theme engine to avoid retain cycles.
     private weak var themeEngine: ThemeEngineImpl?
 
+    /// Callback invoked when the appearance observer wants to switch themes.
+    /// When set, bypasses the theme engine and goes through the full
+    /// AppDelegate.switchTheme path (bridge + UI + multi-window).
+    var onThemeSwitchRequested: ((String) -> Void)?
+
     // MARK: - Initialization
 
     /// Creates an observer with a custom appearance provider.
@@ -165,9 +170,13 @@ final class AppearanceObserver {
 
     /// Handles an appearance change by applying the correct theme.
     private func handleAppearanceChange(isDark: Bool) {
-        guard autoSwitchEnabled, let engine = themeEngine else { return }
+        guard autoSwitchEnabled else { return }
 
         let targetThemeName = isDark ? darkThemeName : lightThemeName
-        try? engine.apply(themeName: targetThemeName)
+        if let callback = onThemeSwitchRequested {
+            callback(targetThemeName)
+        } else if let engine = themeEngine {
+            try? engine.apply(themeName: targetThemeName)
+        }
     }
 }

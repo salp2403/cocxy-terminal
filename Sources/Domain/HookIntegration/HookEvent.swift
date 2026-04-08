@@ -227,6 +227,8 @@ enum AnyCodableValue: Codable, Sendable {
     case int(Int)
     case double(Double)
     case bool(Bool)
+    case array([AnyCodableValue])
+    case object([String: AnyCodableValue])
     case null
 
     var stringValue: String? {
@@ -235,6 +237,15 @@ enum AnyCodableValue: Codable, Sendable {
         case .int(let i): return String(i)
         case .double(let d): return String(d)
         case .bool(let b): return String(b)
+        case .array(let arr):
+            let elements = arr.compactMap { $0.stringValue }
+            return "[\(elements.joined(separator: ", "))]"
+        case .object(let dict):
+            let pairs = dict.compactMap { k, v -> String? in
+                guard let vs = v.stringValue else { return nil }
+                return "\(k): \(vs)"
+            }
+            return "{\(pairs.joined(separator: ", "))}"
         case .null: return nil
         }
     }
@@ -245,6 +256,8 @@ enum AnyCodableValue: Codable, Sendable {
         if let i = try? container.decode(Int.self) { self = .int(i); return }
         if let d = try? container.decode(Double.self) { self = .double(d); return }
         if let b = try? container.decode(Bool.self) { self = .bool(b); return }
+        if let arr = try? container.decode([AnyCodableValue].self) { self = .array(arr); return }
+        if let obj = try? container.decode([String: AnyCodableValue].self) { self = .object(obj); return }
         if container.decodeNil() { self = .null; return }
         self = .null
     }
@@ -256,6 +269,8 @@ enum AnyCodableValue: Codable, Sendable {
         case .int(let i): try container.encode(i)
         case .double(let d): try container.encode(d)
         case .bool(let b): try container.encode(b)
+        case .array(let arr): try container.encode(arr)
+        case .object(let obj): try container.encode(obj)
         case .null: try container.encodeNil()
         }
     }

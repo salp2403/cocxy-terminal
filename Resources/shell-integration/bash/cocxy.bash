@@ -27,8 +27,29 @@ unset _COCXY_DEBUG_TRAP_RAW
 __cocxy_report_pwd() {
   if [[ "$_COCXY_LAST_REPORTED_CWD" != "$PWD" ]]; then
     _COCXY_LAST_REPORTED_CWD="$PWD"
-    builtin printf '\e]7;%s\a' "$PWD"
+    builtin printf '\e]7;file://%s\a' "$(__cocxy_uri_encode_path "$PWD")"
   fi
+}
+
+__cocxy_uri_encode_path() {
+  local input="$1"
+  local output=""
+  local i ch
+  local LC_ALL=C
+
+  for (( i = 0; i < ${#input}; i++ )); do
+    ch="${input:i:1}"
+    case "$ch" in
+      [a-zA-Z0-9.~_/-])
+        output+="$ch"
+        ;;
+      *)
+        printf -v output '%s%%%02X' "$output" "'$ch"
+        ;;
+    esac
+  done
+
+  builtin printf '%s' "$output"
 }
 
 __cocxy_wrap_prompts() {

@@ -196,6 +196,43 @@ final class PatternMatchingDetectorTests: XCTestCase {
         XCTAssertFalse(finishedSignals.isEmpty, "Shell prompt '$' should indicate finished")
     }
 
+    func testSplitUTF8CharacterAcrossChunksStillDetectsPattern() {
+        let unicodeAgent = AgentConfig(
+            name: "unicode",
+            displayName: "Unicode Agent",
+            launchPatterns: ["^你$"],
+            waitingPatterns: [],
+            errorPatterns: [],
+            finishedIndicators: [],
+            oscSupported: false,
+            idleTimeoutOverride: nil
+        )
+        let detector = PatternMatchingDetector(
+            configs: [AgentConfigService.compile(unicodeAgent)],
+            requiredConsecutiveMatches: 1,
+            cooldownInterval: 0.0,
+            maxLineBuffer: 5
+        )
+
+        let bytes = Array("你\n".utf8)
+        let firstChunk = Data(bytes.prefix(2))
+        let secondChunk = Data(bytes.dropFirst(2))
+
+        let firstSignals = detector.processBytes(firstChunk)
+        let secondSignals = detector.processBytes(secondChunk)
+
+        XCTAssertTrue(firstSignals.isEmpty, "Incomplete UTF-8 prefix must not emit early signals")
+        XCTAssertTrue(
+            secondSignals.contains {
+                if case .agentDetected(let name) = $0.event {
+                    return name == "unicode"
+                }
+                return false
+            },
+            "Completing a multibyte scalar in the next chunk must still trigger detection"
+        )
+    }
+
     // MARK: - Hysteresis
 
     func testSingleMatchDoesNotTriggerTransition() {

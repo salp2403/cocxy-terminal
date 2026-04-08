@@ -49,8 +49,8 @@ final class ProjectConfigWatcher {
 
         let fd = open(watchedPath, O_EVTONLY)
         guard fd >= 0 else {
-            // File doesn't exist yet — mark as watching but defer observation.
-            isWatching = true
+            // File doesn't exist yet. Don't mark as watching — caller can retry
+            // on next tab switch when the file may have been created.
             return
         }
 
@@ -61,7 +61,14 @@ final class ProjectConfigWatcher {
         )
 
         source.setEventHandler { [weak self] in
-            self?.scheduleReload()
+            guard let self else { return }
+            let events = source.data
+            if events.contains(.rename) || events.contains(.delete) {
+                // Atomic write: file inode changed. Restart to track new inode.
+                self.scheduleRestartWatching()
+            } else {
+                self.scheduleReload()
+            }
         }
 
         source.setCancelHandler {
@@ -88,6 +95,25 @@ final class ProjectConfigWatcher {
         debounceWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             self?.onChange?()
+        }
+        debounceWorkItem = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + debounceInterval,
+            execute: work
+        )
+    }
+
+    /// Debounced restart of file watching after rename/delete (atomic write recovery).
+    private func scheduleRestartWatching() {
+        debounceWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let callback = self.onChange
+            self.stopWatching()
+            if let callback {
+                self.startWatching(onChange: callback)
+                callback()
+            }
         }
         debounceWorkItem = work
         DispatchQueue.main.asyncAfter(

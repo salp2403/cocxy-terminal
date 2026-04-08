@@ -603,7 +603,10 @@ extension MainWindowController {
     /// (e.g., swap/reorder) without adding or removing panes. Removes
     /// the current activeSplitView and reconstructs it to match the
     /// domain model's DFS order.
-    func rebuildSplitViewHierarchy(for tabID: TabID) {
+    func rebuildSplitViewHierarchy(
+        for tabID: TabID,
+        viewsByTerminalIDOverride: [UUID: NSView]? = nil
+    ) {
         guard let container = terminalContainerView else { return }
         let sm = tabSplitCoordinator.splitManager(for: tabID)
         let leaves = sm.rootNode.allLeafIDs()
@@ -617,28 +620,34 @@ extension MainWindowController {
         // Collect all leaf views in current visual order.
         let currentLeafViews = collectLeafViews()
 
-        // Build a mapping from terminalID to the NSView backing it.
-        var viewsByTerminalID: [UUID: NSView] = [:]
-        let allLeafInfos = sm.rootNode.allLeafIDs()
+        let viewsByTerminalID: [UUID: NSView]
+        if let viewsByTerminalIDOverride {
+            viewsByTerminalID = viewsByTerminalIDOverride
+        } else {
+            // Build a best-effort mapping from terminalID to the NSView backing it.
+            var inferredViewsByTerminalID: [UUID: NSView] = [:]
+            let allLeafInfos = sm.rootNode.allLeafIDs()
 
-        // The primary surface maps to the first terminal leaf that matches.
-        if let primary = terminalSurfaceView {
-            if tabSurfaceMap[tabID] != nil,
+            // The primary surface maps to the first terminal leaf that matches.
+            if let primary = terminalSurfaceView,
+               tabSurfaceMap[tabID] != nil,
                let firstLeaf = allLeafInfos.first {
-                viewsByTerminalID[firstLeaf.terminalID] = primary
+                inferredViewsByTerminalID[firstLeaf.terminalID] = primary
             }
-        }
 
-        // Map split surfaces by finding which terminalID they back.
-        // In the current architecture, split surfaces are keyed by SurfaceID,
-        // not terminalID. We match by view identity from the visual hierarchy.
-        for (i, leafView) in currentLeafViews.enumerated() {
-            if i < allLeafInfos.count {
-                let terminalID = allLeafInfos[i].terminalID
-                if viewsByTerminalID[terminalID] == nil {
-                    viewsByTerminalID[terminalID] = leafView
+            // Map split surfaces by finding which terminalID they back.
+            // In the current architecture, split surfaces are keyed by SurfaceID,
+            // not terminalID. We match by view identity from the visual hierarchy.
+            for (i, leafView) in currentLeafViews.enumerated() {
+                if i < allLeafInfos.count {
+                    let terminalID = allLeafInfos[i].terminalID
+                    if inferredViewsByTerminalID[terminalID] == nil {
+                        inferredViewsByTerminalID[terminalID] = leafView
+                    }
                 }
             }
+
+            viewsByTerminalID = inferredViewsByTerminalID
         }
 
         // Panel views stored in panelContentViews are found by
@@ -849,27 +858,42 @@ extension MainWindowController {
     }
 
     private func focusedPaneSnapshot() -> (contentID: UUID, view: NSView, surfaceID: SurfaceID?)? {
-        if let resolvedFromResponder = paneSnapshotFromFirstResponder() {
-            activeSplitManager?.focusLeaf(id: resolvedFromResponder.leafID)
-            return (
-                contentID: resolvedFromResponder.contentID,
-                view: resolvedFromResponder.view,
-                surfaceID: resolvedFromResponder.surfaceID
-            )
-        }
-
         guard let sm = activeSplitManager,
               let focusedLeafID = sm.focusedLeafID else {
+            if let resolvedFromResponder = paneSnapshotFromFirstResponder() {
+                activeSplitManager?.focusLeaf(id: resolvedFromResponder.leafID)
+                return (
+                    contentID: resolvedFromResponder.contentID,
+                    view: resolvedFromResponder.view,
+                    surfaceID: resolvedFromResponder.surfaceID
+                )
+            }
             return nil
         }
 
         let leaves = sm.rootNode.allLeafIDs()
         guard let focusedIndex = leaves.firstIndex(where: { $0.leafID == focusedLeafID }) else {
+            if let resolvedFromResponder = paneSnapshotFromFirstResponder() {
+                activeSplitManager?.focusLeaf(id: resolvedFromResponder.leafID)
+                return (
+                    contentID: resolvedFromResponder.contentID,
+                    view: resolvedFromResponder.view,
+                    surfaceID: resolvedFromResponder.surfaceID
+                )
+            }
             return nil
         }
 
         let leafViews = collectLeafViews()
         guard focusedIndex < leafViews.count else {
+            if let resolvedFromResponder = paneSnapshotFromFirstResponder() {
+                activeSplitManager?.focusLeaf(id: resolvedFromResponder.leafID)
+                return (
+                    contentID: resolvedFromResponder.contentID,
+                    view: resolvedFromResponder.view,
+                    surfaceID: resolvedFromResponder.surfaceID
+                )
+            }
             return nil
         }
 
@@ -927,9 +951,6 @@ extension MainWindowController {
 
         while let view = currentView {
             if let focusedIndex = leafViews.firstIndex(where: { $0 === view }) {
-                guard panelContentViews.values.contains(where: { $0 === view }) else {
-                    return nil
-                }
                 let leaf = leaves[focusedIndex]
                 let resolvedSurfaceID = (view as? TerminalHostView).flatMap(surfaceID(for:))
                 return (

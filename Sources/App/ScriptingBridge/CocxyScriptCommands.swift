@@ -25,7 +25,7 @@ final class CocxyMakeTabCommand: NSScriptCommand, @unchecked Sendable {
 
         let outcome: (result: ScriptableTab?, errorMessage: String?) = MainActor.assumeIsolated {
             guard let appDelegate = NSApp.delegate as? AppDelegate,
-                  let windowController = appDelegate.windowController else {
+                  let windowController = appDelegate.focusedWindowController() ?? appDelegate.windowController else {
                 return (nil, "Application not ready")
             }
 
@@ -74,7 +74,7 @@ final class CocxyRunCommandCommand: NSScriptCommand, @unchecked Sendable {
             }
 
             guard let appDelegate = NSApp.delegate as? AppDelegate,
-                  let windowController = appDelegate.windowController,
+                  let windowController = appDelegate.focusedWindowController() ?? appDelegate.windowController,
                   let activeID = windowController.tabManager.activeTabID,
                   let surfaceID = windowController.tabSurfaceMap[activeID] else {
                 return "No active terminal"
@@ -103,7 +103,7 @@ final class CocxySplitCommand: NSScriptCommand, @unchecked Sendable {
 
         let errorMessage: String? = MainActor.assumeIsolated {
             guard let appDelegate = NSApp.delegate as? AppDelegate,
-                  let windowController = appDelegate.windowController else {
+                  let windowController = appDelegate.focusedWindowController() ?? appDelegate.windowController else {
                 return "Application not ready"
             }
 
@@ -135,14 +135,24 @@ final class CocxyFocusTabCommand: NSScriptCommand, @unchecked Sendable {
                 return "Tab index required"
             }
 
-            guard let appDelegate = NSApp.delegate as? AppDelegate,
-                  let windowController = appDelegate.windowController else {
+            guard let appDelegate = NSApp.delegate as? AppDelegate else {
                 return "Application not ready"
             }
 
-            // Convert from 1-based (AppleScript) to 0-based (internal).
             let zeroBasedIndex = index - 1
-            windowController.tabManager.gotoTab(at: zeroBasedIndex)
+            let allTabIDs = appDelegate.allWindowControllers.flatMap { controller in
+                controller.tabManager.tabs.map(\.id)
+            }
+            guard zeroBasedIndex >= 0, zeroBasedIndex < allTabIDs.count else {
+                return "Tab index out of range"
+            }
+
+            let targetID = allTabIDs[zeroBasedIndex]
+            if let router = appDelegate.windowTabRouter {
+                router.activateTab(id: targetID)
+            } else {
+                _ = appDelegate.controllerContainingTab(targetID)?.focusTab(id: targetID)
+            }
             return nil
         }
 

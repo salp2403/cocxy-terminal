@@ -736,9 +736,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     private func handleStripSwapTabs(from fromIndex: Int, to toIndex: Int) {
         guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
         let sm = tabSplitCoordinator.splitManager(for: tabID)
+        let previousLeaves = sm.rootNode.allLeafIDs()
+        let leafViewsBeforeSwap = collectLeafViews()
         sm.swapLeaves(at: fromIndex, with: toIndex)
 
-        let leafViews = collectLeafViews()
+        let leafViews = leafViewsBeforeSwap
         guard fromIndex < leafViews.count, toIndex < leafViews.count else {
             refreshTabStrip()
             return
@@ -767,6 +769,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             viewAtFirst.frame = frameA
             viewAtSecond.frame = frameB
             parentA.adjustSubviews()
+        } else {
+            // When the panes live under different split parents, swapping the
+            // visual hierarchy locally becomes fragile. Rebuild from the split
+            // model so the rendered order stays consistent with the domain tree.
+            let viewsByTerminalID = Dictionary(
+                uniqueKeysWithValues: zip(previousLeaves, leafViews).map { ($0.terminalID, $1) }
+            )
+            rebuildSplitViewHierarchy(for: tabID, viewsByTerminalIDOverride: viewsByTerminalID)
+            return
         }
 
         refreshTabStrip()
@@ -963,15 +974,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         // Clean stored closures on the sidebar and tab strip to prevent leaks.
         tabBarView?.onCommandPalette = nil
+        tabBarView?.onNotificationPanel = nil
+        tabBarView?.onAcceptTabDrop = nil
+        tabBarViewModel?.onAddTab = nil
+        tabBarViewModel?.onCloseTab = nil
+        tabBarViewModel?.dragDataProvider = nil
 
         if let strip = horizontalTabStripView as? HorizontalTabStripView {
             strip.onAddTab = nil
             strip.onAddBrowser = nil
             strip.onAddMarkdown = nil
             strip.onAddStackedTerminal = nil
+            strip.onSplitSideBySide = nil
+            strip.onSplitStacked = nil
+            strip.onOpenBrowser = nil
+            strip.onOpenMarkdown = nil
+            strip.onReload = nil
+            strip.onGoBack = nil
+            strip.onGoForward = nil
+            strip.onClosePanel = nil
             strip.onSelectTab = nil
             strip.onCloseTab = nil
             strip.onSwapTabs = nil
+            strip.onRenameTab = nil
         }
 
         searchQueryCancellable?.cancel()
@@ -1742,5 +1767,15 @@ final class PassthroughView: NSView {
         let result = super.hitTest(point)
         // If the only hit is ourselves (no subview matched), pass through.
         return result === self ? nil : result
+    }
+}
+
+@MainActor
+final class FocusableHostingView<Content: View>: NSHostingView<Content> {
+    override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { true }
+
+    override func becomeFirstResponder() -> Bool {
+        true
     }
 }

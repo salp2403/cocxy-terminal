@@ -825,6 +825,45 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertFalse(bridge.destroyedSurfaces.contains(originalPrimarySurfaceID))
     }
 
+    func testStripSwapTabsRebuildsNestedVisualHierarchyWhenLeavesHaveDifferentParents() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.performVisualSplit(isVertical: true)
+
+        guard let splitManager = controller.activeSplitManager,
+              let firstLeaf = splitManager.rootNode.allLeafIDs().first else {
+            XCTFail("Expected an active split manager after creating the first split")
+            return
+        }
+
+        splitManager.focusLeaf(id: firstLeaf.leafID)
+        controller.performVisualSplit(isVertical: false)
+
+        let initialLeafViews = controller.collectLeafViews()
+        guard initialLeafViews.count == 3,
+              let strip = controller.horizontalTabStripView as? HorizontalTabStripView else {
+            XCTFail("Expected three visible leaves and a horizontal tab strip")
+            return
+        }
+
+        strip.onSwapTabs?(0, 2)
+
+        let reorderedLeafViews = controller.collectLeafViews()
+        XCTAssertTrue(
+            reorderedLeafViews[0] === initialLeafViews[2],
+            "Swapping leaves across different split parents must rebuild the hierarchy so the leftmost pane reflects the new model order"
+        )
+        XCTAssertTrue(
+            reorderedLeafViews[2] === initialLeafViews[0],
+            "Rebuilding the split hierarchy must also move the original first pane into the new trailing position"
+        )
+    }
+
     func testPerformVisualSplitUsesVisibleTabWorkingDirectoryWhenDisplayedTabDiffersFromActive() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

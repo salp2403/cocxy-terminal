@@ -451,7 +451,7 @@ extension MainWindowController {
 
             feedDetectionEngine(
                 oscCode: 7,
-                payload: "file://localhost\(directoryURL.path)",
+                payload: directoryURL.standardizedFileURL.absoluteString,
                 fromTabID: targetTabID,
                 surfaceID: sourceSurfaceID
             )
@@ -459,9 +459,7 @@ extension MainWindowController {
         case .commandStarted:
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
-                tab.lastCommandStartedAt = Date()
-                tab.lastCommandDuration = nil
-                tab.lastCommandExitCode = nil
+                tab.markCommandStarted()
             }
             refreshStatusBar()
 
@@ -469,9 +467,11 @@ extension MainWindowController {
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
                 if let startTime = tab.lastCommandStartedAt {
-                    tab.lastCommandDuration = Date().timeIntervalSince(startTime)
+                    tab.markCommandFinished(
+                        duration: Date().timeIntervalSince(startTime),
+                        exitCode: exitCode
+                    )
                 }
-                tab.lastCommandExitCode = exitCode
                 tab.lastCommandStartedAt = nil
             }
             refreshStatusBar()

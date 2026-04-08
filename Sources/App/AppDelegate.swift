@@ -346,23 +346,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if sessionRegistry == nil {
                     initializeSessionRegistry()
                 }
-                // Window was closed — recreate it.
-                // Clear existing Combine subscriptions to prevent duplicate
-                // subscribers accumulating on engine.stateChanged.
-                hookCancellables.removeAll()
-
-                // Stop the old socket server BEFORE creating a new one.
-                // Without this, the old server's deinit runs after the new
-                // server binds, and removeStaleSocketFile() deletes the
-                // new server's socket file (race condition).
-                socketServer?.stop()
-                socketServer = nil
-
+                // Window was closed while the app kept running in the background.
+                // Keep long-lived subsystems alive; recreating them here would
+                // tear down app-wide Combine wiring (remote workspace, socket,
+                // notifications, hot reload) and leave features half-disconnected.
                 createMainWindow()
-                wireAgentDetectionToWindow()
-                initializeNotificationStack()
-                wireAgentDetectionToNotifications()
-                initializeSocketServer()
             }
         }
         return true
@@ -1185,6 +1173,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lightTheme = "Catppuccin Latte"
 
         guard let engine = themeEngine else { return }
+        observer.onThemeSwitchRequested = { [weak self] themeName in
+            self?.switchTheme(to: themeName)
+        }
         observer.startObserving(
             themeEngine: engine,
             darkTheme: darkTheme,
@@ -1220,9 +1211,149 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             liveConfigProvider = nil
         }
+        let focusedControllerProvider: @Sendable () -> MainWindowController? = {
+            syncOnMainActor {
+                delegateRef.value?.focusedWindowController()
+                    ?? delegateRef.value?.windowController
+            }
+        }
         let handler = AppSocketCommandHandler(
             tabManager: windowController?.tabManager,
             hookEventReceiver: hookEventReceiver,
+            browserViewModelProviderOverride: {
+                syncOnMainActor {
+                    delegateRef.value?.activeBrowserViewModelForCLI()
+                }
+            },
+            tabCountProviderOverride: {
+                syncOnMainActor {
+                    delegateRef.value?.allWindowControllers.reduce(0) { partial, controller in
+                        partial + controller.tabManager.tabs.count
+                    } ?? 0
+                }
+            },
+            tabInfoProviderOverride: {
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value else { return [] }
+                    return delegate.allWindowControllers.flatMap { controller in
+                        controller.tabManager.tabs.map { tab in
+                            (
+                                id: tab.id.rawValue.uuidString,
+                                title: tab.displayTitle,
+                                isActive: tab.id == (controller.visibleTabID ?? controller.tabManager.activeTabID)
+                            )
+                        }
+                    }
+                }
+            },
+            tabFocusProviderOverride: { uuidString in
+                guard let uuid = UUID(uuidString: uuidString) else { return false }
+                return syncOnMainActor {
+                    let tabID = TabID(rawValue: uuid)
+                    if let router = delegateRef.value?.windowTabRouter {
+                        guard delegateRef.value?.controllerContainingTab(tabID) != nil else { return false }
+                        router.activateTab(id: tabID)
+                        return true
+                    }
+                    return delegateRef.value?.controllerContainingTab(tabID)?.focusTab(id: tabID) ?? false
+                }
+            },
+            tabCloseProviderOverride: { uuidString in
+                guard let uuid = UUID(uuidString: uuidString) else { return .notFound }
+                return syncOnMainActor {
+                    let tabID = TabID(rawValue: uuid)
+                    guard let controller = delegateRef.value?.controllerContainingTab(tabID) else {
+                        return .notFound
+                    }
+                    guard let index = controller.tabManager.tabs.firstIndex(where: { $0.id == tabID }) else {
+                        return .notFound
+                    }
+                    guard controller.tabManager.tabs.count > 1 else {
+                        return .lastTabBlocked
+                    }
+                    guard !controller.tabManager.tabs[index].isPinned else {
+                        return .pinnedBlocked
+                    }
+
+                    controller.closeTab(tabID)
+                    return controller.tabManager.tabs.contains(where: { $0.id == tabID }) ? .unavailable : .closed
+                }
+            },
+            tabCreateProviderOverride: { directoryPath in
+                syncOnMainActor {
+                    guard let controller = focusedControllerProvider() else { return nil }
+                    let workingDirectory = directoryPath.map(URL.init(fileURLWithPath:))
+                    controller.createTab(workingDirectory: workingDirectory)
+                    guard let newTabID = controller.tabManager.activeTabID,
+                          let tab = controller.tabManager.tab(for: newTabID) else {
+                        return nil
+                    }
+                    return (id: newTabID.rawValue.uuidString, title: tab.displayTitle)
+                }
+            },
+            tabRenameProviderOverride: { uuidString, newName in
+                guard let uuid = UUID(uuidString: uuidString) else { return false }
+                return syncOnMainActor {
+                    let tabID = TabID(rawValue: uuid)
+                    guard let controller = delegateRef.value?.controllerContainingTab(tabID) else { return false }
+                    guard controller.tabManager.tab(for: tabID) != nil else { return false }
+                    controller.tabManager.renameTab(id: tabID, newTitle: newName)
+                    return true
+                }
+            },
+            tabMoveProviderOverride: { uuidString, destinationIndex in
+                guard let uuid = UUID(uuidString: uuidString) else { return false }
+                return syncOnMainActor {
+                    let tabID = TabID(rawValue: uuid)
+                    guard let controller = delegateRef.value?.controllerContainingTab(tabID),
+                          let fromIndex = controller.tabManager.tabs.firstIndex(where: { $0.id == tabID }),
+                          destinationIndex >= 0,
+                          destinationIndex < controller.tabManager.tabs.count else {
+                        return false
+                    }
+                    controller.tabManager.moveTab(from: fromIndex, to: destinationIndex)
+                    return true
+                }
+            },
+            projectConfigProviderOverride: {
+                syncOnMainActor {
+                    guard let controller = focusedControllerProvider(),
+                          let activeID = controller.visibleTabID ?? controller.tabManager.activeTabID,
+                          let tab = controller.tabManager.tab(for: activeID),
+                          let config = tab.projectConfig else {
+                        return nil
+                    }
+
+                    var data: [String: String] = [:]
+                    if let fontSize = config.fontSize {
+                        data["font-size"] = String(fontSize)
+                    }
+                    if let padding = config.windowPadding {
+                        data["window-padding"] = String(padding)
+                    }
+                    if let paddingX = config.windowPaddingX {
+                        data["window-padding-x"] = String(paddingX)
+                    }
+                    if let paddingY = config.windowPaddingY {
+                        data["window-padding-y"] = String(paddingY)
+                    }
+                    if let opacity = config.backgroundOpacity {
+                        data["background-opacity"] = String(opacity)
+                    }
+                    if let blur = config.backgroundBlurRadius {
+                        data["background-blur-radius"] = String(blur)
+                    }
+                    if let patterns = config.agentDetectionExtraPatterns {
+                        data["agent-detection-extra-patterns"] = patterns.joined(separator: ", ")
+                    }
+                    if let keybindings = config.keybindingOverrides {
+                        for (key, value) in keybindings {
+                            data["keybinding.\(key)"] = value
+                        }
+                    }
+                    return data
+                }
+            },
             configProvider: liveConfigProvider,
             themeEngineProvider: {
                 if Thread.isMainThread {
@@ -1276,7 +1407,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 syncOnMainActor {
                     guard let delegate = delegateRef.value,
                           let manager = delegate.notificationManager else { return }
-                    let tabId = delegate.windowController?.tabManager.activeTabID ?? TabID()
+                    let tabId = focusedControllerProvider()?.visibleTabID
+                        ?? focusedControllerProvider()?.tabManager.activeTabID
+                        ?? TabID()
                     let notification = CocxyNotification(
                         type: .custom("cli"),
                         tabId: tabId,
@@ -1289,19 +1422,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V3: Tab duplicate — create new tab with active tab's CWD.
             tabDuplicateProvider: {
                 syncOnMainActor {
-                    guard let wc = delegateRef.value?.windowController,
-                          let activeTab = wc.tabManager.activeTab else { return nil }
-                    let newTab = wc.tabManager.addTab(
-                        workingDirectory: activeTab.workingDirectory
-                    )
-                    return (id: newTab.id.rawValue.uuidString, title: newTab.title)
+                    delegateRef.value?.duplicateFocusedTabForCLI()
                 }
             },
             // V3: Tab pin — toggle pin on active or specific tab.
             tabPinProvider: { tabIDString in
                 syncOnMainActor {
-                    guard let wc = delegateRef.value?.windowController else { return nil }
-                    let manager = wc.tabManager
+                    let manager: TabManager
+                    if let idStr = tabIDString,
+                       let uuid = UUID(uuidString: idStr),
+                       let controller = delegateRef.value?.controllerContainingTab(TabID(rawValue: uuid)) {
+                        manager = controller.tabManager
+                    } else if let controller = focusedControllerProvider() {
+                        manager = controller.tabManager
+                    } else {
+                        return nil
+                    }
                     let targetID: TabID
                     if let idStr = tabIDString, let uuid = UUID(uuidString: idStr) {
                         targetID = TabID(rawValue: uuid)
@@ -1330,7 +1466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V3: Split info — list panes in active tab.
             splitInfoProvider: {
                 syncOnMainActor {
-                    guard let wc = delegateRef.value?.windowController,
+                    guard let wc = focusedControllerProvider(),
                           let activeTabID = wc.tabManager.activeTabID else { return [] }
                     let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
                     let leaves = sm.rootNode.allLeafIDs()
@@ -1347,7 +1483,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V3: Split swap — exchange two panes by index.
             splitSwapProvider: { indexA, indexB in
                 syncOnMainActor {
-                    guard let wc = delegateRef.value?.windowController,
+                    guard let wc = focusedControllerProvider(),
                           let activeTabID = wc.tabManager.activeTabID else { return false }
                     let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
                     let leafCount = sm.rootNode.allLeafIDs().count
@@ -1369,7 +1505,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V3: Split zoom — toggle zoom on focused pane.
             splitZoomProvider: {
                 syncOnMainActor {
-                    guard let wc = delegateRef.value?.windowController,
+                    guard let wc = focusedControllerProvider(),
                           let activeTabID = wc.tabManager.activeTabID else { return (false, false) }
                     let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
                     guard sm.rootNode.allLeafIDs().count > 1 else { return (false, false) }
@@ -1390,29 +1526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V3: Session restore — recreate tabs from saved session.
             sessionRestoreProvider: { name in
                 syncOnMainActor {
-                    guard let delegate = delegateRef.value,
-                          let sessionMgr = delegate.sessionManager,
-                          let wc = delegate.windowController else { return false }
-
-                    let session: Session?
-                    do {
-                        if let name = name {
-                            session = try sessionMgr.loadSession(named: name)
-                        } else {
-                            session = try sessionMgr.loadLastSession()
-                        }
-                    } catch {
-                        return false
-                    }
-                    guard let session = session,
-                          let windowState = session.windows.first else { return false }
-
-                    for tabState in windowState.tabs {
-                        wc.tabManager.addTab(
-                            workingDirectory: tabState.workingDirectory
-                        )
-                    }
-                    return true
+                    delegateRef.value?.restoreSessionFromCLI(named: name) ?? false
                 }
             },
             // V3: Notification manager.
@@ -1431,20 +1545,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V3: Capture pane — return terminal output buffer lines.
             capturePaneProvider: {
                 syncOnMainActor {
-                    delegateRef.value?.windowController?.terminalOutputBuffer.lines ?? []
+                    focusedControllerProvider()?.terminalOutputBuffer.lines ?? []
                 }
             },
             // V4: Dashboard toggle — show/hide dashboard panel.
             dashboardToggleProvider: {
                 syncOnMainActor {
-                    delegateRef.value?.windowController?.toggleDashboard()
-                    return delegateRef.value?.windowController?.isDashboardVisible ?? false
+                    focusedControllerProvider()?.toggleDashboard()
+                    return focusedControllerProvider()?.isDashboardVisible ?? false
                 }
             },
             // V4: Dashboard status — session counts and visibility.
             dashboardStatusProvider: {
                 syncOnMainActor {
-                    let wc = delegateRef.value?.windowController
+                    let wc = focusedControllerProvider()
                     var data: [String: String] = [:]
                     data["visible"] = (wc?.isDashboardVisible ?? false) ? "true" : "false"
                     let sessions = wc?.dashboardViewModel?.sessions ?? []
@@ -1481,7 +1595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V4: Split create — add a new split pane.
             splitCreateProvider: { isVertical in
                 syncOnMainActor {
-                    guard let wc = delegateRef.value?.windowController,
+                    guard let wc = focusedControllerProvider(),
                           let activeTabID = wc.tabManager.activeTabID else { return false }
                     let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
                     let countBefore = sm.rootNode.allLeafIDs().count
@@ -1497,7 +1611,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V4: Split focus — focus a pane by DFS index.
             splitFocusProvider: { index in
                 syncOnMainActor {
-                    guard let wc = delegateRef.value?.windowController,
+                    guard let wc = focusedControllerProvider(),
                           let activeTabID = wc.tabManager.activeTabID else { return false }
                     let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
                     let leaves = sm.rootNode.allLeafIDs()
@@ -1517,7 +1631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V4: Split close — close the focused pane.
             splitCloseProvider: {
                 syncOnMainActor {
-                    guard let wc = delegateRef.value?.windowController,
+                    guard let wc = focusedControllerProvider(),
                           let activeTabID = wc.tabManager.activeTabID else { return false }
                     let sm = wc.tabSplitCoordinator.splitManager(for: activeTabID)
                     guard sm.rootNode.allLeafIDs().count > 1 else { return false }
@@ -1544,7 +1658,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V4: Search toggle — show/hide search bar.
             searchToggleProvider: {
                 syncOnMainActor {
-                    delegateRef.value?.windowController?.toggleSearchBar()
+                    focusedControllerProvider()?.toggleSearchBar()
                 }
             },
             // V4: Search query — return structured scrollback matches.
@@ -1563,7 +1677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 syncOnMainActor {
                     guard let delegate = delegateRef.value,
                           let bridge = delegate.bridge,
-                          let wc = delegate.windowController,
+                          let wc = focusedControllerProvider(),
                           let surfaceView = wc.focusedSplitSurfaceView,
                           let surfaceID = surfaceView.terminalViewModel?.surfaceID else { return false }
                     bridge.sendText(text, to: surfaceID)
@@ -1575,7 +1689,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 syncOnMainActor {
                     guard let delegate = delegateRef.value,
                           let bridge = delegate.bridge,
-                          let wc = delegate.windowController,
+                          let wc = focusedControllerProvider(),
                           let surfaceView = wc.focusedSplitSurfaceView,
                           let surfaceID = surfaceView.terminalViewModel?.surfaceID else { return false }
                     let sequence: String?
@@ -1615,7 +1729,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sshProvider: { destination, port, identityFile in
                 syncOnMainActor {
                     guard let delegate = delegateRef.value,
-                          let wc = delegate.windowController else { return nil }
+                          let wc = focusedControllerProvider() else { return nil }
                     var sshArgs = ["ssh"]
                     if let port = port { sshArgs += ["-p", "\(port)"] }
                     if let identity = identityFile { sshArgs += ["-i", identity] }

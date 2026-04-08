@@ -38,11 +38,36 @@ _cocxy_print() {
     print -rnu $_COCXY_FD -- "$1"
 }
 
+_cocxy_uri_encode_path() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+    local input="$1"
+    local output=""
+    local char
+    local hex
+    local LC_ALL=C
+    local -i i
+
+    for (( i = 1; i <= ${#input}; i++ )); do
+        char="${input[i]}"
+        case "$char" in
+            [a-zA-Z0-9.~_/-])
+                output+="$char"
+                ;;
+            *)
+                printf -v hex '%%%02X' "'$char"
+                output+="$hex"
+                ;;
+        esac
+    done
+
+    print -rn -- "$output"
+}
+
 _cocxy_report_pwd() {
     emulate -L zsh -o no_aliases -o no_warn_create_global
     if [[ "$_COCXY_LAST_REPORTED_CWD" != "$PWD" ]]; then
         _COCXY_LAST_REPORTED_CWD="$PWD"
-        _cocxy_print $'\e]7;'"$PWD"$'\a'
+        _cocxy_print $'\e]7;file://'"$(_cocxy_uri_encode_path "$PWD")"$'\a'
     fi
 }
 

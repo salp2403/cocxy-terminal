@@ -21,6 +21,19 @@ if test -r "$__cocxy_integration"
     source "$__cocxy_integration"
 end
 
+# Restore XDG_CONFIG_HOME to its original value so fish plugins and scripts
+# see the correct path for the remainder of the session.
+if set -q COCXY_FISH_ORIG_XDG_CONFIG_HOME
+    set -gx XDG_CONFIG_HOME "$COCXY_FISH_ORIG_XDG_CONFIG_HOME"
+    set -e COCXY_FISH_ORIG_XDG_CONFIG_HOME
+else
+    set -e XDG_CONFIG_HOME
+end
+
+if set -q COCXY_FISH_ORIG_HOME
+    set -e COCXY_FISH_ORIG_HOME
+end
+
 set -e __cocxy_orig_xdg_config_home
 set -e __cocxy_user_config
 set -e __cocxy_integration
