@@ -192,6 +192,9 @@ extension MainWindowController {
     /// Destroys all terminal surfaces across all tabs.
     /// Called during window close and app termination to ensure clean teardown.
     func destroyAllSurfaces() {
+        activeSplitView?.removeFromSuperview()
+        terminalSurfaceView?.removeFromSuperview()
+
         // Collect all unique surface IDs to destroy exactly once.
         var surfacesToDestroy = Set<SurfaceID>()
 
@@ -254,6 +257,7 @@ extension MainWindowController {
         inlineImageRenderers.removeAll()
 
         terminalViewModel.markStopped()
+        terminalOutputBuffer = TerminalOutputBuffer()
     }
 
     // MARK: - Handler Wiring for Restored Tabs
@@ -398,7 +402,7 @@ extension MainWindowController {
             // Notify IDE cursor controller only for the active tab.
             if (sourceTabID == nil || sourceTabID == visibleTabID),
                let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
-                    ?? terminalSurfaceView {
+                    ?? activeTerminalSurfaceView {
                 let promptRow: Int
                 if let surfaceView = surfaceView as? CocxyCoreView {
                     let cursorCtrl = surfaceView.ideCursorController
@@ -475,7 +479,7 @@ extension MainWindowController {
         case .inlineImage(let payload):
             guard let imageData = OSC1337Parser.parse(payload),
                   let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
-                    ?? terminalSurfaceView else { break }
+                    ?? activeTerminalSurfaceView else { break }
             let renderer = inlineImageRenderer(for: surfaceView)
             let position = surfaceView.bounds.height - 20
             renderer.renderImage(imageData, at: position)
@@ -532,9 +536,7 @@ extension MainWindowController {
         let resolvedTabID = sourceTabID ?? visibleTabID
         guard resolvedTabID == visibleTabID else { return false }
 
-        let focusedSurfaceID =
-            focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-            ?? terminalSurfaceView?.terminalViewModel?.surfaceID
+        let focusedSurfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID
 
         guard let focusedSurfaceID else { return true }
         guard let sourceSurfaceID else { return true }

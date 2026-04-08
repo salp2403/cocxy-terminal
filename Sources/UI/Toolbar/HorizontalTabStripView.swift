@@ -58,6 +58,12 @@ final class HorizontalTabStripView: NSView {
     /// Callback when the "Reload" action icon is clicked.
     var onReload: (() -> Void)?
 
+    /// Callback when the "Back" action icon is clicked in a browser panel.
+    var onGoBack: (() -> Void)?
+
+    /// Callback when the "Forward" action icon is clicked in a browser panel.
+    var onGoForward: (() -> Void)?
+
     /// Callback when the "Close Panel" action icon is clicked.
     var onClosePanel: (() -> Void)?
 
@@ -518,6 +524,22 @@ final class HorizontalTabStripView: NSView {
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
+                    icon: "chevron.left",
+                    tooltip: "Back",
+                    accessibilityID: "action:goBack",
+                    action: #selector(handleGoBack)
+                )
+            )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "chevron.right",
+                    tooltip: "Forward",
+                    accessibilityID: "action:goForward",
+                    action: #selector(handleGoForward)
+                )
+            )
+            actionStack.addArrangedSubview(
+                createActionButton(
                     icon: "arrow.clockwise",
                     tooltip: "Reload",
                     accessibilityID: "action:reload",
@@ -573,6 +595,8 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleOpenBrowser() { onOpenBrowser?() }
     @objc private func handleOpenMarkdown() { onOpenMarkdown?() }
     @objc private func handleReload() { onReload?() }
+    @objc private func handleGoBack() { onGoBack?() }
+    @objc private func handleGoForward() { onGoForward?() }
     @objc private func handleClosePanel() { onClosePanel?() }
 
     // MARK: - Drag-and-Drop Pasteboard Type
@@ -833,4 +857,3 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
         return image
     }
 }
-

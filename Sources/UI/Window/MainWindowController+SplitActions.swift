@@ -31,11 +31,17 @@ extension MainWindowController {
     /// Defaults to terminalSurfaceView when no split is active.
     var focusedSplitSurfaceView: TerminalHostView? {
         guard let responder = window?.firstResponder else {
+            if let focusedPane = focusedPaneView() as? TerminalHostView {
+                return focusedPane
+            }
             return terminalSurfaceView
         }
         // Walk the responder chain to find a terminal host view.
         if let surface = responder as? TerminalHostView {
             return surface
+        }
+        if let focusedPane = focusedPaneView() as? TerminalHostView {
+            return focusedPane
         }
         return terminalSurfaceView
     }
@@ -321,6 +327,20 @@ extension MainWindowController {
         // Check if the pane being closed is a non-terminal panel.
         let closingPanelView: NSView? = panelContentViews[focusedPane.contentID]
 
+        // Keep at least one terminal leaf alive in every tab. Closing the last
+        // remaining terminal and leaving only auxiliary panels produces a dead
+        // workspace with no PTY-backed surface to focus or recover.
+        if closingPanelView == nil,
+           let splitManager = activeSplitManager {
+            let terminalLeafCount = splitManager.rootNode.allLeafIDs().filter {
+                splitManager.panelType(for: $0.terminalID) == .terminal
+            }.count
+            if terminalLeafCount <= 1 {
+                NSSound.beep()
+                return
+            }
+        }
+
         // Update the domain model.
         activeSplitManager?.handleSplitAction(.closeActiveSplit)
 
@@ -376,9 +396,14 @@ extension MainWindowController {
         // Check if we are back to a single pane and adopt the surviving view as
         // the tab's primary surface when needed.
         if remainingLeafCount <= 1 {
+            let trackedFallbackView =
+                visibleTabID.flatMap { tabSurfaceViews[$0] }
+                ?? splitSurfaceViews.values.first
+                ?? panelContentViews.values.first
             let remainingView =
                 promotedRemainingView
                 ?? firstVisiblePaneView(in: container)
+                ?? trackedFallbackView
                 ?? terminalSurfaceView
 
             activeSplitView?.removeFromSuperview()
@@ -692,8 +717,22 @@ extension MainWindowController {
     func spawnSubagentPanel(subagentId: String, sessionId: String, agentType: String?, targetTabId: UUID? = nil) {
         let normalizedSubagentId = subagentId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedSubagentId.isEmpty else { return }
-        if let agentType,
-           agentType.caseInsensitiveCompare("subprocess") == .orderedSame {
+        let normalizedAgentType = agentType?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalizedAgentType, !normalizedAgentType.isEmpty else {
+            return
+        }
+        let lowercasedAgentType = normalizedAgentType.lowercased()
+        let genericAgentTypes: Set<String> = [
+            "subprocess",
+            "agent",
+            "subagent",
+            "generic",
+            "general",
+            "general-purpose",
+            "unknown",
+        ]
+        if genericAgentTypes.contains(lowercasedAgentType) {
             return
         }
 
@@ -715,6 +754,16 @@ extension MainWindowController {
 
         let panel = PanelInfo.subagent(id: normalizedSubagentId, sessionId: sessionId)
         performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
+
+        if let activeTabID = tabManager.activeTabID {
+            if let contentID = panelContentViews.first(where: { _, view in
+                guard let subagentView = view as? SubagentContentView else { return false }
+                return subagentView.subagentId == normalizedSubagentId && subagentView.sessionId == sessionId
+            })?.key {
+                tabSplitCoordinator.splitManager(for: activeTabID)
+                    .setPanelTitle(for: contentID, title: normalizedAgentType)
+            }
+        }
 
         // Animate the new panel entrance (fade-in).
         if let newPanelView = panelContentViews.values.first(where: { ($0 as? SubagentContentView)?.subagentId == subagentId }) {
@@ -813,7 +862,7 @@ extension MainWindowController {
         return (leaf.terminalID, view, resolvedSurfaceID)
     }
 
-    private func focusedPaneView() -> NSView? {
+    func focusedPaneView() -> NSView? {
         focusedPaneSnapshot()?.view
     }
 

@@ -360,9 +360,7 @@ extension MainWindowController {
         commandPaletteHostingView?.removeFromSuperview()
         commandPaletteHostingView = nil
         isCommandPaletteVisible = false
-        if let surfaceView = terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
     }
 
     // MARK: - Dashboard Panel (Cmd+Option+A)
@@ -521,14 +519,11 @@ extension MainWindowController {
         searchBarHostingView?.removeFromSuperview()
         searchBarHostingView = nil
         isSearchBarVisible = false
-        if let surfaceView = focusedSplitSurfaceView ?? terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
     }
 
     private func activeSearchSurfaceID() -> SurfaceID? {
-        focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-            ?? terminalSurfaceView?.terminalViewModel?.surfaceID
+        activeTerminalSurfaceView?.terminalViewModel?.surfaceID
     }
 
     // MARK: - Smart Routing Overlay (Cmd+Shift+U)
@@ -577,9 +572,7 @@ extension MainWindowController {
         smartRoutingHostingView = nil
         smartRoutingViewModel = nil
         isSmartRoutingVisible = false
-        if let surfaceView = terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
     }
 
     @objc func showSmartRoutingAction(_ sender: Any?) {
@@ -805,9 +798,7 @@ extension MainWindowController {
             }
         })
 
-        if let surfaceView = terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
     }
 
     // MARK: - Browser Panel (Cmd+Shift+B)
@@ -886,9 +877,7 @@ extension MainWindowController {
             }
         })
 
-        if let surfaceView = terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
     }
 
     // MARK: - Preferences Window (Cmd+,)
@@ -927,7 +916,7 @@ extension MainWindowController {
             // the preferences window is fully ordered out first.
             Task { @MainActor [weak self] in
                 guard let self,
-                      let surfaceView = self.terminalSurfaceView else { return }
+                      let surfaceView = self.activeTerminalSurfaceView else { return }
                 self.window?.makeKeyAndOrderFront(nil)
                 self.window?.makeFirstResponder(surfaceView)
             }
@@ -980,9 +969,7 @@ extension MainWindowController {
         welcomeHostingView?.removeFromSuperview()
         welcomeHostingView = nil
         isWelcomeVisible = false
-        if let surfaceView = terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
     }
 
     @objc func showWelcomeAction(_ sender: Any?) {

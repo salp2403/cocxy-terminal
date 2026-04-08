@@ -345,6 +345,27 @@ final class TabSurfaceMappingTests: XCTestCase {
             "Surface-specific CWD tracking must override the tab-level working directory"
         )
     }
+
+    func testDestroyAllSurfacesRemovesTerminalSubviewsFromContainer() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        controller.terminalContainerView = container
+
+        let primaryView = TrackingTerminalHostView(frame: container.bounds)
+        controller.terminalSurfaceView = primaryView
+        container.addSubview(primaryView)
+
+        XCTAssertEqual(container.subviews.count, 1)
+
+        controller.destroyAllSurfaces()
+
+        XCTAssertTrue(
+            container.subviews.isEmpty,
+            "Destroying all surfaces must also clear the visible terminal hierarchy from the container"
+        )
+    }
 }
 
 // MARK: - Tab Navigation Surface Switching Tests
@@ -624,6 +645,42 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testSpawnSubagentPanelIgnoresGenericAgentPlaceholderType() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.injectedDashboardViewModel = AgentDashboardViewModel()
+
+        controller.spawnSubagentPanel(
+            subagentId: "sub-generic",
+            sessionId: "sess-1",
+            agentType: "Agent"
+        )
+
+        XCTAssertTrue(
+            controller.panelContentViews.isEmpty,
+            "Placeholder agent labels must not auto-open subagent panels that the user did not explicitly spawn"
+        )
+    }
+
+    func testSpawnSubagentPanelIgnoresMissingAgentType() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.injectedDashboardViewModel = AgentDashboardViewModel()
+
+        controller.spawnSubagentPanel(
+            subagentId: "sub-untitled",
+            sessionId: "sess-1",
+            agentType: nil
+        )
+
+        XCTAssertTrue(
+            controller.panelContentViews.isEmpty,
+            "Subagent auto-panels must not open when the hook lacks descriptive type metadata"
+        )
+    }
+
     func testCloseSplitActionPromotesRemainingSplitSurfaceToPrimary() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -686,6 +743,45 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             bridge.destroyedSurfaces.contains(originalPrimarySurfaceID),
             "Closing the focused primary pane must destroy its surface in the engine"
         )
+    }
+
+    func testCloseSplitActionDoesNotCloseLastTerminalWhenOnlyPanelsWouldRemain() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let activeTabID = controller.tabManager.activeTabID,
+              let originalPrimaryView = controller.terminalSurfaceView,
+              let originalPrimarySurfaceID = controller.tabSurfaceMap[activeTabID] else {
+            XCTFail("Expected bootstrap tab and primary surface")
+            return
+        }
+
+        controller.splitWithBrowserAction(nil)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after opening browser panel")
+            return
+        }
+
+        let leaves = splitManager.rootNode.allLeafIDs()
+        guard let terminalLeaf = leaves.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .terminal
+        }) else {
+            XCTFail("Expected a terminal leaf")
+            return
+        }
+
+        splitManager.focusLeaf(id: terminalLeaf.leafID)
+        controller.closeSplitAction(nil)
+
+        XCTAssertNotNil(controller.activeSplitView, "The split hierarchy must stay alive when closing the last terminal would leave only panels")
+        XCTAssertTrue(controller.terminalSurfaceView === originalPrimaryView)
+        XCTAssertEqual(controller.tabSurfaceMap[activeTabID], originalPrimarySurfaceID)
+        XCTAssertFalse(bridge.destroyedSurfaces.contains(originalPrimarySurfaceID))
     }
 
     func testHandleOSCNotificationUpdatesTheSourceTabViewModelTitle() {

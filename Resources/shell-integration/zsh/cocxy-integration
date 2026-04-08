@@ -1,0 +1,109 @@
+# Copyright (c) 2026 Said Arturo Lopez. MIT License.
+# Minimal Cocxy shell integration for zsh.
+
+_cocxy_integration_entrypoint() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+
+    [[ -o interactive ]] || return 0
+    (( ${+_cocxy_integration_loaded} == 0 )) || return 0
+    typeset -g _cocxy_integration_loaded=1
+
+    typeset -g _COCXY_SAVED_PS1="$PS1"
+    typeset -g _COCXY_SAVED_PS2="$PS2"
+    typeset -g _COCXY_MARKED_PS1=""
+    typeset -g _COCXY_MARKED_PS2=""
+    typeset -g _COCXY_LAST_REPORTED_CWD=""
+    typeset -gi _COCXY_EXECUTING=0
+    typeset -gi _COCXY_FD=1
+
+    {
+        zmodload zsh/system
+        if (( $+builtins[sysopen] )); then
+            if [[ -w "$TTY" ]]; then
+                sysopen -o cloexec -wu _COCXY_FD -- "$TTY"
+            elif [[ -w /dev/tty ]]; then
+                sysopen -o cloexec -wu _COCXY_FD -- /dev/tty
+            fi
+        fi
+    } 2>/dev/null || _COCXY_FD=1
+
+    autoload -Uz add-zsh-hook
+    add-zsh-hook precmd _cocxy_precmd
+    add-zsh-hook preexec _cocxy_preexec
+    add-zsh-hook chpwd _cocxy_report_pwd
+}
+
+_cocxy_print() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+    print -rnu $_COCXY_FD -- "$1"
+}
+
+_cocxy_report_pwd() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+    if [[ "$_COCXY_LAST_REPORTED_CWD" != "$PWD" ]]; then
+        _COCXY_LAST_REPORTED_CWD="$PWD"
+        _cocxy_print $'\e]7;'"$PWD"$'\a'
+    fi
+}
+
+_cocxy_wrap_prompts() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+
+    if [[ -n "${_COCXY_MARKED_PS1}" && "$PS1" == "$_COCXY_MARKED_PS1" ]]; then
+        PS1="$_COCXY_SAVED_PS1"
+        PS2="$_COCXY_SAVED_PS2"
+    else
+        _COCXY_SAVED_PS1="$PS1"
+        _COCXY_SAVED_PS2="$PS2"
+    fi
+
+    local prompt_start=$'%{\e]133;A\a%}'
+
+    PS1="${prompt_start}${_COCXY_SAVED_PS1}"
+    PS2="${prompt_start}${_COCXY_SAVED_PS2}"
+    _COCXY_MARKED_PS1="$PS1"
+    _COCXY_MARKED_PS2="$PS2"
+}
+
+_cocxy_restore_prompts() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+    if [[ -n "${_COCXY_MARKED_PS1}" && "$PS1" == "$_COCXY_MARKED_PS1" ]]; then
+        PS1="$_COCXY_SAVED_PS1"
+        PS2="$_COCXY_SAVED_PS2"
+    fi
+}
+
+_cocxy_precmd() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+    local status=$?
+
+    if (( _COCXY_EXECUTING )); then
+        _cocxy_print $'\e]133;D;'"$status"$'\a'
+        _COCXY_EXECUTING=0
+    fi
+
+    _cocxy_report_pwd
+
+    if [[ "${COCXY_SHELL_FEATURES:-}" == *title* ]]; then
+        _cocxy_print $'\e]2;'"${PWD/#$HOME/~}"$'\a'
+    fi
+
+    _cocxy_wrap_prompts
+}
+
+_cocxy_preexec() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+    local command_text="$1"
+
+    _cocxy_restore_prompts
+
+    if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$command_text" ]]; then
+        _cocxy_print $'\e]2;'"${command_text//[$'\x00'-$'\x1f']/}"$'\a'
+    fi
+
+    _cocxy_print $'\e]133;B\a'
+    _cocxy_print $'\e]133;C\a'
+    _COCXY_EXECUTING=1
+}
+
+_cocxy_integration_entrypoint

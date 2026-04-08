@@ -582,6 +582,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onOpenBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
         strip.onOpenMarkdown = { [weak self] in self?.splitWithMarkdownAction(nil) }
         strip.onReload = { [weak self] in self?.reloadFocusedBrowserPanel() }
+        strip.onGoBack = { [weak self] in self?.goBackFocusedBrowserPanel() }
+        strip.onGoForward = { [weak self] in self?.goForwardFocusedBrowserPanel() }
         strip.onClosePanel = { [weak self] in self?.closeSplitAction(nil) }
         strip.onSelectTab = { [weak self] index in self?.handleStripSelectTab(at: index) }
         strip.onCloseTab = { [weak self] index in self?.handleStripCloseTab(at: index) }
@@ -839,7 +841,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             // Bring window to front and switch to the tab.
             NSApp.activate(ignoringOtherApps: true)
             window?.makeKeyAndOrderFront(nil)
-            handleTabSwitch(to: entry.tabID)
+            _ = focusTab(id: entry.tabID)
 
         case .themeChanged, .fontChanged, .configReloaded,
              .globalShortcut, .custom:
@@ -1021,16 +1023,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func windowDidBecomeMain(_ notification: Notification) {
         // Ensure the terminal view has focus when the window becomes main.
-        if let surfaceView = terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
         refreshVisibleTerminalInteractionState()
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
-        if let surfaceView = terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
         refreshVisibleTerminalInteractionState()
         injectedAgentDetectionEngine?.resumeTimingDetector()
     }
@@ -1090,6 +1088,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var visibleTabViewModel: TerminalViewModel? {
         guard let tabID = visibleTabID else { return terminalSurfaceView?.terminalViewModel }
         return tabViewModels[tabID] ?? terminalSurfaceView?.terminalViewModel
+    }
+
+    /// The terminal surface that should receive interaction right now.
+    ///
+    /// This prefers the actually focused split pane and only falls back to the
+    /// visible tab's primary surface. It avoids targeting stale bootstrap
+    /// surfaces after restores, tab switches, or split promotion.
+    var activeTerminalSurfaceView: TerminalHostView? {
+        if let focused = focusedSplitSurfaceView {
+            return focused
+        }
+
+        if let visibleTabID, let visiblePrimary = tabSurfaceViews[visibleTabID] {
+            return visiblePrimary
+        }
+
+        return terminalSurfaceView ?? splitSurfaceViews.values.first
+    }
+
+    /// Restores first responder to the active terminal surface, if any.
+    func focusActiveTerminalSurface() {
+        guard let surfaceView = activeTerminalSurfaceView else { return }
+        window?.makeFirstResponder(surfaceView)
     }
 
     /// Returns every terminal view model associated with a tab, including split panes.
@@ -1264,8 +1285,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // cell sizes we computed here before. Calling resize twice caused a brief
         // flicker when the approximate and actual sizes diverged.
 
-        window?.makeFirstResponder(targetSurfaceView)
-        targetSurfaceView.hideNotificationRing()
+        let responderSurface = (focusedPaneView() as? TerminalHostView) ?? targetSurfaceView
+        window?.makeFirstResponder(responderSurface)
+        responderSurface.hideNotificationRing()
+        if responderSurface !== targetSurfaceView {
+            targetSurfaceView.hideNotificationRing()
+        }
         refreshVisibleTerminalInteractionState()
 
         // Propagate read state to the session registry so other windows

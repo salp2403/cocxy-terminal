@@ -680,6 +680,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for viewModel in controller.splitViewModels.values {
                 viewModel.setDefaultFontSize(config.appearance.fontSize)
             }
+            for storedViewModels in controller.savedTabSplitViewModels.values {
+                for viewModel in storedViewModels.values {
+                    viewModel.setDefaultFontSize(config.appearance.fontSize)
+                }
+            }
             for surfaceView in controller.tabSurfaceViews.values {
                 surfaceView.updateInteractionMetrics()
                 surfaceView.requestImmediateRedraw()
@@ -722,22 +727,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Creates and displays the main application window.
     private func createMainWindow() {
-        guard let controller = makeWindowController(registerInitialSession: true) else {
+        let shouldBootstrapSurface = !hasRestorableSessionOnLaunch()
+
+        guard let controller = makeWindowController(registerInitialSession: shouldBootstrapSurface) else {
             // Bridge initialization failed. Show a placeholder window.
             createFallbackWindow()
             return
         }
 
         controller.showWindow(nil)
-        controller.window?.center()
+        if shouldBootstrapSurface {
+            controller.window?.center()
 
-        // Create the terminal surface after the window is visible.
-        // The view needs a valid frame for Metal layer initialization.
-        controller.createTerminalSurface()
+            // Create the terminal surface after the window is visible.
+            // The view needs a valid frame for Metal layer initialization.
+            controller.createTerminalSurface()
 
-        // Make the terminal view first responder for keyboard input.
-        if let surfaceView = controller.terminalSurfaceView {
-            controller.window?.makeFirstResponder(surfaceView)
+            // Make the terminal view first responder for keyboard input.
+            if let surfaceView = controller.terminalSurfaceView {
+                controller.window?.makeFirstResponder(surfaceView)
+            }
         }
 
         self.windowController = controller
@@ -796,7 +805,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let cwd,
               let resolved = resolvedWorkingDirectoryCandidate(for: cwd) else {
-            return nil
+            guard let sessionID,
+                  let cwd,
+                  let focusedController = focusedWindowController(),
+                  let focusedTabID = focusedController.visibleTabID ?? focusedController.tabManager.activeTabID,
+                  tabMatchesWorkingDirectory(focusedTabID, in: focusedController, directory: cwd) else {
+                return nil
+            }
+            bindHookSession(sessionID, to: focusedTabID)
+            return (focusedController, focusedTabID)
         }
 
         if let sessionID {
@@ -884,6 +901,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return parsed.standardizedFileURL.path
         }
         return URL(fileURLWithPath: trimmed).standardized.path
+    }
+
+    private func tabMatchesWorkingDirectory(
+        _ tabID: TabID,
+        in controller: MainWindowController,
+        directory: String
+    ) -> Bool {
+        let normalizedPath = normalizedWorkingDirectoryPath(directory)
+
+        if controller.tabManager.tab(for: tabID)?.workingDirectory.standardized.path == normalizedPath {
+            return true
+        }
+
+        return controller.surfaceIDs(for: tabID).contains { surfaceID in
+            controller.surfaceWorkingDirectories[surfaceID]?.standardized.path == normalizedPath
+        }
     }
 
     func configureSharedServices(
@@ -1601,8 +1634,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         guard let bridge = delegate?.bridge,
                               let wc = wc,
                               wc.tabManager.activeTabID == targetTabID else { return }
-                        let surfaceID = wc.terminalSurfaceView?.terminalViewModel?.surfaceID
-                            ?? wc.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+                        let surfaceID = wc.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
                         guard let sid = surfaceID else { return }
                         bridge.sendText("\(sshCommand)\r", to: sid)
                     }

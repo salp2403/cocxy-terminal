@@ -255,7 +255,7 @@ struct CocxyCoreSemanticAdapterTests {
         #expect(capture.hooks.isEmpty)
     }
 
-    @Test("Process spawn emits a subagent-start timeline entry")
+    @Test("Process spawn emits a generic state-change timeline entry")
     func processSpawnEmitsTimeline() {
         let adapter = CocxyCoreSemanticAdapter()
         let capture = SemanticCapture(adapter: adapter)
@@ -271,11 +271,11 @@ struct CocxyCoreSemanticAdapterTests {
         )
         adapter.processProcessEvent(event, for: makeSurfaceID(), cwd: nil)
 
-        #expect(capture.timeline.last?.type == .subagentStart)
+        #expect(capture.timeline.last?.type == .stateChange)
         #expect(capture.timeline.last?.summary == "Subprocess spawned (PID 321)")
     }
 
-    @Test("Process exit emits only a subagent-stop timeline entry")
+    @Test("Process exit emits only a generic state-change timeline entry")
     func processExitPublishesTimelineOnly() {
         let adapter = CocxyCoreSemanticAdapter()
         let capture = SemanticCapture(adapter: adapter)
@@ -292,7 +292,7 @@ struct CocxyCoreSemanticAdapterTests {
         adapter.processProcessEvent(event, for: makeSurfaceID(), cwd: nil)
 
         #expect(capture.hooks.isEmpty)
-        #expect(capture.timeline.last?.type == .subagentStop)
+        #expect(capture.timeline.last?.type == .stateChange)
         #expect(capture.timeline.last?.summary == "Subprocess exited (PID 444, code 9)")
     }
 

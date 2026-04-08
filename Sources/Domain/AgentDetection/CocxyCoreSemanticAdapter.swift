@@ -286,7 +286,7 @@ final class CocxyCoreSemanticAdapter {
         switch Int32(event.event_type) {
         case 0: // CHILD_SPAWNED
             emitTimeline(
-                type: .subagentStart, sessionId: sessionId,
+                type: .stateChange, sessionId: sessionId,
                 summary: "Subprocess spawned (PID \(event.pid))",
                 timestamp: timestamp,
                 windowID: windowID, windowLabel: windowLabel
@@ -294,7 +294,7 @@ final class CocxyCoreSemanticAdapter {
 
         case 1: // CHILD_EXITED
             emitTimeline(
-                type: .subagentStop, sessionId: sessionId,
+                type: .stateChange, sessionId: sessionId,
                 summary: "Subprocess exited (PID \(event.pid), code \(event.exit_code))",
                 timestamp: timestamp,
                 windowID: windowID, windowLabel: windowLabel

@@ -96,6 +96,11 @@ if [ -d "${PROJECT_ROOT}/Resources/Sounds" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Sounds" "${RESOURCES}/Sounds"
 fi
 
+# Step 6c: Copy shell integration scripts.
+if [ -d "${PROJECT_ROOT}/Resources/shell-integration" ]; then
+    cp -R "${PROJECT_ROOT}/Resources/shell-integration" "${RESOURCES}/shell-integration"
+fi
+
 # Step 7: Also build the CLI companion and place it in Resources.
 echo "==> Building CLI companion..."
 swift build --target cocxy ${SWIFT_FLAGS} 2>&1 | tail -1

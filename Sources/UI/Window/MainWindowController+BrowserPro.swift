@@ -51,6 +51,14 @@ extension MainWindowController {
         return browserViewModel
     }
 
+    func goBackFocusedBrowserPanel() {
+        activeBrowserViewModel()?.goBack()
+    }
+
+    func goForwardFocusedBrowserPanel() {
+        activeBrowserViewModel()?.goForward()
+    }
+
     /// Toggles the browser history panel.
     func toggleBrowserHistory() {
         if isBrowserHistoryVisible {

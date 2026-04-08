@@ -303,6 +303,49 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.parseWorkingDirectoryURL("file://localhost/Users/test/project")?.path == "/Users/test/project")
         #expect(bridge.parseWorkingDirectoryURL("/Users/test/project")?.path == "/Users/test/project")
     }
+
+    @Test("shell integration env injects zsh wrapper when resources are available")
+    func shellIntegrationEnvInjectsZshWrapper() throws {
+        let bridge = try makeBridge()
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let zshDir = root.appendingPathComponent("shell-integration/zsh", isDirectory: true)
+        try FileManager.default.createDirectory(at: zshDir, withIntermediateDirectories: true)
+
+        let env = bridge.buildShellIntegrationEnvVars(
+            forShell: "/bin/zsh",
+            environment: ["ZDOTDIR": "/Users/test/.config/zsh"],
+            resourcesPath: root.path
+        )
+
+        #expect(env["TERM"] == "xterm-256color")
+        #expect(env["COCXY_RESOURCES_DIR"] == root.path)
+        #expect(env["COCXY_SHELL_INTEGRATION_DIR"] == root.appendingPathComponent("shell-integration").path)
+        #expect(env["ZDOTDIR"] == zshDir.path)
+        #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == "/Users/test/.config/zsh")
+    }
+
+    @Test("shell integration env leaves non-zsh shells untouched")
+    func shellIntegrationEnvLeavesNonZshShellsUntouched() throws {
+        let bridge = try makeBridge()
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("shell-integration", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        let env = bridge.buildShellIntegrationEnvVars(
+            forShell: "/bin/bash",
+            environment: ["ZDOTDIR": "/Users/test/.config/zsh"],
+            resourcesPath: root.path
+        )
+
+        #expect(env["TERM"] == "xterm-256color")
+        #expect(env["COCXY_RESOURCES_DIR"] == root.path)
+        #expect(env["ZDOTDIR"] == nil)
+        #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == nil)
+    }
 }
 
 @MainActor

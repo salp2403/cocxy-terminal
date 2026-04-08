@@ -46,6 +46,7 @@ final class CocxyCoreBridge: TerminalEngine {
         let contextBox: Unmanaged<CallbackContext>
         weak var hostView: NSView?
         var lastKnownWorkingDirectory: URL?
+        var lastFallbackWorkingDirectoryProbeAt: TimeInterval = 0
 
         var outputHandler: (@Sendable (Data) -> Void)?
         var oscHandler: (@Sendable (OSCNotification) -> Void)?
@@ -104,6 +105,10 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Process tracker capacity (max concurrent child processes).
     private static let processTrackerCapacity: UInt32 = 64
+
+    /// When shell integration is absent, probe the PTY child cwd at a low rate
+    /// so sidebar/session routing can still converge without polling every read.
+    private static let fallbackWorkingDirectoryProbeInterval: TimeInterval = 0.35
 
     // MARK: - Initialization
 
@@ -472,6 +477,17 @@ final class CocxyCoreBridge: TerminalEngine {
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
+    /// Reapplies the currently configured default font to a surface using the
+    /// surface's live backing scale when available.
+    ///
+    /// This helps newly attached/restored surfaces and moved windows pick up
+    /// the correct raster scale instead of relying on whichever screen was
+    /// active when the terminal was first created.
+    func reapplyConfiguredFont(to surface: SurfaceID) {
+        guard let config else { return }
+        applyFont(family: config.fontFamily, size: config.fontSize, to: surface)
+    }
+
     /// Apply the same font change to a batch of surfaces.
     func applyFont(family: String, size: Double, to surfaces: [SurfaceID]) {
         for surface in surfaces {
@@ -562,7 +578,7 @@ final class CocxyCoreBridge: TerminalEngine {
         // fork time. Scope those mutations carefully and restore them
         // immediately after spawn so other modules/windows do not observe them.
         let previousCwd = FileManager.default.currentDirectoryPath
-        let envVars = buildShellIntegrationEnvVars()
+        let envVars = buildShellIntegrationEnvVars(forShell: shell)
         let previousEnv = envVars.reduce(into: [String: String?]()) { result, entry in
             result[entry.key] = Self.environmentValue(for: entry.key)
         }
@@ -594,7 +610,47 @@ final class CocxyCoreBridge: TerminalEngine {
     /// The PTY inherits the host process environment, so user-defined values
     /// such as `ZDOTDIR`, `HOME`, and `SHELL` flow through naturally. This
     /// method only layers CocxyCore's own integration markers on top.
-    private func buildShellIntegrationEnvVars() -> [String: String] {
+    func buildShellIntegrationEnvVars(
+        forShell shell: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        resourcesPath: String? = nil
+    ) -> [String: String] {
+        let resolvedResourcesPath = resourcesPath ?? resolveResourcesPath()
+        return Self.makeShellIntegrationEnvVars(
+            forShell: shell,
+            environment: environment,
+            resourcesPath: resolvedResourcesPath
+        )
+    }
+
+    private func resolveResourcesPath() -> String? {
+        let fileManager = FileManager.default
+
+        if let bundleResources = Bundle.main.resourceURL?.path,
+           fileManager.fileExists(atPath: bundleResources) {
+            return bundleResources
+        }
+
+        let sourceResources = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // Infrastructure
+            .deletingLastPathComponent()   // Core
+            .deletingLastPathComponent()   // Sources
+            .deletingLastPathComponent()   // repo root
+            .appendingPathComponent("Resources", isDirectory: true)
+            .path
+
+        if fileManager.fileExists(atPath: sourceResources) {
+            return sourceResources
+        }
+
+        return nil
+    }
+
+    private static func makeShellIntegrationEnvVars(
+        forShell shell: String,
+        environment: [String: String],
+        resourcesPath: String?
+    ) -> [String: String] {
         var env: [String: String] = [:]
 
         // CocxyCore base vars
@@ -614,6 +670,36 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         env["TERM"] = "xterm-256color"
+
+        guard let resourcesPath else {
+            return env
+        }
+
+        let shellIntegrationRoot = URL(fileURLWithPath: resourcesPath, isDirectory: true)
+            .appendingPathComponent("shell-integration", isDirectory: true)
+        let shellName = URL(fileURLWithPath: shell).lastPathComponent.lowercased()
+        let fileManager = FileManager.default
+
+        env["COCXY_RESOURCES_DIR"] = resourcesPath
+        env["COCXY_SHELL_INTEGRATION_DIR"] = shellIntegrationRoot.path
+        env["COCXY_SHELL_FEATURES"] = "marks,cwd,title"
+
+        switch shellName {
+        case "zsh":
+            let zshIntegrationDir = shellIntegrationRoot
+                .appendingPathComponent("zsh", isDirectory: true)
+            guard fileManager.fileExists(atPath: zshIntegrationDir.path) else {
+                return env
+            }
+
+            env["ZDOTDIR"] = zshIntegrationDir.path
+            if let originalZdotdir = environment["ZDOTDIR"] {
+                env["COCXY_ZSH_ORIG_ZDOTDIR"] = originalZdotdir
+            }
+
+        default:
+            break
+        }
 
         return env
     }
@@ -659,6 +745,7 @@ final class CocxyCoreBridge: TerminalEngine {
             DispatchQueue.main.async { [weak self] in
                 (self?.surfaces[surfaceID]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
                 self?.surfaces[surfaceID]?.outputHandler?(data)
+                self?.probeWorkingDirectoryAfterOutputIfNeeded(for: surfaceID)
             }
         }
 
@@ -943,6 +1030,18 @@ final class CocxyCoreBridge: TerminalEngine {
             return
         }
         dispatchOSC(.currentDirectory(url), for: surfaceID)
+    }
+
+    private func probeWorkingDirectoryAfterOutputIfNeeded(for surfaceID: SurfaceID) {
+        guard var state = surfaces[surfaceID] else { return }
+        let now = Date.timeIntervalSinceReferenceDate
+        guard now - state.lastFallbackWorkingDirectoryProbeAt >= Self.fallbackWorkingDirectoryProbeInterval else {
+            return
+        }
+
+        state.lastFallbackWorkingDirectoryProbeAt = now
+        surfaces[surfaceID] = state
+        emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
     }
 
     private func inferredWorkingDirectory(for surfaceID: SurfaceID) -> URL? {

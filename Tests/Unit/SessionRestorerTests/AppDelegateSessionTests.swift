@@ -73,6 +73,62 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
         XCTAssertFalse(delegate.sessionManager?.isAutoSaveRunning == true)
     }
 
+    func testHasRestorableSessionOnLaunchIsFalseWithoutSavedTabs() throws {
+        let delegate = AppDelegate()
+        let manager = makeSessionManager()
+        delegate.sessionManager = manager
+
+        let emptySession = Session(
+            windows: [
+                WindowState(
+                    frame: CodableRect(x: 0, y: 0, width: 1200, height: 800),
+                    isFullScreen: false,
+                    tabs: [],
+                    activeTabIndex: 0
+                ),
+            ]
+        )
+        try manager.saveSession(emptySession, named: nil)
+
+        XCTAssertFalse(
+            delegate.hasRestorableSessionOnLaunch(),
+            "Launch should not defer bootstrap surface creation when the saved session has no tabs"
+        )
+    }
+
+    func testHasRestorableSessionOnLaunchIsTrueWhenSavedSessionHasTabs() throws {
+        let delegate = AppDelegate()
+        let manager = makeSessionManager()
+        delegate.sessionManager = manager
+
+        let session = Session(
+            windows: [
+                WindowState(
+                    frame: CodableRect(x: 0, y: 0, width: 1200, height: 800),
+                    isFullScreen: false,
+                    tabs: [
+                        TabState(
+                            id: TabID(),
+                            title: "Galf",
+                            workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                            splitTree: .leaf(
+                                workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                                command: nil
+                            )
+                        ),
+                    ],
+                    activeTabIndex: 0
+                ),
+            ]
+        )
+        try manager.saveSession(session, named: nil)
+
+        XCTAssertTrue(
+            delegate.hasRestorableSessionOnLaunch(),
+            "Launch should defer bootstrap surface creation when a real saved session can be restored"
+        )
+    }
+
     private func makeSessionManager() -> SessionManagerImpl {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("AppDelegateSessionTests-\(UUID().uuidString)")
@@ -97,4 +153,5 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
             )
         )
     }
+
 }

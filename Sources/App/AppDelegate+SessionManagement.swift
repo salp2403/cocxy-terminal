@@ -10,6 +10,22 @@ import Combine
 /// persisting to disk, and restoring tabs on launch.
 extension AppDelegate {
 
+    /// Returns true when launch should defer bootstrap surface creation
+    /// because a persisted session with real tabs is available to restore.
+    ///
+    /// This avoids creating a throwaway primary surface/session that then has
+    /// to be torn down milliseconds later during restore-on-launch.
+    func hasRestorableSessionOnLaunch() -> Bool {
+        let config = configService?.current ?? .defaults
+        guard config.sessions.restoreOnLaunch,
+              let sessionManager,
+              let session = try? sessionManager.loadLastSession() else {
+            return false
+        }
+
+        return session.windows.contains { !$0.tabs.isEmpty }
+    }
+
     // MARK: - Session Manager Initialization
 
     /// Initializes the session manager for persistence and restoration.
@@ -189,7 +205,10 @@ extension AppDelegate {
         guard let sessionManager = sessionManager else { return }
         guard let windowController = windowController else { return }
 
-        guard let session = try? sessionManager.loadLastSession() else { return }
+        guard let session = try? sessionManager.loadLastSession() else {
+            bootstrapInitialSurfaceIfNeeded(windowController)
+            return
+        }
 
         let restorationPairs = session.windows.map { windowState in
             (
@@ -202,8 +221,11 @@ extension AppDelegate {
         }
 
         // Restore the primary window (index 0) — it already exists.
-        if let primaryResult = restorationPairs.first?.1 {
+        if let primaryResult = restorationPairs.first?.1,
+           !primaryResult.restoredTabs.isEmpty {
             restoreTabsIntoController(windowController, from: primaryResult)
+        } else {
+            bootstrapInitialSurfaceIfNeeded(windowController)
         }
 
         // Restore additional windows (index 1+).
@@ -223,6 +245,22 @@ extension AppDelegate {
         if focusedIndex >= 0, focusedIndex < allControllers.count {
             allControllers[focusedIndex].window?.makeKeyAndOrderFront(nil)
         }
+    }
+
+    private func bootstrapInitialSurfaceIfNeeded(_ controller: MainWindowController) {
+        guard controller.tabSurfaceMap.isEmpty,
+              controller.terminalViewModel.surfaceID == nil else {
+            return
+        }
+
+        if let initialTab = controller.tabManager.tabs.first {
+            registerSession(for: initialTab, in: controller)
+        }
+
+        controller.window?.center()
+        controller.createTerminalSurface()
+        controller.tabBarViewModel?.syncWithManager()
+        controller.focusActiveTerminalSurface()
     }
 
     // MARK: - Restore Helpers
@@ -340,9 +378,7 @@ extension AppDelegate {
         }
 
         controller.tabBarViewModel?.syncWithManager()
-        if let surfaceView = controller.terminalSurfaceView {
-            controller.window?.makeFirstResponder(surfaceView)
-        }
+        controller.focusActiveTerminalSurface()
     }
 
     private func restoreSurfaces(
@@ -371,7 +407,8 @@ extension AppDelegate {
             let surfaceView: TerminalHostView
 
             if isPrimaryLeaf,
-               controller.tabManager.tabs.first?.id == restoredTab.tabID {
+               controller.tabViewModels.isEmpty,
+               controller.splitViewModels.isEmpty {
                 viewModel = controller.terminalViewModel
                 viewModel.setDefaultFontSize(configuredFontSize)
                 let freshPrimarySurfaceView = CocxyCoreView(viewModel: viewModel)
@@ -457,6 +494,7 @@ extension AppDelegate {
         }
 
         controller.destroyAllSurfaces()
+        controller.terminalContainerView?.subviews.forEach { $0.removeFromSuperview() }
         controller.tabSessionMap.removeAll()
         controller.tabSurfaceMap.removeAll()
         controller.tabSurfaceViews.removeAll()
@@ -474,6 +512,8 @@ extension AppDelegate {
         controller.activeSplitView = nil
         controller.displayedTabID = nil
         controller.terminalSurfaceView?.removeFromSuperview()
+        controller.terminalSurfaceView = nil
+        controller.terminalOutputBuffer = TerminalOutputBuffer()
 
         while let tabID = controller.tabManager.tabs.first?.id {
             _ = controller.tabManager.detachTab(id: tabID)

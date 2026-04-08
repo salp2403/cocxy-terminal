@@ -34,6 +34,16 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertNil(strip.onReload)
     }
 
+    func testOnGoBackCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onGoBack)
+    }
+
+    func testOnGoForwardCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onGoForward)
+    }
+
     func testOnClosePanelCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onClosePanel)
@@ -81,6 +91,22 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertTrue(called)
     }
 
+    func testOnGoBackCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onGoBack = { called = true }
+        strip.onGoBack?()
+        XCTAssertTrue(called)
+    }
+
+    func testOnGoForwardCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onGoForward = { called = true }
+        strip.onGoForward?()
+        XCTAssertTrue(called)
+    }
+
     func testOnClosePanelCallbackFires() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         var called = false
@@ -109,22 +135,22 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertEqual(actionButtons.count, 5)
     }
 
-    func testUpdateActionIconsForBrowserPanelShowsThreeActions() {
+    func testUpdateActionIconsForBrowserPanelShowsFiveActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .browser, canClose: false)
 
         let actionButtons = findActionButtons(in: strip)
-        // Browser: Split Side by Side, Split Stacked, Reload
-        XCTAssertEqual(actionButtons.count, 3)
+        // Browser: Split Side by Side, Split Stacked, Back, Forward, Reload
+        XCTAssertEqual(actionButtons.count, 5)
     }
 
-    func testUpdateActionIconsForBrowserWithCloseShowsFourActions() {
+    func testUpdateActionIconsForBrowserWithCloseShowsSixActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .browser, canClose: true)
 
         let actionButtons = findActionButtons(in: strip)
-        // Browser: Split Side by Side, Split Stacked, Reload, Close
-        XCTAssertEqual(actionButtons.count, 4)
+        // Browser: Split Side by Side, Split Stacked, Back, Forward, Reload, Close
+        XCTAssertEqual(actionButtons.count, 6)
     }
 
     func testUpdateActionIconsForMarkdownPanelShowsTwoActions() {
@@ -154,7 +180,7 @@ final class HorizontalTabStripActionTests: XCTestCase {
 
         strip.updateActionIcons(panelType: .browser, canClose: false)
         let browserButtons = findActionButtons(in: strip)
-        XCTAssertEqual(browserButtons.count, 3)
+        XCTAssertEqual(browserButtons.count, 5)
     }
 
     func testActionButtonsHaveTooltips() {

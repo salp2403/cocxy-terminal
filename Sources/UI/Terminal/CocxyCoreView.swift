@@ -271,6 +271,20 @@ final class CocxyCoreView: NSView {
            let metalLayer = layer as? CAMetalLayer {
             metalLayer.contentsScale = scale
         }
+        if let bridge, let sid = surfaceID {
+            bridge.reapplyConfiguredFont(to: sid)
+        }
+        refreshIDECursorMetrics()
+        requestImmediateRedraw()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let bridge, let sid = surfaceID {
+            bridge.reapplyConfiguredFont(to: sid)
+        }
+        updateInteractionMetrics()
+        requestImmediateRedraw()
     }
 
     /// Forces a size sync after surface creation.

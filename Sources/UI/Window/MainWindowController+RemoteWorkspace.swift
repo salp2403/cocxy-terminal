@@ -98,8 +98,6 @@ extension MainWindowController {
             }
         })
 
-        if let surfaceView = terminalSurfaceView {
-            window?.makeFirstResponder(surfaceView)
-        }
+        focusActiveTerminalSurface()
     }
 }
