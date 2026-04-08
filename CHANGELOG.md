@@ -5,6 +5,22 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.44] - 2026-04-08
+
+### Added
+- Native Cocxy shell integration for zsh (OSC 133 + OSC 7 + title) and bash (CWD reporting)
+- Shell integration resources bundled in app and copied to app bundle on build
+
+### Fixed
+- Launch no longer creates throwaway bootstrap surface when a saved session is available to restore
+- Bootstrap surface recreated cleanly when session restore fails or comes back empty
+- Font re-rasterization on window attach and backing scale changes (fixes fuzzy/huge text on display switch)
+- Closing the last terminal pane when only panels remain is now blocked with audible feedback
+- Subagent panels no longer opened for generic agent types (Agent, Subagent, general-purpose, unknown)
+- Cross-window focus now aligns activeTabID alongside the visible tab
+- Split close fallback chain expanded to prevent empty container state
+- resetControllerForRestore cleans container subviews, nils surface view, and resets output buffer
+
 ## [0.1.43] - 2026-04-07
 
 ### Fixed
