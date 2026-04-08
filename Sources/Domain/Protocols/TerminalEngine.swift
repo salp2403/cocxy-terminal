@@ -269,6 +269,8 @@ struct TerminalEngineConfig: Sendable {
     let windowPaddingX: Double
     /// Vertical padding in points (applied to top and bottom).
     let windowPaddingY: Double
+    /// Policy for OSC 52 clipboard reads initiated by terminal programs.
+    let clipboardReadAccess: ClipboardReadAccess
 
     init(
         fontFamily: String,
@@ -278,7 +280,8 @@ struct TerminalEngineConfig: Sendable {
         workingDirectory: URL,
         themePalette: ThemePalette? = nil,
         windowPaddingX: Double = 8,
-        windowPaddingY: Double = 4
+        windowPaddingY: Double = 4,
+        clipboardReadAccess: ClipboardReadAccess = .prompt
     ) {
         self.fontFamily = fontFamily
         self.fontSize = fontSize
@@ -288,6 +291,7 @@ struct TerminalEngineConfig: Sendable {
         self.themePalette = themePalette
         self.windowPaddingX = windowPaddingX
         self.windowPaddingY = windowPaddingY
+        self.clipboardReadAccess = clipboardReadAccess
     }
 
     func replacing(
@@ -298,7 +302,8 @@ struct TerminalEngineConfig: Sendable {
         workingDirectory: URL? = nil,
         themePalette: ThemePalette? = nil,
         windowPaddingX: Double? = nil,
-        windowPaddingY: Double? = nil
+        windowPaddingY: Double? = nil,
+        clipboardReadAccess: ClipboardReadAccess? = nil
     ) -> TerminalEngineConfig {
         TerminalEngineConfig(
             fontFamily: fontFamily ?? self.fontFamily,
@@ -308,7 +313,8 @@ struct TerminalEngineConfig: Sendable {
             workingDirectory: workingDirectory ?? self.workingDirectory,
             themePalette: themePalette ?? self.themePalette,
             windowPaddingX: windowPaddingX ?? self.windowPaddingX,
-            windowPaddingY: windowPaddingY ?? self.windowPaddingY
+            windowPaddingY: windowPaddingY ?? self.windowPaddingY,
+            clipboardReadAccess: clipboardReadAccess ?? self.clipboardReadAccess
         )
     }
 }

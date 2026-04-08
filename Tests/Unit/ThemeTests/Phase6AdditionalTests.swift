@@ -261,6 +261,7 @@ final class CodableColorEdgeCaseTests: XCTestCase {
         XCTAssertEqual(lowerNS.redComponent, upperNS.redComponent, accuracy: 0.001)
         XCTAssertEqual(lowerNS.greenComponent, upperNS.greenComponent, accuracy: 0.001)
         XCTAssertEqual(lowerNS.blueComponent, upperNS.blueComponent, accuracy: 0.001)
+        XCTAssertEqual(lower, upper)
     }
 
     // Alpha 0 -> NSColor completamente transparente

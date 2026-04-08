@@ -84,24 +84,22 @@ final class RealisticAgentDetectionTests: XCTestCase {
 
     /// Simulates a realistic Aider session launch.
     ///
-    /// Aider prints its version and prompt. Both lines start with "aider",
-    /// matching the launch pattern "^aider\b". The sliding window sees
-    /// 2 matches within 5 lines, triggering the agentDetected signal.
+    /// Aider prints a startup command/banner sequence. Two launch-like lines
+    /// within the sliding window satisfy the launch hysteresis threshold
+    /// without relying on the waiting prompt.
     ///
     /// Lines prefixed with "$" (shell prompt) do NOT match because the
     /// pattern requires "aider" at position 0.
     func testRealisticAiderLaunchWithBannerNoise() {
         let collector = subscribeStateCollector()
 
-        // "aider v0.82.2" matches ^aider\b (1st match in window)
-        // Non-matching lines fill the buffer but do not reset the window count
-        // "aider> " matches ^aider\b (2nd match in window -> signal emitted)
+        // Two launch-like lines within the buffer should trigger detection.
         feedLines([
+            "aider --model gpt-4",
             "aider v0.82.2",
             "Model: gpt-4 with diff edit format",
             "Git repo: .git with 42 files",
             "Repo-map: using 1024 tokens",
-            "aider> ",
         ])
 
         waitForAsyncDispatch()

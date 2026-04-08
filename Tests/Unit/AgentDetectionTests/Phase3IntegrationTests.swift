@@ -193,11 +193,8 @@ final class AiderPatternSessionTests: XCTestCase {
     /// Aider waiting prompt ">" detected as waiting input.
     ///
     /// Uses "> " which exclusively matches the waiting pattern "^>\\s*$".
-    /// Note: "aider>" matches BOTH the launch pattern "^aider\\b" (word boundary
-    /// before '>') AND the waiting pattern "^aider>". Because resolveConflictingSignals
-    /// picks a single winner per chunk, using "aider>" causes the launch signal to
-    /// be selected over the waiting signal when both have equal confidence.
-    /// This is documented as HALLAZGO-002 in phase-3-verification.md.
+    /// The default Aider launch pattern is intentionally exclusive from the
+    /// waiting prompt, so "aider>" is no longer used here as a waiting probe.
     func testIntegration_AiderWaitingPromptDetected() {
         // Get into working state via direct injection
         engine.injectSignal(DetectionSignal(

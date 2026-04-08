@@ -161,11 +161,12 @@ final class SessionManagerImpl: SessionManaging, @unchecked Sendable {
         return metadataList.sorted { $0.savedAt > $1.savedAt }
     }
 
-    func deleteSession(named name: String) throws {
+    func deleteSession(named name: String?) throws {
         let fileURL = fileURL(for: name)
+        let displayName = name ?? "last"
 
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            throw SessionError.deleteFailed(reason: "Session '\(name)' does not exist at \(fileURL.path)")
+            throw SessionError.deleteFailed(reason: "Session '\(displayName)' does not exist at \(fileURL.path)")
         }
 
         do {
@@ -224,6 +225,11 @@ final class SessionManagerImpl: SessionManaging, @unchecked Sendable {
     func stopAutoSave() {
         autoSaveTimer?.cancel()
         autoSaveTimer = nil
+    }
+
+    /// Whether the periodic auto-save timer is currently running.
+    var isAutoSaveRunning: Bool {
+        autoSaveTimer != nil
     }
 
     // MARK: - Async Save

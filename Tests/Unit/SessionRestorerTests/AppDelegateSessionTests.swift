@@ -12,6 +12,16 @@ import AppKit
 @MainActor
 final class AppDelegateSessionIntegrationTests: XCTestCase {
 
+    private var tempSessionsDirectory: URL?
+
+    override func tearDown() {
+        if let tempSessionsDirectory {
+            try? FileManager.default.removeItem(at: tempSessionsDirectory)
+        }
+        tempSessionsDirectory = nil
+        super.tearDown()
+    }
+
     // MARK: - Test 1: Session manager is nil before launch
 
     func testSessionManagerIsNilBeforeLaunch() {
@@ -40,5 +50,51 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
                        "Must have exactly one window state")
         XCTAssertTrue(session.windows[0].tabs.isEmpty,
                       "No window controller means no tabs")
+    }
+
+    func testStartSessionAutoSaveIfNeededStartsTimer() {
+        let delegate = AppDelegate()
+        delegate.sessionManager = makeSessionManager()
+
+        delegate.startSessionAutoSaveIfNeeded(using: makeConfig(autoSave: true, interval: 30))
+
+        XCTAssertTrue(delegate.sessionManager?.isAutoSaveRunning == true)
+    }
+
+    func testStartSessionAutoSaveIfNeededStopsTimerWhenDisabled() {
+        let delegate = AppDelegate()
+        delegate.sessionManager = makeSessionManager()
+
+        delegate.startSessionAutoSaveIfNeeded(using: makeConfig(autoSave: true, interval: 30))
+        XCTAssertTrue(delegate.sessionManager?.isAutoSaveRunning == true)
+
+        delegate.startSessionAutoSaveIfNeeded(using: makeConfig(autoSave: false, interval: 30))
+
+        XCTAssertFalse(delegate.sessionManager?.isAutoSaveRunning == true)
+    }
+
+    private func makeSessionManager() -> SessionManagerImpl {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppDelegateSessionTests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        tempSessionsDirectory = directory
+        return SessionManagerImpl(sessionsDirectory: directory)
+    }
+
+    private func makeConfig(autoSave: Bool, interval: Int) -> CocxyConfig {
+        CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: SessionsConfig(
+                autoSave: autoSave,
+                autoSaveInterval: interval,
+                restoreOnLaunch: true
+            )
+        )
     }
 }

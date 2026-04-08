@@ -82,4 +82,15 @@ struct CodableColor: Equatable, Sendable {
             return NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
         }
     }
+
+    static func == (lhs: CodableColor, rhs: CodableColor) -> Bool {
+        lhs.normalizedHex == rhs.normalizedHex
+    }
+
+    private var normalizedHex: String {
+        hex
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "#", with: "")
+    }
 }

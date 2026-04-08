@@ -64,6 +64,8 @@ final class CocxyCoreBridge: TerminalEngine {
 
     private var surfaces: [SurfaceID: SurfaceState] = [:]
     private var config: TerminalEngineConfig?
+    var clipboardService: any ClipboardServiceProtocol = SystemClipboardService()
+    var clipboardReadAuthorizationHandler: ((NSWindow?) -> Bool)?
 
     /// Semantic adapter that converts CocxyCore events to HookEvent/TimelineEvent
     /// format for the existing agent detection and timeline systems.
@@ -424,7 +426,8 @@ final class CocxyCoreBridge: TerminalEngine {
         themePalette: ThemePalette? = nil,
         shell: String? = nil,
         windowPaddingX: Double? = nil,
-        windowPaddingY: Double? = nil
+        windowPaddingY: Double? = nil,
+        clipboardReadAccess: ClipboardReadAccess? = nil
     ) {
         guard let currentConfig = config else { return }
         config = currentConfig.replacing(
@@ -434,7 +437,8 @@ final class CocxyCoreBridge: TerminalEngine {
             shell: shell,
             themePalette: themePalette,
             windowPaddingX: windowPaddingX,
-            windowPaddingY: windowPaddingY
+            windowPaddingY: windowPaddingY,
+            clipboardReadAccess: clipboardReadAccess
         )
     }
 
@@ -740,27 +744,74 @@ final class CocxyCoreBridge: TerminalEngine {
                     encoding: .utf8
                 ) ?? ""
                 if !text.isEmpty {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
+                    clipboardService.write(text)
                 }
             }
         } else {
-            // Query clipboard (OSC 52 read) — respond with current clipboard content
-            if let content = NSPasteboard.general.string(forType: .string) {
-                let bytes = Array(content.utf8)
-                var responseBuf = [UInt8](repeating: 0, count: bytes.count * 2 + 64)
-                let n = cocxycore_terminal_encode_clipboard_response(
-                    event.selection,
-                    bytes,
-                    bytes.count,
-                    &responseBuf,
-                    responseBuf.count
-                )
-                if n > 0 {
-                    cocxycore_pty_write(state.pty, responseBuf, min(n, responseBuf.count))
-                }
-            }
+            handleClipboardReadRequest(event, state: state)
         }
+    }
+
+    private func handleClipboardReadRequest(
+        _ event: cocxycore_clipboard_event,
+        state: SurfaceState
+    ) {
+        let content = resolvedClipboardReadContent(for: state.hostView?.window)
+        sendClipboardResponse(selection: event.selection, content: content, to: state)
+    }
+
+    func resolvedClipboardReadContent(for window: NSWindow?) -> String {
+        switch config?.clipboardReadAccess ?? .prompt {
+        case .allow:
+            return clipboardService.read() ?? ""
+        case .deny:
+            return ""
+        case .prompt:
+            guard requestClipboardReadAuthorization(for: window) else {
+                return ""
+            }
+            return clipboardService.read() ?? ""
+        }
+    }
+
+    private func requestClipboardReadAuthorization(for window: NSWindow?) -> Bool {
+        if let handler = clipboardReadAuthorizationHandler {
+            return handler(window)
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Allow clipboard read?"
+        alert.informativeText = """
+        A terminal program requested access to the system clipboard via OSC 52.
+        Allowing this will send your current clipboard contents to the running shell.
+        """
+        alert.addButton(withTitle: "Allow")
+        alert.addButton(withTitle: "Deny")
+
+        if let window {
+            window.makeKeyAndOrderFront(nil)
+        }
+
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func sendClipboardResponse(
+        selection: UInt8,
+        content: String,
+        to state: SurfaceState
+    ) {
+        let bytes = Array(content.utf8)
+        var responseBuf = [UInt8](repeating: 0, count: max(bytes.count * 2 + 64, 64))
+        let n = cocxycore_terminal_encode_clipboard_response(
+            selection,
+            bytes,
+            bytes.count,
+            &responseBuf,
+            responseBuf.count
+        )
+        guard n > 0 else { return }
+        cocxycore_pty_write(state.pty, responseBuf, min(n, responseBuf.count))
     }
 
     /// Handle semantic events from CocxyCore's AI layer.

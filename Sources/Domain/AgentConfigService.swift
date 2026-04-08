@@ -185,8 +185,8 @@ final class AgentConfigService {
             AgentConfig(
                 name: "aider",
                 displayName: "Aider",
-                launchPatterns: ["^aider\\b", "^python.*aider"],
-                waitingPatterns: ["^>\\s*$", "^aider>"],
+                launchPatterns: ["^aider(?:\\s|$)", "^python.*aider"],
+                waitingPatterns: ["^>\\s*$", "^aider>\\s*$"],
                 errorPatterns: ["Error:", "Exception:", "Traceback"],
                 finishedIndicators: ["^\\$\\s*$"],
                 oscSupported: false,

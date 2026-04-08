@@ -98,6 +98,11 @@ final class ConfigServiceFullParsingTests: XCTestCase {
         tab-position = "top"
         window-padding = 12.0
 
+        [terminal]
+        scrollback-lines = 25000
+        clipboard-paste-protection = false
+        clipboard-read-access = "deny"
+
         [agent-detection]
         enabled = false
         osc-notifications = false
@@ -146,6 +151,10 @@ final class ConfigServiceFullParsingTests: XCTestCase {
         XCTAssertEqual(config.appearance.fontSize, 16.0)
         XCTAssertEqual(config.appearance.tabPosition, .top)
         XCTAssertEqual(config.appearance.windowPadding, 12.0)
+
+        XCTAssertEqual(config.terminal.scrollbackLines, 25000)
+        XCTAssertFalse(config.terminal.clipboardPasteProtection)
+        XCTAssertEqual(config.terminal.clipboardReadAccess, .deny)
 
         XCTAssertFalse(config.agentDetection.enabled)
         XCTAssertFalse(config.agentDetection.oscNotifications)
@@ -518,9 +527,10 @@ final class ConfigServiceTomlGenerationTests: XCTestCase {
         let parser = TOMLParser()
         let parsed = try parser.parse(defaultToml)
 
-        // Should have all 7 sections
+        // Should have all top-level sections
         XCTAssertNotNil(parsed["general"])
         XCTAssertNotNil(parsed["appearance"])
+        XCTAssertNotNil(parsed["terminal"])
         XCTAssertNotNil(parsed["agent-detection"])
         XCTAssertNotNil(parsed["notifications"])
         XCTAssertNotNil(parsed["quick-terminal"])

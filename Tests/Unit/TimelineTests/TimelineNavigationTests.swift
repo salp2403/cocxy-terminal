@@ -1,13 +1,15 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // TimelineNavigationTests.swift - Tests for Timeline navigation to terminal position.
 //
-// Test plan (6 tests):
+// Test plan (8 tests):
 // 1.  Tap on event -> navigateToEvent called on navigator
 // 2.  Tap on event with filePath -> highlightFile called
 // 3.  Navigator nil -> no crash (safe no-op)
 // 4.  Navigate with various event types dispatches correctly
 // 5.  TimelineNavigatorStub logs navigateToEvent calls
 // 6.  TimelineNavigatorStub logs highlightFile calls
+// 7.  TimelineNavigatorImpl delegates navigation through its closure
+// 8.  TimelineNavigatorImpl delegates file highlighting through its closure
 
 import XCTest
 @testable import CocxyTerminal
@@ -138,6 +140,32 @@ final class TimelineNavigationTests: XCTestCase {
                         "Stub must log all highlightFile calls")
         XCTAssertEqual(stub.highlightedFiles[0], "/path/to/file.swift")
         XCTAssertEqual(stub.highlightedFiles[1], "/another/file.rs")
+    }
+
+    func testTimelineNavigatorImplDelegatesNavigation() {
+        var navigated: [TimelineEvent] = []
+        let navigator = TimelineNavigatorImpl { event in
+            navigated.append(event)
+        }
+        let event = makeEvent(sessionId: "sess-impl", summary: "Impl navigation")
+
+        navigator.navigateToEvent(event)
+
+        XCTAssertEqual(navigated.map(\.id), [event.id])
+    }
+
+    func testTimelineNavigatorImplDelegatesHighlighting() {
+        var highlighted: [String] = []
+        let navigator = TimelineNavigatorImpl(
+            navigateHandler: { _ in },
+            highlightHandler: { path in
+                highlighted.append(path)
+            }
+        )
+
+        navigator.highlightFile("/tmp/project/File.swift")
+
+        XCTAssertEqual(highlighted, ["/tmp/project/File.swift"])
     }
 
     // MARK: - Helpers

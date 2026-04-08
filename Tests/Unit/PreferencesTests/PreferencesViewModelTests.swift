@@ -283,7 +283,8 @@ final class PreferencesViewModelTests: XCTestCase {
             cursorOpacity: 0.8,
             mouseHideWhileTyping: true,
             copyOnSelect: true,
-            clipboardPasteProtection: true
+            clipboardPasteProtection: true,
+            clipboardReadAccess: .prompt
         )
         let config = CocxyConfig(
             general: .defaults,

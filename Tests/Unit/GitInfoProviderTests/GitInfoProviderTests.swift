@@ -286,6 +286,47 @@ final class GitInfoProviderTests: XCTestCase {
                        "No more callbacks should fire after cancellation")
     }
 
+    func testReplacingWatcherKeepsLatestObserverActiveAfterOldCancel() {
+        createFakeGitRepo(branch: "main")
+
+        final class Recorder: @unchecked Sendable {
+            var values: [String?] = []
+        }
+
+        let firstRecorder = Recorder()
+        let secondRecorder = Recorder()
+        let updateExpectation = expectation(description: "Latest watcher receives updated branch")
+
+        let first = provider.observeBranch(at: tempDirectory) { branch in
+            firstRecorder.values.append(branch)
+        }
+
+        let second = provider.observeBranch(at: tempDirectory) { branch in
+            secondRecorder.values.append(branch)
+            if secondRecorder.values.last == "feature/refactor",
+               secondRecorder.values.count >= 2 {
+                updateExpectation.fulfill()
+            }
+        }
+
+        first.cancel()
+
+        let headURL = tempDirectory.appendingPathComponent(".git/HEAD")
+        try? "ref: refs/heads/feature/refactor\n".write(
+            to: headURL,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        waitForExpectations(timeout: 2.0)
+
+        XCTAssertEqual(firstRecorder.values.count, 1,
+                       "The replaced watcher must not receive post-cancel updates")
+        XCTAssertEqual(secondRecorder.values.last!, "feature/refactor")
+
+        second.cancel()
+    }
+
     // MARK: - Edge Cases
 
     func testCurrentBranchHandlesMalformedGitHead() {

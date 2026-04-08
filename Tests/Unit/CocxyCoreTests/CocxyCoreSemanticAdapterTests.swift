@@ -68,6 +68,27 @@ struct CocxyCoreSemanticAdapterTests {
         #expect(timeline?.windowLabel == "Window 3")
     }
 
+    @Test("Session identifier provider overrides synthetic surface IDs")
+    func sessionIdentifierProviderOverridesSyntheticID() {
+        let adapter = CocxyCoreSemanticAdapter()
+        let capture = SemanticCapture(adapter: adapter)
+        let surfaceID = makeSurfaceID("00000000-0000-0000-0000-000000000111")
+        let sessionID = UUID().uuidString
+
+        adapter.sessionIdentifierProvider = { candidateSurfaceID, cwd in
+            #expect(candidateSurfaceID == surfaceID)
+            #expect(cwd == "/tmp/project")
+            return sessionID
+        }
+
+        withSemanticEvent(type: .toolStarted, detail: "Read") { event in
+            adapter.processSemanticEvent(event, for: surfaceID, cwd: "/tmp/project")
+        }
+
+        #expect(capture.hooks.last?.sessionId == sessionID)
+        #expect(capture.timeline.last?.sessionId == sessionID)
+    }
+
     @Test("Agent waiting emits a UserPromptSubmit hook")
     func agentWaitingEmitsUserPromptSubmitHook() {
         let adapter = CocxyCoreSemanticAdapter()

@@ -73,7 +73,8 @@ extension MainWindowController {
             old?.appearance.windowPadding != config.appearance.windowPadding ||
             old?.appearance.windowPaddingX != config.appearance.windowPaddingX ||
             old?.appearance.windowPaddingY != config.appearance.windowPaddingY ||
-            old?.general.shell != config.general.shell
+            old?.general.shell != config.general.shell ||
+            old?.terminal.clipboardReadAccess != config.terminal.clipboardReadAccess
 
         lastAppliedConfig = config
 

@@ -55,9 +55,10 @@ protocol SessionManaging: Sendable {
 
     /// Deletes a saved session.
     ///
-    /// - Parameter name: The name of the session to delete.
+    /// - Parameter name: The name of the session to delete, or `nil` for the
+    ///   unnamed auto-save session (`last.json`).
     /// - Throws: `SessionError` if the deletion fails.
-    func deleteSession(named name: String) throws
+    func deleteSession(named name: String?) throws
 }
 
 // MARK: - Session Model

@@ -103,14 +103,15 @@ final class QuickTerminalViewModel: ObservableObject {
 
     /// Restores state from a saved snapshot.
     ///
-    /// All fields are updated to match the saved state. The `heightPercent`
-    /// from the state is applied as-is (it was clamped when saved).
+    /// All fields are updated to match the saved state. `heightPercent` is
+    /// clamped defensively so corrupted or externally edited session files do
+    /// not restore an invalid panel size.
     ///
     /// - Parameter state: The saved state to restore from.
     func restore(from state: QuickTerminalSessionState) {
         isVisible = state.isVisible
         workingDirectory = state.workingDirectory
-        heightPercent = state.heightPercent
+        heightPercent = min(Self.maximumPercent, max(Self.minimumPercent, state.heightPercent))
         position = state.position
     }
 

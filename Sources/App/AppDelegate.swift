@@ -90,6 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extensions (+SessionManagement) assign during init.
     var sessionManager: SessionManagerImpl?
 
+    /// Subscription for hot-reloading the periodic session auto-save timer
+    /// when the `[sessions]` config changes.
+    var sessionAutoSaveConfigCancellable: AnyCancellable?
+
     /// The quick terminal view model for state management.
     /// Internal setter: extensions (+SessionManagement) assign during init.
     var quickTerminalViewModel: QuickTerminalViewModel?
@@ -238,6 +242,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupBrowserPro()
         setupAutoUpdate()
         restoreSessionOnLaunch()
+        startSessionAutoSaveIfNeeded()
+        observeSessionAutoSaveConfigChanges()
         applyPlaceholderAppIcon()
         performFirstLaunchSetup()
         showWelcomeOnFirstLaunch()
@@ -245,6 +251,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        stopSessionAutoSave()
+        sessionAutoSaveConfigCancellable?.cancel()
+        sessionAutoSaveConfigCancellable = nil
+
         // Save the current session synchronously before shutting down.
         saveSessionBeforeTermination()
 
@@ -425,7 +435,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
             themePalette: resolvedPalette,
             windowPaddingX: paddingX,
-            windowPaddingY: paddingY
+            windowPaddingY: paddingY,
+            clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
+                ?? TerminalConfig.defaults.clipboardReadAccess
         )
 
         do {
@@ -502,7 +514,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             themePalette: resolvedTheme?.palette,
             shell: newConfig.general.shell,
             windowPaddingX: newConfig.appearance.effectivePaddingX,
-            windowPaddingY: newConfig.appearance.effectivePaddingY
+            windowPaddingY: newConfig.appearance.effectivePaddingY,
+            clipboardReadAccess: newConfig.terminal.clipboardReadAccess
         )
 
         let fontChanged =
@@ -572,7 +585,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
             themePalette: palette,
             windowPaddingX: paddingX,
-            windowPaddingY: paddingY
+            windowPaddingY: paddingY,
+            clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
+                ?? TerminalConfig.defaults.clipboardReadAccess
         )
 
         do {
@@ -872,6 +887,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let manager = notificationManager {
             controller.tabBarViewModel?.setNotificationManager(manager)
         }
+
+        if let quickSwitchController {
+            controller.quickSwitchController = quickSwitchController
+        }
+
+        controller.timelineDispatcher.navigator = makeTimelineNavigator()
     }
 
     @discardableResult
@@ -974,7 +995,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// Called after the main window is created so we have a tab manager to wire into.
     private func initializeNotificationStack() {
-        guard let windowController = windowController else { return }
+        guard windowController != nil else { return }
         let config = configService?.current ?? .defaults
 
         // 1. Create a tab router adapter that delegates to the window controller.
@@ -1037,9 +1058,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 6. Create the quick switch controller and wire to the window controller.
         let quickSwitch = QuickSwitchController(
             notificationManager: manager,
-            tabActivator: windowController.tabManager
+            tabActivator: tabRouter,
+            tabNameProvider: { [weak self] tabID in
+                self?.controllerContainingTab(tabID)?.tabManager.tab(for: tabID)?.displayTitle
+            }
         )
-        windowController.quickSwitchController = quickSwitch
+        for controller in allWindowControllers {
+            controller.quickSwitchController = quickSwitch
+        }
         self.quickSwitchController = quickSwitch
 
         // 7. Install the notification center delegate so we receive
@@ -1667,7 +1693,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Routes notification click actions to the correct tab by delegating
 /// to the window controller's tab manager.
 @MainActor
-final class WindowControllerTabRouter: NotificationTabRouting, DashboardTabNavigating {
+final class WindowControllerTabRouter: NotificationTabRouting, DashboardTabNavigating, TabActivating {
     private weak var appDelegate: AppDelegate?
 
     init(appDelegate: AppDelegate) {
@@ -1686,6 +1712,10 @@ final class WindowControllerTabRouter: NotificationTabRouting, DashboardTabNavig
         guard appDelegate?.controllerContainingTab(id) != nil else { return false }
         activateTab(id: id)
         return true
+    }
+
+    func setActive(id: TabID) {
+        activateTab(id: id)
     }
 }
 

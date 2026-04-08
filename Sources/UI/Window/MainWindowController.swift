@@ -161,11 +161,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var timelineHostingView: NSView?
     var timelineViewModel: TimelineViewModel?
     var isTimelineVisible: Bool = false
-    private(set) lazy var timelineDispatcher: TimelineNavigationDispatcher = {
-        let dispatcher = TimelineNavigationDispatcher()
-        dispatcher.navigator = TimelineNavigatorStub()
-        return dispatcher
-    }()
+    private(set) lazy var timelineDispatcher = TimelineNavigationDispatcher()
 
     var welcomeHostingView: NSHostingView<WelcomeOverlayView>?
     var isWelcomeVisible: Bool = false
@@ -1229,16 +1225,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             return surfaceWorkingDirectory
         }
 
-        if let tabID = tabSurfaceMap.first(where: { $0.value == surfaceID })?.key {
-            return tabManager.tab(for: tabID)?.workingDirectory
-        }
-
-        if splitSurfaceViews[surfaceID] != nil {
-            let activeTabID = displayedTabID ?? tabManager.activeTabID
-            return activeTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
-        }
-
-        for (tabID, savedViews) in savedTabSplitSurfaceViews where savedViews[surfaceID] != nil {
+        if let tabID = tabID(for: surfaceID) {
             return tabManager.tab(for: tabID)?.workingDirectory
         }
 
@@ -1270,6 +1257,51 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         return nil
+    }
+
+    /// Resolves the owning tab for a given surface ID.
+    func tabID(for surfaceID: SurfaceID) -> TabID? {
+        if let tabID = tabSurfaceMap.first(where: { $0.value == surfaceID })?.key {
+            return tabID
+        }
+
+        if splitSurfaceViews[surfaceID] != nil {
+            return displayedTabID ?? tabManager.activeTabID
+        }
+
+        for (tabID, savedViews) in savedTabSplitSurfaceViews where savedViews[surfaceID] != nil {
+            return tabID
+        }
+
+        return nil
+    }
+
+    /// Returns all surface IDs associated with a tab, including split panes.
+    func surfaceIDs(for tabID: TabID) -> [SurfaceID] {
+        var ids: [SurfaceID] = []
+        var seen = Set<SurfaceID>()
+
+        func append(_ surfaceID: SurfaceID?) {
+            guard let surfaceID, seen.insert(surfaceID).inserted else { return }
+            ids.append(surfaceID)
+        }
+
+        append(tabSurfaceMap[tabID])
+
+        if displayedTabID == tabID || tabManager.activeTabID == tabID {
+            for surfaceID in splitSurfaceViews.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+                append(surfaceID)
+            }
+        }
+
+        let savedSplitIDs = savedTabSplitSurfaceViews[tabID]?.keys.sorted {
+            $0.rawValue.uuidString < $1.rawValue.uuidString
+        } ?? []
+        for surfaceID in savedSplitIDs {
+            append(surfaceID)
+        }
+
+        return ids
     }
 
     /// Restarts the file watcher for the active tab's `.cocxy.toml`.

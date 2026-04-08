@@ -354,6 +354,8 @@ final class PreferencesViewModel: ObservableObject {
         scrollback-lines = \(defaults.terminal.scrollbackLines)
         cursor-style = "\(defaults.terminal.cursorStyle.rawValue)"
         cursor-blink = \(defaults.terminal.cursorBlink)
+        clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
+        clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
 
         [agent-detection]
         enabled = \(agentDetectionEnabled)

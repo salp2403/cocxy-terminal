@@ -12,8 +12,9 @@ import Foundation
 /// the affected file.
 ///
 /// The concrete implementation depends on the active terminal engine's
-/// scrollback/navigation support. A stub implementation (`TimelineNavigatorStub`)
-/// is provided for testing and as a placeholder until the real integration is connected.
+/// scrollback/navigation support. A production implementation can be injected
+/// through `TimelineNavigatorImpl`, while `TimelineNavigatorStub` remains useful
+/// for tests.
 ///
 /// - SeeAlso: `TimelineNavigationDispatcher` (dispatch helper with nil-safety)
 /// - SeeAlso: `TimelineNavigatorStub` (logging stub for development)
@@ -70,13 +71,42 @@ final class TimelineNavigationDispatcher {
     }
 }
 
+// MARK: - Timeline Navigator Implementation
+
+/// Closure-driven production implementation of `TimelineNavigating`.
+///
+/// Keeps the domain contract free of AppKit dependencies while letting the
+/// AppDelegate inject concrete cross-window/tab navigation behavior.
+final class TimelineNavigatorImpl: TimelineNavigating {
+    typealias NavigateHandler = (TimelineEvent) -> Void
+    typealias HighlightHandler = (String) -> Void
+
+    private let navigateHandler: NavigateHandler
+    private let highlightHandler: HighlightHandler
+
+    init(
+        navigateHandler: @escaping NavigateHandler,
+        highlightHandler: @escaping HighlightHandler = { _ in }
+    ) {
+        self.navigateHandler = navigateHandler
+        self.highlightHandler = highlightHandler
+    }
+
+    func navigateToEvent(_ event: TimelineEvent) {
+        navigateHandler(event)
+    }
+
+    func highlightFile(_ filePath: String) {
+        highlightHandler(filePath)
+    }
+}
+
 // MARK: - Timeline Navigator Stub
 
 /// Logging stub implementation of `TimelineNavigating`.
 ///
-/// Records all calls for inspection. Intended for:
-/// - Unit tests (as a spy/stub hybrid).
-/// - Development builds before a production navigator is connected.
+/// Records all calls for inspection. Intended for unit tests and lightweight
+/// instrumentation of navigation flows.
 ///
 /// - SeeAlso: `TimelineNavigating`
 final class TimelineNavigatorStub: TimelineNavigating {

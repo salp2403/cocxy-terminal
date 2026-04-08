@@ -123,6 +123,32 @@ final class QuickTerminalViewModelTests: XCTestCase {
         XCTAssertEqual(sut.position, .top)
     }
 
+    func testRestoreClampsHeightPercentBelowMinimum() {
+        let state = QuickTerminalSessionState(
+            isVisible: false,
+            workingDirectory: "~",
+            heightPercent: 0.05,
+            position: .top
+        )
+
+        sut.restore(from: state)
+
+        XCTAssertEqual(sut.heightPercent, 0.2, accuracy: 0.001)
+    }
+
+    func testRestoreClampsHeightPercentAboveMaximum() {
+        let state = QuickTerminalSessionState(
+            isVisible: false,
+            workingDirectory: "~",
+            heightPercent: 0.99,
+            position: .bottom
+        )
+
+        sut.restore(from: state)
+
+        XCTAssertEqual(sut.heightPercent, 0.9, accuracy: 0.001)
+    }
+
     // MARK: - Test 7: Height percent clamped below minimum
 
     func testHeightPercentClampedBelowMinimum() {

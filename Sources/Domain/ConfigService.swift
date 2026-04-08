@@ -165,6 +165,8 @@ final class ConfigService: ConfigProviding {
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
+        clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
+        clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
 
         [agent-detection]
         enabled = \(defaults.agentDetection.enabled)
@@ -318,7 +320,10 @@ final class ConfigService: ConfigProviding {
             ),
             mouseHideWhileTyping: boolValue(table["mouse-hide-while-typing"]) ?? defaults.mouseHideWhileTyping,
             copyOnSelect: boolValue(table["copy-on-select"]) ?? defaults.copyOnSelect,
-            clipboardPasteProtection: boolValue(table["clipboard-paste-protection"]) ?? defaults.clipboardPasteProtection
+            clipboardPasteProtection: boolValue(table["clipboard-paste-protection"]) ?? defaults.clipboardPasteProtection,
+            clipboardReadAccess: stringValue(table["clipboard-read-access"])
+                .flatMap { ClipboardReadAccess(rawValue: $0) }
+                ?? defaults.clipboardReadAccess
         )
     }
 

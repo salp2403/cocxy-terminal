@@ -408,6 +408,17 @@ final class SessionManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: filePath.path))
     }
 
+    func testDeleteUnnamedSessionRemovesLastSnapshot() throws {
+        let session = makeSimpleSession()
+        try sessionManager.saveSession(session, named: nil)
+
+        let filePath = tempDirectory.appendingPathComponent("last.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: filePath.path))
+
+        try sessionManager.deleteSession(named: nil)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: filePath.path))
+    }
+
     // MARK: - Test 17: sessionExists
 
     func testSessionExists() throws {

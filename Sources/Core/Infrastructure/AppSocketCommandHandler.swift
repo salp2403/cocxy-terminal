@@ -1025,6 +1025,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.terminal.copyOnSelect)"
         case "terminal.clipboard-paste-protection":
             return "\(config.terminal.clipboardPasteProtection)"
+        case "terminal.clipboard-read-access":
+            return config.terminal.clipboardReadAccess.rawValue
 
         // Agent detection
         case "agent-detection.enabled":
@@ -1964,21 +1966,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         return .ok(id: request.id, data: data)
     }
 
-    /// Deletes a saved session by name.
-    ///
-    /// Required params: `name`.
+    /// Deletes a saved session by name, or deletes the unnamed auto-save
+    /// session when `name` is omitted.
     private func handleSessionDelete(_ request: SocketRequest) -> SocketResponse {
-        guard let name = request.params?["name"] else {
-            return .failure(id: request.id, error: "Missing required param: name")
-        }
-
         guard let sessionManager = sessionManagerProvider?() else {
             return .failure(id: request.id, error: "Session manager not available")
         }
 
+        let name = request.params?["name"]
+
         do {
             try sessionManager.deleteSession(named: name)
-            return .ok(id: request.id, data: ["status": "deleted", "name": name])
+            return .ok(id: request.id, data: [
+                "status": "deleted",
+                "name": name ?? "last",
+            ])
         } catch {
             return .failure(id: request.id, error: "Failed to delete: \(error)")
         }
@@ -2217,7 +2219,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",
-            "terminal.clipboard-paste-protection",
+            "terminal.clipboard-paste-protection", "terminal.clipboard-read-access",
             "agent-detection.enabled", "agent-detection.osc-notifications",
             "agent-detection.pattern-matching", "agent-detection.timing-heuristics",
             "agent-detection.idle-timeout-seconds",

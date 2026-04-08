@@ -394,7 +394,7 @@ final class PatternMatchingDetectorTests: XCTestCase {
         let aider = AgentConfig(
             name: "aider",
             displayName: "Aider",
-            launchPatterns: ["^aider\\b"],
+            launchPatterns: ["^aider(?:\\s|$)"],
             waitingPatterns: [],
             errorPatterns: [],
             finishedIndicators: [],
@@ -416,6 +416,27 @@ final class PatternMatchingDetectorTests: XCTestCase {
         let claudeSignals = detector.processBytes(lineData("claude --model opus"))
         XCTAssertEqual(claudeSignals.count, 1,
             "Should detect claude launch even within cooldown — different agent")
+    }
+
+    func testDefaultAiderPromptDoesNotEmitLaunchSignal() {
+        let detector = PatternMatchingDetector(
+            configs: AgentConfigService.defaultAgentConfigs().map { AgentConfigService.compile($0) },
+            requiredConsecutiveMatches: 1,
+            cooldownInterval: 1.0,
+            maxLineBuffer: 5
+        )
+
+        let signals = detector.processBytes(lineData("aider> "))
+
+        XCTAssertFalse(
+            signals.contains(where: {
+                if case .agentDetected(name: "aider") = $0.event {
+                    return true
+                }
+                return false
+            }),
+            "The aider prompt must not be treated as a launch line"
+        )
     }
 
     // MARK: - Confidence Levels

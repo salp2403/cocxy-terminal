@@ -392,6 +392,22 @@ extension AppDelegate {
             return (nil, nil)
         }
 
+        cocxyBridge.semanticAdapter.sessionIdentifierProvider = { [weak self] surfaceID, cwd in
+            guard let self else { return nil }
+
+            if let controller = self.controllerContainingSurface(surfaceID),
+               let tabID = controller.tabID(for: surfaceID) {
+                return controller.sessionIDForTab(tabID).rawValue.uuidString
+            }
+
+            if let cwd,
+               let resolved = self.resolvedControllerAndTab(forHookSessionID: nil, cwd: cwd) {
+                return resolved.controller.sessionIDForTab(resolved.tabID).rawValue.uuidString
+            }
+
+            return nil
+        }
+
         cocxyBridge.semanticAdapter.eventPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak receiver] event in
@@ -424,6 +440,150 @@ extension AppDelegate {
         }
 
         return nil
+    }
+
+    func makeTimelineNavigator() -> TimelineNavigating {
+        TimelineNavigatorImpl(
+            navigateHandler: { [weak self] event in
+                self?.navigateTimelineEvent(event)
+            },
+            highlightHandler: { [weak self] filePath in
+                self?.highlightTimelineFile(filePath)
+            }
+        )
+    }
+
+    private func navigateTimelineEvent(_ event: TimelineEvent) {
+        guard let target = resolvedControllerAndTab(for: event) else { return }
+
+        if focusedWindowController() === target.controller {
+            _ = target.controller.focusTab(id: target.tabID)
+        } else if let router = windowTabRouter {
+            router.activateTab(id: target.tabID)
+        } else if target.controller.focusTab(id: target.tabID) {
+            NSApp.activate(ignoringOtherApps: true)
+            target.controller.showWindow(nil)
+            target.controller.window?.makeKeyAndOrderFront(nil)
+        }
+
+        scrollTimelineEvent(event, in: target.controller, tabID: target.tabID)
+    }
+
+    private func resolvedControllerAndTab(
+        for event: TimelineEvent
+    ) -> (controller: MainWindowController, tabID: TabID)? {
+        if let boundTabID = hookSessionTabBindings[event.sessionId],
+           let controller = controllerContainingTab(boundTabID) {
+            return (controller, boundTabID)
+        }
+
+        if let uuid = UUID(uuidString: event.sessionId),
+           let entry = sessionRegistry?.session(for: SessionID(rawValue: uuid)),
+           let controller = controllerContainingTab(entry.tabID) {
+            return (controller, entry.tabID)
+        }
+
+        if let windowID = event.windowID,
+           let controller = allWindowControllers.first(where: { $0.windowID == windowID }) {
+            if let sessions = sessionRegistry?.sessions(in: windowID),
+               sessions.count == 1,
+               let matchingEntry = sessions.first,
+               let owner = controllerContainingTab(matchingEntry.tabID) {
+                return (owner, matchingEntry.tabID)
+            }
+
+            if let activeTabID = controller.displayedTabID ?? controller.tabManager.activeTabID {
+                return (controller, activeTabID)
+            }
+        }
+
+        return nil
+    }
+
+    private func scrollTimelineEvent(
+        _ event: TimelineEvent,
+        in controller: MainWindowController,
+        tabID: TabID
+    ) {
+        guard let cocxyBridge = controller.bridge as? CocxyCoreBridge else { return }
+        let candidateSurfaceIDs = controller.surfaceIDs(for: tabID)
+        guard !candidateSurfaceIDs.isEmpty else { return }
+
+        guard let match = bestHistoryMatch(
+            for: event,
+            surfaceIDs: candidateSurfaceIDs,
+            bridge: cocxyBridge
+        ) else { return }
+
+        cocxyBridge.scrollToSearchResult(
+            surfaceID: match.surfaceID,
+            lineNumber: match.lineNumber
+        )
+    }
+
+    private func bestHistoryMatch(
+        for event: TimelineEvent,
+        surfaceIDs: [SurfaceID],
+        bridge: CocxyCoreBridge
+    ) -> (surfaceID: SurfaceID, lineNumber: Int)? {
+        let terms = timelineSearchTerms(for: event)
+        guard !terms.isEmpty else { return nil }
+
+        var bestMatch: (surfaceID: SurfaceID, lineNumber: Int, score: Int)?
+
+        for surfaceID in surfaceIDs {
+            let lines = bridge.historyLines(for: surfaceID)
+            for (lineNumber, line) in lines.enumerated() {
+                let normalizedLine = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard !normalizedLine.isEmpty else { continue }
+
+                let score = matchScore(for: normalizedLine, terms: terms)
+                guard score > 0 else { continue }
+
+                if let current = bestMatch {
+                    if score > current.score || (score == current.score && lineNumber > current.lineNumber) {
+                        bestMatch = (surfaceID, lineNumber, score)
+                    }
+                } else {
+                    bestMatch = (surfaceID, lineNumber, score)
+                }
+            }
+        }
+
+        return bestMatch.map { ($0.surfaceID, $0.lineNumber) }
+    }
+
+    private func timelineSearchTerms(for event: TimelineEvent) -> [String] {
+        var terms: [String] = []
+
+        func append(_ value: String?) {
+            guard let value else { return }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            let normalized = trimmed.lowercased()
+            if !terms.contains(normalized) {
+                terms.append(normalized)
+            }
+        }
+
+        append(event.filePath)
+        append(event.filePath.map { URL(fileURLWithPath: $0).lastPathComponent })
+        append(event.summary)
+        append(event.toolName)
+        return terms
+    }
+
+    private func matchScore(for line: String, terms: [String]) -> Int {
+        for (index, term) in terms.enumerated() where line.contains(term) {
+            return terms.count - index
+        }
+        return 0
+    }
+
+    private func highlightTimelineFile(_ filePath: String) {
+        let url = URL(fileURLWithPath: filePath)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     // MARK: - Notification Wiring

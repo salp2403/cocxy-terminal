@@ -213,6 +213,8 @@ struct TerminalConfig: Codable, Sendable, Equatable {
     let copyOnSelect: Bool
     /// Whether to show a confirmation dialog when pasting text with newlines.
     let clipboardPasteProtection: Bool
+    /// Policy for OSC 52 clipboard read requests initiated by terminal programs.
+    let clipboardReadAccess: ClipboardReadAccess
 
     static var defaults: TerminalConfig {
         TerminalConfig(
@@ -222,7 +224,8 @@ struct TerminalConfig: Codable, Sendable, Equatable {
             cursorOpacity: 0.8,
             mouseHideWhileTyping: true,
             copyOnSelect: true,
-            clipboardPasteProtection: true
+            clipboardPasteProtection: true,
+            clipboardReadAccess: .prompt
         )
     }
 }
@@ -232,6 +235,17 @@ enum CursorStyle: String, Codable, Sendable {
     case block
     case bar
     case underline
+}
+
+/// Policy controlling whether terminal programs may read the system clipboard
+/// via OSC 52 clipboard-query sequences.
+enum ClipboardReadAccess: String, Codable, Sendable, Equatable {
+    /// Ask the user before returning clipboard contents to the terminal.
+    case prompt
+    /// Allow clipboard reads without prompting.
+    case allow
+    /// Deny clipboard reads and return an empty response.
+    case deny
 }
 
 // MARK: - Agent Detection Config

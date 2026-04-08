@@ -68,6 +68,9 @@ final class QuickSwitchController {
     /// The tab activator that brings a tab to focus.
     private let tabActivator: TabActivating
 
+    /// Optional provider for a user-visible tab title used in HUD messages.
+    private let tabNameProvider: ((TabID) -> String?)?
+
     // MARK: - Initialization
 
     /// Creates a QuickSwitchController.
@@ -77,10 +80,12 @@ final class QuickSwitchController {
     ///   - tabActivator: The service that can activate a specific tab.
     init(
         notificationManager: NotificationManaging,
-        tabActivator: TabActivating
+        tabActivator: TabActivating,
+        tabNameProvider: ((TabID) -> String?)? = nil
     ) {
         self.notificationManager = notificationManager
         self.tabActivator = tabActivator
+        self.tabNameProvider = tabNameProvider
     }
 
     // MARK: - Quick Switch
@@ -99,9 +104,16 @@ final class QuickSwitchController {
 
         tabActivator.setActive(id: tabId)
 
+        let description: String
+        if let title = tabNameProvider?(tabId), !title.isEmpty {
+            description = "Switched to: \(title)"
+        } else {
+            description = "Switched to unread tab"
+        }
+
         return QuickSwitchResult(
             tabId: tabId,
-            description: "Switched to unread tab"
+            description: description
         )
     }
 }

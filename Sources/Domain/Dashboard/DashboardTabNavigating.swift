@@ -8,8 +8,8 @@ import Foundation
 /// Contract for navigating from the agent dashboard to a specific tab.
 ///
 /// The dashboard ViewModel uses this protocol to focus a tab when the user
-/// clicks on a session row. Concrete implementation is provided by
-/// `TabManager` (which already conforms to `TabActivating`).
+/// clicks on a session row. Concrete implementations include `TabManager`
+/// for local navigation and `WindowControllerTabRouter` for cross-window focus.
 ///
 /// Injected into the ViewModel to avoid a direct dependency on `TabManager`.
 ///

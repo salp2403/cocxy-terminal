@@ -622,12 +622,9 @@ final class Phase5QATests: XCTestCase {
                        "Height percent at exact maximum must not be clamped further")
     }
 
-    // MARK: - Test QA-20: QuickTerminal -- restore no aplica clamping adicional
+    // MARK: - Test QA-20: QuickTerminal -- restore preserva valores válidos
 
-    func testQuickTerminalViewModel_RestoreDoesNotExtraClamp() {
-        // El estado guardado ya vino de toState() que clampea -- pero restore()
-        // aplica el valor tal cual. Si el valor guardado estuviera fuera de rango
-        // (estado de fichero externo manipulado), restore lo acepta sin clampar.
+    func testQuickTerminalViewModel_RestorePreservesValidHeight() {
         let vm = QuickTerminalViewModel()
         let state = QuickTerminalSessionState(
             isVisible: false,
@@ -638,9 +635,23 @@ final class Phase5QATests: XCTestCase {
 
         vm.restore(from: state)
 
-        // El valor debe aplicarse tal cual (0.85 esta dentro del rango valido).
         XCTAssertEqual(vm.heightPercent, 0.85, accuracy: 0.0001,
-                       "Restore must apply state value as-is")
+                       "Restore must keep valid saved heights unchanged")
+    }
+
+    func testQuickTerminalViewModel_RestoreClampsOutOfRangeHeight() {
+        let vm = QuickTerminalViewModel()
+        let state = QuickTerminalSessionState(
+            isVisible: false,
+            workingDirectory: "~",
+            heightPercent: 1.25,
+            position: .right
+        )
+
+        vm.restore(from: state)
+
+        XCTAssertEqual(vm.heightPercent, 0.9, accuracy: 0.0001,
+                       "Restore must clamp externally corrupted height values")
     }
 
     // MARK: - Test QA-21: QuickTerminal Panel -- frame de pantalla con Retina (escala 2x)

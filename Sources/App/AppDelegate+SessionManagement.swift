@@ -2,6 +2,7 @@
 // AppDelegate+SessionManagement.swift - Session persistence and restoration.
 
 import AppKit
+import Combine
 
 // MARK: - Session Management
 
@@ -15,6 +16,45 @@ extension AppDelegate {
     func initializeSessionManager() {
         sessionManager = SessionManagerImpl()
         quickTerminalViewModel = QuickTerminalViewModel()
+    }
+
+    /// Starts or stops periodic auto-save according to the current sessions config.
+    ///
+    /// The timer captures session state on the main actor and persists it as the
+    /// unnamed `last.json` snapshot used for restore-on-launch.
+    func startSessionAutoSaveIfNeeded(using config: CocxyConfig? = nil) {
+        guard let sessionManager = sessionManager else { return }
+        let resolvedConfig = config ?? configService?.current ?? .defaults
+
+        guard resolvedConfig.sessions.autoSave else {
+            sessionManager.stopAutoSave()
+            return
+        }
+
+        sessionManager.startAutoSave(intervalSeconds: TimeInterval(resolvedConfig.sessions.autoSaveInterval)) { [weak self] in
+            syncOnMainActor {
+                self?.captureCurrentSession() ?? Self.emptySessionSnapshot()
+            }
+        }
+    }
+
+    /// Stops periodic auto-save if it is active.
+    func stopSessionAutoSave() {
+        sessionManager?.stopAutoSave()
+    }
+
+    /// Observes config hot-reloads and keeps the auto-save timer aligned with
+    /// the latest `[sessions]` settings.
+    func observeSessionAutoSaveConfigChanges() {
+        sessionAutoSaveConfigCancellable?.cancel()
+        guard let configService else { return }
+
+        sessionAutoSaveConfigCancellable = configService.configChangedPublisher
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newConfig in
+                self?.startSessionAutoSaveIfNeeded(using: newConfig)
+            }
     }
 
     // MARK: - Session Save
@@ -214,6 +254,21 @@ extension AppDelegate {
             )
         }
         return currentScreenBounds()
+    }
+
+    private static func emptySessionSnapshot() -> Session {
+        Session(
+            version: Session.currentVersion,
+            savedAt: Date(),
+            windows: [
+                WindowState(
+                    frame: CodableRect(x: 100, y: 100, width: 1200, height: 800),
+                    isFullScreen: false,
+                    tabs: [],
+                    activeTabIndex: 0
+                ),
+            ]
+        )
     }
 
     /// Restores tabs from a `RestorationResult` into an existing controller.

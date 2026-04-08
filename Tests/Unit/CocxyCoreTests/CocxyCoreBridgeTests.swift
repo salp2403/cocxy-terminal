@@ -240,6 +240,60 @@ struct CocxyCoreBridgeTests {
         #expect(cocxycore_terminal_get_font_metrics(state.terminal, &after) == true)
         #expect(after.cell_height >= before.cell_height)
     }
+
+    @Test("clipboard reads are allowed only when explicitly configured")
+    func resolvedClipboardReadContentHonorsAllowPolicy() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "secret")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardReadAccess: .allow)
+
+        let content = bridge.resolvedClipboardReadContent(for: nil)
+
+        #expect(content == "secret")
+        #expect(clipboard.readCallCount == 1)
+    }
+
+    @Test("clipboard reads are denied without touching the pasteboard when policy is deny")
+    func resolvedClipboardReadContentHonorsDenyPolicy() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "secret")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardReadAccess: .deny)
+
+        let content = bridge.resolvedClipboardReadContent(for: nil)
+
+        #expect(content.isEmpty)
+        #expect(clipboard.readCallCount == 0)
+    }
+
+    @Test("prompted clipboard reads do not read content when the user denies access")
+    func resolvedClipboardReadContentSkipsClipboardWhenPromptDenied() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "secret")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardReadAccess: .prompt)
+        bridge.clipboardReadAuthorizationHandler = { _ in false }
+
+        let content = bridge.resolvedClipboardReadContent(for: nil)
+
+        #expect(content.isEmpty)
+        #expect(clipboard.readCallCount == 0)
+    }
+
+    @Test("prompted clipboard reads return content only after approval")
+    func resolvedClipboardReadContentReturnsClipboardAfterApproval() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "secret")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardReadAccess: .prompt)
+        bridge.clipboardReadAuthorizationHandler = { _ in true }
+
+        let content = bridge.resolvedClipboardReadContent(for: nil)
+
+        #expect(content == "secret")
+        #expect(clipboard.readCallCount == 1)
+    }
 }
 
 @MainActor
@@ -259,6 +313,25 @@ private func makeConfig() -> TerminalEngineConfig {
         windowPaddingX: 8,
         windowPaddingY: 4
     )
+}
+
+@MainActor
+private final class RecordingClipboardService: ClipboardServiceProtocol {
+    private let content: String?
+    private(set) var readCallCount = 0
+
+    init(content: String?) {
+        self.content = content
+    }
+
+    func read() -> String? {
+        readCallCount += 1
+        return content
+    }
+
+    func write(_ text: String) {}
+
+    func clear() {}
 }
 
 @MainActor

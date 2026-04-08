@@ -51,6 +51,14 @@ final class CodableColorTests: XCTestCase {
         XCTAssertNotNil(color.nsColor)
     }
 
+    func testEqualityIgnoresCase() {
+        XCTAssertEqual(CodableColor(hex: "#ff8800"), CodableColor(hex: "#FF8800"))
+    }
+
+    func testEqualityIgnoresLeadingHash() {
+        XCTAssertEqual(CodableColor(hex: "#1e1e2e"), CodableColor(hex: "1E1E2E"))
+    }
+
     // MARK: - NSColor Conversion
 
     func testRedHexConvertsToCorrectNSColor() {

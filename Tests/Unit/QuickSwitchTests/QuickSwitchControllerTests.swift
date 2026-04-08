@@ -167,6 +167,21 @@ final class QuickSwitchControllerTests: XCTestCase {
         XCTAssertFalse(result!.description.isEmpty)
     }
 
+    func testQuickSwitchResultUsesResolvedTabTitleWhenAvailable() {
+        mockNotificationManager.nextUnreadTabIds = [tabB]
+        sut = QuickSwitchController(
+            notificationManager: mockNotificationManager,
+            tabActivator: mockTabActivator,
+            tabNameProvider: { id in
+                id == self.tabB ? "Backend Logs" : nil
+            }
+        )
+
+        let result = sut.performQuickSwitch()
+
+        XCTAssertEqual(result?.description, "Switched to: Backend Logs")
+    }
+
     // MARK: - 7. Quick switch does not activate when manager returns nil
 
     func testQuickSwitchDoesNotActivateWhenManagerReturnsNil() {

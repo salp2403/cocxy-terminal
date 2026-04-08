@@ -68,6 +68,12 @@ final class CocxyCoreSemanticAdapter {
     /// multi-window filtering and presentation.
     var windowMetadataProvider: ((SurfaceID, String?) -> (WindowID?, String?))?
 
+    /// Resolves a real Cocxy session identifier for a surface.
+    ///
+    /// When available, timeline and hook events should use the owning tab's
+    /// stable `SessionID` instead of a synthetic per-surface fallback.
+    var sessionIdentifierProvider: ((SurfaceID, String?) -> String?)?
+
     /// Synthetic session ID per surface. CocxyCore doesn't have the CLI agent's
     /// session concept, so we create a stable ID per surface for routing.
     private var sessionIDs: [SurfaceID: String] = [:]
@@ -89,7 +95,7 @@ final class CocxyCoreSemanticAdapter {
         for surfaceID: SurfaceID,
         cwd: String?
     ) {
-        let sessionId = sessionID(for: surfaceID)
+        let sessionId = sessionID(for: surfaceID, cwd: cwd)
         let detail = extractDetail(from: event)
         let timestamp = Date()
         let (windowID, windowLabel) = windowMetadataProvider?(surfaceID, cwd) ?? (nil, nil)
@@ -271,7 +277,7 @@ final class CocxyCoreSemanticAdapter {
         for surfaceID: SurfaceID,
         cwd: String?
     ) {
-        let sessionId = sessionID(for: surfaceID)
+        let sessionId = sessionID(for: surfaceID, cwd: cwd)
         let timestamp = Date()
         let (windowID, windowLabel) = windowMetadataProvider?(surfaceID, cwd) ?? (nil, nil)
 
@@ -316,7 +322,12 @@ final class CocxyCoreSemanticAdapter {
     // MARK: - Private Helpers
 
     /// Get or create a stable session ID for a surface.
-    private func sessionID(for surfaceID: SurfaceID) -> String {
+    private func sessionID(for surfaceID: SurfaceID, cwd: String?) -> String {
+        if let resolved = sessionIdentifierProvider?(surfaceID, cwd), !resolved.isEmpty {
+            sessionIDs[surfaceID] = resolved
+            return resolved
+        }
+
         if let existing = sessionIDs[surfaceID] {
             return existing
         }

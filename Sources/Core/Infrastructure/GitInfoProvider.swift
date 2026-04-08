@@ -171,6 +171,11 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
 
         source.setEventHandler { [weak self] in
             guard let self = self else { return }
+            self.cacheLock.lock()
+            let isCurrentWatcher = self.watchers[directoryPath] === source
+            self.cacheLock.unlock()
+            guard isCurrentWatcher else { return }
+
             self.invalidateCache(for: directory)
             let newBranch = self.readBranchFromDisk(at: directory)
             self.storeCacheEntry(branch: newBranch, for: directoryPath)
@@ -185,14 +190,19 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
 
         // Store the watcher so we can cancel it later.
         cacheLock.lock()
+        let previousWatcher = watchers[directoryPath]
         watchers[directoryPath] = source
         cacheLock.unlock()
+        previousWatcher?.cancel()
 
         return AnyCancellable { [weak self] in
             source.cancel()
-            self?.cacheLock.lock()
-            self?.watchers.removeValue(forKey: directoryPath)
-            self?.cacheLock.unlock()
+            guard let self else { return }
+            self.cacheLock.lock()
+            if self.watchers[directoryPath] === source {
+                self.watchers.removeValue(forKey: directoryPath)
+            }
+            self.cacheLock.unlock()
         }
     }
 
