@@ -5,6 +5,16 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.43] - 2026-04-07
+
+### Fixed
+- Session restore no longer reuses stale primary surfaces — each tab gets a fresh terminal view
+- Programmatic restore gate prevents blank terminals after app relaunch or update
+- Generic child processes no longer misidentified as agent subagents (no false loading panels)
+- Closing the last split pane now promotes the surviving terminal to primary surface
+- Tab sidebar CWD updates via PID-based fallback when the shell does not emit OSC 7
+- Hook event model extended with TaskCompleted and TeammateIdle lifecycle events
+
 ## [0.1.42] - 2026-04-07
 
 ### Fixed
