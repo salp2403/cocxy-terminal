@@ -334,32 +334,41 @@ extension AppDelegate {
         // auto-close the panel after a brief delay.
         receiver.eventPublisher
             .receive(on: DispatchQueue.main)
-            .sink { [weak self, weak dashboardVM] hookEvent in
+            .sink { [weak self] hookEvent in
                 guard let self else { return }
 
                 if hookEvent.type == .subagentStart,
                    case .subagent(let data) = hookEvent.data {
-                    let targetTabId = dashboardVM?.tabIdForSession(hookEvent.sessionId)
-                    let targetController = targetTabId
-                        .flatMap { self.controllerContainingTab(TabID(rawValue: $0)) }
-                        ?? self.windowController
-                    targetController?.spawnSubagentPanel(
-                        subagentId: data.subagentId,
+                    let subagentId = data.subagentId.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !subagentId.isEmpty,
+                          let resolved = self.resolvedControllerAndTab(
+                              forHookSessionID: hookEvent.sessionId,
+                              cwd: hookEvent.cwd
+                          ) else {
+                        return
+                    }
+
+                    resolved.controller.spawnSubagentPanel(
+                        subagentId: subagentId,
                         sessionId: hookEvent.sessionId,
                         agentType: data.subagentType,
-                        targetTabId: targetTabId
+                        targetTabId: resolved.tabID.rawValue
                     )
                 } else if hookEvent.type == .subagentStop,
                           case .subagent(let data) = hookEvent.data {
-                    let subId = data.subagentId
+                    let subId = data.subagentId.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !subId.isEmpty,
+                          let resolved = self.resolvedControllerAndTab(
+                              forHookSessionID: hookEvent.sessionId,
+                              cwd: hookEvent.cwd
+                          ) else {
+                        return
+                    }
                     let sessId = hookEvent.sessionId
+                    let targetController = resolved.controller
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 2_000_000_000)
-                        let targetTabId = dashboardVM?.tabIdForSession(sessId)
-                        let targetController = targetTabId
-                            .flatMap { self.controllerContainingTab(TabID(rawValue: $0)) }
-                            ?? self.windowController
-                        targetController?.closeSubagentPanelBySubagentId(subId, sessionId: sessId)
+                        targetController.closeSubagentPanelBySubagentId(subId, sessionId: sessId)
                     }
                 }
             }

@@ -335,6 +335,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Saved non-terminal panel views per tab.
     var savedTabPanelContentViews: [TabID: [UUID: NSView]] = [:]
 
+    /// Suppresses reactive tab switches while a full session restore is
+    /// rebuilding tabs, surfaces, and split hierarchies.
+    ///
+    /// Without this gate, `insertExternalTab` publishes intermediate active-tab
+    /// changes before the corresponding surface tree exists, which can leave the
+    /// visible terminal blank after restore/update relaunches.
+    var isPerformingProgrammaticTabRestore: Bool = false
+
     // MARK: - Initialization
 
     /// Creates a MainWindowController with the given bridge and optional config.
@@ -574,7 +582,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onOpenBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
         strip.onOpenMarkdown = { [weak self] in self?.splitWithMarkdownAction(nil) }
         strip.onReload = { [weak self] in self?.reloadFocusedBrowserPanel() }
-        strip.onClosePanel = { [weak self] in self?.closeLastPanel() }
+        strip.onClosePanel = { [weak self] in self?.closeSplitAction(nil) }
         strip.onSelectTab = { [weak self] index in self?.handleStripSelectTab(at: index) }
         strip.onCloseTab = { [weak self] index in self?.handleStripCloseTab(at: index) }
         strip.onSwapTabs = { [weak self] from, to in self?.handleStripSwapTabs(from: from, to: to) }
@@ -908,6 +916,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newActiveID in
                 guard let self, let tabID = newActiveID else { return }
+                guard !self.isPerformingProgrammaticTabRestore else { return }
                 self.handleTabSwitch(to: tabID)
             }
             .store(in: &cancellables)
@@ -1185,7 +1194,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func focusTab(id: TabID) -> Bool {
         guard tabManager.tab(for: id) != nil else { return false }
-        handleTabSwitch(to: id)
+        if tabManager.activeTabID != id {
+            tabManager.setActive(id: id)
+        } else {
+            handleTabSwitch(to: id)
+        }
         return true
     }
 
@@ -1193,8 +1206,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         guard let targetSurfaceView = tabSurfaceViews[tabID] else { return }
         guard let container = terminalContainerView else { return }
 
-        // Idempotent: skip if this tab is already displayed.
-        if displayedTabID == tabID {
+        // Idempotent only when the visible hierarchy is still attached.
+        if displayedTabID == tabID, isVisibleHierarchyAttached(for: tabID, in: container) {
             refreshStatusBar()
             refreshTabStrip()
             refreshVisibleTerminalInteractionState()
@@ -1263,6 +1276,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         refreshTabStrip()
         updateAgentProgressOverlay()
         applyProjectConfig(for: tabID)
+    }
+
+    private func isVisibleHierarchyAttached(for tabID: TabID, in container: NSView) -> Bool {
+        if let splitView = activeSplitView {
+            return splitView.superview === container
+        }
+
+        guard let targetSurfaceView = tabSurfaceViews[tabID] else {
+            return false
+        }
+
+        return targetSurfaceView.superview === container
     }
 
     /// Re-syncs the currently visible terminal host views with the live window

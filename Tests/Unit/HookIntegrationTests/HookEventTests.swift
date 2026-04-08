@@ -194,6 +194,30 @@ final class HookEventTests: XCTestCase {
         XCTAssertEqual(data.subagentType, "research")
     }
 
+    func testFlatSubagentEventWithoutAgentIdDoesNotInventRandomIdentifier() throws {
+        let json = """
+        {
+            "hook_event_name": "SubagentStart",
+            "session_id": "sess-flat-sub",
+            "cwd": "/Users/dev/project",
+            "agent_type": "research"
+        }
+        """
+
+        let event = try makeDecoder().decode(HookEvent.self, from: Data(json.utf8))
+
+        XCTAssertEqual(event.type, .subagentStart)
+        guard case .subagent(let data) = event.data else {
+            XCTFail("Expected subagent data")
+            return
+        }
+        XCTAssertEqual(
+            data.subagentId,
+            "",
+            "Missing agent IDs must stay empty so the UI can ignore unresolved subagent events"
+        )
+    }
+
     // MARK: - Invalid JSON Graceful Error
 
     func testParseInvalidJSONReturnsError() {

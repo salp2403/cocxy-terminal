@@ -480,6 +480,33 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertEqual(firstView.redrawCallCount, 1)
     }
 
+    func testHandleTabSwitchReattachesDisplayedSurfaceWhenHierarchyIsMissing() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        controller.terminalContainerView = container
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab")
+            return
+        }
+
+        let firstView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[firstTabID] = firstView
+        controller.terminalSurfaceView = firstView
+        controller.displayedTabID = firstTabID
+
+        controller.handleTabSwitch(to: firstTabID)
+
+        XCTAssertTrue(
+            firstView.superview === container,
+            "Re-selecting the displayed tab must repair a detached hierarchy instead of early-returning"
+        )
+        XCTAssertEqual(firstView.updateMetricsCallCount, 1)
+        XCTAssertEqual(firstView.redrawCallCount, 1)
+    }
+
     func testHandleTabSwitchRefreshesRestoredSplitSurfaces() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -550,6 +577,115 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertEqual(primaryView.redrawCallCount, 1)
         XCTAssertEqual(splitView.updateMetricsCallCount, 1)
         XCTAssertEqual(splitView.redrawCallCount, 1)
+    }
+
+    func testSpawnSubagentPanelDeduplicatesSameSessionAndSubagent() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.injectedDashboardViewModel = AgentDashboardViewModel()
+
+        controller.spawnSubagentPanel(
+            subagentId: "sub-1",
+            sessionId: "sess-1",
+            agentType: "research"
+        )
+        let initialPanelCount = controller.panelContentViews.count
+
+        controller.spawnSubagentPanel(
+            subagentId: "sub-1",
+            sessionId: "sess-1",
+            agentType: "research"
+        )
+
+        XCTAssertEqual(initialPanelCount, 1)
+        XCTAssertEqual(
+            controller.panelContentViews.count,
+            1,
+            "Repeated subagent-start events must not create duplicate loading panels"
+        )
+    }
+
+    func testSpawnSubagentPanelIgnoresGenericSubprocessAgentType() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.injectedDashboardViewModel = AgentDashboardViewModel()
+
+        controller.spawnSubagentPanel(
+            subagentId: "pid-123",
+            sessionId: "sess-1",
+            agentType: "subprocess"
+        )
+
+        XCTAssertTrue(
+            controller.panelContentViews.isEmpty,
+            "Generic subprocess events must not auto-open subagent panels"
+        )
+    }
+
+    func testCloseSplitActionPromotesRemainingSplitSurfaceToPrimary() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let activeTabID = controller.tabManager.activeTabID,
+              let originalPrimaryView = controller.terminalSurfaceView,
+              let originalPrimarySurfaceID = controller.tabSurfaceMap[activeTabID] else {
+            XCTFail("Expected bootstrap tab and primary surface")
+            return
+        }
+
+        controller.performVisualSplit(isVertical: true)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after creating a split")
+            return
+        }
+        let leaves = splitManager.rootNode.allLeafIDs()
+        guard leaves.count == 2,
+              let (promotedSurfaceID, promotedSurfaceView) = controller.splitSurfaceViews.first else {
+            XCTFail("Expected a secondary split surface")
+            return
+        }
+
+        splitManager.focusLeaf(id: leaves[0].leafID)
+        controller.closeSplitAction(nil)
+
+        XCTAssertNil(controller.activeSplitView, "Closing back to one pane must remove the split hierarchy")
+        XCTAssertTrue(
+            controller.terminalSurfaceView === promotedSurfaceView,
+            "The surviving split surface must become the tab's primary terminal view"
+        )
+        XCTAssertTrue(
+            controller.surfaceViewForTab(activeTabID) === promotedSurfaceView,
+            "Tab-to-surface mapping must follow the surviving terminal after collapse"
+        )
+        XCTAssertEqual(
+            controller.tabSurfaceMap[activeTabID],
+            promotedSurfaceID,
+            "The active tab must now point at the surviving surface ID"
+        )
+        XCTAssertEqual(
+            controller.viewModelForTab(activeTabID)?.surfaceID,
+            promotedSurfaceID,
+            "The active tab must adopt the surviving view model"
+        )
+        XCTAssertNil(
+            controller.splitSurfaceViews[promotedSurfaceID],
+            "The surviving surface must no longer be tracked as a split once it becomes primary"
+        )
+        XCTAssertFalse(
+            controller.terminalSurfaceView === originalPrimaryView,
+            "The destroyed primary surface must not remain attached after collapse"
+        )
+        XCTAssertTrue(
+            bridge.destroyedSurfaces.contains(originalPrimarySurfaceID),
+            "Closing the focused primary pane must destroy its surface in the engine"
+        )
     }
 
     func testHandleOSCNotificationUpdatesTheSourceTabViewModelTitle() {

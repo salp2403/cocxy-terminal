@@ -294,6 +294,15 @@ struct CocxyCoreBridgeTests {
         #expect(content == "secret")
         #expect(clipboard.readCallCount == 1)
     }
+
+    @Test("parseWorkingDirectoryURL accepts file URLs and plain paths")
+    func parseWorkingDirectoryURLAcceptsFileURLsAndPaths() throws {
+        let bridge = try makeBridge()
+
+        #expect(bridge.parseWorkingDirectoryURL("file:///Users/test/project")?.path == "/Users/test/project")
+        #expect(bridge.parseWorkingDirectoryURL("file://localhost/Users/test/project")?.path == "/Users/test/project")
+        #expect(bridge.parseWorkingDirectoryURL("/Users/test/project")?.path == "/Users/test/project")
+    }
 }
 
 @MainActor

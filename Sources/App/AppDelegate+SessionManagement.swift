@@ -281,6 +281,8 @@ extension AppDelegate {
     ) {
         guard !result.restoredTabs.isEmpty else { return }
         guard let bridge = bridge else { return }
+        controller.isPerformingProgrammaticTabRestore = true
+        defer { controller.isPerformingProgrammaticTabRestore = false }
 
         // Restore window frame.
         let frame = NSRect(
@@ -328,6 +330,9 @@ extension AppDelegate {
         let activeTabID = result.restoredTabs[safeActiveIndex].tabID
         controller.tabManager.setActive(id: activeTabID)
         controller.handleTabSwitch(to: activeTabID)
+        controller.refreshVisibleTerminalInteractionState()
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.window?.displayIfNeeded()
 
         // Enter full screen if saved.
         if result.isFullScreen, controller.window?.styleMask.contains(.fullScreen) == false {
@@ -366,11 +371,12 @@ extension AppDelegate {
             let surfaceView: TerminalHostView
 
             if isPrimaryLeaf,
-               controller.tabManager.tabs.first?.id == restoredTab.tabID,
-               let existingSurfaceView = controller.terminalSurfaceView {
+               controller.tabManager.tabs.first?.id == restoredTab.tabID {
                 viewModel = controller.terminalViewModel
                 viewModel.setDefaultFontSize(configuredFontSize)
-                surfaceView = existingSurfaceView
+                let freshPrimarySurfaceView = CocxyCoreView(viewModel: viewModel)
+                controller.terminalSurfaceView = freshPrimarySurfaceView
+                surfaceView = freshPrimarySurfaceView
             } else {
                 let newViewModel = TerminalViewModel(engine: bridge)
                 newViewModel.setDefaultFontSize(configuredFontSize)
@@ -387,9 +393,11 @@ extension AppDelegate {
                 viewModel.markRunning(surfaceID: surfaceID)
                 surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
                 surfaceView.syncSizeWithTerminal()
-                controller.wireHandlersForRestoredTab(
+                controller.wireSurfaceHandlers(
+                    for: surfaceID,
                     tabID: restoredTab.tabID,
-                    surfaceID: surfaceID
+                    in: surfaceView,
+                    initialWorkingDirectory: workingDirectory
                 )
 
                 if isPrimaryLeaf {

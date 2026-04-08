@@ -315,16 +315,11 @@ extension MainWindowController {
         guard let container = terminalContainerView else { return }
         guard activeSplitView != nil else { return }
 
-        // Capture the focused leaf's content ID BEFORE the domain model removes it.
-        // This is needed to clean up panelContentViews for non-terminal panels.
-        var closingContentID: UUID?
-        if let sm = activeSplitManager, let focusedID = sm.focusedLeafID {
-            let leaves = sm.rootNode.allLeafIDs()
-            closingContentID = leaves.first(where: { $0.leafID == focusedID })?.terminalID
-        }
+        guard let focusedPane = focusedPaneSnapshot() else { return }
+        var promotedRemainingView: NSView?
 
         // Check if the pane being closed is a non-terminal panel.
-        let closingPanelView: NSView? = closingContentID.flatMap { panelContentViews[$0] }
+        let closingPanelView: NSView? = panelContentViews[focusedPane.contentID]
 
         // Update the domain model.
         activeSplitManager?.handleSplitAction(.closeActiveSplit)
@@ -334,25 +329,9 @@ extension MainWindowController {
         if let panelView = closingPanelView {
             viewToRemove = panelView
             // Clean up the panel content view entry.
-            if let contentID = closingContentID {
-                panelContentViews.removeValue(forKey: contentID)
-            }
-        } else if let focusedSurface = focusedSplitSurfaceView {
-            // Find the surface ID of the focused terminal pane to destroy it.
-            let focusedSurfaceID = splitSurfaceViews.first { $0.value === focusedSurface }?.key
-
-            // If the focused surface is the primary, close a secondary instead.
-            let surfaceToClose: TerminalHostView
-            let surfaceIDToDestroy: SurfaceID?
-            if focusedSurfaceID != nil {
-                surfaceToClose = focusedSurface
-                surfaceIDToDestroy = focusedSurfaceID
-            } else if let (lastID, lastView) = splitSurfaceViews.first {
-                surfaceToClose = lastView
-                surfaceIDToDestroy = lastID
-            } else {
-                return
-            }
+            panelContentViews.removeValue(forKey: focusedPane.contentID)
+        } else if let focusedSurface = focusedPane.view as? TerminalHostView {
+            let surfaceIDToDestroy = focusedPane.surfaceID
 
             // Destroy the surface in the engine.
             if let sid = surfaceIDToDestroy {
@@ -362,7 +341,7 @@ extension MainWindowController {
                 splitSurfaceViews.removeValue(forKey: sid)
                 splitViewModels.removeValue(forKey: sid)
             }
-            viewToRemove = surfaceToClose
+            viewToRemove = focusedSurface
         } else {
             return
         }
@@ -378,6 +357,7 @@ extension MainWindowController {
 
                 remaining.removeFromSuperview()
                 parentSplit.removeFromSuperview()
+                promotedRemainingView = remaining
 
                 remaining.frame = parentFrame
                 remaining.autoresizingMask = [.width, .height]
@@ -391,20 +371,35 @@ extension MainWindowController {
             }
         }
 
-        // Check if we are back to a single pane.
-        if splitSurfaceViews.isEmpty && panelContentViews.isEmpty {
+        let remainingLeafCount = activeSplitManager?.rootNode.allLeafIDs().count ?? 0
+
+        // Check if we are back to a single pane and adopt the surviving view as
+        // the tab's primary surface when needed.
+        if remainingLeafCount <= 1 {
+            let remainingView =
+                promotedRemainingView
+                ?? firstVisiblePaneView(in: container)
+                ?? terminalSurfaceView
+
             activeSplitView?.removeFromSuperview()
             activeSplitView = nil
 
-            if let primarySurface = terminalSurfaceView {
-                primarySurface.frame = container.bounds
-                primarySurface.autoresizingMask = [.width, .height]
-                container.addSubview(primarySurface, positioned: .below, relativeTo: nil)
-                window?.makeFirstResponder(primarySurface)
+            if let remainingView {
+                remainingView.removeFromSuperview()
+                remainingView.frame = container.bounds
+                remainingView.autoresizingMask = [.width, .height]
+                container.addSubview(remainingView, positioned: .below, relativeTo: nil)
+
+                if let remainingTerminalView = remainingView as? TerminalHostView {
+                    promoteTerminalHostViewToPrimary(remainingTerminalView)
+                    remainingTerminalView.syncSizeWithTerminal()
+                }
+
+                window?.makeFirstResponder(remainingView)
             }
         } else {
             // Focus another pane.
-            let nextFocus = splitSurfaceViews.values.first ?? terminalSurfaceView
+            let nextFocus = focusedPaneView() ?? terminalSurfaceView
             if let next = nextFocus {
                 window?.makeFirstResponder(next)
             }
@@ -695,14 +690,30 @@ extension MainWindowController {
     ///   - sessionId: The parent session's ID.
     ///   - agentType: The subagent type (e.g., "Explore", "Plan").
     func spawnSubagentPanel(subagentId: String, sessionId: String, agentType: String?, targetTabId: UUID? = nil) {
+        let normalizedSubagentId = subagentId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedSubagentId.isEmpty else { return }
+        if let agentType,
+           agentType.caseInsensitiveCompare("subprocess") == .orderedSame {
+            return
+        }
+
         // Switch to the correct tab before creating the split.
         if let targetId = targetTabId {
             let targetTabID = TabID(rawValue: targetId)
             if tabManager.activeTabID != targetTabID {
-                handleTabSwitch(to: targetTabID)
+                _ = focusTab(id: targetTabID)
             }
         }
-        let panel = PanelInfo.subagent(id: subagentId, sessionId: sessionId)
+
+        if panelContentViews.values.contains(where: { view in
+            guard let subagentView = view as? SubagentContentView else { return false }
+            return subagentView.subagentId == normalizedSubagentId && subagentView.sessionId == sessionId
+        }) {
+            refreshTabStrip()
+            return
+        }
+
+        let panel = PanelInfo.subagent(id: normalizedSubagentId, sessionId: sessionId)
         performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
 
         // Animate the new panel entrance (fade-in).
@@ -770,6 +781,91 @@ extension MainWindowController {
         }
         for contentID in subagentContentIDs {
             closeSubagentPanel(contentID: contentID)
+        }
+    }
+
+    private func focusedPaneSnapshot() -> (contentID: UUID, view: NSView, surfaceID: SurfaceID?)? {
+        guard let sm = activeSplitManager,
+              let focusedLeafID = sm.focusedLeafID else {
+            return nil
+        }
+
+        let leaves = sm.rootNode.allLeafIDs()
+        guard let focusedIndex = leaves.firstIndex(where: { $0.leafID == focusedLeafID }) else {
+            return nil
+        }
+
+        let leafViews = collectLeafViews()
+        guard focusedIndex < leafViews.count else {
+            return nil
+        }
+
+        let leaf = leaves[focusedIndex]
+        let view = leafViews[focusedIndex]
+        let resolvedSurfaceID: SurfaceID?
+
+        if let hostView = view as? TerminalHostView {
+            resolvedSurfaceID = self.surfaceID(for: hostView)
+        } else {
+            resolvedSurfaceID = nil
+        }
+
+        return (leaf.terminalID, view, resolvedSurfaceID)
+    }
+
+    private func focusedPaneView() -> NSView? {
+        focusedPaneSnapshot()?.view
+    }
+
+    private func surfaceID(for hostView: TerminalHostView) -> SurfaceID? {
+        if let activeTabID = tabManager.activeTabID,
+           tabSurfaceViews[activeTabID] === hostView {
+            return tabSurfaceMap[activeTabID]
+        }
+
+        return splitSurfaceViews.first(where: { $0.value === hostView })?.key
+    }
+
+    private func firstVisiblePaneView(in container: NSView) -> NSView? {
+        for subview in container.subviews.reversed() {
+            if let splitView = subview as? NSSplitView {
+                if let leaf = collectLeaves(from: splitView).last {
+                    return leaf
+                }
+                continue
+            }
+            if subview is TerminalHostView || panelContentViews.values.contains(where: { $0 === subview }) {
+                return subview
+            }
+        }
+        return nil
+    }
+
+    private func promoteTerminalHostViewToPrimary(_ hostView: TerminalHostView) {
+        guard let activeTabID = visibleTabID ?? tabManager.activeTabID else {
+            terminalSurfaceView = hostView
+            return
+        }
+
+        terminalSurfaceView = hostView
+        tabSurfaceViews[activeTabID] = hostView
+
+        if let promotedSurfaceID = splitSurfaceViews.first(where: { $0.value === hostView })?.key {
+            tabSurfaceMap[activeTabID] = promotedSurfaceID
+            splitSurfaceViews.removeValue(forKey: promotedSurfaceID)
+            if let promotedViewModel = splitViewModels.removeValue(forKey: promotedSurfaceID) {
+                tabViewModels[activeTabID] = promotedViewModel
+            } else if let promotedViewModel = hostView.terminalViewModel {
+                tabViewModels[activeTabID] = promotedViewModel
+            }
+            return
+        }
+
+        if let promotedSurfaceID = surfaceID(for: hostView) {
+            tabSurfaceMap[activeTabID] = promotedSurfaceID
+        }
+        if let promotedViewModel = hostView.terminalViewModel {
+            tabViewModels[activeTabID] = promotedViewModel
         }
     }
 }

@@ -2,6 +2,7 @@
 // CocxyCoreBridge.swift - Bridge between CocxyCore C API and Swift.
 
 import AppKit
+import Darwin
 import CocxyCoreKit
 
 // MARK: - CocxyCore Bridge
@@ -44,6 +45,7 @@ final class CocxyCoreBridge: TerminalEngine {
         let readSource: DispatchSourceRead
         let contextBox: Unmanaged<CallbackContext>
         weak var hostView: NSView?
+        var lastKnownWorkingDirectory: URL?
 
         var outputHandler: (@Sendable (Data) -> Void)?
         var oscHandler: (@Sendable (OSCNotification) -> Void)?
@@ -205,7 +207,8 @@ final class CocxyCoreBridge: TerminalEngine {
             pty: pty,
             readSource: readSource,
             contextBox: contextBox,
-            hostView: view
+            hostView: view,
+            lastKnownWorkingDirectory: (workingDirectory ?? config.workingDirectory).standardizedFileURL
         )
 
         readSource.resume()
@@ -459,15 +462,12 @@ final class CocxyCoreBridge: TerminalEngine {
                 ?? NSScreen.main?.backingScaleFactor
                 ?? 2.0
         )
-        _ = family.withCString { familyPtr in
-            cocxycore_terminal_set_font(
-                state.terminal,
-                familyPtr,
-                Float(size),
-                scale,
-                true
-            )
-        }
+        _ = applyResolvedFont(
+            family: family,
+            size: Float(size),
+            scale: scale,
+            to: state.terminal
+        )
         (state.hostView as? TerminalHostView)?.updateInteractionMetrics()
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
@@ -520,15 +520,12 @@ final class CocxyCoreBridge: TerminalEngine {
         cocxycore_terminal_enable_semantic(terminal, Self.semanticBlockCapacity)
 
         // Font
-        _ = config.fontFamily.withCString { family in
-            cocxycore_terminal_set_font(
-                terminal,
-                family,
-                Float(config.fontSize),
-                Float(NSScreen.main?.backingScaleFactor ?? 2.0),
-                true // ligatures
-            )
-        }
+        _ = applyResolvedFont(
+            family: config.fontFamily,
+            size: Float(config.fontSize),
+            scale: Float(NSScreen.main?.backingScaleFactor ?? 2.0),
+            to: terminal
+        )
 
         // Theme (if palette provided)
         if let palette = config.themePalette {
@@ -692,9 +689,11 @@ final class CocxyCoreBridge: TerminalEngine {
                 bytes: UnsafeBufferPointer(start: cwd, count: len),
                 encoding: .utf8
             ) ?? ""
-            let url = URL(fileURLWithPath: pathStr, isDirectory: true)
+            guard let url = box.bridge?.parseWorkingDirectoryURL(pathStr) else { return }
             DispatchQueue.main.async {
-                box.bridge?.dispatchOSC(.currentDirectory(url), for: box.surfaceID)
+                guard let bridge = box.bridge,
+                      bridge.trackWorkingDirectory(url, for: box.surfaceID) else { return }
+                bridge.dispatchOSC(.currentDirectory(url), for: box.surfaceID)
             }
         }, context)
 
@@ -739,6 +738,45 @@ final class CocxyCoreBridge: TerminalEngine {
                 box.bridge?.handleProcessEvent(eventCopy, for: box.surfaceID)
             }
         }, context)
+    }
+
+    func parseWorkingDirectoryURL(_ rawValue: String) -> URL? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let parsed = URL(string: trimmed), parsed.isFileURL {
+            return parsed.standardizedFileURL
+        }
+
+        return URL(fileURLWithPath: trimmed, isDirectory: true).standardizedFileURL
+    }
+
+    @discardableResult
+    private func applyResolvedFont(
+        family: String,
+        size: Float,
+        scale: Float,
+        to terminal: OpaquePointer
+    ) -> String {
+        for candidate in FontFallbackResolver.fallbackChain(for: family) {
+            guard FontFallbackResolver.isFontAvailable(candidate) else { continue }
+
+            let applied = candidate.withCString { familyPtr in
+                cocxycore_terminal_set_font(
+                    terminal,
+                    familyPtr,
+                    size,
+                    scale,
+                    true
+                )
+            }
+
+            if applied {
+                return candidate
+            }
+        }
+
+        return family
     }
 
     // MARK: - Private: Callback Handlers
@@ -842,10 +880,12 @@ final class CocxyCoreBridge: TerminalEngine {
         // Shell integration → OSCNotification for existing tab wiring
         switch Int32(event.event_type) {
         case 0: // PROMPT_SHOWN
+            emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
             dispatchOSC(.shellPrompt, for: surfaceID)
         case 1: // COMMAND_STARTED
             dispatchOSC(.commandStarted, for: surfaceID)
         case 2: // COMMAND_FINISHED
+            emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
             let exitCode = event.exit_code >= 0 ? Int(event.exit_code) : nil
             dispatchOSC(.commandFinished(exitCode: exitCode), for: surfaceID)
         default:
@@ -885,6 +925,47 @@ final class CocxyCoreBridge: TerminalEngine {
 
     private func currentWorkingDirectory(for surfaceID: SurfaceID) -> String? {
         cwdProvider?(surfaceID)
+    }
+
+    @discardableResult
+    private func trackWorkingDirectory(_ url: URL, for surfaceID: SurfaceID) -> Bool {
+        guard var state = surfaces[surfaceID] else { return false }
+        let normalized = url.standardizedFileURL
+        guard state.lastKnownWorkingDirectory != normalized else { return false }
+        state.lastKnownWorkingDirectory = normalized
+        surfaces[surfaceID] = state
+        return true
+    }
+
+    private func emitFallbackWorkingDirectoryIfNeeded(for surfaceID: SurfaceID) {
+        guard let url = inferredWorkingDirectory(for: surfaceID),
+              trackWorkingDirectory(url, for: surfaceID) else {
+            return
+        }
+        dispatchOSC(.currentDirectory(url), for: surfaceID)
+    }
+
+    private func inferredWorkingDirectory(for surfaceID: SurfaceID) -> URL? {
+        guard let state = surfaces[surfaceID] else { return nil }
+        let pid = cocxycore_pty_child_pid(state.pty)
+        guard pid > 0 else { return nil }
+
+        var info = proc_vnodepathinfo()
+        let result = proc_pidinfo(
+            pid,
+            PROC_PIDVNODEPATHINFO,
+            0,
+            &info,
+            Int32(MemoryLayout.size(ofValue: info))
+        )
+        guard result == Int32(MemoryLayout.size(ofValue: info)) else { return nil }
+
+        return withUnsafePointer(to: &info.pvi_cdir.vip_path) { pathPtr in
+            let cString = UnsafeRawPointer(pathPtr).assumingMemoryBound(to: CChar.self)
+            let path = String(cString: cString).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !path.isEmpty else { return nil }
+            return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        }
     }
 
     // MARK: - Private: Key Mapping

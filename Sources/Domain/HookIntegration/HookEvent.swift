@@ -131,9 +131,10 @@ struct HookEvent: Codable, Sendable {
 
             case .subagentStart, .subagentStop:
                 let agentType = try? container.decode(String.self, forKey: .agentType)
-                let agentId = try? container.decode(String.self, forKey: .agentId)
+                let agentId = (try? container.decode(String.self, forKey: .agentId))?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 self.data = .subagent(SubagentData(
-                    subagentId: agentId ?? UUID().uuidString,
+                    subagentId: agentId ?? "",
                     subagentType: agentType
                 ))
 

@@ -236,8 +236,8 @@ struct CocxyCoreSemanticAdapterTests {
         #expect(capture.timeline.last?.summary == "Uploading…")
     }
 
-    @Test("Process spawn emits a SubagentStart hook")
-    func processSpawnEmitsSubagentHook() {
+    @Test("Process spawn does not emit hook events for generic subprocesses")
+    func processSpawnDoesNotEmitHookForGenericSubprocesses() {
         let adapter = CocxyCoreSemanticAdapter()
         let capture = SemanticCapture(adapter: adapter)
 
@@ -252,14 +252,7 @@ struct CocxyCoreSemanticAdapterTests {
         )
         adapter.processProcessEvent(event, for: makeSurfaceID(), cwd: "/tmp/project")
 
-        let hook = capture.hooks.last
-        #expect(hook?.type == .subagentStart)
-        if case .subagent(let data)? = hook?.data {
-            #expect(data.subagentId == "pid-321")
-            #expect(data.subagentType == "subprocess")
-        } else {
-            Issue.record("Expected SubagentData payload")
-        }
+        #expect(capture.hooks.isEmpty)
     }
 
     @Test("Process spawn emits a subagent-start timeline entry")

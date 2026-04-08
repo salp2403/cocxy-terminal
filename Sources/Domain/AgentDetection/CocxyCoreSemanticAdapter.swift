@@ -270,8 +270,10 @@ final class CocxyCoreSemanticAdapter {
 
     /// Process a CocxyCore process event (child spawned/exited).
     ///
-    /// Maps to subagent start/stop events when a child process
-    /// is spawned or exits in the tracked process tree.
+    /// Generic process tracking is best-effort and currently cannot
+    /// distinguish a real "subagent" from an ordinary child process.
+    /// We therefore emit timeline-only entries here and reserve hook-level
+    /// subagent events for integrations that have explicit semantic metadata.
     func processProcessEvent(
         _ event: cocxycore_process_event,
         for surfaceID: SurfaceID,
@@ -283,16 +285,6 @@ final class CocxyCoreSemanticAdapter {
 
         switch Int32(event.event_type) {
         case 0: // CHILD_SPAWNED
-            emitHookEvent(
-                type: .subagentStart,
-                sessionId: sessionId,
-                cwd: cwd,
-                data: .subagent(SubagentData(
-                    subagentId: "pid-\(event.pid)",
-                    subagentType: "subprocess"
-                )),
-                timestamp: timestamp
-            )
             emitTimeline(
                 type: .subagentStart, sessionId: sessionId,
                 summary: "Subprocess spawned (PID \(event.pid))",

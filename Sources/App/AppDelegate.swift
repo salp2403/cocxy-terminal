@@ -762,42 +762,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func controllerContainingWorkingDirectory(_ directory: String) -> MainWindowController? {
-        let normalizedPath = URL(fileURLWithPath: directory).standardized.path
-        return allWindowControllers.first { controller in
-            controller.tabManager.tabs.contains {
-                $0.workingDirectory.standardized.path == normalizedPath
-            } || controller.surfaceWorkingDirectories.values.contains {
-                $0.standardized.path == normalizedPath
-            }
-        }
+        resolvedWorkingDirectoryCandidate(for: directory)?.controller
     }
 
     func tabIDForWorkingDirectory(_ directory: String) -> TabID? {
-        let normalizedPath = URL(fileURLWithPath: directory).standardized.path
-
-        for controller in allWindowControllers {
-            if let tab = controller.tabManager.tabs.first(where: {
-                $0.workingDirectory.standardized.path == normalizedPath
-            }) {
-                return tab.id
-            }
-
-            if let matchedSurfaceID = controller.surfaceWorkingDirectories.first(where: {
-                $0.value.standardized.path == normalizedPath
-            })?.key {
-                if let tabID = controller.tabSurfaceMap.first(where: { $0.value == matchedSurfaceID })?.key {
-                    return tabID
-                }
-                if let tabID = controller.savedTabSplitSurfaceViews.first(where: { $0.value[matchedSurfaceID] != nil })?.key {
-                    return tabID
-                }
-                if controller.splitSurfaceViews[matchedSurfaceID] != nil {
-                    return controller.displayedTabID ?? controller.tabManager.activeTabID
-                }
-            }
-        }
-
-        return nil
+        resolvedWorkingDirectoryCandidate(for: directory)?.tabID
     }
 
     func focusedWindowController() -> MainWindowController? {
@@ -826,15 +795,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let cwd,
-              let tabID = tabIDForWorkingDirectory(cwd),
-              let controller = controllerContainingTab(tabID) else {
+              let resolved = resolvedWorkingDirectoryCandidate(for: cwd) else {
             return nil
         }
 
         if let sessionID {
-            bindHookSession(sessionID, to: tabID)
+            bindHookSession(sessionID, to: resolved.tabID)
         }
-        return (controller, tabID)
+        return resolved
     }
 
     func windowIDForTab(_ tabUUID: UUID) -> WindowID? {
@@ -854,6 +822,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
         return "Window \(index + 1)"
+    }
+
+    private func resolvedWorkingDirectoryCandidate(
+        for directory: String
+    ) -> (controller: MainWindowController, tabID: TabID)? {
+        let normalizedPath = normalizedWorkingDirectoryPath(directory)
+        var matches: [(controller: MainWindowController, tabID: TabID)] = []
+        var seenTabIDs = Set<TabID>()
+
+        func appendMatch(controller: MainWindowController, tabID: TabID) {
+            guard seenTabIDs.insert(tabID).inserted else { return }
+            matches.append((controller, tabID))
+        }
+
+        for controller in allWindowControllers {
+            for tab in controller.tabManager.tabs where tab.workingDirectory.standardized.path == normalizedPath {
+                appendMatch(controller: controller, tabID: tab.id)
+            }
+
+            for (surfaceID, workingDirectory) in controller.surfaceWorkingDirectories
+            where workingDirectory.standardized.path == normalizedPath {
+                if let tabID = controller.tabID(for: surfaceID) {
+                    appendMatch(controller: controller, tabID: tabID)
+                }
+            }
+        }
+
+        guard !matches.isEmpty else { return nil }
+        if matches.count == 1 {
+            return matches[0]
+        }
+
+        if let focusedController = focusedWindowController() {
+            let focusedVisibleMatches = matches.filter {
+                $0.controller === focusedController
+                    && ($0.tabID == focusedController.visibleTabID
+                        || $0.tabID == focusedController.tabManager.activeTabID)
+            }
+            if focusedVisibleMatches.count == 1 {
+                return focusedVisibleMatches[0]
+            }
+
+            let focusedMatches = matches.filter { $0.controller === focusedController }
+            if focusedMatches.count == 1 {
+                return focusedMatches[0]
+            }
+        }
+
+        let visibleMatches = matches.filter { $0.controller.visibleTabID == $0.tabID }
+        if visibleMatches.count == 1 {
+            return visibleMatches[0]
+        }
+
+        return Set(matches.map { $0.tabID }).count == 1 ? matches[0] : nil
+    }
+
+    private func normalizedWorkingDirectoryPath(_ directory: String) -> String {
+        let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let parsed = URL(string: trimmed), parsed.isFileURL {
+            return parsed.standardizedFileURL.path
+        }
+        return URL(fileURLWithPath: trimmed).standardized.path
     }
 
     func configureSharedServices(
