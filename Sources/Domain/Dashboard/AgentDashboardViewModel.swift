@@ -99,6 +99,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// Resolves a stable window label for UI display.
     var windowLabelProvider: ((WindowID?) -> String?)?
 
+    /// Resolves the tab and working directory currently feeding pattern-based
+    /// detection. Unlike hook events, pattern detection has no stable session
+    /// payload of its own, so it must be anchored to the focused visible tab.
+    var activePatternContextProvider: (() -> (tabId: UUID, workingDirectory: String?)?)?
+
     // MARK: - Initialization
 
     /// Creates a dashboard ViewModel and subscribes to event sources.
@@ -164,6 +169,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         onCrossWindowNavigate?(data.tabId)
     }
 
+    /// Returns whether a concrete subagent is already tracked under a parent session.
+    func hasSubagent(id subagentId: String, in sessionId: String) -> Bool {
+        sessionDataStore[sessionId]?.subagents.contains(where: { $0.id == subagentId }) == true
+    }
+
     /// Returns the tab UUID associated with a session, for targeting splits.
     func tabIdForSession(_ sessionId: String) -> UUID? {
         sessionDataStore[sessionId]?.tabId
@@ -213,10 +223,13 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         tabId: UUID
     ) {
         let syntheticSessionId = "pattern-\(tabId.uuidString)"
+        let patternContext = activePatternContextProvider?()
+        let workingDirectory = patternContext?.tabId == tabId
+            ? patternContext?.workingDirectory
+            : nil
 
         if sessionDataStore[syntheticSessionId] == nil {
-            let cwd = hookEventReceiver?.lastReceivedCwd
-            let projectName = extractProjectName(from: cwd)
+            let projectName = extractProjectName(from: workingDirectory)
             let data = MutableSessionData(
                 id: syntheticSessionId,
                 projectName: projectName != "Unknown" ? projectName : agentName,
@@ -235,30 +248,50 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     /// Processes a detection engine state change using a stable session ID.
     ///
-    /// Unlike `processDetectionSignal(agentName:state:tabId:)`, this method
-    /// derives the synthetic session ID from the agent name alone, ensuring
-    /// repeated signals update the same entry instead of creating orphans.
+    /// Pattern detection only watches the focused visible surface. We therefore
+    /// anchor synthetic sessions to that tab instead of reusing the receiver's
+    /// last global CWD, which can belong to an unrelated hook event.
     private func processPatternDetectionSignal(
         agentName: String,
         state: AgentStateMachine.State
     ) {
-        let syntheticSessionId = "pattern-\(agentName)"
+        if let context = activePatternContextProvider?() {
+            let syntheticSessionId = "pattern-\(context.tabId.uuidString)"
 
-        if sessionDataStore[syntheticSessionId] == nil {
-            let cwd = hookEventReceiver?.lastReceivedCwd
-            let projectName = extractProjectName(from: cwd)
-            let tabId = cwd.flatMap { tabIdForCwdProvider?($0) } ?? UUID()
-            let data = MutableSessionData(
-                id: syntheticSessionId,
-                projectName: projectName != "Unknown" ? projectName : agentName,
-                tabId: tabId,
-                state: mapStateMachineState(state),
-                agentName: agentName
-            )
-            sessionDataStore[syntheticSessionId] = data
+            if sessionDataStore[syntheticSessionId] == nil {
+                let projectName = extractProjectName(from: context.workingDirectory)
+                let data = MutableSessionData(
+                    id: syntheticSessionId,
+                    projectName: projectName != "Unknown" ? projectName : agentName,
+                    tabId: context.tabId,
+                    state: mapStateMachineState(state),
+                    agentName: agentName
+                )
+                sessionDataStore[syntheticSessionId] = data
+            } else {
+                sessionDataStore[syntheticSessionId]?.state = mapStateMachineState(state)
+                sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
+                sessionDataStore[syntheticSessionId]?.agentName = agentName
+            }
         } else {
-            sessionDataStore[syntheticSessionId]?.state = mapStateMachineState(state)
-            sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
+            // Degrade gracefully when the host has not injected focused-tab
+            // context yet (for example isolated tests or early bootstrap).
+            // The app wiring still prefers the tab-bound path above.
+            let syntheticSessionId = "pattern-\(agentName)"
+            if sessionDataStore[syntheticSessionId] == nil {
+                let data = MutableSessionData(
+                    id: syntheticSessionId,
+                    projectName: agentName,
+                    tabId: UUID(),
+                    state: mapStateMachineState(state),
+                    agentName: agentName
+                )
+                sessionDataStore[syntheticSessionId] = data
+            } else {
+                sessionDataStore[syntheticSessionId]?.state = mapStateMachineState(state)
+                sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
+                sessionDataStore[syntheticSessionId]?.agentName = agentName
+            }
         }
 
         rebuildSessions()
@@ -386,16 +419,41 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     }
 
     private func handleSubagentStart(_ event: HookEvent) {
-        guard sessionDataStore[event.sessionId] != nil else { return }
+        if sessionDataStore[event.sessionId] == nil {
+            let projectName = extractProjectName(from: event.cwd)
+            let resolvedTabId = tabIdResolver?(event.sessionId, event.cwd)
+                ?? event.cwd.flatMap { tabIdForCwdProvider?($0) }
+                ?? UUID()
+            let data = MutableSessionData(
+                id: event.sessionId,
+                projectName: projectName,
+                tabId: resolvedTabId,
+                state: .working,
+                agentName: "Claude Code"
+            )
+            sessionDataStore[event.sessionId] = data
+        }
 
         if case .subagent(let subagentData) = event.data {
-            let subagent = SubagentInfo(
-                id: subagentData.subagentId,
-                type: subagentData.subagentType,
-                state: .working,
-                startTime: event.timestamp
-            )
-            sessionDataStore[event.sessionId]?.subagents.append(subagent)
+            let subagentId = subagentData.subagentId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !subagentId.isEmpty else {
+                sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
+                rebuildSessions()
+                return
+            }
+
+            if let index = sessionDataStore[event.sessionId]?.subagents.firstIndex(where: { $0.id == subagentId }) {
+                sessionDataStore[event.sessionId]?.subagents[index].state = .working
+                sessionDataStore[event.sessionId]?.subagents[index].endTime = nil
+            } else {
+                let subagent = SubagentInfo(
+                    id: subagentId,
+                    type: subagentData.subagentType,
+                    state: .working,
+                    startTime: event.timestamp
+                )
+                sessionDataStore[event.sessionId]?.subagents.append(subagent)
+            }
         }
 
         sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp

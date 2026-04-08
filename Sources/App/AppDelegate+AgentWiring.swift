@@ -181,7 +181,7 @@ extension AppDelegate {
                     // Only apply to the active tab (pattern detection reads
                     // the focused surface's output).
                     guard let controller = self.focusedWindowController(),
-                          let activeTabID = controller.tabManager.activeTabID else {
+                          let activeTabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
                         return
                     }
                     target = (controller, activeTabID)
@@ -266,6 +266,22 @@ extension AppDelegate {
             self?.windowDisplayName(for: windowID)
         }
 
+        dashboardVM.activePatternContextProvider = { [weak self] in
+            guard let self,
+                  let controller = self.focusedWindowController(),
+                  let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
+                return nil
+            }
+
+            let surfaceDirectory = controller.activeTerminalSurfaceView?
+                .terminalViewModel?
+                .surfaceID
+                .flatMap { controller.workingDirectory(for: $0)?.path }
+            let tabDirectory = controller.tabManager.tab(for: tabID)?.workingDirectory.path
+
+            return (tabId: tabID.rawValue, workingDirectory: surfaceDirectory ?? tabDirectory)
+        }
+
         // Inject the dashboard VM into all windows so multi-window
         // panels render the same shared state.
         for controller in allWindowControllers {
@@ -334,26 +350,32 @@ extension AppDelegate {
         // auto-close the panel after a brief delay.
         receiver.eventPublisher
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] hookEvent in
+            .sink { [weak self, weak dashboardVM] hookEvent in
                 guard let self else { return }
 
                 if hookEvent.type == .subagentStart,
                    case .subagent(let data) = hookEvent.data {
                     let subagentId = data.subagentId.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !subagentId.isEmpty,
-                          let resolved = self.resolvedControllerAndTab(
-                              forHookSessionID: hookEvent.sessionId,
-                              cwd: hookEvent.cwd
-                          ) else {
-                        return
-                    }
+                    guard !subagentId.isEmpty else { return }
 
-                    resolved.controller.spawnSubagentPanel(
-                        subagentId: subagentId,
-                        sessionId: hookEvent.sessionId,
-                        agentType: data.subagentType,
-                        targetTabId: resolved.tabID.rawValue
-                    )
+                    Task { @MainActor [weak self, weak dashboardVM] in
+                        guard let self,
+                              let dashboardVM,
+                              dashboardVM.hasSubagent(id: subagentId, in: hookEvent.sessionId),
+                              let resolved = self.resolvedControllerAndTab(
+                                  forHookSessionID: hookEvent.sessionId,
+                                  cwd: hookEvent.cwd
+                              ) else {
+                            return
+                        }
+
+                        resolved.controller.spawnSubagentPanel(
+                            subagentId: subagentId,
+                            sessionId: hookEvent.sessionId,
+                            agentType: data.subagentType,
+                            targetTabId: resolved.tabID.rawValue
+                        )
+                    }
                 } else if hookEvent.type == .subagentStop,
                           case .subagent(let data) = hookEvent.data {
                     let subId = data.subagentId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -626,7 +648,7 @@ extension AppDelegate {
                     )
                 } else {
                     guard let controller = self.focusedWindowController(),
-                          let activeTabID = controller.tabManager.activeTabID else {
+                          let activeTabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
                         return
                     }
                     target = (controller, activeTabID)

@@ -101,7 +101,7 @@ extension MainWindowController {
             buffer = newBuffer
         }
 
-        if tabID == tabManager.activeTabID {
+        if tabID == visibleTabID {
             terminalOutputBuffer = buffer
         }
 
@@ -295,7 +295,7 @@ extension MainWindowController {
         switch agentState {
         case .waitingInput:
             // Only show ring on background tabs (not the active one).
-            if tabID != tabManager.activeTabID {
+            if tabID != (visibleTabID ?? tabManager.activeTabID) {
                 surfaceView.showNotificationRing(color: CocxyColors.blue)
             }
         default:
@@ -318,7 +318,7 @@ extension MainWindowController {
         surfaceID sourceSurfaceID: SurfaceID? = nil
     ) {
         // Use the source tab when known, fall back to active tab.
-        let targetTabID = sourceTabID ?? tabManager.activeTabID
+        let targetTabID = sourceTabID ?? visibleTabID ?? tabManager.activeTabID
 
         switch notification {
         case .titleChange(let title):

@@ -30,7 +30,24 @@ extension MainWindowController {
             return overlayVM
         }
 
+        // If focus is already inside a browser split panel (URL bar, WKWebView,
+        // toolbar button, etc.), prefer that exact panel.
+        var currentView: NSView?
+        if let firstResponderView = window?.firstResponder as? NSView {
+            currentView = firstResponderView
+        } else if let firstResponder = window?.firstResponder as? NSResponder {
+            currentView = firstResponder.nextResponder as? NSView
+        }
+
+        while let view = currentView {
+            if let browserView = view as? BrowserContentView {
+                return browserView.viewModel
+            }
+            currentView = view.superview
+        }
+
         // Check for a split-based browser by looking at the focused leaf.
+        syncFocusedLeafSelectionFromFirstResponder()
         if let sm = activeSplitManager, let focusedID = sm.focusedLeafID {
             let leaves = sm.rootNode.allLeafIDs()
             if let focusedLeaf = leaves.first(where: { $0.leafID == focusedID }),

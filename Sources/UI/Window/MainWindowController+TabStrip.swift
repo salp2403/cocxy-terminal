@@ -13,12 +13,13 @@ extension MainWindowController {
     /// Updates the horizontal tab strip to reflect current workspace state.
     func refreshTabStrip() {
         guard let strip = horizontalTabStripView as? HorizontalTabStripView else { return }
+        syncFocusedLeafSelectionFromFirstResponder()
 
-        // Build tab entries from the active tab's split panes.
+        // Build tab entries from the visible tab's split panes.
         var tabEntries: [(title: String, icon: String, isActive: Bool)] = []
 
-        if let activeTabID = tabManager.activeTabID {
-            let sm = tabSplitCoordinator.splitManager(for: activeTabID)
+        if let targetTabID = visibleTabID ?? tabManager.activeTabID {
+            let sm = tabSplitCoordinator.splitManager(for: targetTabID)
             let leaves = sm.rootNode.allLeafIDs()
             let focusedID = sm.focusedLeafID
 
@@ -43,7 +44,7 @@ extension MainWindowController {
                     switch panelType {
                     case .terminal:
                         terminalIndex += 1
-                        let dirName = tabManager.activeTab?.workingDirectory.lastPathComponent ?? "Terminal"
+                        let dirName = tabManager.tab(for: targetTabID)?.workingDirectory.lastPathComponent ?? "Terminal"
                         title = leaves.count > 1 ? "\(dirName) \(terminalIndex)" : dirName
                         icon = "terminal.fill"
                     case .browser:
@@ -63,15 +64,17 @@ extension MainWindowController {
         }
 
         if tabEntries.isEmpty {
-            let dirName = tabManager.activeTab?.workingDirectory.lastPathComponent ?? "Terminal"
+            let dirName = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory.lastPathComponent }
+                ?? tabManager.activeTab?.workingDirectory.lastPathComponent
+                ?? "Terminal"
             tabEntries = [(title: dirName, icon: "terminal.fill", isActive: true)]
         }
 
         strip.updateTabs(tabEntries)
 
         // Update contextual action icons based on the focused panel type.
-        if let activeTabID = tabManager.activeTabID {
-            let sm = tabSplitCoordinator.splitManager(for: activeTabID)
+        if let targetTabID = visibleTabID ?? tabManager.activeTabID {
+            let sm = tabSplitCoordinator.splitManager(for: targetTabID)
             let leaves = sm.rootNode.allLeafIDs()
             let canClose = leaves.count > 1
 

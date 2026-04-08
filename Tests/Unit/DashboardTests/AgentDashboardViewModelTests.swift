@@ -383,6 +383,53 @@ final class AgentDashboardViewModelTests: XCTestCase {
         XCTAssertEqual(sut.sessions.first?.subagents.first?.state, .working)
     }
 
+    func testSubagentStartAutoCreatesSessionWhenParentStartArrivesLate() {
+        let resolvedTabId = UUID()
+        sut.tabIdResolver = { sessionId, cwd in
+            XCTAssertEqual(sessionId, "sess-sub-late")
+            XCTAssertEqual(cwd, "/tmp/demo")
+            return resolvedTabId
+        }
+
+        let subagentEvent = HookEvent(
+            type: .subagentStart,
+            sessionId: "sess-sub-late",
+            timestamp: Date(),
+            data: .subagent(SubagentData(subagentId: "sub-early", subagentType: "research")),
+            cwd: "/tmp/demo"
+        )
+        sut.processHookEvent(subagentEvent)
+
+        XCTAssertEqual(sut.sessions.count, 1)
+        XCTAssertEqual(sut.sessions.first?.id, "sess-sub-late")
+        XCTAssertEqual(sut.sessions.first?.tabId, resolvedTabId)
+        XCTAssertEqual(sut.sessions.first?.subagents.count, 1)
+        XCTAssertEqual(sut.sessions.first?.subagents.first?.id, "sub-early")
+        XCTAssertEqual(sut.sessions.first?.subagents.first?.type, "research")
+        XCTAssertEqual(sut.sessions.first?.state, .working)
+    }
+
+    func testRepeatedSubagentStartDoesNotDuplicateTrackedSubagent() {
+        let startEvent = makeHookEvent(
+            type: .sessionStart,
+            sessionId: "sess-sub-dup",
+            data: .sessionStart(SessionStartData())
+        )
+        sut.processHookEvent(startEvent)
+
+        let subagentEvent = makeHookEvent(
+            type: .subagentStart,
+            sessionId: "sess-sub-dup",
+            data: .subagent(SubagentData(subagentId: "sub-1", subagentType: "research"))
+        )
+        sut.processHookEvent(subagentEvent)
+        sut.processHookEvent(subagentEvent)
+
+        XCTAssertEqual(sut.sessions.first?.subagents.count, 1)
+        XCTAssertEqual(sut.sessions.first?.subagents.first?.id, "sub-1")
+        XCTAssertEqual(sut.sessions.first?.subagents.first?.state, .working)
+    }
+
     // MARK: - ViewModel Tests: Hook SessionEnd
 
     func testSessionEndRemovesSession() {

@@ -697,6 +697,43 @@ final class CocxyCoreBridge: TerminalEngine {
                 env["COCXY_ZSH_ORIG_ZDOTDIR"] = originalZdotdir
             }
 
+        case "bash":
+            let bashIntegrationDir = shellIntegrationRoot
+                .appendingPathComponent("bash", isDirectory: true)
+            let bashBootstrap = bashIntegrationDir
+                .appendingPathComponent(".bashrc", isDirectory: false)
+            guard fileManager.fileExists(atPath: bashIntegrationDir.path),
+                  fileManager.fileExists(atPath: bashBootstrap.path) else {
+                return env
+            }
+
+            if let originalHome = environment["HOME"], !originalHome.isEmpty {
+                env["COCXY_BASH_ORIG_HOME"] = originalHome
+            }
+            env["HOME"] = bashIntegrationDir.path
+
+        case "fish":
+            let fishIntegrationDir = shellIntegrationRoot
+                .appendingPathComponent("fish", isDirectory: true)
+            let fishConfig = fishIntegrationDir
+                .appendingPathComponent("config.fish", isDirectory: false)
+            let fishScript = fishIntegrationDir
+                .appendingPathComponent("cocxy.fish", isDirectory: false)
+            guard fileManager.fileExists(atPath: fishIntegrationDir.path),
+                  fileManager.fileExists(atPath: fishConfig.path),
+                  fileManager.fileExists(atPath: fishScript.path) else {
+                return env
+            }
+
+            if let originalXDGConfigHome = environment["XDG_CONFIG_HOME"],
+               !originalXDGConfigHome.isEmpty {
+                env["COCXY_FISH_ORIG_XDG_CONFIG_HOME"] = originalXDGConfigHome
+            }
+            if let originalHome = environment["HOME"], !originalHome.isEmpty {
+                env["COCXY_FISH_ORIG_HOME"] = originalHome
+            }
+            env["XDG_CONFIG_HOME"] = shellIntegrationRoot.path
+
         default:
             break
         }

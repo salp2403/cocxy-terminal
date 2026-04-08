@@ -7,6 +7,7 @@ import AppKit
 final class MockTerminalEngine: TerminalEngine {
     private(set) var initializeCalls: [TerminalEngineConfig] = []
     private(set) var createdSurfaces: [SurfaceID: NativeTerminalView] = [:]
+    private(set) var createSurfaceRequests: [(surface: SurfaceID, workingDirectory: URL?, command: String?)] = []
     private(set) var destroyedSurfaces: [SurfaceID] = []
     private(set) var keyEvents: [(surface: SurfaceID, event: KeyEvent)] = []
     private(set) var sentTexts: [(surface: SurfaceID, text: String)] = []
@@ -36,6 +37,7 @@ final class MockTerminalEngine: TerminalEngine {
 
         let surfaceID = SurfaceID()
         createdSurfaces[surfaceID] = view
+        createSurfaceRequests.append((surface: surfaceID, workingDirectory: workingDirectory, command: command))
         return surfaceID
     }
 

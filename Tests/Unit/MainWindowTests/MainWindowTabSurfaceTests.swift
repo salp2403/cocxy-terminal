@@ -566,6 +566,47 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertTrue(controller.activeSplitView === splitView)
     }
 
+    func testHandleTabSwitchFallsBackToStoredSplitSurfaceWhenPrimaryMappingIsMissing() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        controller.terminalContainerView = container
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab")
+            return
+        }
+
+        let firstView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[firstTabID] = firstView
+        controller.terminalSurfaceView = firstView
+        controller.displayedTabID = firstTabID
+        container.addSubview(firstView)
+
+        let targetTab = controller.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/fallback-tab")
+        )
+        let storedSurface = TrackingTerminalHostView()
+        let storedSurfaceID = SurfaceID()
+
+        controller.savedTabSplitSurfaceViews[targetTab.id] = [storedSurfaceID: storedSurface]
+        controller.tabSurfaceMap[targetTab.id] = storedSurfaceID
+        controller.tabSurfaceViews.removeValue(forKey: targetTab.id)
+
+        controller.handleTabSwitch(to: targetTab.id)
+
+        XCTAssertEqual(controller.displayedTabID, targetTab.id)
+        XCTAssertTrue(
+            controller.terminalSurfaceView === storedSurface,
+            "Tab switching must recover from a missing primary mapping by using the stored split surface"
+        )
+        XCTAssertTrue(
+            storedSurface.superview === container,
+            "The recovered surface must be attached back into the terminal container"
+        )
+    }
+
     func testWindowDidBecomeKeyRefreshesVisibleTerminalSurfaces() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -782,6 +823,53 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertTrue(controller.terminalSurfaceView === originalPrimaryView)
         XCTAssertEqual(controller.tabSurfaceMap[activeTabID], originalPrimarySurfaceID)
         XCTAssertFalse(bridge.destroyedSurfaces.contains(originalPrimarySurfaceID))
+    }
+
+    func testPerformVisualSplitUsesVisibleTabWorkingDirectoryWhenDisplayedTabDiffersFromActive() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let firstTabID = controller.tabManager.activeTabID else {
+            XCTFail("Expected bootstrap tab")
+            return
+        }
+
+        let visibleDirectory = URL(fileURLWithPath: "/tmp/visible-tab")
+        controller.tabManager.updateTab(id: firstTabID) { tab in
+            tab.workingDirectory = visibleDirectory
+        }
+
+        let secondTab = controller.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/active-tab")
+        )
+        controller.tabManager.updateTab(id: secondTab.id) { tab in
+            tab.title = "Other"
+        }
+
+        controller.displayedTabID = firstTabID
+        XCTAssertEqual(controller.tabManager.activeTabID, secondTab.id)
+
+        controller.performVisualSplit(isVertical: true)
+
+        guard let latestRequest = bridge.createSurfaceRequests.last else {
+            XCTFail("Expected split surface creation")
+            return
+        }
+
+        XCTAssertEqual(
+            latestRequest.workingDirectory?.path,
+            visibleDirectory.path,
+            "Split creation must inherit the tab actually shown on screen"
+        )
+        XCTAssertEqual(
+            controller.tabID(for: latestRequest.surface),
+            firstTabID,
+            "The new split surface must stay attached to the visible workspace"
+        )
     }
 
     func testHandleOSCNotificationUpdatesTheSourceTabViewModelTitle() {

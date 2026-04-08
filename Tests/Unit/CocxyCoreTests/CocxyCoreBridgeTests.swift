@@ -325,26 +325,75 @@ struct CocxyCoreBridgeTests {
         #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == "/Users/test/.config/zsh")
     }
 
-    @Test("shell integration env leaves non-zsh shells untouched")
-    func shellIntegrationEnvLeavesNonZshShellsUntouched() throws {
+    @Test("shell integration env injects bash bootstrap when resources are available")
+    func shellIntegrationEnvInjectsBashBootstrap() throws {
         let bridge = try makeBridge()
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let bashDir = root
+            .appendingPathComponent("shell-integration", isDirectory: true)
+            .appendingPathComponent("bash", isDirectory: true)
         try FileManager.default.createDirectory(
-            at: root.appendingPathComponent("shell-integration", isDirectory: true),
+            at: bashDir,
             withIntermediateDirectories: true
+        )
+        _ = FileManager.default.createFile(
+            atPath: bashDir.appendingPathComponent(".bashrc").path,
+            contents: Data()
         )
 
         let env = bridge.buildShellIntegrationEnvVars(
             forShell: "/bin/bash",
-            environment: ["ZDOTDIR": "/Users/test/.config/zsh"],
+            environment: [
+                "HOME": "/Users/test",
+                "ZDOTDIR": "/Users/test/.config/zsh",
+            ],
             resourcesPath: root.path
         )
 
         #expect(env["TERM"] == "xterm-256color")
         #expect(env["COCXY_RESOURCES_DIR"] == root.path)
+        #expect(env["HOME"] == bashDir.path)
+        #expect(env["COCXY_BASH_ORIG_HOME"] == "/Users/test")
         #expect(env["ZDOTDIR"] == nil)
         #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == nil)
+    }
+
+    @Test("shell integration env injects fish bootstrap when resources are available")
+    func shellIntegrationEnvInjectsFishBootstrap() throws {
+        let bridge = try makeBridge()
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fishDir = root
+            .appendingPathComponent("shell-integration", isDirectory: true)
+            .appendingPathComponent("fish", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: fishDir,
+            withIntermediateDirectories: true
+        )
+        _ = FileManager.default.createFile(
+            atPath: fishDir.appendingPathComponent("config.fish").path,
+            contents: Data()
+        )
+        _ = FileManager.default.createFile(
+            atPath: fishDir.appendingPathComponent("cocxy.fish").path,
+            contents: Data()
+        )
+
+        let env = bridge.buildShellIntegrationEnvVars(
+            forShell: "/opt/homebrew/bin/fish",
+            environment: [
+                "HOME": "/Users/test",
+                "XDG_CONFIG_HOME": "/Users/test/.config",
+            ],
+            resourcesPath: root.path
+        )
+
+        #expect(env["TERM"] == "xterm-256color")
+        #expect(env["COCXY_RESOURCES_DIR"] == root.path)
+        #expect(env["XDG_CONFIG_HOME"] == root.appendingPathComponent("shell-integration").path)
+        #expect(env["COCXY_FISH_ORIG_HOME"] == "/Users/test")
+        #expect(env["COCXY_FISH_ORIG_XDG_CONFIG_HOME"] == "/Users/test/.config")
     }
 }
 

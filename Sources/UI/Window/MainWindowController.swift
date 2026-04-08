@@ -661,7 +661,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     // MARK: - Tab Strip Callbacks
 
     private func handleStripSelectTab(at index: Int) {
-        guard let tabID = tabManager.activeTabID else { return }
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
+        syncFocusedLeafSelectionFromFirstResponder()
         let sm = tabSplitCoordinator.splitManager(for: tabID)
         let leaves = sm.rootNode.allLeafIDs()
         guard index < leaves.count else { return }
@@ -683,7 +684,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func handleStripCloseTab(at index: Int) {
-        guard let tabID = tabManager.activeTabID else { return }
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
+        syncFocusedLeafSelectionFromFirstResponder()
         let sm = tabSplitCoordinator.splitManager(for: tabID)
         let leaves = sm.rootNode.allLeafIDs()
         guard index < leaves.count, leaves.count > 1 else { return }
@@ -710,7 +712,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// If only terminals remain, closes the last terminal (unless it's the
     /// only one left). Works correctly with multiple panes.
     private func closeLastPanel() {
-        guard let tabID = tabManager.activeTabID else { return }
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
+        syncFocusedLeafSelectionFromFirstResponder()
         let sm = tabSplitCoordinator.splitManager(for: tabID)
         let leaves = sm.rootNode.allLeafIDs()
         guard leaves.count > 1 else { return }
@@ -731,7 +734,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func handleStripSwapTabs(from fromIndex: Int, to toIndex: Int) {
-        guard let tabID = tabManager.activeTabID else { return }
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
         let sm = tabSplitCoordinator.splitManager(for: tabID)
         sm.swapLeaves(at: fromIndex, with: toIndex)
 
@@ -770,7 +773,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func handleStripRenameTab(at index: Int, newTitle: String) {
-        guard let tabID = tabManager.activeTabID else { return }
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
         let sm = tabSplitCoordinator.splitManager(for: tabID)
         let leaves = sm.rootNode.allLeafIDs()
         guard index < leaves.count else { return }
@@ -1224,11 +1227,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     func handleTabSwitch(to tabID: TabID) {
-        guard let targetSurfaceView = tabSurfaceViews[tabID] else { return }
         guard let container = terminalContainerView else { return }
 
+        let primarySurfaceView = tabSurfaceViews[tabID]
+        let storedPrimarySplitSurface = savedTabSplitSurfaceViews[tabID]?
+            .sorted { $0.key.rawValue.uuidString < $1.key.rawValue.uuidString }
+            .first?
+            .value
+        let targetSurfaceView = primarySurfaceView
+            ?? storedPrimarySplitSurface
+            ?? terminalSurfaceView
+
         // Idempotent only when the visible hierarchy is still attached.
-        if displayedTabID == tabID, isVisibleHierarchyAttached(for: tabID, in: container) {
+        if displayedTabID == tabID,
+           isVisibleHierarchyAttached(for: tabID, in: container) {
             refreshStatusBar()
             refreshTabStrip()
             refreshVisibleTerminalInteractionState()
@@ -1264,15 +1276,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             splitView.autoresizingMask = [.width, .height]
             container.addSubview(splitView, positioned: .below, relativeTo: nil)
             activeSplitView = splitView
-        } else {
+        } else if let targetSurfaceView {
             activeSplitView = nil
             targetSurfaceView.frame = container.bounds
             targetSurfaceView.autoresizingMask = [.width, .height]
             container.addSubview(targetSurfaceView, positioned: .below, relativeTo: nil)
+        } else {
+            activeSplitView = nil
+            refreshStatusBar()
+            refreshTabStrip()
+            return
         }
 
         // 3. Update active references.
-        self.terminalSurfaceView = targetSurfaceView
+        if let targetSurfaceView {
+            self.terminalSurfaceView = targetSurfaceView
+        }
         self.displayedTabID = tabID
 
         if let buffer = tabOutputBuffers[tabID] {
@@ -1285,11 +1304,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // cell sizes we computed here before. Calling resize twice caused a brief
         // flicker when the approximate and actual sizes diverged.
 
-        let responderSurface = (focusedPaneView() as? TerminalHostView) ?? targetSurfaceView
-        window?.makeFirstResponder(responderSurface)
-        responderSurface.hideNotificationRing()
-        if responderSurface !== targetSurfaceView {
-            targetSurfaceView.hideNotificationRing()
+        if let responderSurface = (focusedPaneView() as? TerminalHostView) ?? targetSurfaceView {
+            window?.makeFirstResponder(responderSurface)
+            responderSurface.hideNotificationRing()
+            if let targetSurfaceView, responderSurface !== targetSurfaceView {
+                targetSurfaceView.hideNotificationRing()
+            }
         }
         refreshVisibleTerminalInteractionState()
 
@@ -1438,7 +1458,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         append(tabSurfaceMap[tabID])
 
-        if displayedTabID == tabID || tabManager.activeTabID == tabID {
+        if displayedTabID == tabID {
             for surfaceID in splitSurfaceViews.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
                 append(surfaceID)
             }

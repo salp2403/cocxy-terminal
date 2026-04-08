@@ -14,6 +14,15 @@ _COCXY_SAVED_PS1="$PS1"
 _COCXY_SAVED_PS2="$PS2"
 _COCXY_MARKED_PS1=""
 _COCXY_MARKED_PS2=""
+_COCXY_OLD_PROMPT_COMMAND="${PROMPT_COMMAND:-}"
+_COCXY_DEBUG_TRAP_RAW="$(trap -p DEBUG)"
+
+if [[ "$_COCXY_DEBUG_TRAP_RAW" =~ ^trap\ --\ \'(.*)\'\ DEBUG$ ]]; then
+  _COCXY_OLD_DEBUG_TRAP="${BASH_REMATCH[1]}"
+else
+  _COCXY_OLD_DEBUG_TRAP=""
+fi
+unset _COCXY_DEBUG_TRAP_RAW
 
 __cocxy_report_pwd() {
   if [[ "$_COCXY_LAST_REPORTED_CWD" != "$PWD" ]]; then
@@ -76,5 +85,25 @@ __cocxy_preexec() {
   _COCXY_EXECUTING=1
 }
 
-trap '__cocxy_precmd' DEBUG
-PROMPT_COMMAND='__cocxy_precmd'
+__cocxy_debug_trap() {
+  local command_text="${BASH_COMMAND:-}"
+
+  case "$command_text" in
+    __cocxy_precmd*|__cocxy_preexec*|__cocxy_debug_trap*|trap*DEBUG*|"")
+      ;;
+    *)
+      __cocxy_preexec "$command_text"
+      ;;
+  esac
+
+  if [[ -n "${_COCXY_OLD_DEBUG_TRAP:-}" ]]; then
+    builtin eval -- "${_COCXY_OLD_DEBUG_TRAP}"
+  fi
+}
+
+trap '__cocxy_debug_trap' DEBUG
+if [[ -n "$_COCXY_OLD_PROMPT_COMMAND" ]]; then
+  PROMPT_COMMAND="__cocxy_precmd; ${_COCXY_OLD_PROMPT_COMMAND}"
+else
+  PROMPT_COMMAND='__cocxy_precmd'
+fi

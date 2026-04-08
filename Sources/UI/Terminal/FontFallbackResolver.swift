@@ -89,6 +89,17 @@ enum FontFallbackResolver {
     /// - Returns: Whether the font family can be instantiated.
     @MainActor
     static func isFontAvailable(_ family: String) -> Bool {
-        NSFontManager.shared.availableFontFamilies.contains(family)
+        if NSFont(name: family, size: 13) != nil {
+            return true
+        }
+
+        if NSFontManager.shared.availableFontFamilies.contains(family) {
+            return true
+        }
+
+        let descriptor = NSFontDescriptor(fontAttributes: [
+            .family: family,
+        ])
+        return NSFont(descriptor: descriptor, size: 13) != nil
     }
 }

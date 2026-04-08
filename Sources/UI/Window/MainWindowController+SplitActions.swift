@@ -21,8 +21,8 @@ extension MainWindowController {
     /// Looks up the active tab ID and retrieves the per-tab SplitManager
     /// from the TabSplitCoordinator.
     var activeSplitManager: SplitManager? {
-        guard let activeTabID = tabManager.activeTabID else { return nil }
-        return tabSplitCoordinator.splitManager(for: activeTabID)
+        guard let targetTabID = visibleTabID ?? tabManager.activeTabID else { return nil }
+        return tabSplitCoordinator.splitManager(for: targetTabID)
     }
 
     // MARK: - Focused Pane
@@ -67,7 +67,8 @@ extension MainWindowController {
     /// Opens a markdown panel appended at the end of the split tree.
     @objc func splitWithMarkdownAction(_ sender: Any?) {
         // Markdown panel opens with the workspace's working directory README if available.
-        let dir = tabManager.activeTab?.workingDirectory
+        let dir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+            ?? tabManager.activeTab?.workingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
         let readmePath = dir.appendingPathComponent("README.md")
         let panel: PanelInfo = FileManager.default.fileExists(atPath: readmePath.path)
@@ -92,6 +93,7 @@ extension MainWindowController {
         let currentPaneCount = countSplitPanes()
         guard currentPaneCount < Self.maxPaneCount else { return }
         guard let focusedSurface = focusedSplitSurfaceView else { return }
+        let currentTabID = visibleTabID ?? tabManager.activeTabID
         let splitManager = activeSplitManager
         let splitTargetLeafID = splitManager?.focusedLeafID
 
@@ -149,7 +151,7 @@ extension MainWindowController {
 
         panelContentViews[contentID] = panelView
 
-        if appendToEnd, let tabID = tabManager.activeTabID {
+        if appendToEnd, let tabID = currentTabID {
             // Rebuild the entire view hierarchy from the domain model.
             // This guarantees the visual layout matches the tree after
             // appendPanel placed the new leaf at the rightmost position.
@@ -211,6 +213,7 @@ extension MainWindowController {
     /// and a new terminal pane.
     func performVisualSplit(isVertical: Bool) {
         guard let container = terminalContainerView else { return }
+        let currentTabID = visibleTabID ?? tabManager.activeTabID
 
         // Count current panes. Reject if at maximum.
         let currentPaneCount = countSplitPanes()
@@ -237,7 +240,8 @@ extension MainWindowController {
         newViewModel.setDefaultFontSize(configuredFontSize)
         let newSurfaceView = CocxyCoreView(viewModel: newViewModel)
 
-        let workingDirectory = tabManager.activeTab?.workingDirectory
+        let workingDirectory = currentTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+            ?? tabManager.activeTab?.workingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
         let surfaceID: SurfaceID
         do {
@@ -258,7 +262,7 @@ extension MainWindowController {
         // Track the new pane.
         splitSurfaceViews[surfaceID] = newSurfaceView
         splitViewModels[surfaceID] = newViewModel
-        if let activeTabID = tabManager.activeTabID {
+        if let activeTabID = currentTabID {
             wireSurfaceHandlers(
                 for: surfaceID,
                 tabID: activeTabID,
@@ -396,30 +400,41 @@ extension MainWindowController {
         // Check if we are back to a single pane and adopt the surviving view as
         // the tab's primary surface when needed.
         if remainingLeafCount <= 1 {
-            let trackedFallbackView =
+            let trackedFallbackTerminalView =
                 visibleTabID.flatMap { tabSurfaceViews[$0] }
                 ?? splitSurfaceViews.values.first
-                ?? panelContentViews.values.first
             let remainingView =
                 promotedRemainingView
                 ?? firstVisiblePaneView(in: container)
-                ?? trackedFallbackView
+                ?? trackedFallbackTerminalView
                 ?? terminalSurfaceView
 
             activeSplitView?.removeFromSuperview()
             activeSplitView = nil
 
-            if let remainingView {
+            if let remainingTerminalView = remainingView as? TerminalHostView {
+                remainingTerminalView.removeFromSuperview()
+                remainingTerminalView.frame = container.bounds
+                remainingTerminalView.autoresizingMask = [.width, .height]
+                container.addSubview(remainingTerminalView, positioned: .below, relativeTo: nil)
+
+                promoteTerminalHostViewToPrimary(remainingTerminalView)
+                remainingTerminalView.syncSizeWithTerminal()
+                window?.makeFirstResponder(remainingTerminalView)
+            } else if let fallbackTerminalView = trackedFallbackTerminalView {
+                fallbackTerminalView.removeFromSuperview()
+                fallbackTerminalView.frame = container.bounds
+                fallbackTerminalView.autoresizingMask = [.width, .height]
+                container.addSubview(fallbackTerminalView, positioned: .below, relativeTo: nil)
+
+                promoteTerminalHostViewToPrimary(fallbackTerminalView)
+                fallbackTerminalView.syncSizeWithTerminal()
+                window?.makeFirstResponder(fallbackTerminalView)
+            } else if let remainingView {
                 remainingView.removeFromSuperview()
                 remainingView.frame = container.bounds
                 remainingView.autoresizingMask = [.width, .height]
                 container.addSubview(remainingView, positioned: .below, relativeTo: nil)
-
-                if let remainingTerminalView = remainingView as? TerminalHostView {
-                    promoteTerminalHostViewToPrimary(remainingTerminalView)
-                    remainingTerminalView.syncSizeWithTerminal()
-                }
-
                 window?.makeFirstResponder(remainingView)
             }
         } else {
@@ -755,7 +770,7 @@ extension MainWindowController {
         let panel = PanelInfo.subagent(id: normalizedSubagentId, sessionId: sessionId)
         performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
 
-        if let activeTabID = tabManager.activeTabID {
+        if let activeTabID = visibleTabID ?? tabManager.activeTabID {
             if let contentID = panelContentViews.first(where: { _, view in
                 guard let subagentView = view as? SubagentContentView else { return false }
                 return subagentView.subagentId == normalizedSubagentId && subagentView.sessionId == sessionId
@@ -834,6 +849,15 @@ extension MainWindowController {
     }
 
     private func focusedPaneSnapshot() -> (contentID: UUID, view: NSView, surfaceID: SurfaceID?)? {
+        if let resolvedFromResponder = paneSnapshotFromFirstResponder() {
+            activeSplitManager?.focusLeaf(id: resolvedFromResponder.leafID)
+            return (
+                contentID: resolvedFromResponder.contentID,
+                view: resolvedFromResponder.view,
+                surfaceID: resolvedFromResponder.surfaceID
+            )
+        }
+
         guard let sm = activeSplitManager,
               let focusedLeafID = sm.focusedLeafID else {
             return nil
@@ -867,12 +891,58 @@ extension MainWindowController {
     }
 
     private func surfaceID(for hostView: TerminalHostView) -> SurfaceID? {
-        if let activeTabID = tabManager.activeTabID,
-           tabSurfaceViews[activeTabID] === hostView {
-            return tabSurfaceMap[activeTabID]
+        if let currentTabID = visibleTabID ?? tabManager.activeTabID,
+           tabSurfaceViews[currentTabID] === hostView {
+            return tabSurfaceMap[currentTabID]
         }
 
         return splitSurfaceViews.first(where: { $0.value === hostView })?.key
+    }
+
+    /// Synchronizes the domain-focused leaf with the AppKit first responder.
+    ///
+    /// Browser and subagent panels often install nested responder chains
+    /// (`WKWebView`, buttons, text fields). Relying only on SplitManager's
+    /// previous `focusedLeafID` can leave toolbar actions targeting the wrong
+    /// pane after the user clicks inside panel chrome.
+    func syncFocusedLeafSelectionFromFirstResponder() {
+        guard let resolved = paneSnapshotFromFirstResponder() else { return }
+        activeSplitManager?.focusLeaf(id: resolved.leafID)
+    }
+
+    private func paneSnapshotFromFirstResponder() -> (contentID: UUID, view: NSView, surfaceID: SurfaceID?, leafID: UUID)? {
+        guard let sm = activeSplitManager else { return nil }
+        let leaves = sm.rootNode.allLeafIDs()
+        guard !leaves.isEmpty else { return nil }
+
+        let leafViews = collectLeafViews()
+        guard leafViews.count == leaves.count else { return nil }
+
+        var currentView: NSView?
+        if let firstResponderView = window?.firstResponder as? NSView {
+            currentView = firstResponderView
+        } else if let firstResponder = window?.firstResponder as? NSResponder {
+            currentView = firstResponder.nextResponder as? NSView
+        }
+
+        while let view = currentView {
+            if let focusedIndex = leafViews.firstIndex(where: { $0 === view }) {
+                guard panelContentViews.values.contains(where: { $0 === view }) else {
+                    return nil
+                }
+                let leaf = leaves[focusedIndex]
+                let resolvedSurfaceID = (view as? TerminalHostView).flatMap(surfaceID(for:))
+                return (
+                    contentID: leaf.terminalID,
+                    view: view,
+                    surfaceID: resolvedSurfaceID,
+                    leafID: leaf.leafID
+                )
+            }
+            currentView = view.superview
+        }
+
+        return nil
     }
 
     private func firstVisiblePaneView(in container: NSView) -> NSView? {
