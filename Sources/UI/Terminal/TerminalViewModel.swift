@@ -157,20 +157,34 @@ final class TerminalViewModel: ObservableObject {
     }
 
     /// Increases the font size by one step (Cmd++).
-    func zoomIn() {
+    @discardableResult
+    func zoomIn() -> CGFloat {
         let newSize = min(currentFontSize + Self.fontSizeStep, Self.maximumFontSize)
         currentFontSize = newSize
+        return currentFontSize
     }
 
     /// Decreases the font size by one step (Cmd+-).
-    func zoomOut() {
+    @discardableResult
+    func zoomOut() -> CGFloat {
         let newSize = max(currentFontSize - Self.fontSizeStep, Self.minimumFontSize)
         currentFontSize = newSize
+        return currentFontSize
     }
 
     /// Resets the font size to the configured default (Cmd+0).
-    func resetZoom() {
+    @discardableResult
+    func resetZoom() -> CGFloat {
         currentFontSize = defaultFontSize
+        return currentFontSize
+    }
+
+    /// Applies a runtime font size without changing the configured default.
+    ///
+    /// Used to keep every surface in a tab visually in sync when the user
+    /// zooms the active terminal.
+    func setCurrentFontSize(_ size: CGFloat) {
+        currentFontSize = max(Self.minimumFontSize, min(Self.maximumFontSize, size))
     }
 
     // Agent state and detection are managed at the Tab model level

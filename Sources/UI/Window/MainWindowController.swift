@@ -1071,6 +1071,106 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         tabSurfaceViews.count
     }
 
+    /// The tab currently shown on screen, falling back to TabManager's active tab
+    /// during early setup before `displayedTabID` is established.
+    var visibleTabID: TabID? {
+        displayedTabID ?? tabManager.activeTabID
+    }
+
+    /// The primary terminal ViewModel for the currently visible tab.
+    var visibleTabViewModel: TerminalViewModel? {
+        guard let tabID = visibleTabID else { return terminalSurfaceView?.terminalViewModel }
+        return tabViewModels[tabID] ?? terminalSurfaceView?.terminalViewModel
+    }
+
+    /// Returns every terminal view model associated with a tab, including split panes.
+    func viewModelsForTab(_ tabID: TabID) -> [TerminalViewModel] {
+        var result: [TerminalViewModel] = []
+        var seen = Set<ObjectIdentifier>()
+
+        func append(_ viewModel: TerminalViewModel?) {
+            guard let viewModel else { return }
+            let key = ObjectIdentifier(viewModel)
+            guard seen.insert(key).inserted else { return }
+            result.append(viewModel)
+        }
+
+        append(tabViewModels[tabID])
+
+        if displayedTabID == tabID {
+            for viewModel in splitViewModels.values {
+                append(viewModel)
+            }
+        } else {
+            let storedViewModels = savedTabSplitViewModels[tabID] ?? [:]
+            for viewModel in storedViewModels.values {
+                append(viewModel)
+            }
+        }
+
+        return result
+    }
+
+    /// Returns every terminal host view associated with a tab, including split panes.
+    func surfaceViewsForTab(_ tabID: TabID) -> [TerminalHostView] {
+        var result: [TerminalHostView] = []
+        var seen = Set<ObjectIdentifier>()
+
+        func append(_ surfaceView: TerminalHostView?) {
+            guard let surfaceView else { return }
+            let key = ObjectIdentifier(surfaceView)
+            guard seen.insert(key).inserted else { return }
+            result.append(surfaceView)
+        }
+
+        append(tabSurfaceViews[tabID])
+
+        if displayedTabID == tabID {
+            for surfaceView in splitSurfaceViews.values {
+                append(surfaceView)
+            }
+        } else {
+            let storedSurfaceViews = savedTabSplitSurfaceViews[tabID] ?? [:]
+            for surfaceView in storedSurfaceViews.values {
+                append(surfaceView)
+            }
+        }
+
+        return result
+    }
+
+    /// The effective configuration for a tab after applying project overrides.
+    func effectiveConfig(for tabID: TabID) -> CocxyConfig {
+        let globalConfig = configService?.current ?? .defaults
+        guard let projectOverrides = tabManager.tab(for: tabID)?.projectConfig else {
+            return globalConfig
+        }
+        return globalConfig.applying(projectOverrides: projectOverrides)
+    }
+
+    /// Applies a font change to the tab's live surfaces without affecting other tabs.
+    func applyFontToTab(_ tabID: TabID, size: CGFloat) {
+        let effective = effectiveConfig(for: tabID)
+        let fontSize = Double(size)
+
+        for viewModel in viewModelsForTab(tabID) {
+            viewModel.setCurrentFontSize(size)
+        }
+
+        if let cocxyBridge = bridge as? CocxyCoreBridge {
+            cocxyBridge.applyFont(
+                family: effective.appearance.fontFamily,
+                size: fontSize,
+                to: surfaceIDs(for: tabID)
+            )
+        } else {
+            for surfaceView in surfaceViewsForTab(tabID) {
+                surfaceView.updateInteractionMetrics()
+                surfaceView.requestImmediateRedraw()
+            }
+        }
+    }
+
     /// Switches the visible terminal surface to the one belonging to the given tab.
     ///
     /// Saves the current tab's entire split view hierarchy (NSSplitView tree,
@@ -1196,24 +1296,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     func applyProjectConfig(for tabID: TabID) {
         guard let tab = tabManager.tab(for: tabID) else { return }
 
-        let globalConfig = configService?.current ?? .defaults
-        let effective: CocxyConfig
-        if let projectOverrides = tab.projectConfig {
-            effective = globalConfig.applying(projectOverrides: projectOverrides)
-        } else {
-            effective = globalConfig
-        }
+        let effective = effectiveConfig(for: tabID)
 
-        // Apply font size to the tab's view model.
-        if let viewModel = tabViewModels[tabID] {
+        // Apply font size to every surface in the tab so restore, zoom and
+        // split panes stay visually consistent with the effective config.
+        for viewModel in viewModelsForTab(tabID) {
             viewModel.setDefaultFontSize(effective.appearance.fontSize)
         }
 
-        // Apply window appearance overrides.
-        applyEffectiveAppearance(effective.appearance)
+        if let cocxyBridge = bridge as? CocxyCoreBridge {
+            cocxyBridge.applyFont(
+                family: effective.appearance.fontFamily,
+                size: effective.appearance.fontSize,
+                to: surfaceIDs(for: tabID)
+            )
+        }
 
-        // Restart the project config watcher for this tab's directory.
-        restartProjectConfigWatcher(for: tab)
+        // Only the visible tab is allowed to mutate window chrome and active
+        // project watchers. Background tabs must not override the current UI.
+        if visibleTabID == tabID {
+            applyEffectiveAppearance(effective.appearance)
+            restartProjectConfigWatcher(for: tab)
+        }
     }
 
     /// Returns the working directory associated with a specific terminal surface.
@@ -1238,16 +1342,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// rendering and shell prompt overlays so split panes do not accidentally
     /// target the primary terminal view.
     func surfaceView(for surfaceID: SurfaceID) -> TerminalHostView? {
-        if terminalViewModel.surfaceID == surfaceID {
-            return terminalSurfaceView
+        if let tabID = tabSurfaceMap.first(where: { $0.value == surfaceID })?.key {
+            return tabSurfaceViews[tabID]
         }
 
         if let splitView = splitSurfaceViews[surfaceID] {
             return splitView
-        }
-
-        if let tabID = tabSurfaceMap.first(where: { $0.value == surfaceID })?.key {
-            return tabSurfaceViews[tabID]
         }
 
         for views in savedTabSplitSurfaceViews.values {
@@ -1419,20 +1519,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Increases the terminal font size by one step. Wired to Cmd++ via the View menu.
     @objc func zoomInAction(_ sender: Any?) {
-        terminalViewModel.zoomIn()
-        terminalSurfaceView?.updateInteractionMetrics()
+        guard let tabID = visibleTabID,
+              let viewModel = viewModelForTab(tabID) else { return }
+        let newSize = viewModel.zoomIn()
+        applyFontToTab(tabID, size: newSize)
     }
 
     /// Decreases the terminal font size by one step. Wired to Cmd+- via the View menu.
     @objc func zoomOutAction(_ sender: Any?) {
-        terminalViewModel.zoomOut()
-        terminalSurfaceView?.updateInteractionMetrics()
+        guard let tabID = visibleTabID,
+              let viewModel = viewModelForTab(tabID) else { return }
+        let newSize = viewModel.zoomOut()
+        applyFontToTab(tabID, size: newSize)
     }
 
     /// Resets the terminal font size to the configured default. Wired to Cmd+0 via the View menu.
     @objc func resetZoomAction(_ sender: Any?) {
-        terminalViewModel.resetZoom()
-        terminalSurfaceView?.updateInteractionMetrics()
+        guard let tabID = visibleTabID,
+              let viewModel = viewModelForTab(tabID) else { return }
+        let newSize = viewModel.resetZoom()
+        applyFontToTab(tabID, size: newSize)
     }
 
     // MARK: - Tab Bar Toggle

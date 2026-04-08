@@ -122,6 +122,70 @@ final class BrowserViewModelTests: XCTestCase {
         cancellable.cancel()
     }
 
+    func testAddBrowserTabEmitsLoadForNewTabURL() {
+        let vm = BrowserViewModel()
+        var received: BrowserViewModel.NavigationAction?
+        let expectedURL = URL(string: "https://docs.cocxy.dev")!
+        let cancellable = vm.navigationActionSubject.sink { received = $0 }
+
+        vm.addBrowserTab(url: expectedURL)
+
+        if case .load(let url) = received {
+            XCTAssertEqual(url, expectedURL)
+        } else {
+            XCTFail("Expected addBrowserTab to emit .load for the new tab")
+        }
+        cancellable.cancel()
+    }
+
+    func testSelectBrowserTabEmitsLoadForSelectedTab() {
+        let vm = BrowserViewModel()
+        let selectedURL = URL(string: "https://example.com/selected")!
+        vm.addBrowserTab(url: selectedURL)
+
+        guard let targetID = vm.activeTabID else {
+            XCTFail("Expected an active browser tab after creation")
+            return
+        }
+
+        var received: BrowserViewModel.NavigationAction?
+        let cancellable = vm.navigationActionSubject.sink { received = $0 }
+
+        vm.selectBrowserTab(targetID)
+
+        if case .load(let url) = received {
+            XCTAssertEqual(url, selectedURL)
+        } else {
+            XCTFail("Expected selectBrowserTab to emit .load for the selected tab")
+        }
+        cancellable.cancel()
+    }
+
+    func testCloseActiveBrowserTabLoadsReplacementTab() {
+        let vm = BrowserViewModel()
+        let originalID = vm.activeTabID
+        let secondaryURL = URL(string: "https://example.com/secondary")!
+        vm.addBrowserTab(url: secondaryURL)
+
+        guard let secondaryID = vm.activeTabID,
+              secondaryID != originalID else {
+            XCTFail("Expected a distinct active tab after adding a second browser tab")
+            return
+        }
+
+        var received: BrowserViewModel.NavigationAction?
+        let cancellable = vm.navigationActionSubject.sink { received = $0 }
+
+        vm.closeBrowserTab(secondaryID)
+
+        if case .load(let url) = received {
+            XCTAssertEqual(url.absoluteString, vm.currentURL?.absoluteString)
+        } else {
+            XCTFail("Expected closing the active tab to load the replacement tab")
+        }
+        cancellable.cancel()
+    }
+
     // MARK: - Default State
 
     func testDefaultURLIsLocalhost3000() {

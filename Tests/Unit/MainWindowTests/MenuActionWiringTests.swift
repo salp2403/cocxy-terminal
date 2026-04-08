@@ -233,6 +233,42 @@ final class ZoomActionBehaviorTests: XCTestCase {
             "resetZoomAction must restore the default font size"
         )
     }
+
+    func testZoomActionsTargetTheVisibleTabInsteadOfTheBootstrapViewModel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id,
+              let firstViewModel = controller.viewModelForTab(firstTabID) else {
+            XCTFail("Expected the bootstrap tab to exist")
+            return
+        }
+
+        controller.newTabAction(nil)
+        guard let activeTabID = controller.tabManager.activeTabID,
+              activeTabID != firstTabID,
+              let activeViewModel = controller.viewModelForTab(activeTabID) else {
+            XCTFail("Expected a second active tab after newTabAction")
+            return
+        }
+
+        let initialFirstSize = firstViewModel.currentFontSize
+        let initialActiveSize = activeViewModel.currentFontSize
+
+        controller.zoomInAction(nil)
+
+        XCTAssertEqual(
+            firstViewModel.currentFontSize,
+            initialFirstSize,
+            "Zooming the visible tab must not mutate the bootstrap tab's font size"
+        )
+        XCTAssertGreaterThan(
+            activeViewModel.currentFontSize,
+            initialActiveSize,
+            "Zooming must update the visible tab's view model"
+        )
+    }
 }
 
 // MARK: - Tab Bar Toggle Tests

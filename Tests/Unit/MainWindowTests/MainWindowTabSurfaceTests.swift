@@ -551,4 +551,43 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertEqual(splitView.updateMetricsCallCount, 1)
         XCTAssertEqual(splitView.redrawCallCount, 1)
     }
+
+    func testHandleOSCNotificationUpdatesTheSourceTabViewModelTitle() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id,
+              let firstViewModel = controller.viewModelForTab(firstTabID) else {
+            XCTFail("Expected bootstrap tab view model")
+            return
+        }
+
+        controller.newTabAction(nil)
+        guard let secondTabID = controller.tabManager.activeTabID,
+              secondTabID != firstTabID,
+              let secondViewModel = controller.viewModelForTab(secondTabID) else {
+            XCTFail("Expected second tab view model")
+            return
+        }
+
+        let originalFirstTitle = firstViewModel.title
+
+        controller.handleOSCNotification(
+            .titleChange("worker"),
+            fromTabID: secondTabID,
+            surfaceID: nil
+        )
+
+        XCTAssertEqual(
+            secondViewModel.title,
+            "worker",
+            "Title changes must update the source tab's view model, not only the bootstrap tab"
+        )
+        XCTAssertEqual(
+            firstViewModel.title,
+            originalFirstTitle,
+            "Background tab title updates must not leak into the bootstrap tab's view model"
+        )
+    }
 }

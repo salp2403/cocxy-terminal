@@ -111,11 +111,16 @@ extension MainWindowController {
 
         bridge.setOutputHandler(
             for: surfaceID
-        ) { [weak buffer, weak engine, weak commandTracker, weak imageDetector] data in
-            engine?.processTerminalOutput(data)
+        ) { [weak self, weak buffer, weak engine, weak commandTracker, weak imageDetector] data in
             commandTracker?.processBytes(data)
             imageDetector?.processBytes(data)
             Task { @MainActor in
+                if self?.shouldRouteOutputToDetection(
+                    fromTabID: capturedTabID,
+                    surfaceID: capturedSurfaceID
+                ) == true {
+                    engine?.processTerminalOutput(data)
+                }
                 buffer?.append(data)
             }
         }
@@ -177,10 +182,11 @@ extension MainWindowController {
 
     /// Destroys the terminal surface and cleans up resources.
     func destroyTerminalSurface() {
-        guard let surfaceID = terminalViewModel.surfaceID else { return }
+        guard let tabID = visibleTabID,
+              let surfaceID = tabSurfaceMap[tabID] ?? tabViewModels[tabID]?.surfaceID else { return }
         clearSurfaceTracking(for: surfaceID)
         bridge.destroySurface(surfaceID)
-        terminalViewModel.markStopped()
+        tabViewModels[tabID]?.markStopped()
     }
 
     /// Destroys all terminal surfaces across all tabs.
@@ -314,8 +320,11 @@ extension MainWindowController {
         case .titleChange(let title):
             // Update the window title only when the source is the active tab
             // (or unknown, for backward compatibility).
-            if sourceTabID == nil || sourceTabID == tabManager.activeTabID {
-                terminalViewModel.updateTitle(title)
+            if let tabID = targetTabID {
+                viewModelForTab(tabID)?.updateTitle(title)
+            }
+
+            if sourceTabID == nil || sourceTabID == visibleTabID {
                 window?.title = title
             }
 
@@ -353,7 +362,12 @@ extension MainWindowController {
             }
 
             // Feed the title to the agent detection engine.
-            feedDetectionEngine(oscCode: 0, payload: title)
+            feedDetectionEngine(
+                oscCode: 0,
+                payload: title,
+                fromTabID: targetTabID,
+                surfaceID: sourceSurfaceID
+            )
 
         case .notification(title: let title, body: let body):
             guard let tabID = targetTabID else { break }
@@ -365,7 +379,12 @@ extension MainWindowController {
             )
             injectedNotificationManager?.notify(cocxyNotification)
 
-            feedDetectionEngine(oscCode: 9, payload: body)
+            feedDetectionEngine(
+                oscCode: 9,
+                payload: body,
+                fromTabID: targetTabID,
+                surfaceID: sourceSurfaceID
+            )
 
         case .shellPrompt:
             guard let tabID = targetTabID else { break }
@@ -377,7 +396,7 @@ extension MainWindowController {
             tabBarViewModel?.syncWithManager()
 
             // Notify IDE cursor controller only for the active tab.
-            if (sourceTabID == nil || sourceTabID == tabManager.activeTabID),
+            if (sourceTabID == nil || sourceTabID == visibleTabID),
                let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
                     ?? terminalSurfaceView {
                 let promptRow: Int
@@ -392,7 +411,12 @@ extension MainWindowController {
                 surfaceView.handleShellPrompt(row: promptRow, column: 2)
             }
 
-            feedDetectionEngine(oscCode: 133, payload: "A")
+            feedDetectionEngine(
+                oscCode: 133,
+                payload: "A",
+                fromTabID: targetTabID,
+                surfaceID: sourceSurfaceID
+            )
 
         case .currentDirectory(let directoryURL):
             guard let tabID = targetTabID else { break }
@@ -423,7 +447,9 @@ extension MainWindowController {
 
             feedDetectionEngine(
                 oscCode: 7,
-                payload: "file://localhost\(directoryURL.path)"
+                payload: "file://localhost\(directoryURL.path)",
+                fromTabID: targetTabID,
+                surfaceID: sourceSurfaceID
             )
 
         case .commandStarted:
@@ -478,12 +504,41 @@ extension MainWindowController {
     /// - Parameters:
     ///   - oscCode: The OSC code (0 = title, 7 = pwd, 9 = notification, 133 = prompt).
     ///   - payload: The OSC payload string.
-    private func feedDetectionEngine(oscCode: Int, payload: String) {
+    private func feedDetectionEngine(
+        oscCode: Int,
+        payload: String,
+        fromTabID sourceTabID: TabID?,
+        surfaceID sourceSurfaceID: SurfaceID?
+    ) {
         guard let engine = injectedAgentDetectionEngine else { return }
+        guard shouldRouteOutputToDetection(
+            fromTabID: sourceTabID,
+            surfaceID: sourceSurfaceID
+        ) else { return }
         let oscSequence = "\u{1b}]\(oscCode);\(payload)\u{07}"
         if let data = oscSequence.data(using: .utf8) {
             engine.processTerminalOutput(data)
         }
+    }
+
+    /// Pattern/OSC-based detection must only observe the surface the user is
+    /// actually looking at. Hook integration remains responsible for
+    /// background-session updates across windows.
+    private func shouldRouteOutputToDetection(
+        fromTabID sourceTabID: TabID?,
+        surfaceID sourceSurfaceID: SurfaceID?
+    ) -> Bool {
+        guard let visibleTabID else { return false }
+        let resolvedTabID = sourceTabID ?? visibleTabID
+        guard resolvedTabID == visibleTabID else { return false }
+
+        let focusedSurfaceID =
+            focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+            ?? terminalSurfaceView?.terminalViewModel?.surfaceID
+
+        guard let focusedSurfaceID else { return true }
+        guard let sourceSurfaceID else { return true }
+        return focusedSurfaceID == sourceSurfaceID
     }
 
     // MARK: - Inline Image Renderer

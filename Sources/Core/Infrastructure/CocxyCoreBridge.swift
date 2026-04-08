@@ -446,19 +446,36 @@ final class CocxyCoreBridge: TerminalEngine {
     func applyFont(family: String, size: Double) {
         updateDefaults(fontFamily: family, fontSize: size)
 
-        for state in surfaces.values {
-            let scale = Float(state.hostView?.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0)
-            _ = family.withCString { familyPtr in
-                cocxycore_terminal_set_font(
-                    state.terminal,
-                    familyPtr,
-                    Float(size),
-                    scale,
-                    true
-                )
-            }
-            (state.hostView as? TerminalHostView)?.updateInteractionMetrics()
-            (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        for surfaceID in surfaces.keys {
+            applyFont(family: family, size: size, to: surfaceID)
+        }
+    }
+
+    /// Apply a font change to a specific live surface only.
+    func applyFont(family: String, size: Double, to surface: SurfaceID) {
+        guard let state = surfaces[surface] else { return }
+        let scale = Float(
+            state.hostView?.window?.backingScaleFactor
+                ?? NSScreen.main?.backingScaleFactor
+                ?? 2.0
+        )
+        _ = family.withCString { familyPtr in
+            cocxycore_terminal_set_font(
+                state.terminal,
+                familyPtr,
+                Float(size),
+                scale,
+                true
+            )
+        }
+        (state.hostView as? TerminalHostView)?.updateInteractionMetrics()
+        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    /// Apply the same font change to a batch of surfaces.
+    func applyFont(family: String, size: Double, to surfaces: [SurfaceID]) {
+        for surface in surfaces {
+            applyFont(family: family, size: size, to: surface)
         }
     }
 

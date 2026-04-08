@@ -186,6 +186,7 @@ final class BrowserViewModel: ObservableObject {
         urlString = url.absoluteString
         currentURL = url
         pageTitle = ""
+        navigationActionSubject.send(.load(url))
     }
 
     /// Closes the browser tab with the given ID.
@@ -209,6 +210,7 @@ final class BrowserViewModel: ObservableObject {
             urlString = newActiveTab.url.absoluteString
             currentURL = newActiveTab.url
             pageTitle = newActiveTab.title
+            navigationActionSubject.send(.load(newActiveTab.url))
         }
     }
 
@@ -221,6 +223,7 @@ final class BrowserViewModel: ObservableObject {
         urlString = tab.url.absoluteString
         currentURL = tab.url
         pageTitle = tab.title
+        navigationActionSubject.send(.load(tab.url))
     }
 
     /// Updates the title of the active tab.

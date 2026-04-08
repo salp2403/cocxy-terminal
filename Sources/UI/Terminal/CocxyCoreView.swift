@@ -141,6 +141,16 @@ final class CocxyCoreView: NSView {
     override var wantsUpdateLayer: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let commandFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if commandFlags.contains(.command),
+           let menu = NSApp.mainMenu,
+           menu.performKeyEquivalent(with: event) {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
     override func makeBackingLayer() -> CALayer {
         let metalLayer = CAMetalLayer()
         metalLayer.device = MTLCreateSystemDefaultDevice()
@@ -330,6 +340,12 @@ final class CocxyCoreView: NSView {
             characters: event.characters
         )
 
+        if action == .sendToTerminal,
+           modifiers.contains(.command),
+           performKeyEquivalent(with: event) {
+            return
+        }
+
         NSCursor.setHiddenUntilMouseMoves(true)
 
         switch action {
@@ -466,6 +482,25 @@ final class CocxyCoreView: NSView {
     override func noResponder(for eventSelector: Selector) {}
 
     // MARK: - Copy / Paste
+
+    @objc func copy(_ sender: Any?) {
+        handleCopy()
+    }
+
+    @objc func paste(_ sender: Any?) {
+        handlePaste()
+    }
+
+    override func selectAll(_ sender: Any?) {
+        guard let bridge = bridge, let sid = surfaceID else { return }
+        let keyEvent = KeyEvent(
+            characters: "a",
+            keyCode: 0x00,
+            modifiers: [.command],
+            isKeyDown: true
+        )
+        bridge.sendKeyEvent(keyEvent, to: sid)
+    }
 
     private func handleCopy() {
         guard let bridge = bridge, let sid = surfaceID else { return }
