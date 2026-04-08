@@ -5,6 +5,21 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.45] - 2026-04-08
+
+### Added
+- Fish shell integration with full OSC 133 semantic marks and OSC 7 CWD reporting
+- Bash .bashrc bootstrap that restores HOME before sourcing user config
+- Triple-check font availability in FontFallbackResolver (NSFont, manager, descriptor)
+
+### Fixed
+- CocxyCore font fallback retries with system monospace when requested family fails
+- Bash preexec correctly wired through DEBUG trap with self-referential guard
+- Split creation inherits the visible tab's working directory, not the domain-model active tab
+- Focused pane resolution prefers AppKit first responder over stale domain model state
+- Active terminal surface avoids returning stale bootstrap surfaces after restore
+- Dashboard pattern context aligned with visible tab and active surface resolution
+
 ## [0.1.44] - 2026-04-08
 
 ### Added
