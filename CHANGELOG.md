@@ -5,6 +5,22 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.41] - 2026-04-07
+
+### Security
+- OSC 52 clipboard read now requires user confirmation (prompt by default)
+- New `clipboard-read-access` config option: `allow`, `prompt`, or `deny`
+
+### Fixed
+- Periodic session auto-save now wired in production (was implemented but never called)
+- Timeline navigation now uses real navigator instead of no-op stub
+- Aider agent detection patterns no longer conflict between launch and waiting
+- QuickTerminal restore clamps height to valid range defensively
+- Git branch watcher race condition on cancellation
+- CodableColor equality now case-insensitive
+- Session delete API accepts unnamed session consistently with save
+- QuickSwitch result shows destination tab name
+
 ## [0.1.40] - 2026-04-07
 
 ### Fixed
