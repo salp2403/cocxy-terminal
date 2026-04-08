@@ -1019,12 +1019,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         if let surfaceView = terminalSurfaceView {
             window?.makeFirstResponder(surfaceView)
         }
+        refreshVisibleTerminalInteractionState()
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
         if let surfaceView = terminalSurfaceView {
             window?.makeFirstResponder(surfaceView)
         }
+        refreshVisibleTerminalInteractionState()
         injectedAgentDetectionEngine?.resumeTimingDetector()
     }
 
@@ -1099,6 +1101,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         if displayedTabID == tabID {
             refreshStatusBar()
             refreshTabStrip()
+            refreshVisibleTerminalInteractionState()
             return
         }
 
@@ -1154,6 +1157,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         window?.makeFirstResponder(targetSurfaceView)
         targetSurfaceView.hideNotificationRing()
+        refreshVisibleTerminalInteractionState()
 
         // Propagate read state to the session registry so other windows
         // can clear their badge counts for this session.
@@ -1163,6 +1167,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         refreshTabStrip()
         updateAgentProgressOverlay()
         applyProjectConfig(for: tabID)
+    }
+
+    /// Re-syncs the currently visible terminal host views with the live window
+    /// geometry and requests an immediate redraw.
+    ///
+    /// This closes a subtle gap where a surface can process PTY output while it
+    /// is detached or still zero-sized. Reattaching the view without an
+    /// explicit refresh can leave the terminal visually blank until the next
+    /// chunk of output arrives.
+    func refreshVisibleTerminalInteractionState() {
+        var seen = Set<ObjectIdentifier>()
+        let visibleViews = [terminalSurfaceView].compactMap { $0 } + Array(splitSurfaceViews.values)
+
+        for surfaceView in visibleViews {
+            let identifier = ObjectIdentifier(surfaceView)
+            guard seen.insert(identifier).inserted else { continue }
+            surfaceView.updateInteractionMetrics()
+            surfaceView.requestImmediateRedraw()
+        }
     }
 
     // MARK: - Project Config

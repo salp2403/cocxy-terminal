@@ -5,6 +5,37 @@ import XCTest
 import AppKit
 @testable import CocxyTerminal
 
+@MainActor
+private final class TrackingTerminalHostView: NSView, TerminalHostingView {
+    var terminalViewModel: TerminalViewModel?
+    var onFileDrop: (([URL]) -> Bool)?
+    var onUserInputSubmitted: (() -> Void)?
+    private(set) var syncSizeCallCount = 0
+    private(set) var redrawCallCount = 0
+    private(set) var updateMetricsCallCount = 0
+
+    func syncSizeWithTerminal() {
+        syncSizeCallCount += 1
+    }
+
+    func showNotificationRing(color: NSColor) {}
+    func hideNotificationRing() {}
+    func handleShellPrompt(row: Int, column: Int) {}
+
+    func updateInteractionMetrics() {
+        updateMetricsCallCount += 1
+    }
+
+    func configureSurfaceIfNeeded(
+        bridge: any TerminalEngine,
+        surfaceID: SurfaceID
+    ) {}
+
+    func requestImmediateRedraw() {
+        redrawCallCount += 1
+    }
+}
+
 // MARK: - Tab Surface Mapping Tests
 
 /// Tests that MainWindowController correctly maps each tab to its own terminal surface.
@@ -394,5 +425,130 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             controller.terminalSurfaceView === firstSurfaceView,
             "gotoTab1 must switch the terminal surface to the first tab's surface"
         )
+    }
+
+    func testHandleTabSwitchRefreshesTargetSurfaceAfterReattach() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        controller.terminalContainerView = container
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab")
+            return
+        }
+
+        let firstView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[firstTabID] = firstView
+        controller.terminalSurfaceView = firstView
+        controller.displayedTabID = firstTabID
+        container.addSubview(firstView)
+
+        let secondTab = controller.tabManager.addTab(workingDirectory: URL(fileURLWithPath: "/tmp"))
+        let secondView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[secondTab.id] = secondView
+
+        controller.handleTabSwitch(to: secondTab.id)
+
+        XCTAssertEqual(secondView.updateMetricsCallCount, 1)
+        XCTAssertEqual(secondView.redrawCallCount, 1)
+        XCTAssertTrue(controller.terminalSurfaceView === secondView)
+    }
+
+    func testHandleTabSwitchRefreshesAlreadyDisplayedSurface() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        controller.terminalContainerView = container
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab")
+            return
+        }
+
+        let firstView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[firstTabID] = firstView
+        controller.terminalSurfaceView = firstView
+        controller.displayedTabID = firstTabID
+        container.addSubview(firstView)
+
+        controller.handleTabSwitch(to: firstTabID)
+
+        XCTAssertEqual(firstView.updateMetricsCallCount, 1)
+        XCTAssertEqual(firstView.redrawCallCount, 1)
+    }
+
+    func testHandleTabSwitchRefreshesRestoredSplitSurfaces() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        controller.terminalContainerView = container
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab")
+            return
+        }
+
+        let firstView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[firstTabID] = firstView
+        controller.terminalSurfaceView = firstView
+        controller.displayedTabID = firstTabID
+        container.addSubview(firstView)
+
+        let splitTab = controller.tabManager.addTab(workingDirectory: URL(fileURLWithPath: "/tmp/split"))
+        let primarySplitView = TrackingTerminalHostView()
+        let secondarySplitView = TrackingTerminalHostView()
+        let secondarySurfaceID = SurfaceID()
+        let splitView = NSSplitView(frame: container.bounds)
+        splitView.isVertical = true
+
+        controller.tabSurfaceViews[splitTab.id] = primarySplitView
+        controller.savedTabSplitViews[splitTab.id] = splitView
+        controller.savedTabSplitSurfaceViews[splitTab.id] = [secondarySurfaceID: secondarySplitView]
+
+        controller.handleTabSwitch(to: splitTab.id)
+
+        XCTAssertEqual(primarySplitView.updateMetricsCallCount, 1)
+        XCTAssertEqual(primarySplitView.redrawCallCount, 1)
+        XCTAssertEqual(secondarySplitView.updateMetricsCallCount, 1)
+        XCTAssertEqual(secondarySplitView.redrawCallCount, 1)
+        XCTAssertTrue(controller.activeSplitView === splitView)
+    }
+
+    func testWindowDidBecomeKeyRefreshesVisibleTerminalSurfaces() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let primaryView = TrackingTerminalHostView()
+        let splitView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = primaryView
+        controller.splitSurfaceViews[SurfaceID()] = splitView
+
+        controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+
+        XCTAssertEqual(primaryView.updateMetricsCallCount, 1)
+        XCTAssertEqual(primaryView.redrawCallCount, 1)
+        XCTAssertEqual(splitView.updateMetricsCallCount, 1)
+        XCTAssertEqual(splitView.redrawCallCount, 1)
+    }
+
+    func testWindowDidBecomeMainRefreshesVisibleTerminalSurfaces() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let primaryView = TrackingTerminalHostView()
+        let splitView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = primaryView
+        controller.splitSurfaceViews[SurfaceID()] = splitView
+
+        controller.windowDidBecomeMain(Notification(name: NSWindow.didBecomeMainNotification))
+
+        XCTAssertEqual(primaryView.updateMetricsCallCount, 1)
+        XCTAssertEqual(primaryView.redrawCallCount, 1)
+        XCTAssertEqual(splitView.updateMetricsCallCount, 1)
+        XCTAssertEqual(splitView.redrawCallCount, 1)
     }
 }
