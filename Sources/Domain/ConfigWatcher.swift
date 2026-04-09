@@ -102,7 +102,7 @@ final class ConfigWatcher {
         directorySource?.cancel()
         directorySource = nil
 
-        let fd = open(configPath, O_EVTONLY)
+        let fd = open(configPath, O_EVTONLY | O_CLOEXEC)
         guard fd >= 0 else {
             NSLog("[ConfigWatcher] Failed to open config file for watching: %@", configPath)
             return false
@@ -142,7 +142,7 @@ final class ConfigWatcher {
             atPath: parentDir, withIntermediateDirectories: true, attributes: nil
         )
 
-        let dirFd = open(parentDir, O_EVTONLY)
+        let dirFd = open(parentDir, O_EVTONLY | O_CLOEXEC)
         guard dirFd >= 0 else { return false }
 
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -193,9 +193,10 @@ final class ConfigWatcher {
     /// Directly handles a file change event. Called by the dispatch source
     /// or by tests to simulate a file change.
     ///
-    /// Reloads the config service immediately.
+    /// Uses `reloadIfValid()` to preserve current config when the file
+    /// is temporarily invalid (e.g., mid-edit in vim/emacs).
     func handleFileChange() {
-        try? configService.reload()
+        configService.reloadIfValid()
     }
 
     /// Schedules a debounced reload. Multiple calls within `debounceInterval`
@@ -320,7 +321,7 @@ final class AgentConfigWatcher {
         directorySource?.cancel()
         directorySource = nil
 
-        let fd = open(configPath, O_EVTONLY)
+        let fd = open(configPath, O_EVTONLY | O_CLOEXEC)
         guard fd >= 0 else { return false }
 
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -355,7 +356,7 @@ final class AgentConfigWatcher {
             atPath: parentDir, withIntermediateDirectories: true, attributes: nil
         )
 
-        let dirFd = open(parentDir, O_EVTONLY)
+        let dirFd = open(parentDir, O_EVTONLY | O_CLOEXEC)
         guard dirFd >= 0 else { return false }
 
         let source = DispatchSource.makeFileSystemObjectSource(

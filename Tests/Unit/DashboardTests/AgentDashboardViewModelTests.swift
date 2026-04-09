@@ -715,7 +715,7 @@ final class AgentDashboardViewModelTests: XCTestCase {
         )
         sut.processHookEvent(idleEvent)
 
-        XCTAssertEqual(sut.sessions.first?.state, .idle)
+        XCTAssertEqual(sut.sessions.first?.state, .waitingForInput)
     }
 
     // MARK: - ViewModel Tests: TaskCompleted

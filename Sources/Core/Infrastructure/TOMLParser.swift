@@ -228,26 +228,62 @@ struct TOMLParser {
         // Support both basic strings ("...") and literal strings ('...').
         // TOML literal strings (single-quoted) preserve backslashes verbatim,
         // which is essential for regex patterns like '^claude\b'.
-        let quoteChar: Character
         if raw.hasPrefix("\"") {
-            quoteChar = "\""
+            return .string(try parseBasicStringValue(raw, lineNumber: lineNumber))
         } else if raw.hasPrefix("'") {
-            quoteChar = "'"
+            return .string(try parseLiteralStringValue(raw, lineNumber: lineNumber))
         } else {
             throw TOMLParserError.invalidValue(
                 line: lineNumber,
                 detail: "String must start with a quote"
             )
         }
+    }
 
+    private func parseBasicStringValue(_ raw: String, lineNumber: Int) throws -> String {
+        var content = ""
+        var iterator = raw.dropFirst().makeIterator()
+        var isEscaping = false
+
+        while let character = iterator.next() {
+            if isEscaping {
+                switch character {
+                case "\"", "\\":
+                    content.append(character)
+                case "n":
+                    content.append("\n")
+                case "r":
+                    content.append("\r")
+                case "t":
+                    content.append("\t")
+                default:
+                    content.append(character)
+                }
+                isEscaping = false
+                continue
+            }
+
+            switch character {
+            case "\\":
+                isEscaping = true
+            case "\"":
+                return content
+            default:
+                content.append(character)
+            }
+        }
+
+        throw TOMLParserError.unterminatedString(line: lineNumber)
+    }
+
+    private func parseLiteralStringValue(_ raw: String, lineNumber: Int) throws -> String {
         let withoutOpeningQuote = String(raw.dropFirst())
 
-        guard let closingQuoteIndex = withoutOpeningQuote.firstIndex(of: quoteChar) else {
+        guard let closingQuoteIndex = withoutOpeningQuote.firstIndex(of: "'") else {
             throw TOMLParserError.unterminatedString(line: lineNumber)
         }
 
-        let content = String(withoutOpeningQuote[withoutOpeningQuote.startIndex..<closingQuoteIndex])
-        return .string(content)
+        return String(withoutOpeningQuote[withoutOpeningQuote.startIndex..<closingQuoteIndex])
     }
 
     /// Parses an array value like `[1, 2, 3]`.

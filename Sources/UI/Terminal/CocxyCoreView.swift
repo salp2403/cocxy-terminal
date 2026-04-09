@@ -782,8 +782,9 @@ final class CocxyCoreView: NSView {
             width: CGFloat(metrics.cell_width) / scale,
             height: CGFloat(metrics.cell_height) / scale
         )
-        ideCursorController.leftPadding = 8
-        ideCursorController.topPadding = 4
+        let padding = contentPadding
+        ideCursorController.leftPadding = padding.x
+        ideCursorController.topPadding = padding.y
     }
 
     // MARK: - Static Helpers

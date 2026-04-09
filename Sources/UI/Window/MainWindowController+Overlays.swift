@@ -350,6 +350,19 @@ extension MainWindowController {
                     }
                 }
             ),
+            CommandAction(
+                id: "navigation.quickterminal",
+                name: "Toggle Quick Terminal",
+                description: "Show or hide the dropdown quick terminal",
+                shortcut: nil,
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        (NSApp.delegate as? AppDelegate)?.quickTerminalController?.toggle()
+                    }
+                }
+            ),
         ]
 
         engine.registerActions(actions)
@@ -535,7 +548,7 @@ extension MainWindowController {
         if smartRoutingViewModel == nil {
             let dashVM = dashboardViewModel ?? AgentDashboardViewModel()
             if dashboardViewModel == nil { dashboardViewModel = dashVM }
-            let router = SmartAgentRouterImpl(dashboard: dashVM, tabNavigator: nil)
+            let router = SmartAgentRouterImpl(dashboard: dashVM, tabNavigator: self)
             smartRoutingViewModel = SmartRoutingOverlayViewModel(router: router)
         }
 

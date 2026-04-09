@@ -286,6 +286,7 @@ final class PreferencesViewModel: ObservableObject {
             ),
             appearance: AppearanceConfig(
                 theme: theme,
+                lightTheme: savedConfig.appearance.lightTheme,
                 fontFamily: fontFamily,
                 fontSize: fontSize,
                 tabPosition: TabPosition(rawValue: tabPosition) ?? .left,
@@ -344,6 +345,7 @@ final class PreferencesViewModel: ObservableObject {
 
         [appearance]
         theme = "\(theme)"
+        light-theme = "\(defaults.appearance.lightTheme)"
         font-family = "\(fontFamily)"
         font-size = \(clampedFontSize)
         tab-position = "\(tabPosition)"

@@ -40,7 +40,8 @@ struct BrowserProfileSelector: View {
     let onCreateProfile: () -> Void
 
     /// Called when the user selects "Manage Profiles".
-    let onManageProfiles: () -> Void
+    /// When nil, the "Manage Profiles" button is hidden.
+    let onManageProfiles: (() -> Void)?
 
     // MARK: - Body
 
@@ -125,15 +126,17 @@ struct BrowserProfileSelector: View {
             }
             .accessibilityLabel("Create new profile")
 
-            Button(action: onManageProfiles) {
-                HStack(spacing: 4) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 10))
-                    Text("Manage Profiles")
-                        .font(.system(size: 12))
+            if let onManageProfiles {
+                Button(action: onManageProfiles) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 10))
+                        Text("Manage Profiles")
+                            .font(.system(size: 12))
+                    }
                 }
+                .accessibilityLabel("Open profile management")
             }
-            .accessibilityLabel("Open profile management")
         }
     }
 

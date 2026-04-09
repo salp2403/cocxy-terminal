@@ -55,7 +55,7 @@ final class SocketProtocolTests: XCTestCase {
         {
             "id": "raw-1",
             "command": "new-tab",
-            "params": { "directory": "/tmp" }
+            "params": { "dir": "/tmp" }
         }
         """.data(using: .utf8)!
 
@@ -63,7 +63,7 @@ final class SocketProtocolTests: XCTestCase {
 
         XCTAssertEqual(decoded.id, "raw-1")
         XCTAssertEqual(decoded.command, "new-tab")
-        XCTAssertEqual(decoded.params?["directory"], "/tmp")
+        XCTAssertEqual(decoded.params?["dir"], "/tmp")
     }
 
     // MARK: - 2. SocketResponse Codable round-trip

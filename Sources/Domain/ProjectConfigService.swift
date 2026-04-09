@@ -53,6 +53,14 @@ struct ProjectConfig: Codable, Equatable, Sendable {
     /// Only specified keys override; unspecified keys keep global values.
     let keybindingOverrides: [String: String]?
 
+    /// Whether all fields are nil (no overrides).
+    var isEmpty: Bool {
+        fontSize == nil && windowPadding == nil && windowPaddingX == nil
+            && windowPaddingY == nil && backgroundOpacity == nil
+            && backgroundBlurRadius == nil && agentDetectionExtraPatterns == nil
+            && keybindingOverrides == nil
+    }
+
     // MARK: - Initialization
 
     init(
@@ -140,7 +148,7 @@ final class ProjectConfigService {
             keybindingOverrides: keybindingOverrides
         )
 
-        if config == ProjectConfig() {
+        if config.isEmpty {
             return nil
         }
 

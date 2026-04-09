@@ -13,9 +13,9 @@ set -g __cocxy_fish_last_reported_cwd ""
 
 function __cocxy_fish_print
     if test -w /dev/tty
-        printf '%b' -- "$argv[1]" > /dev/tty
+        printf '%b' "$argv[1]" > /dev/tty
     else
-        printf '%b' -- "$argv[1]"
+        printf '%b' "$argv[1]"
     end
 end
 

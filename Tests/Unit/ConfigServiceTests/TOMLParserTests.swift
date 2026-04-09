@@ -86,6 +86,14 @@ final class TOMLParserTests: XCTestCase {
         XCTAssertEqual(result["empty"], .string(""))
     }
 
+    func testBasicStringPreservesEscapedQuotes() throws {
+        let toml = #"""
+        message = "He said \"hello\""
+        """#
+        let result = try parser.parse(toml)
+        XCTAssertEqual(result["message"], .string(#"He said "hello""#))
+    }
+
     // MARK: - Integer Values
 
     func testPositiveInteger() throws {

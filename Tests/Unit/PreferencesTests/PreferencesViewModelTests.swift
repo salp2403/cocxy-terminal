@@ -57,7 +57,8 @@ final class PreferencesViewModelTests: XCTestCase {
         let config = CocxyConfig(
             general: GeneralConfig(shell: "/bin/bash", workingDirectory: "/tmp", confirmCloseProcess: false),
             appearance: AppearanceConfig(
-                theme: "dracula", fontFamily: "Fira Code", fontSize: 16,
+                theme: "dracula", lightTheme: "catppuccin-latte",
+                fontFamily: "Fira Code", fontSize: 16,
                 tabPosition: .top, windowPadding: 12,
                 windowPaddingX: nil, windowPaddingY: nil,
                 backgroundOpacity: 1.0, backgroundBlurRadius: 0
@@ -139,6 +140,35 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertTrue(toml.contains("[quick-terminal]"))
         XCTAssertTrue(toml.contains("[keybindings]"))
         XCTAssertTrue(toml.contains("[sessions]"))
+    }
+
+    func testGenerateTomlPreservesConfiguredLightTheme() {
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: AppearanceConfig(
+                theme: "catppuccin-mocha",
+                lightTheme: "solarized-light",
+                fontFamily: "JetBrainsMono Nerd Font",
+                fontSize: 14,
+                tabPosition: .left,
+                windowPadding: 8,
+                windowPaddingX: nil,
+                windowPaddingY: nil,
+                backgroundOpacity: 1.0,
+                backgroundBlurRadius: 0
+            ),
+            terminal: .defaults,
+            agentDetection: .defaults,
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+
+        let viewModel = PreferencesViewModel(config: config)
+        let toml = viewModel.generateToml()
+
+        XCTAssertTrue(toml.contains("light-theme = \"solarized-light\""))
     }
 
     // MARK: - Save to File Provider

@@ -478,7 +478,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     private func handleTeammateIdle(_ event: HookEvent) {
         guard sessionDataStore[event.sessionId] != nil else { return }
-        sessionDataStore[event.sessionId]?.state = .idle
+        sessionDataStore[event.sessionId]?.state = .waitingForInput
         sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
         rebuildSessions()
     }
@@ -585,8 +585,10 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             .sink { [weak self] event in
                 guard let self else { return }
                 // Only process events from sessions running inside Cocxy tabs.
-                if let cwd = event.cwd,
-                   let tabCwds = self.tabCwdProvider?() {
+                // Events without CWD are dropped when the provider is available,
+                // preventing cross-terminal leakage.
+                if let tabCwds = self.tabCwdProvider?() {
+                    guard let cwd = event.cwd else { return }
                     let cwdStd = URL(fileURLWithPath: cwd).standardized.path
                     let matches = tabCwds.contains { tabCwd in
                         URL(fileURLWithPath: tabCwd).standardized.path == cwdStd
@@ -604,19 +606,33 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         engine.stateChanged
             .receive(on: DispatchQueue.main)
             .sink { [weak self] context in
-                // Read agentName from the context itself, not from the engine,
-                // to avoid a strong capture and ensure data consistency.
-                guard let agentName = context.agentName else { return }
-                // Use the agent name directly for a stable synthetic session ID.
-                // Pattern detection is per-engine (global), not per-tab, so we
-                // don't have a real tab ID. Using agentName ensures repeated
-                // signals update the same session instead of creating orphans.
-                self?.processPatternDetectionSignal(
-                    agentName: agentName,
-                    state: context.state
-                )
+                guard let self else { return }
+                if let agentName = context.agentName {
+                    self.processPatternDetectionSignal(
+                        agentName: agentName,
+                        state: context.state
+                    )
+                } else if context.state == .idle {
+                    // Idle without agent name — the state machine cleared it.
+                    // Transition all pattern sessions to idle so they don't
+                    // stay stuck in their last non-idle state.
+                    self.transitionAllPatternSessionsToIdle()
+                }
             }
             .store(in: &cancellables)
+    }
+
+    /// Transitions all pattern-detected sessions to idle.
+    private func transitionAllPatternSessionsToIdle() {
+        var changed = false
+        for key in sessionDataStore.keys where key.hasPrefix("pattern-") {
+            if sessionDataStore[key]?.state != .idle {
+                sessionDataStore[key]?.state = .idle
+                sessionDataStore[key]?.lastActivityTime = Date()
+                changed = true
+            }
+        }
+        if changed { rebuildSessions() }
     }
 
     // MARK: - Private: Session Rebuild

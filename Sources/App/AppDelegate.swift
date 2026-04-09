@@ -170,6 +170,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentConfigService: AgentConfigService?
 
+    /// The main config file watcher for hot-reload of config.toml.
+    private var configWatcher: ConfigWatcher?
+
     /// The agent config file watcher for hot-reload.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentConfigWatcher: AgentConfigWatcher?
@@ -224,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         themeEngine = ThemeEngineImpl()
         initializeConfigService()
+        startConfigWatcher()
         initializeSessionManager()
         setupMainMenu()
         initializeBridge()
@@ -277,7 +281,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browserBookmarkStore = nil
         sparkleUpdater = nil
 
-        // Stop the agent config watcher before services are torn down.
+        // Stop config watchers before services are torn down.
+        configWatcher?.stopWatching()
+        configWatcher = nil
         agentConfigWatcher?.stopWatching()
         agentConfigWatcher = nil
         agentConfigService = nil
@@ -369,6 +375,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Continue with defaults -- ConfigService handles this gracefully.
         }
         self.configService = service
+    }
+
+    /// Starts the config file watcher for hot-reload of config.toml.
+    private func startConfigWatcher() {
+        guard let service = configService else { return }
+        let watcher = ConfigWatcher(
+            configService: service,
+            fileProvider: DiskConfigFileProvider()
+        )
+        watcher.startWatching()
+        self.configWatcher = watcher
     }
 
     // MARK: - Session Registry Initialization
@@ -1169,8 +1186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let observer = AppearanceObserver()
         self.appearanceObserver = observer
 
-        let darkTheme = configService?.current.appearance.theme ?? "catppuccin-mocha"
-        let lightTheme = "Catppuccin Latte"
+        let config = configService?.current ?? .defaults
+        let darkTheme = config.appearance.theme
+        let lightTheme = config.appearance.lightTheme
 
         guard let engine = themeEngine else { return }
         observer.onThemeSwitchRequested = { [weak self] themeName in

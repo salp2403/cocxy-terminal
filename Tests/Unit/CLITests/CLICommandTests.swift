@@ -221,7 +221,7 @@ final class CLIArgumentParserTests: XCTestCase {
 
     func testVersionTextContainsVersionNumber() {
         let versionText = CLIArgumentParser.versionText()
-        XCTAssertEqual(versionText, "cocxy 0.1.45")
+        XCTAssertEqual(versionText, "cocxy 0.1.47")
     }
     // MARK: - SSH Parsing
 
@@ -280,7 +280,7 @@ final class RequestBuilderTests: XCTestCase {
         let request = runner.buildRequest(from: .newTab(directory: "/tmp"))
 
         XCTAssertEqual(request.command, "new-tab")
-        XCTAssertEqual(request.params?["directory"], "/tmp")
+        XCTAssertEqual(request.params?["dir"], "/tmp")
     }
 
     // MARK: - 17. List-tabs request
@@ -498,7 +498,7 @@ final class CommandRunnerTests: XCTestCase {
         let result = runner.run(arguments: ["--version"])
 
         XCTAssertEqual(result.exitCode, 0)
-        XCTAssertEqual(result.stdout, "cocxy 0.1.45")
+        XCTAssertEqual(result.stdout, "cocxy 0.1.47")
         XCTAssertTrue(result.stderr.isEmpty)
     }
 

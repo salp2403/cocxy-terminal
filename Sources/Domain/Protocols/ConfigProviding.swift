@@ -80,6 +80,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     func applying(projectOverrides overrides: ProjectConfig) -> CocxyConfig {
         let mergedAppearance = AppearanceConfig(
             theme: appearance.theme,
+            lightTheme: appearance.lightTheme,
             fontFamily: appearance.fontFamily,
             fontSize: overrides.fontSize ?? appearance.fontSize,
             tabPosition: appearance.tabPosition,
@@ -143,8 +144,10 @@ struct GeneralConfig: Codable, Sendable, Equatable {
 
 /// `[appearance]` section of the configuration.
 struct AppearanceConfig: Codable, Sendable, Equatable {
-    /// Name of the active theme.
+    /// Name of the active (dark) theme.
     let theme: String
+    /// Name of the light theme for auto-switch.
+    let lightTheme: String
     /// Font family for terminal text.
     let fontFamily: String
     /// Font size in points. Valid range: 6...72.
@@ -170,6 +173,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     static var defaults: AppearanceConfig {
         AppearanceConfig(
             theme: "catppuccin-mocha",
+            lightTheme: "catppuccin-latte",
             fontFamily: "JetBrainsMono Nerd Font",
             fontSize: 14,
             tabPosition: .left,

@@ -43,6 +43,9 @@ final class MetalTerminalRenderer {
     /// Single-instance buffer for the cursor quad.
     private var cursorBuffer: MTLBuffer?
 
+    /// Whether the cursor was visible in the last prepared frame.
+    private var lastCursorVisible: Bool = false
+
     /// Instance data for inline image quads.
     private var imageQuadBuffer: MTLBuffer?
 
@@ -273,8 +276,6 @@ final class MetalTerminalRenderer {
               let uniformBuffer = uniformBuffer
         else { return }
 
-        let cursorInst = readCursor(terminal: terminal)
-
         // 5. Get drawable and render
         guard let drawable = layer.nextDrawable() else { return }
 
@@ -344,7 +345,7 @@ final class MetalTerminalRenderer {
         }
 
         // Pass 3: Cursor
-        if cursorInst.visible != 0, let cursorBuf = cursorBuffer {
+        if lastCursorVisible, let cursorBuf = cursorBuffer {
             encoder.setRenderPipelineState(cursorPipeline)
             encoder.setVertexBuffer(cursorBuf, offset: 0, index: 0)
             encoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
@@ -384,6 +385,7 @@ final class MetalTerminalRenderer {
         fillImageQuadBuffer(terminal: terminal)
 
         let cursorInst = readCursor(terminal: terminal)
+        lastCursorVisible = cursorInst.visible != 0
         ensureCursorBuffer()
         if let cursorBuf = cursorBuffer {
             let ptr = cursorBuf.contents().assumingMemoryBound(to: CursorInstance.self)

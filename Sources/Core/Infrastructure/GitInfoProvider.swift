@@ -158,7 +158,7 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
             return AnyCancellable {}
         }
 
-        let fileDescriptor = open(headURL.path, O_EVTONLY)
+        let fileDescriptor = open(headURL.path, O_EVTONLY | O_CLOEXEC)
         guard fileDescriptor >= 0 else {
             return AnyCancellable {}
         }

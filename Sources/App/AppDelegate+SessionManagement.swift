@@ -17,9 +17,19 @@ extension AppDelegate {
     /// to be torn down milliseconds later during restore-on-launch.
     func hasRestorableSessionOnLaunch() -> Bool {
         let config = configService?.current ?? .defaults
-        guard config.sessions.restoreOnLaunch,
-              let sessionManager,
-              let session = try? sessionManager.loadLastSession() else {
+        guard config.sessions.restoreOnLaunch, let sessionManager else {
+            return false
+        }
+
+        let session: Session
+        do {
+            guard let loaded = try sessionManager.loadLastSession() else {
+                return false
+            }
+            session = loaded
+        } catch {
+            NSLog("[AppDelegate] Failed to load session for restore: %@",
+                  String(describing: error))
             return false
         }
 

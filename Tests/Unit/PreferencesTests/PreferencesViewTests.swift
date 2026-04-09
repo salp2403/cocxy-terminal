@@ -131,7 +131,8 @@ final class TabPositionTests: XCTestCase {
         let config = CocxyConfig(
             general: .defaults,
             appearance: AppearanceConfig(
-                theme: "catppuccin-mocha", fontFamily: "JetBrainsMono Nerd Font",
+                theme: "catppuccin-mocha", lightTheme: "catppuccin-latte",
+                fontFamily: "JetBrainsMono Nerd Font",
                 fontSize: 14, tabPosition: .left, windowPadding: 8,
                 windowPaddingX: nil, windowPaddingY: nil,
                 backgroundOpacity: 1.0, backgroundBlurRadius: 0
@@ -149,7 +150,8 @@ final class TabPositionTests: XCTestCase {
         let config = CocxyConfig(
             general: .defaults,
             appearance: AppearanceConfig(
-                theme: "catppuccin-mocha", fontFamily: "JetBrainsMono Nerd Font",
+                theme: "catppuccin-mocha", lightTheme: "catppuccin-latte",
+                fontFamily: "JetBrainsMono Nerd Font",
                 fontSize: 14, tabPosition: .top, windowPadding: 8,
                 windowPaddingX: nil, windowPaddingY: nil,
                 backgroundOpacity: 1.0, backgroundBlurRadius: 0
@@ -167,7 +169,8 @@ final class TabPositionTests: XCTestCase {
         let config = CocxyConfig(
             general: .defaults,
             appearance: AppearanceConfig(
-                theme: "catppuccin-mocha", fontFamily: "JetBrainsMono Nerd Font",
+                theme: "catppuccin-mocha", lightTheme: "catppuccin-latte",
+                fontFamily: "JetBrainsMono Nerd Font",
                 fontSize: 14, tabPosition: .hidden, windowPadding: 8,
                 windowPaddingX: nil, windowPaddingY: nil,
                 backgroundOpacity: 1.0, backgroundBlurRadius: 0

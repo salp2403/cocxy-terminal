@@ -40,13 +40,13 @@ final class ScrollbackSearchBarViewModel: ObservableObject {
     @Published var useRegex: Bool = false
 
     /// Zero-based index of the currently highlighted match.
-    private(set) var currentMatchIndex: Int = 0
+    @Published private(set) var currentMatchIndex: Int = 0
 
     /// Total number of matches found.
-    private(set) var totalMatches: Int = 0
+    @Published private(set) var totalMatches: Int = 0
 
     /// The current search results.
-    private(set) var results: [SearchResult] = []
+    @Published private(set) var results: [SearchResult] = []
 
     // MARK: - Dependencies
 

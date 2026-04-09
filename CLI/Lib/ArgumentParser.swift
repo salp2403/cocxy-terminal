@@ -276,7 +276,7 @@ public enum SplitDirection: String, Equatable {
 public enum CLIArgumentParser {
 
     /// The current CLI version string.
-    public static let version = "0.1.45"
+    public static let version = "0.1.47"
 
     /// Parses command-line arguments into a `ParsedCommand`.
     ///

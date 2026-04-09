@@ -5,6 +5,50 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.47] - 2026-04-08
+
+### Fixed
+- CocxyCore AGENT_WAITING events never triggering waiting-input state in detection engine
+- CocxyCore AGENT_ERROR events invisible to detection engine and dashboard
+- Smart Routing overlay navigation broken (tabNavigator nil)
+- CLI `cocxy new-tab --dir` parameter mismatch (directory vs dir)
+- ConfigWatcher hot-reload silently replacing config with defaults on malformed TOML
+- ConfigWatcher for config.toml never instantiated in production
+- NotificationManager attention queue growing without bound (memory leak)
+- Dashboard ignoring idle transitions for pattern-detected agents (sessions stuck forever)
+- Detection engine reset() not clearing pattern detector stale matches
+- Scrollback search searchAsync() blocking MainActor on large buffers
+- Browser "Manage Profiles" button visible but non-functional
+- CLI version stuck at 0.1.45 instead of 0.1.46
+- Dashboard handleTeammateIdle setting .idle instead of .waitingForInput
+- MetalTerminalRenderer double cursor read per frame (wasted C API call)
+- IDECursorController padding hardcoded to 8,4 instead of reading configured values
+- Timeline subjects dictionary growing without bound on session clear
+- Hook events without CWD bypassing dashboard tab ownership filter
+- Search bar result count and navigation not updating after next/prev (missing @Published)
+- Bash PROMPT_COMMAND array flattened to string in Bash 5.1+
+- Bash preexec firing for every command in pipeline instead of once
+- Bash debug trap recursion guard missing cocxy helper functions
+- Fish printf using non-standard `--` end-of-options marker
+- Appearance observer hardcoding "Catppuccin Latte" as light theme
+- Session restore silencing errors without logging
+- TOML parser truncating basic strings with escaped quotes
+- Split close always focusing first leaf instead of nearest sibling
+- File descriptors leaked to child processes (missing O_CLOEXEC on 7 watchers)
+- ProjectConfig isEmpty comparison fragile against new fields
+- Bash integration loaded flag exported unnecessarily to child processes
+
+### Added
+- `reloadIfValid()` method on ConfigService for safe hot-reload
+- ConfigWatcher production instantiation with startConfigWatcher() in AppDelegate
+- `lightTheme` field in AppearanceConfig (configurable via `light-theme` in config.toml)
+- `reset()` method on PatternMatchingDetector for clean session transitions
+- Quick Terminal toggle action in Command Palette
+- Background thread search via `Task.detached` in ScrollbackSearchEngine
+- `isEmpty` computed property on ProjectConfig
+- `transitionAllPatternSessionsToIdle()` in dashboard for clean idle transitions
+- Notification queue pruning at 200 items max
+
 ## [0.1.46] - 2026-04-08
 
 ### Fixed

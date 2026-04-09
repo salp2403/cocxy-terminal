@@ -74,7 +74,7 @@ final class ScrollbackSearchEngineImpl: ScrollbackSearching {
     // MARK: - Constants
 
     /// Number of characters of context to extract before/after a match.
-    private static let contextCharacterCount = 20
+    private nonisolated static let contextCharacterCount = 20
 
     // MARK: - State
 
@@ -108,8 +108,126 @@ final class ScrollbackSearchEngineImpl: ScrollbackSearching {
 
     // MARK: - Search (Asynchronous)
 
+    /// Performs search on a background thread to avoid blocking the main thread
+    /// on large scrollback buffers. State notifications (searching/completed)
+    /// are dispatched back to MainActor.
     func searchAsync(options: SearchOptions, in lines: [String]) async -> [SearchResult] {
-        search(options: options, in: lines)
+        guard !options.query.isEmpty else {
+            stateSubject.send(.completed(resultCount: 0))
+            return []
+        }
+        stateSubject.send(.searching(progress: 0.0))
+
+        let opts = options
+        let linesCopy = lines
+
+        let results: [SearchResult] = await Task.detached(priority: .userInitiated) {
+            Self.performSearch(options: opts, in: linesCopy)
+        }.value
+
+        stateSubject.send(.completed(resultCount: results.count))
+        return results
+    }
+
+    // MARK: - Private: Thread-safe Search (no state mutation)
+
+    /// Pure search logic without state side-effects.
+    /// Safe to call from any thread.
+    private nonisolated static func performSearch(
+        options: SearchOptions, in lines: [String]
+    ) -> [SearchResult] {
+        if options.useRegex {
+            return performRegexSearch(options: options, in: lines)
+        } else {
+            return performPlainTextSearch(options: options, in: lines)
+        }
+    }
+
+    private nonisolated static func performPlainTextSearch(
+        options: SearchOptions, in lines: [String]
+    ) -> [SearchResult] {
+        var results: [SearchResult] = []
+        let comparison: String.CompareOptions = options.caseSensitive ? [] : [.caseInsensitive]
+
+        for (lineIndex, line) in lines.enumerated() {
+            if results.count >= options.maxResults { break }
+            var cursor = line.startIndex
+            while cursor < line.endIndex {
+                guard let range = line.range(
+                    of: options.query, options: comparison,
+                    range: cursor..<line.endIndex
+                ) else { break }
+
+                let column = line.distance(from: line.startIndex, to: range.lowerBound)
+                let (before, after) = extractContextStatic(from: line, matchRange: range)
+                results.append(SearchResult(
+                    id: UUID(), lineNumber: lineIndex, column: column,
+                    matchText: String(line[range]),
+                    contextBefore: before, contextAfter: after
+                ))
+                if results.count >= options.maxResults { break }
+                cursor = range.upperBound
+            }
+        }
+        return results
+    }
+
+    private nonisolated static func performRegexSearch(
+        options: SearchOptions, in lines: [String]
+    ) -> [SearchResult] {
+        var results: [SearchResult] = []
+        let regexOptions: NSRegularExpression.Options = options.caseSensitive ? [] : [.caseInsensitive]
+        guard let regex = try? NSRegularExpression(
+            pattern: options.query, options: regexOptions
+        ) else { return [] }
+
+        for (lineIndex, line) in lines.enumerated() {
+            if results.count >= options.maxResults { break }
+            let nsRange = NSRange(line.startIndex..., in: line)
+            let matches = regex.matches(in: line, range: nsRange)
+            for match in matches {
+                guard let range = Range(match.range, in: line) else { continue }
+                let column = line.distance(from: line.startIndex, to: range.lowerBound)
+                let (before, after) = extractContextStatic(from: line, matchRange: range)
+                results.append(SearchResult(
+                    id: UUID(), lineNumber: lineIndex, column: column,
+                    matchText: String(line[range]),
+                    contextBefore: before, contextAfter: after
+                ))
+                if results.count >= options.maxResults { break }
+            }
+        }
+        return results
+    }
+
+    private nonisolated static func extractContextStatic(
+        from line: String,
+        matchRange: Range<String.Index>
+    ) -> (before: String?, after: String?) {
+        let contextSize = contextCharacterCount
+        let beforeText: String?
+        if matchRange.lowerBound > line.startIndex {
+            let start = line.index(
+                matchRange.lowerBound, offsetBy: -contextSize,
+                limitedBy: line.startIndex
+            ) ?? line.startIndex
+            let s = String(line[start..<matchRange.lowerBound])
+            beforeText = s.isEmpty ? nil : s
+        } else {
+            beforeText = nil
+        }
+        let afterText: String?
+        if matchRange.upperBound < line.endIndex {
+            let end = line.index(
+                matchRange.upperBound, offsetBy: contextSize,
+                limitedBy: line.endIndex
+            ) ?? line.endIndex
+            let s = String(line[matchRange.upperBound..<end])
+            afterText = s.isEmpty ? nil : s
+        } else {
+            afterText = nil
+        }
+        return (beforeText, afterText)
     }
 
     // MARK: - Cancel

@@ -152,6 +152,18 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
         return signals
     }
 
+    // MARK: - Reset
+
+    /// Clears all sliding window state and cooldown timestamps.
+    ///
+    /// Called by the detection engine when the terminal is reused for a new
+    /// session, preventing stale pattern matches from contaminating detection.
+    func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        resetAllCounters()
+    }
+
     // MARK: - Update Configs
 
     /// Updates the compiled agent configurations.

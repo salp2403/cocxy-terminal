@@ -193,7 +193,7 @@ final class AgentTimelineStoreImpl: AgentTimelineProviding, @unchecked Sendable 
     func clearEvents(for sessionId: String) {
         lock.lock()
         eventsBySession.removeValue(forKey: sessionId)
-        let subject = subjects[sessionId]
+        let subject = subjects.removeValue(forKey: sessionId)
 
         // Rebuild cache after removing a session's events.
         cachedAllEvents.removeAll { $0.sessionId == sessionId }

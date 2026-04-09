@@ -240,7 +240,7 @@ final class MarkdownContentView: NSView {
     private func watchFileChanges(_ url: URL) {
         fileMonitor?.cancel()
 
-        let fd = open(url.path, O_EVTONLY)
+        let fd = open(url.path, O_EVTONLY | O_CLOEXEC)
         guard fd >= 0 else { return }
 
         let source = DispatchSource.makeFileSystemObjectSource(

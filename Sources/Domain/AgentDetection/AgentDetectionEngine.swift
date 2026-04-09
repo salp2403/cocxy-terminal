@@ -217,6 +217,7 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         lastTransitionTimestamp = .distantPast
         lastTransitionEventKey = nil
         oscDetector.reset()
+        patternDetector.reset()
         timingDetector.notifyStateChanged(to: .idle)
     }
 

@@ -89,8 +89,8 @@ struct CocxyCoreSemanticAdapterTests {
         #expect(capture.timeline.last?.sessionId == sessionID)
     }
 
-    @Test("Agent waiting emits a UserPromptSubmit hook")
-    func agentWaitingEmitsUserPromptSubmitHook() {
+    @Test("Agent waiting emits a TeammateIdle hook for waiting-input detection")
+    func agentWaitingEmitsTeammateIdleHook() {
         let adapter = CocxyCoreSemanticAdapter()
         let capture = SemanticCapture(adapter: adapter)
 
@@ -98,7 +98,7 @@ struct CocxyCoreSemanticAdapterTests {
             adapter.processSemanticEvent(event, for: makeSurfaceID(), cwd: "/tmp/project")
         }
 
-        #expect(capture.hooks.last?.type == .userPromptSubmit)
+        #expect(capture.hooks.last?.type == .teammateIdle)
     }
 
     @Test("Agent waiting emits a waiting timeline entry")
@@ -164,8 +164,8 @@ struct CocxyCoreSemanticAdapterTests {
         }
     }
 
-    @Test("Agent error emits only a failure timeline event")
-    func agentErrorEmitsFailureTimelineOnly() {
+    @Test("Agent error emits PostToolUseFailure hook and failure timeline event")
+    func agentErrorEmitsHookAndTimeline() {
         let adapter = CocxyCoreSemanticAdapter()
         let capture = SemanticCapture(adapter: adapter)
 
@@ -173,7 +173,8 @@ struct CocxyCoreSemanticAdapterTests {
             adapter.processSemanticEvent(event, for: makeSurfaceID(), cwd: nil)
         }
 
-        #expect(capture.hooks.isEmpty)
+        #expect(capture.hooks.count == 1)
+        #expect(capture.hooks.last?.type == .postToolUseFailure)
         #expect(capture.timeline.last?.type == .toolFailure)
         #expect(capture.timeline.last?.summary == "Boom")
         #expect(capture.timeline.last?.isError == true)

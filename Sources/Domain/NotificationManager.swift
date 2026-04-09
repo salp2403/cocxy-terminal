@@ -368,6 +368,10 @@ final class NotificationManagerImpl: NotificationManaging, UnreadCountPublishing
         lastCoalescenceTimestamps[key] = now
     }
 
+    /// Maximum number of attention items retained. Read items beyond this
+    /// limit are pruned on each enqueue to prevent unbounded memory growth.
+    private static let maxAttentionQueueSize = 200
+
     /// Creates an attention item from a notification and appends it to the queue.
     private func enqueueAttentionItem(from notification: CocxyNotification, at now: Date) {
         let item = AttentionItem(
@@ -381,6 +385,18 @@ final class NotificationManagerImpl: NotificationManaging, UnreadCountPublishing
         )
         attentionQueue.append(item)
         sortAttentionQueue()
+        pruneReadItemsIfNeeded()
+    }
+
+    /// Removes oldest read items when the queue exceeds `maxAttentionQueueSize`.
+    private func pruneReadItemsIfNeeded() {
+        guard attentionQueue.count > Self.maxAttentionQueueSize else { return }
+        // Remove read items from the end (lowest urgency, oldest) first.
+        attentionQueue.removeAll { $0.isRead }
+        // If still over limit after removing all read items, trim oldest.
+        if attentionQueue.count > Self.maxAttentionQueueSize {
+            attentionQueue = Array(attentionQueue.prefix(Self.maxAttentionQueueSize))
+        }
     }
 
     /// Publishes the notification through Combine subjects.

@@ -236,6 +236,9 @@ final class SplitManager: ObservableObject {
         // Cannot close the last leaf.
         guard rootNode.leafCount > 1 else { return }
 
+        let leafOrderBeforeClose = rootNode.allLeafIDs()
+        let closingIndex = leafOrderBeforeClose.firstIndex(where: { $0.leafID == currentFocusedID })
+
         // Find the content ID of the leaf being closed for cleanup.
         let closingLeaf = rootNode.findLeaf(id: currentFocusedID)
         let closingContentID: UUID?
@@ -257,9 +260,19 @@ final class SplitManager: ObservableObject {
             panelTitles.removeValue(forKey: contentID)
         }
 
-        // Focus the first leaf in the remaining tree.
+        // Keep focus near the pane that was closed so navigation feels local.
         let remainingLeaves = rootNode.allLeafIDs()
-        focusedLeafID = remainingLeaves.first?.leafID
+        guard !remainingLeaves.isEmpty else {
+            focusedLeafID = nil
+            return
+        }
+
+        if let closingIndex {
+            let targetIndex = min(closingIndex, remainingLeaves.count - 1)
+            focusedLeafID = remainingLeaves[targetIndex].leafID
+        } else {
+            focusedLeafID = remainingLeaves.first?.leafID
+        }
     }
 
     // MARK: - Navigation

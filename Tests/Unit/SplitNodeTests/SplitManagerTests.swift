@@ -119,6 +119,40 @@ final class SplitManagerTests: XCTestCase {
         XCTAssertEqual(manager.focusedLeafID, remainingLeafID)
     }
 
+    func testCloseFocusedWithThreePanesKeepsFocusNearClosedLeaf() {
+        let manager = SplitManager()
+        _ = manager.splitFocused(direction: .horizontal)
+        _ = manager.splitFocused(direction: .vertical)
+
+        let leavesBeforeClose = manager.rootNode.allLeafIDs()
+        XCTAssertEqual(leavesBeforeClose.count, 3)
+
+        // Focus is on the last leaf after the second split.
+        XCTAssertEqual(manager.focusedLeafID, leavesBeforeClose[2].leafID)
+
+        manager.closeFocused()
+
+        let leavesAfterClose = manager.rootNode.allLeafIDs()
+        XCTAssertEqual(leavesAfterClose.count, 2)
+        XCTAssertEqual(manager.focusedLeafID, leavesAfterClose[1].leafID)
+    }
+
+    func testCloseFocusedMiddlePanePrefersNextRemainingLeaf() {
+        let manager = SplitManager()
+        _ = manager.splitFocused(direction: .horizontal)
+        _ = manager.splitFocused(direction: .vertical)
+
+        let leavesBeforeClose = manager.rootNode.allLeafIDs()
+        XCTAssertEqual(leavesBeforeClose.count, 3)
+
+        manager.focusLeaf(id: leavesBeforeClose[1].leafID)
+        manager.closeFocused()
+
+        let leavesAfterClose = manager.rootNode.allLeafIDs()
+        XCTAssertEqual(leavesAfterClose.count, 2)
+        XCTAssertEqual(manager.focusedLeafID, leavesAfterClose[1].leafID)
+    }
+
     // MARK: - Close Focused With 1 Pane (No-op)
 
     func testCloseFocusedWithSinglePaneIsNoOp() {

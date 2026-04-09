@@ -613,7 +613,7 @@ final class SocketServerTests: XCTestCase {
         let (server, _) = try startServer(handler: handler)
         defer { server.stop() }
 
-        let request = SocketRequest(id: "nt-1", command: "new-tab", params: ["directory": "/tmp"])
+        let request = SocketRequest(id: "nt-1", command: "new-tab", params: ["dir": "/tmp"])
         let response = try performRoundTrip(request: request)
 
         XCTAssertTrue(response.success)

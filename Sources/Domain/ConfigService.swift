@@ -134,6 +134,28 @@ final class ConfigService: ConfigProviding {
         configSubject.send(config)
     }
 
+    /// Hot-reload variant that preserves current config when the file is invalid.
+    ///
+    /// Unlike `reload()`, this method first validates the TOML content before
+    /// applying it. If the file is malformed (e.g., mid-edit in vim), the
+    /// current config remains intact rather than falling back to defaults.
+    ///
+    /// Use this method for file-watcher callbacks. Use `reload()` only for
+    /// cold-start initialization where defaults are acceptable.
+    func reloadIfValid() {
+        guard let rawContent = fileProvider.readConfigFile() else { return }
+
+        do {
+            _ = try parser.parse(rawContent)
+        } catch {
+            // TOML is invalid — preserve current config.
+            return
+        }
+
+        let config = parseAndValidate(rawContent)
+        configSubject.send(config)
+    }
+
     // MARK: - Default Config File Creation
 
     /// Creates the default config file via the file provider.
@@ -158,6 +180,7 @@ final class ConfigService: ConfigProviding {
 
         [appearance]
         theme = "\(defaults.appearance.theme)"
+        light-theme = "\(defaults.appearance.lightTheme)"
         font-family = "\(defaults.appearance.fontFamily)"
         font-size = \(defaults.appearance.fontSize)
         tab-position = "\(defaults.appearance.tabPosition.rawValue)"
@@ -288,6 +311,7 @@ final class ConfigService: ConfigProviding {
 
         return AppearanceConfig(
             theme: stringValue(table["theme"]) ?? defaults.theme,
+            lightTheme: stringValue(table["light-theme"]) ?? defaults.lightTheme,
             fontFamily: stringValue(table["font-family"]) ?? defaults.fontFamily,
             fontSize: validatedFontSize,
             tabPosition: tabPosition,

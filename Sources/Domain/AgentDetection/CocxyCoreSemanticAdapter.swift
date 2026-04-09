@@ -37,8 +37,8 @@ import CocxyCoreKit
 /// | COMMAND_STARTED | — (OSCNotification) | — |
 /// | COMMAND_FINISHED | — (OSCNotification) | — |
 /// | AGENT_LAUNCHED | .sessionStart | agentDetected |
-/// | AGENT_WAITING | .userPromptSubmit | waitingForInput |
-/// | AGENT_ERROR | .postToolUseFailure | — |
+/// | AGENT_WAITING | .teammateIdle | promptDetected (waitingInput) |
+/// | AGENT_ERROR | .postToolUseFailure | errorDetected |
 /// | AGENT_FINISHED | .stop | completionDetected |
 /// | TOOL_STARTED | .preToolUse | outputReceived |
 /// | TOOL_FINISHED | .postToolUse | outputReceived |
@@ -159,7 +159,7 @@ final class CocxyCoreSemanticAdapter {
 
         case 5: // AGENT_WAITING
             emitHookEvent(
-                type: .userPromptSubmit,
+                type: .teammateIdle,
                 sessionId: sessionId,
                 cwd: cwd,
                 data: .generic,
@@ -172,9 +172,22 @@ final class CocxyCoreSemanticAdapter {
             )
 
         case 6: // AGENT_ERROR
+            let errorMessage = detail ?? "Agent error"
+            emitHookEvent(
+                type: .postToolUseFailure,
+                sessionId: sessionId,
+                cwd: cwd,
+                data: .toolUse(ToolUseData(
+                    toolName: "agent",
+                    toolInput: nil,
+                    result: nil,
+                    error: errorMessage
+                )),
+                timestamp: timestamp
+            )
             emitTimeline(
                 type: .toolFailure, sessionId: sessionId,
-                summary: detail ?? "Agent error",
+                summary: errorMessage,
                 timestamp: timestamp, isError: true,
                 windowID: windowID, windowLabel: windowLabel
             )

@@ -47,7 +47,7 @@ final class ProjectConfigWatcher {
         guard !isWatching else { return }
         self.onChange = onChange
 
-        let fd = open(watchedPath, O_EVTONLY)
+        let fd = open(watchedPath, O_EVTONLY | O_CLOEXEC)
         guard fd >= 0 else {
             // File doesn't exist yet. Don't mark as watching — caller can retry
             // on next tab switch when the file may have been created.

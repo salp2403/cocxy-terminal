@@ -216,7 +216,7 @@ public struct CommandRunner {
         case .newTab(let directory):
             var params: [String: String]? = nil
             if let directory {
-                params = ["directory": directory]
+                params = ["dir": directory]
             }
             return CLISocketRequest(id: requestID, command: "new-tab", params: params)
 

@@ -6,15 +6,23 @@
 if [[ -n "${_COCXY_BASH_INTEGRATION_LOADED:-}" ]]; then
   return 0
 fi
-export _COCXY_BASH_INTEGRATION_LOADED=1
+_COCXY_BASH_INTEGRATION_LOADED=1
 
 _COCXY_EXECUTING=0
+_COCXY_PREEXEC_FIRED=0
 _COCXY_LAST_REPORTED_CWD=""
 _COCXY_SAVED_PS1="$PS1"
 _COCXY_SAVED_PS2="$PS2"
 _COCXY_MARKED_PS1=""
 _COCXY_MARKED_PS2=""
-_COCXY_OLD_PROMPT_COMMAND="${PROMPT_COMMAND:-}"
+# Preserve PROMPT_COMMAND as array (Bash 5.1+) or string (older).
+if [[ ${#PROMPT_COMMAND[@]} -gt 1 ]] 2>/dev/null; then
+  _COCXY_OLD_PROMPT_COMMAND=("${PROMPT_COMMAND[@]}")
+  _COCXY_PC_IS_ARRAY=1
+else
+  _COCXY_OLD_PROMPT_COMMAND="${PROMPT_COMMAND:-}"
+  _COCXY_PC_IS_ARRAY=0
+fi
 _COCXY_DEBUG_TRAP_RAW="$(trap -p DEBUG)"
 
 if [[ "$_COCXY_DEBUG_TRAP_RAW" =~ ^trap\ --\ \'(.*)\'\ DEBUG$ ]]; then
@@ -82,6 +90,7 @@ __cocxy_precmd() {
     builtin printf '\e]133;D;%s\a' "$status"
     _COCXY_EXECUTING=0
   fi
+  _COCXY_PREEXEC_FIRED=0
 
   __cocxy_report_pwd
 
@@ -93,6 +102,13 @@ __cocxy_precmd() {
 }
 
 __cocxy_preexec() {
+  # Guard: fire only once per command (DEBUG trap fires for each
+  # simple command in a pipeline/compound statement).
+  if [[ "$_COCXY_PREEXEC_FIRED" == "1" ]]; then
+    return
+  fi
+  _COCXY_PREEXEC_FIRED=1
+
   local command_text="$1"
 
   __cocxy_restore_prompts
@@ -110,7 +126,7 @@ __cocxy_debug_trap() {
   local command_text="${BASH_COMMAND:-}"
 
   case "$command_text" in
-    __cocxy_precmd*|__cocxy_preexec*|__cocxy_debug_trap*|trap*DEBUG*|"")
+    __cocxy_precmd*|__cocxy_preexec*|__cocxy_debug_trap*|__cocxy_wrap_prompts*|__cocxy_restore_prompts*|__cocxy_report_pwd*|trap*DEBUG*|"")
       ;;
     *)
       __cocxy_preexec "$command_text"
@@ -123,7 +139,9 @@ __cocxy_debug_trap() {
 }
 
 trap '__cocxy_debug_trap' DEBUG
-if [[ -n "$_COCXY_OLD_PROMPT_COMMAND" ]]; then
+if [[ "$_COCXY_PC_IS_ARRAY" == "1" ]]; then
+  PROMPT_COMMAND=('__cocxy_precmd' "${_COCXY_OLD_PROMPT_COMMAND[@]}")
+elif [[ -n "$_COCXY_OLD_PROMPT_COMMAND" ]]; then
   PROMPT_COMMAND="__cocxy_precmd; ${_COCXY_OLD_PROMPT_COMMAND}"
 else
   PROMPT_COMMAND='__cocxy_precmd'

@@ -151,7 +151,7 @@ struct BrowserPanelView: View {
                             colorHex: "#89B4FA"
                         )
                     },
-                    onManageProfiles: {}
+                    onManageProfiles: nil
                 )
             }
 
