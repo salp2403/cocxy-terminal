@@ -1365,6 +1365,12 @@ bool cocxycore_image_get_info(
     uint32_t image_id,
     cocxycore_image_info* out
 );
+/** Query metadata for the Nth live stored image (0-based). Returns false when out of range. */
+bool cocxycore_image_get_info_at(
+    const cocxycore_terminal* term,
+    uint32_t index,
+    cocxycore_image_info* out
+);
 /** Delete a stored image and all of its placements. */
 void cocxycore_image_delete(cocxycore_terminal* term, uint32_t image_id);
 /** Delete all stored images and placements, resetting the image atlas. */

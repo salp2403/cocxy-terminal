@@ -442,7 +442,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowPaddingX: paddingX,
             windowPaddingY: paddingY,
             clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
-                ?? TerminalConfig.defaults.clipboardReadAccess
+                ?? TerminalConfig.defaults.clipboardReadAccess,
+            ligaturesEnabled: configService?.current.appearance.ligatures
+                ?? AppearanceConfig.defaults.ligatures,
+            imageMemoryLimitBytes: UInt64(
+                (configService?.current.terminal.imageMemoryLimitMB
+                    ?? TerminalConfig.defaults.imageMemoryLimitMB) * 1024 * 1024
+            ),
+            imageFileTransferEnabled: configService?.current.terminal.imageFileTransfer
+                ?? TerminalConfig.defaults.imageFileTransfer,
+            sixelImagesEnabled: configService?.current.terminal.enableSixelImages
+                ?? TerminalConfig.defaults.enableSixelImages,
+            kittyImagesEnabled: configService?.current.terminal.enableKittyImages
+                ?? TerminalConfig.defaults.enableKittyImages
         )
 
         do {
@@ -520,7 +532,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             shell: newConfig.general.shell,
             windowPaddingX: newConfig.appearance.effectivePaddingX,
             windowPaddingY: newConfig.appearance.effectivePaddingY,
-            clipboardReadAccess: newConfig.terminal.clipboardReadAccess
+            clipboardReadAccess: newConfig.terminal.clipboardReadAccess,
+            ligaturesEnabled: newConfig.appearance.ligatures,
+            imageMemoryLimitBytes: UInt64(newConfig.terminal.imageMemoryLimitMB) * 1024 * 1024,
+            imageFileTransferEnabled: newConfig.terminal.imageFileTransfer,
+            sixelImagesEnabled: newConfig.terminal.enableSixelImages,
+            kittyImagesEnabled: newConfig.terminal.enableKittyImages
         )
 
         let fontChanged =
@@ -529,12 +546,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let paddingChanged =
             oldConfig?.appearance.effectivePaddingX != newConfig.appearance.effectivePaddingX ||
             oldConfig?.appearance.effectivePaddingY != newConfig.appearance.effectivePaddingY
+        let ligaturesChanged = oldConfig?.appearance.ligatures != newConfig.appearance.ligatures
+        let imageSettingsChanged =
+            oldConfig?.terminal.imageMemoryLimitMB != newConfig.terminal.imageMemoryLimitMB ||
+            oldConfig?.terminal.imageFileTransfer != newConfig.terminal.imageFileTransfer ||
+            oldConfig?.terminal.enableSixelImages != newConfig.terminal.enableSixelImages ||
+            oldConfig?.terminal.enableKittyImages != newConfig.terminal.enableKittyImages
         let themeChanged = oldConfig?.appearance.theme != newConfig.appearance.theme
 
         if fontChanged {
             cocxyBridge.applyFont(
                 family: newConfig.appearance.fontFamily,
                 size: newConfig.appearance.fontSize
+            )
+        } else if ligaturesChanged {
+            cocxyBridge.applyLigaturesEnabled(newConfig.appearance.ligatures)
+        }
+
+        if imageSettingsChanged {
+            cocxyBridge.applyImageSettings(
+                memoryLimitBytes: UInt64(newConfig.terminal.imageMemoryLimitMB) * 1024 * 1024,
+                fileTransferEnabled: newConfig.terminal.imageFileTransfer,
+                sixelEnabled: newConfig.terminal.enableSixelImages,
+                kittyEnabled: newConfig.terminal.enableKittyImages
             )
         }
 
@@ -592,7 +626,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowPaddingX: paddingX,
             windowPaddingY: paddingY,
             clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
-                ?? TerminalConfig.defaults.clipboardReadAccess
+                ?? TerminalConfig.defaults.clipboardReadAccess,
+            ligaturesEnabled: configService?.current.appearance.ligatures
+                ?? AppearanceConfig.defaults.ligatures,
+            imageMemoryLimitBytes: UInt64(
+                (configService?.current.terminal.imageMemoryLimitMB
+                    ?? TerminalConfig.defaults.imageMemoryLimitMB) * 1024 * 1024
+            ),
+            imageFileTransferEnabled: configService?.current.terminal.imageFileTransfer
+                ?? TerminalConfig.defaults.imageFileTransfer,
+            sixelImagesEnabled: configService?.current.terminal.enableSixelImages
+                ?? TerminalConfig.defaults.enableSixelImages,
+            kittyImagesEnabled: configService?.current.terminal.enableKittyImages
+                ?? TerminalConfig.defaults.enableKittyImages
         )
 
         do {
@@ -1373,6 +1419,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             configProvider: liveConfigProvider,
+            statusDetailsProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.runtimeStatusDetailsForCLI() ?? [:]
+                }
+            },
             themeEngineProvider: {
                 if Thread.isMainThread {
                     return MainActor.assumeIsolated {
@@ -1771,6 +1822,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         bridge.sendText("\(sshCommand)\r", to: sid)
                     }
                     return (id: newTab.id.rawValue.uuidString, title: destination)
+                }
+            },
+            webStartProvider: { bind, port, token, maxConnections, fps in
+                syncOnMainActor {
+                    delegateRef.value?.startWebTerminalForCLI(
+                        bindAddress: bind,
+                        port: port,
+                        token: token,
+                        maxConnections: maxConnections,
+                        maxFPS: fps
+                    )
+                }
+            },
+            webStopProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.stopWebTerminalForCLI() ?? false
+                }
+            },
+            webStatusProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.webStatusForCLI()
+                }
+            },
+            streamListProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.streamListForCLI()
+                }
+            },
+            streamCurrentProvider: { streamID in
+                syncOnMainActor {
+                    delegateRef.value?.setCurrentStreamForCLI(streamID)
+                }
+            },
+            protocolCapabilitiesProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.requestProtocolCapabilitiesForCLI()
+                }
+            },
+            protocolViewportProvider: { requestID in
+                syncOnMainActor {
+                    delegateRef.value?.sendProtocolViewportForCLI(requestID: requestID)
+                }
+            },
+            protocolSendProvider: { type, payload in
+                syncOnMainActor {
+                    delegateRef.value?.sendProtocolMessageForCLI(type: type, payload: payload)
+                }
+            },
+            imageListProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.listImagesForCLI()
+                }
+            },
+            imageDeleteProvider: { imageID in
+                syncOnMainActor {
+                    delegateRef.value?.deleteImageForCLI(imageID)
+                }
+            },
+            imageClearProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.clearImagesForCLI()
                 }
             }
         )

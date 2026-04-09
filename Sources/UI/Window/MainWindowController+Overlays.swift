@@ -484,20 +484,33 @@ extension MainWindowController {
         guard let viewModel = searchBarViewModel else { return }
 
         searchQueryCancellable?.cancel()
-        searchQueryCancellable = viewModel.$query
+        searchQueryCancellable = Publishers.CombineLatest3(
+            viewModel.$query,
+            viewModel.$caseSensitive,
+            viewModel.$useRegex
+        )
             .debounce(for: .milliseconds(150), scheduler: DispatchQueue.main)
-            .removeDuplicates()
-            .sink { [weak self, weak viewModel] _ in
+            .removeDuplicates(by: { lhs, rhs in
+                lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2
+            })
+            .sink { [weak self, weak viewModel] query, caseSensitive, useRegex in
                 guard let self, let viewModel else { return }
-                let searchLines: [String]
+                let options = SearchOptions(
+                    query: query,
+                    caseSensitive: caseSensitive,
+                    useRegex: useRegex
+                )
+
                 if let surfaceID = self.activeSearchSurfaceID(),
-                   let cocxyBridge = self.bridge as? CocxyCoreBridge {
-                    let historyLines = cocxyBridge.historyLines(for: surfaceID)
-                    searchLines = historyLines.isEmpty ? self.terminalOutputBuffer.lines : historyLines
-                } else {
-                    searchLines = self.terminalOutputBuffer.lines
+                   let nativeResults = self.bridge.searchScrollback(
+                       surfaceID: surfaceID,
+                       options: options
+                   ) {
+                    viewModel.applySearchResults(nativeResults)
+                    return
                 }
 
+                let searchLines = self.searchLinesForActiveSurface()
                 viewModel.performSearch(in: searchLines)
             }
 
@@ -538,6 +551,16 @@ extension MainWindowController {
 
     private func activeSearchSurfaceID() -> SurfaceID? {
         activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+    }
+
+    private func searchLinesForActiveSurface() -> [String] {
+        guard let surfaceID = activeSearchSurfaceID(),
+              let cocxyBridge = bridge as? CocxyCoreBridge else {
+            return terminalOutputBuffer.lines
+        }
+
+        let historyLines = cocxyBridge.historyLines(for: surfaceID)
+        return historyLines.isEmpty ? terminalOutputBuffer.lines : historyLines
     }
 
     // MARK: - Smart Routing Overlay (Cmd+Shift+U)

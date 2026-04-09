@@ -205,6 +205,34 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// Toggle fullscreen for the focused window.
     case windowFullscreen = "window-fullscreen"
 
+    // MARK: - Web Terminal (v5)
+
+    /// Start the CocxyCore web terminal for the focused surface.
+    case webStart = "web-start"
+    /// Stop the CocxyCore web terminal for the focused surface.
+    case webStop = "web-stop"
+    /// Inspect CocxyCore web terminal status for the focused surface.
+    case webStatus = "web-status"
+
+    // MARK: - CocxyCore Diagnostics & Protocol (v5)
+
+    /// List CocxyCore process streams for the focused surface.
+    case streamList = "stream-list"
+    /// Set the current CocxyCore stream for the focused surface.
+    case streamCurrent = "stream-current"
+    /// Request a Protocol v2 capabilities exchange from the focused surface.
+    case protocolCapabilities = "protocol-capabilities"
+    /// Emit a Protocol v2 viewport update from the focused surface.
+    case protocolViewport = "protocol-viewport"
+    /// Send an explicit Protocol v2 message from the focused surface.
+    case protocolSend = "protocol-send"
+    /// List stored inline images for the focused surface.
+    case imageList = "image-list"
+    /// Delete a specific inline image from the focused surface.
+    case imageDelete = "image-delete"
+    /// Clear all inline images from the focused surface.
+    case imageClear = "image-clear"
+
     // MARK: - Session Management (v3)
 
     /// Save the current session to disk.

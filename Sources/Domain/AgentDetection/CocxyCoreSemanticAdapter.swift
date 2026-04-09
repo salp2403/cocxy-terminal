@@ -81,6 +81,9 @@ final class CocxyCoreSemanticAdapter {
     /// Track the last detected agent name per surface for context.
     private var agentNames: [SurfaceID: String] = [:]
 
+    /// Sessions that already emitted a synthetic start event.
+    private var startedSessions: Set<String> = []
+
     // MARK: - Public API
 
     /// Process a semantic event from CocxyCore and emit corresponding
@@ -130,6 +133,7 @@ final class CocxyCoreSemanticAdapter {
         case 3: // AGENT_LAUNCHED
             let agentName = detail ?? "agent"
             agentNames[surfaceID] = agentName
+            startedSessions.insert(sessionId)
 
             emitHookEvent(
                 type: .sessionStart,
@@ -207,6 +211,7 @@ final class CocxyCoreSemanticAdapter {
                 windowID: windowID, windowLabel: windowLabel
             )
             agentNames.removeValue(forKey: surfaceID)
+            startedSessions.remove(sessionId)
 
         // Tool events (8-9) → synthesize tool-use HookEvents
         case 8: // TOOL_STARTED
@@ -318,8 +323,219 @@ final class CocxyCoreSemanticAdapter {
         }
     }
 
+    /// Process a structured Protocol v2 message emitted by CocxyCore.
+    ///
+    /// This gives the host a higher-fidelity signal for agent/subagent/tool
+    /// activity than generic process tracking alone.
+    func processProtocolV2Message(
+        type: String,
+        payload: String,
+        for surfaceID: SurfaceID,
+        cwd: String?
+    ) {
+        guard let json = payload.data(using: .utf8),
+              let rootObject = try? JSONSerialization.jsonObject(with: json) as? [String: Any] else {
+            return
+        }
+
+        let sessionId = sessionID(for: surfaceID, cwd: cwd)
+        let timestamp = Date()
+        let (windowID, windowLabel) = windowMetadataProvider?(surfaceID, cwd) ?? (nil, nil)
+        let data = rootObject["data"] as? [String: Any] ?? [:]
+
+        switch type {
+        case "agent.status":
+            let state = (data["state"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let agentName = ((data["agent_name"] as? String) ?? (data["name"] as? String) ?? "agent")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let task = (data["task"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !agentName.isEmpty {
+                agentNames[surfaceID] = agentName
+            }
+            ensureSessionStarted(
+                sessionId: sessionId,
+                cwd: cwd,
+                agentName: agentName.isEmpty ? nil : agentName,
+                timestamp: timestamp
+            )
+
+            switch state {
+            case "waiting":
+                emitHookEvent(
+                    type: .teammateIdle,
+                    sessionId: sessionId,
+                    cwd: cwd,
+                    data: .teammateIdle(TeammateIdleData()),
+                    timestamp: timestamp
+                )
+                emitTimeline(
+                    type: .agentResponse,
+                    sessionId: sessionId,
+                    summary: task.map { "Waiting for input: \($0)" } ?? "Waiting for input",
+                    timestamp: timestamp,
+                    windowID: windowID,
+                    windowLabel: windowLabel
+                )
+            case "error":
+                let summary = task ?? "Agent error"
+                emitHookEvent(
+                    type: .postToolUseFailure,
+                    sessionId: sessionId,
+                    cwd: cwd,
+                    data: .toolUse(ToolUseData(
+                        toolName: "agent",
+                        toolInput: nil,
+                        result: nil,
+                        error: summary
+                    )),
+                    timestamp: timestamp
+                )
+                emitTimeline(
+                    type: .toolFailure,
+                    sessionId: sessionId,
+                    summary: summary,
+                    timestamp: timestamp,
+                    isError: true,
+                    windowID: windowID,
+                    windowLabel: windowLabel
+                )
+            case "done", "idle":
+                emitHookEvent(
+                    type: .stop,
+                    sessionId: sessionId,
+                    cwd: cwd,
+                    data: .stop(StopData()),
+                    timestamp: timestamp
+                )
+                emitTimeline(
+                    type: .sessionEnd,
+                    sessionId: sessionId,
+                    summary: task.map { "Agent finished: \($0)" }
+                        ?? "Agent finished: \(agentName.isEmpty ? "agent" : agentName)",
+                    timestamp: timestamp,
+                    windowID: windowID,
+                    windowLabel: windowLabel
+                )
+                startedSessions.remove(sessionId)
+            case "working":
+                emitTimeline(
+                    type: .agentResponse,
+                    sessionId: sessionId,
+                    summary: task.map { "Working: \($0)" }
+                        ?? "Agent working: \(agentName.isEmpty ? "agent" : agentName)",
+                    timestamp: timestamp,
+                    windowID: windowID,
+                    windowLabel: windowLabel
+                )
+            default:
+                break
+            }
+
+        case "agent.tool_call":
+            let toolName = ((data["tool_name"] as? String) ?? "unknown")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let callID = (data["call_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ensureSessionStarted(sessionId: sessionId, cwd: cwd, agentName: agentNames[surfaceID], timestamp: timestamp)
+            emitHookEvent(
+                type: .preToolUse,
+                sessionId: sessionId,
+                cwd: cwd,
+                data: .toolUse(ToolUseData(
+                    toolName: toolName.isEmpty ? "unknown" : toolName,
+                    toolInput: callID.map { ["call_id": $0] },
+                    result: nil
+                )),
+                timestamp: timestamp
+            )
+            emitTimeline(
+                type: .toolUse,
+                sessionId: sessionId,
+                toolName: toolName.isEmpty ? "unknown" : toolName,
+                summary: "Tool started: \(toolName.isEmpty ? "unknown" : toolName)",
+                timestamp: timestamp,
+                windowID: windowID,
+                windowLabel: windowLabel
+            )
+
+        case "agent.tool_result":
+            let success = data["success"] as? Bool ?? true
+            let summary = ((data["summary"] as? String) ?? (success ? "Tool finished" : "Tool failed"))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let callID = (data["call_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ensureSessionStarted(sessionId: sessionId, cwd: cwd, agentName: agentNames[surfaceID], timestamp: timestamp)
+            emitHookEvent(
+                type: success ? .postToolUse : .postToolUseFailure,
+                sessionId: sessionId,
+                cwd: cwd,
+                data: .toolUse(ToolUseData(
+                    toolName: "protocol_v2",
+                    toolInput: callID.map { ["call_id": $0] },
+                    result: success ? summary : nil,
+                    error: success ? nil : summary
+                )),
+                timestamp: timestamp
+            )
+            emitTimeline(
+                type: success ? .toolUse : .toolFailure,
+                sessionId: sessionId,
+                toolName: success ? "protocol_v2" : nil,
+                summary: summary,
+                timestamp: timestamp,
+                isError: !success,
+                windowID: windowID,
+                windowLabel: windowLabel
+            )
+
+        case "agent.subagent":
+            let action = ((data["action"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let subagentID = ((data["subagent_id"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let subagentName = ((data["name"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !subagentID.isEmpty else { return }
+            ensureSessionStarted(sessionId: sessionId, cwd: cwd, agentName: agentNames[surfaceID], timestamp: timestamp)
+
+            let hookType: HookEventType
+            let timelineType: TimelineEventType
+            let summary: String
+            switch action {
+            case "exit":
+                hookType = .subagentStop
+                timelineType = .subagentStop
+                summary = "Subagent finished: \(subagentName.isEmpty ? subagentID : subagentName)"
+            default:
+                hookType = .subagentStart
+                timelineType = .subagentStart
+                summary = "Subagent started: \(subagentName.isEmpty ? subagentID : subagentName)"
+            }
+
+            emitHookEvent(
+                type: hookType,
+                sessionId: sessionId,
+                cwd: cwd,
+                data: .subagent(SubagentData(
+                    subagentId: subagentID,
+                    subagentType: subagentName.isEmpty ? nil : subagentName
+                )),
+                timestamp: timestamp
+            )
+            emitTimeline(
+                type: timelineType,
+                sessionId: sessionId,
+                summary: summary,
+                timestamp: timestamp,
+                windowID: windowID,
+                windowLabel: windowLabel
+            )
+
+        default:
+            break
+        }
+    }
+
     /// Clean up state for a destroyed surface.
     func surfaceDestroyed(_ surfaceID: SurfaceID) {
+        if let sessionID = sessionIDs[surfaceID] {
+            startedSessions.remove(sessionID)
+        }
         sessionIDs.removeValue(forKey: surfaceID)
         agentNames.removeValue(forKey: surfaceID)
     }
@@ -339,6 +555,23 @@ final class CocxyCoreSemanticAdapter {
         let id = "cocxycore-\(surfaceID.rawValue.uuidString.prefix(8))"
         sessionIDs[surfaceID] = id
         return id
+    }
+
+    private func ensureSessionStarted(
+        sessionId: String,
+        cwd: String?,
+        agentName: String?,
+        timestamp: Date
+    ) {
+        guard !startedSessions.contains(sessionId) else { return }
+        startedSessions.insert(sessionId)
+        emitHookEvent(
+            type: .sessionStart,
+            sessionId: sessionId,
+            cwd: cwd,
+            data: .sessionStart(SessionStartData(agentType: agentName ?? "agent")),
+            timestamp: timestamp
+        )
     }
 
     /// Extract detail text from a semantic event.

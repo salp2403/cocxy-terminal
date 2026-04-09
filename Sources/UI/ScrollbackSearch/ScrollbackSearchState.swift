@@ -80,8 +80,17 @@ final class ScrollbackSearchBarViewModel: ObservableObject {
             useRegex: useRegex
         )
 
-        results = searchEngine.search(options: options, in: lines)
-        totalMatches = results.count
+        applySearchResults(searchEngine.search(options: options, in: lines))
+    }
+
+    /// Applies externally computed results while keeping the view-model state
+    /// consistent with locally executed searches.
+    ///
+    /// This lets the host swap in CocxyCore-native search without duplicating
+    /// the result-count and navigation bookkeeping here.
+    func applySearchResults(_ newResults: [SearchResult]) {
+        results = newResults
+        totalMatches = newResults.count
         currentMatchIndex = 0
     }
 

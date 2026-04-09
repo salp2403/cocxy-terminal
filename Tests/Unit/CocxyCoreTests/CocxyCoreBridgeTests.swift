@@ -40,10 +40,23 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.surfaceState(for: surfaceID) == nil)
     }
 
+    @Test("process monitor registration exposes shell PID and PTY master fd")
+    func processMonitorRegistrationExposesRuntimeMetadata() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let registration = try #require(bridge.processMonitorRegistration(for: surfaceID))
+        #expect(registration.shellPID > 0)
+        #expect(registration.ptyMasterFD >= 0)
+        #expect(registration.shellIdentity?.pid == registration.shellPID)
+    }
+
     @Test("surfaceState returns nil for unknown surfaces")
     func surfaceStateReturnsNilForUnknownSurface() throws {
         let bridge = try makeBridge()
         #expect(bridge.surfaceState(for: SurfaceID()) == nil)
+        #expect(bridge.processMonitorRegistration(for: SurfaceID()) == nil)
     }
 
     @Test("historyLines returns the lines fed into the terminal")
@@ -57,6 +70,26 @@ struct CocxyCoreBridgeTests {
 
         let lines = bridge.historyLines(for: surfaceID).filter { !$0.isEmpty }
         #expect(Array(lines.prefix(3)) == ["alpha", "beta", "gamma"])
+    }
+
+    @Test("searchScrollback uses CocxyCore native search and preserves match coordinates")
+    func searchScrollbackUsesNativeSearch() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("alpha\r\nbeta\r\ngamma\r\n", to: state.terminal)
+
+        let results = try #require(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "BETA", caseSensitive: false, useRegex: false)
+        ))
+
+        #expect(results.count == 1)
+        #expect(results[0].lineNumber == 1)
+        #expect(results[0].column == 0)
+        #expect(results[0].matchText.lowercased() == "beta")
     }
 
     @Test("historyVisibleStart reports the live bottom before scrolling")
@@ -222,6 +255,87 @@ struct CocxyCoreBridgeTests {
 
         #expect(bridge.configuredPaddingX == 20)
         #expect(bridge.configuredPaddingY == 10)
+    }
+
+    @Test("applyLigaturesEnabled updates diagnostics for existing surfaces")
+    func applyLigaturesEnabledUpdatesDiagnostics() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        #expect(bridge.ligatureDiagnostics(for: surfaceID)?.enabled == true)
+        bridge.applyLigaturesEnabled(false, to: surfaceID)
+        #expect(bridge.ligatureDiagnostics(for: surfaceID)?.enabled == false)
+    }
+
+    @Test("applyImageSettings updates image diagnostics for existing surfaces")
+    func applyImageSettingsUpdatesDiagnostics() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        bridge.applyImageSettings(
+            memoryLimitBytes: 128 * 1024 * 1024,
+            fileTransferEnabled: true,
+            sixelEnabled: false,
+            kittyEnabled: true,
+            to: surfaceID
+        )
+
+        let diagnostics = try #require(bridge.imageDiagnostics(for: surfaceID))
+        #expect(diagnostics.memoryLimitBytes == 128 * 1024 * 1024)
+        #expect(diagnostics.fileTransferEnabled == true)
+        #expect(diagnostics.sixelEnabled == false)
+        #expect(diagnostics.kittyEnabled == true)
+    }
+
+    @Test("image snapshots enumerate live image metadata in a stable order")
+    func imageSnapshotsEnumerateLiveImages() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}_Ga=T,f=32,s=1,v=1,i=7;/wAA/w==\u{1B}\\", to: state.terminal)
+        feed("\u{1B}_Ga=T,f=32,s=1,v=1,i=11;AP8A/w==\u{1B}\\", to: state.terminal)
+
+        try await waitUntil {
+            bridge.imageSnapshots(for: surfaceID).count == 2
+        }
+
+        #expect(bridge.imageSnapshots(for: surfaceID).map(\.imageID) == [7, 11])
+    }
+
+    @Test("deleteImage removes a specific inline image")
+    func deleteImageRemovesSpecificImage() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}_Ga=T,f=32,s=1,v=1,i=7;/wAA/w==\u{1B}\\", to: state.terminal)
+        feed("\u{1B}_Ga=T,f=32,s=1,v=1,i=11;AP8A/w==\u{1B}\\", to: state.terminal)
+
+        try await waitUntil {
+            bridge.imageSnapshots(for: surfaceID).count == 2
+        }
+
+        #expect(bridge.deleteImage(7, for: surfaceID) == true)
+        #expect(bridge.imageSnapshots(for: surfaceID).map(\.imageID) == [11])
+    }
+
+    @Test("protocol diagnostics track outbound capability requests")
+    func protocolDiagnosticsTrackProtocolState() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+
+        #expect(bridge.protocolDiagnostics(for: surfaceID)?.observed == false)
+        #expect(bridge.requestProtocolV2Capabilities(for: surfaceID) == true)
+        #expect(bridge.sendProtocolV2Viewport(for: surfaceID, requestID: "test-request") == true)
+
+        let diagnostics = try #require(bridge.protocolDiagnostics(for: surfaceID))
+        #expect(diagnostics.capabilitiesRequested == true)
     }
 
     @Test("applyFont updates the live terminal font metrics")

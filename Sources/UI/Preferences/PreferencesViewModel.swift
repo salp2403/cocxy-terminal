@@ -59,6 +59,8 @@ final class PreferencesViewModel: ObservableObject {
 
     /// Uniform window padding in points. Clamped to 0...40 on save.
     @Published var windowPadding: Double
+    /// Whether typographic ligatures are enabled.
+    @Published var ligatures: Bool
 
     /// Window background opacity (0.3 = very transparent, 1.0 = fully opaque).
     /// Controls vibrancy on sidebar, tab strip, and status bar.
@@ -108,6 +110,14 @@ final class PreferencesViewModel: ObservableObject {
 
     /// Whether the cursor blinks, from the saved config.
     var cursorBlink: Bool { savedConfig.terminal.cursorBlink }
+    /// Whether inline image file transfer is enabled.
+    @Published var imageFileTransfer: Bool
+    /// Whether sixel images are enabled.
+    @Published var enableSixelImages: Bool
+    /// Whether kitty images are enabled.
+    @Published var enableKittyImages: Bool
+    /// Inline image memory limit in MiB.
+    @Published var imageMemoryLimitMB: Int
 
     // MARK: - Read-Only Keybindings
 
@@ -163,7 +173,12 @@ final class PreferencesViewModel: ObservableObject {
             || fontSize != c.appearance.fontSize
             || tabPosition != c.appearance.tabPosition.rawValue
             || windowPadding != c.appearance.windowPadding
+            || ligatures != c.appearance.ligatures
             || backgroundOpacity != c.appearance.backgroundOpacity
+            || imageFileTransfer != c.terminal.imageFileTransfer
+            || enableSixelImages != c.terminal.enableSixelImages
+            || enableKittyImages != c.terminal.enableKittyImages
+            || imageMemoryLimitMB != c.terminal.imageMemoryLimitMB
             || agentDetectionEnabled != c.agentDetection.enabled
             || oscNotifications != c.agentDetection.oscNotifications
             || patternMatching != c.agentDetection.patternMatching
@@ -187,7 +202,12 @@ final class PreferencesViewModel: ObservableObject {
         fontSize = c.appearance.fontSize
         tabPosition = c.appearance.tabPosition.rawValue
         windowPadding = c.appearance.windowPadding
+        ligatures = c.appearance.ligatures
         backgroundOpacity = c.appearance.backgroundOpacity
+        imageFileTransfer = c.terminal.imageFileTransfer
+        enableSixelImages = c.terminal.enableSixelImages
+        enableKittyImages = c.terminal.enableKittyImages
+        imageMemoryLimitMB = c.terminal.imageMemoryLimitMB
         agentDetectionEnabled = c.agentDetection.enabled
         oscNotifications = c.agentDetection.oscNotifications
         patternMatching = c.agentDetection.patternMatching
@@ -234,6 +254,7 @@ final class PreferencesViewModel: ObservableObject {
         self.fontSize = config.appearance.fontSize
         self.tabPosition = config.appearance.tabPosition.rawValue
         self.windowPadding = config.appearance.windowPadding
+        self.ligatures = config.appearance.ligatures
         self.backgroundOpacity = config.appearance.backgroundOpacity
 
         // Agent Detection
@@ -249,6 +270,10 @@ final class PreferencesViewModel: ObservableObject {
         self.badgeOnTab = config.notifications.badgeOnTab
         self.flashTab = config.notifications.flashTab
         self.showDockBadge = config.notifications.showDockBadge
+        self.imageFileTransfer = config.terminal.imageFileTransfer
+        self.enableSixelImages = config.terminal.enableSixelImages
+        self.enableKittyImages = config.terminal.enableKittyImages
+        self.imageMemoryLimitMB = config.terminal.imageMemoryLimitMB
 
         // Available themes from built-in list.
         self.availableThemes = Self.defaultThemeNames()
@@ -293,10 +318,24 @@ final class PreferencesViewModel: ObservableObject {
                 windowPadding: windowPadding,
                 windowPaddingX: savedConfig.appearance.windowPaddingX,
                 windowPaddingY: savedConfig.appearance.windowPaddingY,
+                ligatures: ligatures,
                 backgroundOpacity: clampedOpacity,
                 backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius
             ),
-            terminal: savedConfig.terminal,
+            terminal: TerminalConfig(
+                scrollbackLines: savedConfig.terminal.scrollbackLines,
+                cursorStyle: savedConfig.terminal.cursorStyle,
+                cursorBlink: savedConfig.terminal.cursorBlink,
+                cursorOpacity: savedConfig.terminal.cursorOpacity,
+                mouseHideWhileTyping: savedConfig.terminal.mouseHideWhileTyping,
+                copyOnSelect: savedConfig.terminal.copyOnSelect,
+                clipboardPasteProtection: savedConfig.terminal.clipboardPasteProtection,
+                clipboardReadAccess: savedConfig.terminal.clipboardReadAccess,
+                imageMemoryLimitMB: imageMemoryLimitMB,
+                imageFileTransfer: imageFileTransfer,
+                enableSixelImages: enableSixelImages,
+                enableKittyImages: enableKittyImages
+            ),
             agentDetection: AgentDetectionConfig(
                 enabled: agentDetectionEnabled,
                 oscNotifications: oscNotifications,
@@ -331,6 +370,7 @@ final class PreferencesViewModel: ObservableObject {
         let clampedPadding = Int(min(max(windowPadding, 0), 40))
         let clampedOpacity = min(max(backgroundOpacity, 0.3), 1.0)
         let clampedTimeout = min(max(idleTimeoutSeconds, 1), 300)
+        let clampedImageMemoryLimitMB = min(max(imageMemoryLimitMB, 1), 4096)
 
         let defaults = savedConfig
 
@@ -350,6 +390,7 @@ final class PreferencesViewModel: ObservableObject {
         font-size = \(clampedFontSize)
         tab-position = "\(tabPosition)"
         window-padding = \(clampedPadding)
+        ligatures = \(ligatures)
         background-opacity = \(String(format: "%.2f", clampedOpacity))
 
         [terminal]
@@ -358,6 +399,10 @@ final class PreferencesViewModel: ObservableObject {
         cursor-blink = \(defaults.terminal.cursorBlink)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
         clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
+        image-memory-limit-mb = \(clampedImageMemoryLimitMB)
+        image-file-transfer = \(imageFileTransfer)
+        enable-sixel-images = \(enableSixelImages)
+        enable-kitty-images = \(enableKittyImages)
 
         [agent-detection]
         enabled = \(agentDetectionEnabled)

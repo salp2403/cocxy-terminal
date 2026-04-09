@@ -341,11 +341,17 @@ final class CocxyCoreView: NSView {
 
     override func becomeFirstResponder() -> Bool {
         isFocused = true
+        if let bridge, let sid = surfaceID {
+            bridge.notifyFocus(true, for: sid)
+        }
         return true
     }
 
     override func resignFirstResponder() -> Bool {
         isFocused = false
+        if let bridge, let sid = surfaceID {
+            bridge.notifyFocus(false, for: sid)
+        }
         return true
     }
 

@@ -376,7 +376,7 @@ final class MetalTerminalRenderer {
 
         guard cellCount > 0,
               let cellBuffer = cellBuffer,
-              cocxycore_terminal_build_metal_frame(terminal, atlasWidth, atlasHeight)
+              cocxycore_terminal_build_gpu_frame(terminal, atlasWidth, atlasHeight)
         else { return false }
 
         uploadAtlasIfNeeded(terminal: terminal)
@@ -412,12 +412,12 @@ final class MetalTerminalRenderer {
         let rows = self.rows
         let cols = self.cols
 
-        var cell = cocxycore_metal_cell()
+        var cell = cocxycore_gpu_cell()
         var idx = 0
 
         for row in 0..<rows {
             for col in 0..<cols {
-                cocxycore_terminal_metal_cell(terminal, row, col, &cell)
+                cocxycore_terminal_gpu_cell(terminal, row, col, &cell)
 
                 ptr[idx] = CellInstance(
                     x: cell.x, y: cell.y,
@@ -494,8 +494,8 @@ final class MetalTerminalRenderer {
     }
 
     private func readCursor(terminal: OpaquePointer) -> CursorInstance {
-        var cursor = cocxycore_metal_cursor()
-        cocxycore_terminal_metal_cursor(terminal, &cursor)
+        var cursor = cocxycore_gpu_cursor()
+        cocxycore_terminal_gpu_cursor(terminal, &cursor)
         return CursorInstance(
             x: cursor.x, y: cursor.y,
             width: cursor.width, height: cursor.height,
@@ -508,8 +508,8 @@ final class MetalTerminalRenderer {
 
     private func readBackgroundClearColor(terminal: OpaquePointer) -> MTLClearColor {
         // Read cell (0,0) background as the clear color
-        var cell = cocxycore_metal_cell()
-        cocxycore_terminal_metal_cell(terminal, 0, 0, &cell)
+        var cell = cocxycore_gpu_cell()
+        cocxycore_terminal_gpu_cell(terminal, 0, 0, &cell)
         return MTLClearColor(
             red: Double(cell.bg.r) / 255.0,
             green: Double(cell.bg.g) / 255.0,
@@ -530,8 +530,8 @@ final class MetalTerminalRenderer {
     // MARK: - Private: Atlas Management
 
     private func uploadAtlasIfNeeded(terminal: OpaquePointer) {
-        var info = cocxycore_metal_atlas_info()
-        guard cocxycore_terminal_metal_atlas_info(terminal, &info) else { return }
+        var info = cocxycore_gpu_atlas_info()
+        guard cocxycore_terminal_gpu_atlas_info(terminal, &info) else { return }
 
         let needsUpload = info.dirty || info.generation != lastAtlasGeneration
 
@@ -557,7 +557,7 @@ final class MetalTerminalRenderer {
         // Copy atlas bitmap from CocxyCore
         let byteCount = Int(info.width) * Int(info.height)
         var bitmap = [UInt8](repeating: 0, count: byteCount)
-        let copied = cocxycore_terminal_metal_copy_atlas_bitmap(terminal, &bitmap, byteCount)
+        let copied = cocxycore_terminal_gpu_copy_atlas_bitmap(terminal, &bitmap, byteCount)
 
         if copied > 0 {
             texture.replace(
@@ -568,7 +568,7 @@ final class MetalTerminalRenderer {
             )
         }
 
-        cocxycore_terminal_metal_clear_atlas_dirty(terminal)
+        cocxycore_terminal_gpu_clear_atlas_dirty(terminal)
         lastAtlasGeneration = info.generation
     }
 

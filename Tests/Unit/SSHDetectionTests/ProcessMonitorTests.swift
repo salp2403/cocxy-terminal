@@ -11,6 +11,90 @@ import SwiftUI
 
 final class ForegroundProcessDetectorTests: XCTestCase {
 
+    func testSelectForegroundProcessPrefersForegroundGroupLeader() {
+        let snapshots: [ForegroundProcessDetector.ProcessSnapshot] = [
+            .init(pid: 100, parentPID: 1, processGroupID: 100, name: "zsh"),
+            .init(pid: 200, parentPID: 100, processGroupID: 200, name: "ssh"),
+            .init(pid: 201, parentPID: 200, processGroupID: 200, name: "ssh-helper"),
+        ]
+
+        let selected = ForegroundProcessDetector.selectForegroundProcess(
+            shellPID: 100,
+            foregroundProcessGroupID: 200,
+            snapshots: snapshots
+        )
+
+        XCTAssertEqual(selected?.pid, 200)
+        XCTAssertEqual(selected?.name, "ssh")
+    }
+
+    func testSelectForegroundProcessFindsNestedForegroundDescendant() {
+        let snapshots: [ForegroundProcessDetector.ProcessSnapshot] = [
+            .init(pid: 100, parentPID: 1, processGroupID: 100, name: "zsh"),
+            .init(pid: 150, parentPID: 100, processGroupID: 150, name: "tmux"),
+            .init(pid: 250, parentPID: 150, processGroupID: 250, name: "nvim"),
+        ]
+
+        let selected = ForegroundProcessDetector.selectForegroundProcess(
+            shellPID: 100,
+            foregroundProcessGroupID: 250,
+            snapshots: snapshots
+        )
+
+        XCTAssertEqual(selected?.pid, 250)
+        XCTAssertEqual(selected?.name, "nvim")
+    }
+
+    func testSelectForegroundProcessFallsBackToNewestDescendantWithoutForegroundGroup() {
+        let snapshots: [ForegroundProcessDetector.ProcessSnapshot] = [
+            .init(pid: 100, parentPID: 1, processGroupID: 100, name: "zsh"),
+            .init(pid: 200, parentPID: 100, processGroupID: 200, name: "claude"),
+            .init(pid: 210, parentPID: 100, processGroupID: 210, name: "python"),
+        ]
+
+        let selected = ForegroundProcessDetector.selectForegroundProcess(
+            shellPID: 100,
+            foregroundProcessGroupID: nil,
+            snapshots: snapshots
+        )
+
+        XCTAssertEqual(selected?.pid, 210)
+        XCTAssertEqual(selected?.name, "python")
+    }
+
+    func testSelectForegroundProcessFallsBackToShellWhenNoDescendantsExist() {
+        let snapshots: [ForegroundProcessDetector.ProcessSnapshot] = [
+            .init(pid: 100, parentPID: 1, processGroupID: 100, name: "zsh")
+        ]
+
+        let selected = ForegroundProcessDetector.selectForegroundProcess(
+            shellPID: 100,
+            foregroundProcessGroupID: 999,
+            snapshots: snapshots
+        )
+
+        XCTAssertEqual(selected?.pid, 100)
+        XCTAssertEqual(selected?.name, "zsh")
+    }
+
+    func testDetectRejectsRecycledShellPIDWhenIdentityDoesNotMatch() {
+        let shellPID = getpid()
+        let mismatchedIdentity = TerminalProcessIdentity(
+            pid: shellPID,
+            startSeconds: 0,
+            startMicroseconds: 0
+        )
+
+        let info = ForegroundProcessDetector.detect(
+            shellPID: shellPID,
+            ptyMasterFD: nil,
+            expectedShellIdentity: mismatchedIdentity,
+            snapshots: []
+        )
+
+        XCTAssertNil(info)
+    }
+
     func testProcessNameForCurrentPID() {
         let pid = getpid()
         let name = ForegroundProcessDetector.processName(for: pid)
@@ -104,12 +188,14 @@ final class ProcessMonitorServiceTests: XCTestCase {
         let event = ProcessChangeEvent(
             tabID: tabID,
             processName: "ssh",
+            pid: 1234,
             sshSession: sshInfo
         )
 
         XCTAssertEqual(event.processName, "ssh")
         XCTAssertEqual(event.sshSession?.host, "server.com")
         XCTAssertEqual(event.tabID, tabID)
+        XCTAssertEqual(event.pid, 1234)
     }
 
     // MARK: - Process Monitor Wiring Tests
@@ -144,6 +230,7 @@ final class ProcessMonitorServiceTests: XCTestCase {
         let event = ProcessChangeEvent(
             tabID: tabID,
             processName: "ssh",
+            pid: 4321,
             sshSession: SSHSessionInfo(
                 user: "root", host: "server",
                 port: nil, hasIdentityFile: false, flags: []

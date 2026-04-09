@@ -138,6 +138,20 @@ public enum CLICommand: String, CaseIterable {
 
     case ssh
 
+    // MARK: - Web Terminal (v5)
+
+    case webStart = "web-start"
+    case webStop = "web-stop"
+    case webStatus = "web-status"
+    case streamList = "stream-list"
+    case streamCurrent = "stream-current"
+    case protocolCapabilities = "protocol-capabilities"
+    case protocolViewport = "protocol-viewport"
+    case protocolSend = "protocol-send"
+    case imageList = "image-list"
+    case imageDelete = "image-delete"
+    case imageClear = "image-clear"
+
     /// Whether this command is internal (hidden from --help).
     public var isInternal: Bool {
         switch self {
@@ -252,6 +266,17 @@ public enum CLICommand: String, CaseIterable {
         case .notificationList: return "List recent notifications as JSON"
         case .notificationClear: return "Clear notification badge and unread count"
         case .ssh: return "Open SSH session in a new tab"
+        case .webStart: return "Start the CocxyCore web terminal for the focused surface"
+        case .webStop: return "Stop the CocxyCore web terminal for the focused surface"
+        case .webStatus: return "Show CocxyCore web terminal status for the focused surface"
+        case .streamList: return "List CocxyCore process streams for the focused surface"
+        case .streamCurrent: return "Select the active CocxyCore stream for the focused surface"
+        case .protocolCapabilities: return "Request a Protocol v2 capabilities exchange from the focused surface"
+        case .protocolViewport: return "Send a Protocol v2 viewport update from the focused surface"
+        case .protocolSend: return "Send an explicit Protocol v2 JSON message from the focused surface"
+        case .imageList: return "List inline images stored for the focused surface"
+        case .imageDelete: return "Delete a specific inline image from the focused surface"
+        case .imageClear: return "Clear inline images from the focused surface"
         }
     }
 
@@ -361,6 +386,17 @@ public enum CLICommand: String, CaseIterable {
         case .notificationList: return "cocxy notification list [--limit <n>]"
         case .notificationClear: return "cocxy notification clear"
         case .ssh: return "cocxy ssh user@host [-p port] [-i key]"
+        case .webStart: return "cocxy web start [--bind <address>] [--port <port>] [--token <token>] [--fps <n>]"
+        case .webStop: return "cocxy web stop"
+        case .webStatus: return "cocxy web status"
+        case .streamList: return "cocxy stream list"
+        case .streamCurrent: return "cocxy stream current <id>"
+        case .protocolCapabilities: return "cocxy protocol capabilities"
+        case .protocolViewport: return "cocxy protocol viewport [--request-id <id>]"
+        case .protocolSend: return "cocxy protocol send --type <type> --json <json>"
+        case .imageList: return "cocxy image list"
+        case .imageDelete: return "cocxy image delete <id>"
+        case .imageClear: return "cocxy image clear"
         }
     }
 }

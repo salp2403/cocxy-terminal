@@ -22,10 +22,6 @@ extension MainWindowController {
         guard let surfaceView = terminalSurfaceView else { return }
 
         do {
-            // Snapshot child PIDs before surface creation to identify
-            // the new shell process spawned for the first tab.
-            let childrenBefore = snapshotChildPIDs()
-
             let surfaceID = try bridge.createSurface(
                 in: surfaceView,
                 workingDirectory: nil,
@@ -43,11 +39,7 @@ extension MainWindowController {
                 tabViewModels[firstTabID] = terminalViewModel
                 displayedTabID = firstTabID
 
-                // Register tab with process monitor for SSH detection.
-                let childrenAfter = snapshotChildPIDs()
-                if let shellPID = findNewShellPID(current: childrenAfter, previous: childrenBefore) {
-                    processMonitor?.registerTab(firstTabID, shellPID: shellPID)
-                }
+                registerSurfaceWithProcessMonitor(surfaceID, tabID: firstTabID)
                 wireSurfaceHandlers(
                     for: surfaceID,
                     tabID: firstTabID,
@@ -59,6 +51,18 @@ extension MainWindowController {
             NSLog("[MainWindowController] Failed to create terminal surface: %@",
                   String(describing: error))
         }
+    }
+
+    func registerSurfaceWithProcessMonitor(_ surfaceID: SurfaceID, tabID: TabID) {
+        guard let registration = bridge.processMonitorRegistration(for: surfaceID) else {
+            return
+        }
+        processMonitor?.registerTab(
+            tabID,
+            shellPID: registration.shellPID,
+            ptyMasterFD: registration.ptyMasterFD,
+            shellIdentity: registration.shellIdentity
+        )
     }
 
     // MARK: - Shared Handler Wiring

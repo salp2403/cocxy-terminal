@@ -128,6 +128,33 @@ protocol TerminalEngine: AnyObject {
     ///   - surfaceID: The surface to scroll.
     ///   - lineNumber: The zero-based line number in the scrollback buffer.
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int)
+
+    /// Notifies the engine that the host surface gained or lost focus.
+    ///
+    /// Engines can use this to forward focus changes to the PTY/terminal state,
+    /// update cursor behavior, or dispatch focus-related hooks.
+    /// - Parameters:
+    ///   - focused: `true` when the surface is focused and its window is key.
+    ///   - surface: Target surface.
+    func notifyFocus(_ focused: Bool, for surface: SurfaceID)
+
+    /// Searches terminal scrollback using the engine's native facilities.
+    ///
+    /// Engines may return `nil` when they do not offer a native search path.
+    /// The host will then fall back to its Swift-side search engine.
+    /// - Parameters:
+    ///   - surfaceID: The surface whose combined history should be searched.
+    ///   - options: Search configuration.
+    /// - Returns: Search results, or `nil` if no native search path exists.
+    func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]?
+
+    /// Returns process-monitor metadata for a surface when the engine can
+    /// expose a real PTY-backed shell process.
+    ///
+    /// This lets the host monitor foreground processes without guessing shell
+    /// PIDs from global process snapshots. Engines that do not support PTYs can
+    /// return `nil`.
+    func processMonitorRegistration(for surface: SurfaceID) -> TerminalProcessMonitorRegistration?
 }
 
 // MARK: - Supporting Types
@@ -161,6 +188,25 @@ struct TerminalSize: Equatable, Sendable {
     let pixelWidth: UInt16
     /// Height in pixels (for GPU rendering).
     let pixelHeight: UInt16
+}
+
+/// PTY-backed process metadata that the host can use for foreground-process
+/// detection without relying on process-tree heuristics.
+struct TerminalProcessMonitorRegistration: Equatable, Sendable {
+    let shellPID: pid_t
+    let ptyMasterFD: Int32
+    let shellIdentity: TerminalProcessIdentity?
+}
+
+/// Stable identity for a process PID on macOS.
+///
+/// The PID alone is not enough because the kernel may recycle it after exit.
+/// Pairing it with the process start time lets the host reject stale or
+/// recycled shell PIDs when monitoring foreground process changes.
+struct TerminalProcessIdentity: Equatable, Sendable {
+    let pid: pid_t
+    let startSeconds: UInt64
+    let startMicroseconds: UInt64
 }
 
 /// Keyboard event abstraction decoupled from AppKit's `NSEvent`.
@@ -218,6 +264,18 @@ struct KeyModifiers: OptionSet, Sendable {
     static let command = KeyModifiers(rawValue: 1 << 3)
 }
 
+extension TerminalEngine {
+    func processMonitorRegistration(for surface: SurfaceID) -> TerminalProcessMonitorRegistration? {
+        nil
+    }
+
+    func notifyFocus(_ focused: Bool, for surface: SurfaceID) {}
+
+    func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
+        nil
+    }
+}
+
 /// Parsed OSC (Operating System Command) notification from the terminal.
 ///
 /// These are the standard OSC sequences used by shell integration and
@@ -271,6 +329,16 @@ struct TerminalEngineConfig: Sendable {
     let windowPaddingY: Double
     /// Policy for OSC 52 clipboard reads initiated by terminal programs.
     let clipboardReadAccess: ClipboardReadAccess
+    /// Whether typographic ligatures should be enabled.
+    let ligaturesEnabled: Bool
+    /// Maximum inline-image memory budget in bytes.
+    let imageMemoryLimitBytes: UInt64
+    /// Whether inline image file-transfer mode is enabled.
+    let imageFileTransferEnabled: Bool
+    /// Whether Sixel inline images are enabled.
+    let sixelImagesEnabled: Bool
+    /// Whether Kitty inline images are enabled.
+    let kittyImagesEnabled: Bool
 
     init(
         fontFamily: String,
@@ -281,7 +349,12 @@ struct TerminalEngineConfig: Sendable {
         themePalette: ThemePalette? = nil,
         windowPaddingX: Double = 8,
         windowPaddingY: Double = 4,
-        clipboardReadAccess: ClipboardReadAccess = .prompt
+        clipboardReadAccess: ClipboardReadAccess = .prompt,
+        ligaturesEnabled: Bool = true,
+        imageMemoryLimitBytes: UInt64 = 256 * 1024 * 1024,
+        imageFileTransferEnabled: Bool = false,
+        sixelImagesEnabled: Bool = true,
+        kittyImagesEnabled: Bool = true
     ) {
         self.fontFamily = fontFamily
         self.fontSize = fontSize
@@ -292,6 +365,11 @@ struct TerminalEngineConfig: Sendable {
         self.windowPaddingX = windowPaddingX
         self.windowPaddingY = windowPaddingY
         self.clipboardReadAccess = clipboardReadAccess
+        self.ligaturesEnabled = ligaturesEnabled
+        self.imageMemoryLimitBytes = imageMemoryLimitBytes
+        self.imageFileTransferEnabled = imageFileTransferEnabled
+        self.sixelImagesEnabled = sixelImagesEnabled
+        self.kittyImagesEnabled = kittyImagesEnabled
     }
 
     func replacing(
@@ -303,7 +381,12 @@ struct TerminalEngineConfig: Sendable {
         themePalette: ThemePalette? = nil,
         windowPaddingX: Double? = nil,
         windowPaddingY: Double? = nil,
-        clipboardReadAccess: ClipboardReadAccess? = nil
+        clipboardReadAccess: ClipboardReadAccess? = nil,
+        ligaturesEnabled: Bool? = nil,
+        imageMemoryLimitBytes: UInt64? = nil,
+        imageFileTransferEnabled: Bool? = nil,
+        sixelImagesEnabled: Bool? = nil,
+        kittyImagesEnabled: Bool? = nil
     ) -> TerminalEngineConfig {
         TerminalEngineConfig(
             fontFamily: fontFamily ?? self.fontFamily,
@@ -314,7 +397,12 @@ struct TerminalEngineConfig: Sendable {
             themePalette: themePalette ?? self.themePalette,
             windowPaddingX: windowPaddingX ?? self.windowPaddingX,
             windowPaddingY: windowPaddingY ?? self.windowPaddingY,
-            clipboardReadAccess: clipboardReadAccess ?? self.clipboardReadAccess
+            clipboardReadAccess: clipboardReadAccess ?? self.clipboardReadAccess,
+            ligaturesEnabled: ligaturesEnabled ?? self.ligaturesEnabled,
+            imageMemoryLimitBytes: imageMemoryLimitBytes ?? self.imageMemoryLimitBytes,
+            imageFileTransferEnabled: imageFileTransferEnabled ?? self.imageFileTransferEnabled,
+            sixelImagesEnabled: sixelImagesEnabled ?? self.sixelImagesEnabled,
+            kittyImagesEnabled: kittyImagesEnabled ?? self.kittyImagesEnabled
         )
     }
 }

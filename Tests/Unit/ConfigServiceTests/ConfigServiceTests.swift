@@ -37,6 +37,11 @@ final class ConfigServiceDefaultTests: XCTestCase {
         XCTAssertEqual(config.appearance.fontSize, 14)
         XCTAssertEqual(config.appearance.tabPosition, .left)
         XCTAssertEqual(config.appearance.windowPadding, 8)
+        XCTAssertTrue(config.appearance.ligatures)
+        XCTAssertEqual(config.terminal.imageMemoryLimitMB, 256)
+        XCTAssertFalse(config.terminal.imageFileTransfer)
+        XCTAssertTrue(config.terminal.enableSixelImages)
+        XCTAssertTrue(config.terminal.enableKittyImages)
         XCTAssertTrue(config.agentDetection.enabled)
         XCTAssertTrue(config.agentDetection.oscNotifications)
         XCTAssertEqual(config.agentDetection.idleTimeoutSeconds, 5)
@@ -97,11 +102,16 @@ final class ConfigServiceFullParsingTests: XCTestCase {
         font-size = 16.0
         tab-position = "top"
         window-padding = 12.0
+        ligatures = false
 
         [terminal]
         scrollback-lines = 25000
         clipboard-paste-protection = false
         clipboard-read-access = "deny"
+        image-memory-limit-mb = 512
+        image-file-transfer = true
+        enable-sixel-images = false
+        enable-kitty-images = true
 
         [agent-detection]
         enabled = false
@@ -151,10 +161,15 @@ final class ConfigServiceFullParsingTests: XCTestCase {
         XCTAssertEqual(config.appearance.fontSize, 16.0)
         XCTAssertEqual(config.appearance.tabPosition, .top)
         XCTAssertEqual(config.appearance.windowPadding, 12.0)
+        XCTAssertFalse(config.appearance.ligatures)
 
         XCTAssertEqual(config.terminal.scrollbackLines, 25000)
         XCTAssertFalse(config.terminal.clipboardPasteProtection)
         XCTAssertEqual(config.terminal.clipboardReadAccess, .deny)
+        XCTAssertEqual(config.terminal.imageMemoryLimitMB, 512)
+        XCTAssertTrue(config.terminal.imageFileTransfer)
+        XCTAssertFalse(config.terminal.enableSixelImages)
+        XCTAssertTrue(config.terminal.enableKittyImages)
 
         XCTAssertFalse(config.agentDetection.enabled)
         XCTAssertFalse(config.agentDetection.oscNotifications)

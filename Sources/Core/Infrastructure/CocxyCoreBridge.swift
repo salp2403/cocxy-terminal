@@ -5,6 +5,80 @@ import AppKit
 import Darwin
 import CocxyCoreKit
 
+struct TerminalLigatureDiagnostics: Equatable, Sendable {
+    let enabled: Bool
+    let cacheHits: UInt32
+    let cacheMisses: UInt32
+}
+
+struct TerminalImageDiagnostics: Equatable, Sendable {
+    let imageCount: UInt32
+    let memoryUsedBytes: UInt64
+    let memoryLimitBytes: UInt64
+    let fileTransferEnabled: Bool
+    let sixelEnabled: Bool
+    let kittyEnabled: Bool
+    let atlasWidth: UInt32
+    let atlasHeight: UInt32
+    let atlasGeneration: UInt32
+    let atlasDirty: Bool
+}
+
+struct TerminalImageSnapshot: Equatable, Sendable {
+    let imageID: UInt32
+    let width: UInt32
+    let height: UInt32
+    let byteSize: UInt32
+    let source: UInt8
+    let placementCount: UInt16
+}
+
+struct TerminalSearchDiagnostics: Equatable, Sendable {
+    let gpuActive: Bool
+    let indexedRows: UInt32
+}
+
+struct TerminalProtocolDiagnostics: Equatable, Sendable {
+    let observed: Bool
+    let capabilitiesRequested: Bool
+    let currentStreamID: UInt32
+}
+
+struct TerminalStreamSnapshot: Equatable, Sendable {
+    let streamID: UInt32
+    let pid: pid_t
+    let parentPID: pid_t
+    let state: UInt8
+    let exitCode: Int16
+}
+
+struct WebTerminalConfiguration: Equatable, Sendable {
+    let bindAddress: String
+    let port: UInt16
+    let authToken: String
+    let maxConnections: UInt16
+    let maxFrameRate: UInt32
+
+    static let `default` = WebTerminalConfiguration(
+        bindAddress: "127.0.0.1",
+        port: 7770,
+        authToken: "",
+        maxConnections: 4,
+        maxFrameRate: 60
+    )
+}
+
+struct WebTerminalStatus: Equatable, Sendable {
+    let running: Bool
+    let bindAddress: String
+    let port: UInt16
+    let connectionCount: UInt16
+    let authRequired: Bool
+    let maxFrameRate: UInt32
+    let lastEventType: String?
+    let lastEventConnectionID: UInt16?
+}
+
 // MARK: - CocxyCore Bridge
 
 /// Concrete implementation of `TerminalEngine` using CocxyCore's C API.
@@ -40,13 +114,32 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// All state associated with a single terminal surface.
     struct SurfaceState {
+        struct WebServerState {
+            let handle: OpaquePointer
+            let bindAddress: String
+            let authToken: String
+            var maxFrameRate: UInt32
+            var lastEventType: String?
+            var lastEventConnectionID: UInt16?
+        }
+
         let terminal: OpaquePointer      // cocxycore_terminal*
         let pty: OpaquePointer           // cocxycore_pty*
+        let masterFD: Int32
+        let childPID: pid_t
+        let childProcessIdentity: TerminalProcessIdentity?
         let readSource: DispatchSourceRead
         let contextBox: Unmanaged<CallbackContext>
         weak var hostView: NSView?
         var lastKnownWorkingDirectory: URL?
         var lastFallbackWorkingDirectoryProbeAt: TimeInterval = 0
+        var lastReportedFocus: Bool?
+        var webServer: WebServerState?
+        var currentStreamID: UInt32 = 0
+        var protocolV2Observed: Bool = false
+        var protocolV2CapabilitiesRequested: Bool = false
+        var configuredImageMemoryLimitBytes: UInt64 = 256 * 1024 * 1024
+        var configuredImageFileTransferEnabled: Bool = false
 
         var outputHandler: (@Sendable (Data) -> Void)?
         var oscHandler: (@Sendable (OSCNotification) -> Void)?
@@ -109,6 +202,9 @@ final class CocxyCoreBridge: TerminalEngine {
     /// When shell integration is absent, probe the PTY child cwd at a low rate
     /// so sidebar/session routing can still converge without polling every read.
     private static let fallbackWorkingDirectoryProbeInterval: TimeInterval = 0.35
+
+    /// Context extracted around native search matches for UI display.
+    private static let searchContextCharacterCount = 20
 
     // MARK: - Initialization
 
@@ -211,10 +307,16 @@ final class CocxyCoreBridge: TerminalEngine {
         surfaces[surfaceID] = SurfaceState(
             terminal: terminal,
             pty: pty,
+            masterFD: masterFd,
+            childPID: childPid,
+            childProcessIdentity: processIdentity(for: childPid),
             readSource: readSource,
             contextBox: contextBox,
             hostView: view,
-            lastKnownWorkingDirectory: (workingDirectory ?? config.workingDirectory).standardizedFileURL
+            lastKnownWorkingDirectory: (workingDirectory ?? config.workingDirectory).standardizedFileURL,
+            lastReportedFocus: nil,
+            configuredImageMemoryLimitBytes: config.imageMemoryLimitBytes,
+            configuredImageFileTransferEnabled: config.imageFileTransferEnabled
         )
 
         readSource.resume()
@@ -226,6 +328,12 @@ final class CocxyCoreBridge: TerminalEngine {
 
         // Clean up semantic adapter state for this surface.
         semanticAdapter.surfaceDestroyed(id)
+
+        if let webState = state.webServer {
+            cocxycore_web_detach_terminal(webState.handle)
+            cocxycore_web_stop(webState.handle)
+            cocxycore_web_destroy(webState.handle)
+        }
 
         // Resource teardown is deferred to the source's cancel handler so
         // any in-flight read callback drains before the raw pointers vanish.
@@ -299,6 +407,12 @@ final class CocxyCoreBridge: TerminalEngine {
         guard let state = surfaces[surface] else { return }
         cocxycore_terminal_resize(state.terminal, size.rows, size.columns)
         cocxycore_pty_resize(state.pty, size.rows, size.columns)
+        if let webState = state.webServer {
+            cocxycore_web_force_full_frame(webState.handle)
+        }
+        if state.protocolV2Observed {
+            _ = sendProtocolV2Viewport(for: surface, requestID: nil)
+        }
     }
 
     func tick() {
@@ -337,7 +451,74 @@ final class CocxyCoreBridge: TerminalEngine {
             UInt32(clampedTopRow)
         ) else { return }
 
+        if state.protocolV2Observed {
+            _ = sendProtocolV2Viewport(for: surfaceID, requestID: nil)
+        }
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
+        guard var state = surfaces[surface] else { return }
+        guard state.lastReportedFocus != focused else { return }
+
+        cocxycore_terminal_notify_focus(state.terminal, focused)
+        state.lastReportedFocus = focused
+        surfaces[surface] = state
+        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
+        guard let state = surfaces[surfaceID] else { return nil }
+        guard !options.query.isEmpty else { return [] }
+        guard let engine = cocxycore_gpu_search_init(state.terminal) else { return nil }
+        defer { cocxycore_gpu_search_destroy(engine) }
+
+        cocxycore_gpu_search_sync(engine, state.terminal)
+
+        let cappedResultCount = max(1, min(options.maxResults, Int(UInt32.max)))
+        var matches = Array(
+            repeating: cocxycore_search_match(row: 0, start_col: 0, end_col: 0),
+            count: cappedResultCount
+        )
+        var elapsedMicros: UInt64 = 0
+
+        let matchCount = options.query.withCString { queryPtr in
+            matches.withUnsafeMutableBufferPointer { buffer -> UInt32 in
+                guard let baseAddress = buffer.baseAddress else { return 0 }
+                return cocxycore_gpu_search_find(
+                    engine,
+                    state.terminal,
+                    queryPtr,
+                    UInt32(options.query.utf8.count),
+                    options.useRegex,
+                    !options.caseSensitive,
+                    0,
+                    0,
+                    0,
+                    UInt32(cappedResultCount),
+                    baseAddress,
+                    &elapsedMicros
+                )
+            }
+        }
+
+        guard matchCount > 0 else { return [] }
+
+        let columnCount = cocxycore_terminal_cols(state.terminal)
+        return matches.prefix(Int(matchCount)).map { match in
+            let line = historyLineText(
+                terminal: state.terminal,
+                absoluteRow: match.row,
+                columnCount: columnCount
+            )
+            return Self.makeSearchResult(
+                line: line,
+                lineNumber: Int(match.row),
+                startColumn: Int(match.start_col),
+                endColumnInclusive: Int(match.end_col),
+                fallbackMatchText: options.query
+            )
+        }
     }
 
     // MARK: - Extended API (beyond TerminalEngine protocol)
@@ -345,6 +526,354 @@ final class CocxyCoreBridge: TerminalEngine {
     /// Access surface state for renderer and view integration (Block 2-3).
     func surfaceState(for id: SurfaceID) -> SurfaceState? {
         surfaces[id]
+    }
+
+    func processMonitorRegistration(for id: SurfaceID) -> TerminalProcessMonitorRegistration? {
+        guard let state = surfaces[id],
+              state.childPID > 0,
+              state.masterFD >= 0 else {
+            return nil
+        }
+
+        return TerminalProcessMonitorRegistration(
+            shellPID: state.childPID,
+            ptyMasterFD: state.masterFD,
+            shellIdentity: state.childProcessIdentity
+        )
+    }
+
+    func ligatureDiagnostics(for surface: SurfaceID) -> TerminalLigatureDiagnostics? {
+        guard let state = surfaces[surface] else { return nil }
+        return TerminalLigatureDiagnostics(
+            enabled: cocxycore_terminal_get_ligatures(state.terminal),
+            cacheHits: cocxycore_ligature_cache_hits(state.terminal),
+            cacheMisses: cocxycore_ligature_cache_misses(state.terminal)
+        )
+    }
+
+    func applyLigaturesEnabled(_ enabled: Bool) {
+        updateDefaults(ligaturesEnabled: enabled)
+        for surface in surfaces.keys {
+            applyLigaturesEnabled(enabled, to: surface)
+        }
+    }
+
+    func applyLigaturesEnabled(_ enabled: Bool, to surface: SurfaceID) {
+        guard let state = surfaces[surface] else { return }
+        cocxycore_terminal_set_ligatures(state.terminal, enabled)
+        if let webState = state.webServer {
+            cocxycore_web_force_full_frame(webState.handle)
+        }
+        (state.hostView as? TerminalHostView)?.updateInteractionMetrics()
+        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    func imageDiagnostics(for surface: SurfaceID) -> TerminalImageDiagnostics? {
+        guard let state = surfaces[surface] else { return nil }
+        var atlasInfo = cocxycore_image_atlas_info()
+        let hasAtlasInfo = cocxycore_image_get_atlas_info(state.terminal, &atlasInfo)
+        return TerminalImageDiagnostics(
+            imageCount: cocxycore_image_count(state.terminal),
+            memoryUsedBytes: cocxycore_image_memory_used(state.terminal),
+            memoryLimitBytes: state.configuredImageMemoryLimitBytes,
+            fileTransferEnabled: state.configuredImageFileTransferEnabled,
+            sixelEnabled: cocxycore_image_sixel_enabled(state.terminal),
+            kittyEnabled: cocxycore_image_kitty_enabled(state.terminal),
+            atlasWidth: hasAtlasInfo ? atlasInfo.width : 0,
+            atlasHeight: hasAtlasInfo ? atlasInfo.height : 0,
+            atlasGeneration: hasAtlasInfo ? atlasInfo.generation : 0,
+            atlasDirty: hasAtlasInfo ? atlasInfo.dirty : false
+        )
+    }
+
+    func imageSnapshots(for surface: SurfaceID) -> [TerminalImageSnapshot] {
+        guard let state = surfaces[surface] else { return [] }
+        let count = cocxycore_image_count(state.terminal)
+        guard count > 0 else { return [] }
+
+        var snapshots: [TerminalImageSnapshot] = []
+        snapshots.reserveCapacity(Int(count))
+        for index in 0..<count {
+            var info = cocxycore_image_info()
+            guard cocxycore_image_get_info_at(state.terminal, index, &info) else { continue }
+            snapshots.append(
+                TerminalImageSnapshot(
+                    imageID: info.image_id,
+                    width: info.width,
+                    height: info.height,
+                    byteSize: info.byte_size,
+                    source: info.source,
+                    placementCount: info.placement_count
+                )
+            )
+        }
+        return snapshots.sorted { $0.imageID < $1.imageID }
+    }
+
+    func applyImageSettings(
+        memoryLimitBytes: UInt64,
+        fileTransferEnabled: Bool,
+        sixelEnabled: Bool,
+        kittyEnabled: Bool
+    ) {
+        updateDefaults(
+            imageMemoryLimitBytes: memoryLimitBytes,
+            imageFileTransferEnabled: fileTransferEnabled,
+            sixelImagesEnabled: sixelEnabled,
+            kittyImagesEnabled: kittyEnabled
+        )
+        for surface in surfaces.keys {
+            applyImageSettings(
+                memoryLimitBytes: memoryLimitBytes,
+                fileTransferEnabled: fileTransferEnabled,
+                sixelEnabled: sixelEnabled,
+                kittyEnabled: kittyEnabled,
+                to: surface
+            )
+        }
+    }
+
+    func applyImageSettings(
+        memoryLimitBytes: UInt64,
+        fileTransferEnabled: Bool,
+        sixelEnabled: Bool,
+        kittyEnabled: Bool,
+        to surface: SurfaceID
+    ) {
+        guard var state = surfaces[surface] else { return }
+        cocxycore_image_set_memory_limit(state.terminal, memoryLimitBytes)
+        cocxycore_image_set_file_transfer(state.terminal, fileTransferEnabled)
+        cocxycore_image_enable_sixel(state.terminal, sixelEnabled)
+        cocxycore_image_enable_kitty(state.terminal, kittyEnabled)
+        state.configuredImageMemoryLimitBytes = memoryLimitBytes
+        state.configuredImageFileTransferEnabled = fileTransferEnabled
+        surfaces[surface] = state
+        if let webState = state.webServer {
+            cocxycore_web_force_full_frame(webState.handle)
+        }
+        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    func searchDiagnostics(for surface: SurfaceID) -> TerminalSearchDiagnostics? {
+        guard let state = surfaces[surface] else { return nil }
+        guard let engine = cocxycore_gpu_search_init(state.terminal) else { return nil }
+        defer { cocxycore_gpu_search_destroy(engine) }
+        cocxycore_gpu_search_sync(engine, state.terminal)
+        return TerminalSearchDiagnostics(
+            gpuActive: cocxycore_gpu_search_is_gpu_active(engine),
+            indexedRows: cocxycore_gpu_search_indexed_rows(engine)
+        )
+    }
+
+    func streamSnapshots(for surface: SurfaceID) -> [TerminalStreamSnapshot] {
+        guard let state = surfaces[surface] else { return [] }
+        let count = cocxycore_terminal_stream_count(state.terminal)
+        guard count > 0 else { return [] }
+
+        return (1...count).compactMap { streamID in
+            var info = cocxycore_process_info()
+            guard cocxycore_terminal_stream_info(state.terminal, streamID, &info) else { return nil }
+            return TerminalStreamSnapshot(
+                streamID: info.stream_id,
+                pid: info.pid,
+                parentPID: info.parent_pid,
+                state: info.state,
+                exitCode: info.exit_code
+            )
+        }.sorted { $0.streamID < $1.streamID }
+    }
+
+    func protocolDiagnostics(for surface: SurfaceID) -> TerminalProtocolDiagnostics? {
+        guard let state = surfaces[surface] else { return nil }
+        return TerminalProtocolDiagnostics(
+            observed: state.protocolV2Observed,
+            capabilitiesRequested: state.protocolV2CapabilitiesRequested,
+            currentStreamID: state.currentStreamID
+        )
+    }
+
+    @discardableResult
+    func setCurrentStream(_ streamID: UInt32, for surface: SurfaceID) -> Bool {
+        guard var state = surfaces[surface] else { return false }
+        cocxycore_terminal_set_current_stream(state.terminal, streamID)
+        state.currentStreamID = streamID
+        surfaces[surface] = state
+        return true
+    }
+
+    @discardableResult
+    func syncCurrentStreamWithForegroundProcess(pid: pid_t, for surface: SurfaceID) -> UInt32? {
+        guard pid > 0 else {
+            _ = setCurrentStream(0, for: surface)
+            return 0
+        }
+
+        let snapshots = streamSnapshots(for: surface)
+        let matchedStream = snapshots.first { $0.pid == pid }?.streamID ?? 0
+        _ = setCurrentStream(matchedStream, for: surface)
+        return matchedStream
+    }
+
+    @discardableResult
+    func requestProtocolV2Capabilities(for surface: SurfaceID) -> Bool {
+        guard var state = surfaces[surface] else { return false }
+        var buf = [UInt8](repeating: 0, count: 2048)
+        let bytesWritten = cocxycore_terminal_request_capabilities(state.terminal, &buf, buf.count)
+        guard bytesWritten > 0 else { return false }
+        cocxycore_pty_write(state.pty, buf, bytesWritten)
+        state.protocolV2CapabilitiesRequested = true
+        surfaces[surface] = state
+        return true
+    }
+
+    @discardableResult
+    func sendProtocolV2Viewport(for surface: SurfaceID, requestID: String?) -> Bool {
+        guard let state = surfaces[surface] else { return false }
+        var buf = [UInt8](repeating: 0, count: 2048)
+        let bytesWritten = (requestID ?? "").withCString { requestIDPtr in
+            cocxycore_terminal_generate_viewport(
+                state.terminal,
+                &buf,
+                buf.count,
+                requestIDPtr,
+                requestID?.utf8.count ?? 0
+            )
+        }
+        guard bytesWritten > 0 else { return false }
+        cocxycore_pty_write(state.pty, buf, bytesWritten)
+        return true
+    }
+
+    @discardableResult
+    func sendProtocolV2Message(type: String, json: String, to surface: SurfaceID) -> Bool {
+        guard let state = surfaces[surface], !type.isEmpty else { return false }
+        var buf = [UInt8](repeating: 0, count: 4096)
+        let bytesWritten = type.withCString { typePtr in
+            json.withCString { jsonPtr in
+                cocxycore_terminal_send_protocol_v2(
+                    state.terminal,
+                    typePtr,
+                    type.utf8.count,
+                    jsonPtr,
+                    json.utf8.count,
+                    &buf,
+                    buf.count
+                )
+            }
+        }
+        guard bytesWritten > 0 else { return false }
+        cocxycore_pty_write(state.pty, buf, bytesWritten)
+        return true
+    }
+
+    @discardableResult
+    func clearImages(for surface: SurfaceID) -> UInt32? {
+        guard let state = surfaces[surface] else { return nil }
+        let removed = cocxycore_image_count(state.terminal)
+        cocxycore_image_delete_all(state.terminal)
+        if let webState = state.webServer {
+            cocxycore_web_force_full_frame(webState.handle)
+        }
+        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        return removed
+    }
+
+    @discardableResult
+    func deleteImage(_ imageID: UInt32, for surface: SurfaceID) -> Bool {
+        guard let state = surfaces[surface] else { return false }
+        var info = cocxycore_image_info()
+        guard cocxycore_image_get_info(state.terminal, imageID, &info) else { return false }
+        cocxycore_image_delete(state.terminal, imageID)
+        guard !cocxycore_image_get_info(state.terminal, imageID, &info) else { return false }
+        if let webState = state.webServer {
+            cocxycore_web_force_full_frame(webState.handle)
+        }
+        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        return true
+    }
+
+    func webTerminalStatus(for surface: SurfaceID) -> WebTerminalStatus? {
+        guard let state = surfaces[surface], let webState = state.webServer else { return nil }
+        return makeWebTerminalStatus(from: webState)
+    }
+
+    @discardableResult
+    func startWebTerminal(
+        for surface: SurfaceID,
+        configuration: WebTerminalConfiguration = .default
+    ) -> WebTerminalStatus? {
+        guard var state = surfaces[surface] else { return nil }
+
+        if let existing = state.webServer {
+            if existing.bindAddress != configuration.bindAddress || existing.authToken != configuration.authToken {
+                destroyWebServer(existing)
+                state.webServer = nil
+            } else {
+                cocxycore_web_set_max_fps(existing.handle, configuration.maxFrameRate)
+                if cocxycore_web_is_running(existing.handle) {
+                    var updated = existing
+                    updated.maxFrameRate = configuration.maxFrameRate
+                    state.webServer = updated
+                    surfaces[surface] = state
+                    cocxycore_web_force_full_frame(existing.handle)
+                    return makeWebTerminalStatus(from: updated)
+                }
+                destroyWebServer(existing)
+                state.webServer = nil
+            }
+        }
+
+        var webConfig = cocxycore_web_config()
+        Self.writeCString(configuration.bindAddress, into: &webConfig.bind_address, maxBytes: 64)
+        webConfig.bind_address_len = UInt32(configuration.bindAddress.utf8.count)
+        webConfig.port = configuration.port
+        Self.writeCString(configuration.authToken, into: &webConfig.auth_token, maxBytes: 128)
+        webConfig.auth_token_len = UInt32(configuration.authToken.utf8.count)
+        webConfig.max_connections = configuration.maxConnections
+        webConfig.max_frame_rate = configuration.maxFrameRate
+
+        guard let server = cocxycore_web_create(&webConfig) else { return nil }
+        cocxycore_web_set_event_callback(server, { eventType, connectionID, ctx in
+            guard let ctx else { return }
+            let box = Unmanaged<CallbackContext>.fromOpaque(ctx).takeUnretainedValue()
+            DispatchQueue.main.async {
+                box.bridge?.handleWebTerminalEvent(
+                    eventType: eventType,
+                    connectionID: connectionID,
+                    for: box.surfaceID
+                )
+            }
+        }, state.contextBox.toOpaque())
+
+        guard cocxycore_web_attach_terminal(server, state.terminal) else {
+            cocxycore_web_destroy(server)
+            return nil
+        }
+        cocxycore_web_set_max_fps(server, configuration.maxFrameRate)
+        guard cocxycore_web_start(server) else {
+            cocxycore_web_detach_terminal(server)
+            cocxycore_web_destroy(server)
+            return nil
+        }
+
+        state.webServer = SurfaceState.WebServerState(
+            handle: server,
+            bindAddress: configuration.bindAddress,
+            authToken: configuration.authToken,
+            maxFrameRate: configuration.maxFrameRate,
+            lastEventType: nil,
+            lastEventConnectionID: nil
+        )
+        surfaces[surface] = state
+        cocxycore_web_force_full_frame(server)
+        return state.webServer.map(makeWebTerminalStatus(from:))
+    }
+
+    func stopWebTerminal(for surface: SurfaceID) {
+        guard var state = surfaces[surface], let webState = state.webServer else { return }
+        destroyWebServer(webState)
+        state.webServer = nil
+        surfaces[surface] = state
     }
 
     /// Returns the visible-history top row for a surface.
@@ -362,6 +891,9 @@ final class CocxyCoreBridge: TerminalEngine {
             Int32(max(Int(Int32.min), min(Int(Int32.max), deltaRows)))
         ) else { return }
 
+        if state.protocolV2Observed {
+            _ = sendProtocolV2Viewport(for: surfaceID, requestID: nil)
+        }
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
@@ -420,6 +952,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
         let sel = Self.parseHexColor(palette.selectionBackground)
         cocxycore_terminal_set_selection_color(state.terminal, sel.r, sel.g, sel.b, 128)
+        if let webState = state.webServer {
+            cocxycore_web_force_full_frame(webState.handle)
+        }
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
@@ -435,7 +970,12 @@ final class CocxyCoreBridge: TerminalEngine {
         shell: String? = nil,
         windowPaddingX: Double? = nil,
         windowPaddingY: Double? = nil,
-        clipboardReadAccess: ClipboardReadAccess? = nil
+        clipboardReadAccess: ClipboardReadAccess? = nil,
+        ligaturesEnabled: Bool? = nil,
+        imageMemoryLimitBytes: UInt64? = nil,
+        imageFileTransferEnabled: Bool? = nil,
+        sixelImagesEnabled: Bool? = nil,
+        kittyImagesEnabled: Bool? = nil
     ) {
         guard let currentConfig = config else { return }
         config = currentConfig.replacing(
@@ -446,7 +986,12 @@ final class CocxyCoreBridge: TerminalEngine {
             themePalette: themePalette,
             windowPaddingX: windowPaddingX,
             windowPaddingY: windowPaddingY,
-            clipboardReadAccess: clipboardReadAccess
+            clipboardReadAccess: clipboardReadAccess,
+            ligaturesEnabled: ligaturesEnabled,
+            imageMemoryLimitBytes: imageMemoryLimitBytes,
+            imageFileTransferEnabled: imageFileTransferEnabled,
+            sixelImagesEnabled: sixelImagesEnabled,
+            kittyImagesEnabled: kittyImagesEnabled
         )
     }
 
@@ -471,8 +1016,12 @@ final class CocxyCoreBridge: TerminalEngine {
             family: family,
             size: Float(size),
             scale: scale,
+            ligaturesEnabled: config?.ligaturesEnabled ?? true,
             to: state.terminal
         )
+        if let webState = state.webServer {
+            cocxycore_web_force_full_frame(webState.handle)
+        }
         (state.hostView as? TerminalHostView)?.updateInteractionMetrics()
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
@@ -540,8 +1089,14 @@ final class CocxyCoreBridge: TerminalEngine {
             family: config.fontFamily,
             size: Float(config.fontSize),
             scale: Float(NSScreen.main?.backingScaleFactor ?? 2.0),
+            ligaturesEnabled: config.ligaturesEnabled,
             to: terminal
         )
+
+        cocxycore_image_set_memory_limit(terminal, config.imageMemoryLimitBytes)
+        cocxycore_image_set_file_transfer(terminal, config.imageFileTransferEnabled)
+        cocxycore_image_enable_sixel(terminal, config.sixelImagesEnabled)
+        cocxycore_image_enable_kitty(terminal, config.kittyImagesEnabled)
 
         // Theme (if palette provided)
         if let palette = config.themePalette {
@@ -874,6 +1429,32 @@ final class CocxyCoreBridge: TerminalEngine {
                 box.bridge?.handleProcessEvent(eventCopy, for: box.surfaceID)
             }
         }, context)
+
+        // Structured Protocol v2 events (OSC 7770)
+        cocxycore_terminal_set_protocol_v2_callback(terminal, { msgType, msgTypeLen, payload, payloadLen, ctx in
+            guard let ctx = ctx,
+                  let msgType = msgType,
+                  let payload = payload else { return }
+            let box = Unmanaged<CallbackContext>.fromOpaque(ctx).takeUnretainedValue()
+            let type = String(
+                bytes: UnsafeBufferPointer(
+                    start: UnsafeRawPointer(msgType).assumingMemoryBound(to: UInt8.self),
+                    count: msgTypeLen
+                ),
+                encoding: .utf8
+            ) ?? ""
+            let json = String(
+                bytes: UnsafeBufferPointer(
+                    start: UnsafeRawPointer(payload).assumingMemoryBound(to: UInt8.self),
+                    count: payloadLen
+                ),
+                encoding: .utf8
+            ) ?? ""
+            guard !type.isEmpty, !json.isEmpty else { return }
+            DispatchQueue.main.async {
+                box.bridge?.handleProtocolV2Message(type: type, payload: json, for: box.surfaceID)
+            }
+        }, context)
     }
 
     func parseWorkingDirectoryURL(_ rawValue: String) -> URL? {
@@ -892,6 +1473,7 @@ final class CocxyCoreBridge: TerminalEngine {
         family: String,
         size: Float,
         scale: Float,
+        ligaturesEnabled: Bool,
         to terminal: OpaquePointer
     ) -> String {
         for candidate in FontFallbackResolver.fallbackChain(for: family) {
@@ -903,7 +1485,7 @@ final class CocxyCoreBridge: TerminalEngine {
                     familyPtr,
                     size,
                     scale,
-                    true
+                    ligaturesEnabled
                 )
             }
 
@@ -1049,6 +1631,47 @@ final class CocxyCoreBridge: TerminalEngine {
         semanticAdapter.processProcessEvent(event, for: surfaceID, cwd: cwd)
     }
 
+    private func handleProtocolV2Message(type: String, payload: String, for surfaceID: SurfaceID) {
+        if var state = surfaces[surfaceID] {
+            let firstObservation = !state.protocolV2Observed
+            state.protocolV2Observed = true
+            surfaces[surfaceID] = state
+            if firstObservation {
+                _ = requestProtocolV2Capabilities(for: surfaceID)
+                _ = sendProtocolV2Viewport(for: surfaceID, requestID: nil)
+            }
+        }
+
+        let cwd = currentWorkingDirectory(for: surfaceID)
+        semanticAdapter.processProtocolV2Message(
+            type: type,
+            payload: payload,
+            for: surfaceID,
+            cwd: cwd
+        )
+    }
+
+    private func handleWebTerminalEvent(
+        eventType: UInt8,
+        connectionID: UInt16,
+        for surfaceID: SurfaceID
+    ) {
+        guard var state = surfaces[surfaceID], var webState = state.webServer else { return }
+        switch eventType {
+        case 0:
+            webState.lastEventType = "connect"
+        case 1:
+            webState.lastEventType = "disconnect"
+        case 2:
+            webState.lastEventType = "auth_fail"
+        default:
+            webState.lastEventType = "unknown"
+        }
+        webState.lastEventConnectionID = connectionID
+        state.webServer = webState
+        surfaces[surfaceID] = state
+    }
+
     /// Get the last known CWD for a surface (from tab model, if wired).
     /// Returns nil if not yet known.
     private var cwdProvider: ((SurfaceID) -> String?)?
@@ -1094,9 +1717,10 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     private func inferredWorkingDirectory(for surfaceID: SurfaceID) -> URL? {
-        guard let state = surfaces[surfaceID] else { return nil }
-        let pid = cocxycore_pty_child_pid(state.pty)
-        guard pid > 0 else { return nil }
+        guard let state = surfaces[surfaceID],
+              let pid = verifiedChildPID(for: state) else {
+            return nil
+        }
 
         var info = proc_vnodepathinfo()
         let result = proc_pidinfo(
@@ -1113,6 +1737,69 @@ final class CocxyCoreBridge: TerminalEngine {
             let path = String(cString: cString).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !path.isEmpty else { return nil }
             return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        }
+    }
+
+    private func verifiedChildPID(for state: SurfaceState) -> pid_t? {
+        guard state.childPID > 0 else { return nil }
+
+        var waitResult = cocxycore_pty_wait_result()
+        _ = cocxycore_pty_wait_check(state.pty, &waitResult)
+        guard cocxycore_pty_is_alive(state.pty) else { return nil }
+
+        guard let currentIdentity = processIdentity(for: state.childPID) else { return nil }
+        if let expectedIdentity = state.childProcessIdentity,
+           currentIdentity != expectedIdentity {
+            return nil
+        }
+
+        return state.childPID
+    }
+
+    private func processIdentity(for pid: pid_t) -> TerminalProcessIdentity? {
+        guard pid > 0 else { return nil }
+
+        var info = proc_bsdinfo()
+        let expectedSize = Int32(MemoryLayout.size(ofValue: info))
+        let result = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, expectedSize)
+        guard result == expectedSize else { return nil }
+
+        return TerminalProcessIdentity(
+            pid: pid,
+            startSeconds: UInt64(info.pbi_start_tvsec),
+            startMicroseconds: UInt64(info.pbi_start_tvusec)
+        )
+    }
+
+    private func destroyWebServer(_ webState: SurfaceState.WebServerState) {
+        cocxycore_web_detach_terminal(webState.handle)
+        cocxycore_web_stop(webState.handle)
+        cocxycore_web_destroy(webState.handle)
+    }
+
+    private func makeWebTerminalStatus(from webState: SurfaceState.WebServerState) -> WebTerminalStatus {
+        WebTerminalStatus(
+            running: cocxycore_web_is_running(webState.handle),
+            bindAddress: webState.bindAddress,
+            port: cocxycore_web_port(webState.handle),
+            connectionCount: cocxycore_web_connection_count(webState.handle),
+            authRequired: !webState.authToken.isEmpty,
+            maxFrameRate: webState.maxFrameRate,
+            lastEventType: webState.lastEventType,
+            lastEventConnectionID: webState.lastEventConnectionID
+        )
+    }
+
+    private static func writeCString<T>(
+        _ string: String,
+        into buffer: inout T,
+        maxBytes: Int
+    ) {
+        withUnsafeMutableBytes(of: &buffer) { rawBuffer in
+            guard rawBuffer.count > 0 else { return }
+            rawBuffer.initializeMemory(as: UInt8.self, repeating: 0)
+            let utf8 = Array(string.utf8.prefix(max(0, maxBytes - 1)))
+            rawBuffer.copyBytes(from: utf8)
         }
     }
 
@@ -1151,6 +1838,62 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         return line
+    }
+
+    private static func makeSearchResult(
+        line: String,
+        lineNumber: Int,
+        startColumn: Int,
+        endColumnInclusive: Int,
+        fallbackMatchText: String
+    ) -> SearchResult {
+        let characterCount = line.count
+        let clampedStart = max(0, min(startColumn, characterCount))
+        let clampedEndExclusive = max(
+            clampedStart,
+            min(endColumnInclusive + 1, characterCount)
+        )
+
+        let startIndex = line.index(
+            line.startIndex,
+            offsetBy: clampedStart,
+            limitedBy: line.endIndex
+        ) ?? line.endIndex
+        let endIndex = line.index(
+            line.startIndex,
+            offsetBy: clampedEndExclusive,
+            limitedBy: line.endIndex
+        ) ?? line.endIndex
+
+        let beforeStart = line.index(
+            startIndex,
+            offsetBy: -searchContextCharacterCount,
+            limitedBy: line.startIndex
+        ) ?? line.startIndex
+        let afterEnd = line.index(
+            endIndex,
+            offsetBy: searchContextCharacterCount,
+            limitedBy: line.endIndex
+        ) ?? line.endIndex
+
+        let matchText = startIndex < endIndex
+            ? String(line[startIndex..<endIndex])
+            : fallbackMatchText
+        let contextBefore = beforeStart < startIndex
+            ? String(line[beforeStart..<startIndex])
+            : nil
+        let contextAfter = endIndex < afterEnd
+            ? String(line[endIndex..<afterEnd])
+            : nil
+
+        return SearchResult(
+            id: UUID(),
+            lineNumber: lineNumber,
+            column: clampedStart,
+            matchText: matchText,
+            contextBefore: contextBefore,
+            contextAfter: contextAfter
+        )
     }
 
     // MARK: - Private: Color Parsing

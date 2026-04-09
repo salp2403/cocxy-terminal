@@ -87,6 +87,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             windowPadding: overrides.windowPadding ?? appearance.windowPadding,
             windowPaddingX: overrides.windowPaddingX ?? appearance.windowPaddingX,
             windowPaddingY: overrides.windowPaddingY ?? appearance.windowPaddingY,
+            ligatures: appearance.ligatures,
             backgroundOpacity: overrides.backgroundOpacity ?? appearance.backgroundOpacity,
             backgroundBlurRadius: overrides.backgroundBlurRadius ?? appearance.backgroundBlurRadius
         )
@@ -160,6 +161,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     let windowPaddingX: Double?
     /// Vertical padding in points. Overrides windowPadding for Y axis.
     let windowPaddingY: Double?
+    /// Whether typographic ligatures should be enabled.
+    let ligatures: Bool
     /// Window background opacity (0.0 = fully transparent, 1.0 = opaque).
     let backgroundOpacity: Double
     /// Background blur radius in points (0 = no blur).
@@ -169,6 +172,32 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     var effectivePaddingX: Double { windowPaddingX ?? windowPadding }
     /// Effective vertical padding (prefers windowPaddingY, falls back to windowPadding).
     var effectivePaddingY: Double { windowPaddingY ?? windowPadding }
+
+    init(
+        theme: String,
+        lightTheme: String,
+        fontFamily: String,
+        fontSize: Double,
+        tabPosition: TabPosition,
+        windowPadding: Double,
+        windowPaddingX: Double?,
+        windowPaddingY: Double?,
+        ligatures: Bool = true,
+        backgroundOpacity: Double,
+        backgroundBlurRadius: Double
+    ) {
+        self.theme = theme
+        self.lightTheme = lightTheme
+        self.fontFamily = fontFamily
+        self.fontSize = fontSize
+        self.tabPosition = tabPosition
+        self.windowPadding = windowPadding
+        self.windowPaddingX = windowPaddingX
+        self.windowPaddingY = windowPaddingY
+        self.ligatures = ligatures
+        self.backgroundOpacity = backgroundOpacity
+        self.backgroundBlurRadius = backgroundBlurRadius
+    }
 
     static var defaults: AppearanceConfig {
         AppearanceConfig(
@@ -180,6 +209,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             windowPadding: 8,
             windowPaddingX: nil,
             windowPaddingY: nil,
+            ligatures: true,
             backgroundOpacity: 1.0,
             backgroundBlurRadius: 0
         )
@@ -219,6 +249,42 @@ struct TerminalConfig: Codable, Sendable, Equatable {
     let clipboardPasteProtection: Bool
     /// Policy for OSC 52 clipboard read requests initiated by terminal programs.
     let clipboardReadAccess: ClipboardReadAccess
+    /// Maximum inline-image memory budget in MiB.
+    let imageMemoryLimitMB: Int
+    /// Whether inline image file-transfer mode is enabled.
+    let imageFileTransfer: Bool
+    /// Whether Sixel inline images are enabled.
+    let enableSixelImages: Bool
+    /// Whether Kitty inline images are enabled.
+    let enableKittyImages: Bool
+
+    init(
+        scrollbackLines: Int,
+        cursorStyle: CursorStyle,
+        cursorBlink: Bool,
+        cursorOpacity: Double,
+        mouseHideWhileTyping: Bool,
+        copyOnSelect: Bool,
+        clipboardPasteProtection: Bool,
+        clipboardReadAccess: ClipboardReadAccess,
+        imageMemoryLimitMB: Int = 256,
+        imageFileTransfer: Bool = false,
+        enableSixelImages: Bool = true,
+        enableKittyImages: Bool = true
+    ) {
+        self.scrollbackLines = scrollbackLines
+        self.cursorStyle = cursorStyle
+        self.cursorBlink = cursorBlink
+        self.cursorOpacity = cursorOpacity
+        self.mouseHideWhileTyping = mouseHideWhileTyping
+        self.copyOnSelect = copyOnSelect
+        self.clipboardPasteProtection = clipboardPasteProtection
+        self.clipboardReadAccess = clipboardReadAccess
+        self.imageMemoryLimitMB = imageMemoryLimitMB
+        self.imageFileTransfer = imageFileTransfer
+        self.enableSixelImages = enableSixelImages
+        self.enableKittyImages = enableKittyImages
+    }
 
     static var defaults: TerminalConfig {
         TerminalConfig(
@@ -229,7 +295,11 @@ struct TerminalConfig: Codable, Sendable, Equatable {
             mouseHideWhileTyping: true,
             copyOnSelect: true,
             clipboardPasteProtection: true,
-            clipboardReadAccess: .prompt
+            clipboardReadAccess: .prompt,
+            imageMemoryLimitMB: 256,
+            imageFileTransfer: false,
+            enableSixelImages: true,
+            enableKittyImages: true
         )
     }
 }

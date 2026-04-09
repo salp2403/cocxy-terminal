@@ -88,6 +88,7 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.fontSize, 16)
         XCTAssertEqual(viewModel.tabPosition, "top")
         XCTAssertEqual(viewModel.windowPadding, 12)
+        XCTAssertTrue(viewModel.ligatures)
         XCTAssertFalse(viewModel.agentDetectionEnabled)
         XCTAssertEqual(viewModel.idleTimeoutSeconds, 10)
         XCTAssertFalse(viewModel.macosNotifications)
@@ -122,13 +123,30 @@ final class PreferencesViewModelTests: XCTestCase {
         let viewModel = PreferencesViewModel(config: .defaults)
         viewModel.shell = "/bin/fish"
         viewModel.fontSize = 18
+        viewModel.ligatures = false
         viewModel.agentDetectionEnabled = false
 
         let toml = viewModel.generateToml()
 
         XCTAssertTrue(toml.contains("shell = \"/bin/fish\""))
         XCTAssertTrue(toml.contains("font-size = 18"))
+        XCTAssertTrue(toml.contains("ligatures = false"))
         XCTAssertTrue(toml.contains("enabled = false"))
+    }
+
+    func testGenerateTomlPersistsImageSettings() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+        viewModel.imageMemoryLimitMB = 384
+        viewModel.imageFileTransfer = true
+        viewModel.enableSixelImages = false
+        viewModel.enableKittyImages = true
+
+        let toml = viewModel.generateToml()
+
+        XCTAssertTrue(toml.contains("image-memory-limit-mb = 384"))
+        XCTAssertTrue(toml.contains("image-file-transfer = true"))
+        XCTAssertTrue(toml.contains("enable-sixel-images = false"))
+        XCTAssertTrue(toml.contains("enable-kitty-images = true"))
     }
 
     func testGenerateTomlPreservesTerminalDefaults() {
@@ -314,7 +332,11 @@ final class PreferencesViewModelTests: XCTestCase {
             mouseHideWhileTyping: true,
             copyOnSelect: true,
             clipboardPasteProtection: true,
-            clipboardReadAccess: .prompt
+            clipboardReadAccess: .prompt,
+            imageMemoryLimitMB: 128,
+            imageFileTransfer: true,
+            enableSixelImages: false,
+            enableKittyImages: true
         )
         let config = CocxyConfig(
             general: .defaults,
@@ -331,6 +353,10 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.scrollbackLines, 5000)
         XCTAssertEqual(viewModel.cursorStyle, "block")
         XCTAssertFalse(viewModel.cursorBlink)
+        XCTAssertEqual(viewModel.imageMemoryLimitMB, 128)
+        XCTAssertTrue(viewModel.imageFileTransfer)
+        XCTAssertFalse(viewModel.enableSixelImages)
+        XCTAssertTrue(viewModel.enableKittyImages)
     }
 
     // MARK: - Read-Only Keybinding Properties

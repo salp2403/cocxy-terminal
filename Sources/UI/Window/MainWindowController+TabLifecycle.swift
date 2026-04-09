@@ -181,10 +181,6 @@ extension MainWindowController {
         workingDirectory: URL?
     ) {
         do {
-            // Snapshot child PIDs before surface creation so we can
-            // identify the new shell process spawned for this tab.
-            let childrenBefore = snapshotChildPIDs()
-
             let surfaceID = try bridge.createSurface(
                 in: surfaceView,
                 workingDirectory: workingDirectory,
@@ -195,11 +191,7 @@ extension MainWindowController {
             surfaceView.syncSizeWithTerminal()
             tabSurfaceMap[tabID] = surfaceID
 
-            // Register the tab with the process monitor for SSH detection.
-            let childrenAfter = snapshotChildPIDs()
-            if let shellPID = findNewShellPID(current: childrenAfter, previous: childrenBefore) {
-                processMonitor?.registerTab(tabID, shellPID: shellPID)
-            }
+            registerSurfaceWithProcessMonitor(surfaceID, tabID: tabID)
             wireSurfaceHandlers(
                 for: surfaceID,
                 tabID: tabID,

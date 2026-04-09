@@ -870,11 +870,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     ///
     /// Starts the process monitor service and subscribes to process changes.
     ///
-    /// The monitor polls foreground processes every 2 seconds using `sysctl`.
+    /// The monitor polls the PTY foreground process group every 2 seconds and
+    /// falls back to shell-process metadata when the PTY cannot answer directly.
     /// When a tab's foreground process changes (e.g., `zsh` -> `ssh`), it
     /// updates the tab model and refreshes the UI.
     ///
-    /// Tabs are registered with `processMonitor.registerTab(_:shellPID:)`
+    /// Tabs are registered with `processMonitor.registerTab(_:shellPID:ptyMasterFD:)`
     /// in `createAndWireSurface` and `createTerminalSurface`.
     private func startProcessMonitor() {
         let monitor = ProcessMonitorService()
@@ -895,31 +896,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             tab.processName = event.processName
             tab.sshSession = event.sshSession
         }
+        if let cocxyBridge = bridge as? CocxyCoreBridge,
+           let surfaceID = surfaceIDs(for: event.tabID).first {
+            cocxyBridge.syncCurrentStreamWithForegroundProcess(pid: event.pid, for: surfaceID)
+        }
         tabBarViewModel?.syncWithManager()
         refreshStatusBar()
         refreshTabStrip()
-    }
-
-    /// Returns the PIDs of child processes of the current app process.
-    ///
-    /// Used before and after `createSurface` to identify the new shell
-    /// process by comparing snapshots.
-    func snapshotChildPIDs() -> [pid_t] {
-        ForegroundProcessDetector.childProcesses(of: getpid()) ?? []
-    }
-
-    /// Finds the first PID in `current` that was not present in `previous`.
-    ///
-    /// Used after `createSurface` to identify the newly spawned shell PID
-    /// so it can be registered with the process monitor for SSH detection.
-    ///
-    /// - Parameters:
-    ///   - current: Child PIDs after surface creation.
-    ///   - previous: Child PIDs before surface creation.
-    /// - Returns: The new shell PID, or nil if no new process was found.
-    func findNewShellPID(current: [pid_t], previous: [pid_t]) -> pid_t? {
-        let previousSet = Set(previous)
-        return current.first { !previousSet.contains($0) }
     }
 
     /// Subscribes to active tab changes to switch the terminal surface view.
@@ -1057,11 +1040,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func windowDidBecomeKey(_ notification: Notification) {
         focusActiveTerminalSurface()
+        synchronizeActiveSurfaceFocusState(focused: true)
         refreshVisibleTerminalInteractionState()
         injectedAgentDetectionEngine?.resumeTimingDetector()
     }
 
     func windowDidResignKey(_ notification: Notification) {
+        synchronizeActiveSurfaceFocusState(focused: false)
         injectedAgentDetectionEngine?.pauseTimingDetector()
     }
 
@@ -1139,6 +1124,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     func focusActiveTerminalSurface() {
         guard let surfaceView = activeTerminalSurfaceView else { return }
         window?.makeFirstResponder(surfaceView)
+        synchronizeActiveSurfaceFocusState(
+            focused: window?.isKeyWindow == true && window?.firstResponder === surfaceView
+        )
+    }
+
+    /// Mirrors the host window's focus state into the active CocxyCore surface.
+    ///
+    /// AppKit does not guarantee a `becomeFirstResponder` / `resignFirstResponder`
+    /// round-trip when the same view survives a window activation change, so the
+    /// host also notifies the engine explicitly on key-window transitions.
+    func synchronizeActiveSurfaceFocusState(focused: Bool) {
+        guard let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID else { return }
+        bridge.notifyFocus(focused, for: surfaceID)
     }
 
     /// Returns every terminal view model associated with a tab, including split panes.

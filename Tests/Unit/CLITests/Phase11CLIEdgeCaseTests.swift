@@ -109,15 +109,15 @@ final class Phase11CLIEdgeCaseTests: XCTestCase {
                       "EC-11: version text must contain a semantic version number, got: '\(versionText)'")
     }
 
-    // MARK: - EC-12: All 38 CLICommand cases have non-empty helpDescription
+    // MARK: - EC-12: All CLICommand cases have non-empty helpDescription
 
     func testEC12_AllThirtyCommandsHaveNonEmptyHelpDescription() {
         // "80% de cobertura no es suficiente si el 20% restante es el login."
         // Every command must be self-documenting.
         let allCases = CLICommand.allCases
 
-        XCTAssertEqual(allCases.count, 66,
-                       "EC-12: CLICommand must have exactly 66 cases (10 original + 21 v2 + 8 browser + 5 remote + 3 plugin + 18 v3 + 1 ssh)")
+        XCTAssertEqual(allCases.count, 77,
+                       "EC-12: CLICommand must have exactly 77 cases including the core contract web/stream/protocol/image commands")
 
         for command in allCases {
             XCTAssertFalse(

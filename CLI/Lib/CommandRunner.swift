@@ -550,6 +550,51 @@ public struct CommandRunner {
             if let port { params["port"] = "\(port)" }
             if let identityFile { params["identity"] = identityFile }
             return CLISocketRequest(id: requestID, command: "ssh", params: params)
+
+        // MARK: Web Terminal (v5)
+
+        case .webStart(let bindAddress, let port, let token, let fps):
+            var params: [String: String] = [:]
+            if let bindAddress { params["bind"] = bindAddress }
+            if let port { params["port"] = "\(port)" }
+            if let token { params["token"] = token }
+            if let fps { params["fps"] = "\(fps)" }
+            return CLISocketRequest(id: requestID, command: "web-start", params: params.isEmpty ? nil : params)
+
+        case .webStop:
+            return CLISocketRequest(id: requestID, command: "web-stop", params: nil)
+
+        case .webStatus:
+            return CLISocketRequest(id: requestID, command: "web-status", params: nil)
+
+        case .streamList:
+            return CLISocketRequest(id: requestID, command: "stream-list", params: nil)
+
+        case .streamCurrent(let id):
+            return CLISocketRequest(id: requestID, command: "stream-current", params: ["id": "\(id)"])
+
+        case .protocolCapabilities:
+            return CLISocketRequest(id: requestID, command: "protocol-capabilities", params: nil)
+
+        case .protocolViewport(let requestIDValue):
+            let params = requestIDValue.map { ["request_id": $0] }
+            return CLISocketRequest(id: requestID, command: "protocol-viewport", params: params)
+
+        case .protocolSend(let type, let json):
+            return CLISocketRequest(
+                id: requestID,
+                command: "protocol-send",
+                params: ["type": type, "json": json]
+            )
+
+        case .imageList:
+            return CLISocketRequest(id: requestID, command: "image-list", params: nil)
+
+        case .imageDelete(let id):
+            return CLISocketRequest(id: requestID, command: "image-delete", params: ["id": "\(id)"])
+
+        case .imageClear:
+            return CLISocketRequest(id: requestID, command: "image-clear", params: nil)
         }
     }
 }

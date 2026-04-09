@@ -29,6 +29,12 @@ import Combine
 @MainActor
 final class ProcessMonitorService: ObservableObject {
 
+    struct TabProcessRegistration: Equatable, Sendable {
+        let shellPID: pid_t
+        let ptyMasterFD: Int32?
+        let shellIdentity: TerminalProcessIdentity?
+    }
+
     // MARK: - Published State
 
     /// Emits when a process change is detected for a tab.
@@ -39,8 +45,8 @@ final class ProcessMonitorService: ObservableObject {
     /// The interval between process checks.
     let pollInterval: TimeInterval
 
-    /// Maps tab IDs to their shell PIDs for monitoring.
-    private var tabShellPIDs: [TabID: pid_t] = [:]
+    /// Maps tab IDs to the PTY/shell metadata needed for process monitoring.
+    private var tabRegistrations: [TabID: TabProcessRegistration] = [:]
 
     /// Last known process name per tab (to detect changes).
     private var lastKnownProcess: [TabID: String] = [:]
@@ -92,21 +98,39 @@ final class ProcessMonitorService: ObservableObject {
     /// - Parameters:
     ///   - tabID: The tab to monitor.
     ///   - shellPID: The PID of the shell running in this tab's PTY.
-    func registerTab(_ tabID: TabID, shellPID: pid_t) {
-        tabShellPIDs[tabID] = shellPID
+    ///   - ptyMasterFD: The master PTY file descriptor, when available.
+    func registerTab(
+        _ tabID: TabID,
+        shellPID: pid_t,
+        ptyMasterFD: Int32? = nil,
+        shellIdentity: TerminalProcessIdentity? = nil
+    ) {
+        tabRegistrations[tabID] = TabProcessRegistration(
+            shellPID: shellPID,
+            ptyMasterFD: ptyMasterFD,
+            shellIdentity: shellIdentity
+        )
+        lastKnownProcess[tabID] = nil
     }
 
     /// Unregisters a tab from monitoring.
     func unregisterTab(_ tabID: TabID) {
-        tabShellPIDs.removeValue(forKey: tabID)
+        tabRegistrations.removeValue(forKey: tabID)
         lastKnownProcess.removeValue(forKey: tabID)
     }
 
     // MARK: - Polling
 
     private func pollProcesses() {
-        for (tabID, shellPID) in tabShellPIDs {
-            guard let processInfo = ForegroundProcessDetector.detect(shellPID: shellPID) else {
+        let snapshots = ForegroundProcessDetector.processSnapshots() ?? []
+
+        for (tabID, registration) in tabRegistrations {
+            guard let processInfo = ForegroundProcessDetector.detect(
+                shellPID: registration.shellPID,
+                ptyMasterFD: registration.ptyMasterFD,
+                expectedShellIdentity: registration.shellIdentity,
+                snapshots: snapshots
+            ) else {
                 continue
             }
 
@@ -127,6 +151,7 @@ final class ProcessMonitorService: ObservableObject {
                 processChanged.send(ProcessChangeEvent(
                     tabID: tabID,
                     processName: processInfo.name,
+                    pid: processInfo.pid,
                     sshSession: sshSession
                 ))
             }
@@ -142,6 +167,8 @@ struct ProcessChangeEvent: Sendable {
     let tabID: TabID
     /// The new process name.
     let processName: String
+    /// PID of the detected foreground process.
+    let pid: pid_t
     /// SSH session info, if the new process is an SSH client.
     let sshSession: SSHSessionInfo?
 }

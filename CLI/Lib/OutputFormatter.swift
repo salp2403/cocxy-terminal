@@ -213,6 +213,28 @@ public enum OutputFormatter {
         case .ssh:
             let dest = response.data?["destination"] ?? ""
             return "SSH session opened: \(dest)"
+        case .webStart:
+            return formatWebStatus(response: response, defaultHeadline: "Web terminal started")
+        case .webStop:
+            return "Web terminal stopped."
+        case .webStatus:
+            return formatWebStatus(response: response, defaultHeadline: "Web terminal")
+        case .streamList:
+            return formatDataOrJSON(response: response)
+        case .streamCurrent:
+            return "Current stream selected."
+        case .protocolCapabilities:
+            return "Protocol capabilities requested."
+        case .protocolViewport:
+            return "Protocol viewport sent."
+        case .protocolSend:
+            return "Protocol message sent."
+        case .imageList:
+            return formatDataOrJSON(response: response)
+        case .imageDelete:
+            return "Inline image deleted."
+        case .imageClear:
+            return "Inline images cleared."
         }
     }
 
@@ -260,7 +282,81 @@ public enum OutputFormatter {
             lines.append("Socket: \(socketInfo)")
         }
 
+        if let searchMode = data["search_mode"] {
+            let indexedRows = data["search_indexed_rows"] ?? "0"
+            lines.append("Search: \(searchMode) (\(indexedRows) indexed rows)")
+        }
+
+        if let protocolObserved = data["protocol_v2_observed"] {
+            let requested = data["protocol_v2_capabilities_requested"] ?? "false"
+            let currentStream = data["current_stream_id"] ?? "0"
+            lines.append(
+                "Protocol v2: observed \(boolText(protocolObserved)), capabilities \(boolText(requested)), current stream \(currentStream)"
+            )
+        }
+
+        if let ligatures = data["ligatures_enabled"] {
+            let hits = data["ligature_cache_hits"] ?? "0"
+            let misses = data["ligature_cache_misses"] ?? "0"
+            lines.append("Ligatures: \(boolText(ligatures)) (hits \(hits), misses \(misses))")
+        }
+
+        if let imageCount = data["image_count"] {
+            let memory = data["image_memory_used_mib"] ?? "0"
+            let budget = data["image_memory_limit_mib"] ?? "0"
+            let sixel = data["image_sixel_enabled"] ?? "false"
+            let kitty = data["image_kitty_enabled"] ?? "false"
+            let atlasWidth = data["image_atlas_width"] ?? "0"
+            let atlasHeight = data["image_atlas_height"] ?? "0"
+            let atlasGeneration = data["image_atlas_generation"] ?? "0"
+            let atlasDirty = data["image_atlas_dirty"] ?? "false"
+            lines.append("Images: \(imageCount) loaded (\(memory)/\(budget) MiB, sixel \(boolText(sixel)), kitty \(boolText(kitty)))")
+            lines.append("Image atlas: \(atlasWidth)x\(atlasHeight) gen \(atlasGeneration), dirty \(boolText(atlasDirty))")
+        }
+
+        if let streamCount = data["stream_count"] {
+            lines.append("Streams: \(streamCount)")
+        }
+
+        if let webRunning = data["web_running"] {
+            if webRunning == "true" {
+                let bind = data["web_bind"] ?? "127.0.0.1"
+                let port = data["web_port"] ?? "0"
+                let connections = data["web_connections"] ?? "0"
+                lines.append("Web terminal: running on \(bind):\(port) (\(connections) clients)")
+            } else {
+                lines.append("Web terminal: stopped")
+            }
+        }
+
         return lines.joined(separator: "\n")
+    }
+
+    private static func formatWebStatus(response: CLISocketResponse, defaultHeadline: String) -> String {
+        guard let data = response.data else { return defaultHeadline }
+        let running = data["running"] == "true"
+        var lines = [defaultHeadline]
+        lines.append("Status: \(running ? "running" : "stopped")")
+        if let bind = data["bind"], let port = data["port"] {
+            lines.append("Bind: \(bind):\(port)")
+        }
+        if let fps = data["max_fps"] {
+            lines.append("Max FPS: \(fps)")
+        }
+        if let authRequired = data["auth_required"] {
+            lines.append("Auth required: \(boolText(authRequired))")
+        }
+        if let connections = data["connections"] {
+            lines.append("Connections: \(connections)")
+        }
+        if let lastEvent = data["last_event"] {
+            lines.append("Last event: \(lastEvent)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func boolText(_ value: String) -> String {
+        value == "true" ? "on" : "off"
     }
 
     /// Formats JSON data from a specific key in the response.

@@ -9,10 +9,10 @@ import SwiftUI
 ///
 /// Organized in sections with a sidebar navigation pattern:
 /// - General: shell path, working directory, confirm close
-/// - Appearance: theme picker, font family, font size slider, padding
+/// - Appearance: theme picker, font family, ligatures, font size slider, padding
 /// - Agent Detection: toggles for each detection layer, idle timeout
 /// - Notifications: toggles for each notification type
-/// - Terminal: read-only display of scrollback, cursor style, cursor blink
+/// - Terminal: runtime protocol settings such as inline images
 /// - Keybindings: read-only display of keyboard shortcuts
 /// - About: version, license
 ///
@@ -85,7 +85,7 @@ struct PreferencesView: View {
         case .notifications:
             EditableNotificationsSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .terminal:
-            TerminalPreferencesSection(viewModel: viewModel)
+            TerminalPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .keybindings:
             KeybindingsPreferencesSection(viewModel: viewModel)
         case .about:
@@ -224,6 +224,8 @@ struct EditableAppearanceSection: View {
                 TextField("Font family", text: $viewModel.fontFamily)
                     .textFieldStyle(.roundedBorder)
 
+                Toggle("Enable ligatures", isOn: $viewModel.ligatures)
+
                 VStack(alignment: .leading) {
                     HStack {
                         Text("Font size")
@@ -336,18 +338,15 @@ struct EditableNotificationsSection: View {
     }
 }
 
-// MARK: - Terminal Section (Read-Only)
+// MARK: - Terminal Section
 
-/// Read-only display of terminal settings from config.toml.
-///
-/// Shows scrollback lines, cursor style, and cursor blink state.
-/// Users edit these values directly in config.toml.
 struct TerminalPreferencesSection: View {
     @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
 
     var body: some View {
         Form {
-            Section("Terminal") {
+            Section("Core Defaults") {
                 LabeledContent("Scrollback lines") {
                     Text("\(viewModel.scrollbackLines)")
                         .foregroundStyle(.secondary)
@@ -362,11 +361,18 @@ struct TerminalPreferencesSection: View {
                 }
             }
 
-            Section {
-                Text("Edit config.toml directly to change terminal settings.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            Section("Inline Images") {
+                Toggle("Enable Sixel images", isOn: $viewModel.enableSixelImages)
+                Toggle("Enable Kitty images", isOn: $viewModel.enableKittyImages)
+                Toggle("Enable file transfer", isOn: $viewModel.imageFileTransfer)
+                Stepper(
+                    "Image memory budget: \(viewModel.imageMemoryLimitMB) MiB",
+                    value: $viewModel.imageMemoryLimitMB,
+                    in: 1...4096
+                )
             }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
         .navigationTitle("Terminal")

@@ -145,6 +145,57 @@ final class SearchBarIntegrationTests: XCTestCase {
             "toggleSearchBarAction must toggle the search bar"
         )
     }
+
+    func testSearchBarRetriggersWhenCaseSensitivityChanges() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.terminalOutputBuffer.append("Error first\n".data(using: .utf8)!)
+        controller.terminalOutputBuffer.append("error second\n".data(using: .utf8)!)
+
+        controller.showSearchBarOverlay()
+        guard let viewModel = controller.searchBarViewModel else {
+            XCTFail("Search bar view model should exist")
+            return
+        }
+
+        viewModel.query = "error"
+        waitForSearchDebounce()
+        XCTAssertEqual(viewModel.totalMatches, 2)
+
+        viewModel.caseSensitive = true
+        waitForSearchDebounce()
+        XCTAssertEqual(viewModel.totalMatches, 1)
+    }
+
+    private func waitForSearchDebounce() {
+        let expectation = expectation(description: "search debounce")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+    }
+}
+
+// MARK: - Focus Sync Integration Tests
+
+@MainActor
+final class FocusSyncIntegrationTests: XCTestCase {
+
+    func testWindowKeyChangesNotifyActiveSurfaceFocusState() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+        XCTAssertEqual(bridge.focusNotifications.last?.focused, true)
+
+        controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
+        XCTAssertEqual(bridge.focusNotifications.last?.focused, false)
+    }
 }
 
 // MARK: - Smart Routing Integration Tests

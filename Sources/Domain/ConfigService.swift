@@ -185,11 +185,16 @@ final class ConfigService: ConfigProviding {
         font-size = \(defaults.appearance.fontSize)
         tab-position = "\(defaults.appearance.tabPosition.rawValue)"
         window-padding = \(defaults.appearance.windowPadding)
+        ligatures = \(defaults.appearance.ligatures)
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
         clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
+        image-memory-limit-mb = \(defaults.terminal.imageMemoryLimitMB)
+        image-file-transfer = \(defaults.terminal.imageFileTransfer)
+        enable-sixel-images = \(defaults.terminal.enableSixelImages)
+        enable-kitty-images = \(defaults.terminal.enableKittyImages)
 
         [agent-detection]
         enabled = \(defaults.agentDetection.enabled)
@@ -318,6 +323,7 @@ final class ConfigService: ConfigProviding {
             windowPadding: validatedWindowPadding,
             windowPaddingX: doubleValue(table["window-padding-x"]),
             windowPaddingY: doubleValue(table["window-padding-y"]),
+            ligatures: boolValue(table["ligatures"]) ?? defaults.ligatures,
             backgroundOpacity: clamp(rawOpacity, min: 0.1, max: 1.0),
             backgroundBlurRadius: clamp(rawBlur, min: 0, max: 100)
         )
@@ -330,6 +336,8 @@ final class ConfigService: ConfigProviding {
 
         let rawScrollback = intValue(table["scrollback-lines"]) ?? defaults.scrollbackLines
         let validatedScrollback = max(0, rawScrollback)
+        let rawImageMemoryLimit = intValue(table["image-memory-limit-mb"]) ?? defaults.imageMemoryLimitMB
+        let validatedImageMemoryLimit = max(1, rawImageMemoryLimit)
 
         let cursorStyleStr = stringValue(table["cursor-style"])
         let cursorStyle = cursorStyleStr.flatMap { CursorStyle(rawValue: $0) } ?? defaults.cursorStyle
@@ -347,7 +355,11 @@ final class ConfigService: ConfigProviding {
             clipboardPasteProtection: boolValue(table["clipboard-paste-protection"]) ?? defaults.clipboardPasteProtection,
             clipboardReadAccess: stringValue(table["clipboard-read-access"])
                 .flatMap { ClipboardReadAccess(rawValue: $0) }
-                ?? defaults.clipboardReadAccess
+                ?? defaults.clipboardReadAccess,
+            imageMemoryLimitMB: validatedImageMemoryLimit,
+            imageFileTransfer: boolValue(table["image-file-transfer"]) ?? defaults.imageFileTransfer,
+            enableSixelImages: boolValue(table["enable-sixel-images"]) ?? defaults.enableSixelImages,
+            enableKittyImages: boolValue(table["enable-kitty-images"]) ?? defaults.enableKittyImages
         )
     }
 

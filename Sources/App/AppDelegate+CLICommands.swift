@@ -7,6 +7,284 @@ import Foundation
 extension AppDelegate {
 
     @MainActor
+    private func activeTerminalSurfaceForCLI() -> (controller: MainWindowController, surfaceID: SurfaceID)? {
+        guard let controller = focusedWindowController() ?? windowController else { return nil }
+        guard let surfaceID = controller.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+            ?? controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
+            return nil
+        }
+        return (controller, surfaceID)
+    }
+
+    @MainActor
+    func runtimeStatusDetailsForCLI() -> [String: String] {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return [:]
+        }
+
+        var data: [String: String] = [:]
+
+        if let search = cocxyBridge.searchDiagnostics(for: surfaceID) {
+            data["search_mode"] = search.gpuActive ? "gpu" : "cpu"
+            data["search_indexed_rows"] = "\(search.indexedRows)"
+        }
+
+        if let protocolDetails = cocxyBridge.protocolDiagnostics(for: surfaceID) {
+            data["protocol_v2_observed"] = protocolDetails.observed ? "true" : "false"
+            data["protocol_v2_capabilities_requested"] = protocolDetails.capabilitiesRequested ? "true" : "false"
+            data["current_stream_id"] = "\(protocolDetails.currentStreamID)"
+        }
+
+        if let ligatures = cocxyBridge.ligatureDiagnostics(for: surfaceID) {
+            data["ligatures_enabled"] = ligatures.enabled ? "true" : "false"
+            data["ligature_cache_hits"] = "\(ligatures.cacheHits)"
+            data["ligature_cache_misses"] = "\(ligatures.cacheMisses)"
+        }
+
+        if let images = cocxyBridge.imageDiagnostics(for: surfaceID) {
+            data["image_count"] = "\(images.imageCount)"
+            data["image_memory_used_bytes"] = "\(images.memoryUsedBytes)"
+            data["image_memory_used_mib"] = "\(images.memoryUsedBytes / (1024 * 1024))"
+            data["image_memory_limit_bytes"] = "\(images.memoryLimitBytes)"
+            data["image_memory_limit_mib"] = "\(images.memoryLimitBytes / (1024 * 1024))"
+            data["image_file_transfer_enabled"] = images.fileTransferEnabled ? "true" : "false"
+            data["image_sixel_enabled"] = images.sixelEnabled ? "true" : "false"
+            data["image_kitty_enabled"] = images.kittyEnabled ? "true" : "false"
+            data["image_atlas_width"] = "\(images.atlasWidth)"
+            data["image_atlas_height"] = "\(images.atlasHeight)"
+            data["image_atlas_generation"] = "\(images.atlasGeneration)"
+            data["image_atlas_dirty"] = images.atlasDirty ? "true" : "false"
+        }
+
+        let streams = cocxyBridge.streamSnapshots(for: surfaceID)
+        data["stream_count"] = "\(streams.count)"
+        for (index, stream) in streams.enumerated() {
+            data["stream_\(index)_id"] = "\(stream.streamID)"
+            data["stream_\(index)_pid"] = "\(stream.pid)"
+            data["stream_\(index)_parent_pid"] = "\(stream.parentPID)"
+            data["stream_\(index)_state"] = "\(stream.state)"
+            data["stream_\(index)_exit_code"] = "\(stream.exitCode)"
+        }
+
+        let webStatus = cocxyBridge.webTerminalStatus(for: surfaceID)
+        for (key, value) in webStatusDictionary(from: webStatus) {
+            data["web_\(key)"] = value
+        }
+
+        return data
+    }
+
+    @MainActor
+    func startWebTerminalForCLI(
+        bindAddress: String,
+        port: UInt16,
+        token: String,
+        maxConnections: UInt16,
+        maxFPS: UInt32
+    ) -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        let configuration = WebTerminalConfiguration(
+            bindAddress: bindAddress,
+            port: port,
+            authToken: token,
+            maxConnections: min(max(maxConnections, 1), 16),
+            maxFrameRate: min(max(maxFPS, 1), 240)
+        )
+
+        guard let status = cocxyBridge.startWebTerminal(for: surfaceID, configuration: configuration) else {
+            return nil
+        }
+        return webStatusDictionary(from: status)
+    }
+
+    @MainActor
+    func stopWebTerminalForCLI() -> Bool {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return false
+        }
+
+        guard cocxyBridge.webTerminalStatus(for: surfaceID) != nil else { return false }
+        cocxyBridge.stopWebTerminal(for: surfaceID)
+        return true
+    }
+
+    @MainActor
+    func webStatusForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+        return webStatusDictionary(from: cocxyBridge.webTerminalStatus(for: surfaceID))
+    }
+
+    @MainActor
+    func streamListForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        let streams = cocxyBridge.streamSnapshots(for: surfaceID)
+        var data: [String: String] = ["count": "\(streams.count)"]
+        if let protocolDetails = cocxyBridge.protocolDiagnostics(for: surfaceID) {
+            data["current_stream_id"] = "\(protocolDetails.currentStreamID)"
+        }
+        for (index, stream) in streams.enumerated() {
+            data["stream_\(index)_id"] = "\(stream.streamID)"
+            data["stream_\(index)_pid"] = "\(stream.pid)"
+            data["stream_\(index)_parent_pid"] = "\(stream.parentPID)"
+            data["stream_\(index)_state"] = "\(stream.state)"
+            data["stream_\(index)_exit_code"] = "\(stream.exitCode)"
+        }
+        return data
+    }
+
+    @MainActor
+    func setCurrentStreamForCLI(_ streamID: UInt32) -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        guard cocxyBridge.setCurrentStream(streamID, for: surfaceID) else { return nil }
+        return [
+            "status": "current",
+            "stream_id": "\(streamID)"
+        ]
+    }
+
+    @MainActor
+    func requestProtocolCapabilitiesForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        guard cocxyBridge.requestProtocolV2Capabilities(for: surfaceID) else { return nil }
+        return [
+            "status": "sent",
+            "message": "terminal.capabilities"
+        ]
+    }
+
+    @MainActor
+    func sendProtocolViewportForCLI(requestID: String?) -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        guard cocxyBridge.sendProtocolV2Viewport(for: surfaceID, requestID: requestID) else { return nil }
+        var data: [String: String] = [
+            "status": "sent",
+            "message": "terminal.viewport"
+        ]
+        if let requestID, !requestID.isEmpty {
+            data["request_id"] = requestID
+        }
+        return data
+    }
+
+    @MainActor
+    func sendProtocolMessageForCLI(type: String, payload: String) -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        guard cocxyBridge.sendProtocolV2Message(type: type, json: payload, to: surfaceID) else {
+            return nil
+        }
+        return [
+            "status": "sent",
+            "type": type
+        ]
+    }
+
+    @MainActor
+    func clearImagesForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        guard let removed = cocxyBridge.clearImages(for: surfaceID) else { return nil }
+        return [
+            "status": "cleared",
+            "removed": "\(removed)"
+        ]
+    }
+
+    @MainActor
+    func listImagesForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        let images = cocxyBridge.imageSnapshots(for: surfaceID)
+        var data: [String: String] = ["count": "\(images.count)"]
+        for (index, image) in images.enumerated() {
+            data["image_\(index)_id"] = "\(image.imageID)"
+            data["image_\(index)_width"] = "\(image.width)"
+            data["image_\(index)_height"] = "\(image.height)"
+            data["image_\(index)_byte_size"] = "\(image.byteSize)"
+            data["image_\(index)_source"] = "\(image.source)"
+            data["image_\(index)_placement_count"] = "\(image.placementCount)"
+        }
+        return data
+    }
+
+    @MainActor
+    func deleteImageForCLI(_ imageID: UInt32) -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        guard cocxyBridge.deleteImage(imageID, for: surfaceID) else { return nil }
+        return [
+            "status": "deleted",
+            "image_id": "\(imageID)"
+        ]
+    }
+
+    @MainActor
+    private func webStatusDictionary(from status: WebTerminalStatus?) -> [String: String] {
+        guard let status else {
+            return [
+                "status": "stopped",
+                "running": "false",
+                "connections": "0",
+            ]
+        }
+
+        var data: [String: String] = [
+            "status": status.running ? "running" : "stopped",
+            "running": status.running ? "true" : "false",
+            "bind": status.bindAddress,
+            "port": "\(status.port)",
+            "connections": "\(status.connectionCount)",
+            "auth_required": status.authRequired ? "true" : "false",
+            "max_fps": "\(status.maxFrameRate)",
+        ]
+        if let eventType = status.lastEventType {
+            if let connectionID = status.lastEventConnectionID {
+                data["last_event"] = "\(eventType)#\(connectionID)"
+            } else {
+                data["last_event"] = eventType
+            }
+        }
+        return data
+    }
+
+    @MainActor
     func activeBrowserViewModelForCLI() -> BrowserViewModel? {
         (focusedWindowController() ?? windowController)?.activeBrowserViewModel()
     }
@@ -104,6 +382,12 @@ extension AppDelegate {
     ) -> SearchCommandResult? {
         let resolvedTabID: String?
         let lines: [String]
+        let nativeResults: [SearchResult]?
+        let options = SearchOptions(
+            query: query,
+            caseSensitive: caseSensitive,
+            useRegex: regex
+        )
 
         if let tabIDString {
             guard let tabUUID = UUID(uuidString: tabIDString) else { return nil }
@@ -111,21 +395,42 @@ extension AppDelegate {
             guard let controller = controllerContainingTab(tabID) else {
                 return nil
             }
-            lines = controller.tabOutputBuffers[tabID]?.lines ?? []
+            if let surfaceID = controller.surfaceIDs(for: tabID).first,
+               let bridge,
+               let bridgeResults = bridge.searchScrollback(surfaceID: surfaceID, options: options) {
+                nativeResults = bridgeResults
+                if let cocxyBridge = bridge as? CocxyCoreBridge {
+                    let historyLines = cocxyBridge.historyLines(for: surfaceID)
+                    lines = historyLines.isEmpty ? controller.tabOutputBuffers[tabID]?.lines ?? [] : historyLines
+                } else {
+                    lines = controller.tabOutputBuffers[tabID]?.lines ?? []
+                }
+            } else {
+                nativeResults = nil
+                lines = controller.tabOutputBuffers[tabID]?.lines ?? []
+            }
             resolvedTabID = tabIDString
         } else {
             guard let controller = focusedWindowController() ?? windowController else { return nil }
-            lines = controller.terminalOutputBuffer.lines
+            if let surfaceID = controller.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+                ?? controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
+               let bridge,
+               let bridgeResults = bridge.searchScrollback(surfaceID: surfaceID, options: options) {
+                nativeResults = bridgeResults
+                if let cocxyBridge = bridge as? CocxyCoreBridge {
+                    let historyLines = cocxyBridge.historyLines(for: surfaceID)
+                    lines = historyLines.isEmpty ? controller.terminalOutputBuffer.lines : historyLines
+                } else {
+                    lines = controller.terminalOutputBuffer.lines
+                }
+            } else {
+                nativeResults = nil
+                lines = controller.terminalOutputBuffer.lines
+            }
             resolvedTabID = (controller.visibleTabID ?? controller.tabManager.activeTabID)?.rawValue.uuidString
         }
 
-        let engine = ScrollbackSearchEngineImpl()
-        let options = SearchOptions(
-            query: query,
-            caseSensitive: caseSensitive,
-            useRegex: regex
-        )
-        let results = engine.search(options: options, in: lines)
+        let results = nativeResults ?? ScrollbackSearchEngineImpl().search(options: options, in: lines)
 
         return SearchCommandResult(
             tabID: resolvedTabID,

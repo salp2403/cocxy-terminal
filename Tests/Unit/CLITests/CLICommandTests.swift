@@ -243,6 +243,62 @@ final class CLIArgumentParserTests: XCTestCase {
     func testParseSSHWithoutDestinationThrows() {
         XCTAssertThrowsError(try CLIArgumentParser.parse(["ssh"]))
     }
+
+    func testParseWebStartWithOptions() throws {
+        let result = try CLIArgumentParser.parse([
+            "web", "start",
+            "--bind", "0.0.0.0",
+            "--port", "9000",
+            "--token", "secret",
+            "--fps", "30"
+        ])
+        XCTAssertEqual(
+            result,
+            .webStart(bindAddress: "0.0.0.0", port: 9000, token: "secret", fps: 30)
+        )
+    }
+
+    func testParseWebStatus() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["web", "status"]), .webStatus)
+    }
+
+    func testParseStreamList() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["stream", "list"]), .streamList)
+    }
+
+    func testParseStreamCurrentWithID() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["stream", "current", "7"]), .streamCurrent(id: 7))
+    }
+
+    func testParseProtocolCapabilities() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["protocol", "capabilities"]), .protocolCapabilities)
+    }
+
+    func testParseProtocolViewportWithRequestID() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["protocol", "viewport", "--request-id", "req-42"]),
+            .protocolViewport(requestID: "req-42")
+        )
+    }
+
+    func testParseProtocolSend() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["protocol", "send", "--type", "agent.status", "--json", "{\"ok\":true}"]),
+            .protocolSend(type: "agent.status", json: "{\"ok\":true}")
+        )
+    }
+
+    func testParseImageList() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["image", "list"]), .imageList)
+    }
+
+    func testParseImageDeleteWithID() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["image", "delete", "9"]), .imageDelete(id: 9))
+    }
+
+    func testParseImageClear() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["image", "clear"]), .imageClear)
+    }
 }
 
 // MARK: - Request Builder Tests
@@ -334,6 +390,67 @@ final class RequestBuilderTests: XCTestCase {
         let request = runner.buildRequest(from: .status)
 
         XCTAssertEqual(request.command, "status")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildWebStartRequest() {
+        let request = runner.buildRequest(
+            from: .webStart(bindAddress: "127.0.0.1", port: 7770, token: "abc", fps: 60)
+        )
+
+        XCTAssertEqual(request.command, "web-start")
+        XCTAssertEqual(request.params?["bind"], "127.0.0.1")
+        XCTAssertEqual(request.params?["port"], "7770")
+        XCTAssertEqual(request.params?["token"], "abc")
+        XCTAssertEqual(request.params?["fps"], "60")
+    }
+
+    func testBuildStreamListRequest() {
+        let request = runner.buildRequest(from: .streamList)
+        XCTAssertEqual(request.command, "stream-list")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildStreamCurrentRequest() {
+        let request = runner.buildRequest(from: .streamCurrent(id: 4))
+        XCTAssertEqual(request.command, "stream-current")
+        XCTAssertEqual(request.params?["id"], "4")
+    }
+
+    func testBuildProtocolCapabilitiesRequest() {
+        let request = runner.buildRequest(from: .protocolCapabilities)
+        XCTAssertEqual(request.command, "protocol-capabilities")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildProtocolViewportRequest() {
+        let request = runner.buildRequest(from: .protocolViewport(requestID: "req-1"))
+        XCTAssertEqual(request.command, "protocol-viewport")
+        XCTAssertEqual(request.params?["request_id"], "req-1")
+    }
+
+    func testBuildProtocolSendRequest() {
+        let request = runner.buildRequest(from: .protocolSend(type: "agent.status", json: "{\"ok\":true}"))
+        XCTAssertEqual(request.command, "protocol-send")
+        XCTAssertEqual(request.params?["type"], "agent.status")
+        XCTAssertEqual(request.params?["json"], "{\"ok\":true}")
+    }
+
+    func testBuildImageListRequest() {
+        let request = runner.buildRequest(from: .imageList)
+        XCTAssertEqual(request.command, "image-list")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildImageDeleteRequest() {
+        let request = runner.buildRequest(from: .imageDelete(id: 12))
+        XCTAssertEqual(request.command, "image-delete")
+        XCTAssertEqual(request.params?["id"], "12")
+    }
+
+    func testBuildImageClearRequest() {
+        let request = runner.buildRequest(from: .imageClear)
+        XCTAssertEqual(request.command, "image-clear")
         XCTAssertNil(request.params)
     }
 }
@@ -444,6 +561,82 @@ final class OutputFormatterTests: XCTestCase {
             response: response
         )
         XCTAssertEqual(output, "Cocxy Terminal - status unavailable")
+    }
+
+    func testFormatStatusIncludesCoreDiagnostics() {
+        let response = CLISocketResponse(
+            id: "r-7b",
+            success: true,
+            data: [
+                "version": "0.1.47",
+                "search_mode": "gpu",
+                "search_indexed_rows": "420",
+                "protocol_v2_observed": "true",
+                "protocol_v2_capabilities_requested": "true",
+                "current_stream_id": "3",
+                "ligatures_enabled": "true",
+                "ligature_cache_hits": "12",
+                "ligature_cache_misses": "2",
+                "image_count": "4",
+                "image_memory_used_mib": "8",
+                "image_memory_limit_mib": "256",
+                "image_sixel_enabled": "true",
+                "image_kitty_enabled": "true",
+                "image_atlas_width": "1024",
+                "image_atlas_height": "1024",
+                "image_atlas_generation": "7",
+                "image_atlas_dirty": "false",
+                "stream_count": "2",
+                "web_running": "true",
+                "web_bind": "127.0.0.1",
+                "web_port": "7770",
+                "web_connections": "1"
+            ],
+            error: nil
+        )
+        let output = OutputFormatter.formatSuccess(command: .status, response: response)
+
+        XCTAssertTrue(output.contains("Search: gpu (420 indexed rows)"))
+        XCTAssertTrue(output.contains("Protocol v2: observed on, capabilities on, current stream 3"))
+        XCTAssertTrue(output.contains("Ligatures: on (hits 12, misses 2)"))
+        XCTAssertTrue(output.contains("Images: 4 loaded (8/256 MiB, sixel on, kitty on)"))
+        XCTAssertTrue(output.contains("Image atlas: 1024x1024 gen 7, dirty off"))
+        XCTAssertTrue(output.contains("Streams: 2"))
+        XCTAssertTrue(output.contains("Web terminal: running on 127.0.0.1:7770 (1 clients)"))
+    }
+
+    func testFormatImageDeleteSuccess() {
+        let response = CLISocketResponse(
+            id: "r-img-del",
+            success: true,
+            data: ["image_id": "7"],
+            error: nil
+        )
+        let output = OutputFormatter.formatSuccess(
+            command: .imageDelete(id: 7),
+            response: response
+        )
+        XCTAssertEqual(output, "Inline image deleted.")
+    }
+
+    func testFormatImageListSuccessFallsBackToStructuredData() {
+        let response = CLISocketResponse(
+            id: "r-img-list",
+            success: true,
+            data: [
+                "count": "1",
+                "image_0_id": "7",
+                "image_0_width": "1",
+                "image_0_height": "1"
+            ],
+            error: nil
+        )
+        let output = OutputFormatter.formatSuccess(
+            command: .imageList,
+            response: response
+        )
+        XCTAssertTrue(output.contains("\"count\""))
+        XCTAssertTrue(output.contains("\"image_0_id\""))
     }
 
     // MARK: - 30. List-tabs formatting with no data
@@ -582,10 +775,10 @@ final class CLIErrorTests: XCTestCase {
 /// Tests for `CLICommand` enum metadata.
 final class CLICommandDefinitionTests: XCTestCase {
 
-    // MARK: - 43. All commands exist (10 original + 21 v2 + 8 browser + 5 remote + 3 plugin + 18 v3 = 65)
+    // MARK: - 43. All commands exist (current catalog size)
 
     func testAllCommandsExist() {
-        XCTAssertEqual(CLICommand.allCases.count, 66)
+        XCTAssertEqual(CLICommand.allCases.count, 77)
     }
 
     // MARK: - 39. Raw values match server protocol

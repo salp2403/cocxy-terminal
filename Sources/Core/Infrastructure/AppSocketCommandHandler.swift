@@ -119,6 +119,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// of silently returning "acknowledged".
     private let notifyDispatcher: @Sendable (String, String) -> Void
 
+    /// Provides extra status fields derived from the active CocxyCore surface.
+    private let statusDetailsProvider: (@Sendable () -> [String: String])?
+
     // MARK: - V3 Command Providers
 
     /// Duplicates the active tab (creates new tab with same working directory).
@@ -204,6 +207,39 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Opens an SSH session in a new tab. Params: (destination, port?, identityFile?).
     let sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)?
 
+    /// Starts a web terminal on the focused surface and returns status fields.
+    let webStartProvider: (@Sendable (String, UInt16, String, UInt16, UInt32) -> [String: String]?)?
+
+    /// Stops the focused surface's web terminal.
+    let webStopProvider: (@Sendable () -> Bool)?
+
+    /// Returns web-terminal status for the focused surface.
+    let webStatusProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns CocxyCore process streams for the focused surface.
+    let streamListProvider: (@Sendable () -> [String: String]?)?
+
+    /// Sets the current CocxyCore stream for the focused surface.
+    let streamCurrentProvider: (@Sendable (UInt32) -> [String: String]?)?
+
+    /// Requests a Protocol v2 capabilities exchange on the focused surface.
+    let protocolCapabilitiesProvider: (@Sendable () -> [String: String]?)?
+
+    /// Sends a Protocol v2 viewport payload on the focused surface.
+    let protocolViewportProvider: (@Sendable (String?) -> [String: String]?)?
+
+    /// Sends an explicit Protocol v2 message on the focused surface.
+    let protocolSendProvider: (@Sendable (String, String) -> [String: String]?)?
+
+    /// Returns stored inline images for the focused surface.
+    let imageListProvider: (@Sendable () -> [String: String]?)?
+
+    /// Deletes a specific inline image by ID for the focused surface.
+    let imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)?
+
+    /// Clears inline images for the focused surface.
+    let imageClearProvider: (@Sendable () -> [String: String]?)?
+
     // MARK: - Initialization
 
     /// Creates an AppSocketCommandHandler with closure-based access to @MainActor services.
@@ -232,6 +268,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         tabMoveProviderOverride: (@Sendable (String, Int) -> Bool)? = nil,
         projectConfigProviderOverride: (@Sendable () -> [String: String]?)? = nil,
         configProvider: (@Sendable () -> CocxyConfig)? = nil,
+        statusDetailsProvider: (@Sendable () -> [String: String])? = nil,
         themeEngineProvider: (() -> ThemeEngineImpl?)? = nil,
         remoteConnectionManagerProvider: (() -> RemoteConnectionManager?)? = nil,
         remoteProfileStoreProvider: (() -> (any RemoteProfileStoring)?)? = nil,
@@ -264,9 +301,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         searchProvider: (@Sendable (String, Bool, Bool, String?) -> SearchCommandResult?)? = nil,
         sendTextProvider: (@Sendable (String) -> Bool)? = nil,
         sendKeyProvider: (@Sendable (String) -> Bool)? = nil,
-        sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)? = nil
+        sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)? = nil,
+        webStartProvider: (@Sendable (String, UInt16, String, UInt16, UInt32) -> [String: String]?)? = nil,
+        webStopProvider: (@Sendable () -> Bool)? = nil,
+        webStatusProvider: (@Sendable () -> [String: String]?)? = nil,
+        streamListProvider: (@Sendable () -> [String: String]?)? = nil,
+        streamCurrentProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
+        protocolCapabilitiesProvider: (@Sendable () -> [String: String]?)? = nil,
+        protocolViewportProvider: (@Sendable (String?) -> [String: String]?)? = nil,
+        protocolSendProvider: (@Sendable (String, String) -> [String: String]?)? = nil,
+        imageListProvider: (@Sendable () -> [String: String]?)? = nil,
+        imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
+        imageClearProvider: (@Sendable () -> [String: String]?)? = nil
     ) {
         self.configProvider = configProvider
+        self.statusDetailsProvider = statusDetailsProvider
         self.themeEngineProvider = themeEngineProvider
         self.remoteConnectionManagerProvider = remoteConnectionManagerProvider
         self.remoteProfileStoreProvider = remoteProfileStoreProvider
@@ -299,6 +348,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.sendTextProvider = sendTextProvider
         self.sendKeyProvider = sendKeyProvider
         self.sshProvider = sshProvider
+        self.webStartProvider = webStartProvider
+        self.webStopProvider = webStopProvider
+        self.webStatusProvider = webStatusProvider
+        self.streamListProvider = streamListProvider
+        self.streamCurrentProvider = streamCurrentProvider
+        self.protocolCapabilitiesProvider = protocolCapabilitiesProvider
+        self.protocolViewportProvider = protocolViewportProvider
+        self.protocolSendProvider = protocolSendProvider
+        self.imageListProvider = imageListProvider
+        self.imageDeleteProvider = imageDeleteProvider
+        self.imageClearProvider = imageClearProvider
         let tabManagerRef = WeakReference(tabManager)
         let browserViewModelRef = WeakReference(browserViewModel)
 
@@ -677,6 +737,30 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         // SSH (v4)
         case .ssh:
             return handleSSH(request)
+
+        // Web terminal (v5)
+        case .webStart:
+            return handleWebStart(request)
+        case .webStop:
+            return handleWebStop(request)
+        case .webStatus:
+            return handleWebStatus(request)
+        case .streamList:
+            return handleStreamList(request)
+        case .streamCurrent:
+            return handleStreamCurrent(request)
+        case .protocolCapabilities:
+            return handleProtocolCapabilities(request)
+        case .protocolViewport:
+            return handleProtocolViewport(request)
+        case .protocolSend:
+            return handleProtocolSend(request)
+        case .imageList:
+            return handleImageList(request)
+        case .imageDelete:
+            return handleImageDelete(request)
+        case .imageClear:
+            return handleImageClear(request)
         }
     }
 
@@ -701,11 +785,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Returns the application status including version and tab count.
     private func handleStatus(_ request: SocketRequest) -> SocketResponse {
         let tabCount = tabCountProvider()
-        return .ok(id: request.id, data: [
+        var data: [String: String] = [
             "status": "running",
             "version": CocxyVersion.current,
             "tabs": "\(tabCount)"
-        ])
+        ]
+        if let extra = statusDetailsProvider?() {
+            for (key, value) in extra {
+                data[key] = value
+            }
+        }
+        return .ok(id: request.id, data: data)
     }
 
     /// Returns a list of all open tabs with their IDs, titles, and active state.
@@ -1050,6 +1140,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return config.appearance.tabPosition.rawValue
         case "appearance.window-padding":
             return "\(config.appearance.windowPadding)"
+        case "appearance.ligatures":
+            return "\(config.appearance.ligatures)"
         case "appearance.background-opacity":
             return "\(config.appearance.backgroundOpacity)"
         case "appearance.background-blur-radius":
@@ -1072,6 +1164,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.terminal.clipboardPasteProtection)"
         case "terminal.clipboard-read-access":
             return config.terminal.clipboardReadAccess.rawValue
+        case "terminal.image-memory-limit-mb":
+            return "\(config.terminal.imageMemoryLimitMB)"
+        case "terminal.image-file-transfer":
+            return "\(config.terminal.imageFileTransfer)"
+        case "terminal.enable-sixel-images":
+            return "\(config.terminal.enableSixelImages)"
+        case "terminal.enable-kitty-images":
+            return "\(config.terminal.enableKittyImages)"
 
         // Agent detection
         case "agent-detection.enabled":
@@ -2263,12 +2363,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "general.shell", "general.working-directory",
             "general.confirm-close-process",
             "appearance.theme", "appearance.font-family", "appearance.font-size",
-            "appearance.tab-position", "appearance.window-padding",
+            "appearance.tab-position", "appearance.window-padding", "appearance.ligatures",
             "appearance.background-opacity", "appearance.background-blur-radius",
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",
             "terminal.clipboard-paste-protection", "terminal.clipboard-read-access",
+            "terminal.image-memory-limit-mb", "terminal.image-file-transfer",
+            "terminal.enable-sixel-images", "terminal.enable-kitty-images",
             "agent-detection.enabled", "agent-detection.osc-notifications",
             "agent-detection.pattern-matching", "agent-detection.timing-heuristics",
             "agent-detection.idle-timeout-seconds",

@@ -14,10 +14,13 @@ final class MockTerminalEngine: TerminalEngine {
     private(set) var preeditTexts: [(surface: SurfaceID, text: String)] = []
     private(set) var resizedSurfaces: [(surface: SurfaceID, size: TerminalSize)] = []
     private(set) var scrolledResults: [(surface: SurfaceID, lineNumber: Int)] = []
+    private(set) var focusNotifications: [(surface: SurfaceID, focused: Bool)] = []
+    private(set) var nativeSearchRequests: [(surface: SurfaceID, options: SearchOptions)] = []
     private(set) var tickCount: Int = 0
 
     var createSurfaceError: Error?
     var sendKeyEventReturnValue: Bool = true
+    var nativeSearchResults: [SurfaceID: [SearchResult]?] = [:]
 
     private var outputHandlers: [SurfaceID: @Sendable (Data) -> Void] = [:]
     private var oscHandlers: [SurfaceID: @Sendable (OSCNotification) -> Void] = [:]
@@ -86,6 +89,15 @@ final class MockTerminalEngine: TerminalEngine {
 
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {
         scrolledResults.append((surfaceID, lineNumber))
+    }
+
+    func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
+        focusNotifications.append((surface, focused))
+    }
+
+    func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
+        nativeSearchRequests.append((surfaceID, options))
+        return nativeSearchResults[surfaceID] ?? nil
     }
 
     func emitOutput(_ data: Data, for surface: SurfaceID) {

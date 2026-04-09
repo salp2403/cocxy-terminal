@@ -38,6 +38,30 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     @MainActor
+    func test_statusCommand_mergesCocxyCoreDiagnosticsWithoutOverwritingBaseStatus() {
+        let tabManager = TabManager()
+        let handler = AppSocketCommandHandler(
+            tabManager: tabManager,
+            hookEventReceiver: nil,
+            statusDetailsProvider: {
+                [
+                    "web_running": "true",
+                    "web_bind": "127.0.0.1",
+                    "web_port": "7770",
+                    "current_stream_id": "2"
+                ]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(id: "test-2b", command: "status", params: nil))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "running")
+        XCTAssertEqual(response.data?["web_running"], "true")
+        XCTAssertEqual(response.data?["current_stream_id"], "2")
+    }
+
+    @MainActor
     func test_listTabsCommand_returnsTabInfo() {
         let tabManager = TabManager()
         let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
@@ -882,12 +906,160 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertFalse(response.success)
     }
 
+    func test_webStatusCommand_withProvider_returnsStructuredStatus() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            webStatusProvider: {
+                [
+                    "status": "running",
+                    "running": "true",
+                    "bind": "127.0.0.1",
+                    "port": "7770",
+                    "connections": "2"
+                ]
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "web-1", command: "web-status", params: nil))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "running")
+        XCTAssertEqual(response.data?["connections"], "2")
+    }
+
+    func test_webStartCommand_withoutProvider_returnsFailure() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(id: "web-2", command: "web-start", params: nil))
+        XCTAssertFalse(response.success)
+    }
+
+    func test_streamListCommand_withProvider_returnsData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            streamListProvider: {
+                ["count": "2", "current_stream_id": "1", "stream_0_id": "1", "stream_1_id": "2"]
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-1", command: "stream-list", params: nil))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "2")
+        XCTAssertEqual(response.data?["current_stream_id"], "1")
+    }
+
+    func test_protocolSendCommand_requiresTypeAndJson() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            protocolSendProvider: { _, _ in ["status": "sent"] }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-2", command: "protocol-send", params: ["type": "agent.status"]))
+        XCTAssertFalse(response.success)
+    }
+
+    func test_streamCurrentCommand_withProvider_returnsSelectedStream() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            streamCurrentProvider: { streamID in
+                ["status": "current", "stream_id": "\(streamID)"]
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-2b", command: "stream-current", params: ["id": "9"]))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["stream_id"], "9")
+    }
+
+    func test_protocolCapabilitiesCommand_withProvider_returnsSent() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            protocolCapabilitiesProvider: {
+                ["status": "sent", "message": "terminal.capabilities"]
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-2c", command: "protocol-capabilities", params: nil))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["message"], "terminal.capabilities")
+    }
+
+    func test_protocolViewportCommand_withProvider_returnsViewportMessage() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            protocolViewportProvider: { requestID in
+                var data = ["status": "sent", "message": "terminal.viewport"]
+                if let requestID {
+                    data["request_id"] = requestID
+                }
+                return data
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-2d", command: "protocol-viewport", params: ["request_id": "req-1"]))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["request_id"], "req-1")
+    }
+
+    func test_imageListCommand_withProvider_returnsData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            imageListProvider: {
+                ["count": "1", "image_0_id": "7"]
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-2e", command: "image-list", params: nil))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["image_0_id"], "7")
+    }
+
+    func test_imageDeleteCommand_requiresID() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            imageDeleteProvider: { _ in ["status": "deleted"] }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-2f", command: "image-delete", params: nil))
+        XCTAssertFalse(response.success)
+    }
+
+    func test_imageDeleteCommand_withProvider_returnsDeletedImage() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            imageDeleteProvider: { imageID in
+                ["status": "deleted", "image_id": "\(imageID)"]
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-2g", command: "image-delete", params: ["id": "12"]))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["image_id"], "12")
+    }
+
+    func test_imageClearCommand_withProvider_returnsCleared() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            imageClearProvider: {
+                ["status": "cleared", "removed": "3"]
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-3", command: "image-clear", params: nil))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["removed"], "3")
+    }
+
     func test_v4Commands_withoutProviders_returnFailure() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let commands = [
             "split", "split-list", "split-focus", "split-close", "split-resize",
             "dashboard-show", "dashboard-hide", "dashboard-toggle", "dashboard-status",
-            "timeline-show", "timeline-export", "search", "send", "send-key", "ssh"
+            "timeline-show", "timeline-export", "search", "send", "send-key", "ssh",
+            "web-start", "web-stop", "web-status",
+            "stream-list", "stream-current", "protocol-capabilities",
+            "protocol-viewport", "protocol-send", "image-list", "image-delete", "image-clear"
         ]
         for command in commands {
             let request = SocketRequest(id: "nil-\(command)", command: command, params: nil)

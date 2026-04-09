@@ -2,6 +2,7 @@
 // ForegroundProcessDetector.swift - Detects the foreground process of a terminal PTY.
 
 import Foundation
+import Darwin
 
 // MARK: - Foreground Process Info
 
@@ -38,27 +39,108 @@ struct ForegroundProcessInfo: Equatable, Sendable {
 /// - SeeAlso: `Tab.processName` for the display field.
 enum ForegroundProcessDetector {
 
+    struct ProcessSnapshot: Equatable, Sendable {
+        let pid: pid_t
+        let parentPID: pid_t
+        let processGroupID: pid_t
+        let name: String
+    }
+
     /// Detects the foreground process for the given PID.
     ///
     /// - Parameter pid: The PID to query (typically the shell's PID).
     /// - Returns: Process info, or nil if detection failed.
-    static func detect(shellPID: pid_t) -> ForegroundProcessInfo? {
-        // Get the foreground process group of the shell's controlling terminal.
-        // On macOS, we use sysctl to find child processes.
-        guard let childPIDs = childProcesses(of: shellPID) else { return nil }
+    static func detect(shellPID: pid_t, ptyMasterFD: Int32? = nil) -> ForegroundProcessInfo? {
+        let snapshots = processSnapshots() ?? []
+        return detect(
+            shellPID: shellPID,
+            ptyMasterFD: ptyMasterFD,
+            expectedShellIdentity: nil,
+            snapshots: snapshots
+        )
+    }
 
-        // The foreground process is typically the last child.
-        // If no children, the shell itself is the foreground process.
-        let targetPID = childPIDs.last ?? shellPID
+    static func detect(
+        shellPID: pid_t,
+        ptyMasterFD: Int32? = nil,
+        expectedShellIdentity: TerminalProcessIdentity? = nil,
+        snapshots: [ProcessSnapshot]
+    ) -> ForegroundProcessInfo? {
+        if let expectedShellIdentity,
+           processIdentity(for: shellPID) != expectedShellIdentity {
+            return nil
+        }
 
-        guard let name = processName(for: targetPID) else { return nil }
+        guard let snapshot = selectForegroundProcess(
+            shellPID: shellPID,
+            ptyMasterFD: ptyMasterFD,
+            snapshots: snapshots
+        ) else {
+            return nil
+        }
 
-        let command = processCommand(for: targetPID)
+        let command = processCommand(for: snapshot.pid)
 
         return ForegroundProcessInfo(
-            name: name,
+            name: snapshot.name,
             command: command,
-            pid: targetPID
+            pid: snapshot.pid
+        )
+    }
+
+    static func selectForegroundProcess(
+        shellPID: pid_t,
+        ptyMasterFD: Int32? = nil,
+        snapshots: [ProcessSnapshot]
+    ) -> ProcessSnapshot? {
+        let foregroundPGID = foregroundProcessGroupID(
+            shellPID: shellPID,
+            ptyMasterFD: ptyMasterFD
+        )
+        return selectForegroundProcess(
+            shellPID: shellPID,
+            foregroundProcessGroupID: foregroundPGID,
+            snapshots: snapshots
+        )
+    }
+
+    static func selectForegroundProcess(
+        shellPID: pid_t,
+        foregroundProcessGroupID: pid_t?,
+        snapshots: [ProcessSnapshot]
+    ) -> ProcessSnapshot? {
+        guard !snapshots.isEmpty else {
+            guard let name = processName(for: shellPID) else { return nil }
+            return ProcessSnapshot(
+                pid: shellPID,
+                parentPID: 0,
+                processGroupID: foregroundProcessGroupID ?? shellPID,
+                name: name
+            )
+        }
+
+        let descendantPIDs = descendantProcessIDs(of: shellPID, in: snapshots)
+        var candidates = snapshots.filter { snapshot in
+            snapshot.pid == shellPID || descendantPIDs.contains(snapshot.pid)
+        }
+
+        guard !candidates.isEmpty else {
+            return snapshots.first(where: { $0.pid == shellPID })
+        }
+
+        if let foregroundProcessGroupID, foregroundProcessGroupID > 0 {
+            let foregroundCandidates = candidates.filter {
+                $0.processGroupID == foregroundProcessGroupID
+            }
+            if !foregroundCandidates.isEmpty {
+                candidates = foregroundCandidates
+            }
+        }
+
+        return preferredProcess(
+            from: candidates,
+            shellPID: shellPID,
+            foregroundProcessGroupID: foregroundProcessGroupID
         )
     }
 
@@ -132,6 +214,14 @@ enum ForegroundProcessDetector {
 
     /// Gets child processes of a PID using sysctl.
     static func childProcesses(of parentPID: pid_t) -> [pid_t]? {
+        guard let snapshots = processSnapshots() else { return nil }
+        let children = snapshots
+            .filter { $0.parentPID == parentPID }
+            .map(\.pid)
+        return children.isEmpty ? nil : children
+    }
+
+    static func processSnapshots() -> [ProcessSnapshot]? {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL]
         var size: Int = 0
 
@@ -146,13 +236,94 @@ enum ForegroundProcessDetector {
 
         let actualCount = size / MemoryLayout<kinfo_proc>.stride
 
-        var children: [pid_t] = []
+        var snapshots: [ProcessSnapshot] = []
+        snapshots.reserveCapacity(actualCount)
         for i in 0..<actualCount {
-            if procs[i].kp_eproc.e_ppid == parentPID {
-                children.append(procs[i].kp_proc.p_pid)
+            let pid = procs[i].kp_proc.p_pid
+            let name = withUnsafePointer(to: &procs[i].kp_proc.p_comm) { ptr in
+                ptr.withMemoryRebound(to: CChar.self, capacity: Int(MAXCOMLEN)) { charPtr in
+                    String(cString: charPtr)
+                }
+            }
+            snapshots.append(ProcessSnapshot(
+                pid: pid,
+                parentPID: procs[i].kp_eproc.e_ppid,
+                processGroupID: procs[i].kp_eproc.e_pgid,
+                name: name.isEmpty ? String(pid) : name
+            ))
+        }
+
+        return snapshots
+    }
+
+    private static func foregroundProcessGroupID(
+        shellPID: pid_t,
+        ptyMasterFD: Int32?
+    ) -> pid_t? {
+        if let ptyMasterFD, ptyMasterFD >= 0 {
+            let pgid = tcgetpgrp(ptyMasterFD)
+            if pgid > 0 {
+                return pgid
             }
         }
 
-        return children.isEmpty ? nil : children
+        guard let bsdInfo = processBSDInfo(for: shellPID) else { return nil }
+        let ttyForegroundPGID = pid_t(bsdInfo.e_tpgid)
+        return ttyForegroundPGID > 0 ? ttyForegroundPGID : nil
+    }
+
+    private static func processBSDInfo(for pid: pid_t) -> proc_bsdinfo? {
+        guard pid > 0 else { return nil }
+
+        var info = proc_bsdinfo()
+        let expectedSize = Int32(MemoryLayout.size(ofValue: info))
+        let result = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, expectedSize)
+        guard result == expectedSize else { return nil }
+        return info
+    }
+
+    static func processIdentity(for pid: pid_t) -> TerminalProcessIdentity? {
+        guard let info = processBSDInfo(for: pid) else { return nil }
+        return TerminalProcessIdentity(
+            pid: pid,
+            startSeconds: UInt64(info.pbi_start_tvsec),
+            startMicroseconds: UInt64(info.pbi_start_tvusec)
+        )
+    }
+
+    private static func descendantProcessIDs(
+        of ancestorPID: pid_t,
+        in snapshots: [ProcessSnapshot]
+    ) -> Set<pid_t> {
+        let childrenByParent = Dictionary(grouping: snapshots, by: \.parentPID)
+        var pending: [pid_t] = [ancestorPID]
+        var descendants: Set<pid_t> = []
+
+        while let current = pending.popLast() {
+            for child in childrenByParent[current] ?? [] where descendants.insert(child.pid).inserted {
+                pending.append(child.pid)
+            }
+        }
+
+        return descendants
+    }
+
+    private static func preferredProcess(
+        from candidates: [ProcessSnapshot],
+        shellPID: pid_t,
+        foregroundProcessGroupID: pid_t?
+    ) -> ProcessSnapshot? {
+        let nonShellCandidates = candidates.filter { $0.pid != shellPID }
+
+        if let foregroundProcessGroupID,
+           let leader = nonShellCandidates.first(where: { $0.pid == foregroundProcessGroupID }) {
+            return leader
+        }
+
+        if let nonShell = nonShellCandidates.max(by: { $0.pid < $1.pid }) {
+            return nonShell
+        }
+
+        return candidates.first(where: { $0.pid == shellPID })
     }
 }

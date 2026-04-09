@@ -257,6 +257,43 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy ssh user@host [-p port] [-i identity]`
     case ssh(destination: String, port: Int?, identityFile: String?)
+
+    // MARK: - Web Terminal (v5)
+
+    /// `cocxy web start [--bind <address>] [--port <port>] [--token <token>] [--fps <n>]`
+    case webStart(bindAddress: String?, port: Int?, token: String?, fps: Int?)
+
+    /// `cocxy web stop`
+    case webStop
+
+    /// `cocxy web status`
+    case webStatus
+
+    // MARK: - CocxyCore Streams / Protocol / Images (v5)
+
+    /// `cocxy stream list`
+    case streamList
+
+    /// `cocxy stream current <id>`
+    case streamCurrent(id: Int)
+
+    /// `cocxy protocol capabilities`
+    case protocolCapabilities
+
+    /// `cocxy protocol viewport [--request-id <id>]`
+    case protocolViewport(requestID: String?)
+
+    /// `cocxy protocol send --type <type> --json <json>`
+    case protocolSend(type: String, json: String)
+
+    /// `cocxy image list`
+    case imageList
+
+    /// `cocxy image delete <id>`
+    case imageDelete(id: Int)
+
+    /// `cocxy image clear`
+    case imageClear
 }
 
 // MARK: - Split Direction
@@ -377,6 +414,18 @@ public enum CLIArgumentParser {
 
         case "browser":
             return try parseBrowser(arguments: Array(arguments.dropFirst()))
+
+        case "web":
+            return try parseWeb(arguments: Array(arguments.dropFirst()))
+
+        case "stream":
+            return try parseStream(arguments: Array(arguments.dropFirst()))
+
+        case "protocol":
+            return try parseProtocol(arguments: Array(arguments.dropFirst()))
+
+        case "image":
+            return try parseImage(arguments: Array(arguments.dropFirst()))
 
         default:
             throw CLIError.unknownCommand(firstArg)
@@ -1070,6 +1119,173 @@ public enum CLIArgumentParser {
         }
 
         return .ssh(destination: destination, port: port, identityFile: identityFile)
+    }
+
+    // MARK: - Web Terminal Parser
+
+    private static func parseWeb(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "web", argument: "start|stop|status")
+        }
+
+        switch subcommand {
+        case "start":
+            let rest = Array(arguments.dropFirst())
+            var bindAddress: String?
+            var port: Int?
+            var token: String?
+            var fps: Int?
+            var index = 0
+            while index < rest.count {
+                switch rest[index] {
+                case "--bind" where index + 1 < rest.count:
+                    bindAddress = rest[index + 1]
+                    index += 2
+                case "--port" where index + 1 < rest.count:
+                    guard let parsed = Int(rest[index + 1]) else {
+                        throw CLIError.invalidArgument(command: "web start", argument: rest[index + 1], reason: "port must be an integer")
+                    }
+                    port = parsed
+                    index += 2
+                case "--token" where index + 1 < rest.count:
+                    token = rest[index + 1]
+                    index += 2
+                case "--fps" where index + 1 < rest.count:
+                    guard let parsed = Int(rest[index + 1]) else {
+                        throw CLIError.invalidArgument(command: "web start", argument: rest[index + 1], reason: "fps must be an integer")
+                    }
+                    fps = parsed
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(command: "web start", argument: rest[index], reason: "unknown option")
+                }
+            }
+            return .webStart(bindAddress: bindAddress, port: port, token: token, fps: fps)
+
+        case "stop":
+            return .webStop
+
+        case "status":
+            return .webStatus
+
+        default:
+            throw CLIError.invalidArgument(command: "web", argument: subcommand, reason: "Unknown subcommand. Use start, stop, or status.")
+        }
+    }
+
+    // MARK: - Stream Parser
+
+    private static func parseStream(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "stream", argument: "list|current")
+        }
+
+        switch subcommand {
+        case "list":
+            return .streamList
+        case "current":
+            guard arguments.count >= 2, let streamID = Int(arguments[1]) else {
+                throw CLIError.missingArgument(command: "stream current", argument: "id")
+            }
+            return .streamCurrent(id: streamID)
+        default:
+            throw CLIError.invalidArgument(
+                command: "stream",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list or current."
+            )
+        }
+    }
+
+    // MARK: - Protocol Parser
+
+    private static func parseProtocol(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "protocol", argument: "capabilities|viewport|send")
+        }
+
+        switch subcommand {
+        case "capabilities":
+            return .protocolCapabilities
+        case "viewport":
+            let rest = Array(arguments.dropFirst())
+            var requestID: String?
+            var index = 0
+            while index < rest.count {
+                switch rest[index] {
+                case "--request-id" where index + 1 < rest.count:
+                    requestID = rest[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "protocol viewport",
+                        argument: rest[index],
+                        reason: "unknown option"
+                    )
+                }
+            }
+            return .protocolViewport(requestID: requestID)
+        case "send":
+            let rest = Array(arguments.dropFirst())
+            var type: String?
+            var json: String?
+            var index = 0
+            while index < rest.count {
+                switch rest[index] {
+                case "--type" where index + 1 < rest.count:
+                    type = rest[index + 1]
+                    index += 2
+                case "--json" where index + 1 < rest.count:
+                    json = rest[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "protocol send",
+                        argument: rest[index],
+                        reason: "unknown option"
+                    )
+                }
+            }
+            guard let type, !type.isEmpty else {
+                throw CLIError.missingArgument(command: "protocol send", argument: "--type")
+            }
+            guard let json, !json.isEmpty else {
+                throw CLIError.missingArgument(command: "protocol send", argument: "--json")
+            }
+            return .protocolSend(type: type, json: json)
+        default:
+            throw CLIError.invalidArgument(
+                command: "protocol",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use capabilities, viewport, or send."
+            )
+        }
+    }
+
+    // MARK: - Image Parser
+
+    private static func parseImage(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "image", argument: "list|delete|clear")
+        }
+
+        switch subcommand {
+        case "list":
+            return .imageList
+        case "delete":
+            guard arguments.count >= 2, let imageID = Int(arguments[1]) else {
+                throw CLIError.missingArgument(command: "image delete", argument: "id")
+            }
+            return .imageDelete(id: imageID)
+        case "clear":
+            return .imageClear
+        default:
+            throw CLIError.invalidArgument(
+                command: "image",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list, delete, or clear."
+            )
+        }
     }
 
     // MARK: - Help Text
