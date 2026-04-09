@@ -168,6 +168,19 @@ struct ForwardCache: Sendable {
 @MainActor
 final class HTTPConnectProxy {
 
+    private final class ListenerStartupGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var resumed = false
+
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !resumed else { return false }
+            resumed = true
+            return true
+        }
+    }
+
     /// The local port this proxy listens on.
     let port: Int
 
@@ -198,25 +211,44 @@ final class HTTPConnectProxy {
         self.profileID = profileID
     }
 
-    /// Starts the proxy listener.
-    func start() throws {
+    /// Starts the proxy listener and waits until the listener is either ready or failed.
+    func start() async throws {
         let parameters = NWParameters.tcp
         let nwPort = NWEndpoint.Port(rawValue: UInt16(port))!
-        listener = try NWListener(using: parameters, on: nwPort)
+        let listener = try NWListener(using: parameters, on: nwPort)
+        self.listener = listener
 
-        listener?.newConnectionHandler = { [weak self] connection in
+        listener.newConnectionHandler = { [weak self] connection in
             Task { @MainActor in
                 self?.handleConnection(connection)
             }
         }
 
-        listener?.stateUpdateHandler = { newState in
-            if case .failed(let error) = newState {
-                NSLog("[HTTPConnectProxy] Listener failed: \(error)")
-            }
-        }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            let gate = ListenerStartupGate()
 
-        listener?.start(queue: .main)
+            listener.stateUpdateHandler = { [weak self] newState in
+                switch newState {
+                case .ready:
+                    guard gate.claim() else { return }
+                    continuation.resume()
+                case .failed(let error):
+                    NSLog("[HTTPConnectProxy] Listener failed: \(error)")
+                    Task { @MainActor [weak self] in
+                        self?.listener = nil
+                    }
+                    guard gate.claim() else { return }
+                    continuation.resume(throwing: error)
+                case .cancelled:
+                    guard gate.claim() else { return }
+                    continuation.resume(throwing: CancellationError())
+                default:
+                    break
+                }
+            }
+
+            listener.start(queue: .main)
+        }
     }
 
     /// Stops the proxy listener and cleans up.

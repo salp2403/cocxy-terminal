@@ -36,6 +36,13 @@ extension AppDelegate {
             data["current_stream_id"] = "\(protocolDetails.currentStreamID)"
         }
 
+        if let modeDetails = cocxyBridge.modeDiagnostics(for: surfaceID) {
+            data["cursor_visible"] = modeDetails.cursorVisible ? "true" : "false"
+            data["app_cursor_mode"] = modeDetails.appCursorMode ? "true" : "false"
+            data["alt_screen"] = modeDetails.altScreen ? "true" : "false"
+            data["semantic_block_count"] = "\(modeDetails.semanticBlockCount)"
+        }
+
         if let ligatures = cocxyBridge.ligatureDiagnostics(for: surfaceID) {
             data["ligatures_enabled"] = ligatures.enabled ? "true" : "false"
             data["ligature_cache_hits"] = "\(ligatures.cacheHits)"

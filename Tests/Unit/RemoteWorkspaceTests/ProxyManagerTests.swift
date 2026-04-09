@@ -38,6 +38,17 @@ final class MockPortForwarder: PortForwarding {
 @Suite("ProxyManager")
 struct ProxyManagerTests {
 
+    private static let portLock = NSLock()
+    private static var nextHTTPPort = 38888
+
+    private static func uniqueHTTPConnectPort() -> Int {
+        portLock.lock()
+        defer { portLock.unlock() }
+        let port = nextHTTPPort
+        nextHTTPPort += 1
+        return port
+    }
+
     @Test("Initial state is off")
     @MainActor func initialState() {
         let forwarder = MockPortForwarder()
@@ -119,9 +130,11 @@ struct ProxyManagerTests {
             forwarder: forwarder
         )
         let profileID = UUID()
+        let httpPort = Self.uniqueHTTPConnectPort()
         try await manager.enableSOCKS(port: 1080, profileID: profileID)
-        try await manager.enableHTTPConnect(port: 8888, profileID: profileID)
-        #expect(manager.state == .active(socksPort: 1080, httpPort: 8888))
+        try await manager.enableHTTPConnect(port: httpPort, profileID: profileID)
+        #expect(manager.state == .active(socksPort: 1080, httpPort: httpPort))
+        await manager.disable(profileID: profileID)
     }
 
     @Test("enableHTTPConnect without SOCKS throws error")
@@ -131,7 +144,7 @@ struct ProxyManagerTests {
             forwarder: MockPortForwarder()
         )
         do {
-            try await manager.enableHTTPConnect(port: 8888, profileID: UUID())
+            try await manager.enableHTTPConnect(port: Self.uniqueHTTPConnectPort(), profileID: UUID())
             Issue.record("Expected socksNotActive error")
         } catch let error as ProxyError {
             #expect(error == .socksNotActive)
@@ -148,8 +161,9 @@ struct ProxyManagerTests {
             forwarder: forwarder
         )
         let profileID = UUID()
+        let httpPort = Self.uniqueHTTPConnectPort()
         try await manager.enableSOCKS(port: 1080, profileID: profileID)
-        try await manager.enableHTTPConnect(port: 8888, profileID: profileID)
+        try await manager.enableHTTPConnect(port: httpPort, profileID: profileID)
         await manager.disable(profileID: profileID)
         #expect(manager.state == .off)
         #expect(forwarder.cancelledPorts.count == 1)

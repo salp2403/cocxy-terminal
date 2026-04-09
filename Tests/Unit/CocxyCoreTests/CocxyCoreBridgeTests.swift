@@ -338,6 +338,19 @@ struct CocxyCoreBridgeTests {
         #expect(diagnostics.capabilitiesRequested == true)
     }
 
+    @Test("mode diagnostics expose live terminal mode state")
+    func modeDiagnosticsExposeTerminalState() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+
+        let diagnostics = try #require(bridge.modeDiagnostics(for: surfaceID))
+        #expect(diagnostics.cursorVisible == true)
+        #expect(diagnostics.appCursorMode == false)
+        #expect(diagnostics.altScreen == false)
+        #expect(diagnostics.semanticBlockCount == 0)
+    }
+
     @Test("applyFont updates the live terminal font metrics")
     func applyFontUpdatesLiveMetrics() throws {
         let bridge = try makeBridge()

@@ -189,7 +189,7 @@ final class ProxyManagerImpl: ProxyManaging, ObservableObject {
             profileID: profileID
         )
         do {
-            try proxy.start()
+            try await proxy.start()
         } catch {
             throw ProxyError.httpConnectFailed(error.localizedDescription)
         }

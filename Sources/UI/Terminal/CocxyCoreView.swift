@@ -412,8 +412,6 @@ final class CocxyCoreView: NSView {
         surfaceID sid: SurfaceID,
         modifiers: KeyModifiers
     ) {
-        guard let state = bridge.surfaceState(for: sid) else { return }
-
         // Ctrl+letter → compute ASCII control character directly.
         if modifiers.contains(.control),
            !modifiers.contains(.command),
@@ -421,7 +419,7 @@ final class CocxyCoreView: NSView {
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 0x61, scalar.value <= 0x7A {
             let controlCode = UInt8(scalar.value - 0x60)
-            cocxycore_pty_write(state.pty, [controlCode], 1)
+            _ = bridge.writeBytes([controlCode], to: sid)
             return
         }
 
@@ -658,7 +656,7 @@ final class CocxyCoreView: NSView {
                 var buf = [UInt8](repeating: 0, count: 16)
                 let n = encodeMouseButton(button, terminal: state.terminal, event: event, buf: &buf)
                 if n > 0 {
-                    cocxycore_pty_write(state.pty, buf, n)
+                    _ = bridge.writeBytes(Array(buf.prefix(n)), to: sid)
                 }
             }
             return

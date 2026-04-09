@@ -44,6 +44,13 @@ struct TerminalProtocolDiagnostics: Equatable, Sendable {
     let currentStreamID: UInt32
 }
 
+struct TerminalModeDiagnostics: Equatable, Sendable {
+    let cursorVisible: Bool
+    let appCursorMode: Bool
+    let altScreen: Bool
+    let semanticBlockCount: UInt32
+}
+
 struct TerminalStreamSnapshot: Equatable, Sendable {
     let streamID: UInt32
     let pid: pid_t
@@ -341,6 +348,40 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     @discardableResult
+    func writeBytes(_ bytes: [UInt8], to surface: SurfaceID) -> Bool {
+        guard let state = surfaces[surface], !bytes.isEmpty else { return false }
+        return writeBytes(bytes, to: state)
+    }
+
+    @discardableResult
+    private func writeBytes(_ bytes: [UInt8], to state: SurfaceState) -> Bool {
+        writeAttachedPTYBytes(bytes, terminal: state.terminal, pty: state.pty) > 0
+    }
+
+    @discardableResult
+    private func writeAttachedPTYBytes(
+        _ bytes: [UInt8],
+        terminal: OpaquePointer,
+        pty: OpaquePointer
+    ) -> Int {
+        guard !bytes.isEmpty else { return 0 }
+
+        let attachedWritten = bytes.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return 0 }
+            return Int(cocxycore_terminal_write_attached_pty(terminal, baseAddress, buffer.count))
+        }
+
+        if attachedWritten > 0 {
+            return attachedWritten
+        }
+
+        return bytes.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return 0 }
+            return Int(cocxycore_pty_write(pty, baseAddress, buffer.count))
+        }
+    }
+
+    @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
         guard event.isKeyDown, let state = surfaces[surface] else { return false }
 
@@ -373,7 +414,7 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         if bytesWritten > 0 {
-            cocxycore_pty_write(state.pty, buf, bytesWritten)
+            _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
             return true
         }
         return false
@@ -383,7 +424,7 @@ final class CocxyCoreBridge: TerminalEngine {
         guard let state = surfaces[surface] else { return }
         let bytes = Array(text.utf8)
         if !bytes.isEmpty {
-            cocxycore_pty_write(state.pty, bytes, bytes.count)
+            _ = writeBytes(bytes, to: state)
         }
     }
 
@@ -692,6 +733,16 @@ final class CocxyCoreBridge: TerminalEngine {
         )
     }
 
+    func modeDiagnostics(for surface: SurfaceID) -> TerminalModeDiagnostics? {
+        guard let state = surfaces[surface] else { return nil }
+        return TerminalModeDiagnostics(
+            cursorVisible: cocxycore_terminal_cursor_visible(state.terminal),
+            appCursorMode: cocxycore_terminal_mode_app_cursor(state.terminal),
+            altScreen: cocxycore_terminal_is_alt_screen(state.terminal),
+            semanticBlockCount: cocxycore_terminal_semantic_block_count(state.terminal)
+        )
+    }
+
     @discardableResult
     func setCurrentStream(_ streamID: UInt32, for surface: SurfaceID) -> Bool {
         guard var state = surfaces[surface] else { return false }
@@ -720,7 +771,7 @@ final class CocxyCoreBridge: TerminalEngine {
         var buf = [UInt8](repeating: 0, count: 2048)
         let bytesWritten = cocxycore_terminal_request_capabilities(state.terminal, &buf, buf.count)
         guard bytesWritten > 0 else { return false }
-        cocxycore_pty_write(state.pty, buf, bytesWritten)
+        _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
         state.protocolV2CapabilitiesRequested = true
         surfaces[surface] = state
         return true
@@ -740,7 +791,7 @@ final class CocxyCoreBridge: TerminalEngine {
             )
         }
         guard bytesWritten > 0 else { return false }
-        cocxycore_pty_write(state.pty, buf, bytesWritten)
+        _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
         return true
     }
 
@@ -762,7 +813,7 @@ final class CocxyCoreBridge: TerminalEngine {
             }
         }
         guard bytesWritten > 0 else { return false }
-        cocxycore_pty_write(state.pty, buf, bytesWritten)
+        _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
         return true
     }
 
@@ -1331,7 +1382,11 @@ final class CocxyCoreBridge: TerminalEngine {
                     terminal, &responseBuf, responseBuf.count
                 )
                 if rn > 0 {
-                    cocxycore_pty_write(pty, responseBuf, rn)
+                    _ = self?.writeAttachedPTYBytes(
+                        Array(responseBuf.prefix(rn)),
+                        terminal: terminal,
+                        pty: pty
+                    )
                 }
             }
 
@@ -1348,6 +1403,7 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         source.setCancelHandler {
+            cocxycore_terminal_detach_pty(terminal)
             cocxycore_pty_destroy(pty)
             cocxycore_terminal_destroy(terminal)
             contextBox.release()
@@ -1584,7 +1640,7 @@ final class CocxyCoreBridge: TerminalEngine {
             responseBuf.count
         )
         guard n > 0 else { return }
-        cocxycore_pty_write(state.pty, responseBuf, min(n, responseBuf.count))
+        _ = writeBytes(Array(responseBuf.prefix(min(n, responseBuf.count))), to: state)
     }
 
     /// Handle semantic events from CocxyCore's AI layer.
