@@ -5,6 +5,11 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.48] - 2026-04-09
+
+### Added
+- PTY-backed process detection, native search, CocxyCore contract wiring
+
 ## [0.1.47] - 2026-04-08
 
 ### Fixed
@@ -601,6 +606,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero telemetry — no PostHog, no Sentry, no analytics
 - MIT License
 
+[0.1.48]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.47...v0.1.48
 [0.1.38]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.37...v0.1.38
 [0.1.37]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.36...v0.1.37
 [0.1.36]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.35...v0.1.36
