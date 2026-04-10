@@ -186,6 +186,66 @@ struct MetalTerminalRendererTests {
         #expect(state.hasAtlasTexture == false)
         #expect(state.hasUniformBuffer == false)
     }
+
+    // MARK: - Display Fix Regression Coverage
+
+    @Test("draw returns false when frame resources cannot be prepared")
+    func drawReturnsFalseWhenPrepareFails() throws {
+        let renderer = try MetalTerminalRenderer()
+        // Unconfigured terminal (no font) — prepareFrameResources bails
+        // immediately because the atlas dimensions are zero.
+        let terminal = try #require(cocxycore_terminal_create(6, 12))
+        defer { cocxycore_terminal_destroy(terminal) }
+
+        let layer = CAMetalLayer()
+        layer.device = MTLCreateSystemDefaultDevice()
+
+        let drawn = renderer.draw(terminal: terminal, layer: layer)
+
+        #expect(drawn == false)
+    }
+
+    @Test("draw releases the terminal lock on the prepare-fail path")
+    func drawReleasesLockOnPrepareFail() throws {
+        let renderer = try MetalTerminalRenderer()
+        let terminal = try #require(cocxycore_terminal_create(6, 12))
+        defer { cocxycore_terminal_destroy(terminal) }
+
+        let layer = CAMetalLayer()
+        layer.device = MTLCreateSystemDefaultDevice()
+        let lock = NSLock()
+
+        let drawn = renderer.draw(
+            terminal: terminal,
+            layer: layer,
+            terminalLock: lock
+        )
+
+        // Early-exit path must not leak the lock. If it did, `try()` would
+        // return false because the current thread would still hold it (NSLock
+        // is non-reentrant) or, worse, another thread would be blocked.
+        #expect(drawn == false)
+        #expect(lock.try() == true)
+        lock.unlock()
+    }
+
+    @Test("draw without an external lock still returns false on prepare failure")
+    func drawHandlesAbsentLockGracefully() throws {
+        let renderer = try MetalTerminalRenderer()
+        let terminal = try #require(cocxycore_terminal_create(6, 12))
+        defer { cocxycore_terminal_destroy(terminal) }
+
+        let layer = CAMetalLayer()
+        layer.device = MTLCreateSystemDefaultDevice()
+
+        // `terminalLock` is optional. The default-argument path must not
+        // crash and must still report bail with `false`, preserving the
+        // contract for callers that haven't been migrated to the new lock
+        // parameter yet.
+        let drawn = renderer.draw(terminal: terminal, layer: layer)
+
+        #expect(drawn == false)
+    }
 }
 
 private func makeConfiguredTerminal(

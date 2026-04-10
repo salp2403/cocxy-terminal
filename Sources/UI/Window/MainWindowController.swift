@@ -1003,6 +1003,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         adjustLayoutForWindowSize()
     }
 
+    // MARK: - Display / Backing Safety Net
+
+    /// Fallback path for the transparent-on-display-change bug.
+    ///
+    /// `CocxyCoreView` also observes `NSWindow.didChangeScreenNotification`
+    /// locally to refresh its Metal layer and re-anchor the display link,
+    /// but that path only fires while the view is attached to the window.
+    /// These delegate callbacks run for the window itself and drive the
+    /// same `refreshVisibleTerminalInteractionState()` used by tab switch,
+    /// which is the most battle-tested path for getting every visible
+    /// surface back to a consistent rendering state.
+    func windowDidChangeScreen(_ notification: Notification) {
+        refreshVisibleTerminalInteractionState()
+    }
+
+    func windowDidChangeScreenProfile(_ notification: Notification) {
+        refreshVisibleTerminalInteractionState()
+    }
+
+    func windowDidChangeBackingProperties(_ notification: Notification) {
+        refreshVisibleTerminalInteractionState()
+    }
+
     // MARK: - Responsive Layout
 
     /// Minimum window width before side panels are auto-dismissed.

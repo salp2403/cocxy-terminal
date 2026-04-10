@@ -1,57 +1,102 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // MarkdownContentView.swift - Embeddable markdown viewer for workspace splits.
+//
+// This is the Clearly+ rewrite of the original panel:
+// - Real GFM parser in `MarkdownParser` (Swift, zero deps)
+// - Syntax-highlighted source view via `MarkdownSyntaxHighlighter`
+// - Rendered preview view via `MarkdownRenderer`
+// - Side-by-side split mode backed by `NSSplitView`
+// - Outline sidebar (`MarkdownOutlineView`) for heading navigation
+// - Toolbar mode switcher + outline toggle + reload button
+// - Frontmatter YAML extraction, GFM tables, task lists, strike, code fences
+//
+// The public constructor and `loadFile(_:)` signatures are preserved so
+// `MainWindowController+SplitActions` keeps working without modification.
 
 import AppKit
 
 // MARK: - Markdown Content View
 
-/// NSView that renders markdown content for embedding in split panes.
-///
-/// Displays a markdown file using an `NSTextView` with basic formatting.
-/// Supports loading from a file URL and live-reload when the file changes.
+/// NSView that renders a markdown file for embedding in workspace splits.
 ///
 /// ## Layout
 ///
 /// ```
-/// +----------------------------------+
-/// | [file icon] filename.md      [R] |  <- 32pt header
-/// +----------------------------------+
-/// |                                  |
-/// |     Rendered markdown text       |
-/// |                                  |
-/// +----------------------------------+
+/// +--------------------------------------------+
+/// | [doc] filename.md   [ Src|Pre|Split ] [O][R]|  <- toolbar
+/// +----+---------------------------------------+
+/// |    |                                       |
+/// | Ol |     Source / Preview / Split          |
+/// | ine|                                       |
+/// +----+---------------------------------------+
 /// ```
+///
+/// The outline column collapses to zero width when hidden.
 ///
 /// - SeeAlso: `PanelType.markdown`
 @MainActor
 final class MarkdownContentView: NSView {
 
-    // MARK: - Properties
+    // MARK: - Properties (preserved API)
 
-    /// The file being displayed.
+    /// The file being displayed. Preserved from the previous implementation.
     private(set) var filePath: URL?
 
-    /// The text view showing rendered content.
-    private var textView: NSTextView?
+    // MARK: - Properties (new)
 
-    /// The scroll view wrapping the text view.
-    private var scrollView: NSScrollView?
+    private let toolbar = MarkdownToolbarView()
+    private let outlineView = MarkdownOutlineView()
+    private let sourceView: MarkdownSourceView
+    private let previewView: MarkdownPreviewView
+    private let splitContainer = NSSplitView()
+    private let contentContainer = NSView()
 
-    /// The file name label in the header.
-    private var fileNameLabel: NSTextField?
-
-    /// File system monitor for live-reload.
+    /// File-system watcher that reloads the document when the source file
+    /// changes on disk.
     private var fileMonitor: DispatchSourceFileSystemObject?
 
-    /// Height of the header bar.
-    private static let headerHeight: CGFloat = 32
+    /// Current view mode. Setting updates the displayed subview and toolbar.
+    private(set) var mode: MarkdownViewMode = .source {
+        didSet {
+            if oldValue != mode {
+                applyMode()
+                toolbar.mode = mode
+            }
+        }
+    }
 
-    // MARK: - Initialization
+    /// Whether the outline sidebar is currently visible.
+    private(set) var isOutlineVisible: Bool = true {
+        didSet {
+            if oldValue != isOutlineVisible {
+                applyOutlineVisibility()
+                toolbar.isOutlineVisible = isOutlineVisible
+            }
+        }
+    }
+
+    /// The currently loaded document. Exposed for tests.
+    private(set) var document: MarkdownDocument = .empty {
+        didSet { propagateDocument() }
+    }
+
+    /// Outline column width constraint (toggled between fixed value and 0).
+    private var outlineWidthConstraint: NSLayoutConstraint!
+
+    /// Fixed width applied when the outline is visible.
+    private static let outlineWidth: CGFloat = 200
+
+    // MARK: - Init
 
     init(filePath: URL? = nil) {
         self.filePath = filePath
+        self.sourceView = MarkdownSourceView()
+        self.previewView = MarkdownPreviewView()
         super.init(frame: .zero)
         setupUI()
+        wireToolbarCallbacks()
+        wireOutlineCallback()
+
         if let path = filePath {
             loadFile(path)
         } else {
@@ -69,170 +114,186 @@ final class MarkdownContentView: NSView {
         fileMonitor = nil
     }
 
-    // MARK: - UI Setup
+    // MARK: - Public API (preserved)
+
+    /// Loads and displays a markdown file. Preserved API.
+    func loadFile(_ url: URL) {
+        self.filePath = url
+        toolbar.fileName = url.lastPathComponent
+
+        guard let rawContent = try? String(contentsOf: url, encoding: .utf8) else {
+            let errorText = "Failed to load file: \(url.lastPathComponent)"
+            document = MarkdownDocument(
+                source: errorText,
+                frontmatter: MarkdownFrontmatter(),
+                body: errorText,
+                parseResult: MarkdownParser().parse(errorText),
+                outline: .empty,
+                bodyLineOffset: 0
+            )
+            return
+        }
+
+        document = MarkdownDocument.parse(rawContent)
+        watchFileChanges(url)
+    }
+
+    // MARK: - Setup
 
     private func setupUI() {
         wantsLayer = true
         layer?.backgroundColor = CocxyColors.base.cgColor
 
-        // Header bar.
-        let header = NSView()
-        header.wantsLayer = true
-        header.layer?.backgroundColor = CocxyColors.mantle.cgColor
-        header.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(header)
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(toolbar)
 
-        // File icon.
-        let iconView = NSImageView()
-        if let image = NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Markdown") {
-            iconView.image = image.withSymbolConfiguration(
-                .init(pointSize: 12, weight: .medium)
-            )
-        }
-        iconView.contentTintColor = CocxyColors.blue
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        header.addSubview(iconView)
+        outlineView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(outlineView)
 
-        // File name label.
-        let label = NSTextField(labelWithString: "Untitled.md")
-        label.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
-        label.textColor = CocxyColors.text
-        label.translatesAutoresizingMaskIntoConstraints = false
-        header.addSubview(label)
-        self.fileNameLabel = label
+        contentContainer.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(contentContainer)
 
-        // Reload button.
-        let reloadButton = NSButton()
-        reloadButton.bezelStyle = .accessoryBarAction
-        reloadButton.isBordered = false
-        if let image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Reload") {
-            reloadButton.image = image.withSymbolConfiguration(
-                .init(pointSize: 12, weight: .medium)
-            )
-        }
-        reloadButton.contentTintColor = CocxyColors.subtext0
-        reloadButton.target = self
-        reloadButton.action = #selector(reloadAction)
-        reloadButton.translatesAutoresizingMaskIntoConstraints = false
-        header.addSubview(reloadButton)
+        outlineWidthConstraint = outlineView.widthAnchor.constraint(equalToConstant: Self.outlineWidth)
 
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: topAnchor),
-            header.leadingAnchor.constraint(equalTo: leadingAnchor),
-            header.trailingAnchor.constraint(equalTo: trailingAnchor),
-            header.heightAnchor.constraint(equalToConstant: Self.headerHeight),
+            toolbar.topAnchor.constraint(equalTo: topAnchor),
+            toolbar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            toolbar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            toolbar.heightAnchor.constraint(equalToConstant: MarkdownToolbarView.height),
 
-            iconView.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 8),
-            iconView.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 16),
-            iconView.heightAnchor.constraint(equalToConstant: 16),
+            outlineView.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            outlineView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            outlineView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            outlineWidthConstraint,
 
-            label.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 6),
-            label.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: reloadButton.leadingAnchor, constant: -8),
-
-            reloadButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -4),
-            reloadButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            reloadButton.widthAnchor.constraint(equalToConstant: 24),
-            reloadButton.heightAnchor.constraint(equalToConstant: 24),
+            contentContainer.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            contentContainer.leadingAnchor.constraint(equalTo: outlineView.trailingAnchor),
+            contentContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentContainer.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
 
-        // Scroll view + text view.
-        let sv = NSScrollView()
-        sv.hasVerticalScroller = true
-        sv.hasHorizontalScroller = false
-        sv.autohidesScrollers = true
-        sv.drawsBackground = false
-        sv.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(sv)
-        self.scrollView = sv
+        applyMode()
+    }
 
-        let tv = NSTextView()
-        tv.isEditable = false
-        tv.isSelectable = true
-        tv.isRichText = true
-        tv.backgroundColor = CocxyColors.base
-        tv.textColor = CocxyColors.text
-        tv.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-        tv.textContainerInset = NSSize(width: 16, height: 12)
-        tv.autoresizingMask = [.width]
-        tv.isVerticallyResizable = true
-        tv.isHorizontallyResizable = false
-        tv.textContainer?.widthTracksTextView = true
-        sv.documentView = tv
-        self.textView = tv
+    private func wireToolbarCallbacks() {
+        toolbar.onModeChanged = { [weak self] newMode in
+            self?.mode = newMode
+        }
+        toolbar.onOutlineToggle = { [weak self] in
+            guard let self else { return }
+            self.isOutlineVisible.toggle()
+        }
+        toolbar.onReload = { [weak self] in
+            guard let self, let path = self.filePath else { return }
+            self.loadFile(path)
+        }
+        toolbar.isOutlineVisible = isOutlineVisible
+        toolbar.mode = mode
+    }
 
+    private func wireOutlineCallback() {
+        outlineView.onSelect = { [weak self] entry in
+            self?.scrollToOutlineEntry(entry)
+        }
+    }
+
+    // MARK: - Mode Switching
+
+    private func applyMode() {
+        // Clear current content
+        contentContainer.subviews.forEach { $0.removeFromSuperview() }
+        for arranged in splitContainer.arrangedSubviews {
+            splitContainer.removeArrangedSubview(arranged)
+            arranged.removeFromSuperview()
+        }
+
+        switch mode {
+        case .source:
+            embed(sourceView, in: contentContainer)
+        case .preview:
+            embed(previewView, in: contentContainer)
+        case .split:
+            splitContainer.isVertical = true
+            splitContainer.dividerStyle = .thin
+            sourceView.translatesAutoresizingMaskIntoConstraints = true
+            previewView.translatesAutoresizingMaskIntoConstraints = true
+            splitContainer.addArrangedSubview(sourceView)
+            splitContainer.addArrangedSubview(previewView)
+            embed(splitContainer, in: contentContainer)
+        }
+    }
+
+    private func embed(_ subview: NSView, in container: NSView) {
+        subview.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(subview)
         NSLayoutConstraint.activate([
-            sv.topAnchor.constraint(equalTo: header.bottomAnchor),
-            sv.leadingAnchor.constraint(equalTo: leadingAnchor),
-            sv.trailingAnchor.constraint(equalTo: trailingAnchor),
-            sv.bottomAnchor.constraint(equalTo: bottomAnchor),
+            subview.topAnchor.constraint(equalTo: container.topAnchor),
+            subview.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            subview.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            subview.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
     }
 
-    // MARK: - File Loading
+    private func applyOutlineVisibility() {
+        outlineWidthConstraint.constant = isOutlineVisible ? Self.outlineWidth : 0
+        outlineView.isHidden = !isOutlineVisible
+        needsLayout = true
+    }
 
-    /// Loads and renders a markdown file.
-    ///
-    /// - Parameter url: The file URL of the markdown document.
-    func loadFile(_ url: URL) {
-        self.filePath = url
-        fileNameLabel?.stringValue = url.lastPathComponent
+    // MARK: - Document Propagation
 
-        guard let content = try? String(contentsOf: url, encoding: .utf8) else {
-            textView?.string = "Failed to load file: \(url.lastPathComponent)"
+    private func propagateDocument() {
+        sourceView.document = document
+        previewView.document = document
+        outlineView.outline = document.outline
+    }
+
+    private func showEmptyState() {
+        toolbar.fileName = "No file"
+        let placeholder = "Drop a .md file here or open one from the Command Palette."
+        document = MarkdownDocument(
+            source: placeholder,
+            frontmatter: MarkdownFrontmatter(),
+            body: placeholder,
+            parseResult: MarkdownParser().parse(placeholder),
+            outline: .empty,
+            bodyLineOffset: 0
+        )
+    }
+
+    // MARK: - Outline Navigation
+
+    private func scrollToOutlineEntry(_ entry: MarkdownOutlineEntry) {
+        let sourceLine = document.sourceLine(forBodyLine: entry.sourceLine)
+        sourceView.scrollToSourceLine(sourceLine)
+        previewView.scrollToHeading(title: entry.title)
+    }
+
+    // MARK: - Keyboard Shortcuts
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let characters = event.charactersIgnoringModifiers ?? ""
+
+        if flags.contains(.command) && !flags.contains(.shift) {
+            switch characters {
+            case "1": mode = .source; return
+            case "2": mode = .preview; return
+            case "3": mode = .split; return
+            case "r":
+                if let path = filePath { loadFile(path) }
+                return
+            default:
+                break
+            }
+        }
+        if flags.contains(.command) && flags.contains(.shift), characters.lowercased() == "o" {
+            isOutlineVisible.toggle()
             return
         }
-
-        renderMarkdown(content)
-        watchFileChanges(url)
-    }
-
-    /// Renders raw markdown text with basic formatting.
-    private func renderMarkdown(_ text: String) {
-        let attributed = NSMutableAttributedString()
-        let bodyFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        let headingFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .bold)
-        let h2Font = NSFont.monospacedSystemFont(ofSize: 14, weight: .semibold)
-        let codeFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 4
-        paragraphStyle.paragraphSpacing = 8
-
-        let lines = text.components(separatedBy: "\n")
-        for line in lines {
-            let attrs: [NSAttributedString.Key: Any]
-            if line.hasPrefix("# ") {
-                attrs = [.font: headingFont, .foregroundColor: CocxyColors.blue,
-                         .paragraphStyle: paragraphStyle]
-            } else if line.hasPrefix("## ") {
-                attrs = [.font: h2Font, .foregroundColor: CocxyColors.mauve,
-                         .paragraphStyle: paragraphStyle]
-            } else if line.hasPrefix("### ") {
-                attrs = [.font: h2Font, .foregroundColor: CocxyColors.teal,
-                         .paragraphStyle: paragraphStyle]
-            } else if line.hasPrefix("```") || line.hasPrefix("    ") {
-                attrs = [.font: codeFont, .foregroundColor: CocxyColors.green,
-                         .backgroundColor: CocxyColors.surface0,
-                         .paragraphStyle: paragraphStyle]
-            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
-                attrs = [.font: bodyFont, .foregroundColor: CocxyColors.text,
-                         .paragraphStyle: paragraphStyle]
-            } else {
-                attrs = [.font: bodyFont, .foregroundColor: CocxyColors.text,
-                         .paragraphStyle: paragraphStyle]
-            }
-            attributed.append(NSAttributedString(string: line + "\n", attributes: attrs))
-        }
-
-        textView?.textStorage?.setAttributedString(attributed)
-    }
-
-    /// Shows a placeholder when no file is loaded.
-    private func showEmptyState() {
-        fileNameLabel?.stringValue = "No file"
-        textView?.string = "Drop a .md file here or open one from the Command Palette."
+        super.keyDown(with: event)
     }
 
     // MARK: - File Watching
@@ -256,12 +317,5 @@ final class MarkdownContentView: NSView {
         }
         source.resume()
         self.fileMonitor = source
-    }
-
-    // MARK: - Actions
-
-    @objc private func reloadAction(_ sender: Any?) {
-        guard let path = filePath else { return }
-        loadFile(path)
     }
 }

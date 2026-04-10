@@ -267,17 +267,37 @@ final class MetalTerminalRenderer {
     /// Reads cell/cursor data from the terminal handle, uploads to GPU,
     /// and submits a render pass to the given Metal layer.
     ///
+    /// The optional `terminalLock` serializes access to the C terminal state
+    /// against the PTY read loop, which calls `cocxycore_terminal_feed` from a
+    /// background dispatch queue. Frame preparation (`build_frame`, atlas
+    /// uploads, cell fills) must not race with `feed` or the C core may return
+    /// partial data that causes `prepareFrameResources` to fail and leave the
+    /// view blank.
+    ///
     /// - Parameters:
     ///   - terminal: CocxyCore terminal handle (opaque pointer).
     ///   - layer: The CAMetalLayer to render into.
-    func draw(terminal: OpaquePointer, layer: CAMetalLayer) {
+    ///   - terminalLock: Optional per-surface lock serializing feed vs build.
+    /// - Returns: `true` if a frame was committed, `false` if any stage bailed
+    ///   (resources unavailable, drawable unavailable, encoder creation failed).
+    ///   Callers should re-arm their dirty flag on `false` so the next display
+    ///   link tick retries instead of leaving the view blank.
+    @discardableResult
+    func draw(
+        terminal: OpaquePointer,
+        layer: CAMetalLayer,
+        terminalLock: NSLock? = nil
+    ) -> Bool {
+        terminalLock?.lock()
+        defer { terminalLock?.unlock() }
+
         guard prepareFrameResources(terminal: terminal),
               let cellBuffer = cellBuffer,
               let uniformBuffer = uniformBuffer
-        else { return }
+        else { return false }
 
         // 5. Get drawable and render
-        guard let drawable = layer.nextDrawable() else { return }
+        guard let drawable = layer.nextDrawable() else { return false }
 
         let bgColor = readBackgroundClearColor(terminal: terminal)
 
@@ -289,7 +309,7 @@ final class MetalTerminalRenderer {
 
         guard let cmdBuffer = commandQueue.makeCommandBuffer(),
               let encoder = cmdBuffer.makeRenderCommandEncoder(descriptor: passDesc)
-        else { return }
+        else { return false }
 
         let instanceCount = cellCount
 
@@ -358,6 +378,7 @@ final class MetalTerminalRenderer {
         encoder.endEncoding()
         cmdBuffer.present(drawable)
         cmdBuffer.commit()
+        return true
     }
 
     /// Builds CocxyCore frame resources without requiring a drawable.

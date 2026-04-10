@@ -137,6 +137,14 @@ final class CocxyCoreBridge: TerminalEngine {
         let childProcessIdentity: TerminalProcessIdentity?
         let readSource: DispatchSourceRead
         let contextBox: Unmanaged<CallbackContext>
+        /// Serializes access to the C terminal state between the PTY read
+        /// loop (background queue, calls `cocxycore_terminal_feed`) and the
+        /// render path (main thread, calls `cocxycore_terminal_build_frame`
+        /// / `build_gpu_frame`). Without this serialization the C core can
+        /// observe a half-written screen buffer and `build_frame` returns
+        /// false, causing the renderer to drop the frame and leave the view
+        /// transparent until another event re-triggers rendering.
+        let terminalLock: NSLock
         weak var hostView: NSView?
         var lastKnownWorkingDirectory: URL?
         var lastFallbackWorkingDirectoryProbeAt: TimeInterval = 0
@@ -303,12 +311,19 @@ final class CocxyCoreBridge: TerminalEngine {
             throw TerminalEngineError.surfaceCreationFailed(reason: "Invalid PTY master fd")
         }
 
+        // Per-surface lock that serializes PTY feed (background) and frame
+        // build (main thread) against the same C terminal state. Created
+        // before the read source so the closure captures the same instance
+        // stored in SurfaceState.
+        let terminalLock = NSLock()
+
         let readSource = createReadSource(
             masterFd: masterFd,
             terminal: terminal,
             pty: pty,
             contextBox: contextBox,
-            surfaceID: surfaceID
+            surfaceID: surfaceID,
+            terminalLock: terminalLock
         )
 
         // 8. Store state
@@ -320,6 +335,7 @@ final class CocxyCoreBridge: TerminalEngine {
             childProcessIdentity: processIdentity(for: childPid),
             readSource: readSource,
             contextBox: contextBox,
+            terminalLock: terminalLock,
             hostView: view,
             lastKnownWorkingDirectory: (workingDirectory ?? config.workingDirectory).standardizedFileURL,
             lastReportedFocus: nil,
@@ -1363,7 +1379,8 @@ final class CocxyCoreBridge: TerminalEngine {
         terminal: OpaquePointer,
         pty: OpaquePointer,
         contextBox: Unmanaged<CallbackContext>,
-        surfaceID: SurfaceID
+        surfaceID: SurfaceID,
+        terminalLock: NSLock
     ) -> DispatchSourceRead {
         let source = DispatchSource.makeReadSource(
             fileDescriptor: masterFd,
@@ -1375,6 +1392,15 @@ final class CocxyCoreBridge: TerminalEngine {
             let bytesRead = cocxycore_pty_read(pty, &buf, buf.count)
 
             guard bytesRead > 0 else { return }
+
+            // Serialize all C terminal mutation against the render path.
+            // The renderer (main thread) calls cocxycore_terminal_build_frame
+            // which reads the same internal state we mutate here with feed,
+            // response drain, and process poll. Holding the lock across all
+            // three is cheap (per-surface, no contention outside the frame
+            // boundary) and keeps the C core consistent from the renderer's
+            // point of view.
+            terminalLock.lock()
 
             // Feed bytes through terminal pipeline (parser → executor → screen)
             cocxycore_terminal_feed(terminal, buf, bytesRead)
@@ -1396,6 +1422,8 @@ final class CocxyCoreBridge: TerminalEngine {
 
             // Poll process tracker (non-blocking kqueue check)
             cocxycore_terminal_poll_processes(terminal)
+
+            terminalLock.unlock()
 
             // Notify output handler with raw bytes
             let data = Data(bytes: buf, count: bytesRead)

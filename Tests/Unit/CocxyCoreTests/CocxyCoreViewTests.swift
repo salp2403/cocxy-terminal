@@ -134,6 +134,49 @@ struct CocxyCoreViewTests {
         #expect(rect.width > 0)
         #expect(rect.height > 0)
     }
+
+    // MARK: - Display Fix Regression Coverage
+
+    @Test("renderFrame clears needsRender when prerequisites are missing")
+    func renderFrameClearsFlagWhenNotConfigured() {
+        let view = CocxyCoreView(viewModel: TerminalViewModel())
+        view.frame = NSRect(x: 0, y: 0, width: 200, height: 120)
+        _ = view.layer
+
+        view.needsRender = true
+        view.renderFrame()
+
+        #expect(view.needsRender == false)
+    }
+
+    @Test("renderFrame clears needsRender when the surface was destroyed")
+    func renderFrameClearsFlagAfterDestroy() throws {
+        let harness = try makeViewHarness()
+        harness.bridge.destroySurface(harness.surfaceID)
+
+        // After destroy the bridge no longer has a SurfaceState for this id,
+        // so renderFrame hits the prerequisites-missing branch and must
+        // clear the flag. Anything reviving the view (new surface, new
+        // configure call) will re-arm needsRender deliberately.
+        harness.view.needsRender = true
+        harness.view.renderFrame()
+
+        #expect(harness.view.needsRender == false)
+    }
+
+    @Test("surface state carries a usable terminal lock for render serialization")
+    func surfaceStateExposesTerminalLock() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+
+        // Lock must be acquirable (not held by any other path at rest) and
+        // must release cleanly, so the render path can safely take/drop it
+        // every frame without deadlocking against the PTY feed loop.
+        #expect(state.terminalLock.try() == true)
+        state.terminalLock.unlock()
+    }
 }
 
 @MainActor

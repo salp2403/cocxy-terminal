@@ -83,7 +83,19 @@ final class CocxyCoreView: NSView {
     // MARK: - Display Link
 
     private var displayLink: CVDisplayLink?
-    private var needsRender: Bool = false
+
+    /// Whether the render loop must produce a new frame on the next tick.
+    ///
+    /// Set to `true` by `setNeedsTerminalDisplay()` (invoked from the bridge
+    /// after PTY output or from resize paths) and cleared inside
+    /// `renderFrame()`. `renderFrame()` re-arms it automatically whenever
+    /// `MetalTerminalRenderer.draw(...)` bails early, so a transient
+    /// failure (no drawable, lost race with PTY feed) cannot freeze the
+    /// view indefinitely.
+    ///
+    /// Exposed as `internal` for `@testable import` so the re-arm contract
+    /// can be verified without going through the display link.
+    internal var needsRender: Bool = false
 
     // MARK: - Input State
 
@@ -232,17 +244,41 @@ final class CocxyCoreView: NSView {
         needsRender = true
     }
 
-    private func renderFrame() {
-        needsRender = false
-
+    /// Runs one render cycle. Called from the CVDisplayLink callback (see
+    /// `startDisplayLink()`) and also from tests via `@testable import` to
+    /// verify the `needsRender` re-arm contract directly without having to
+    /// wait on the display link.
+    internal func renderFrame() {
         guard let bridge = bridge,
               let sid = surfaceID,
               let state = bridge.surfaceState(for: sid),
               let renderer = renderer,
               let metalLayer = layer as? CAMetalLayer
-        else { return }
+        else {
+            // Prerequisites missing. Clearing the flag here is safe because
+            // whatever creates these prerequisites will re-arm it.
+            needsRender = false
+            return
+        }
 
-        renderer.draw(terminal: state.terminal, layer: metalLayer)
+        // Optimistically clear the flag, then re-arm if the renderer bailed.
+        // `draw()` returns `false` when any stage failed silently: resources
+        // unavailable, `nextDrawable()` returned `nil`, encoder creation
+        // failed, or `prepareFrameResources` returned `false` due to a race
+        // with the PTY feed loop. Without this re-arm, the display link sees
+        // `needsRender == false` forever and the surface freezes until
+        // something external (tab switch, resize, new PTY output) re-sets
+        // the flag. That was the root cause of the transparent-on-display-
+        // change and transparent-on-agent-launch bugs.
+        needsRender = false
+        let drawn = renderer.draw(
+            terminal: state.terminal,
+            layer: metalLayer,
+            terminalLock: state.terminalLock
+        )
+        if !drawn {
+            needsRender = true
+        }
     }
 
     // MARK: - Layout & Resize
@@ -335,11 +371,21 @@ final class CocxyCoreView: NSView {
     private func updateMetalViewportForCurrentScale() {
         guard let metalLayer = layer as? CAMetalLayer else { return }
         let scale = currentBackingScale()
+
+        // Apply both layer mutations inside a single CATransaction with
+        // implicit animations disabled. Without this, Core Animation can
+        // interpolate `contentsScale` / `drawableSize` across a frame,
+        // leaving the drawable temporarily inconsistent with the layer's
+        // advertised size. That inconsistency is one of the reasons
+        // `nextDrawable()` returns nil mid-display-transition.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         metalLayer.contentsScale = scale
         metalLayer.drawableSize = CGSize(
             width: bounds.width * scale,
             height: bounds.height * scale
         )
+        CATransaction.commit()
 
         renderer?.updateViewportSize(
             bounds.size,
@@ -349,8 +395,28 @@ final class CocxyCoreView: NSView {
         )
     }
 
+    /// Re-anchors the CVDisplayLink to the display currently hosting the
+    /// window. The display link is created with the active display set at
+    /// construction time and does not follow the window when it moves to a
+    /// different screen. Without re-anchoring, it keeps ticking at the old
+    /// display's refresh rate (and can skip ticks entirely if the old
+    /// display is asleep), contributing to the "transparent on display
+    /// change" symptom. Silent no-op if the current display can't be
+    /// resolved — the MainWindowController delegate path is the backup.
+    private func anchorDisplayLinkToCurrentScreen() {
+        guard let link = displayLink,
+              let screen = window?.screen,
+              let screenNumber = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+              ] as? NSNumber
+        else { return }
+        let displayID = CGDirectDisplayID(screenNumber.uint32Value)
+        CVDisplayLinkSetCurrentCGDisplay(link, displayID)
+    }
+
     private func refreshBackingConfiguration(forceGridSync: Bool) {
         updateMetalViewportForCurrentScale()
+        anchorDisplayLinkToCurrentScreen()
         if let bridge, let sid = surfaceID {
             bridge.reapplyConfiguredFont(to: sid)
         }
@@ -370,8 +436,20 @@ final class CocxyCoreView: NSView {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            // The observer block already runs on the main queue. Posting
+            // through `Task { @MainActor }` added an unnecessary run-loop
+            // hop that could land after the display link had already dropped
+            // a tick, so we refresh synchronously and schedule a second
+            // pass on the next tick as a safety net for cases where the
+            // backing scale is still being committed when the notification
+            // fires.
+            MainActor.assumeIsolated {
                 self?.refreshBackingConfiguration(forceGridSync: true)
+            }
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.refreshBackingConfiguration(forceGridSync: true)
+                }
             }
         }
     }

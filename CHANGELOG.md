@@ -5,6 +5,31 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.51] - 2026-04-10
+
+### Added
+- Native markdown viewer with GFM parser written in pure Swift, zero dependencies
+- Source / preview / split view modes with Cmd+1, Cmd+2, Cmd+3 shortcuts
+- Heading outline sidebar with tree navigation (Cmd+Shift+O toggle)
+- Syntax highlighting for markdown source view
+- Preview renders headings H1-H6, bold, italic, strikethrough, inline code, code blocks with language, blockquotes, ordered and unordered lists, nested lists, task lists, GFM tables with alignments, horizontal rules, and frontmatter YAML
+- `NSLock` per-surface serializing PTY feed against frame build to eliminate render race conditions
+- `MainWindowController` now handles `windowDidChangeScreen`, `windowDidChangeScreenProfile`, `windowDidChangeBackingProperties` as a render safety net
+
+### Fixed
+- Terminal surface becoming transparent when the window moves between displays with different backing scales
+- Terminal surface becoming transparent when launching an AI coding agent with heavy output
+- `MetalTerminalRenderer.draw` bailing silently without re-arming the dirty flag, causing the display link to skip subsequent frames until an external event re-triggered rendering
+- Race condition between `cocxycore_terminal_feed` (background queue) and `cocxycore_terminal_build_frame` (main thread) causing frames to be dropped
+- `CVDisplayLink` continuing to tick against the original display after the window moved to a different screen
+- `CAMetalLayer` `contentsScale` and `drawableSize` changing outside a `CATransaction` with actions disabled, leaving the drawable temporarily inconsistent with the layer geometry
+- `NSWindow.didChangeScreenNotification` observer refreshing through an unnecessary async hop that could land after the display link had already dropped a tick
+
+### Changed
+- `MetalTerminalRenderer.draw` now returns `Bool` indicating whether a frame was committed
+- `CocxyCoreView.renderFrame` re-arms `needsRender` when `draw` returns false so transient render failures recover on the next display link tick
+- `MarkdownContentView` rewritten from a basic prefix-detecting text view into a full markdown document panel with toolbar, outline sidebar, mode switcher, and live reload
+
 ## [0.1.50] - 2026-04-10
 
 ### Fixed
