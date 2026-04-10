@@ -17,7 +17,16 @@
 [claude]
 display-name = "Claude Code"
 osc-supported = true
-launch-patterns = ["^claude\\b", "^claude-code\\b", "npx claude"]
+# launch-patterns mix two strategies:
+#  - Direct command (^claude, ^claude-code, npx claude) → matches when
+#    the user types the binary name in the shell.
+#  - Banner copy ("Claude Code v[0-9]", "Claude (Max|Pro)") → matches the
+#    real banner emitted by claude-code v2.x on launch. The banner does
+#    NOT begin with the literal "claude", so the direct patterns alone
+#    miss it. Both banner patterns are highly Claude-specific to avoid
+#    false positives from other agents that might mention "Claude" in
+#    unrelated output.
+launch-patterns = ["^claude\\b", "^claude-code\\b", "npx claude", "Claude Code v[0-9]", "Claude (Max|Pro)"]
 waiting-patterns = ["^\\? ", "\\(Y/n\\)", "\\(y/N\\)", "Do you want to", "Would you like"]
 error-patterns = ["^Error:", "^error\\[", "APIError", "Rate limit"]
 finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^>\\s*$"]

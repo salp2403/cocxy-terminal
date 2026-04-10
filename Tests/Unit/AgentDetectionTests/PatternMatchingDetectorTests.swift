@@ -664,4 +664,95 @@ final class PatternMatchingDetectorTests: XCTestCase {
         XCTAssertEqual(launchSignals.count, 1,
             "Empty lines should be false flags in window, not block detection")
     }
+
+    // MARK: - Real Claude Code Banner Detection (regression for v0.1.52 bug)
+
+    /// Builds a detector configured with the production default agent
+    /// configs (the same ones used by `AgentConfigService.defaultAgentConfigs`).
+    /// Tests that hit this helper exercise the REAL launch patterns shipped
+    /// with the app, not the simplified fakes used by the rest of the suite.
+    private func detectorWithProductionDefaults() -> PatternMatchingDetector {
+        let defaults = AgentConfigService.defaultAgentConfigs()
+        let compiled = defaults.map { AgentConfigService.compile($0) }
+        return PatternMatchingDetector(
+            configs: compiled,
+            requiredConsecutiveMatches: 2,
+            cooldownInterval: 1.0,
+            maxLineBuffer: 5
+        )
+    }
+
+    func testRealClaudeCodeBannerIsDetectedWithinSlidingWindow() {
+        // The real banner Claude Code v2.1.100 emits when launched: a few
+        // marketing lines that DO NOT begin with a literal "claude". The
+        // current production patterns (^claude\b, ^claude-code\b) miss
+        // every line of this banner — that is the v0.1.52 sidebar "Ready"
+        // bug. The fix adds patterns that match the actual banner copy.
+        let detector = detectorWithProductionDefaults()
+
+        // Two consecutive banner lines must produce two launch matches
+        // within the sliding window of 5, satisfying the hysteresis
+        // threshold of 2.
+        let _ = detector.processBytes(lineData("Claude Code v2.1.100"))
+        let signals = detector.processBytes(
+            lineData("Opus 4.6 (1M context) with high effort \u{00B7} Claude Max")
+        )
+
+        let launchSignals = signals.filter {
+            if case .agentDetected(let name) = $0.event, name == "claude" {
+                return true
+            }
+            return false
+        }
+        XCTAssertFalse(
+            launchSignals.isEmpty,
+            "Real Claude Code banner must produce a `claude` agent detection signal"
+        )
+    }
+
+    func testUserTypedClaudeCommandStillMatchesAfterPatternUpdate() {
+        // Regression: the original `^claude\b` pattern must keep matching
+        // when the user runs `claude` directly (the pattern that worked
+        // before the fix). This guards against accidentally regressing
+        // the existing behavior while adding the banner patterns.
+        let detector = detectorWithProductionDefaults()
+
+        let _ = detector.processBytes(lineData("claude"))
+        let signals = detector.processBytes(lineData("claude --help"))
+
+        let launchSignals = signals.filter {
+            if case .agentDetected(let name) = $0.event, name == "claude" {
+                return true
+            }
+            return false
+        }
+        XCTAssertFalse(
+            launchSignals.isEmpty,
+            "Direct `claude` command must still trigger detection after the pattern update"
+        )
+    }
+
+    func testCodexAgentDoesNotFalseMatchOnClaudeCodeBanner() {
+        // Sanity check: the new banner-based patterns must be specific
+        // enough that running another agent (Codex CLI) does not get
+        // misdetected as Claude Code. We feed the Claude banner and
+        // confirm no Codex signal fires.
+        let detector = detectorWithProductionDefaults()
+
+        let _ = detector.processBytes(lineData("Claude Code v2.1.100"))
+        let signals = detector.processBytes(
+            lineData("Opus 4.6 (1M context) with high effort \u{00B7} Claude Max")
+        )
+
+        let codexSignals = signals.filter {
+            if case .agentDetected(let name) = $0.event, name == "codex" {
+                return true
+            }
+            return false
+        }
+        XCTAssertTrue(
+            codexSignals.isEmpty,
+            "Claude banner must not produce a `codex` detection (false positive)"
+        )
+    }
 }

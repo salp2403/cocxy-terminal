@@ -186,7 +186,22 @@ final class AgentConfigService {
             AgentConfig(
                 name: "claude",
                 displayName: "Claude Code",
-                launchPatterns: ["^claude\\b", "^claude-code\\b", "npx claude"],
+                launchPatterns: [
+                    // Direct command — what the user types in the shell.
+                    "^claude\\b",
+                    "^claude-code\\b",
+                    "npx claude",
+                    // Real Claude Code banner copy emitted on launch.
+                    // These two patterns match the version line and the
+                    // model/plan line of the v2.x banner, so the launch
+                    // detection fires within the sliding window even when
+                    // the user did not type `claude` (e.g. they ran a
+                    // wrapper script). Both are highly Claude-specific to
+                    // avoid false positives from other agents that happen
+                    // to mention "Claude" in unrelated contexts.
+                    "Claude Code v[0-9]",
+                    "Claude (Max|Pro)",
+                ],
                 waitingPatterns: ["^\\? ", "\\(Y/n\\)", "\\(y/N\\)", "Do you want to", "Would you like"],
                 errorPatterns: ["^Error:", "^error\\[", "APIError", "Rate limit"],
                 finishedIndicators: ["^\\$\\s*$", "^❯\\s*$", "^>\\s*$"],

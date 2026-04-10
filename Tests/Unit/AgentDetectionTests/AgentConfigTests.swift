@@ -160,7 +160,12 @@ final class AgentConfigServiceParseTests: XCTestCase {
 
         XCTAssertEqual(claude.displayName, "Claude Code")
         XCTAssertTrue(claude.oscSupported)
-        XCTAssertEqual(claude.launchPatterns.count, 3)
+        // 5 launch patterns: 3 direct command variants (^claude\b,
+        // ^claude-code\b, npx claude) plus 2 banner-copy patterns
+        // ("Claude Code v[0-9]" and "Claude (Max|Pro)") added in v0.1.53
+        // to detect the launch when the user runs Claude Code without
+        // typing the literal binary name (e.g., via a wrapper script).
+        XCTAssertEqual(claude.launchPatterns.count, 5)
         XCTAssertEqual(claude.waitingPatterns.count, 5)
         XCTAssertEqual(claude.errorPatterns.count, 4)
         XCTAssertEqual(claude.finishedIndicators.count, 3)
