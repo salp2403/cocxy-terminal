@@ -346,7 +346,7 @@ public struct MarkdownParser {
 
         var items: [MarkdownListItem] = []
         var cursor = start
-        var ordered = firstMatch.ordered
+        let ordered = firstMatch.ordered
         var listStart = firstMatch.start
 
         while cursor < lines.count {
@@ -478,7 +478,7 @@ public struct MarkdownParser {
         if line.first == "|" {
             i = line.index(after: i)
         }
-        var trailingPipe = line.last == "|"
+        let trailingPipe = line.last == "|"
         while i < line.endIndex {
             let ch = line[i]
             if ch == "\\" && line.index(after: i) < line.endIndex {

@@ -54,6 +54,7 @@ final class MarkdownContentView: NSView {
     /// File-system watcher that reloads the document when the source file
     /// changes on disk.
     private var fileMonitor: DispatchSourceFileSystemObject?
+    private var pendingSaveWorkItem: DispatchWorkItem?
 
     /// Current view mode. Setting updates the displayed subview and toolbar.
     private(set) var mode: MarkdownViewMode = .source {
@@ -96,6 +97,7 @@ final class MarkdownContentView: NSView {
         setupUI()
         wireToolbarCallbacks()
         wireOutlineCallback()
+        wireSourceCallbacks()
 
         if let path = filePath {
             loadFile(path)
@@ -109,7 +111,18 @@ final class MarkdownContentView: NSView {
         fatalError("MarkdownContentView does not support NSCoding")
     }
 
-    deinit {
+    override func viewWillMove(toSuperview newSuperview: NSView?) {
+        super.viewWillMove(toSuperview: newSuperview)
+        if newSuperview == nil {
+            tearDownTransientState()
+        }
+    }
+
+    deinit {}
+
+    private func tearDownTransientState() {
+        pendingSaveWorkItem?.cancel()
+        pendingSaveWorkItem = nil
         fileMonitor?.cancel()
         fileMonitor = nil
     }
@@ -121,6 +134,14 @@ final class MarkdownContentView: NSView {
         self.filePath = url
         toolbar.fileName = url.lastPathComponent
 
+        reloadFromDisk(url, force: true)
+    }
+
+    internal var sourceViewForTesting: MarkdownSourceView { sourceView }
+
+    // MARK: - Loading / Saving
+
+    private func reloadFromDisk(_ url: URL, force: Bool) {
         guard let rawContent = try? String(contentsOf: url, encoding: .utf8) else {
             let errorText = "Failed to load file: \(url.lastPathComponent)"
             document = MarkdownDocument(
@@ -134,8 +155,29 @@ final class MarkdownContentView: NSView {
             return
         }
 
-        document = MarkdownDocument.parse(rawContent)
+        if force || rawContent != document.source {
+            document = MarkdownDocument.parse(rawContent)
+        }
         watchFileChanges(url)
+    }
+
+    private func scheduleSave(for source: String) {
+        guard let filePath else { return }
+        pendingSaveWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.saveSource(source, to: filePath)
+        }
+        pendingSaveWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
+    }
+
+    private func saveSource(_ source: String, to url: URL) {
+        do {
+            try source.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            NSLog("MarkdownContentView failed to save %@: %@", url.path, String(describing: error))
+        }
     }
 
     // MARK: - Setup
@@ -194,6 +236,15 @@ final class MarkdownContentView: NSView {
     private func wireOutlineCallback() {
         outlineView.onSelect = { [weak self] entry in
             self?.scrollToOutlineEntry(entry)
+        }
+    }
+
+    private func wireSourceCallbacks() {
+        sourceView.onSourceChanged = { [weak self] source in
+            self?.handleSourceEdited(source)
+        }
+        sourceView.onShortcutCommand = { [weak self] command in
+            self?.handleSourceShortcut(command) ?? false
         }
     }
 
@@ -261,6 +312,28 @@ final class MarkdownContentView: NSView {
         )
     }
 
+    private func handleSourceEdited(_ source: String) {
+        document = MarkdownDocument.parse(source)
+        scheduleSave(for: source)
+    }
+
+    private func handleSourceShortcut(_ command: MarkdownSourceShortcutCommand) -> Bool {
+        switch command {
+        case .setMode(let newMode):
+            mode = newMode
+            return true
+        case .toggleOutline:
+            isOutlineVisible.toggle()
+            return true
+        case .reload:
+            if let path = filePath {
+                reloadFromDisk(path, force: true)
+                return true
+            }
+            return false
+        }
+    }
+
     // MARK: - Outline Navigation
 
     private func scrollToOutlineEntry(_ entry: MarkdownOutlineEntry) {
@@ -273,27 +346,50 @@ final class MarkdownContentView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handleGlobalShortcut(event) {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
     override func keyDown(with event: NSEvent) {
+        if handleGlobalShortcut(event) {
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    private func handleGlobalShortcut(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let characters = event.charactersIgnoringModifiers ?? ""
+        let characters = (event.charactersIgnoringModifiers ?? "").lowercased()
 
         if flags.contains(.command) && !flags.contains(.shift) {
             switch characters {
-            case "1": mode = .source; return
-            case "2": mode = .preview; return
-            case "3": mode = .split; return
+            case "1":
+                mode = .source
+                return true
+            case "2":
+                mode = .preview
+                return true
+            case "3":
+                mode = .split
+                return true
             case "r":
-                if let path = filePath { loadFile(path) }
-                return
+                if let path = filePath {
+                    reloadFromDisk(path, force: true)
+                    return true
+                }
+                return false
             default:
                 break
             }
         }
-        if flags.contains(.command) && flags.contains(.shift), characters.lowercased() == "o" {
+        if flags.contains(.command) && flags.contains(.shift), characters == "o" {
             isOutlineVisible.toggle()
-            return
+            return true
         }
-        super.keyDown(with: event)
+        return false
     }
 
     // MARK: - File Watching
@@ -306,11 +402,19 @@ final class MarkdownContentView: NSView {
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
-            eventMask: .write,
+            eventMask: [.write, .rename, .delete],
             queue: .main
         )
         source.setEventHandler { [weak self] in
-            self?.loadFile(url)
+            guard let self else { return }
+            let flags = source.data
+            if flags.contains(.rename) || flags.contains(.delete) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.reloadFromDisk(url, force: false)
+                }
+            } else {
+                self.reloadFromDisk(url, force: false)
+            }
         }
         source.setCancelHandler {
             close(fd)

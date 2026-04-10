@@ -5,6 +5,27 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.52] - 2026-04-10
+
+### Added
+- Markdown source view is now a real plain-text editor: undo/redo, native Find bar (Cmd+F), and all AppKit autosubstitutions disabled so markdown syntax is never rewritten under the user
+- Cmd+B toggles `**bold**` on the current selection (wraps new, unwraps existing)
+- Cmd+I toggles `*italic*` on the current selection
+- Cmd+K wraps the selection in `[text](https://)` and selects the URL placeholder for immediate typing; with no selection it inserts `[link text](https://)` and selects the label
+- Live propagation from source edits to the preview pane, heading outline, and document model via a debounced pipeline
+- Debounced save-on-edit writes back to disk atomically 150 ms after the last keystroke
+- File watcher now reacts to `write`, `rename`, and `delete` events and dedupes its own saves by comparing on-disk content against the in-memory document
+
+### Fixed
+- Two local-variable warnings in `MarkdownParser` (`var` → `let` where the binding was never reassigned)
+- File watcher could previously re-enter a reload loop on the writer's own atomic save because it never compared the new on-disk content against the in-memory document
+- Markdown panel leaked its `DispatchSourceFileSystemObject` and pending save work item when removed from a parent without an explicit teardown; `viewWillMove(toSuperview:)` now cancels both
+
+### Changed
+- Markdown source view moved from `NSTextView` readonly to an editable `MarkdownEditorTextView` subclass that routes key equivalents through a custom shortcut handler before falling back to the standard AppKit pipeline
+- Re-highlight pass after an edit runs inside a disabled-undo scope so cosmetic attribute updates no longer contaminate the user's undo stack
+- `typingAttributes` are reset after every re-highlight so newly typed characters always start with the theme's base font and color instead of inheriting the attribute run under the caret
+
 ## [0.1.51] - 2026-04-10
 
 ### Added

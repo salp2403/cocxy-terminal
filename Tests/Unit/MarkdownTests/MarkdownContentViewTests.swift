@@ -138,6 +138,48 @@ struct MarkdownContentViewTests {
         #expect(view.isOutlineVisible == true)
     }
 
+    @Test("editing source updates the live document outline")
+    func editingSourceUpdatesDocumentOutline() {
+        let url = createTempMarkdownFile(content: "# First")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        view.sourceViewForTesting.replaceEntireSource(with: "# Second\n\n## Child")
+
+        #expect(view.document.outline.entries.map(\.title) == ["Second", "Child"])
+    }
+
+    @Test("editing source saves back to disk")
+    func editingSourceSavesToDisk() async throws {
+        let url = createTempMarkdownFile(content: "# First")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        view.sourceViewForTesting.replaceEntireSource(with: "# Saved\n\nBody")
+
+        try await Task.sleep(for: .milliseconds(300))
+
+        let saved = try String(contentsOf: url, encoding: .utf8)
+        #expect(saved == "# Saved\n\nBody")
+    }
+
+    @Test("Cmd+B in the source editor wraps the current selection")
+    func commandBInSourceEditorWrapsSelection() {
+        let url = createTempMarkdownFile(content: "hello")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        let sourceView = view.sourceViewForTesting
+        sourceView.setSelectedSourceRange(NSRange(location: 0, length: 5))
+
+        let handled = sourceView.editorTextView.performKeyEquivalent(
+            with: makeKeyEvent(characters: "b", modifiers: .command)
+        )
+
+        #expect(handled == true)
+        #expect(sourceView.currentSource == "**hello**")
+    }
+
     // MARK: - Helpers
 
     private func createTempMarkdownFile(content: String) -> URL {
