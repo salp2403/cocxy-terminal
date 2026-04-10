@@ -465,18 +465,21 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func sendPreeditText(_ text: String, to surface: SurfaceID) {
-        guard let state = surfaces[surface] else { return }
-
-        if text.isEmpty {
-            cocxycore_terminal_preedit_clear(state.terminal)
-        } else {
-            let row = cocxycore_terminal_cursor_row(state.terminal)
-            let col = cocxycore_terminal_cursor_col(state.terminal)
-            let bytes = Array(text.utf8)
-            let displayWidth = Self.terminalDisplayWidth(of: text)
-            cocxycore_terminal_preedit_set(
-                state.terminal, row, col, bytes, bytes.count, displayWidth
-            )
+        // IME composition state mutates the same terminal cell buffer the
+        // background feed loop reads, so all preedit mutations run inside
+        // the per-surface lock.
+        withTerminalLock(surface) { state in
+            if text.isEmpty {
+                cocxycore_terminal_preedit_clear(state.terminal)
+            } else {
+                let row = cocxycore_terminal_cursor_row(state.terminal)
+                let col = cocxycore_terminal_cursor_col(state.terminal)
+                let bytes = Array(text.utf8)
+                let displayWidth = Self.terminalDisplayWidth(of: text)
+                cocxycore_terminal_preedit_set(
+                    state.terminal, row, col, bytes, bytes.count, displayWidth
+                )
+            }
         }
     }
 
@@ -599,10 +602,24 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
+        // Short-circuit BEFORE acquiring the lock so duplicate focus signals
+        // (which arrive from both the responder chain and window-key delegate
+        // path — see feedback_focus_notify_engine.md) do not stall the
+        // caller behind the background feed loop.
         guard var state = surfaces[surface] else { return }
         guard state.lastReportedFocus != focused else { return }
 
-        cocxycore_terminal_notify_focus(state.terminal, focused)
+        // The C focus notification mutates terminal mode flags read by the
+        // PTY parser. Run it inside the lock so the background feed cannot
+        // observe a half-applied focus transition.
+        withTerminalLock(surface) { lockedState in
+            cocxycore_terminal_notify_focus(lockedState.terminal, focused)
+        }
+
+        // Persist the new focus state in the Swift-side surface map and
+        // request a redraw OUTSIDE the lock. The dictionary update is
+        // serialized by the @MainActor isolation and the redraw call may
+        // hop into AppKit code that is not safe to call under the lock.
         state.lastReportedFocus = focused
         surfaces[surface] = state
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
@@ -700,13 +717,24 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func applyLigaturesEnabled(_ enabled: Bool, to surface: SurfaceID) {
-        guard let state = surfaces[surface] else { return }
-        cocxycore_terminal_set_ligatures(state.terminal, enabled)
-        if let webState = state.webServer {
-            cocxycore_web_force_full_frame(webState.handle)
+        // Step 1: ligature toggle mutates the C terminal's glyph atlas
+        //         configuration; serialize against the background feed.
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_ligatures(state.terminal, enabled)
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
         }
-        (state.hostView as? TerminalHostView)?.updateInteractionMetrics()
-        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+
+        // Step 2: UI notifications OUTSIDE the lock. updateInteractionMetrics
+        //         transitively calls bridge.resize which acquires the same
+        //         lock, so dispatching here would deadlock (NSLock is not
+        //         reentrant).
+        guard let hostView = surfaces[surface]?.hostView as? TerminalHostView else {
+            return
+        }
+        hostView.updateInteractionMetrics()
+        hostView.requestImmediateRedraw()
     }
 
     func imageDiagnostics(for surface: SurfaceID) -> TerminalImageDiagnostics? {
@@ -846,7 +874,17 @@ final class CocxyCoreBridge: TerminalEngine {
     @discardableResult
     func setCurrentStream(_ streamID: UInt32, for surface: SurfaceID) -> Bool {
         guard var state = surfaces[surface] else { return false }
-        cocxycore_terminal_set_current_stream(state.terminal, streamID)
+
+        // Stream switching mutates the terminal's active stream pointer
+        // which is read by the parser inside `cocxycore_terminal_feed`.
+        // Serialize against the background feed loop.
+        withTerminalLock(surface) { lockedState in
+            cocxycore_terminal_set_current_stream(lockedState.terminal, streamID)
+        }
+
+        // Persist the new stream ID in the Swift-side surface map after
+        // releasing the lock; the @MainActor isolation guarantees the
+        // dictionary update is serialized.
         state.currentStreamID = streamID
         surfaces[surface] = state
         return true
@@ -1081,32 +1119,42 @@ final class CocxyCoreBridge: TerminalEngine {
     /// Apply a theme change without destroying surfaces.
     ///
     /// CocxyCore supports runtime theme updates, so the active surface can
-    /// redraw immediately without teardown/recreation.
+    /// redraw immediately without teardown/recreation. The 18+ individual C
+    /// mutations (`set_theme`, 16× `set_theme_base16`, `set_selection_color`)
+    /// run as one atomic critical section so the background feed loop never
+    /// observes a partially-applied palette.
     func applyTheme(_ palette: ThemePalette, to surface: SurfaceID) {
-        guard let state = surfaces[surface] else { return }
-
+        // Parse hex colors BEFORE acquiring the lock to keep the critical
+        // section as short as possible. Parsing is pure Swift and never
+        // touches the terminal state.
         let fg = Self.parseHexColor(palette.foreground)
         let bg = Self.parseHexColor(palette.background)
         let cur = Self.parseHexColor(palette.cursor)
-
-        cocxycore_terminal_set_theme(
-            state.terminal,
-            fg.r, fg.g, fg.b,
-            bg.r, bg.g, bg.b,
-            cur.r, cur.g, cur.b
-        )
-
-        for i in 0..<min(palette.ansiColors.count, 16) {
-            let c = Self.parseHexColor(palette.ansiColors[i])
-            cocxycore_terminal_set_theme_base16(state.terminal, UInt8(i), c.r, c.g, c.b)
-        }
-
         let sel = Self.parseHexColor(palette.selectionBackground)
-        cocxycore_terminal_set_selection_color(state.terminal, sel.r, sel.g, sel.b, 128)
-        if let webState = state.webServer {
-            cocxycore_web_force_full_frame(webState.handle)
+        let ansi: [(r: UInt8, g: UInt8, b: UInt8)] = (0..<min(palette.ansiColors.count, 16)).map {
+            Self.parseHexColor(palette.ansiColors[$0])
         }
-        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+
+        // Apply the full palette atomically inside the lock.
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_theme(
+                state.terminal,
+                fg.r, fg.g, fg.b,
+                bg.r, bg.g, bg.b,
+                cur.r, cur.g, cur.b
+            )
+            for (index, c) in ansi.enumerated() {
+                cocxycore_terminal_set_theme_base16(state.terminal, UInt8(index), c.r, c.g, c.b)
+            }
+            cocxycore_terminal_set_selection_color(state.terminal, sel.r, sel.g, sel.b, 128)
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+        }
+
+        // Redraw OUTSIDE the lock — main-thread AppKit work that is unsafe
+        // to invoke from inside the critical section.
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
     /// Updates the stored defaults used for newly created surfaces.

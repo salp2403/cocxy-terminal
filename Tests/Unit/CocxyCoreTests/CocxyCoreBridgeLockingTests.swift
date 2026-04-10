@@ -280,6 +280,119 @@ struct CocxyCoreBridgeLockingTests {
         #expect(elapsed < 0.050, "key-up returned in \(elapsed)s, expected < 0.050s (no lock acquisition)")
     }
 
+    // MARK: - Misc state mutators serialization (preedit, focus, ligatures, theme, stream)
+
+    @Test("sendPreeditText, notifyFocus, ligatures, theme and currentStream acquire the terminal lock")
+    func miscStateMutatorsAcquireTerminalLock() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+        let holdDuration: TimeInterval = 0.150
+        let setupMargin: TimeInterval = 0.060
+        let expectedMinimum = holdDuration - setupMargin
+        let background = DispatchQueue.global(qos: .userInteractive)
+
+        // Helper: spawns a background queue that holds the lock for
+        // `holdDuration`, then runs `op` on the current thread and reports
+        // how long it took. If `op` correctly waits for the lock, the
+        // elapsed time will be ≥ expectedMinimum. If it does not, the call
+        // will return almost instantly and the assertion below catches it.
+        func measureUnderHolder(op: () -> Void) -> TimeInterval {
+            let acquired = DispatchSemaphore(value: 0)
+            background.async {
+                lock.lock()
+                acquired.signal()
+                Thread.sleep(forTimeInterval: holdDuration)
+                lock.unlock()
+            }
+            acquired.wait()
+            let start = Date()
+            op()
+            return Date().timeIntervalSince(start)
+        }
+
+        let preeditElapsed = measureUnderHolder {
+            bridge.sendPreeditText("hola", to: surfaceID)
+        }
+        #expect(
+            preeditElapsed >= expectedMinimum,
+            "sendPreeditText completed in \(preeditElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        // notifyFocus(true) is the first focus signal — lastReportedFocus
+        // starts at nil, so the inner guard does NOT short-circuit and the
+        // lock is taken.
+        let focusElapsed = measureUnderHolder {
+            bridge.notifyFocus(true, for: surfaceID)
+        }
+        #expect(
+            focusElapsed >= expectedMinimum,
+            "notifyFocus completed in \(focusElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let ligaturesElapsed = measureUnderHolder {
+            bridge.applyLigaturesEnabled(false, to: surfaceID)
+        }
+        #expect(
+            ligaturesElapsed >= expectedMinimum,
+            "applyLigaturesEnabled completed in \(ligaturesElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let themeElapsed = measureUnderHolder {
+            bridge.applyTheme(Self.makeTestPalette(), to: surfaceID)
+        }
+        #expect(
+            themeElapsed >= expectedMinimum,
+            "applyTheme completed in \(themeElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let streamElapsed = measureUnderHolder {
+            _ = bridge.setCurrentStream(0, for: surfaceID)
+        }
+        #expect(
+            streamElapsed >= expectedMinimum,
+            "setCurrentStream completed in \(streamElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+    }
+
+    @Test("notifyFocus skips the lock when the focus state is already current")
+    func notifyFocusShortCircuitsWhenStateUnchanged() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        // First call drives lastReportedFocus from nil → true.
+        bridge.notifyFocus(true, for: surfaceID)
+
+        // Hold the lock; the second `notifyFocus(true, ...)` should
+        // short-circuit at the `state.lastReportedFocus != focused` guard
+        // and return immediately without contending for the lock.
+        let background = DispatchQueue.global(qos: .userInteractive)
+        let acquired = DispatchSemaphore(value: 0)
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+
+        background.async {
+            lock.lock()
+            acquired.signal()
+            Thread.sleep(forTimeInterval: 0.200)
+            lock.unlock()
+        }
+        acquired.wait()
+
+        let start = Date()
+        bridge.notifyFocus(true, for: surfaceID)
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(
+            elapsed < 0.050,
+            "duplicate notifyFocus took \(elapsed)s; the early-return guard must skip the lock"
+        )
+    }
+
     // MARK: - Shared Test Helpers
 
     /// Minimal config used by every test in this suite. Mirrors the one in
@@ -322,5 +435,34 @@ struct CocxyCoreBridgeLockingTests {
             command: command
         )
         return (surfaceID, view)
+    }
+
+    /// Builds a minimal `ThemePalette` for tests. The values are arbitrary
+    /// but well-formed hex strings; the bridge only forwards them to the C
+    /// terminal which validates them internally. UI-side fields (tab bar,
+    /// badges) are not exercised by the locking tests but must be present
+    /// because every property of `ThemePalette` is `let`.
+    static func makeTestPalette() -> ThemePalette {
+        ThemePalette(
+            background: "#000000",
+            foreground: "#ffffff",
+            cursor: "#ff00ff",
+            selectionBackground: "#444444",
+            selectionForeground: "#ffffff",
+            tabActiveBackground: "#222222",
+            tabActiveForeground: "#ffffff",
+            tabInactiveBackground: "#111111",
+            tabInactiveForeground: "#888888",
+            badgeAttention: "#ffaa00",
+            badgeCompleted: "#00ff00",
+            badgeError: "#ff0000",
+            badgeWorking: "#00aaff",
+            ansiColors: [
+                "#000000", "#ff0000", "#00ff00", "#ffff00",
+                "#0000ff", "#ff00ff", "#00ffff", "#ffffff",
+                "#444444", "#ff5555", "#55ff55", "#ffff55",
+                "#5555ff", "#ff55ff", "#55ffff", "#ffffff"
+            ]
+        )
     }
 }
