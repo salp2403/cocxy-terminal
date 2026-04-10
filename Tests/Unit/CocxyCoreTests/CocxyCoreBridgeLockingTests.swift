@@ -71,6 +71,68 @@ struct CocxyCoreBridgeLockingTests {
         #expect(secondRan)
     }
 
+    // MARK: - resize serialization
+
+    @Test("resize waits for the terminal lock held by a background holder")
+    func resizeWaitsForBackgroundLockHolder() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        // Simulate the background PTY read loop holding the lock around
+        // `cocxycore_terminal_feed`. If `resize` does not try to acquire the
+        // lock, it will complete immediately; if it does, it must wait for
+        // the holder to release it and the elapsed time will be at least
+        // `holdDuration` minus a small setup margin.
+        let holdDuration: TimeInterval = 0.200
+        let setupMargin: TimeInterval = 0.080
+        let expectedMinimum = holdDuration - setupMargin
+
+        let background = DispatchQueue.global(qos: .userInteractive)
+        let holderAcquired = DispatchSemaphore(value: 0)
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+
+        background.async {
+            lock.lock()
+            holderAcquired.signal()
+            Thread.sleep(forTimeInterval: holdDuration)
+            lock.unlock()
+        }
+
+        // Wait until the background queue actually holds the lock.
+        holderAcquired.wait()
+
+        let start = Date()
+        bridge.resize(
+            surfaceID,
+            to: TerminalSize(columns: 80, rows: 24, pixelWidth: 640, pixelHeight: 384)
+        )
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(
+            elapsed >= expectedMinimum,
+            "resize completed in \(elapsed)s, expected ≥ \(expectedMinimum)s (serialized against background holder)"
+        )
+    }
+
+    @Test("resize applies the new dimensions to the underlying terminal")
+    func resizeAppliesNewDimensions() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        bridge.resize(
+            surfaceID,
+            to: TerminalSize(columns: 100, rows: 30, pixelWidth: 800, pixelHeight: 480)
+        )
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        #expect(cocxycore_terminal_cols(state.terminal) == 100)
+        #expect(cocxycore_terminal_rows(state.terminal) == 30)
+    }
+
     // MARK: - Shared Test Helpers
 
     /// Minimal config used by every test in this suite. Mirrors the one in

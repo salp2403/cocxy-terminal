@@ -500,13 +500,25 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func resize(_ surface: SurfaceID, to size: TerminalSize) {
-        guard let state = surfaces[surface] else { return }
-        cocxycore_terminal_resize(state.terminal, size.rows, size.columns)
-        cocxycore_pty_resize(state.pty, size.rows, size.columns)
-        if let webState = state.webServer {
-            cocxycore_web_force_full_frame(webState.handle)
+        // Serialize the C terminal/PTY mutations against the background PTY
+        // feed loop. Without this, a concurrent screen change while an agent
+        // is producing output can corrupt the cell arena and produce a
+        // transparent frame (see bug v0.1.52).
+        let observesProtocolV2 = withTerminalLock(surface) { state -> Bool in
+            cocxycore_terminal_resize(state.terminal, size.rows, size.columns)
+            cocxycore_pty_resize(state.pty, size.rows, size.columns)
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+            return state.protocolV2Observed
         }
-        if state.protocolV2Observed {
+
+        // Protocol v2 viewport notification is emitted outside the critical
+        // section to avoid coupling Task 2's fix with the protocol v2 write
+        // path, which is refactored in a follow-up task. For the Claude Code
+        // startup scenario this branch is inert because Claude Code does not
+        // negotiate protocol v2.
+        if observesProtocolV2 == true {
             _ = sendProtocolV2Viewport(for: surface, requestID: nil)
         }
     }
