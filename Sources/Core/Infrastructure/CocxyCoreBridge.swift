@@ -601,6 +601,42 @@ final class CocxyCoreBridge: TerminalEngine {
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
+    // MARK: - Selection
+
+    /// Clears the active text selection on the given surface.
+    ///
+    /// `cocxycore_terminal_selection_clear` mutates the terminal's
+    /// selection range, which the background PTY feed reads when it
+    /// reflows scrollback. The call runs inside the per-surface lock so
+    /// the feed cannot observe a half-cleared selection.
+    func clearSelection(for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_selection_clear(state.terminal)
+        }
+    }
+
+    /// Updates the text selection on the given surface to the rectangular
+    /// range defined by `(startRow, startCol)` → `(endRow, endCol)` in
+    /// absolute history coordinates.
+    ///
+    /// Acquires the per-surface lock so the mutation cannot interleave with
+    /// the background PTY feed loop reading the same selection state.
+    func setSelection(
+        for surface: SurfaceID,
+        startRow: UInt32,
+        startCol: UInt16,
+        endRow: UInt32,
+        endCol: UInt16
+    ) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_selection_set(
+                state.terminal,
+                startRow, startCol,
+                endRow, endCol
+            )
+        }
+    }
+
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
         // Short-circuit BEFORE acquiring the lock so duplicate focus signals
         // (which arrive from both the responder chain and window-key delegate

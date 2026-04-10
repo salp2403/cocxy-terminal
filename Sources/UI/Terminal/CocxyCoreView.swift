@@ -694,7 +694,10 @@ final class CocxyCoreView: NSView {
         let historyStart = cocxycore_terminal_history_visible_start(state.terminal)
         let absoluteRow = historyStart + UInt32(pos.row)
 
-        cocxycore_terminal_selection_clear(state.terminal)
+        // Route the selection mutation through the bridge so it acquires
+        // the per-surface terminal lock and cannot race with the background
+        // PTY feed loop.
+        bridge.clearSelection(for: sid)
         selectionAnchor = (row: absoluteRow, col: pos.col)
         isDragging = false
     }
@@ -709,10 +712,15 @@ final class CocxyCoreView: NSView {
         let historyStart = cocxycore_terminal_history_visible_start(state.terminal)
         let absoluteRow = historyStart + UInt32(pos.row)
 
-        cocxycore_terminal_selection_set(
-            state.terminal,
-            anchor.row, anchor.col,
-            absoluteRow, pos.col
+        // Route the selection mutation through the bridge so it acquires
+        // the per-surface terminal lock and cannot race with the background
+        // PTY feed loop.
+        bridge.setSelection(
+            for: sid,
+            startRow: anchor.row,
+            startCol: anchor.col,
+            endRow: absoluteRow,
+            endCol: pos.col
         )
 
         setNeedsTerminalDisplay()

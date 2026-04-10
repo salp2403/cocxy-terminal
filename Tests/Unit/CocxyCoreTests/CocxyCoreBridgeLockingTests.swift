@@ -393,6 +393,75 @@ struct CocxyCoreBridgeLockingTests {
         )
     }
 
+    // MARK: - Selection mutators serialization
+
+    @Test("clearSelection and setSelection acquire the terminal lock")
+    func selectionMutatorsAcquireTerminalLock() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+        let holdDuration: TimeInterval = 0.150
+        let setupMargin: TimeInterval = 0.060
+        let expectedMinimum = holdDuration - setupMargin
+        let background = DispatchQueue.global(qos: .userInteractive)
+
+        func measureUnderHolder(op: () -> Void) -> TimeInterval {
+            let acquired = DispatchSemaphore(value: 0)
+            background.async {
+                lock.lock()
+                acquired.signal()
+                Thread.sleep(forTimeInterval: holdDuration)
+                lock.unlock()
+            }
+            acquired.wait()
+            let start = Date()
+            op()
+            return Date().timeIntervalSince(start)
+        }
+
+        let setElapsed = measureUnderHolder {
+            bridge.setSelection(
+                for: surfaceID,
+                startRow: 0,
+                startCol: 0,
+                endRow: 0,
+                endCol: 5
+            )
+        }
+        #expect(
+            setElapsed >= expectedMinimum,
+            "setSelection completed in \(setElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let clearElapsed = measureUnderHolder {
+            bridge.clearSelection(for: surfaceID)
+        }
+        #expect(
+            clearElapsed >= expectedMinimum,
+            "clearSelection completed in \(clearElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+    }
+
+    @Test("selection mutators are no-ops on an unknown surface")
+    func selectionMutatorsNoOpOnUnknownSurface() throws {
+        let bridge = try Self.makeBridge()
+        let unknown = SurfaceID()
+
+        // Must not crash and must not deadlock — withTerminalLock returns
+        // nil for unknown surfaces and the body is skipped entirely.
+        bridge.setSelection(
+            for: unknown,
+            startRow: 0,
+            startCol: 0,
+            endRow: 0,
+            endCol: 5
+        )
+        bridge.clearSelection(for: unknown)
+    }
+
     // MARK: - Shared Test Helpers
 
     /// Minimal config used by every test in this suite. Mirrors the one in
