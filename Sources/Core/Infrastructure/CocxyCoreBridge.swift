@@ -464,6 +464,41 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    // MARK: - Terminal Lock Helper
+
+    /// Runs `body` while holding the per-surface terminal lock.
+    ///
+    /// Centralizes the lock acquisition pattern for every main-thread
+    /// operation that mutates the CocxyCore C terminal state. Without
+    /// this serialization, mutations can interleave with the background
+    /// PTY feed loop (which holds the same lock around
+    /// `cocxycore_terminal_feed` / `cocxycore_terminal_build_frame`) and
+    /// corrupt the C-side cell buffer, producing transparent frames or
+    /// half-written screens when an agent is pushing output concurrently.
+    ///
+    /// The closure receives the looked-up `SurfaceState` for convenience,
+    /// so callers never need to repeat the `surfaces[surface]` lookup.
+    ///
+    /// Returns `nil` without calling `body` if the surface identifier is
+    /// unknown — callers can treat that the same way they currently treat
+    /// a failed `surfaces[surface]` lookup.
+    ///
+    /// - Parameters:
+    ///   - surface: The target surface identifier.
+    ///   - body: Closure executed while the lock is held. Receives the
+    ///     current `SurfaceState` snapshot.
+    /// - Returns: The closure's return value, or `nil` if the surface is unknown.
+    @discardableResult
+    func withTerminalLock<T>(
+        _ surface: SurfaceID,
+        body: (SurfaceState) throws -> T
+    ) rethrows -> T? {
+        guard let state = surfaces[surface] else { return nil }
+        state.terminalLock.lock()
+        defer { state.terminalLock.unlock() }
+        return try body(state)
+    }
+
     func resize(_ surface: SurfaceID, to size: TerminalSize) {
         guard let state = surfaces[surface] else { return }
         cocxycore_terminal_resize(state.terminal, size.rows, size.columns)
