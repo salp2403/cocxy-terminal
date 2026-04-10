@@ -26,6 +26,18 @@ protocol TerminalHostingView: AnyObject {
         surfaceID: SurfaceID
     )
     func requestImmediateRedraw()
+
+    /// Re-anchors the host view's CVDisplayLink (or equivalent render
+    /// timing source) to the display currently hosting the window.
+    ///
+    /// Called as a safety net from `MainWindowController` window-change
+    /// delegate methods so that detached or hidden surface views — which
+    /// do NOT receive `NSWindow.didChangeScreenNotification` because
+    /// they have no window reference — still get re-anchored when the
+    /// user moves the window between displays. The view-local observer
+    /// also calls this when the view is attached, so the operation must
+    /// be idempotent.
+    func refreshDisplayLinkAnchor()
 }
 
 typealias TerminalHostView = NSView & TerminalHostingView

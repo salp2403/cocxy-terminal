@@ -1010,20 +1010,62 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// `CocxyCoreView` also observes `NSWindow.didChangeScreenNotification`
     /// locally to refresh its Metal layer and re-anchor the display link,
     /// but that path only fires while the view is attached to the window.
-    /// These delegate callbacks run for the window itself and drive the
-    /// same `refreshVisibleTerminalInteractionState()` used by tab switch,
-    /// which is the most battle-tested path for getting every visible
-    /// surface back to a consistent rendering state.
+    /// Detached or hidden surface views (saved split panes for inactive
+    /// tabs, surfaces awaiting reattachment after a tab switch, etc.)
+    /// have no window reference and therefore never receive the local
+    /// notification.
+    ///
+    /// This delegate path is the safety net: it walks every managed
+    /// surface view — primary, tab-mapped, split-mapped, AND saved split
+    /// surfaces from inactive tabs — and forces a CVDisplayLink re-anchor
+    /// on each. It then defers to `refreshVisibleTerminalInteractionState`
+    /// to handle the visible-view layout refresh that tab switch already
+    /// uses.
     func windowDidChangeScreen(_ notification: Notification) {
+        refreshAllSurfaceDisplayLinkAnchors()
         refreshVisibleTerminalInteractionState()
     }
 
     func windowDidChangeScreenProfile(_ notification: Notification) {
+        refreshAllSurfaceDisplayLinkAnchors()
         refreshVisibleTerminalInteractionState()
     }
 
     func windowDidChangeBackingProperties(_ notification: Notification) {
+        refreshAllSurfaceDisplayLinkAnchors()
         refreshVisibleTerminalInteractionState()
+    }
+
+    /// Walks every `TerminalHostView` managed by this controller and
+    /// invokes `refreshDisplayLinkAnchor()` exactly once per distinct
+    /// view (deduplicated by `ObjectIdentifier`).
+    ///
+    /// Sources walked, in order:
+    /// 1. `terminalSurfaceView` (the currently active primary surface)
+    /// 2. `tabSurfaceViews` (per-tab primary surfaces)
+    /// 3. `splitSurfaceViews` (current visible split panes)
+    /// 4. `savedTabSplitSurfaceViews` (split panes saved for inactive
+    ///    tabs — these are detached from the window hierarchy and would
+    ///    miss the local screen-change observer otherwise).
+    ///
+    /// The same view appearing in multiple slots (for example, the
+    /// primary view that is also stored in `tabSurfaceViews` for its
+    /// owning tab) is anchored exactly once.
+    private func refreshAllSurfaceDisplayLinkAnchors() {
+        var seen = Set<ObjectIdentifier>()
+
+        func anchor(_ view: TerminalHostView?) {
+            guard let view else { return }
+            guard seen.insert(ObjectIdentifier(view)).inserted else { return }
+            view.refreshDisplayLinkAnchor()
+        }
+
+        anchor(terminalSurfaceView)
+        for view in tabSurfaceViews.values { anchor(view) }
+        for view in splitSurfaceViews.values { anchor(view) }
+        for savedSplits in savedTabSplitSurfaceViews.values {
+            for view in savedSplits.values { anchor(view) }
+        }
     }
 
     // MARK: - Responsive Layout

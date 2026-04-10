@@ -22,6 +22,7 @@ private final class MockTerminalHostView: NSView, TerminalHostingView {
         surfaceID: SurfaceID
     ) {}
     func requestImmediateRedraw() {}
+    func refreshDisplayLinkAnchor() {}
 }
 
 // MARK: - Session Drag Data Tests

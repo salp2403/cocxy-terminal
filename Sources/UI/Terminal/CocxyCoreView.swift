@@ -950,6 +950,17 @@ final class CocxyCoreView: NSView {
 extension CocxyCoreView: TerminalHostingView {
     var terminalViewModel: TerminalViewModel? { viewModel }
 
+    /// Re-anchors the CVDisplayLink to the display currently hosting
+    /// the window. Called from `MainWindowController.windowDidChangeScreen`
+    /// as a safety net for detached/hidden surface views whose own
+    /// `NSWindow.didChangeScreenNotification` observer does not fire
+    /// (because they have no window reference). The view-local observer
+    /// also calls `anchorDisplayLinkToCurrentScreen` directly when the
+    /// view is attached, so this entry point is idempotent.
+    func refreshDisplayLinkAnchor() {
+        anchorDisplayLinkToCurrentScreen()
+    }
+
     func showNotificationRing(color: NSColor = CocxyColors.blue) {
         guard !isNotificationRingActive else { return }
         isNotificationRingActive = true

@@ -13,6 +13,7 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     private(set) var syncSizeCallCount = 0
     private(set) var redrawCallCount = 0
     private(set) var updateMetricsCallCount = 0
+    private(set) var refreshDisplayLinkAnchorCallCount = 0
 
     func syncSizeWithTerminal() {
         syncSizeCallCount += 1
@@ -33,6 +34,10 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
 
     func requestImmediateRedraw() {
         redrawCallCount += 1
+    }
+
+    func refreshDisplayLinkAnchor() {
+        refreshDisplayLinkAnchorCallCount += 1
     }
 }
 
@@ -947,6 +952,86 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             firstViewModel.title,
             originalFirstTitle,
             "Background tab title updates must not leak into the bootstrap tab's view model"
+        )
+    }
+
+    // MARK: - windowDidChangeScreen safety net
+
+    /// Verifies that `windowDidChangeScreen` walks every managed
+    /// surface view (primary, tab map, split map, AND saved tab split
+    /// surfaces) and forces a `refreshDisplayLinkAnchor()` call on each.
+    /// This is the v0.1.53 safety net for detached/hidden views whose
+    /// own `NSWindow.didChangeScreenNotification` observer cannot fire
+    /// because they have no window reference.
+    func testWindowDidChangeScreenRefreshesAnchorOnEveryManagedSurface() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let primaryView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = primaryView
+
+        let tabMappedView = TrackingTerminalHostView()
+        let tabID = TabID()
+        controller.tabSurfaceViews[tabID] = tabMappedView
+
+        let splitView = TrackingTerminalHostView()
+        let splitSurfaceID = SurfaceID()
+        controller.splitSurfaceViews[splitSurfaceID] = splitView
+
+        let savedView = TrackingTerminalHostView()
+        let savedTabID = TabID()
+        let savedSurfaceID = SurfaceID()
+        controller.savedTabSplitSurfaceViews[savedTabID] = [savedSurfaceID: savedView]
+
+        // Drive the window-screen-changed delegate path. The notification
+        // payload is irrelevant — the controller dispatches based on the
+        // event itself, not its userInfo.
+        let notification = Notification(
+            name: NSWindow.didChangeScreenNotification,
+            object: nil
+        )
+        controller.windowDidChangeScreen(notification)
+
+        XCTAssertEqual(
+            primaryView.refreshDisplayLinkAnchorCallCount, 1,
+            "Primary surface view must receive a display-link re-anchor"
+        )
+        XCTAssertEqual(
+            tabMappedView.refreshDisplayLinkAnchorCallCount, 1,
+            "Tab-mapped surface view must receive a display-link re-anchor"
+        )
+        XCTAssertEqual(
+            splitView.refreshDisplayLinkAnchorCallCount, 1,
+            "Split surface view must receive a display-link re-anchor"
+        )
+        XCTAssertEqual(
+            savedView.refreshDisplayLinkAnchorCallCount, 1,
+            "Saved (detached) split surface view must receive a display-link re-anchor"
+        )
+    }
+
+    func testWindowDidChangeScreenDeduplicatesSharedViews() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        // The same view is the primary AND lives inside tabSurfaceViews —
+        // a common situation immediately after surface creation. The
+        // safety net must call refreshDisplayLinkAnchor exactly ONCE
+        // per distinct view, not once per slot.
+        let sharedView = TrackingTerminalHostView()
+        let tabID = TabID()
+        controller.terminalSurfaceView = sharedView
+        controller.tabSurfaceViews[tabID] = sharedView
+
+        let notification = Notification(
+            name: NSWindow.didChangeScreenNotification,
+            object: nil
+        )
+        controller.windowDidChangeScreen(notification)
+
+        XCTAssertEqual(
+            sharedView.refreshDisplayLinkAnchorCallCount, 1,
+            "Shared view must be re-anchored exactly once even though it appears in multiple slots"
         )
     }
 }
