@@ -195,6 +195,91 @@ struct CocxyCoreBridgeLockingTests {
         #expect(cocxycore_terminal_rows(afterState.terminal) == beforeRows)
     }
 
+    // MARK: - sendKeyEvent serialization
+
+    @Test("sendKeyEvent waits for the terminal lock held by a background holder")
+    func sendKeyEventWaitsForBackgroundLockHolder() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let holdDuration: TimeInterval = 0.200
+        let setupMargin: TimeInterval = 0.080
+        let expectedMinimum = holdDuration - setupMargin
+
+        let background = DispatchQueue.global(qos: .userInteractive)
+        let holderAcquired = DispatchSemaphore(value: 0)
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+
+        background.async {
+            lock.lock()
+            holderAcquired.signal()
+            Thread.sleep(forTimeInterval: holdDuration)
+            lock.unlock()
+        }
+
+        holderAcquired.wait()
+
+        // Use the same arrow-left key event that the existing
+        // CocxyCoreBridgeTests use to exercise encode_key — keyCode 123,
+        // no characters, no modifiers, key-down.
+        let arrowLeft = KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: true)
+
+        let start = Date()
+        _ = bridge.sendKeyEvent(arrowLeft, to: surfaceID)
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(
+            elapsed >= expectedMinimum,
+            "sendKeyEvent completed in \(elapsed)s, expected ≥ \(expectedMinimum)s (serialized against background holder)"
+        )
+    }
+
+    @Test("sendKeyEvent still encodes and forwards arrow keys after the lock refactor")
+    func sendKeyEventStillHandlesArrowKeys() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let arrowLeft = KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: true)
+        let handled = bridge.sendKeyEvent(arrowLeft, to: surfaceID)
+        #expect(handled == true)
+    }
+
+    @Test("sendKeyEvent ignores key-up events without acquiring the lock")
+    func sendKeyEventIgnoresKeyUpEvents() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        // Hold the lock on a background queue. A key-up event must NOT wait
+        // for the lock — the early `guard event.isKeyDown` exits before any
+        // lock acquisition. We measure that the call returns near-instantly
+        // even with the lock held.
+        let background = DispatchQueue.global(qos: .userInteractive)
+        let holderAcquired = DispatchSemaphore(value: 0)
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+
+        background.async {
+            lock.lock()
+            holderAcquired.signal()
+            Thread.sleep(forTimeInterval: 0.200)
+            lock.unlock()
+        }
+        holderAcquired.wait()
+
+        let arrowLeftUp = KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: false)
+        let start = Date()
+        let handled = bridge.sendKeyEvent(arrowLeftUp, to: surfaceID)
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(handled == false)
+        #expect(elapsed < 0.050, "key-up returned in \(elapsed)s, expected < 0.050s (no lock acquisition)")
+    }
+
     // MARK: - Shared Test Helpers
 
     /// Minimal config used by every test in this suite. Mirrors the one in

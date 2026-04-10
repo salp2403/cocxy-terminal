@@ -403,41 +403,57 @@ final class CocxyCoreBridge: TerminalEngine {
 
     @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
-        guard event.isKeyDown, let state = surfaces[surface] else { return false }
+        // Drop key-up events before acquiring the lock — they are no-ops
+        // for the C terminal and we should not stall the caller behind the
+        // background feed loop just to bail out.
+        guard event.isKeyDown else { return false }
 
-        var buf = [UInt8](repeating: 0, count: 32)
-        var bytesWritten = 0
+        // Encode + write the key sequence atomically inside the per-surface
+        // lock. `cocxycore_terminal_encode_key` and `encode_char` read the
+        // terminal's keypad / cursor mode flags to choose the right escape
+        // sequence; the background PTY feed loop holds the same lock while
+        // it parses bytes that may flip those flags. Without serialization
+        // we can read a half-written mode and emit the wrong sequence — and
+        // worse, the subsequent `write_attached_pty` lands on a C buffer
+        // that the parser is mid-update, which is the suspected trigger for
+        // the transparent-on-Claude-launch bug.
+        return withTerminalLock(surface) { state -> Bool in
+            var buf = [UInt8](repeating: 0, count: 32)
+            var bytesWritten = 0
 
-        if let chars = event.characters,
-           let scalar = chars.unicodeScalars.first {
-            let codepoint = scalar.value
-            let mods = mapModifiers(event.modifiers)
+            if let chars = event.characters,
+               let scalar = chars.unicodeScalars.first {
+                let codepoint = scalar.value
+                let mods = mapModifiers(event.modifiers)
 
-            // Try special key mapping first (arrows, function keys, etc.)
-            if let key = mapKeyCodeToSpecialKey(event.keyCode) {
-                bytesWritten = cocxycore_terminal_encode_key(
-                    state.terminal, key, mods, &buf, buf.count
-                )
-            } else {
-                bytesWritten = cocxycore_terminal_encode_char(
-                    state.terminal, codepoint, mods, &buf, buf.count
-                )
-            }
-        } else {
-            // No characters — try special key mapping
-            if let key = mapKeyCodeToSpecialKey(event.keyCode) {
+                // Try special key mapping first (arrows, function keys, etc.)
+                if let key = mapKeyCodeToSpecialKey(event.keyCode) {
+                    bytesWritten = cocxycore_terminal_encode_key(
+                        state.terminal, key, mods, &buf, buf.count
+                    )
+                } else {
+                    bytesWritten = cocxycore_terminal_encode_char(
+                        state.terminal, codepoint, mods, &buf, buf.count
+                    )
+                }
+            } else if let key = mapKeyCodeToSpecialKey(event.keyCode) {
+                // No characters — try special key mapping.
                 let mods = mapModifiers(event.modifiers)
                 bytesWritten = cocxycore_terminal_encode_key(
                     state.terminal, key, mods, &buf, buf.count
                 )
             }
-        }
 
-        if bytesWritten > 0 {
-            _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
-            return true
-        }
-        return false
+            if bytesWritten > 0 {
+                // `writeBytes(_:to: SurfaceState)` calls `writeAttachedPTYBytes`
+                // which mutates the C terminal's response buffer. It must run
+                // inside the same critical section as the encode call so the
+                // background feed loop sees a consistent terminal state.
+                _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+                return true
+            }
+            return false
+        } ?? false
     }
 
     func sendText(_ text: String, to surface: SurfaceID) {
