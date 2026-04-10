@@ -895,6 +895,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func resolvedWorkingDirectoryCandidate(
         for directory: String
     ) -> (controller: MainWindowController, tabID: TabID)? {
+        // Both the hook side and the tab side go through the SAME
+        // normalization (trim → file:// → resolveSymlinks → standardize)
+        // so the strict equality below treats `/tmp` and `/private/tmp`
+        // as the same canonical path. Without this, hooks from agents
+        // that pre-resolve symlinks (Claude Code among them) would be
+        // dropped against tabs whose CWD comes from the shell un-
+        // resolved, and vice versa.
         let normalizedPath = normalizedWorkingDirectoryPath(directory)
         var matches: [(controller: MainWindowController, tabID: TabID)] = []
         var seenTabIDs = Set<TabID>()
@@ -905,12 +912,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         for controller in allWindowControllers {
-            for tab in controller.tabManager.tabs where tab.workingDirectory.standardized.path == normalizedPath {
+            for tab in controller.tabManager.tabs
+            where Self.normalizedWorkingDirectoryPathForTesting(tab.workingDirectory.path) == normalizedPath {
                 appendMatch(controller: controller, tabID: tab.id)
             }
 
             for (surfaceID, workingDirectory) in controller.surfaceWorkingDirectories
-            where workingDirectory.standardized.path == normalizedPath {
+            where Self.normalizedWorkingDirectoryPathForTesting(workingDirectory.path) == normalizedPath {
                 if let tabID = controller.tabID(for: surfaceID) {
                     appendMatch(controller: controller, tabID: tabID)
                 }
@@ -947,11 +955,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func normalizedWorkingDirectoryPath(_ directory: String) -> String {
+        Self.normalizedWorkingDirectoryPathForTesting(directory)
+    }
+
+    /// Pure-function path normalizer used by hook cwd matching.
+    ///
+    /// Normalization steps applied in order:
+    ///
+    /// 1. Whitespace trimming (handles stray newlines from socket payloads).
+    /// 2. `file://` URL → plain path conversion when applicable.
+    /// 3. `resolvingSymlinksInPath()` to canonicalize macOS bind mounts
+    ///    (e.g. `/tmp` → `/private/tmp`, `/var` → `/private/var`).
+    /// 4. `standardized` to drop `.`, `..` and trailing slashes.
+    ///
+    /// This is the SAME normalization used by `tab.workingDirectory`
+    /// when comparing in `resolvedWorkingDirectoryCandidate` and
+    /// `tabMatchesWorkingDirectory` — both sides of the equality must
+    /// see the same canonical form, otherwise hook events from agents
+    /// that report `/tmp` while the tab tracks `/private/tmp` (or vice
+    /// versa) get dropped silently. That was the v0.1.52 sidebar
+    /// "Ready" bug for sessions running in symlinked directories.
+    ///
+    /// Exposed as `internal static` so tests can exercise the helper
+    /// without instantiating an entire `AppDelegate`. Production code
+    /// inside `AppDelegate` keeps using the `private` instance method
+    /// thin wrapper above.
+    ///
+    /// Marked `nonisolated` because this is a pure function with no
+    /// dependency on `AppDelegate` state — it can be called from any
+    /// concurrency context (including the synchronous test suite).
+    internal nonisolated static func normalizedWorkingDirectoryPathForTesting(_ directory: String) -> String {
         let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
         if let parsed = URL(string: trimmed), parsed.isFileURL {
-            return parsed.standardizedFileURL.path
+            return parsed.resolvingSymlinksInPath().standardizedFileURL.path
         }
-        return URL(fileURLWithPath: trimmed).standardized.path
+        return URL(fileURLWithPath: trimmed)
+            .resolvingSymlinksInPath()
+            .standardized
+            .path
     }
 
     private func tabMatchesWorkingDirectory(
@@ -959,14 +1000,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         in controller: MainWindowController,
         directory: String
     ) -> Bool {
+        // Both sides of the comparison go through the same canonical
+        // normalization so symlinked paths (e.g. /tmp ↔ /private/tmp)
+        // resolve to the same value. See `resolvedWorkingDirectoryCandidate`
+        // for the rationale.
         let normalizedPath = normalizedWorkingDirectoryPath(directory)
 
-        if controller.tabManager.tab(for: tabID)?.workingDirectory.standardized.path == normalizedPath {
+        if let tabPath = controller.tabManager.tab(for: tabID)?.workingDirectory.path,
+           Self.normalizedWorkingDirectoryPathForTesting(tabPath) == normalizedPath {
             return true
         }
 
         return controller.surfaceIDs(for: tabID).contains { surfaceID in
-            controller.surfaceWorkingDirectories[surfaceID]?.standardized.path == normalizedPath
+            guard let surfacePath = controller.surfaceWorkingDirectories[surfaceID]?.path else {
+                return false
+            }
+            return Self.normalizedWorkingDirectoryPathForTesting(surfacePath) == normalizedPath
         }
     }
 
