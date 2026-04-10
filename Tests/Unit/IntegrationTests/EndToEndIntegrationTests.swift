@@ -826,6 +826,11 @@ final class StatusBarDataIntegrationTests: XCTestCase {
         }
         controller.tabManager.updateTab(id: firstTabID) { tab in
             tab.agentState = .working
+            tab.detectedAgent = DetectedAgent(
+                name: "Claude Code",
+                launchCommand: "claude",
+                startedAt: Date()
+            )
         }
 
         let summary = controller.computeAgentSummary()
@@ -833,6 +838,11 @@ final class StatusBarDataIntegrationTests: XCTestCase {
         XCTAssertEqual(
             summary.working, 1,
             "working count must be 1 when one tab has agentState .working"
+        )
+        XCTAssertEqual(
+            summary.activeAgentText,
+            "Claude Code working",
+            "active agent text must describe the focused agent state"
         )
     }
 
@@ -952,5 +962,33 @@ final class StatusBarDataIntegrationTests: XCTestCase {
                        "errors must be 1 with one .error tab")
         XCTAssertEqual(summary.finished, 1,
                        "finished must be 1 with one .finished tab")
+    }
+
+    func testComputeAgentSummaryIncludesActiveToolAndErrorCounts() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab")
+            return
+        }
+
+        controller.tabManager.updateTab(id: firstTabID) { tab in
+            tab.agentState = .working
+            tab.detectedAgent = DetectedAgent(
+                name: "Claude Code",
+                launchCommand: "claude",
+                startedAt: Date()
+            )
+            tab.agentActivity = "Read: main.swift"
+            tab.agentToolCount = 3
+            tab.agentErrorCount = 1
+        }
+
+        let summary = controller.computeAgentSummary()
+
+        XCTAssertEqual(summary.activeAgentText, "Read: main.swift")
+        XCTAssertEqual(summary.activeToolCount, 3)
+        XCTAssertEqual(summary.activeErrorCount, 1)
     }
 }

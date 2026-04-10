@@ -137,6 +137,7 @@ extension AppDelegate {
                     resolved.controller.tabManager.updateTab(id: resolved.tabID) { tab in
                         tab.agentActivity = activity
                         tab.agentToolCount += 1
+                        tab.lastActivityAt = Date()
                         if isError {
                             tab.agentErrorCount += 1
                         }
@@ -144,6 +145,7 @@ extension AppDelegate {
                     // Refresh progress overlay and sidebar with new tool counts.
                     resolved.controller.updateAgentProgressOverlay()
                     resolved.controller.tabBarViewModel?.syncWithManager()
+                    resolved.controller.refreshStatusBar()
                 }
 
                 engine?.processHookEvent(event)
@@ -193,10 +195,37 @@ extension AppDelegate {
                 let tabID = target.tabID
                 controller.tabManager.updateTab(id: tabID) { tab in
                     tab.agentState = agentState
-                    // Reset tool/error counters when agent finishes or goes idle.
+                    tab.lastActivityAt = Date()
+
                     if agentState == .idle {
                         tab.agentToolCount = 0
                         tab.agentErrorCount = 0
+                        tab.agentActivity = nil
+                        tab.detectedAgent = nil
+                    } else if let agentName = context.agentName?
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                        !agentName.isEmpty {
+                        if let existing = tab.detectedAgent,
+                           existing.name == agentName {
+                            // Preserve the original start time while the same
+                            // agent continues across multiple state changes.
+                            tab.detectedAgent = existing
+                        } else {
+                            tab.detectedAgent = DetectedAgent(
+                                name: agentName,
+                                launchCommand: agentName,
+                                startedAt: Date()
+                            )
+                        }
+                    }
+
+                    // Reset tool/error counters when agent finishes or goes idle.
+                    if agentState == .finished, tab.agentActivity == nil {
+                        tab.agentActivity = "Task completed"
+                    } else if agentState == .error, tab.agentActivity == nil {
+                        tab.agentActivity = "Error occurred"
+                    } else if agentState == .waitingInput, tab.agentActivity == nil {
+                        tab.agentActivity = "Waiting for input"
                     }
                 }
 

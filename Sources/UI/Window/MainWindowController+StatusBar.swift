@@ -33,6 +33,46 @@ extension MainWindowController {
                 break
             }
         }
+
+        if let activeTab = tabManager.activeTab,
+           activeTab.agentState != .idle {
+            let agentName = activeTab.detectedAgent?.name
+                ?? activeTab.processName
+                ?? "Agent"
+            let statusText: String
+            switch activeTab.agentState {
+            case .launched:
+                statusText = "\(agentName) starting..."
+            case .working:
+                statusText = activeTab.agentActivity ?? "\(agentName) working"
+            case .waitingInput:
+                statusText = "\(agentName) waiting for input"
+            case .finished:
+                statusText = "\(agentName) finished"
+            case .error:
+                statusText = "\(agentName) error"
+            case .idle:
+                statusText = ""
+            }
+
+            summary.activeAgentText = statusText.isEmpty ? nil : statusText
+            summary.activeToolCount = activeTab.agentToolCount
+            summary.activeErrorCount = activeTab.agentErrorCount
+
+            switch activeTab.agentState {
+            case .working, .launched:
+                summary.activeAgentColor = CocxyColors.blue
+            case .waitingInput:
+                summary.activeAgentColor = CocxyColors.yellow
+            case .finished:
+                summary.activeAgentColor = CocxyColors.green
+            case .error:
+                summary.activeAgentColor = CocxyColors.red
+            case .idle:
+                summary.activeAgentColor = CocxyColors.overlay1
+            }
+        }
+
         return summary
     }
 

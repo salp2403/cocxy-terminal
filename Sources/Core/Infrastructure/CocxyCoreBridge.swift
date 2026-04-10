@@ -140,6 +140,7 @@ final class CocxyCoreBridge: TerminalEngine {
         weak var hostView: NSView?
         var lastKnownWorkingDirectory: URL?
         var lastFallbackWorkingDirectoryProbeAt: TimeInterval = 0
+        var pendingFallbackWorkingDirectoryProbe: DispatchWorkItem?
         var lastReportedFocus: Bool?
         var webServer: WebServerState?
         var currentStreamID: UInt32 = 0
@@ -326,12 +327,15 @@ final class CocxyCoreBridge: TerminalEngine {
             configuredImageFileTransferEnabled: config.imageFileTransferEnabled
         )
 
+        applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
         readSource.resume()
         return surfaceID
     }
 
     func destroySurface(_ id: SurfaceID) {
         guard let state = surfaces.removeValue(forKey: id) else { return }
+
+        state.pendingFallbackWorkingDirectoryProbe?.cancel()
 
         // Clean up semantic adapter state for this surface.
         semanticAdapter.surfaceDestroyed(id)
@@ -1655,11 +1659,13 @@ final class CocxyCoreBridge: TerminalEngine {
         switch Int32(event.event_type) {
         case 0: // PROMPT_SHOWN
             emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
+            scheduleFallbackWorkingDirectoryProbe(for: surfaceID, delay: 0.12)
             dispatchOSC(.shellPrompt, for: surfaceID)
         case 1: // COMMAND_STARTED
             dispatchOSC(.commandStarted, for: surfaceID)
         case 2: // COMMAND_FINISHED
             emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
+            scheduleFallbackWorkingDirectoryProbe(for: surfaceID, delay: 0.12)
             let exitCode = event.exit_code >= 0 ? Int(event.exit_code) : nil
             dispatchOSC(.commandFinished(exitCode: exitCode), for: surfaceID)
         default:
@@ -1739,7 +1745,10 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     private func currentWorkingDirectory(for surfaceID: SurfaceID) -> String? {
-        cwdProvider?(surfaceID)
+        if let cwd = surfaces[surfaceID]?.lastKnownWorkingDirectory?.path {
+            return cwd
+        }
+        return cwdProvider?(surfaceID)
     }
 
     @discardableResult
@@ -1770,6 +1779,29 @@ final class CocxyCoreBridge: TerminalEngine {
         state.lastFallbackWorkingDirectoryProbeAt = now
         surfaces[surfaceID] = state
         emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
+        scheduleFallbackWorkingDirectoryProbe(for: surfaceID, delay: 0.12)
+    }
+
+    private func scheduleFallbackWorkingDirectoryProbe(
+        for surfaceID: SurfaceID,
+        delay: TimeInterval
+    ) {
+        guard var state = surfaces[surfaceID] else { return }
+        state.pendingFallbackWorkingDirectoryProbe?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
+            if var refreshed = self.surfaces[surfaceID] {
+                refreshed.pendingFallbackWorkingDirectoryProbe = nil
+                self.surfaces[surfaceID] = refreshed
+            }
+        }
+
+        state.pendingFallbackWorkingDirectoryProbe = workItem
+        surfaces[surfaceID] = state
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     private func inferredWorkingDirectory(for surfaceID: SurfaceID) -> URL? {

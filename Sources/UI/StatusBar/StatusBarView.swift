@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // StatusBarView.swift - Bottom status bar with contextual workspace info.
 
+import AppKit
 import SwiftUI
 
 // MARK: - Status Bar View
@@ -149,6 +150,34 @@ struct StatusBarView: View {
             KeyboardShortcutsButton()
                 .padding(.trailing, 6)
 
+            if let liveAgentText = agentSummary.activeAgentText {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(CocxyColors.swiftUI(agentSummary.activeAgentColor))
+                        .frame(width: 6, height: 6)
+                        .shadow(color: CocxyColors.swiftUI(agentSummary.activeAgentColor).opacity(0.45), radius: 3)
+                    Text(liveAgentText)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext1))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if agentSummary.activeToolCount > 0 {
+                        AgentMetricPill(
+                            value: "\(agentSummary.activeToolCount)t",
+                            color: CocxyColors.swiftUI(CocxyColors.blue)
+                        )
+                    }
+                    if agentSummary.activeErrorCount > 0 {
+                        AgentMetricPill(
+                            value: "\(agentSummary.activeErrorCount)e",
+                            color: CocxyColors.swiftUI(CocxyColors.red)
+                        )
+                    }
+                }
+                .frame(maxWidth: 280, alignment: .trailing)
+                .padding(.trailing, 8)
+            }
+
             // Right: agent activity pills
             HStack(spacing: 6) {
                 if agentSummary.working > 0 {
@@ -222,6 +251,21 @@ private struct AgentCountPill: View {
     }
 }
 
+private struct AgentMetricPill: View {
+    let value: String
+    let color: Color
+
+    var body: some View {
+        Text(value)
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundColor(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+}
+
 // MARK: - Agent Summary
 
 /// Aggregated agent state counts across all tabs.
@@ -230,6 +274,10 @@ struct AgentSummary: Equatable {
     var waiting: Int = 0
     var errors: Int = 0
     var finished: Int = 0
+    var activeAgentText: String?
+    var activeAgentColor: NSColor = CocxyColors.overlay1
+    var activeToolCount: Int = 0
+    var activeErrorCount: Int = 0
 
     static let empty = AgentSummary()
 }

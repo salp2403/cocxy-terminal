@@ -260,7 +260,12 @@ final class TabBarViewModel: ObservableObject {
                 hasUnreadNotification: unreadCount > 0,
                 agentState: tab.agentState,
                 isPinned: tab.isPinned,
-                agentStatusText: agentStatusText(for: tab.agentState, processName: tab.processName, activity: tab.agentActivity),
+                agentStatusText: agentStatusText(
+                    for: tab.agentState,
+                    processName: tab.processName,
+                    activity: tab.agentActivity,
+                    detectedAgentName: tab.detectedAgent?.name
+                ),
                 directoryPath: shortPath(tab.workingDirectory),
                 timeSinceActivity: relativeTime(since: tab.lastActivityAt),
                 gitBranch: tab.gitBranch,
@@ -363,21 +368,27 @@ final class TabBarViewModel: ObservableObject {
     // MARK: - Rich Sidebar Helpers
 
     /// Returns a human-readable status text for the agent state.
-    private func agentStatusText(for state: AgentState, processName: String?, activity: String?) -> String {
+    private func agentStatusText(
+        for state: AgentState,
+        processName: String?,
+        activity: String?,
+        detectedAgentName: String?
+    ) -> String {
+        let agentLabel = detectedAgentName ?? processName ?? "Agent"
         switch state {
         case .idle:
             return processName ?? "Ready"
         case .launched:
-            return "Agent launching..."
+            return "\(agentLabel) starting..."
         case .working:
             // Show the actual tool + file when available, not just "Working..."
-            return activity ?? "Working..."
+            return activity ?? "\(agentLabel) working"
         case .waitingInput:
-            return "Waiting for input"
+            return "\(agentLabel) waiting for input"
         case .finished:
-            return "Task completed"
+            return "\(agentLabel) finished"
         case .error:
-            return "Error occurred"
+            return "\(agentLabel) error"
         }
     }
 

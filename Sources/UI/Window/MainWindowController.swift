@@ -895,6 +895,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         tabManager.updateTab(id: event.tabID) { tab in
             tab.processName = event.processName
             tab.sshSession = event.sshSession
+            tab.lastActivityAt = Date()
         }
         if let cocxyBridge = bridge as? CocxyCoreBridge,
            let surfaceID = surfaceIDs(for: event.tabID).first {

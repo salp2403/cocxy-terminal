@@ -340,6 +340,7 @@ extension MainWindowController {
                 let previousSSH = tabManager.tab(for: tabID)?.sshSession
                 tabManager.updateTab(id: tabID) { tab in
                     tab.title = title
+                    tab.lastActivityAt = Date()
 
                     // Detect SSH sessions from terminal title changes.
                     if title.lowercased().hasPrefix("ssh ") {
@@ -397,11 +398,13 @@ extension MainWindowController {
         case .shellPrompt:
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
+                tab.lastActivityAt = Date()
                 if tab.agentState == .working {
                     tab.agentState = .finished
                 }
             }
             tabBarViewModel?.syncWithManager()
+            refreshStatusBar()
 
             // Notify IDE cursor controller only for the active tab.
             if (sourceTabID == nil || sourceTabID == visibleTabID),
@@ -436,6 +439,7 @@ extension MainWindowController {
             tabManager.updateTab(id: tabID) { tab in
                 tab.workingDirectory = directoryURL
                 tab.gitBranch = branch
+                tab.lastActivityAt = Date()
             }
             tabBarViewModel?.syncWithManager()
             refreshStatusBar()
@@ -464,6 +468,7 @@ extension MainWindowController {
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
                 tab.markCommandStarted()
+                tab.lastActivityAt = Date()
             }
             refreshStatusBar()
 
@@ -477,6 +482,7 @@ extension MainWindowController {
                     )
                 }
                 tab.lastCommandStartedAt = nil
+                tab.lastActivityAt = Date()
             }
             refreshStatusBar()
 
@@ -495,6 +501,8 @@ extension MainWindowController {
             tabManager.updateTab(id: tabID) { tab in
                 tab.agentState = .idle
                 tab.agentActivity = nil
+                tab.detectedAgent = nil
+                tab.lastActivityAt = Date()
             }
             tabBarViewModel?.syncWithManager()
             injectedAgentDetectionEngine?.notifyProcessExited()

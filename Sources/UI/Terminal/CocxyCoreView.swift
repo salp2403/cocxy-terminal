@@ -106,6 +106,10 @@ final class CocxyCoreView: NSView {
     /// Last backing-pixel size sent to the bridge, prevents redundant resize calls.
     private var lastNotifiedBackingSize: NSSize = .zero
 
+    /// Observes screen changes on the hosting window so terminal metrics can be
+    /// recalculated immediately when the view moves between displays.
+    private var windowScreenObserver: NSObjectProtocol?
+
     // MARK: - Constants
 
     private static let scrollSpeedFactor: CGFloat = 0.15
@@ -131,6 +135,7 @@ final class CocxyCoreView: NSView {
 
     deinit {
         MainActor.assumeIsolated {
+            removeWindowObservers()
             stopDisplayLink()
         }
     }
@@ -178,6 +183,7 @@ final class CocxyCoreView: NSView {
             assertionFailure("MetalTerminalRenderer init failed: \(error)")
         }
 
+        refreshBackingConfiguration(forceGridSync: true)
         startDisplayLink()
     }
 
@@ -245,21 +251,7 @@ final class CocxyCoreView: NSView {
         super.layout()
         guard surfaceID != nil else { return }
 
-        if let metalLayer = layer as? CAMetalLayer {
-            let scale = window?.backingScaleFactor ?? 2.0
-            metalLayer.contentsScale = scale
-            metalLayer.drawableSize = CGSize(
-                width: bounds.width * scale,
-                height: bounds.height * scale
-            )
-
-            renderer?.updateViewportSize(
-                bounds.size,
-                scale: scale,
-                paddingX: Float(contentPadding.x),
-                paddingY: Float(contentPadding.y)
-            )
-        }
+        updateMetalViewportForCurrentScale()
 
         let currentBacking = convertToBacking(bounds).size
         if currentBacking != lastNotifiedBackingSize {
@@ -277,24 +269,20 @@ final class CocxyCoreView: NSView {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        if let scale = window?.backingScaleFactor,
-           let metalLayer = layer as? CAMetalLayer {
-            metalLayer.contentsScale = scale
+        refreshBackingConfiguration(forceGridSync: true)
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow !== window {
+            removeWindowObservers()
         }
-        if let bridge, let sid = surfaceID {
-            bridge.reapplyConfiguredFont(to: sid)
-        }
-        refreshIDECursorMetrics()
-        requestImmediateRedraw()
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if let bridge, let sid = surfaceID {
-            bridge.reapplyConfiguredFont(to: sid)
-        }
-        updateInteractionMetrics()
-        requestImmediateRedraw()
+        installWindowObserversIfNeeded()
+        refreshBackingConfiguration(forceGridSync: true)
     }
 
     /// Forces a size sync after surface creation.
@@ -316,7 +304,7 @@ final class CocxyCoreView: NSView {
         guard cocxycore_terminal_get_font_metrics(state.terminal, &metrics),
               metrics.cell_width > 0, metrics.cell_height > 0 else { return }
 
-        let scale = Float(window?.backingScaleFactor ?? 2.0)
+        let scale = Float(currentBackingScale())
         let padding = contentPadding
         let paddingX = Float(padding.x) * scale
         let paddingY = Float(padding.y) * scale
@@ -335,6 +323,64 @@ final class CocxyCoreView: NSView {
         bridge.resize(sid, to: terminalSize)
         renderer?.updateGridSize(rows: rows, cols: cols)
         requestImmediateRedraw()
+    }
+
+    private func currentBackingScale() -> CGFloat {
+        window?.backingScaleFactor
+            ?? window?.screen?.backingScaleFactor
+            ?? NSScreen.main?.backingScaleFactor
+            ?? 2.0
+    }
+
+    private func updateMetalViewportForCurrentScale() {
+        guard let metalLayer = layer as? CAMetalLayer else { return }
+        let scale = currentBackingScale()
+        metalLayer.contentsScale = scale
+        metalLayer.drawableSize = CGSize(
+            width: bounds.width * scale,
+            height: bounds.height * scale
+        )
+
+        renderer?.updateViewportSize(
+            bounds.size,
+            scale: scale,
+            paddingX: Float(contentPadding.x),
+            paddingY: Float(contentPadding.y)
+        )
+    }
+
+    private func refreshBackingConfiguration(forceGridSync: Bool) {
+        updateMetalViewportForCurrentScale()
+        if let bridge, let sid = surfaceID {
+            bridge.reapplyConfiguredFont(to: sid)
+        }
+        if forceGridSync {
+            updateInteractionMetrics()
+        } else {
+            refreshIDECursorMetrics()
+        }
+        updateNotificationRingFrame()
+        requestImmediateRedraw()
+    }
+
+    private func installWindowObserversIfNeeded() {
+        guard windowScreenObserver == nil, let window else { return }
+        windowScreenObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeScreenNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshBackingConfiguration(forceGridSync: true)
+            }
+        }
+    }
+
+    private func removeWindowObservers() {
+        if let windowScreenObserver {
+            NotificationCenter.default.removeObserver(windowScreenObserver)
+            self.windowScreenObserver = nil
+        }
     }
 
     // MARK: - Focus
@@ -709,7 +755,7 @@ final class CocxyCoreView: NSView {
             return (0, 0)
         }
 
-        let scale = Float(window?.backingScaleFactor ?? 2.0)
+        let scale = Float(currentBackingScale())
         let padding = contentPadding
         let paddingX = Float(padding.x)
         let paddingY = Float(padding.y)
@@ -781,7 +827,7 @@ final class CocxyCoreView: NSView {
             return
         }
 
-        let scale = CGFloat(window?.backingScaleFactor ?? 2.0)
+        let scale = currentBackingScale()
         ideCursorController.setCellDimensions(
             width: CGFloat(metrics.cell_width) / scale,
             height: CGFloat(metrics.cell_height) / scale
@@ -977,7 +1023,7 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
             return .zero
         }
 
-        let scale = Float(window?.backingScaleFactor ?? 2.0)
+        let scale = Float(currentBackingScale())
         let cursorRow = cocxycore_terminal_cursor_row(state.terminal)
         let cursorCol = cocxycore_terminal_cursor_col(state.terminal)
 
