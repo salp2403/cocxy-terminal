@@ -133,6 +133,68 @@ struct CocxyCoreBridgeLockingTests {
         #expect(cocxycore_terminal_rows(state.terminal) == 30)
     }
 
+    // MARK: - applyFont serialization
+
+    @Test("applyFont waits for the terminal lock held by a background holder")
+    func applyFontWaitsForBackgroundLockHolder() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let holdDuration: TimeInterval = 0.200
+        let setupMargin: TimeInterval = 0.080
+        let expectedMinimum = holdDuration - setupMargin
+
+        let background = DispatchQueue.global(qos: .userInteractive)
+        let holderAcquired = DispatchSemaphore(value: 0)
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+
+        background.async {
+            lock.lock()
+            holderAcquired.signal()
+            Thread.sleep(forTimeInterval: holdDuration)
+            lock.unlock()
+        }
+
+        holderAcquired.wait()
+
+        let start = Date()
+        bridge.applyFont(family: "Menlo", size: 14.0, to: surfaceID)
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(
+            elapsed >= expectedMinimum,
+            "applyFont completed in \(elapsed)s, expected ≥ \(expectedMinimum)s (serialized against background holder)"
+        )
+    }
+
+    @Test("applyFont leaves the terminal state intact on a live surface")
+    func applyFontLeavesTerminalStateIntact() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        // Sanity check that applyFont still drives the surface correctly
+        // after the lock refactor. We cannot read back the font family via
+        // a public API, but we can verify the call returns cleanly and the
+        // grid dimensions remain intact (the lock refactor must not reset
+        // or corrupt the terminal state).
+        let beforeCols = cocxycore_terminal_cols(
+            try #require(bridge.surfaceState(for: surfaceID)).terminal
+        )
+        let beforeRows = cocxycore_terminal_rows(
+            try #require(bridge.surfaceState(for: surfaceID)).terminal
+        )
+
+        bridge.applyFont(family: "Menlo", size: 16.0, to: surfaceID)
+
+        let afterState = try #require(bridge.surfaceState(for: surfaceID))
+        #expect(cocxycore_terminal_cols(afterState.terminal) == beforeCols)
+        #expect(cocxycore_terminal_rows(afterState.terminal) == beforeRows)
+    }
+
     // MARK: - Shared Test Helpers
 
     /// Minimal config used by every test in this suite. Mirrors the one in

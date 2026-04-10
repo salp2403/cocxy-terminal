@@ -499,6 +499,23 @@ final class CocxyCoreBridge: TerminalEngine {
         return try body(state)
     }
 
+    /// Resolves the live backing scale for a surface with a cascaded fallback.
+    ///
+    /// Preferred chain: `window.backingScaleFactor` →
+    /// `window.screen.backingScaleFactor` → `NSScreen.main.backingScaleFactor`
+    /// → `2.0`. Centralized here so the bridge does not duplicate the cascade
+    /// across every call site that needs the scale (mirrors the helper in
+    /// `CocxyCoreView` but operates on a surface identifier).
+    private func liveBackingScale(for surface: SurfaceID) -> CGFloat {
+        guard let state = surfaces[surface] else {
+            return NSScreen.main?.backingScaleFactor ?? 2.0
+        }
+        return state.hostView?.window?.backingScaleFactor
+            ?? state.hostView?.window?.screen?.backingScaleFactor
+            ?? NSScreen.main?.backingScaleFactor
+            ?? 2.0
+    }
+
     func resize(_ surface: SurfaceID, to size: TerminalSize) {
         // Serialize the C terminal/PTY mutations against the background PTY
         // feed loop. Without this, a concurrent screen change while an agent
@@ -1123,25 +1140,41 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     /// Apply a font change to a specific live surface only.
+    ///
+    /// Runs the underlying `cocxycore_terminal_set_font` call — which
+    /// mutates the C terminal's glyph atlas and cell metrics — inside the
+    /// per-surface lock so it cannot interleave with the background PTY
+    /// feed loop. The post-update UI notifications (`updateInteractionMetrics`
+    /// and `requestImmediateRedraw`) are dispatched AFTER releasing the lock
+    /// because `updateInteractionMetrics` transitively calls `resize` which
+    /// also acquires the same lock (NSLock is not reentrant).
     func applyFont(family: String, size: Double, to surface: SurfaceID) {
-        guard let state = surfaces[surface] else { return }
-        let scale = Float(
-            state.hostView?.window?.backingScaleFactor
-                ?? NSScreen.main?.backingScaleFactor
-                ?? 2.0
-        )
-        _ = applyResolvedFont(
-            family: family,
-            size: Float(size),
-            scale: scale,
-            ligaturesEnabled: config?.ligaturesEnabled ?? true,
-            to: state.terminal
-        )
-        if let webState = state.webServer {
-            cocxycore_web_force_full_frame(webState.handle)
+        let scale = Float(liveBackingScale(for: surface))
+        let ligaturesEnabled = config?.ligaturesEnabled ?? true
+
+        // Step 1: Apply the font inside the lock so the C core sees a
+        //         consistent state while feed is running on the background.
+        withTerminalLock(surface) { state in
+            _ = applyResolvedFont(
+                family: family,
+                size: Float(size),
+                scale: scale,
+                ligaturesEnabled: ligaturesEnabled,
+                to: state.terminal
+            )
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
         }
-        (state.hostView as? TerminalHostView)?.updateInteractionMetrics()
-        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+
+        // Step 2: Notify the host view OUTSIDE the lock. `updateInteractionMetrics`
+        //         eventually calls `bridge.resize(...)` which acquires the same
+        //         lock — keeping it outside prevents a reentrancy deadlock.
+        guard let hostView = surfaces[surface]?.hostView as? TerminalHostView else {
+            return
+        }
+        hostView.updateInteractionMetrics()
+        hostView.requestImmediateRedraw()
     }
 
     /// Reapplies the currently configured default font to a surface using the
