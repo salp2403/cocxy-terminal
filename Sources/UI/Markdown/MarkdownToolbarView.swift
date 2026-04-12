@@ -33,7 +33,10 @@ final class MarkdownToolbarView: NSView {
 
     /// Current file name displayed.
     var fileName: String = "Untitled.md" {
-        didSet { fileNameLabel.stringValue = fileName }
+        didSet {
+            fileNameLabel.stringValue = fileName
+            fileNameLabel.toolTip = fileName
+        }
     }
 
     /// Current mode. Setting updates the segmented control selection.
@@ -107,6 +110,7 @@ final class MarkdownToolbarView: NSView {
         fileNameLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         fileNameLabel.textColor = CocxyColors.text
         fileNameLabel.lineBreakMode = .byTruncatingMiddle
+        fileNameLabel.toolTip = fileName
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(fileNameLabel)
 
@@ -118,6 +122,7 @@ final class MarkdownToolbarView: NSView {
             modeSegmented.setWidth(60, forSegment: index)
         }
         modeSegmented.selectedSegment = 0
+        modeSegmented.toolTip = "Switch between Source, Preview, and Split view"
         modeSegmented.target = self
         modeSegmented.action = #selector(modeChanged(_:))
         modeSegmented.translatesAutoresizingMaskIntoConstraints = false
@@ -127,7 +132,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             blameButton,
             systemName: "person.text.rectangle",
-            accessibility: "Git Blame",
+            accessibility: "Show Git Blame",
             action: #selector(blameClicked)
         )
         addSubview(blameButton)
@@ -136,7 +141,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             diffButton,
             systemName: "arrow.left.arrow.right",
-            accessibility: "Git Diff",
+            accessibility: "Show Git Diff",
             action: #selector(diffClicked)
         )
         addSubview(diffButton)
@@ -145,7 +150,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             exportPDFButton,
             systemName: "arrow.down.doc",
-            accessibility: "Export PDF",
+            accessibility: "Export PDF (Cmd+Shift+E)",
             action: #selector(exportPDFClicked)
         )
         addSubview(exportPDFButton)
@@ -154,7 +159,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             exportHTMLButton,
             systemName: "globe",
-            accessibility: "Export HTML",
+            accessibility: "Export HTML (Cmd+Shift+H)",
             action: #selector(exportHTMLClicked)
         )
         addSubview(exportHTMLButton)
@@ -164,7 +169,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             exportSlidesButton,
             systemName: "rectangle.split.3x1",
-            accessibility: "Export Slides",
+            accessibility: "Export Slides (Cmd+Shift+S)",
             action: #selector(exportSlidesClicked)
         )
         addSubview(exportSlidesButton)
@@ -174,7 +179,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             outlineToggleButton,
             systemName: "sidebar.left",
-            accessibility: "Toggle outline",
+            accessibility: "Toggle Sidebar (Cmd+Shift+O)",
             action: #selector(outlineToggleClicked)
         )
         addSubview(outlineToggleButton)
@@ -183,7 +188,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             reloadButton,
             systemName: "arrow.clockwise",
-            accessibility: "Reload file",
+            accessibility: "Reload File (Cmd+R)",
             action: #selector(reloadClicked)
         )
         addSubview(reloadButton)
@@ -251,6 +256,8 @@ final class MarkdownToolbarView: NSView {
                 .init(pointSize: 12, weight: .medium)
             )
         }
+        button.toolTip = accessibility
+        button.setAccessibilityLabel(accessibility)
         button.contentTintColor = CocxyColors.subtext0
         button.target = self
         button.action = action

@@ -369,8 +369,15 @@ final class CocxyCoreBridge: TerminalEngine {
 
     @discardableResult
     func writeBytes(_ bytes: [UInt8], to surface: SurfaceID) -> Bool {
-        guard let state = surfaces[surface], !bytes.isEmpty else { return false }
-        return writeBytes(bytes, to: state)
+        guard !bytes.isEmpty else { return false }
+
+        // Public PTY writes must acquire the same per-surface lock used by the
+        // background feed loop. Writing to the attached PTY mutates the C
+        // terminal's response buffer and can race with `terminal_feed` /
+        // `build_frame` if it bypasses the critical section.
+        return withTerminalLock(surface) { state in
+            writeBytes(bytes, to: state)
+        } ?? false
     }
 
     @discardableResult
@@ -457,10 +464,14 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func sendText(_ text: String, to surface: SurfaceID) {
-        guard let state = surfaces[surface] else { return }
         let bytes = Array(text.utf8)
         if !bytes.isEmpty {
-            _ = writeBytes(bytes, to: state)
+            // Raw text injection is another PTY write path. Keep it under the
+            // same lock as key events so manual agent launches and programmatic
+            // command injection cannot race the feed/render path.
+            _ = withTerminalLock(surface) { state in
+                writeBytes(bytes, to: state)
+            }
         }
     }
 
@@ -607,25 +618,25 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {
-        guard let state = surfaces[surfaceID] else { return }
+        guard let result = withTerminalLock(surfaceID, body: { state -> Bool in
+            let rows = Int(cocxycore_terminal_rows(state.terminal))
+            let maxVisibleStart = Int(cocxycore_terminal_history_max_visible_start(state.terminal))
+            guard rows > 0, maxVisibleStart >= 0 else { return false }
 
-        let rows = Int(cocxycore_terminal_rows(state.terminal))
-        let maxVisibleStart = Int(cocxycore_terminal_history_max_visible_start(state.terminal))
-        guard rows > 0, maxVisibleStart >= 0 else { return }
+            let targetRow = max(0, lineNumber)
+            let preferredTopRow = max(0, targetRow - max(0, rows / 2))
+            let clampedTopRow = min(preferredTopRow, maxVisibleStart)
 
-        let targetRow = max(0, lineNumber)
-        let preferredTopRow = max(0, targetRow - max(0, rows / 2))
-        let clampedTopRow = min(preferredTopRow, maxVisibleStart)
+            return cocxycore_terminal_history_set_visible_start(
+                state.terminal,
+                UInt32(clampedTopRow)
+            )
+        }), result else { return }
 
-        guard cocxycore_terminal_history_set_visible_start(
-            state.terminal,
-            UInt32(clampedTopRow)
-        ) else { return }
-
-        if state.protocolV2Observed {
+        if surfaces[surfaceID]?.protocolV2Observed == true {
             _ = sendProtocolV2Viewport(for: surfaceID, requestID: nil)
         }
-        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        (surfaces[surfaceID]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
     // MARK: - Selection
@@ -890,16 +901,24 @@ final class CocxyCoreBridge: TerminalEngine {
         to surface: SurfaceID
     ) {
         guard var state = surfaces[surface] else { return }
-        cocxycore_image_set_memory_limit(state.terminal, memoryLimitBytes)
-        cocxycore_image_set_file_transfer(state.terminal, fileTransferEnabled)
-        cocxycore_image_enable_sixel(state.terminal, sixelEnabled)
-        cocxycore_image_enable_kitty(state.terminal, kittyEnabled)
+
+        // Image feature toggles mutate the same terminal-side image atlas and
+        // decoder state read during rendering. Apply them atomically inside the
+        // per-surface lock so agent output cannot interleave with a half-updated
+        // image configuration.
+        withTerminalLock(surface) { lockedState in
+            cocxycore_image_set_memory_limit(lockedState.terminal, memoryLimitBytes)
+            cocxycore_image_set_file_transfer(lockedState.terminal, fileTransferEnabled)
+            cocxycore_image_enable_sixel(lockedState.terminal, sixelEnabled)
+            cocxycore_image_enable_kitty(lockedState.terminal, kittyEnabled)
+            if let webState = lockedState.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+        }
+
         state.configuredImageMemoryLimitBytes = memoryLimitBytes
         state.configuredImageFileTransferEnabled = fileTransferEnabled
         surfaces[surface] = state
-        if let webState = state.webServer {
-            cocxycore_web_force_full_frame(webState.handle)
-        }
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
@@ -986,10 +1005,15 @@ final class CocxyCoreBridge: TerminalEngine {
     @discardableResult
     func requestProtocolV2Capabilities(for surface: SurfaceID) -> Bool {
         guard var state = surfaces[surface] else { return false }
-        var buf = [UInt8](repeating: 0, count: 2048)
-        let bytesWritten = cocxycore_terminal_request_capabilities(state.terminal, &buf, buf.count)
-        guard bytesWritten > 0 else { return false }
-        _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+        let requested = withTerminalLock(surface) { state -> Bool in
+            var buf = [UInt8](repeating: 0, count: 2048)
+            let bytesWritten = cocxycore_terminal_request_capabilities(state.terminal, &buf, buf.count)
+            guard bytesWritten > 0 else { return false }
+            _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+            return true
+        } ?? false
+        guard requested else { return false }
+
         state.protocolV2CapabilitiesRequested = true
         surfaces[surface] = state
         return true
@@ -997,68 +1021,79 @@ final class CocxyCoreBridge: TerminalEngine {
 
     @discardableResult
     func sendProtocolV2Viewport(for surface: SurfaceID, requestID: String?) -> Bool {
-        guard let state = surfaces[surface] else { return false }
-        var buf = [UInt8](repeating: 0, count: 2048)
-        let bytesWritten = (requestID ?? "").withCString { requestIDPtr in
-            cocxycore_terminal_generate_viewport(
-                state.terminal,
-                &buf,
-                buf.count,
-                requestIDPtr,
-                requestID?.utf8.count ?? 0
-            )
-        }
-        guard bytesWritten > 0 else { return false }
-        _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
-        return true
+        return withTerminalLock(surface) { state -> Bool in
+            var buf = [UInt8](repeating: 0, count: 2048)
+            let bytesWritten = (requestID ?? "").withCString { requestIDPtr in
+                cocxycore_terminal_generate_viewport(
+                    state.terminal,
+                    &buf,
+                    buf.count,
+                    requestIDPtr,
+                    requestID?.utf8.count ?? 0
+                )
+            }
+            guard bytesWritten > 0 else { return false }
+            _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+            return true
+        } ?? false
     }
 
     @discardableResult
     func sendProtocolV2Message(type: String, json: String, to surface: SurfaceID) -> Bool {
-        guard let state = surfaces[surface], !type.isEmpty else { return false }
-        var buf = [UInt8](repeating: 0, count: 4096)
-        let bytesWritten = type.withCString { typePtr in
-            json.withCString { jsonPtr in
-                cocxycore_terminal_send_protocol_v2(
-                    state.terminal,
-                    typePtr,
-                    type.utf8.count,
-                    jsonPtr,
-                    json.utf8.count,
-                    &buf,
-                    buf.count
-                )
+        guard !type.isEmpty else { return false }
+        return withTerminalLock(surface) { state -> Bool in
+            var buf = [UInt8](repeating: 0, count: 4096)
+            let bytesWritten = type.withCString { typePtr in
+                json.withCString { jsonPtr in
+                    cocxycore_terminal_send_protocol_v2(
+                        state.terminal,
+                        typePtr,
+                        type.utf8.count,
+                        jsonPtr,
+                        json.utf8.count,
+                        &buf,
+                        buf.count
+                    )
+                }
             }
-        }
-        guard bytesWritten > 0 else { return false }
-        _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
-        return true
+            guard bytesWritten > 0 else { return false }
+            _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+            return true
+        } ?? false
     }
 
     @discardableResult
     func clearImages(for surface: SurfaceID) -> UInt32? {
-        guard let state = surfaces[surface] else { return nil }
-        let removed = cocxycore_image_count(state.terminal)
-        cocxycore_image_delete_all(state.terminal)
-        if let webState = state.webServer {
-            cocxycore_web_force_full_frame(webState.handle)
-        }
-        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        guard let removed = withTerminalLock(surface, body: { state -> UInt32 in
+            let removed = cocxycore_image_count(state.terminal)
+            cocxycore_image_delete_all(state.terminal)
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+            return removed
+        }) else { return nil }
+
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
         return removed
     }
 
     @discardableResult
     func deleteImage(_ imageID: UInt32, for surface: SurfaceID) -> Bool {
-        guard let state = surfaces[surface] else { return false }
-        var info = cocxycore_image_info()
-        guard cocxycore_image_get_info(state.terminal, imageID, &info) else { return false }
-        cocxycore_image_delete(state.terminal, imageID)
-        guard !cocxycore_image_get_info(state.terminal, imageID, &info) else { return false }
-        if let webState = state.webServer {
-            cocxycore_web_force_full_frame(webState.handle)
+        let deleted = withTerminalLock(surface) { state -> Bool in
+            var info = cocxycore_image_info()
+            guard cocxycore_image_get_info(state.terminal, imageID, &info) else { return false }
+            cocxycore_image_delete(state.terminal, imageID)
+            guard !cocxycore_image_get_info(state.terminal, imageID, &info) else { return false }
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+            return true
+        } ?? false
+
+        if deleted {
+            (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
         }
-        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
-        return true
+        return deleted
     }
 
     func webTerminalStatus(for surface: SurfaceID) -> WebTerminalStatus? {
@@ -1154,16 +1189,19 @@ final class CocxyCoreBridge: TerminalEngine {
     /// Scroll the surface viewport by a signed number of rows.
     /// Positive values move upward into older scrollback.
     func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {
-        guard deltaRows != 0, let state = surfaces[surfaceID] else { return }
-        guard cocxycore_terminal_history_scroll_viewport(
-            state.terminal,
-            Int32(max(Int(Int32.min), min(Int(Int32.max), deltaRows)))
-        ) else { return }
+        guard deltaRows != 0 else { return }
+        let scrolled = withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_history_scroll_viewport(
+                state.terminal,
+                Int32(max(Int(Int32.min), min(Int(Int32.max), deltaRows)))
+            )
+        } ?? false
+        guard scrolled else { return }
 
-        if state.protocolV2Observed {
+        if surfaces[surfaceID]?.protocolV2Observed == true {
             _ = sendProtocolV2Viewport(for: surfaceID, requestID: nil)
         }
-        (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        (surfaces[surfaceID]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
     /// Snapshot the terminal's combined history as UTF-8 lines.
@@ -1833,16 +1871,17 @@ final class CocxyCoreBridge: TerminalEngine {
                 }
             }
         } else {
-            handleClipboardReadRequest(event, state: state)
+            handleClipboardReadRequest(event, surfaceID: surfaceID, window: state.hostView?.window)
         }
     }
 
     private func handleClipboardReadRequest(
         _ event: cocxycore_clipboard_event,
-        state: SurfaceState
+        surfaceID: SurfaceID,
+        window: NSWindow?
     ) {
-        let content = resolvedClipboardReadContent(for: state.hostView?.window)
-        sendClipboardResponse(selection: event.selection, content: content, to: state)
+        let content = resolvedClipboardReadContent(for: window)
+        sendClipboardResponse(selection: event.selection, content: content, to: surfaceID)
     }
 
     func resolvedClipboardReadContent(for window: NSWindow?) -> String {
@@ -1884,19 +1923,21 @@ final class CocxyCoreBridge: TerminalEngine {
     private func sendClipboardResponse(
         selection: UInt8,
         content: String,
-        to state: SurfaceState
+        to surfaceID: SurfaceID
     ) {
         let bytes = Array(content.utf8)
-        var responseBuf = [UInt8](repeating: 0, count: max(bytes.count * 2 + 64, 64))
-        let n = cocxycore_terminal_encode_clipboard_response(
-            selection,
-            bytes,
-            bytes.count,
-            &responseBuf,
-            responseBuf.count
-        )
-        guard n > 0 else { return }
-        _ = writeBytes(Array(responseBuf.prefix(min(n, responseBuf.count))), to: state)
+        _ = withTerminalLock(surfaceID) { state in
+            var responseBuf = [UInt8](repeating: 0, count: max(bytes.count * 2 + 64, 64))
+            let n = cocxycore_terminal_encode_clipboard_response(
+                selection,
+                bytes,
+                bytes.count,
+                &responseBuf,
+                responseBuf.count
+            )
+            guard n > 0 else { return }
+            _ = writeBytes(Array(responseBuf.prefix(min(n, responseBuf.count))), to: state)
+        }
     }
 
     /// Handle semantic events from CocxyCore's AI layer.

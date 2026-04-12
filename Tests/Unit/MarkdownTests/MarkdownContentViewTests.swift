@@ -180,6 +180,17 @@ struct MarkdownContentViewTests {
         #expect(sourceView.currentSource == "**hello**")
     }
 
+    @Test("Markdown toolbar action icons expose tooltips")
+    func toolbarActionIconsHaveTooltips() {
+        let view = MarkdownContentView(filePath: nil)
+        let toolbar = view.subviews.compactMap { $0 as? MarkdownToolbarView }.first
+        #expect(toolbar != nil)
+
+        let buttons = toolbar?.subviews.compactMap { $0 as? NSButton } ?? []
+        #expect(buttons.count >= 6)
+        #expect(buttons.allSatisfy { !($0.toolTip ?? "").isEmpty })
+    }
+
     // MARK: - Helpers
 
     private func createTempMarkdownFile(content: String) -> URL {

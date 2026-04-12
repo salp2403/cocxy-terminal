@@ -280,6 +280,43 @@ struct CocxyCoreBridgeLockingTests {
         #expect(elapsed < 0.050, "key-up returned in \(elapsed)s, expected < 0.050s (no lock acquisition)")
     }
 
+    // MARK: - PTY write serialization
+
+    @Test("sendText and writeBytes wait for the terminal lock held by a background holder")
+    func ptyWritePathsWaitForBackgroundLockHolder() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+        let holdDuration: TimeInterval = 0.150
+        let setupMargin: TimeInterval = 0.060
+        let expectedMinimum = holdDuration - setupMargin
+
+        let sendTextElapsed = Self.measureUnderBackgroundLockHolder(
+            lock: lock,
+            holdDuration: holdDuration
+        ) {
+            bridge.sendText("claude --version\r", to: surfaceID)
+        }
+        #expect(
+            sendTextElapsed >= expectedMinimum,
+            "sendText completed in \(sendTextElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let writeBytesElapsed = Self.measureUnderBackgroundLockHolder(
+            lock: lock,
+            holdDuration: holdDuration
+        ) {
+            _ = bridge.writeBytes([0x63, 0x6C, 0x61, 0x75, 0x64, 0x65], to: surfaceID)
+        }
+        #expect(
+            writeBytesElapsed >= expectedMinimum,
+            "writeBytes completed in \(writeBytesElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+    }
+
     // MARK: - Misc state mutators serialization (preedit, focus, ligatures, theme, stream)
 
     @Test("sendPreeditText, notifyFocus, ligatures, theme and currentStream acquire the terminal lock")
@@ -390,6 +427,93 @@ struct CocxyCoreBridgeLockingTests {
         #expect(
             elapsed < 0.050,
             "duplicate notifyFocus took \(elapsed)s; the early-return guard must skip the lock"
+        )
+    }
+
+    // MARK: - Additional mutator serialization
+
+    @Test("image settings, protocol writers and scroll mutators acquire the terminal lock")
+    func imageProtocolAndScrollMutatorsAcquireTerminalLock() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let lock = state.terminalLock
+        let holdDuration: TimeInterval = 0.150
+        let setupMargin: TimeInterval = 0.060
+        let expectedMinimum = holdDuration - setupMargin
+
+        let applyImageSettingsElapsed = Self.measureUnderBackgroundLockHolder(
+            lock: lock,
+            holdDuration: holdDuration
+        ) {
+            bridge.applyImageSettings(
+                memoryLimitBytes: 128 * 1024 * 1024,
+                fileTransferEnabled: true,
+                sixelEnabled: false,
+                kittyEnabled: true,
+                to: surfaceID
+            )
+        }
+        #expect(
+            applyImageSettingsElapsed >= expectedMinimum,
+            "applyImageSettings completed in \(applyImageSettingsElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let requestCapabilitiesElapsed = Self.measureUnderBackgroundLockHolder(
+            lock: lock,
+            holdDuration: holdDuration
+        ) {
+            _ = bridge.requestProtocolV2Capabilities(for: surfaceID)
+        }
+        #expect(
+            requestCapabilitiesElapsed >= expectedMinimum,
+            "requestProtocolV2Capabilities completed in \(requestCapabilitiesElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let sendViewportElapsed = Self.measureUnderBackgroundLockHolder(
+            lock: lock,
+            holdDuration: holdDuration
+        ) {
+            _ = bridge.sendProtocolV2Viewport(for: surfaceID, requestID: "lock-test")
+        }
+        #expect(
+            sendViewportElapsed >= expectedMinimum,
+            "sendProtocolV2Viewport completed in \(sendViewportElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let sendMessageElapsed = Self.measureUnderBackgroundLockHolder(
+            lock: lock,
+            holdDuration: holdDuration
+        ) {
+            _ = bridge.sendProtocolV2Message(type: "ping", json: #"{"ok":true}"#, to: surfaceID)
+        }
+        #expect(
+            sendMessageElapsed >= expectedMinimum,
+            "sendProtocolV2Message completed in \(sendMessageElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let scrollToResultElapsed = Self.measureUnderBackgroundLockHolder(
+            lock: lock,
+            holdDuration: holdDuration
+        ) {
+            bridge.scrollToSearchResult(surfaceID: surfaceID, lineNumber: 5)
+        }
+        #expect(
+            scrollToResultElapsed >= expectedMinimum,
+            "scrollToSearchResult completed in \(scrollToResultElapsed)s, expected ≥ \(expectedMinimum)s"
+        )
+
+        let scrollViewportElapsed = Self.measureUnderBackgroundLockHolder(
+            lock: lock,
+            holdDuration: holdDuration
+        ) {
+            bridge.scrollViewport(surfaceID: surfaceID, deltaRows: 1)
+        }
+        #expect(
+            scrollViewportElapsed >= expectedMinimum,
+            "scrollViewport completed in \(scrollViewportElapsed)s, expected ≥ \(expectedMinimum)s"
         )
     }
 
@@ -533,5 +657,26 @@ struct CocxyCoreBridgeLockingTests {
                 "#5555ff", "#ff55ff", "#55ffff", "#ffffff"
             ]
         )
+    }
+
+    static func measureUnderBackgroundLockHolder(
+        lock: NSLock,
+        holdDuration: TimeInterval,
+        operation: () -> Void
+    ) -> TimeInterval {
+        let background = DispatchQueue.global(qos: .userInteractive)
+        let acquired = DispatchSemaphore(value: 0)
+
+        background.async {
+            lock.lock()
+            acquired.signal()
+            Thread.sleep(forTimeInterval: holdDuration)
+            lock.unlock()
+        }
+
+        acquired.wait()
+        let start = Date()
+        operation()
+        return Date().timeIntervalSince(start)
     }
 }
