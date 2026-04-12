@@ -1920,6 +1920,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     delegateRef.value?.sendProtocolMessageForCLI(type: type, payload: payload)
                 }
             },
+            coreResetProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.resetTerminalForCLI()
+                }
+            },
+            coreSignalProvider: { signal in
+                syncOnMainActor {
+                    delegateRef.value?.sendSignalForCLI(signal)
+                }
+            },
+            coreProcessProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.processDiagnosticsForCLI()
+                }
+            },
+            coreModesProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.modeDiagnosticsForCLI()
+                }
+            },
+            coreSearchProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.searchDiagnosticsForCLI()
+                }
+            },
+            coreLigaturesProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.ligatureDiagnosticsForCLI()
+                }
+            },
+            coreProtocolProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.protocolDiagnosticsForCLI()
+                }
+            },
+            coreSelectionProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.selectionSnapshotForCLI()
+                }
+            },
+            coreFontMetricsProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.fontMetricsForCLI()
+                }
+            },
+            corePreeditProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.preeditSnapshotForCLI()
+                }
+            },
+            coreSemanticProvider: { limit in
+                syncOnMainActor {
+                    delegateRef.value?.semanticSummaryForCLI(limit: limit)
+                }
+            },
             imageListProvider: {
                 syncOnMainActor {
                     delegateRef.value?.listImagesForCLI()

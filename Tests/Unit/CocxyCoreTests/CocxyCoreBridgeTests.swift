@@ -210,6 +210,25 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.readSelection(for: surfaceID) == "alpha")
     }
 
+    @Test("selection snapshot exposes active range and text")
+    func selectionSnapshotExposesRangeAndText() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("alpha beta\r\n", to: state.terminal)
+        cocxycore_terminal_selection_set(state.terminal, 0, 0, 0, 4)
+
+        let snapshot = try #require(bridge.selectionSnapshot(for: surfaceID))
+        #expect(snapshot.active == true)
+        #expect(snapshot.startRow == 0)
+        #expect(snapshot.startCol == 0)
+        #expect(snapshot.endRow == 0)
+        #expect(snapshot.endCol == 4)
+        #expect(snapshot.text == "alpha")
+    }
+
     @Test("sendKeyEvent returns true for supported arrow keys")
     func sendKeyEventHandlesArrowKeys() throws {
         let bridge = try makeBridge()
@@ -347,8 +366,53 @@ struct CocxyCoreBridgeTests {
         let diagnostics = try #require(bridge.modeDiagnostics(for: surfaceID))
         #expect(diagnostics.cursorVisible == true)
         #expect(diagnostics.appCursorMode == false)
+        #expect(diagnostics.bracketedPasteMode == false)
+        #expect(diagnostics.mouseTrackingMode == 0)
+        #expect(diagnostics.kittyKeyboardMode == 0)
         #expect(diagnostics.altScreen == false)
+        #expect(diagnostics.preeditActive == false)
+        #expect((0...5).contains(Int(diagnostics.cursorShape)))
         #expect(diagnostics.semanticBlockCount == 0)
+    }
+
+    @Test("process and font diagnostics expose live runtime state")
+    func processAndFontDiagnosticsExposeRuntimeState() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let process = try #require(bridge.processDiagnostics(for: surfaceID))
+        #expect(process.childPID > 0)
+        #expect(process.isAlive == true)
+
+        let font = try #require(bridge.fontMetricsSnapshot(for: surfaceID))
+        #expect(font.cellWidth > 0)
+        #expect(font.cellHeight > 0)
+    }
+
+    @Test("preedit snapshot exposes text, cursor, and anchor")
+    func preeditSnapshotExposesTextCursorAndAnchor() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        bridge.sendPreeditText("hola", to: surfaceID)
+
+        let snapshot = try #require(bridge.preeditSnapshot(for: surfaceID))
+        #expect(snapshot.active == true)
+        #expect(snapshot.text == "hola")
+        #expect(snapshot.cursorBytes == 4)
+    }
+
+    @Test("semantic diagnostics expose state and recent blocks")
+    func semanticDiagnosticsExposeStateAndRecentBlocks() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let diagnostics = try #require(bridge.semanticDiagnostics(for: surfaceID))
+        #expect(diagnostics.totalBlockCount == 0)
+        #expect(bridge.semanticBlocks(for: surfaceID, limit: 5).isEmpty)
     }
 
     @Test("applyFont updates the live terminal font metrics")

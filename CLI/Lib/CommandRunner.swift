@@ -587,6 +587,44 @@ public struct CommandRunner {
                 params: ["type": type, "json": json]
             )
 
+        case .coreReset:
+            return CLISocketRequest(id: requestID, command: "core-reset", params: nil)
+
+        case .coreSignal(let signal):
+            return CLISocketRequest(
+                id: requestID,
+                command: "core-signal",
+                params: ["signal": signal]
+            )
+
+        case .coreProcess:
+            return CLISocketRequest(id: requestID, command: "core-process", params: nil)
+
+        case .coreModes:
+            return CLISocketRequest(id: requestID, command: "core-modes", params: nil)
+
+        case .coreSearch:
+            return CLISocketRequest(id: requestID, command: "core-search", params: nil)
+
+        case .coreLigatures:
+            return CLISocketRequest(id: requestID, command: "core-ligatures", params: nil)
+
+        case .coreProtocol:
+            return CLISocketRequest(id: requestID, command: "core-protocol", params: nil)
+
+        case .coreSelection:
+            return CLISocketRequest(id: requestID, command: "core-selection", params: nil)
+
+        case .coreFontMetrics:
+            return CLISocketRequest(id: requestID, command: "core-font-metrics", params: nil)
+
+        case .corePreedit:
+            return CLISocketRequest(id: requestID, command: "core-preedit", params: nil)
+
+        case .coreSemantic(let limit):
+            let params = limit.map { ["limit": "\($0)"] }
+            return CLISocketRequest(id: requestID, command: "core-semantic", params: params)
+
         case .imageList:
             return CLISocketRequest(id: requestID, command: "image-list", params: nil)
 

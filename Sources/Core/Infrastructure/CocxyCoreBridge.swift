@@ -5,7 +5,7 @@ import AppKit
 import Darwin
 import CocxyCoreKit
 
-struct TerminalLigatureDiagnostics: Equatable, Sendable {
+struct TerminalLigatureDiagnostics: Equatable, Sendable, Encodable {
     let enabled: Bool
     let cacheHits: UInt32
     let cacheMisses: UInt32
@@ -33,22 +33,83 @@ struct TerminalImageSnapshot: Equatable, Sendable {
     let placementCount: UInt16
 }
 
-struct TerminalSearchDiagnostics: Equatable, Sendable {
+struct TerminalSearchDiagnostics: Equatable, Sendable, Encodable {
     let gpuActive: Bool
     let indexedRows: UInt32
 }
 
-struct TerminalProtocolDiagnostics: Equatable, Sendable {
+struct TerminalProtocolDiagnostics: Equatable, Sendable, Encodable {
     let observed: Bool
     let capabilitiesRequested: Bool
     let currentStreamID: UInt32
 }
 
-struct TerminalModeDiagnostics: Equatable, Sendable {
+struct TerminalModeDiagnostics: Equatable, Sendable, Encodable {
     let cursorVisible: Bool
     let appCursorMode: Bool
+    let bracketedPasteMode: Bool
+    let mouseTrackingMode: UInt8
+    let kittyKeyboardMode: UInt8
     let altScreen: Bool
+    let cursorShape: UInt8
+    let preeditActive: Bool
     let semanticBlockCount: UInt32
+}
+
+struct TerminalProcessDiagnostics: Equatable, Sendable, Encodable {
+    let childPID: pid_t
+    let isAlive: Bool
+}
+
+struct TerminalFontMetricsSnapshot: Equatable, Sendable, Encodable {
+    let cellWidth: Float
+    let cellHeight: Float
+    let ascent: Float
+    let descent: Float
+    let leading: Float
+    let underlinePosition: Float
+    let underlineThickness: Float
+    let strikethroughPosition: Float
+}
+
+struct TerminalSelectionSnapshot: Equatable, Sendable, Encodable {
+    let active: Bool
+    let startRow: UInt32?
+    let startCol: UInt16?
+    let endRow: UInt32?
+    let endCol: UInt16?
+    let text: String?
+}
+
+struct TerminalPreeditSnapshot: Equatable, Sendable, Encodable {
+    let active: Bool
+    let text: String
+    let cursorBytes: UInt16
+    let anchorRow: UInt16
+    let anchorCol: UInt16
+}
+
+struct TerminalSemanticDiagnostics: Equatable, Sendable, Encodable {
+    let state: UInt8
+    let currentBlockType: UInt8?
+    let totalBlockCount: UInt32
+    let promptBlockCount: UInt32
+    let commandInputBlockCount: UInt32
+    let commandOutputBlockCount: UInt32
+    let errorBlockCount: UInt32
+    let toolBlockCount: UInt32
+    let agentBlockCount: UInt32
+}
+
+struct TerminalSemanticBlockSnapshot: Equatable, Sendable, Encodable {
+    let blockType: UInt8
+    let detail: String
+    let exitCode: Int16
+    let startRow: UInt32
+    let endRow: UInt32
+    let streamID: UInt32
+    let timestampStart: UInt64
+    let timestampEnd: UInt64
 }
 
 struct TerminalStreamSnapshot: Equatable, Sendable {
@@ -965,9 +1026,195 @@ final class CocxyCoreBridge: TerminalEngine {
         return TerminalModeDiagnostics(
             cursorVisible: cocxycore_terminal_cursor_visible(state.terminal),
             appCursorMode: cocxycore_terminal_mode_app_cursor(state.terminal),
+            bracketedPasteMode: cocxycore_terminal_mode_bracketed_paste(state.terminal),
+            mouseTrackingMode: cocxycore_terminal_mode_mouse(state.terminal),
+            kittyKeyboardMode: cocxycore_terminal_mode_kitty_keyboard(state.terminal),
             altScreen: cocxycore_terminal_is_alt_screen(state.terminal),
+            cursorShape: cocxycore_terminal_cursor_shape(state.terminal),
+            preeditActive: cocxycore_terminal_preedit_active(state.terminal),
             semanticBlockCount: cocxycore_terminal_semantic_block_count(state.terminal)
         )
+    }
+
+    func processDiagnostics(for surface: SurfaceID) -> TerminalProcessDiagnostics? {
+        guard let state = surfaces[surface] else { return nil }
+        return TerminalProcessDiagnostics(
+            childPID: state.childPID,
+            isAlive: cocxycore_pty_is_alive(state.pty)
+        )
+    }
+
+    func fontMetricsSnapshot(for surface: SurfaceID) -> TerminalFontMetricsSnapshot? {
+        withTerminalLock(surface) { state -> TerminalFontMetricsSnapshot? in
+            var metrics = cocxycore_font_metrics()
+            guard cocxycore_terminal_get_font_metrics(state.terminal, &metrics) else { return nil }
+            return TerminalFontMetricsSnapshot(
+                cellWidth: metrics.cell_width,
+                cellHeight: metrics.cell_height,
+                ascent: metrics.ascent,
+                descent: metrics.descent,
+                leading: metrics.leading,
+                underlinePosition: metrics.underline_position,
+                underlineThickness: metrics.underline_thickness,
+                strikethroughPosition: metrics.strikethrough_position
+            )
+        } ?? nil
+    }
+
+    func selectionSnapshot(for surface: SurfaceID) -> TerminalSelectionSnapshot? {
+        withTerminalLock(surface) { state -> TerminalSelectionSnapshot in
+            guard cocxycore_terminal_selection_active(state.terminal) else {
+                return TerminalSelectionSnapshot(
+                    active: false,
+                    startRow: nil,
+                    startCol: nil,
+                    endRow: nil,
+                    endCol: nil,
+                    text: nil
+                )
+            }
+
+            var range = cocxycore_buffer_range()
+            let hasRange = cocxycore_terminal_selection_get(state.terminal, &range)
+            let needed = cocxycore_terminal_selection_copy_text(state.terminal, nil, 0)
+            let text: String?
+            if needed > 0 {
+                var buffer = [UInt8](repeating: 0, count: needed)
+                let copied = cocxycore_terminal_selection_copy_text(
+                    state.terminal,
+                    &buffer,
+                    buffer.count
+                )
+                text = copied > 0 ? String(decoding: buffer.prefix(copied), as: UTF8.self) : nil
+            } else {
+                text = nil
+            }
+
+            return TerminalSelectionSnapshot(
+                active: true,
+                startRow: hasRange ? range.start_row : nil,
+                startCol: hasRange ? range.start_col : nil,
+                endRow: hasRange ? range.end_row : nil,
+                endCol: hasRange ? range.end_col : nil,
+                text: text
+            )
+        }
+    }
+
+    func preeditSnapshot(for surface: SurfaceID) -> TerminalPreeditSnapshot? {
+        withTerminalLock(surface) { state -> TerminalPreeditSnapshot in
+            let active = cocxycore_terminal_preedit_active(state.terminal)
+            let needed = cocxycore_terminal_preedit_text(state.terminal, nil, 0)
+            let text: String
+            if needed > 0 {
+                var buffer = [UInt8](repeating: 0, count: needed)
+                let copied = cocxycore_terminal_preedit_text(state.terminal, &buffer, buffer.count)
+                text = String(decoding: buffer.prefix(copied), as: UTF8.self)
+            } else {
+                text = ""
+            }
+
+            var row: UInt16 = 0
+            var col: UInt16 = 0
+            cocxycore_terminal_preedit_anchor(state.terminal, &row, &col)
+
+            return TerminalPreeditSnapshot(
+                active: active,
+                text: text,
+                cursorBytes: cocxycore_terminal_preedit_cursor_bytes(state.terminal),
+                anchorRow: row,
+                anchorCol: col
+            )
+        }
+    }
+
+    func semanticDiagnostics(for surface: SurfaceID) -> TerminalSemanticDiagnostics? {
+        withTerminalLock(surface) { state in
+            let current = cocxycore_terminal_semantic_current_block_type(state.terminal)
+            return TerminalSemanticDiagnostics(
+                state: cocxycore_terminal_semantic_state(state.terminal),
+                currentBlockType: current == 255 ? nil : current,
+                totalBlockCount: cocxycore_terminal_semantic_block_count(state.terminal),
+                promptBlockCount: cocxycore_terminal_semantic_block_count_by_type(
+                    state.terminal,
+                    UInt8(COCXYCORE_BLOCK_PROMPT.rawValue)
+                ),
+                commandInputBlockCount: cocxycore_terminal_semantic_block_count_by_type(
+                    state.terminal,
+                    UInt8(COCXYCORE_BLOCK_COMMAND_INPUT.rawValue)
+                ),
+                commandOutputBlockCount: cocxycore_terminal_semantic_block_count_by_type(
+                    state.terminal,
+                    UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue)
+                ),
+                errorBlockCount: cocxycore_terminal_semantic_block_count_by_type(
+                    state.terminal,
+                    UInt8(COCXYCORE_BLOCK_ERROR_OUTPUT.rawValue)
+                ),
+                toolBlockCount: cocxycore_terminal_semantic_block_count_by_type(
+                    state.terminal,
+                    UInt8(COCXYCORE_BLOCK_TOOL_CALL.rawValue)
+                ),
+                agentBlockCount: cocxycore_terminal_semantic_block_count_by_type(
+                    state.terminal,
+                    UInt8(COCXYCORE_BLOCK_AGENT_STATUS.rawValue)
+                )
+            )
+        }
+    }
+
+    func semanticBlocks(for surface: SurfaceID, limit: UInt32) -> [TerminalSemanticBlockSnapshot] {
+        withTerminalLock(surface) { state in
+            let blockCount = cocxycore_terminal_semantic_block_count(state.terminal)
+            guard blockCount > 0, limit > 0 else { return [] }
+
+            let clampedLimit = min(blockCount, min(limit, 64))
+            return (0..<clampedLimit).compactMap { offset in
+                var block = cocxycore_semantic_block()
+                guard cocxycore_terminal_semantic_get_block(state.terminal, offset, &block) else {
+                    return nil
+                }
+                let detail = withUnsafeBytes(of: block.detail_buf) { rawBuffer -> String in
+                    let bytes = rawBuffer.prefix(Int(block.detail_len))
+                    return String(decoding: bytes, as: UTF8.self)
+                }
+                return TerminalSemanticBlockSnapshot(
+                    blockType: block.block_type,
+                    detail: detail,
+                    exitCode: block.exit_code,
+                    startRow: block.start_row,
+                    endRow: block.end_row,
+                    streamID: block.stream_id,
+                    timestampStart: block.timestamp_start,
+                    timestampEnd: block.timestamp_end
+                )
+            }
+        } ?? []
+    }
+
+    @discardableResult
+    func resetTerminal(for surface: SurfaceID) -> Bool {
+        let reset = withTerminalLock(surface) { state -> Bool in
+            cocxycore_terminal_reset(state.terminal)
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+            return true
+        } ?? false
+
+        if reset {
+            (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        }
+        return reset
+    }
+
+    @discardableResult
+    func sendSignal(_ signal: Int32, to surface: SurfaceID) -> Bool {
+        withTerminalLock(surface) { state -> Bool in
+            guard cocxycore_pty_is_alive(state.pty) else { return false }
+            cocxycore_pty_send_signal(state.pty, signal)
+            return true
+        } ?? false
     }
 
     @discardableResult

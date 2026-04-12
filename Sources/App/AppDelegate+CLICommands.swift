@@ -2,9 +2,37 @@
 // AppDelegate+CLICommands.swift - Helpers backing CLI socket providers.
 
 import AppKit
+import Darwin
 import Foundation
 
 extension AppDelegate {
+
+    private struct SemanticBlockPayload: Encodable {
+        let type: UInt8
+        let typeName: String
+        let detail: String
+        let exitCode: Int16
+        let startRow: UInt32
+        let endRow: UInt32
+        let streamID: UInt32
+        let timestampStart: UInt64
+        let timestampEnd: UInt64
+    }
+
+    private struct SemanticSummaryPayload: Encodable {
+        let state: UInt8
+        let stateName: String
+        let currentBlockType: UInt8?
+        let currentBlockName: String?
+        let totalBlockCount: UInt32
+        let promptBlockCount: UInt32
+        let commandInputBlockCount: UInt32
+        let commandOutputBlockCount: UInt32
+        let errorBlockCount: UInt32
+        let toolBlockCount: UInt32
+        let agentBlockCount: UInt32
+        let recentBlocks: [SemanticBlockPayload]
+    }
 
     @MainActor
     private func activeTerminalSurfaceForCLI() -> (controller: MainWindowController, surfaceID: SurfaceID)? {
@@ -39,8 +67,65 @@ extension AppDelegate {
         if let modeDetails = cocxyBridge.modeDiagnostics(for: surfaceID) {
             data["cursor_visible"] = modeDetails.cursorVisible ? "true" : "false"
             data["app_cursor_mode"] = modeDetails.appCursorMode ? "true" : "false"
+            data["bracketed_paste_mode"] = modeDetails.bracketedPasteMode ? "true" : "false"
+            data["mouse_tracking_mode"] = "\(modeDetails.mouseTrackingMode)"
+            data["kitty_keyboard_mode"] = "\(modeDetails.kittyKeyboardMode)"
             data["alt_screen"] = modeDetails.altScreen ? "true" : "false"
+            data["cursor_shape"] = "\(modeDetails.cursorShape)"
+            data["preedit_active"] = modeDetails.preeditActive ? "true" : "false"
             data["semantic_block_count"] = "\(modeDetails.semanticBlockCount)"
+        }
+
+        if let process = cocxyBridge.processDiagnostics(for: surfaceID) {
+            data["child_pid"] = "\(process.childPID)"
+            data["process_alive"] = process.isAlive ? "true" : "false"
+        }
+
+        if let fontMetrics = cocxyBridge.fontMetricsSnapshot(for: surfaceID) {
+            data["font_cell_width"] = formattedFloat(fontMetrics.cellWidth)
+            data["font_cell_height"] = formattedFloat(fontMetrics.cellHeight)
+            data["font_ascent"] = formattedFloat(fontMetrics.ascent)
+            data["font_descent"] = formattedFloat(fontMetrics.descent)
+            data["font_leading"] = formattedFloat(fontMetrics.leading)
+            data["font_underline_position"] = formattedFloat(fontMetrics.underlinePosition)
+            data["font_underline_thickness"] = formattedFloat(fontMetrics.underlineThickness)
+            data["font_strikethrough_position"] = formattedFloat(fontMetrics.strikethroughPosition)
+        }
+
+        if let selection = cocxyBridge.selectionSnapshot(for: surfaceID) {
+            data["selection_active"] = selection.active ? "true" : "false"
+            if let startRow = selection.startRow, let startCol = selection.startCol,
+               let endRow = selection.endRow, let endCol = selection.endCol {
+                data["selection_start_row"] = "\(startRow)"
+                data["selection_start_col"] = "\(startCol)"
+                data["selection_end_row"] = "\(endRow)"
+                data["selection_end_col"] = "\(endCol)"
+            }
+            if let text = selection.text {
+                data["selection_text_bytes"] = "\(text.utf8.count)"
+            }
+        }
+
+        if let preedit = cocxyBridge.preeditSnapshot(for: surfaceID), preedit.active {
+            data["preedit_text_bytes"] = "\(preedit.text.utf8.count)"
+            data["preedit_cursor_bytes"] = "\(preedit.cursorBytes)"
+            data["preedit_anchor_row"] = "\(preedit.anchorRow)"
+            data["preedit_anchor_col"] = "\(preedit.anchorCol)"
+        }
+
+        if let semantic = cocxyBridge.semanticDiagnostics(for: surfaceID) {
+            data["semantic_state"] = "\(semantic.state)"
+            data["semantic_state_name"] = semanticStateName(semantic.state)
+            if let currentBlockType = semantic.currentBlockType {
+                data["semantic_current_block_type"] = "\(currentBlockType)"
+                data["semantic_current_block_name"] = semanticBlockTypeName(currentBlockType)
+            }
+            data["semantic_prompt_blocks"] = "\(semantic.promptBlockCount)"
+            data["semantic_command_input_blocks"] = "\(semantic.commandInputBlockCount)"
+            data["semantic_command_output_blocks"] = "\(semantic.commandOutputBlockCount)"
+            data["semantic_error_blocks"] = "\(semantic.errorBlockCount)"
+            data["semantic_tool_blocks"] = "\(semantic.toolBlockCount)"
+            data["semantic_agent_blocks"] = "\(semantic.agentBlockCount)"
         }
 
         if let ligatures = cocxyBridge.ligatureDiagnostics(for: surfaceID) {
@@ -153,6 +238,168 @@ extension AppDelegate {
     }
 
     @MainActor
+    func resetTerminalForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              cocxyBridge.resetTerminal(for: surfaceID) else {
+            return nil
+        }
+
+        return ["status": "reset"]
+    }
+
+    @MainActor
+    func sendSignalForCLI(_ signal: Int32) -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              cocxyBridge.sendSignal(signal, to: surfaceID) else {
+            return nil
+        }
+
+        return [
+            "status": "sent",
+            "signal": "\(signal)",
+        ]
+    }
+
+    @MainActor
+    func processDiagnosticsForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let diagnostics = cocxyBridge.processDiagnostics(for: surfaceID),
+              let content = encodeCLIJSON(diagnostics) else {
+            return nil
+        }
+
+        return ["content": content]
+    }
+
+    @MainActor
+    func modeDiagnosticsForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let diagnostics = cocxyBridge.modeDiagnostics(for: surfaceID),
+              let content = encodeCLIJSON(diagnostics) else {
+            return nil
+        }
+
+        return ["content": content]
+    }
+
+    @MainActor
+    func searchDiagnosticsForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let diagnostics = cocxyBridge.searchDiagnostics(for: surfaceID),
+              let content = encodeCLIJSON(diagnostics) else {
+            return nil
+        }
+
+        return ["content": content]
+    }
+
+    @MainActor
+    func ligatureDiagnosticsForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let diagnostics = cocxyBridge.ligatureDiagnostics(for: surfaceID),
+              let content = encodeCLIJSON(diagnostics) else {
+            return nil
+        }
+
+        return ["content": content]
+    }
+
+    @MainActor
+    func protocolDiagnosticsForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let diagnostics = cocxyBridge.protocolDiagnostics(for: surfaceID),
+              let content = encodeCLIJSON(diagnostics) else {
+            return nil
+        }
+
+        return ["content": content]
+    }
+
+    @MainActor
+    func selectionSnapshotForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let snapshot = cocxyBridge.selectionSnapshot(for: surfaceID),
+              let content = encodeCLIJSON(snapshot) else {
+            return nil
+        }
+
+        return ["content": content]
+    }
+
+    @MainActor
+    func fontMetricsForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let snapshot = cocxyBridge.fontMetricsSnapshot(for: surfaceID),
+              let content = encodeCLIJSON(snapshot) else {
+            return nil
+        }
+
+        return ["content": content]
+    }
+
+    @MainActor
+    func preeditSnapshotForCLI() -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let snapshot = cocxyBridge.preeditSnapshot(for: surfaceID),
+              let content = encodeCLIJSON(snapshot) else {
+            return nil
+        }
+
+        return ["content": content]
+    }
+
+    @MainActor
+    func semanticSummaryForCLI(limit: UInt32) -> [String: String]? {
+        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI(),
+              let diagnostics = cocxyBridge.semanticDiagnostics(for: surfaceID) else {
+            return nil
+        }
+
+        let blocks = cocxyBridge.semanticBlocks(for: surfaceID, limit: limit).map { block in
+            SemanticBlockPayload(
+                type: block.blockType,
+                typeName: semanticBlockTypeName(block.blockType),
+                detail: block.detail,
+                exitCode: block.exitCode,
+                startRow: block.startRow,
+                endRow: block.endRow,
+                streamID: block.streamID,
+                timestampStart: block.timestampStart,
+                timestampEnd: block.timestampEnd
+            )
+        }
+
+        let payload = SemanticSummaryPayload(
+            state: diagnostics.state,
+            stateName: semanticStateName(diagnostics.state),
+            currentBlockType: diagnostics.currentBlockType,
+            currentBlockName: diagnostics.currentBlockType.map { semanticBlockTypeName($0) },
+            totalBlockCount: diagnostics.totalBlockCount,
+            promptBlockCount: diagnostics.promptBlockCount,
+            commandInputBlockCount: diagnostics.commandInputBlockCount,
+            commandOutputBlockCount: diagnostics.commandOutputBlockCount,
+            errorBlockCount: diagnostics.errorBlockCount,
+            toolBlockCount: diagnostics.toolBlockCount,
+            agentBlockCount: diagnostics.agentBlockCount,
+            recentBlocks: blocks
+        )
+
+        guard let content = encodeCLIJSON(payload) else { return nil }
+        return ["content": content]
+    }
+
+    @MainActor
     func setCurrentStreamForCLI(_ streamID: UInt32) -> [String: String]? {
         guard let cocxyBridge = bridge as? CocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
@@ -237,6 +484,17 @@ extension AppDelegate {
 
         let images = cocxyBridge.imageSnapshots(for: surfaceID)
         var data: [String: String] = ["count": "\(images.count)"]
+        if let diagnostics = cocxyBridge.imageDiagnostics(for: surfaceID) {
+            data["memory_used_bytes"] = "\(diagnostics.memoryUsedBytes)"
+            data["memory_limit_bytes"] = "\(diagnostics.memoryLimitBytes)"
+            data["file_transfer_enabled"] = diagnostics.fileTransferEnabled ? "true" : "false"
+            data["sixel_enabled"] = diagnostics.sixelEnabled ? "true" : "false"
+            data["kitty_enabled"] = diagnostics.kittyEnabled ? "true" : "false"
+            data["atlas_width"] = "\(diagnostics.atlasWidth)"
+            data["atlas_height"] = "\(diagnostics.atlasHeight)"
+            data["atlas_generation"] = "\(diagnostics.atlasGeneration)"
+            data["atlas_dirty"] = diagnostics.atlasDirty ? "true" : "false"
+        }
         for (index, image) in images.enumerated() {
             data["image_\(index)_id"] = "\(image.imageID)"
             data["image_\(index)_width"] = "\(image.width)"
@@ -260,6 +518,40 @@ extension AppDelegate {
             "status": "deleted",
             "image_id": "\(imageID)"
         ]
+    }
+
+    private func encodeCLIJSON<T: Encodable>(_ value: T) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(value) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func formattedFloat(_ value: Float) -> String {
+        String(format: "%.2f", value)
+    }
+
+    private func semanticStateName(_ value: UInt8) -> String {
+        switch Int(value) {
+        case 0: return "idle"
+        case 1: return "prompt"
+        case 2: return "command_input"
+        case 3: return "command_running"
+        case 4: return "agent_active"
+        default: return "unknown"
+        }
+    }
+
+    private func semanticBlockTypeName(_ value: UInt8) -> String {
+        switch Int(value) {
+        case 0: return "prompt"
+        case 1: return "command_input"
+        case 2: return "command_output"
+        case 3: return "error_output"
+        case 4: return "tool_call"
+        case 5: return "agent_status"
+        default: return "unknown"
+        }
     }
 
     @MainActor

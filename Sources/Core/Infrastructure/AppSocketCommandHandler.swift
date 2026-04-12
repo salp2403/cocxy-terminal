@@ -231,6 +231,39 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Sends an explicit Protocol v2 message on the focused surface.
     let protocolSendProvider: (@Sendable (String, String) -> [String: String]?)?
 
+    /// Resets the focused CocxyCore terminal surface.
+    let coreResetProvider: (@Sendable () -> [String: String]?)?
+
+    /// Sends a POSIX signal to the focused CocxyCore PTY child.
+    let coreSignalProvider: (@Sendable (Int32) -> [String: String]?)?
+
+    /// Returns the focused surface's PTY process diagnostics.
+    let coreProcessProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns the focused surface's terminal mode diagnostics.
+    let coreModesProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns the focused surface's search diagnostics.
+    let coreSearchProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns the focused surface's ligature diagnostics.
+    let coreLigaturesProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns the focused surface's protocol diagnostics.
+    let coreProtocolProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns the focused surface's current selection snapshot.
+    let coreSelectionProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns the focused surface's font metrics snapshot.
+    let coreFontMetricsProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns the focused surface's current preedit snapshot.
+    let corePreeditProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns semantic diagnostics and recent blocks for the focused surface.
+    let coreSemanticProvider: (@Sendable (UInt32) -> [String: String]?)?
+
     /// Returns stored inline images for the focused surface.
     let imageListProvider: (@Sendable () -> [String: String]?)?
 
@@ -310,6 +343,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         protocolCapabilitiesProvider: (@Sendable () -> [String: String]?)? = nil,
         protocolViewportProvider: (@Sendable (String?) -> [String: String]?)? = nil,
         protocolSendProvider: (@Sendable (String, String) -> [String: String]?)? = nil,
+        coreResetProvider: (@Sendable () -> [String: String]?)? = nil,
+        coreSignalProvider: (@Sendable (Int32) -> [String: String]?)? = nil,
+        coreProcessProvider: (@Sendable () -> [String: String]?)? = nil,
+        coreModesProvider: (@Sendable () -> [String: String]?)? = nil,
+        coreSearchProvider: (@Sendable () -> [String: String]?)? = nil,
+        coreLigaturesProvider: (@Sendable () -> [String: String]?)? = nil,
+        coreProtocolProvider: (@Sendable () -> [String: String]?)? = nil,
+        coreSelectionProvider: (@Sendable () -> [String: String]?)? = nil,
+        coreFontMetricsProvider: (@Sendable () -> [String: String]?)? = nil,
+        corePreeditProvider: (@Sendable () -> [String: String]?)? = nil,
+        coreSemanticProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         imageListProvider: (@Sendable () -> [String: String]?)? = nil,
         imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         imageClearProvider: (@Sendable () -> [String: String]?)? = nil
@@ -356,6 +400,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.protocolCapabilitiesProvider = protocolCapabilitiesProvider
         self.protocolViewportProvider = protocolViewportProvider
         self.protocolSendProvider = protocolSendProvider
+        self.coreResetProvider = coreResetProvider
+        self.coreSignalProvider = coreSignalProvider
+        self.coreProcessProvider = coreProcessProvider
+        self.coreModesProvider = coreModesProvider
+        self.coreSearchProvider = coreSearchProvider
+        self.coreLigaturesProvider = coreLigaturesProvider
+        self.coreProtocolProvider = coreProtocolProvider
+        self.coreSelectionProvider = coreSelectionProvider
+        self.coreFontMetricsProvider = coreFontMetricsProvider
+        self.corePreeditProvider = corePreeditProvider
+        self.coreSemanticProvider = coreSemanticProvider
         self.imageListProvider = imageListProvider
         self.imageDeleteProvider = imageDeleteProvider
         self.imageClearProvider = imageClearProvider
@@ -755,6 +810,28 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleProtocolViewport(request)
         case .protocolSend:
             return handleProtocolSend(request)
+        case .coreReset:
+            return handleCoreReset(request)
+        case .coreSignal:
+            return handleCoreSignal(request)
+        case .coreProcess:
+            return handleCoreProcess(request)
+        case .coreModes:
+            return handleCoreModes(request)
+        case .coreSearch:
+            return handleCoreSearch(request)
+        case .coreLigatures:
+            return handleCoreLigatures(request)
+        case .coreProtocol:
+            return handleCoreProtocol(request)
+        case .coreSelection:
+            return handleCoreSelection(request)
+        case .coreFontMetrics:
+            return handleCoreFontMetrics(request)
+        case .corePreedit:
+            return handleCorePreedit(request)
+        case .coreSemantic:
+            return handleCoreSemantic(request)
         case .imageList:
             return handleImageList(request)
         case .imageDelete:

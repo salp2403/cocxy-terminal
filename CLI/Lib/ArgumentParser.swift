@@ -286,6 +286,39 @@ public enum ParsedCommand: Equatable {
     /// `cocxy protocol send --type <type> --json <json>`
     case protocolSend(type: String, json: String)
 
+    /// `cocxy core reset`
+    case coreReset
+
+    /// `cocxy core signal <signal>`
+    case coreSignal(signal: String)
+
+    /// `cocxy core process`
+    case coreProcess
+
+    /// `cocxy core modes`
+    case coreModes
+
+    /// `cocxy core search`
+    case coreSearch
+
+    /// `cocxy core ligatures`
+    case coreLigatures
+
+    /// `cocxy core protocol`
+    case coreProtocol
+
+    /// `cocxy core selection`
+    case coreSelection
+
+    /// `cocxy core font`
+    case coreFontMetrics
+
+    /// `cocxy core preedit`
+    case corePreedit
+
+    /// `cocxy core semantic [--limit <n>]`
+    case coreSemantic(limit: Int?)
+
     /// `cocxy image list`
     case imageList
 
@@ -423,6 +456,9 @@ public enum CLIArgumentParser {
 
         case "protocol":
             return try parseProtocol(arguments: Array(arguments.dropFirst()))
+
+        case "core":
+            return try parseCore(arguments: Array(arguments.dropFirst()))
 
         case "image":
             return try parseImage(arguments: Array(arguments.dropFirst()))
@@ -1262,6 +1298,74 @@ public enum CLIArgumentParser {
         }
     }
 
+    // MARK: - Core Parser
+
+    private static func parseCore(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(
+                command: "core",
+                argument: "reset|signal|process|modes|search|ligatures|protocol|selection|font|preedit|semantic"
+            )
+        }
+
+        switch subcommand {
+        case "reset":
+            return .coreReset
+        case "signal":
+            guard arguments.count >= 2 else {
+                throw CLIError.missingArgument(command: "core signal", argument: "signal")
+            }
+            return .coreSignal(signal: arguments[1])
+        case "process":
+            return .coreProcess
+        case "modes", "mode":
+            return .coreModes
+        case "search":
+            return .coreSearch
+        case "ligatures", "ligature":
+            return .coreLigatures
+        case "protocol":
+            return .coreProtocol
+        case "selection":
+            return .coreSelection
+        case "font", "font-metrics":
+            return .coreFontMetrics
+        case "preedit":
+            return .corePreedit
+        case "semantic":
+            let rest = Array(arguments.dropFirst())
+            var limit: Int?
+            var index = 0
+            while index < rest.count {
+                switch rest[index] {
+                case "--limit" where index + 1 < rest.count:
+                    guard let parsed = Int(rest[index + 1]), parsed > 0 else {
+                        throw CLIError.invalidArgument(
+                            command: "core semantic",
+                            argument: rest[index + 1],
+                            reason: "limit must be a positive integer"
+                        )
+                    }
+                    limit = parsed
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "core semantic",
+                        argument: rest[index],
+                        reason: "unknown option"
+                    )
+                }
+            }
+            return .coreSemantic(limit: limit)
+        default:
+            throw CLIError.invalidArgument(
+                command: "core",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use reset, signal, process, modes, search, ligatures, protocol, selection, font, preedit, or semantic."
+            )
+        }
+    }
+
     // MARK: - Image Parser
 
     private static func parseImage(arguments: [String]) throws -> ParsedCommand {
@@ -1322,6 +1426,7 @@ public enum CLIArgumentParser {
         lines.append("  cocxy search \"network timeout\" --tab <id>")
         lines.append("  cocxy config get font.size")
         lines.append("  cocxy theme set dracula")
+        lines.append("  cocxy core semantic --limit 5")
         lines.append("")
         return lines.joined(separator: "\n")
     }

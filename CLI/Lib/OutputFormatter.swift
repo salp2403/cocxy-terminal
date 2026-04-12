@@ -229,6 +229,13 @@ public enum OutputFormatter {
             return "Protocol viewport sent."
         case .protocolSend:
             return "Protocol message sent."
+        case .coreReset:
+            return "Terminal reset."
+        case .coreSignal:
+            return "Signal sent to terminal process."
+        case .coreProcess, .coreModes, .coreSearch, .coreLigatures, .coreProtocol,
+             .coreSelection, .coreFontMetrics, .corePreedit, .coreSemantic:
+            return formatDataOrJSON(response: response)
         case .imageList:
             return formatDataOrJSON(response: response)
         case .imageDelete:
@@ -293,6 +300,78 @@ public enum OutputFormatter {
             lines.append(
                 "Protocol v2: observed \(boolText(protocolObserved)), capabilities \(boolText(requested)), current stream \(currentStream)"
             )
+        }
+
+        if let cursorVisible = data["cursor_visible"] {
+            let appCursor = data["app_cursor_mode"] ?? "false"
+            let altScreen = data["alt_screen"] ?? "false"
+            let bracketedPaste = data["bracketed_paste_mode"] ?? "false"
+            let mouseTracking = data["mouse_tracking_mode"] ?? "0"
+            let kittyKeyboard = data["kitty_keyboard_mode"] ?? "0"
+            let preeditActive = data["preedit_active"] ?? "false"
+            let cursorShape = data["cursor_shape"] ?? "0"
+            let semanticBlockCount = data["semantic_block_count"] ?? "0"
+            lines.append(
+                "Modes: cursor \(boolText(cursorVisible)), app cursor \(boolText(appCursor)), alt screen \(boolText(altScreen)), bracketed paste \(boolText(bracketedPaste))"
+            )
+            lines.append(
+                "Input: mouse mode \(mouseTracking), kitty keyboard \(kittyKeyboard), preedit \(boolText(preeditActive)), cursor shape \(cursorShape), semantic blocks \(semanticBlockCount)"
+            )
+        }
+
+        if let childPID = data["child_pid"] {
+            let processAlive = data["process_alive"] ?? "false"
+            lines.append("Process: pid \(childPID), alive \(boolText(processAlive))")
+        }
+
+        if let cellWidth = data["font_cell_width"], let cellHeight = data["font_cell_height"] {
+            let ascent = data["font_ascent"] ?? "0.00"
+            let descent = data["font_descent"] ?? "0.00"
+            let leading = data["font_leading"] ?? "0.00"
+            lines.append(
+                "Font: cell \(cellWidth)x\(cellHeight), ascent \(ascent), descent \(descent), leading \(leading)"
+            )
+        }
+
+        if let selectionActive = data["selection_active"] {
+            if selectionActive == "true",
+               let startRow = data["selection_start_row"],
+               let startCol = data["selection_start_col"],
+               let endRow = data["selection_end_row"],
+               let endCol = data["selection_end_col"] {
+                let textBytes = data["selection_text_bytes"] ?? "0"
+                lines.append(
+                    "Selection: on (\(startRow):\(startCol) -> \(endRow):\(endCol), \(textBytes) bytes)"
+                )
+            } else {
+                lines.append("Selection: off")
+            }
+        }
+
+        if let preeditBytes = data["preedit_text_bytes"] {
+            let cursorBytes = data["preedit_cursor_bytes"] ?? "0"
+            let anchorRow = data["preedit_anchor_row"] ?? "0"
+            let anchorCol = data["preedit_anchor_col"] ?? "0"
+            lines.append(
+                "Preedit detail: \(preeditBytes) bytes, cursor \(cursorBytes), anchor \(anchorRow):\(anchorCol)"
+            )
+        }
+
+        if let semanticState = data["semantic_state_name"] {
+            var parts = ["Semantic: state \(semanticState)"]
+            if let currentBlock = data["semantic_current_block_name"] {
+                parts.append("current \(currentBlock)")
+            }
+            let promptBlocks = data["semantic_prompt_blocks"] ?? "0"
+            let commandInputBlocks = data["semantic_command_input_blocks"] ?? "0"
+            let commandOutputBlocks = data["semantic_command_output_blocks"] ?? "0"
+            let errorBlocks = data["semantic_error_blocks"] ?? "0"
+            let toolBlocks = data["semantic_tool_blocks"] ?? "0"
+            let agentBlocks = data["semantic_agent_blocks"] ?? "0"
+            parts.append(
+                "prompt \(promptBlocks), input \(commandInputBlocks), output \(commandOutputBlocks), error \(errorBlocks), tool \(toolBlocks), agent \(agentBlocks)"
+            )
+            lines.append(parts.joined(separator: ", "))
         }
 
         if let ligatures = data["ligatures_enabled"] {

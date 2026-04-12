@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // AppSocketCommandHandler+CoreContractHandlers.swift - CocxyCore contract commands.
 
+import Darwin
 import Foundation
 
 extension AppSocketCommandHandler {
@@ -65,6 +66,123 @@ extension AppSocketCommandHandler {
         return .ok(id: request.id, data: data)
     }
 
+    func handleCoreReset(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreResetProvider else {
+            return .failure(id: request.id, error: "CocxyCore reset is not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to reset the active terminal")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreSignal(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreSignalProvider else {
+            return .failure(id: request.id, error: "CocxyCore signal forwarding is not available")
+        }
+        guard let rawSignal = request.params?["signal"],
+              let signal = parseSignal(rawSignal) else {
+            return .failure(id: request.id, error: "Missing or invalid signal")
+        }
+        guard let data = provider(signal) else {
+            return .failure(id: request.id, error: "Failed to send signal")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreProcess(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreProcessProvider else {
+            return .failure(id: request.id, error: "CocxyCore process diagnostics are not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to query process diagnostics")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreModes(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreModesProvider else {
+            return .failure(id: request.id, error: "CocxyCore mode diagnostics are not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to query mode diagnostics")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreSearch(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreSearchProvider else {
+            return .failure(id: request.id, error: "CocxyCore search diagnostics are not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to query search diagnostics")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreLigatures(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreLigaturesProvider else {
+            return .failure(id: request.id, error: "CocxyCore ligature diagnostics are not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to query ligature diagnostics")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreProtocol(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreProtocolProvider else {
+            return .failure(id: request.id, error: "CocxyCore protocol diagnostics are not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to query protocol diagnostics")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreSelection(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreSelectionProvider else {
+            return .failure(id: request.id, error: "CocxyCore selection snapshot is not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to query selection snapshot")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreFontMetrics(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreFontMetricsProvider else {
+            return .failure(id: request.id, error: "CocxyCore font metrics are not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to query font metrics")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCorePreedit(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = corePreeditProvider else {
+            return .failure(id: request.id, error: "CocxyCore preedit snapshot is not available")
+        }
+        guard let data = provider() else {
+            return .failure(id: request.id, error: "Failed to query preedit snapshot")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleCoreSemantic(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = coreSemanticProvider else {
+            return .failure(id: request.id, error: "CocxyCore semantic diagnostics are not available")
+        }
+
+        let requestedLimit = request.params?["limit"].flatMap(UInt32.init) ?? 10
+        let limit = min(max(requestedLimit, 1), 64)
+        guard let data = provider(limit) else {
+            return .failure(id: request.id, error: "Failed to query semantic diagnostics")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
     func handleImageList(_ request: SocketRequest) -> SocketResponse {
         guard let provider = imageListProvider else {
             return .failure(id: request.id, error: "Image management is not available")
@@ -96,5 +214,38 @@ extension AppSocketCommandHandler {
             return .failure(id: request.id, error: "Failed to clear inline images")
         }
         return .ok(id: request.id, data: data)
+    }
+
+    private func parseSignal(_ value: String) -> Int32? {
+        if let numeric = Int32(value) {
+            return numeric
+        }
+
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "hup", "sighup":
+            return SIGHUP
+        case "int", "sigint":
+            return SIGINT
+        case "quit", "sigquit":
+            return SIGQUIT
+        case "kill", "sigkill":
+            return SIGKILL
+        case "term", "sigterm":
+            return SIGTERM
+        case "stop", "sigstop":
+            return SIGSTOP
+        case "tstp", "sigtstp":
+            return SIGTSTP
+        case "cont", "sigcont":
+            return SIGCONT
+        case "usr1", "sigusr1":
+            return SIGUSR1
+        case "usr2", "sigusr2":
+            return SIGUSR2
+        case "winch", "sigwinch":
+            return SIGWINCH
+        default:
+            return nil
+        }
     }
 }

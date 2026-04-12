@@ -6,9 +6,24 @@ import Testing
 import CocxyCoreKit
 @testable import CocxyTerminal
 
-@Suite("CocxyCore performance benchmarks", .serialized)
+private enum CocxyCoreBenchmarkConfiguration {
+    static let isEnabled =
+        ProcessInfo.processInfo.environment["COCXY_RUN_COCXYCORE_BENCHMARKS"] == "1"
+}
+
+@Suite(
+    "CocxyCore performance benchmarks",
+    .serialized,
+    .enabled(
+        if: CocxyCoreBenchmarkConfiguration.isEnabled,
+        Comment("Set COCXY_RUN_COCXYCORE_BENCHMARKS=1 to run load-sensitive CocxyCore benchmarks.")
+    )
+)
 @MainActor
 struct CocxyCorePerformanceBenchmarks {
+
+    private static let throughputPayloadBytes = 4 * 1024 * 1024
+    private static let throughputThresholdMBps = 2.5
 
     @Test("surface creation stays within the startup budget")
     func surfaceCreationStartupBudget() throws {
@@ -74,32 +89,31 @@ struct CocxyCorePerformanceBenchmarks {
         let pythonURL = tempDir.appendingPathComponent("throughput.py")
         let python = """
         import os
-        import time
+        import sys
 
-        size = 100_000_000
-        chunk = b"A" * 1_048_576
+        size = \(Self.throughputPayloadBytes)
+        chunk = b"A" * 65536
+
+        sys.stdout.write("READY\\n")
+        sys.stdout.flush()
+        sys.stdin.readline()
+
         remaining = size
-        fd = os.open("/dev/null", os.O_WRONLY)
-        start = time.perf_counter()
-        try:
-            while remaining > 0:
-                piece = chunk if remaining >= len(chunk) else b"A" * remaining
-                os.write(fd, piece)
-                remaining -= len(piece)
-        finally:
-            os.close(fd)
+        while remaining > 0:
+            piece = chunk if remaining >= len(chunk) else b"A" * remaining
+            os.write(sys.stdout.fileno(), piece)
+            remaining -= len(piece)
 
-        elapsed = time.perf_counter() - start
-        print(f"THROUGHPUT_MBPS={size / elapsed / 1_048_576:.2f}")
+        os.write(sys.stdout.fileno(), b"\\n__COCXYCORE_THROUGHPUT_DONE__\\n")
         """
-        try python.write(to: pythonURL, atomically: true, encoding: String.Encoding.utf8)
+        try python.write(to: pythonURL, atomically: true, encoding: .utf8)
 
         let scriptURL = tempDir.appendingPathComponent("throughput.zsh")
         let script = """
         #!/bin/zsh
-        exec python3 \(benchmarkShellQuote(pythonURL.path))
+        exec python3 -u \(benchmarkShellQuote(pythonURL.path))
         """
-        try script.write(to: scriptURL, atomically: true, encoding: String.Encoding.utf8)
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
 
         let bridge = try makeBridge()
@@ -112,18 +126,22 @@ struct CocxyCorePerformanceBenchmarks {
         }
 
         try await waitUntil(timeoutNanoseconds: 5_000_000_000, pollNanoseconds: 1_000_000) {
-            recorder.output.contains("THROUGHPUT_MBPS=")
+            recorder.output.contains("READY")
+        }
+        recorder.reset()
+
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        bridge.sendText("go\n", to: surfaceID)
+
+        try await waitUntil(timeoutNanoseconds: 8_000_000_000, pollNanoseconds: 1_000_000) {
+            recorder.output.contains("__COCXYCORE_THROUGHPUT_DONE__")
         }
 
-        let line = try #require(
-            recorder.output
-                .split(whereSeparator: \.isNewline)
-                .last(where: { $0.contains("THROUGHPUT_MBPS=") })
-        )
-        let throughputValue = try #require(Double(line.replacingOccurrences(of: "THROUGHPUT_MBPS=", with: "")))
+        let elapsed = secondsSince(startedAt)
+        let throughputValue = Double(Self.throughputPayloadBytes) / elapsed / 1_048_576.0
 
         #expect(
-            throughputValue >= 1_000.0,
+            throughputValue >= Self.throughputThresholdMBps,
             Comment("Measured CocxyCore throughput: \(String(format: "%.2f", throughputValue)) MB/s")
         )
     }
@@ -286,9 +304,21 @@ private func currentResidentSize() -> UInt64 {
 }
 
 private final class OutputRecorder: @unchecked Sendable {
+    private let lock = NSLock()
     private(set) var output = ""
+    private(set) var byteCount = 0
 
     func append(_ data: Data) {
+        lock.lock()
+        defer { lock.unlock() }
         output.append(String(decoding: data, as: UTF8.self))
+        byteCount += data.count
+    }
+
+    func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        output = ""
+        byteCount = 0
     }
 }

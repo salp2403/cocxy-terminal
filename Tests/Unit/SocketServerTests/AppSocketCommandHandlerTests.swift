@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // AppSocketCommandHandlerTests.swift - Tests for the socket command dispatcher.
 
+import Darwin
 import XCTest
 @testable import CocxyTerminal
 
@@ -984,6 +985,114 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["message"], "terminal.capabilities")
     }
 
+    func test_coreResetCommand_withProvider_returnsReset() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreResetProvider: {
+                ["status": "reset"]
+            }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-reset-1", command: "core-reset", params: nil))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "reset")
+    }
+
+    func test_coreSignalCommand_requiresSignal() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreSignalProvider: { _ in ["status": "sent"] }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-signal-1", command: "core-signal", params: nil))
+        XCTAssertFalse(response.success)
+    }
+
+    func test_coreSignalCommand_acceptsNamedSignal() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreSignalProvider: { signal in
+                ["status": "sent", "signal": "\(signal)"]
+            }
+        )
+        let response = handler.handleCommand(
+            SocketRequest(id: "core-signal-2", command: "core-signal", params: ["signal": "term"])
+        )
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["signal"], "\(SIGTERM)")
+    }
+
+    func test_coreProcessCommand_withProvider_returnsData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreProcessProvider: { ["content": "{\"alive\":true}"] }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-process-1", command: "core-process", params: nil))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["content"], "{\"alive\":true}")
+    }
+
+    func test_coreModesCommand_withProvider_returnsData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreModesProvider: { ["content": "{\"cursorVisible\":true}"] }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-modes-1", command: "core-modes", params: nil))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["content"], "{\"cursorVisible\":true}")
+    }
+
+    func test_coreSearchCommand_withProvider_returnsData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreSearchProvider: { ["content": "{\"gpuActive\":true}"] }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-search-1", command: "core-search", params: nil))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["content"], "{\"gpuActive\":true}")
+    }
+
+    func test_coreLigaturesCommand_withProvider_returnsData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreLigaturesProvider: { ["content": "{\"enabled\":true}"] }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-ligatures-1", command: "core-ligatures", params: nil))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["content"], "{\"enabled\":true}")
+    }
+
+    func test_coreProtocolCommand_withProvider_returnsData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreProtocolProvider: { ["content": "{\"observed\":true}"] }
+        )
+        let response = handler.handleCommand(SocketRequest(id: "core-protocol-1", command: "core-protocol", params: nil))
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["content"], "{\"observed\":true}")
+    }
+
+    func test_coreSemanticCommand_clampsLimitAndReturnsData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreSemanticProvider: { limit in
+                ["content": "{\"limit\":\(limit)}"]
+            }
+        )
+        let response = handler.handleCommand(
+            SocketRequest(id: "core-semantic-1", command: "core-semantic", params: ["limit": "999"])
+        )
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["content"], "{\"limit\":64}")
+    }
+
     func test_protocolViewportCommand_withProvider_returnsViewportMessage() {
         let handler = AppSocketCommandHandler(
             tabManager: nil,
@@ -1059,7 +1168,11 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             "timeline-show", "timeline-export", "search", "send", "send-key", "ssh",
             "web-start", "web-stop", "web-status",
             "stream-list", "stream-current", "protocol-capabilities",
-            "protocol-viewport", "protocol-send", "image-list", "image-delete", "image-clear"
+            "protocol-viewport", "protocol-send",
+            "core-reset", "core-signal", "core-process", "core-modes", "core-search",
+            "core-ligatures", "core-protocol", "core-selection", "core-font-metrics",
+            "core-preedit", "core-semantic",
+            "image-list", "image-delete", "image-clear"
         ]
         for command in commands {
             let request = SocketRequest(id: "nil-\(command)", command: command, params: nil)

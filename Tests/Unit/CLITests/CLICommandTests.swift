@@ -187,6 +187,46 @@ final class CLIArgumentParserTests: XCTestCase {
         XCTAssertEqual(result, .status)
     }
 
+    func testCoreResetParses() throws {
+        let result = try CLIArgumentParser.parse(["core", "reset"])
+        XCTAssertEqual(result, .coreReset)
+    }
+
+    func testCoreSignalParses() throws {
+        let result = try CLIArgumentParser.parse(["core", "signal", "term"])
+        XCTAssertEqual(result, .coreSignal(signal: "term"))
+    }
+
+    func testCoreProcessParses() throws {
+        let result = try CLIArgumentParser.parse(["core", "process"])
+        XCTAssertEqual(result, .coreProcess)
+    }
+
+    func testCoreModesParses() throws {
+        let result = try CLIArgumentParser.parse(["core", "modes"])
+        XCTAssertEqual(result, .coreModes)
+    }
+
+    func testCoreSearchParses() throws {
+        let result = try CLIArgumentParser.parse(["core", "search"])
+        XCTAssertEqual(result, .coreSearch)
+    }
+
+    func testCoreLigaturesParses() throws {
+        let result = try CLIArgumentParser.parse(["core", "ligatures"])
+        XCTAssertEqual(result, .coreLigatures)
+    }
+
+    func testCoreProtocolParses() throws {
+        let result = try CLIArgumentParser.parse(["core", "protocol"])
+        XCTAssertEqual(result, .coreProtocol)
+    }
+
+    func testCoreSemanticParsesLimit() throws {
+        let result = try CLIArgumentParser.parse(["core", "semantic", "--limit", "7"])
+        XCTAssertEqual(result, .coreSemantic(limit: 7))
+    }
+
     // MARK: - 11. Unknown command
 
     func testUnknownCommandThrowsError() {
@@ -453,6 +493,48 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.command, "image-clear")
         XCTAssertNil(request.params)
     }
+
+    func testBuildCoreSignalRequest() {
+        let request = runner.buildRequest(from: .coreSignal(signal: "int"))
+        XCTAssertEqual(request.command, "core-signal")
+        XCTAssertEqual(request.params?["signal"], "int")
+    }
+
+    func testBuildCoreProcessRequest() {
+        let request = runner.buildRequest(from: .coreProcess)
+        XCTAssertEqual(request.command, "core-process")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildCoreModesRequest() {
+        let request = runner.buildRequest(from: .coreModes)
+        XCTAssertEqual(request.command, "core-modes")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildCoreSearchRequest() {
+        let request = runner.buildRequest(from: .coreSearch)
+        XCTAssertEqual(request.command, "core-search")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildCoreLigaturesRequest() {
+        let request = runner.buildRequest(from: .coreLigatures)
+        XCTAssertEqual(request.command, "core-ligatures")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildCoreProtocolRequest() {
+        let request = runner.buildRequest(from: .coreProtocol)
+        XCTAssertEqual(request.command, "core-protocol")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildCoreSemanticRequest() {
+        let request = runner.buildRequest(from: .coreSemantic(limit: 6))
+        XCTAssertEqual(request.command, "core-semantic")
+        XCTAssertEqual(request.params?["limit"], "6")
+    }
 }
 
 // MARK: - Output Formatter Tests
@@ -574,6 +656,36 @@ final class OutputFormatterTests: XCTestCase {
                 "protocol_v2_observed": "true",
                 "protocol_v2_capabilities_requested": "true",
                 "current_stream_id": "3",
+                "cursor_visible": "true",
+                "app_cursor_mode": "false",
+                "bracketed_paste_mode": "true",
+                "mouse_tracking_mode": "6",
+                "kitty_keyboard_mode": "1",
+                "alt_screen": "false",
+                "cursor_shape": "5",
+                "preedit_active": "false",
+                "semantic_block_count": "4",
+                "child_pid": "81234",
+                "process_alive": "true",
+                "font_cell_width": "8.50",
+                "font_cell_height": "17.00",
+                "font_ascent": "12.20",
+                "font_descent": "3.10",
+                "font_leading": "1.70",
+                "selection_active": "true",
+                "selection_start_row": "10",
+                "selection_start_col": "2",
+                "selection_end_row": "10",
+                "selection_end_col": "7",
+                "selection_text_bytes": "5",
+                "semantic_state_name": "command_running",
+                "semantic_current_block_name": "command_output",
+                "semantic_prompt_blocks": "3",
+                "semantic_command_input_blocks": "2",
+                "semantic_command_output_blocks": "5",
+                "semantic_error_blocks": "1",
+                "semantic_tool_blocks": "4",
+                "semantic_agent_blocks": "2",
                 "ligatures_enabled": "true",
                 "ligature_cache_hits": "12",
                 "ligature_cache_misses": "2",
@@ -598,11 +710,53 @@ final class OutputFormatterTests: XCTestCase {
 
         XCTAssertTrue(output.contains("Search: gpu (420 indexed rows)"))
         XCTAssertTrue(output.contains("Protocol v2: observed on, capabilities on, current stream 3"))
+        XCTAssertTrue(output.contains("Modes: cursor on, app cursor off, alt screen off, bracketed paste on"))
+        XCTAssertTrue(output.contains("Input: mouse mode 6, kitty keyboard 1, preedit off, cursor shape 5, semantic blocks 4"))
+        XCTAssertTrue(output.contains("Process: pid 81234, alive on"))
+        XCTAssertTrue(output.contains("Font: cell 8.50x17.00, ascent 12.20, descent 3.10, leading 1.70"))
+        XCTAssertTrue(output.contains("Selection: on (10:2 -> 10:7, 5 bytes)"))
+        XCTAssertTrue(output.contains("Semantic: state command_running, current command_output, prompt 3, input 2, output 5, error 1, tool 4, agent 2"))
         XCTAssertTrue(output.contains("Ligatures: on (hits 12, misses 2)"))
         XCTAssertTrue(output.contains("Images: 4 loaded (8/256 MiB, sixel on, kitty on)"))
         XCTAssertTrue(output.contains("Image atlas: 1024x1024 gen 7, dirty off"))
         XCTAssertTrue(output.contains("Streams: 2"))
         XCTAssertTrue(output.contains("Web terminal: running on 127.0.0.1:7770 (1 clients)"))
+    }
+
+    func testFormatCoreSemanticSuccessFallsBackToStructuredData() {
+        let response = CLISocketResponse(
+            id: "r-core-sem",
+            success: true,
+            data: ["content": "{\"state\":\"idle\"}"],
+            error: nil
+        )
+        let output = OutputFormatter.formatSuccess(
+            command: .coreSemantic(limit: 4),
+            response: response
+        )
+        XCTAssertTrue(output.contains("\"state\""))
+    }
+
+    func testFormatCoreSnapshotCommandsFallBackToStructuredData() {
+        let response = CLISocketResponse(
+            id: "r-core-snap",
+            success: true,
+            data: ["content": "{\"ok\":true}"],
+            error: nil
+        )
+
+        let commands: [ParsedCommand] = [
+            .coreProcess,
+            .coreModes,
+            .coreSearch,
+            .coreLigatures,
+            .coreProtocol
+        ]
+
+        for command in commands {
+            let output = OutputFormatter.formatSuccess(command: command, response: response)
+            XCTAssertTrue(output.contains("\"ok\""), "Expected structured output for \(command)")
+        }
     }
 
     func testFormatImageDeleteSuccess() {
@@ -778,7 +932,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     // MARK: - 43. All commands exist (current catalog size)
 
     func testAllCommandsExist() {
-        XCTAssertEqual(CLICommand.allCases.count, 77)
+        XCTAssertEqual(CLICommand.allCases.count, 88)
     }
 
     // MARK: - 39. Raw values match server protocol

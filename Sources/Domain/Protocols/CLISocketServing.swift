@@ -226,6 +226,28 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case protocolViewport = "protocol-viewport"
     /// Send an explicit Protocol v2 message from the focused surface.
     case protocolSend = "protocol-send"
+    /// Reset the focused CocxyCore terminal surface.
+    case coreReset = "core-reset"
+    /// Send a POSIX signal to the focused CocxyCore PTY child.
+    case coreSignal = "core-signal"
+    /// Return the focused surface's process diagnostics.
+    case coreProcess = "core-process"
+    /// Return the focused surface's mode diagnostics.
+    case coreModes = "core-modes"
+    /// Return the focused surface's search diagnostics.
+    case coreSearch = "core-search"
+    /// Return the focused surface's ligature diagnostics.
+    case coreLigatures = "core-ligatures"
+    /// Return the focused surface's protocol diagnostics.
+    case coreProtocol = "core-protocol"
+    /// Return the focused surface's selection snapshot.
+    case coreSelection = "core-selection"
+    /// Return the focused surface's font metrics snapshot.
+    case coreFontMetrics = "core-font-metrics"
+    /// Return the focused surface's preedit snapshot.
+    case corePreedit = "core-preedit"
+    /// Return semantic diagnostics and recent blocks for the focused surface.
+    case coreSemantic = "core-semantic"
     /// List stored inline images for the focused surface.
     case imageList = "image-list"
     /// Delete a specific inline image from the focused surface.
