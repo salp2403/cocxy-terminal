@@ -81,9 +81,9 @@ struct MarkdownInlineParserTests {
         ])
     }
 
-    @Test("single tilde is literal")
+    @Test("single tilde produces subscript")
     func singleTilde() {
-        #expect(parser.parse("~nope~") == [.text("~nope~")])
+        #expect(parser.parse("~nope~") == [.`subscript`(inlines: [.text("nope")])])
     }
 
     @Test("inline link produces link node with URL")

@@ -108,6 +108,12 @@ public struct MarkdownSyntaxHighlighter {
                 .foregroundColor: theme.quoteColor,
                 .font: theme.italicFont
             ], range: range)
+            if let calloutRange = (line as NSString).range(of: "\\[![A-Z]+\\]-?", options: .regularExpression).toOptional {
+                output.addAttributes([
+                    .foregroundColor: theme.linkColor,
+                    .font: theme.boldFont
+                ], range: NSRange(location: range.location + calloutRange.location, length: calloutRange.length))
+            }
             return
         }
 
@@ -224,43 +230,132 @@ public struct MarkdownSyntaxHighlighter {
                    into: output)
 
         // Strong `**...**`.
-        applyRegex(pattern: "\\*\\*[^*\n]+\\*\\*",
-                   attributes: [
-                       .font: theme.boldFont,
-                       .foregroundColor: theme.textColor
-                   ],
-                   line: nsLine,
-                   length: length,
-                   lineStart: lineStart,
-                   into: output)
+        applyDelimitedRegex(
+            pattern: "(\\*\\*)([^*\\n]+)(\\*\\*)",
+            markerAttributes: [
+                .foregroundColor: theme.subtleColor,
+                .font: theme.boldFont
+            ],
+            contentAttributes: [
+                .font: theme.boldFont,
+                .foregroundColor: theme.textColor
+            ],
+            line: nsLine,
+            length: length,
+            lineStart: lineStart,
+            into: output
+        )
 
         // Emphasis `*...*` (not matching `**`).
-        applyRegex(pattern: "(?<!\\*)\\*[^*\n]+\\*(?!\\*)",
-                   attributes: [
-                       .font: theme.italicFont,
-                       .foregroundColor: theme.textColor
-                   ],
-                   line: nsLine,
-                   length: length,
-                   lineStart: lineStart,
-                   into: output)
+        applyDelimitedRegex(
+            pattern: "(?<!\\*)(\\*)([^*\\n]+)(\\*)(?!\\*)",
+            markerAttributes: [
+                .foregroundColor: theme.subtleColor,
+                .font: theme.italicFont
+            ],
+            contentAttributes: [
+                .font: theme.italicFont,
+                .foregroundColor: theme.textColor
+            ],
+            line: nsLine,
+            length: length,
+            lineStart: lineStart,
+            into: output
+        )
 
         // Strike `~~...~~`.
-        applyRegex(pattern: "~~[^~\n]+~~",
-                   attributes: [
-                       .foregroundColor: theme.strikeColor,
-                       .strikethroughStyle: NSUnderlineStyle.single.rawValue
-                   ],
-                   line: nsLine,
-                   length: length,
-                   lineStart: lineStart,
-                   into: output)
+        applyDelimitedRegex(
+            pattern: "(~~)([^~\\n]+)(~~)",
+            markerAttributes: [
+                .foregroundColor: theme.subtleColor
+            ],
+            contentAttributes: [
+                .foregroundColor: theme.strikeColor,
+                .strikethroughStyle: NSUnderlineStyle.single.rawValue
+            ],
+            line: nsLine,
+            length: length,
+            lineStart: lineStart,
+            into: output
+        )
+
+        // Highlight `==...==`.
+        applyDelimitedRegex(
+            pattern: "(?<!\\=)(==)([^=\\n]+)(==)(?!\\=)",
+            markerAttributes: [
+                .foregroundColor: theme.subtleColor
+            ],
+            contentAttributes: [
+                .foregroundColor: theme.textColor,
+                .backgroundColor: CocxyColors.yellow.withAlphaComponent(0.35)
+            ],
+            line: nsLine,
+            length: length,
+            lineStart: lineStart,
+            into: output
+        )
+
+        // Superscript `^...^`.
+        applyDelimitedRegex(
+            pattern: "(\\^)([^\\s\\^][^\\^\\n]*?[^\\s\\^]|[^\\s\\^])(\\^)",
+            markerAttributes: [
+                .foregroundColor: theme.subtleColor
+            ],
+            contentAttributes: [
+                .foregroundColor: theme.textColor,
+                .baselineOffset: 4,
+                .font: theme.codeFont.withSize(max(10, theme.codeFont.pointSize - 2))
+            ],
+            line: nsLine,
+            length: length,
+            lineStart: lineStart,
+            into: output
+        )
+
+        // Subscript `~...~` (single tilde only).
+        applyDelimitedRegex(
+            pattern: "(?<!~)(~)([^\\s~][^~\\n]*?[^\\s~]|[^\\s~])(~)(?!~)",
+            markerAttributes: [
+                .foregroundColor: theme.subtleColor
+            ],
+            contentAttributes: [
+                .foregroundColor: theme.textColor,
+                .baselineOffset: -2,
+                .font: theme.codeFont.withSize(max(10, theme.codeFont.pointSize - 2))
+            ],
+            line: nsLine,
+            length: length,
+            lineStart: lineStart,
+            into: output
+        )
 
         // Link `[text](url)`.
         applyRegex(pattern: "\\[[^\\]\n]+\\]\\([^)\n]+\\)",
                    attributes: [
                        .foregroundColor: theme.linkColor,
                        .underlineStyle: NSUnderlineStyle.single.rawValue
+                   ],
+                   line: nsLine,
+                   length: length,
+                   lineStart: lineStart,
+                   into: output)
+
+        // Footnote ref `[^id]`.
+        applyRegex(pattern: "\\[\\^[^\\]\\n]+\\]",
+                   attributes: [
+                       .foregroundColor: theme.linkColor,
+                       .font: theme.boldFont
+                   ],
+                   line: nsLine,
+                   length: length,
+                   lineStart: lineStart,
+                   into: output)
+
+        // Emoji shortcode `:rocket:`.
+        applyRegex(pattern: ":[A-Za-z0-9_+\\-]+:",
+                   attributes: [
+                       .foregroundColor: CocxyColors.peach,
+                       .font: theme.boldFont
                    ],
                    line: nsLine,
                    length: length,
@@ -286,5 +381,44 @@ public struct MarkdownSyntaxHighlighter {
             )
             output.addAttributes(attributes, range: absolute)
         }
+    }
+
+    private func applyDelimitedRegex(
+        pattern: String,
+        markerAttributes: [NSAttributedString.Key: Any],
+        contentAttributes: [NSAttributedString.Key: Any],
+        line: NSString,
+        length: Int,
+        lineStart: Int,
+        into output: NSMutableAttributedString
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        let range = NSRange(location: 0, length: length)
+        regex.enumerateMatches(in: line as String, range: range) { match, _, _ in
+            guard let match, match.numberOfRanges >= 4 else { return }
+            let opening = match.range(at: 1)
+            let content = match.range(at: 2)
+            let closing = match.range(at: 3)
+
+            for segment in [opening, closing] where segment.location != NSNotFound {
+                output.addAttributes(
+                    markerAttributes,
+                    range: NSRange(location: lineStart + segment.location, length: segment.length)
+                )
+            }
+
+            if content.location != NSNotFound {
+                output.addAttributes(
+                    contentAttributes,
+                    range: NSRange(location: lineStart + content.location, length: content.length)
+                )
+            }
+        }
+    }
+}
+
+private extension NSRange {
+    var toOptional: NSRange? {
+        location == NSNotFound ? nil : self
     }
 }

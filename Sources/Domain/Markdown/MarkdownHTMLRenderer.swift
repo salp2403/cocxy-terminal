@@ -5,19 +5,44 @@ import Foundation
 
 /// Converts a `MarkdownParseResult` into an HTML string for WKWebView rendering.
 ///
-/// This renderer produces semantic HTML that Mermaid.js and KaTeX can
-/// post-process. Fenced code blocks with `language == "mermaid"` emit
-/// `<pre class="mermaid">` instead of `<pre><code>`, which is the
-/// convention Mermaid expects. Math delimiters (`$...$`, `$$...$$`) pass
-/// through as plain text for KaTeX auto-render to detect.
-///
-/// All user-supplied text is HTML-escaped to prevent XSS. Links open
-/// in new tabs with `rel="noopener noreferrer"`.
+/// The renderer produces semantic HTML with enough metadata for the preview to
+/// support click-to-source, interactive task toggles, lightbox images,
+/// footnote popovers, Mermaid, KaTeX, and Highlight.js post-processing.
 enum MarkdownHTMLRenderer {
 
+    private struct FootnoteBundle {
+        let definitions: [String: [MarkdownBlock]]
+        let order: [String]
+        let labels: [String: String]
+        let previews: [String: String]
+    }
+
+    private struct RenderContext {
+        let footnotes: FootnoteBundle
+        var checkboxIndex = 0
+    }
+
     /// Renders a parse result to an HTML fragment (no `<html>` wrapper).
-    static func render(_ result: MarkdownParseResult) -> String {
-        result.blocks.map { renderBlock($0) }.joined(separator: "\n")
+    static func render(_ result: MarkdownParseResult, bodyLineOffset: Int = 0) -> String {
+        var context = RenderContext(footnotes: collectFootnotes(from: result.blocks))
+        var parts: [String] = []
+
+        for (index, block) in result.blocks.enumerated() {
+            if case .footnoteDefinition = block {
+                continue
+            }
+            let sourceLine = index < result.locations.count
+                ? bodyLineOffset + result.locations[index].startLine
+                : nil
+            parts.append(renderBlock(block, sourceLine: sourceLine, context: &context))
+        }
+
+        let footnotesHTML = renderFootnotesSection(context: context)
+        if !footnotesHTML.isEmpty {
+            parts.append(footnotesHTML)
+        }
+
+        return parts.joined(separator: "\n")
     }
 
     /// Renders a full document including optional frontmatter section.
@@ -29,7 +54,7 @@ enum MarkdownHTMLRenderer {
             parts.append(frontmatterHTML)
         }
 
-        let bodyHTML = render(document.parseResult)
+        let bodyHTML = render(document.parseResult, bodyLineOffset: document.bodyLineOffset)
         if !bodyHTML.isEmpty {
             parts.append(bodyHTML)
         }
@@ -38,9 +63,6 @@ enum MarkdownHTMLRenderer {
     }
 
     /// Renders frontmatter metadata as a styled section.
-    ///
-    /// Returns an empty string when the frontmatter has no keys, so callers
-    /// can safely concatenate without producing empty DOM nodes.
     static func renderFrontmatter(_ frontmatter: MarkdownFrontmatter) -> String {
         guard !frontmatter.isEmpty else { return "" }
 
@@ -72,63 +94,123 @@ enum MarkdownHTMLRenderer {
 
     // MARK: - Block Rendering
 
-    private static func renderBlock(_ block: MarkdownBlock) -> String {
+    private static func renderBlock(
+        _ block: MarkdownBlock,
+        sourceLine: Int?,
+        context: inout RenderContext
+    ) -> String {
+        let sourceAttribute = sourceLineAttribute(sourceLine)
+
         switch block {
         case .heading(let level, let inlines):
             let tag = "h\(level)"
-            return "<\(tag)>\(renderInlines(inlines))</\(tag)>"
+            return "<\(tag)\(sourceAttribute)>\(renderInlines(inlines, context: &context))</\(tag)>"
 
         case .paragraph(let inlines):
-            return "<p>\(renderInlines(inlines))</p>"
+            return "<p\(sourceAttribute)>\(renderInlines(inlines, context: &context))</p>"
 
         case .blockquote(let blocks):
-            let inner = blocks.map { renderBlock($0) }.joined(separator: "\n")
-            return "<blockquote>\(inner)</blockquote>"
+            let inner = blocks.map { renderBlock($0, sourceLine: nil, context: &context) }.joined(separator: "\n")
+            return "<blockquote\(sourceAttribute)>\(inner)</blockquote>"
+
+        case .callout(let type, let title, let isFolded, let blocks):
+            let inner = blocks.map { renderBlock($0, sourceLine: nil, context: &context) }.joined(separator: "\n")
+            let summary = """
+            <summary class="callout-summary">\
+            <span class="callout-icon">\(escapeHTML(type.icon))</span>\
+            <span class="callout-title">\(escapeHTML(title))</span>\
+            </summary>
+            """
+            if isFolded {
+                return """
+                <details class="callout callout-\(type.rawValue)"\(sourceAttribute)>\
+                \(summary)\
+                <div class="callout-body">\(inner)</div>\
+                </details>
+                """
+            }
+            return """
+            <details class="callout callout-\(type.rawValue)" open\(sourceAttribute)>\
+            \(summary)\
+            <div class="callout-body">\(inner)</div>\
+            </details>
+            """
 
         case .list(let ordered, let start, let items):
             let tag = ordered ? "ol" : "ul"
             let startAttr = ordered && start != 1 ? " start=\"\(start)\"" : ""
-            let inner = items.map { renderListItem($0) }.joined(separator: "\n")
-            return "<\(tag)\(startAttr)>\n\(inner)\n</\(tag)>"
+            let inner = items.map { renderListItem($0, context: &context) }.joined(separator: "\n")
+            return "<\(tag)\(startAttr)\(sourceAttribute)>\n\(inner)\n</\(tag)>"
 
         case .codeBlock(let language, let text):
-            return renderCodeBlock(language: language, text: text)
+            return renderCodeBlock(language: language, text: text, sourceAttribute: sourceAttribute)
 
         case .table(let headers, let alignments, let rows):
-            return renderTable(headers: headers, alignments: alignments, rows: rows)
+            return renderTable(
+                headers: headers,
+                alignments: alignments,
+                rows: rows,
+                sourceAttribute: sourceAttribute,
+                context: &context
+            )
+
+        case .footnoteDefinition:
+            return ""
 
         case .horizontalRule:
-            return "<hr />"
+            return "<hr\(sourceAttribute) />"
         }
     }
 
     // MARK: - Code Blocks
 
-    private static func renderCodeBlock(language: String?, text: String) -> String {
+    private static func renderCodeBlock(language: String?, text: String, sourceAttribute: String) -> String {
         let escaped = escapeHTML(text)
+        let label = escapeHTML(language?.lowercased() ?? "text")
 
-        // Mermaid blocks use <pre class="mermaid"> per Mermaid.js convention.
         if let lang = language?.lowercased(), lang == "mermaid" {
-            return "<pre class=\"mermaid\">\(escaped)</pre>"
+            return """
+            <div class="code-block code-block-mermaid"\(sourceAttribute)>
+              <div class="code-header">
+                <span class="code-lang">\(label)</span>
+                <button type="button" class="code-copy">Copy</button>
+              </div>
+              <div class="code-scroller">
+                <div class="code-line-numbers" aria-hidden="true"></div>
+                <pre class="mermaid">\(escaped)</pre>
+              </div>
+            </div>
+            """
         }
 
-        if let lang = language, !lang.isEmpty {
-            return "<pre><code class=\"language-\(escapeHTML(lang))\">\(escaped)</code></pre>"
-        }
-
-        return "<pre><code>\(escaped)</code></pre>"
+        let classAttribute = language.map { " class=\"language-\(escapeHTML($0))\"" } ?? ""
+        return """
+        <div class="code-block"\(sourceAttribute)>
+          <div class="code-header">
+            <span class="code-lang">\(label)</span>
+            <button type="button" class="code-copy">Copy</button>
+          </div>
+          <div class="code-scroller">
+            <div class="code-line-numbers" aria-hidden="true"></div>
+            <pre><code\(classAttribute)>\(escaped)</code></pre>
+          </div>
+        </div>
+        """
     }
 
     // MARK: - Lists
 
-    private static func renderListItem(_ item: MarkdownListItem) -> String {
-        var inner = ""
+    private static func renderListItem(_ item: MarkdownListItem, context: inout RenderContext) -> String {
+        var parts: [String] = []
 
         switch item.taskState {
-        case .checked:
-            inner += "<input type=\"checkbox\" checked disabled /> "
-        case .unchecked:
-            inner += "<input type=\"checkbox\" disabled /> "
+        case .checked, .unchecked:
+            let index = context.checkboxIndex
+            context.checkboxIndex += 1
+            let checkedAttr = item.taskState == .checked ? " checked" : ""
+            parts.append("""
+            <input type="checkbox" data-checkbox-index="\(index)" aria-label="Toggle task"\(checkedAttr) />
+            """)
         case .none:
             break
         }
@@ -136,14 +218,14 @@ enum MarkdownHTMLRenderer {
         for block in item.blocks {
             switch block {
             case .paragraph(let inlines):
-                inner += renderInlines(inlines)
+                parts.append(renderInlines(inlines, context: &context))
             default:
-                inner += renderBlock(block)
+                parts.append(renderBlock(block, sourceLine: nil, context: &context))
             }
         }
 
         let taskClass = item.taskState != .none ? " class=\"task-item\"" : ""
-        return "<li\(taskClass)>\(inner)</li>"
+        return "<li\(taskClass)>\(parts.joined())</li>"
     }
 
     // MARK: - Tables
@@ -151,13 +233,15 @@ enum MarkdownHTMLRenderer {
     private static func renderTable(
         headers: [[MarkdownInline]],
         alignments: [MarkdownTableAlignment],
-        rows: [[[MarkdownInline]]]
+        rows: [[[MarkdownInline]]],
+        sourceAttribute: String,
+        context: inout RenderContext
     ) -> String {
-        var html = "<table>\n<thead>\n<tr>\n"
+        var html = "<table\(sourceAttribute)>\n<thead>\n<tr>\n"
 
         for (i, header) in headers.enumerated() {
             let align = alignmentAttribute(alignments, at: i)
-            html += "<th\(align)>\(renderInlines(header))</th>\n"
+            html += "<th\(align)>\(renderInlines(header, context: &context))</th>\n"
         }
         html += "</tr>\n</thead>\n"
 
@@ -167,7 +251,7 @@ enum MarkdownHTMLRenderer {
                 html += "<tr>\n"
                 for (i, cell) in row.enumerated() {
                     let align = alignmentAttribute(alignments, at: i)
-                    html += "<td\(align)>\(renderInlines(cell))</td>\n"
+                    html += "<td\(align)>\(renderInlines(cell, context: &context))</td>\n"
                 }
                 html += "</tr>\n"
             }
@@ -193,46 +277,120 @@ enum MarkdownHTMLRenderer {
 
     // MARK: - Inline Rendering
 
-    private static func renderInlines(_ inlines: [MarkdownInline]) -> String {
-        inlines.map { renderInline($0) }.joined()
+    private static func renderInlines(_ inlines: [MarkdownInline], context: inout RenderContext) -> String {
+        inlines.map { renderInline($0, context: &context) }.joined()
     }
 
-    private static func renderInline(_ inline: MarkdownInline) -> String {
+    private static func renderInline(_ inline: MarkdownInline, context: inout RenderContext) -> String {
         switch inline {
         case .text(let text):
             return escapeHTML(text)
 
         case .strong(let inlines):
-            return "<strong>\(renderInlines(inlines))</strong>"
+            return "<strong>\(renderInlines(inlines, context: &context))</strong>"
 
         case .emphasis(let inlines):
-            return "<em>\(renderInlines(inlines))</em>"
+            return "<em>\(renderInlines(inlines, context: &context))</em>"
 
         case .code(let text):
             return "<code>\(escapeHTML(text))</code>"
 
         case .strike(let inlines):
-            return "<del>\(renderInlines(inlines))</del>"
+            return "<del>\(renderInlines(inlines, context: &context))</del>"
+
+        case .highlight(let inlines):
+            return "<mark>\(renderInlines(inlines, context: &context))</mark>"
+
+        case .superscript(let inlines):
+            return "<sup>\(renderInlines(inlines, context: &context))</sup>"
+
+        case .`subscript`(let inlines):
+            return "<sub>\(renderInlines(inlines, context: &context))</sub>"
 
         case .image(let alt, let url):
             let src = escapeHTML(url)
             let altText = escapeHTML(alt)
-            return "<img src=\"\(src)\" alt=\"\(altText)\" />"
+            return "<img src=\"\(src)\" alt=\"\(altText)\" loading=\"lazy\" />"
 
         case .link(let text, let url):
             let href = escapeHTML(url)
-            return "<a href=\"\(href)\">\(renderInlines(text))</a>"
+            return "<a href=\"\(href)\" target=\"_blank\" rel=\"noopener noreferrer\">\(renderInlines(text, context: &context))</a>"
 
         case .autolink(let url):
             let href = escapeHTML(url)
-            return "<a href=\"\(href)\">\(href)</a>"
+            return "<a href=\"\(href)\" target=\"_blank\" rel=\"noopener noreferrer\">\(href)</a>"
+
+        case .footnoteRef(let id):
+            let safeID = MarkdownFootnote.anchorID(for: id)
+            let preview = escapeHTML(context.footnotes.previews[id] ?? "")
+            let label = escapeHTML(context.footnotes.labels[id] ?? id)
+            return """
+            <sup class="footnote-ref"><a href="#fn-\(safeID)" id="fnref-\(safeID)" data-footnote-preview="\(preview)">\(label)</a></sup>
+            """
 
         case .lineBreak:
             return "<br />"
         }
     }
 
-    // MARK: - HTML Escaping
+    // MARK: - Footnotes
+
+    private static func collectFootnotes(from blocks: [MarkdownBlock]) -> FootnoteBundle {
+        var definitions: [String: [MarkdownBlock]] = [:]
+        var order: [String] = []
+
+        for block in blocks {
+            if case .footnoteDefinition(let id, let nestedBlocks) = block {
+                definitions[id] = nestedBlocks
+                order.append(id)
+            }
+        }
+
+        var labels: [String: String] = [:]
+        var previews: [String: String] = [:]
+        for (ordinal, id) in order.enumerated() {
+            let blocks = definitions[id] ?? []
+            labels[id] = MarkdownFootnote.displayLabel(for: id, ordinal: ordinal + 1)
+            previews[id] = MarkdownFootnote.definitionPreviewText(from: blocks)
+        }
+
+        return FootnoteBundle(definitions: definitions, order: order, labels: labels, previews: previews)
+    }
+
+    private static func renderFootnotesSection(context: RenderContext) -> String {
+        guard !context.footnotes.order.isEmpty else { return "" }
+
+        var items: [String] = []
+        for id in context.footnotes.order {
+            guard let blocks = context.footnotes.definitions[id] else { continue }
+            let safeID = MarkdownFootnote.anchorID(for: id)
+            let label = escapeHTML(context.footnotes.labels[id] ?? id)
+            var innerContext = context
+            let body = blocks.map { renderBlock($0, sourceLine: nil, context: &innerContext) }.joined(separator: "\n")
+            items.append("""
+            <li id="fn-\(safeID)" data-footnote-label="\(label)">
+              <div class="footnote-body">\(body)</div>
+              <a class="footnote-backref" href="#fnref-\(safeID)">↩</a>
+            </li>
+            """)
+        }
+
+        return """
+        <section class="footnotes">
+          <hr />
+          <ol>
+            \(items.joined(separator: "\n"))
+          </ol>
+        </section>
+        """
+    }
+
+    // MARK: - Attributes / Escaping
+
+    private static func sourceLineAttribute(_ sourceLine: Int?) -> String {
+        guard let sourceLine else { return "" }
+        return " data-source-line=\"\(sourceLine)\""
+    }
 
     static func escapeHTML(_ text: String) -> String {
         var result = text

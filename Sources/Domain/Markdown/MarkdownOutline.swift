@@ -81,7 +81,10 @@ public struct MarkdownOutline: Equatable, Sendable {
                 buffer.append(s)
             case .strong(let nested),
                  .emphasis(let nested),
-                 .strike(let nested):
+                 .strike(let nested),
+                 .highlight(let nested),
+                 .superscript(let nested),
+                 .`subscript`(let nested):
                 buffer.append(plainText(from: nested))
             case .code(let s):
                 buffer.append(s)
@@ -91,6 +94,8 @@ public struct MarkdownOutline: Equatable, Sendable {
                 buffer.append(plainText(from: text))
             case .autolink(let url):
                 buffer.append(url)
+            case .footnoteRef:
+                continue
             case .lineBreak:
                 buffer.append(" ")
             }

@@ -96,6 +96,8 @@ check_exists "$RESOURCES/Markdown/mermaid.min.js" "Mermaid JS"
 check_exists "$RESOURCES/Markdown/katex.min.js" "KaTeX JS"
 check_exists "$RESOURCES/Markdown/katex.min.css" "KaTeX CSS"
 check_exists "$RESOURCES/Markdown/katex-auto-render.min.js" "KaTeX auto-render"
+check_exists "$RESOURCES/Markdown/highlight.min.js" "Highlight.js"
+check_exists "$RESOURCES/Markdown/highlight-cocxy.css" "Highlight.js theme"
 
 # 9. Themes (optional but expected)
 echo ""

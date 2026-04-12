@@ -123,7 +123,9 @@ extension MarkdownContentView {
             mermaidJS: previewView.loadResourceFile(named: "mermaid.min", ext: "js"),
             katexJS: previewView.loadResourceFile(named: "katex.min", ext: "js"),
             katexCSS: previewView.loadResourceFile(named: "katex.min", ext: "css"),
-            autoRenderJS: previewView.loadResourceFile(named: "katex-auto-render.min", ext: "js")
+            autoRenderJS: previewView.loadResourceFile(named: "katex-auto-render.min", ext: "js"),
+            highlightJS: previewView.loadResourceFile(named: "highlight.min", ext: "js"),
+            highlightCSS: previewView.loadResourceFile(named: "highlight-cocxy", ext: "css")
         )
 
         // Inline local images for a truly standalone presentation file.
@@ -147,6 +149,32 @@ extension MarkdownContentView {
     func defaultExportName(extension ext: String) -> String {
         let baseName = filePath?.deletingPathExtension().lastPathComponent ?? "document"
         return "\(baseName).\(ext)"
+    }
+
+    func handlePastedImageData(_ imageData: Data) {
+        guard let imageURL = persistPastedImageData(imageData) else { return }
+        insertImageReference(for: imageURL)
+    }
+
+    func persistPastedImageData(_ imageData: Data, now: Date = Date()) -> URL? {
+        let directory = filePath?.deletingLastPathComponent() ?? FileManager.default.temporaryDirectory
+
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+
+        let filename = "paste-\(formatter.string(from: now)).png"
+        let fileURL = directory.appendingPathComponent(filename)
+
+        do {
+            try imageData.write(to: fileURL, options: .atomic)
+            return fileURL
+        } catch {
+            NSLog("Persist pasted markdown image failed: %@", String(describing: error))
+            return nil
+        }
     }
 }
 

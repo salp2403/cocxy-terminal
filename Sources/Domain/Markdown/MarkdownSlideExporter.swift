@@ -91,7 +91,9 @@ enum MarkdownSlideExporter {
         mermaidJS: String = "",
         katexJS: String = "",
         katexCSS: String = "",
-        autoRenderJS: String = ""
+        autoRenderJS: String = "",
+        highlightJS: String = "",
+        highlightCSS: String = ""
     ) -> String {
         let slides = splitIntoSlides(body: document.body)
 
@@ -110,7 +112,9 @@ enum MarkdownSlideExporter {
             mermaidJS: mermaidJS,
             katexJS: katexJS,
             katexCSS: katexCSS,
-            autoRenderJS: autoRenderJS
+            autoRenderJS: autoRenderJS,
+            highlightJS: highlightJS,
+            highlightCSS: highlightCSS
         )
     }
 
@@ -132,7 +136,9 @@ enum MarkdownSlideExporter {
         mermaidJS: String = "",
         katexJS: String = "",
         katexCSS: String = "",
-        autoRenderJS: String = ""
+        autoRenderJS: String = "",
+        highlightJS: String = "",
+        highlightCSS: String = ""
     ) -> String {
         let slideDivs = slides.enumerated().map { index, html in
             """
@@ -151,8 +157,10 @@ enum MarkdownSlideExporter {
         <title>\(MarkdownHTMLRenderer.escapeHTML(title))</title>
         <style>\(slideCSS)</style>
         \(katexCSS.isEmpty ? "" : "<style>\(katexCSS)</style>")
+        \(highlightCSS.isEmpty ? "" : "<style>\(highlightCSS)</style>")
         \(katexJS.isEmpty ? "" : "<script>\(katexJS)</script>")
         \(autoRenderJS.isEmpty ? "" : "<script>\(autoRenderJS)</script>")
+        \(highlightJS.isEmpty ? "" : "<script>\(highlightJS)</script>")
         </head>
         <body>
         <div id="presentation">
@@ -208,9 +216,46 @@ enum MarkdownSlideExporter {
             background: #313244; padding: 0.1em 0.4em; border-radius: 4px;
             color: #f5e0dc; font-size: 0.85em;
         }
+        .slide-content .code-block {
+            background: #181825;
+            border: 1px solid #313244;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0.8em 0;
+        }
+        .slide-content .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: rgba(49, 50, 68, 0.85);
+            border-bottom: 1px solid #45475a;
+        }
+        .slide-content .code-lang {
+            font-size: 0.72em;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #bac2de;
+        }
+        .slide-content .code-copy { display: none; }
+        .slide-content .code-scroller {
+            display: grid;
+            grid-template-columns: auto 1fr;
+        }
+        .slide-content .code-line-numbers {
+            white-space: pre;
+            user-select: none;
+            padding: 16px 10px 16px 14px;
+            text-align: right;
+            color: #6c7086;
+            border-right: 1px solid #313244;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
         .slide-content pre {
-            background: #181825; border: 1px solid #313244;
-            border-radius: 8px; padding: 16px 20px; margin: 0.8em 0;
+            padding: 16px 20px;
+            margin: 0;
             overflow-x: auto;
         }
         .slide-content pre code { background: none; padding: 0; color: #cdd6f4; }
@@ -220,10 +265,37 @@ enum MarkdownSlideExporter {
             border-left: 3px solid #89b4fa; padding: 0.3em 1em;
             color: #bac2de; background: #181825; border-radius: 0 4px 4px 0;
         }
+        .slide-content .callout {
+            margin: 0.8em 0;
+            border: 1px solid #45475a;
+            border-left-width: 4px;
+            border-radius: 10px;
+            background: rgba(24, 24, 37, 0.92);
+        }
+        .slide-content .callout-summary {
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            font-weight: 600;
+        }
+        .slide-content .callout-summary::-webkit-details-marker { display: none; }
+        .slide-content .callout-body { padding: 0 14px 12px; }
+        .slide-content .callout-note { border-left-color: #89b4fa; }
+        .slide-content .callout-tip { border-left-color: #a6e3a1; }
+        .slide-content .callout-important { border-left-color: #cba6f7; }
+        .slide-content .callout-warning { border-left-color: #f9e2af; }
+        .slide-content .callout-caution,
+        .slide-content .callout-bug { border-left-color: #f38ba8; }
+        .slide-content .callout-abstract { border-left-color: #94e2d5; }
+        .slide-content .callout-todo { border-left-color: #b4befe; }
         .slide-content table { border-collapse: collapse; margin: 0.8em 0; width: 100%; }
         .slide-content th, .slide-content td { border: 1px solid #45475a; padding: 8px 12px; text-align: left; }
         .slide-content th { background: #313244; font-weight: 600; }
         .slide-content img { max-width: 100%; border-radius: 6px; }
+        .slide-content mark { background: #f9e2af; color: #11111b; padding: 0 0.15em; border-radius: 3px; }
+        .slide-content .footnotes { margin-top: 1.6em; font-size: 0.82em; color: #bac2de; }
         .controls {
             position: fixed;
             bottom: 20px;
@@ -295,6 +367,26 @@ enum MarkdownSlideExporter {
                 });
             });
         }
+
+        if (typeof hljs !== 'undefined') {
+            document.querySelectorAll('.slide-content pre code').forEach(function(code) {
+                hljs.highlightElement(code);
+            });
+        }
+
+        document.querySelectorAll('.slide-content .code-block').forEach(function(block) {
+            var pre = block.querySelector('pre');
+            var code = block.querySelector('code');
+            var rawText = code ? code.textContent : (pre ? pre.textContent : '');
+            var lineCount = rawText.length === 0 ? 1 : rawText.split('\\n').length;
+            var gutter = block.querySelector('.code-line-numbers');
+            if (!gutter) return;
+            var numbers = [];
+            for (var i = 1; i <= lineCount; i++) {
+                numbers.push(String(i));
+            }
+            gutter.textContent = numbers.join('\\n');
+        });
         """
     }
 }

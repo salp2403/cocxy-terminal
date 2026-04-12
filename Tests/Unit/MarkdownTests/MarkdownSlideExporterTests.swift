@@ -211,6 +211,20 @@ struct MarkdownSlideExporterTests {
         #expect(html.contains("renderMathInElement"))
     }
 
+    @Test("Export includes Highlight.js when JS and CSS are provided")
+    func exportWithHighlight() {
+        let doc = MarkdownDocument.parse("# Code\n\n```swift\nprint(\"hi\")\n```")
+        let html = MarkdownSlideExporter.export(
+            document: doc,
+            highlightJS: "/* highlight */",
+            highlightCSS: "/* highlight-css */"
+        )
+
+        #expect(html.contains("/* highlight */"))
+        #expect(html.contains("/* highlight-css */"))
+        #expect(html.contains("hljs.highlightElement"))
+    }
+
     @Test("Export without libs produces no script/style blocks for them")
     func exportWithoutLibs() {
         let doc = MarkdownDocument.parse("# Simple")

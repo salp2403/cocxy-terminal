@@ -161,12 +161,16 @@ public struct MarkdownRenderer {
             appendParagraph(inlines: inlines, into: output)
         case .blockquote(let blocks):
             appendBlockquote(blocks: blocks, into: output)
+        case .callout(let type, let title, _, let blocks):
+            appendCallout(type: type, title: title, blocks: blocks, into: output)
         case .list(let ordered, let start, let items):
             appendList(ordered: ordered, start: start, items: items, into: output)
         case .codeBlock(let language, let text):
             appendCodeBlock(language: language, text: text, into: output)
         case .table(let headers, let alignments, let rows):
             appendTable(headers: headers, alignments: alignments, rows: rows, into: output)
+        case .footnoteDefinition(let id, let blocks):
+            appendFootnoteDefinition(id: id, blocks: blocks, into: output)
         case .horizontalRule:
             appendHorizontalRule(into: output)
         }
@@ -267,6 +271,33 @@ public struct MarkdownRenderer {
             )
             output.append(quoted)
         }
+    }
+
+    // MARK: - Callout
+
+    private func appendCallout(
+        type: MarkdownCalloutType,
+        title: String,
+        blocks: [MarkdownBlock],
+        into output: NSMutableAttributedString
+    ) {
+        let header = NSMutableAttributedString(string: "\(type.icon) \(title)\n", attributes: [
+            .font: theme.boldFont,
+            .foregroundColor: theme.linkColor
+        ])
+        output.append(header)
+
+        let body = NSMutableAttributedString()
+        for (index, block) in blocks.enumerated() {
+            appendBlock(block, into: body, isLast: index == blocks.count - 1)
+        }
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.firstLineHeadIndent = 18
+        paragraph.headIndent = 18
+        paragraph.paragraphSpacing = 6
+        body.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: body.length))
+        output.append(body)
     }
 
     // MARK: - List
@@ -414,6 +445,21 @@ public struct MarkdownRenderer {
         output.append(line)
     }
 
+    private func appendFootnoteDefinition(
+        id: String,
+        blocks: [MarkdownBlock],
+        into output: NSMutableAttributedString
+    ) {
+        let prefix = NSAttributedString(string: "[^\(id)] ", attributes: [
+            .font: theme.boldFont,
+            .foregroundColor: theme.subtleColor
+        ])
+        output.append(prefix)
+        for (index, block) in blocks.enumerated() {
+            appendBlock(block, into: output, isLast: index == blocks.count - 1)
+        }
+    }
+
     // MARK: - Inline Rendering
 
     private func renderInlines(
@@ -453,6 +499,34 @@ public struct MarkdownRenderer {
                 )
                 output.append(mutable)
 
+            case .highlight(let nested):
+                let inner = renderInlines(nested, baseFont: baseFont, baseColor: baseColor, bold: bold, italic: italic)
+                let mutable = NSMutableAttributedString(attributedString: inner)
+                mutable.addAttribute(
+                    .backgroundColor,
+                    value: CocxyColors.yellow.withAlphaComponent(0.35),
+                    range: NSRange(location: 0, length: mutable.length)
+                )
+                output.append(mutable)
+
+            case .superscript(let nested):
+                let inner = renderInlines(nested, baseFont: baseFont, baseColor: baseColor, bold: bold, italic: italic)
+                let mutable = NSMutableAttributedString(attributedString: inner)
+                mutable.addAttributes([
+                    .baselineOffset: 4,
+                    .font: fontFor(baseFont: baseFont, bold: bold, italic: italic).withSize(max(10, baseFont.pointSize - 2))
+                ], range: NSRange(location: 0, length: mutable.length))
+                output.append(mutable)
+
+            case .`subscript`(let nested):
+                let inner = renderInlines(nested, baseFont: baseFont, baseColor: baseColor, bold: bold, italic: italic)
+                let mutable = NSMutableAttributedString(attributedString: inner)
+                mutable.addAttributes([
+                    .baselineOffset: -2,
+                    .font: fontFor(baseFont: baseFont, bold: bold, italic: italic).withSize(max(10, baseFont.pointSize - 2))
+                ], range: NSRange(location: 0, length: mutable.length))
+                output.append(mutable)
+
             case .code(let text):
                 output.append(NSAttributedString(string: text, attributes: [
                     .font: theme.codeFont,
@@ -490,6 +564,13 @@ public struct MarkdownRenderer {
                     .link: URL(string: url) as Any
                 ]
                 output.append(NSAttributedString(string: url, attributes: attrs))
+
+            case .footnoteRef(let id):
+                output.append(NSAttributedString(string: "[^\(id)]", attributes: [
+                    .font: fontFor(baseFont: baseFont, bold: bold, italic: italic).withSize(max(10, baseFont.pointSize - 2)),
+                    .foregroundColor: theme.linkColor,
+                    .baselineOffset: 4
+                ]))
 
             case .lineBreak:
                 output.append(NSAttributedString(string: "\n", attributes: [

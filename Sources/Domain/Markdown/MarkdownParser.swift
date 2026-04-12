@@ -120,6 +120,9 @@ public struct MarkdownParser {
         if let (block, consumed) = parseBlockquote(lines: lines, at: start) {
             return (block, consumed)
         }
+        if let (block, consumed) = parseFootnoteDefinition(lines: lines, at: start) {
+            return (block, consumed)
+        }
         if let (block, consumed) = parseList(lines: lines, at: start) {
             return (block, consumed)
         }
@@ -255,38 +258,6 @@ public struct MarkdownParser {
         if collected.isEmpty { return nil }
 
         return (.codeBlock(language: nil, text: collected.joined(separator: "\n")), cursor - start)
-    }
-
-    // MARK: - Blockquote
-
-    private func parseBlockquote(
-        lines: [String],
-        at start: Int
-    ) -> (MarkdownBlock, Int)? {
-        guard Self.isBlockquoteLine(lines[start]) else { return nil }
-
-        var innerLines: [String] = []
-        var cursor = start
-        while cursor < lines.count, Self.isBlockquoteLine(lines[cursor]) {
-            innerLines.append(Self.stripBlockquoteMarker(lines[cursor]))
-            cursor += 1
-        }
-
-        let nestedSource = innerLines.joined(separator: "\n")
-        let nested = parse(nestedSource)
-        return (.blockquote(blocks: nested.blocks), cursor - start)
-    }
-
-    private static func isBlockquoteLine(_ line: String) -> Bool {
-        let trimmed = leadingSpacesTrimmed(line, max: 3)
-        return trimmed.hasPrefix(">")
-    }
-
-    private static func stripBlockquoteMarker(_ line: String) -> String {
-        let trimmed = leadingSpacesTrimmed(line, max: 3)
-        var body = String(trimmed.dropFirst()) // drop '>'
-        if body.hasPrefix(" ") { body.removeFirst() }
-        return body
     }
 
     // MARK: - Lists
@@ -543,6 +514,7 @@ public struct MarkdownParser {
                 if parseAtxHeading(line) != nil { break }
                 if Self.leadingSpacesTrimmed(line, max: 3).hasPrefix("```") { break }
                 if Self.isBlockquoteLine(line) { break }
+                if parseFootnoteDefinition(lines: lines, at: cursor) != nil { break }
                 if matchListMarker(line) != nil { break }
             }
             collected.append(line)

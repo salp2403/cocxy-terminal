@@ -13,12 +13,35 @@ enum MarkdownSourceShortcutCommand: Equatable {
 
 private final class MarkdownEditorTextView: NSTextView {
     var shortcutHandler: ((NSEvent) -> Bool)?
+    var imagePasteHandler: ((Data) -> Bool)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if shortcutHandler?(event) == true {
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    override func paste(_ sender: Any?) {
+        let pasteboard = NSPasteboard.general
+        if let pngData = pasteboard.data(forType: .png),
+           imagePasteHandler?(pngData) == true {
+            return
+        }
+        if let tiffData = pasteboard.data(forType: .tiff),
+           let pngData = Self.pngData(fromTIFF: tiffData),
+           imagePasteHandler?(pngData) == true {
+            return
+        }
+        super.paste(sender)
+    }
+
+    private static func pngData(fromTIFF tiffData: Data) -> Data? {
+        guard let image = NSImage(data: tiffData),
+              let rep = image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)) else {
+            return nil
+        }
+        return rep.representation(using: .png, properties: [:])
     }
 }
 
@@ -56,6 +79,9 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
 
     /// Called when the source scroll position changes. Value is 0.0...1.0.
     var onScrollChanged: ((CGFloat) -> Void)?
+
+    /// Called when the user pastes image data into the source editor.
+    var onImagePaste: ((Data) -> Void)?
 
     private var scrollObserver: NSObjectProtocol?
 
@@ -104,6 +130,38 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
     func replaceEntireSource(with source: String) {
         let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
         applyReplacement(in: fullRange, with: source, selectedRange: NSRange(location: (source as NSString).length, length: 0))
+    }
+
+    func insertMarkdown(_ markdown: String) {
+        let selection = clampedRange(textView.selectedRange(), maxLength: (textView.string as NSString).length)
+        let insertionEnd = selection.location + (markdown as NSString).length
+        applyReplacement(
+            in: selection,
+            with: markdown,
+            selectedRange: NSRange(location: insertionEnd, length: 0)
+        )
+    }
+
+    @discardableResult
+    func toggleCheckboxAtIndex(_ index: Int, checked: Bool) -> Bool {
+        guard index >= 0 else { return false }
+        let source = textView.string as NSString
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?m)^\s*(?:[-+*]|\d+[.)])\s+(\[(?: |x|X)\])"#,
+            options: []
+        ) else {
+            return false
+        }
+
+        let matches = regex.matches(in: textView.string, range: NSRange(location: 0, length: source.length))
+        guard index < matches.count else { return false }
+        let checkboxRange = matches[index].range(at: 1)
+        guard checkboxRange.location != NSNotFound else { return false }
+
+        let replacement = checked ? "[x]" : "[ ]"
+        let caret = NSRange(location: checkboxRange.location + (replacement as NSString).length, length: 0)
+        applyReplacement(in: checkboxRange, with: replacement, selectedRange: caret)
+        return true
     }
 
     func applyBold() {
@@ -185,6 +243,11 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
         ]
         textView.shortcutHandler = { [weak self] event in
             self?.handleShortcut(event) ?? false
+        }
+        textView.imagePasteHandler = { [weak self] data in
+            guard let self, let onImagePaste = self.onImagePaste else { return false }
+            onImagePaste(data)
+            return true
         }
 
         scrollView.documentView = textView

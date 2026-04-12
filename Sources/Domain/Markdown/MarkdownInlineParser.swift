@@ -47,7 +47,7 @@ public struct MarkdownInlineParser {
 
     private static func flattenSingle(_ inline: MarkdownInline) -> MarkdownInline {
         switch inline {
-        case .text, .code, .autolink, .lineBreak, .image:
+        case .text, .code, .autolink, .lineBreak, .image, .footnoteRef:
             return inline
         case .strong(let nested):
             return .strong(inlines: flatten(nested))
@@ -55,6 +55,12 @@ public struct MarkdownInlineParser {
             return .emphasis(inlines: flatten(nested))
         case .strike(let nested):
             return .strike(inlines: flatten(nested))
+        case .highlight(let nested):
+            return .highlight(inlines: flatten(nested))
+        case .superscript(let nested):
+            return .superscript(inlines: flatten(nested))
+        case .`subscript`(let nested):
+            return .`subscript`(inlines: flatten(nested))
         case .link(let nested, let url):
             return .link(text: flatten(nested), url: url)
         }
@@ -142,6 +148,30 @@ private extension MarkdownInlineParser {
                         flushText()
                         output.append(node)
                         index = newIndex
+                    } else if let (node, newIndex) = parseSubscript(from: index) {
+                        flushText()
+                        output.append(node)
+                        index = newIndex
+                    } else {
+                        textBuffer.append(ch)
+                        index += 1
+                    }
+
+                case "=":
+                    if let (node, newIndex) = parseHighlight(from: index) {
+                        flushText()
+                        output.append(node)
+                        index = newIndex
+                    } else {
+                        textBuffer.append(ch)
+                        index += 1
+                    }
+
+                case "^":
+                    if let (node, newIndex) = parseSuperscript(from: index) {
+                        flushText()
+                        output.append(node)
+                        index = newIndex
                     } else {
                         textBuffer.append(ch)
                         index += 1
@@ -159,7 +189,11 @@ private extension MarkdownInlineParser {
                     }
 
                 case "[":
-                    if let (node, newIndex) = parseLink(from: index) {
+                    if let (node, newIndex) = parseFootnoteRef(from: index) {
+                        flushText()
+                        output.append(node)
+                        index = newIndex
+                    } else if let (node, newIndex) = parseLink(from: index) {
                         flushText()
                         output.append(node)
                         index = newIndex
@@ -172,6 +206,16 @@ private extension MarkdownInlineParser {
                     if let (node, newIndex) = parseAutolink(from: index) {
                         flushText()
                         output.append(node)
+                        index = newIndex
+                    } else {
+                        textBuffer.append(ch)
+                        index += 1
+                    }
+
+                case ":":
+                    if let (emoji, newIndex) = parseEmoji(from: index) {
+                        flushText()
+                        output.append(.text(emoji))
                         index = newIndex
                     } else {
                         textBuffer.append(ch)
@@ -345,7 +389,94 @@ private extension MarkdownInlineParser {
             return nil
         }
 
+        // MARK: Highlight
+
+        mutating func parseHighlight(from start: Int) -> (MarkdownInline, Int)? {
+            guard start + 1 < chars.count,
+                  chars[start] == "=",
+                  chars[start + 1] == "=" else { return nil }
+
+            let contentStart = start + 2
+            var i = contentStart
+            while i + 1 < chars.count {
+                if chars[i] == "\\" {
+                    i += 2
+                    continue
+                }
+                if chars[i] == "=" && chars[i + 1] == "=" {
+                    let innerText = String(chars[contentStart..<i])
+                    guard !innerText.isEmpty else { return nil }
+                    let innerNodes = MarkdownInlineParser().parse(innerText)
+                    return (.highlight(inlines: innerNodes), i + 2)
+                }
+                i += 1
+            }
+            return nil
+        }
+
+        // MARK: Superscript / Subscript
+
+        mutating func parseSuperscript(from start: Int) -> (MarkdownInline, Int)? {
+            parseSingleMarkerInline(from: start, marker: "^", wrap: { .superscript(inlines: $0) })
+        }
+
+        mutating func parseSubscript(from start: Int) -> (MarkdownInline, Int)? {
+            guard start + 1 >= chars.count || chars[start + 1] != "~" else { return nil }
+            return parseSingleMarkerInline(from: start, marker: "~", wrap: { .`subscript`(inlines: $0) })
+        }
+
+        mutating func parseSingleMarkerInline(
+            from start: Int,
+            marker: Character,
+            wrap: ([MarkdownInline]) -> MarkdownInline
+        ) -> (MarkdownInline, Int)? {
+            guard start < chars.count, chars[start] == marker else { return nil }
+            let contentStart = start + 1
+            guard contentStart < chars.count else { return nil }
+
+            var i = contentStart
+            while i < chars.count {
+                if chars[i] == "\\" {
+                    i += 2
+                    continue
+                }
+                if chars[i] == marker {
+                    let innerText = String(chars[contentStart..<i])
+                    guard !innerText.isEmpty,
+                          !innerText.hasPrefix(" "),
+                          !innerText.hasSuffix(" "),
+                          !innerText.contains("\n") else { return nil }
+                    let innerNodes = MarkdownInlineParser().parse(innerText)
+                    return (wrap(innerNodes), i + 1)
+                }
+                i += 1
+            }
+            return nil
+        }
+
         // MARK: Link
+
+        mutating func parseFootnoteRef(from start: Int) -> (MarkdownInline, Int)? {
+            guard start + 3 < chars.count,
+                  chars[start] == "[",
+                  chars[start + 1] == "^" else { return nil }
+
+            var i = start + 2
+            var idBuffer = ""
+            while i < chars.count, chars[i] != "]" {
+                if chars[i] == "\n" { return nil }
+                idBuffer.append(chars[i])
+                i += 1
+            }
+            guard i < chars.count,
+                  chars[i] == "]",
+                  !idBuffer.isEmpty,
+                  !idBuffer.contains("["),
+                  !idBuffer.contains("]") else {
+                return nil
+            }
+            return (.footnoteRef(id: idBuffer), i + 1)
+        }
 
         mutating func parseLink(from start: Int) -> (MarkdownInline, Int)? {
             guard start < chars.count, chars[start] == "[" else { return nil }
@@ -452,6 +583,25 @@ private extension MarkdownInlineParser {
             guard Self.isAutolinkURL(buffer) else { return nil }
 
             return (.autolink(url: buffer), i + 1)
+        }
+
+        // MARK: Emoji
+
+        mutating func parseEmoji(from start: Int) -> (String, Int)? {
+            guard start < chars.count, chars[start] == ":" else { return nil }
+            var i = start + 1
+            var shortcode = ""
+            while i < chars.count, chars[i] != ":" {
+                let ch = chars[i]
+                guard ch.isLetter || ch.isNumber || ch == "_" || ch == "+" || ch == "-" else {
+                    return nil
+                }
+                shortcode.append(ch)
+                i += 1
+            }
+            guard i < chars.count, chars[i] == ":", !shortcode.isEmpty else { return nil }
+            guard let emoji = MarkdownEmoji.resolve(shortcode) else { return nil }
+            return (emoji, i + 1)
         }
 
         // MARK: Character Classes

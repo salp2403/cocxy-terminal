@@ -25,6 +25,7 @@ final class MarkdownPreviewView: NSView {
     // MARK: - Properties
 
     private let webView: WKWebView
+    private let messageProxy: ScriptMessageProxy
     private var isTemplateLoaded = false
     private var latestContentGeneration: UInt64 = 0
     private var isContentUpdatePending = false
@@ -56,15 +57,22 @@ final class MarkdownPreviewView: NSView {
         }
     }
 
+    var onCheckboxToggle: ((Int, Bool) -> Void)?
+    var onClickToSource: ((Int) -> Void)?
+
     // MARK: - Init
 
     init() {
         let config = WKWebViewConfiguration()
+        let proxy = ScriptMessageProxy()
+        config.userContentController.add(proxy, name: "cocxy")
         #if DEBUG
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         #endif
+        self.messageProxy = proxy
         self.webView = WKWebView(frame: .zero, configuration: config)
         super.init(frame: .zero)
+        proxy.handler = self
         setupUI()
         loadTemplate()
     }
@@ -98,7 +106,7 @@ final class MarkdownPreviewView: NSView {
     /// Enqueues an action to execute after the template finishes loading.
     /// If already loaded, executes immediately.
     func whenReady(_ action: @escaping () -> Void) {
-        if isTemplateLoaded {
+        if isReady {
             action()
         } else {
             pendingActions.append(action)
@@ -107,7 +115,7 @@ final class MarkdownPreviewView: NSView {
 
     /// Creates a print operation for PDF export via the system print dialog.
     func createPrintOperation() -> NSPrintOperation? {
-        guard isTemplateLoaded else { return nil }
+        guard isReady else { return nil }
         let printInfo = NSPrintInfo.shared.copy() as! NSPrintInfo
         printInfo.topMargin = 36
         printInfo.bottomMargin = 36
@@ -121,7 +129,7 @@ final class MarkdownPreviewView: NSView {
     /// If the template is still loading (e.g., after a directory change), the
     /// capture is deferred until the template finishes loading.
     func captureRenderedHTML(completion: @escaping (String?) -> Void) {
-        guard isTemplateLoaded else {
+        guard isReady else {
             pendingActions.append { [weak self] in
                 self?.captureRenderedHTML(completion: completion)
             }
@@ -163,12 +171,16 @@ final class MarkdownPreviewView: NSView {
         let katexJS = loadResourceFile(named: "katex.min", ext: "js")
         let katexCSS = loadResourceFile(named: "katex.min", ext: "css")
         let autoRenderJS = loadResourceFile(named: "katex-auto-render.min", ext: "js")
+        let highlightJS = loadResourceFile(named: "highlight.min", ext: "js")
+        let highlightCSS = loadResourceFile(named: "highlight-cocxy", ext: "css")
 
         let html = MarkdownPreviewTemplate.build(
             mermaidJS: mermaidJS,
             katexJS: katexJS,
             katexCSS: katexCSS,
-            autoRenderJS: autoRenderJS
+            autoRenderJS: autoRenderJS,
+            highlightJS: highlightJS,
+            highlightCSS: highlightCSS
         )
 
         webView.loadHTMLString(html, baseURL: baseDirectory)

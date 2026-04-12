@@ -26,6 +26,9 @@ public enum MarkdownBlock: Equatable, Sendable {
     /// blockquotes, lists, headings, etc.).
     case blockquote(blocks: [MarkdownBlock])
 
+    /// A GitHub/Obsidian-style admonition rendered from `> [!TYPE]`.
+    case callout(type: MarkdownCalloutType, title: String, isFolded: Bool, blocks: [MarkdownBlock])
+
     /// An unordered or ordered list. `items` is never empty.
     case list(ordered: Bool, start: Int, items: [MarkdownListItem])
 
@@ -35,6 +38,9 @@ public enum MarkdownBlock: Equatable, Sendable {
 
     /// A GitHub-flavored table with header row, column alignments, and rows.
     case table(headers: [[MarkdownInline]], alignments: [MarkdownTableAlignment], rows: [[[MarkdownInline]]])
+
+    /// A footnote definition block (`[^id]: definition`).
+    case footnoteDefinition(id: String, blocks: [MarkdownBlock])
 
     /// A horizontal rule (`---`, `***`, `___`).
     case horizontalRule
@@ -101,6 +107,15 @@ public enum MarkdownInline: Equatable, Sendable {
     /// GFM strikethrough (`~~text~~`).
     case strike(inlines: [MarkdownInline])
 
+    /// Highlight (`==text==`).
+    case highlight(inlines: [MarkdownInline])
+
+    /// Superscript (`^text^`).
+    case superscript(inlines: [MarkdownInline])
+
+    /// Subscript (`~text~`).
+    case `subscript`(inlines: [MarkdownInline])
+
     /// Link with display text and URL. The display text is itself a list of
     /// inlines so `[**bold**](url)` round-trips correctly.
     case link(text: [MarkdownInline], url: String)
@@ -110,6 +125,9 @@ public enum MarkdownInline: Equatable, Sendable {
 
     /// Autolink (`<http://...>`). The URL doubles as display text.
     case autolink(url: String)
+
+    /// Footnote reference (`[^id]`).
+    case footnoteRef(id: String)
 
     /// Hard line break (`  \n` or `\\`).
     case lineBreak

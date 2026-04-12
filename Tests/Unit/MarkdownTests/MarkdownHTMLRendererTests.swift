@@ -18,9 +18,9 @@ struct MarkdownHTMLRendererTests {
         let result = parse("# Title\n## Subtitle\n### H3")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<h1>Title</h1>"))
-        #expect(html.contains("<h2>Subtitle</h2>"))
-        #expect(html.contains("<h3>H3</h3>"))
+        #expect(html.contains("<h1 data-source-line=\"0\">Title</h1>"))
+        #expect(html.contains("<h2 data-source-line=\"1\">Subtitle</h2>"))
+        #expect(html.contains("<h3 data-source-line=\"2\">H3</h3>"))
     }
 
     // MARK: - Paragraphs
@@ -30,7 +30,7 @@ struct MarkdownHTMLRendererTests {
         let result = parse("Hello world")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<p>Hello world</p>"))
+        #expect(html.contains("<p data-source-line=\"0\">Hello world</p>"))
     }
 
     // MARK: - Inline Formatting
@@ -72,7 +72,8 @@ struct MarkdownHTMLRendererTests {
         let result = parse("[Cocxy](https://cocxy.dev)")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<a href=\"https://cocxy.dev\">Cocxy</a>"))
+        #expect(html.contains("<a href=\"https://cocxy.dev\""))
+        #expect(html.contains(">Cocxy</a>"))
     }
 
     // MARK: - Code Blocks
@@ -82,9 +83,11 @@ struct MarkdownHTMLRendererTests {
         let result = parse("```swift\nlet x = 1\n```")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<pre><code class=\"language-swift\">"))
+        #expect(html.contains("class=\"code-block\""))
+        #expect(html.contains("<span class=\"code-lang\">swift</span>"))
+        #expect(html.contains("<code class=\"language-swift\">"))
         #expect(html.contains("let x = 1"))
-        #expect(html.contains("</code></pre>"))
+        #expect(html.contains("class=\"code-line-numbers\""))
     }
 
     @Test("mermaid code block gets special class for JS detection")
@@ -95,7 +98,7 @@ struct MarkdownHTMLRendererTests {
 
         #expect(html.contains("<pre class=\"mermaid\">"))
         #expect(html.contains("graph TD"))
-        #expect(!html.contains("<code"))
+        #expect(html.contains("code-block-mermaid"))
     }
 
     // MARK: - Lists
@@ -105,7 +108,7 @@ struct MarkdownHTMLRendererTests {
         let result = parse("- item one\n- item two")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<ul>"))
+        #expect(html.contains("<ul data-source-line=\"0\">"))
         #expect(html.contains("<li>"))
         #expect(html.contains("item one"))
         #expect(html.contains("item two"))
@@ -117,7 +120,7 @@ struct MarkdownHTMLRendererTests {
         let result = parse("1. first\n2. second")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<ol>"))
+        #expect(html.contains("<ol data-source-line=\"0\">"))
         #expect(html.contains("<li>"))
         #expect(html.contains("first"))
     }
@@ -129,6 +132,9 @@ struct MarkdownHTMLRendererTests {
 
         #expect(html.contains("checked"))
         #expect(html.contains("type=\"checkbox\""))
+        #expect(html.contains("data-checkbox-index=\"0\""))
+        #expect(html.contains("data-checkbox-index=\"1\""))
+        #expect(!html.contains("disabled"))
     }
 
     // MARK: - Blockquotes
@@ -138,7 +144,7 @@ struct MarkdownHTMLRendererTests {
         let result = parse("> This is a quote")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<blockquote>"))
+        #expect(html.contains("<blockquote data-source-line=\"0\">"))
         #expect(html.contains("This is a quote"))
         #expect(html.contains("</blockquote>"))
     }
@@ -151,7 +157,7 @@ struct MarkdownHTMLRendererTests {
         let result = parse(source)
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<table>"))
+        #expect(html.contains("<table data-source-line=\"0\">"))
         #expect(html.contains("<thead>"))
         #expect(html.contains("<th>"))
         #expect(html.contains("Name"))
@@ -167,7 +173,7 @@ struct MarkdownHTMLRendererTests {
         let result = parse("---")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<hr"))
+        #expect(html.contains("<hr data-source-line=\"0\""))
     }
 
     // MARK: - HTML Escaping
@@ -229,7 +235,7 @@ struct MarkdownHTMLRendererTests {
 
         #expect(html.contains("frontmatter"))
         #expect(html.contains("Test"))
-        #expect(html.contains("<h1>Hello</h1>"))
+        #expect(html.contains("<h1 data-source-line=\"3\">Hello</h1>"))
     }
 
     @Test("renderDocument omits frontmatter section when empty")
@@ -239,7 +245,7 @@ struct MarkdownHTMLRendererTests {
         let html = MarkdownHTMLRenderer.renderDocument(doc)
 
         #expect(!html.contains("frontmatter"))
-        #expect(html.contains("<h1>Hello</h1>"))
+        #expect(html.contains("<h1 data-source-line=\"0\">Hello</h1>"))
     }
 
     // MARK: - Frontmatter Edge Cases
@@ -295,7 +301,7 @@ struct MarkdownHTMLRendererTests {
         ]
         let result = MarkdownParseResult(blocks: blocks, locations: [])
         let html = MarkdownHTMLRenderer.render(result)
-        #expect(html.contains("<img src=\"pic.png\" alt=\"a photo\" />"))
+        #expect(html.contains("<img src=\"pic.png\" alt=\"a photo\" loading=\"lazy\" />"))
     }
 
     @Test("image with special characters in alt/url is escaped")

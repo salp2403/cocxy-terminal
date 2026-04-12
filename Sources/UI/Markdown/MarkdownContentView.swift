@@ -120,6 +120,7 @@ final class MarkdownContentView: NSView {
         wireToolbarCallbacks()
         wireOutlineCallback()
         wireSourceCallbacks()
+        wirePreviewCallbacks()
         registerForDraggedTypes([.fileURL])
 
         if let path = filePath {
@@ -346,6 +347,23 @@ final class MarkdownContentView: NSView {
         }
         sourceView.onShortcutCommand = { [weak self] command in
             self?.handleSourceShortcut(command) ?? false
+        }
+        sourceView.onImagePaste = { [weak self] imageData in
+            self?.handlePastedImageData(imageData)
+        }
+    }
+
+    private func wirePreviewCallbacks() {
+        previewView.onCheckboxToggle = { [weak self] index, checked in
+            _ = self?.sourceView.toggleCheckboxAtIndex(index, checked: checked)
+        }
+        previewView.onClickToSource = { [weak self] sourceLine in
+            guard let self else { return }
+            if self.mode == .preview {
+                self.mode = .split
+            }
+            self.sourceView.scrollToSourceLine(sourceLine)
+            self.sourceView.focusEditor()
         }
     }
 

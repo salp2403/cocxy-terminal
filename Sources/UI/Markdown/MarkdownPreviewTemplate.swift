@@ -5,27 +5,19 @@ import Foundation
 
 /// Builds the complete HTML page loaded once into the WKWebView.
 ///
-/// The template embeds Catppuccin Mocha CSS and reserves a `<div id="content">`
-/// that is updated via `evaluateJavaScript("updateContent('...')")` each time
-/// the document changes. Mermaid and KaTeX scripts run after each update.
-///
-/// The heavy JS libraries (Mermaid ~3MB, KaTeX ~270KB) load once on the
-/// initial page load and persist across content updates.
+/// The template embeds Catppuccin Mocha CSS and bundled JavaScript
+/// dependencies. Swift updates only `#content`, while the template keeps
+/// reusable infrastructure warm: Mermaid, KaTeX, Highlight.js, TOC, lightbox,
+/// footnote popovers, copy buttons, checkbox messaging, and click-to-source.
 enum MarkdownPreviewTemplate {
 
-    /// Builds the full HTML page with CSS and JS library placeholders.
-    ///
-    /// - Parameters:
-    ///   - mermaidJS: Contents of `mermaid.min.js`, or empty to skip.
-    ///   - katexJS: Contents of `katex.min.js`, or empty to skip.
-    ///   - katexCSS: Contents of `katex.min.css`, or empty to skip.
-    ///   - autoRenderJS: Contents of `katex-auto-render.min.js`, or empty to skip.
-    /// - Returns: A complete HTML document string.
     static func build(
         mermaidJS: String = "",
         katexJS: String = "",
         katexCSS: String = "",
-        autoRenderJS: String = ""
+        autoRenderJS: String = "",
+        highlightJS: String = "",
+        highlightCSS: String = ""
     ) -> String {
         """
         <!DOCTYPE html>
@@ -35,13 +27,19 @@ enum MarkdownPreviewTemplate {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <style>\(previewCSS)</style>
         \(katexCSS.isEmpty ? "" : "<style>\(katexCSS)</style>")
+        \(highlightCSS.isEmpty ? "" : "<style>\(highlightCSS)</style>")
         \(katexJS.isEmpty ? "" : "<script>\(katexJS)</script>")
         \(autoRenderJS.isEmpty ? "" : "<script>\(autoRenderJS)</script>")
+        \(highlightJS.isEmpty ? "" : "<script>\(highlightJS)</script>")
         </head>
         <body>
         <button id="toc-toggle" title="Table of Contents">&#9776;</button>
         <div id="toc-panel"></div>
         <div id="content"></div>
+        <div id="footnote-popover" class="footnote-popover" hidden></div>
+        <div id="lightbox-overlay" class="lightbox-overlay" hidden>
+          <img id="lightbox-img" class="lightbox-img" alt="" />
+        </div>
         \(mermaidJS.isEmpty ? "" : "<script>\(mermaidJS)</script>")
         <script>\(updateScript)</script>
         </body>
@@ -49,52 +47,79 @@ enum MarkdownPreviewTemplate {
         """
     }
 
-    /// JavaScript function injected into the page. Called from Swift via
-    /// `evaluateJavaScript("updateContent('...')")` to replace the body
-    /// content and re-run Mermaid/KaTeX rendering.
     private static var updateScript: String {
         """
+        function postPreviewMessage(type, payload) {
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cocxy) {
+                window.webkit.messageHandlers.cocxy.postMessage({ type: type, payload: payload });
+            }
+        }
+
+        function renderMermaid(root) {
+            if (typeof mermaid === 'undefined') return;
+            try {
+                root.querySelectorAll('.mermaid[data-processed]').forEach(function(node) {
+                    node.removeAttribute('data-processed');
+                });
+                mermaid.run({ nodes: root.querySelectorAll('.mermaid') });
+            } catch (error) {
+                console.log('Mermaid render error:', error);
+            }
+        }
+
+        function renderMath(root) {
+            if (typeof renderMathInElement === 'undefined') return;
+            try {
+                renderMathInElement(root, {
+                    delimiters: [
+                        { left: '$$', right: '$$', display: true },
+                        { left: '$', right: '$', display: false }
+                    ],
+                    throwOnError: false
+                });
+            } catch (error) {
+                console.log('KaTeX render error:', error);
+            }
+        }
+
+        function decorateCodeBlocks(root) {
+            root.querySelectorAll('.code-block').forEach(function(block) {
+                var pre = block.querySelector('pre');
+                var code = block.querySelector('code');
+                var rawText = code ? code.textContent : (pre ? pre.textContent : '');
+                var lineCount = rawText.length === 0 ? 1 : rawText.split('\\n').length;
+                var gutter = block.querySelector('.code-line-numbers');
+                if (!gutter) return;
+                var numbers = [];
+                for (var i = 1; i <= lineCount; i++) {
+                    numbers.push(String(i));
+                }
+                gutter.textContent = numbers.join('\\n');
+            });
+        }
+
+        function highlightCode(root) {
+            if (typeof hljs !== 'undefined') {
+                root.querySelectorAll('pre code').forEach(function(code) {
+                    hljs.highlightElement(code);
+                });
+            }
+            decorateCodeBlocks(root);
+        }
+
         function updateContent(html) {
-            var el = document.getElementById('content');
-            if (!el) return;
+            var content = document.getElementById('content');
+            if (!content) return;
 
-            // Preserve scroll position during live editing so the preview
-            // does not jump to the top on every keystroke.
             var savedY = window.scrollY;
+            content.innerHTML = html;
 
-            el.innerHTML = html;
+            renderMermaid(content);
+            renderMath(content);
+            highlightCode(content);
 
-            // Re-render Mermaid diagrams
-            if (typeof mermaid !== 'undefined') {
-                try {
-                    el.querySelectorAll('.mermaid[data-processed]').forEach(function(node) {
-                        node.removeAttribute('data-processed');
-                    });
-                    mermaid.run({ nodes: el.querySelectorAll('.mermaid') });
-                } catch(e) {
-                    console.log('Mermaid render error:', e);
-                }
-            }
-
-            // Re-render KaTeX math expressions
-            if (typeof renderMathInElement !== 'undefined') {
-                try {
-                    renderMathInElement(el, {
-                        delimiters: [
-                            { left: '$$', right: '$$', display: true },
-                            { left: '$', right: '$', display: false }
-                        ],
-                        throwOnError: false
-                    });
-                } catch(e) {
-                    console.log('KaTeX render error:', e);
-                }
-            }
-
-            // Restore scroll position after DOM update.
             window.scrollTo(0, savedY);
 
-            // Rebuild floating TOC if it is visible
             var tocPanel = document.getElementById('toc-panel');
             if (tocPanel && tocPanel.classList.contains('visible')) {
                 buildTOC();
@@ -102,7 +127,7 @@ enum MarkdownPreviewTemplate {
         }
 
         function scrollToHeading(title) {
-            var headings = document.querySelectorAll('h1,h2,h3,h4,h5,h6');
+            var headings = document.querySelectorAll('#content h1, #content h2, #content h3, #content h4, #content h5, #content h6');
             for (var i = 0; i < headings.length; i++) {
                 if (headings[i].textContent.trim() === title) {
                     headings[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -112,7 +137,112 @@ enum MarkdownPreviewTemplate {
             return false;
         }
 
-        // Initialize Mermaid with dark theme on first load
+        function buildTOC() {
+            var panel = document.getElementById('toc-panel');
+            if (!panel) return;
+            while (panel.firstChild) panel.removeChild(panel.firstChild);
+
+            var headings = document.querySelectorAll('#content h1, #content h2, #content h3, #content h4, #content h5, #content h6');
+            if (headings.length === 0) {
+                var empty = document.createElement('div');
+                empty.className = 'toc-empty';
+                empty.textContent = 'No headings';
+                panel.appendChild(empty);
+                return;
+            }
+
+            headings.forEach(function(heading, index) {
+                var level = heading.tagName.toLowerCase();
+                var id = 'toc-heading-' + index;
+                heading.id = id;
+
+                var link = document.createElement('a');
+                link.href = '#';
+                link.className = 'toc-' + level;
+                link.textContent = heading.textContent.trim();
+                link.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+                panel.appendChild(link);
+            });
+        }
+
+        function closeLightbox() {
+            var overlay = document.getElementById('lightbox-overlay');
+            if (!overlay) return;
+            overlay.hidden = true;
+            overlay.classList.remove('visible');
+        }
+
+        function showLightbox(src, alt) {
+            var overlay = document.getElementById('lightbox-overlay');
+            var image = document.getElementById('lightbox-img');
+            if (!overlay || !image) return;
+            image.src = src;
+            image.alt = alt || '';
+            overlay.hidden = false;
+            overlay.classList.add('visible');
+        }
+
+        function copyCode(button) {
+            var block = button.closest('.code-block');
+            if (!block) return;
+            var pre = block.querySelector('pre');
+            var text = pre ? pre.textContent : '';
+            if (!text) return;
+
+            var finish = function(success) {
+                var previous = button.textContent;
+                button.textContent = success ? 'Copied' : 'Copy failed';
+                window.setTimeout(function() {
+                    button.textContent = previous;
+                }, 1200);
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    finish(true);
+                }).catch(function() {
+                    finish(false);
+                });
+                return;
+            }
+
+            try {
+                var textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                var copied = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                finish(copied);
+            } catch (_) {
+                finish(false);
+            }
+        }
+
+        function showFootnotePopover(anchor) {
+            var preview = anchor.getAttribute('data-footnote-preview');
+            if (!preview) return;
+            var popover = document.getElementById('footnote-popover');
+            if (!popover) return;
+            popover.textContent = preview;
+            popover.hidden = false;
+            var rect = anchor.getBoundingClientRect();
+            popover.style.left = Math.max(12, rect.left + window.scrollX) + 'px';
+            popover.style.top = (rect.bottom + window.scrollY + 10) + 'px';
+        }
+
+        function hideFootnotePopover() {
+            var popover = document.getElementById('footnote-popover');
+            if (!popover) return;
+            popover.hidden = true;
+            popover.textContent = '';
+        }
+
         if (typeof mermaid !== 'undefined') {
             mermaid.initialize({
                 startOnLoad: false,
@@ -133,59 +263,77 @@ enum MarkdownPreviewTemplate {
             });
         }
 
-        // Floating TOC — uses DOM API (createElement + textContent) to avoid
-        // re-injecting unescaped heading text via innerHTML, which would break
-        // the renderer's XSS guarantee.
-        function buildTOC() {
-            var panel = document.getElementById('toc-panel');
-            if (!panel) return;
-            var headings = document.querySelectorAll('#content h1, #content h2, #content h3, #content h4, #content h5, #content h6');
-
-            // Clear previous TOC entries safely
-            while (panel.firstChild) panel.removeChild(panel.firstChild);
-
-            if (headings.length === 0) {
-                var empty = document.createElement('div');
-                empty.className = 'toc-empty';
-                empty.textContent = 'No headings';
-                panel.appendChild(empty);
-                return;
-            }
-
-            for (var i = 0; i < headings.length; i++) {
-                var h = headings[i];
-                var level = h.tagName.toLowerCase();
-                var id = 'toc-heading-' + i;
-                h.id = id;
-
-                var link = document.createElement('a');
-                link.href = '#';
-                link.className = 'toc-' + level;
-                link.setAttribute('data-target', id);
-                // textContent is safe: it sets text, never parses HTML
-                link.textContent = h.textContent.trim();
-                link.addEventListener('click', (function(targetId) {
-                    return function(e) {
-                        e.preventDefault();
-                        var el = document.getElementById(targetId);
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    };
-                })(id));
-                panel.appendChild(link);
-            }
-        }
-
-        // Toggle TOC panel visibility
-        var tocToggle = document.getElementById('toc-toggle');
-        if (tocToggle) {
-            tocToggle.addEventListener('click', function() {
+        document.addEventListener('click', function(event) {
+            var tocToggle = event.target.closest('#toc-toggle');
+            if (tocToggle) {
                 var panel = document.getElementById('toc-panel');
                 if (!panel) return;
                 var isVisible = panel.classList.toggle('visible');
                 tocToggle.classList.toggle('active', isVisible);
                 if (isVisible) buildTOC();
+                return;
+            }
+
+            var codeButton = event.target.closest('.code-copy');
+            if (codeButton) {
+                event.preventDefault();
+                copyCode(codeButton);
+                return;
+            }
+
+            var image = event.target.closest('#content img');
+            if (image) {
+                event.preventDefault();
+                showLightbox(image.getAttribute('src'), image.getAttribute('alt'));
+                return;
+            }
+
+            if (event.target.id === 'lightbox-overlay') {
+                closeLightbox();
+            }
+        });
+
+        document.addEventListener('change', function(event) {
+            var checkbox = event.target.closest('input[data-checkbox-index]');
+            if (!checkbox) return;
+            var index = parseInt(checkbox.getAttribute('data-checkbox-index'), 10);
+            if (Number.isNaN(index)) return;
+            postPreviewMessage('checkboxToggle', {
+                index: index,
+                checked: checkbox.checked
             });
-        }
+        });
+
+        document.addEventListener('dblclick', function(event) {
+            var node = event.target;
+            while (node && node !== document.body) {
+                if (node.dataset && node.dataset.sourceLine !== undefined) {
+                    var sourceLine = parseInt(node.dataset.sourceLine, 10);
+                    if (!Number.isNaN(sourceLine)) {
+                        postPreviewMessage('clickToSource', { sourceLine: sourceLine });
+                    }
+                    return;
+                }
+                node = node.parentElement;
+            }
+        });
+
+        document.addEventListener('mouseover', function(event) {
+            var anchor = event.target.closest('.footnote-ref a[data-footnote-preview]');
+            if (anchor) showFootnotePopover(anchor);
+        });
+
+        document.addEventListener('mouseout', function(event) {
+            var anchor = event.target.closest('.footnote-ref a[data-footnote-preview]');
+            if (anchor) hideFootnotePopover();
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeLightbox();
+                hideFootnotePopover();
+            }
+        });
 
         function scrollToFraction(fraction) {
             var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
@@ -194,9 +342,6 @@ enum MarkdownPreviewTemplate {
         """
     }
 
-    // MARK: - Catppuccin Mocha CSS
-
-    /// CSS using exact Catppuccin Mocha hex values from CocxyColors.swift.
     static var previewCSS: String {
         """
         :root {
@@ -235,8 +380,8 @@ enum MarkdownPreviewTemplate {
         }
 
         #content > *:first-child { margin-top: 0; }
+        [data-source-line] { scroll-margin-top: 20px; }
 
-        /* Headings */
         h1, h2, h3, h4, h5, h6 {
             margin: 1.4em 0 0.6em;
             font-weight: 600;
@@ -246,20 +391,16 @@ enum MarkdownPreviewTemplate {
         h2 { font-size: 1.5em; color: var(--mauve); border-bottom: 1px solid var(--surface0); padding-bottom: 0.2em; }
         h3 { font-size: 1.25em; color: var(--teal); }
         h4 { font-size: 1.1em; color: var(--lavender); }
-        h5 { font-size: 1.0em; color: var(--sky); }
+        h5 { font-size: 1em; color: var(--sky); }
         h6 { font-size: 0.9em; color: var(--peach); }
 
-        /* Paragraphs */
         p { margin: 0.8em 0; }
-
-        /* Links */
         a { color: var(--blue); text-decoration: none; }
         a:hover { text-decoration: underline; }
-
-        /* Strong / Emphasis */
         strong { font-weight: 600; }
+        mark { background: var(--yellow); color: var(--base); padding: 0 0.18em; border-radius: 3px; }
+        sup, sub { font-size: 0.75em; line-height: 0; }
 
-        /* Inline code */
         code {
             font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
             font-size: 0.9em;
@@ -269,15 +410,62 @@ enum MarkdownPreviewTemplate {
             border-radius: 4px;
         }
 
-        /* Code blocks */
-        pre {
+        .code-block {
             background: var(--mantle);
             border: 1px solid var(--surface0);
-            border-radius: 6px;
-            padding: 14px 16px;
+            border-radius: 8px;
+            overflow: hidden;
             margin: 1em 0;
-            overflow-x: auto;
+        }
+        .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 14px;
+            background: rgba(49, 50, 68, 0.85);
+            border-bottom: 1px solid var(--surface1);
+        }
+        .code-lang {
+            font-size: 0.78em;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--subtext1);
+        }
+        .code-copy {
+            appearance: none;
+            border: 1px solid var(--surface1);
+            border-radius: 6px;
+            background: var(--surface0);
+            color: var(--text);
+            padding: 4px 10px;
+            font-size: 0.82em;
+            cursor: pointer;
+        }
+        .code-copy:hover { background: var(--surface1); }
+        .code-scroller {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: stretch;
+        }
+        .code-line-numbers {
+            white-space: pre;
+            user-select: none;
+            padding: 14px 10px 14px 14px;
+            text-align: right;
+            color: var(--overlay0);
+            background: rgba(24, 24, 37, 0.9);
+            border-right: 1px solid var(--surface0);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85em;
             line-height: 1.5;
+        }
+        pre {
+            margin: 0;
+            overflow-x: auto;
+            padding: 14px 16px;
+            line-height: 1.5;
+            background: transparent;
         }
         pre code {
             background: none;
@@ -285,16 +473,11 @@ enum MarkdownPreviewTemplate {
             color: var(--text);
             font-size: 0.85em;
         }
-
-        /* Mermaid diagrams */
         pre.mermaid {
-            background: var(--mantle);
-            border: 1px solid var(--surface0);
             text-align: center;
-            padding: 16px;
+            min-height: 48px;
         }
 
-        /* Blockquotes */
         blockquote {
             border-left: 3px solid var(--blue);
             padding: 0.4em 1em;
@@ -305,13 +488,43 @@ enum MarkdownPreviewTemplate {
         }
         blockquote p { margin: 0.4em 0; }
 
-        /* Lists */
+        .callout {
+            margin: 1em 0;
+            border: 1px solid var(--surface1);
+            border-left-width: 4px;
+            border-radius: 10px;
+            background: rgba(24, 24, 37, 0.92);
+            overflow: hidden;
+        }
+        .callout-summary {
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .callout-summary::-webkit-details-marker { display: none; }
+        .callout-body { padding: 0 14px 12px; }
+        .callout-note { border-left-color: var(--blue); }
+        .callout-tip { border-left-color: var(--green); }
+        .callout-important { border-left-color: var(--mauve); }
+        .callout-warning { border-left-color: var(--yellow); }
+        .callout-caution { border-left-color: var(--red); }
+        .callout-abstract { border-left-color: var(--teal); }
+        .callout-todo { border-left-color: var(--lavender); }
+        .callout-bug { border-left-color: var(--red); }
+
         ul, ol { margin: 0.8em 0; padding-left: 1.8em; }
         li { margin: 0.3em 0; }
         li.task-item { list-style: none; margin-left: -1.4em; }
-        li.task-item input[type="checkbox"] { margin-right: 0.5em; }
+        li.task-item input[type="checkbox"] {
+            margin-right: 0.5em;
+            accent-color: var(--blue);
+            cursor: pointer;
+        }
 
-        /* Tables */
         table {
             border-collapse: collapse;
             margin: 1em 0;
@@ -330,20 +543,15 @@ enum MarkdownPreviewTemplate {
         }
         tr:nth-child(even) td { background: rgba(49, 50, 68, 0.3); }
 
-        /* Horizontal rule */
         hr {
             border: none;
             border-top: 1px solid var(--surface1);
             margin: 1.5em 0;
         }
 
-        /* Strikethrough */
         del { color: var(--overlay0); text-decoration: line-through; }
-
-        /* KaTeX display math */
         .katex-display { margin: 1em 0; overflow-x: auto; }
 
-        /* Frontmatter */
         .frontmatter {
             margin: 0 0 1.5em;
             padding: 12px 16px;
@@ -358,78 +566,102 @@ enum MarkdownPreviewTemplate {
         .fm-value { color: var(--subtext1); }
         .fm-tag {
             display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-right: 6px;
             background: var(--surface0);
             color: var(--blue);
-            padding: 1px 8px;
-            border-radius: 10px;
-            margin: 1px 3px 1px 0;
-            font-size: 0.9em;
         }
 
-        /* Images */
-        img { max-width: 100%; border-radius: 4px; margin: 0.5em 0; }
+        .footnotes {
+            margin-top: 2em;
+            color: var(--subtext1);
+            font-size: 0.92em;
+        }
+        .footnotes ol { padding-left: 1.4em; }
+        .footnotes li { margin-bottom: 0.8em; }
+        .footnote-ref a { font-size: 0.78em; vertical-align: super; }
+        .footnote-backref { margin-left: 0.4em; }
+        .footnote-popover {
+            position: absolute;
+            max-width: 320px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: var(--mantle);
+            border: 1px solid var(--surface1);
+            color: var(--text);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+            z-index: 2100;
+            font-size: 0.85em;
+        }
 
-        /* Selection */
-        ::selection { background: rgba(137, 180, 250, 0.3); }
-
-        /* Floating TOC */
         #toc-toggle {
             position: fixed;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            width: 28px;
-            height: 28px;
-            border-radius: 6px;
+            top: 14px;
+            right: 16px;
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
             border: 1px solid var(--surface1);
-            background: var(--mantle);
-            color: var(--subtext0);
-            font-size: 14px;
+            background: rgba(49, 50, 68, 0.88);
+            color: var(--text);
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0.7;
-            transition: opacity 0.15s, background 0.15s;
+            z-index: 1200;
         }
-        #toc-toggle:hover { opacity: 1; background: var(--surface0); }
-        #toc-toggle.active { opacity: 1; color: var(--blue); border-color: var(--blue); }
-
+        #toc-toggle.active { background: var(--surface1); }
         #toc-panel {
             position: fixed;
-            top: 44px;
-            right: 10px;
-            z-index: 999;
-            width: 220px;
-            max-height: 60vh;
+            top: 56px;
+            right: 16px;
+            width: 240px;
+            max-height: calc(100vh - 80px);
             overflow-y: auto;
-            background: var(--mantle);
-            border: 1px solid var(--surface0);
-            border-radius: 8px;
-            padding: 10px 0;
+            border-radius: 10px;
+            background: rgba(24, 24, 37, 0.96);
+            border: 1px solid var(--surface1);
+            box-shadow: 0 16px 38px rgba(0, 0, 0, 0.35);
+            padding: 12px;
             display: none;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+            z-index: 1200;
         }
         #toc-panel.visible { display: block; }
         #toc-panel a {
             display: block;
-            padding: 3px 14px;
+            padding: 4px 0;
             color: var(--subtext1);
-            text-decoration: none;
-            font-size: 12px;
-            line-height: 1.5;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
-        #toc-panel a:hover { background: var(--surface0); color: var(--text); }
-        #toc-panel a.toc-h1 { font-weight: 600; color: var(--blue); padding-left: 14px; }
-        #toc-panel a.toc-h2 { padding-left: 24px; }
-        #toc-panel a.toc-h3 { padding-left: 34px; color: var(--overlay0); }
-        #toc-panel a.toc-h4,
-        #toc-panel a.toc-h5,
-        #toc-panel a.toc-h6 { padding-left: 44px; color: var(--overlay0); font-size: 11px; }
-        #toc-panel .toc-empty { padding: 8px 14px; color: var(--overlay0); font-style: italic; font-size: 12px; }
+        #toc-panel .toc-h1 { padding-left: 0; color: var(--text); }
+        #toc-panel .toc-h2 { padding-left: 10px; }
+        #toc-panel .toc-h3 { padding-left: 20px; }
+        #toc-panel .toc-h4 { padding-left: 30px; }
+        #toc-panel .toc-h5 { padding-left: 40px; }
+        #toc-panel .toc-h6 { padding-left: 50px; }
+        .toc-empty { color: var(--subtext0); }
+
+        .lightbox-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(17, 17, 27, 0.86);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 2200;
+        }
+        .lightbox-overlay.visible { display: flex; }
+        .lightbox-img {
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 14px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            cursor: zoom-in;
+        }
         """
     }
 }
