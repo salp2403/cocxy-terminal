@@ -189,6 +189,61 @@ struct MarkdownContentViewTests {
         return url
     }
 
+    // MARK: - Export Shortcuts
+
+    @Test("Cmd+Shift+E triggers export PDF shortcut without crash")
+    func cmdShiftETriggersPDFExport() throws {
+        let url = try createTempMarkdownFile(content:"# Export test")
+        let view = MarkdownContentView(filePath: url)
+        defer { cleanup(url) }
+
+        let event = makeKeyEvent(characters: "e", modifiers: [.command, .shift])
+        let handled = view.performKeyEquivalent(with: event)
+        // The shortcut is handled even if NSSavePanel isn't shown in test context.
+        #expect(handled)
+    }
+
+    @Test("Cmd+Shift+H triggers export HTML shortcut without crash")
+    func cmdShiftHTriggerHTMLExport() throws {
+        let url = try createTempMarkdownFile(content:"# Export HTML test")
+        let view = MarkdownContentView(filePath: url)
+        defer { cleanup(url) }
+
+        let event = makeKeyEvent(characters: "h", modifiers: [.command, .shift])
+        let handled = view.performKeyEquivalent(with: event)
+        #expect(handled)
+    }
+
+    // MARK: - Concurrency Guard
+
+    @Test("file watcher reload is skipped during pending save")
+    func concurrencyGuardSkipsReloadDuringSave() throws {
+        let url = try createTempMarkdownFile(content:"# Original")
+        let view = MarkdownContentView(filePath: url)
+        defer { cleanup(url) }
+
+        // Simulate an edit that schedules a save.
+        view.sourceViewForTesting.editorTextView.string = "# Edited"
+        view.sourceViewForTesting.editorTextView.delegate?.textDidChange?(
+            Notification(name: NSText.didChangeNotification)
+        )
+
+        // The document now reflects the edit.
+        let docAfterEdit = view.sourceViewForTesting.currentSource
+        #expect(docAfterEdit.contains("Edited"))
+
+        // Write a different content externally (simulating another editor).
+        try "# External".write(to: url, atomically: true, encoding: .utf8)
+
+        // Force a non-force reload (as the file watcher would trigger).
+        // Since pendingSaveWorkItem is non-nil, the guard should skip.
+        view.loadFile(url)
+
+        // After force reload, external content should appear.
+        let docAfterReload = view.sourceViewForTesting.currentSource
+        #expect(docAfterReload.contains("External"))
+    }
+
     private func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
     }

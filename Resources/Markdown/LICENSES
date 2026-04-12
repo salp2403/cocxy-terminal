@@ -1,0 +1,12 @@
+Bundled third-party libraries for local-only markdown preview rendering.
+These files are loaded by WKWebView from the app bundle. Zero network calls.
+
+mermaid.min.js
+  Library: Mermaid (https://mermaid.js.org)
+  License: MIT
+  Version: 11.x
+
+katex.min.js, katex.min.css, katex-auto-render.min.js
+  Library: KaTeX (https://katex.org)
+  License: MIT
+  Version: 0.16.x

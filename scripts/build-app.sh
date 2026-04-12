@@ -106,6 +106,11 @@ if [ -d "${PROJECT_ROOT}/Resources/Fonts" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Fonts" "${RESOURCES}/Fonts"
 fi
 
+# Step 6e: Copy markdown preview resources (Mermaid, KaTeX).
+if [ -d "${PROJECT_ROOT}/Resources/Markdown" ]; then
+    cp -R "${PROJECT_ROOT}/Resources/Markdown" "${RESOURCES}/Markdown"
+fi
+
 # Step 7: Also build the CLI companion and place it in Resources.
 echo "==> Building CLI companion..."
 swift build --target cocxy ${SWIFT_FLAGS} 2>&1 | tail -1

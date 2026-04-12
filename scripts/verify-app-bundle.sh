@@ -88,7 +88,16 @@ echo ""
 echo "[Assets]"
 check_exists "$RESOURCES/AppIcon.png" "App icon"
 
-# 8. Themes (optional but expected)
+# 8. Markdown preview resources (Mermaid, KaTeX)
+echo ""
+echo "[Markdown Preview]"
+check_exists "$RESOURCES/Markdown" "Markdown resources directory"
+check_exists "$RESOURCES/Markdown/mermaid.min.js" "Mermaid JS"
+check_exists "$RESOURCES/Markdown/katex.min.js" "KaTeX JS"
+check_exists "$RESOURCES/Markdown/katex.min.css" "KaTeX CSS"
+check_exists "$RESOURCES/Markdown/katex-auto-render.min.js" "KaTeX auto-render"
+
+# 9. Themes (optional but expected)
 echo ""
 echo "[Themes]"
 if [ -d "$RESOURCES/Themes" ]; then

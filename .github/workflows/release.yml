@@ -130,6 +130,7 @@ jobs:
             cp -R Resources/shell-integration "$RESOURCES_DIR/" || true
           [ -d Resources/defaults ] && cp -R Resources/defaults "$RESOURCES_DIR/" || true
           [ -d Resources/Sounds ] && cp -R Resources/Sounds "$RESOURCES_DIR/" || true
+          [ -d Resources/Markdown ] && cp -R Resources/Markdown "$RESOURCES_DIR/" || true
 
       - name: Verify app bundle contents
         run: |

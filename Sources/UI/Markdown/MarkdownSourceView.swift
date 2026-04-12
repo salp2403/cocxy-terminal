@@ -54,6 +54,11 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
     /// Called for global commands that the host panel should handle.
     var onShortcutCommand: ((MarkdownSourceShortcutCommand) -> Bool)?
 
+    /// Called when the source scroll position changes. Value is 0.0...1.0.
+    var onScrollChanged: ((CGFloat) -> Void)?
+
+    private var scrollObserver: NSObjectProtocol?
+
     internal var currentSource: String { textView.string }
     internal var selectedSourceRange: NSRange { textView.selectedRange() }
     internal var editorTextView: NSTextView { textView }
@@ -190,6 +195,30 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.emitScrollPosition()
+            }
+        }
+        scrollView.contentView.postsBoundsChangedNotifications = true
+    }
+
+    private func emitScrollPosition() {
+        guard let onScrollChanged else { return }
+        let contentHeight = scrollView.documentView?.frame.height ?? 0
+        let visibleHeight = scrollView.contentSize.height
+        let maxScroll = contentHeight - visibleHeight
+        guard maxScroll > 0 else {
+            onScrollChanged(0)
+            return
+        }
+        let fraction = min(1.0, max(0.0, scrollView.contentView.bounds.origin.y / maxScroll))
+        onScrollChanged(fraction)
     }
 
     // MARK: - Rendering

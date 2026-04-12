@@ -20,6 +20,8 @@ final class MarkdownToolbarView: NSView {
     private let iconView = NSImageView()
     private let fileNameLabel = NSTextField(labelWithString: "Untitled.md")
     private let modeSegmented = NSSegmentedControl()
+    private let exportPDFButton = NSButton()
+    private let exportHTMLButton = NSButton()
     private let outlineToggleButton = NSButton()
     private let reloadButton = NSButton()
 
@@ -54,6 +56,12 @@ final class MarkdownToolbarView: NSView {
 
     /// Invoked when the reload button is clicked.
     var onReload: (() -> Void)?
+
+    /// Invoked when Export PDF is clicked.
+    var onExportPDF: (() -> Void)?
+
+    /// Invoked when Export HTML is clicked.
+    var onExportHTML: (() -> Void)?
 
     // MARK: - Init
 
@@ -103,6 +111,24 @@ final class MarkdownToolbarView: NSView {
         modeSegmented.translatesAutoresizingMaskIntoConstraints = false
         addSubview(modeSegmented)
 
+        // Export PDF
+        configureIconButton(
+            exportPDFButton,
+            systemName: "arrow.down.doc",
+            accessibility: "Export PDF",
+            action: #selector(exportPDFClicked)
+        )
+        addSubview(exportPDFButton)
+
+        // Export HTML
+        configureIconButton(
+            exportHTMLButton,
+            systemName: "globe",
+            accessibility: "Export HTML",
+            action: #selector(exportHTMLClicked)
+        )
+        addSubview(exportHTMLButton)
+
         // Outline toggle
         configureIconButton(
             outlineToggleButton,
@@ -142,7 +168,17 @@ final class MarkdownToolbarView: NSView {
             outlineToggleButton.trailingAnchor.constraint(equalTo: reloadButton.leadingAnchor, constant: -4),
             outlineToggleButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             outlineToggleButton.widthAnchor.constraint(equalToConstant: 22),
-            outlineToggleButton.heightAnchor.constraint(equalToConstant: 22)
+            outlineToggleButton.heightAnchor.constraint(equalToConstant: 22),
+
+            exportHTMLButton.trailingAnchor.constraint(equalTo: outlineToggleButton.leadingAnchor, constant: -4),
+            exportHTMLButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            exportHTMLButton.widthAnchor.constraint(equalToConstant: 22),
+            exportHTMLButton.heightAnchor.constraint(equalToConstant: 22),
+
+            exportPDFButton.trailingAnchor.constraint(equalTo: exportHTMLButton.leadingAnchor, constant: -4),
+            exportPDFButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            exportPDFButton.widthAnchor.constraint(equalToConstant: 22),
+            exportPDFButton.heightAnchor.constraint(equalToConstant: 22)
         ])
     }
 
@@ -178,6 +214,14 @@ final class MarkdownToolbarView: NSView {
 
     @objc private func reloadClicked() {
         onReload?()
+    }
+
+    @objc private func exportPDFClicked() {
+        onExportPDF?()
+    }
+
+    @objc private func exportHTMLClicked() {
+        onExportHTML?()
     }
 
     // MARK: - Helpers

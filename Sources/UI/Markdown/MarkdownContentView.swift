@@ -142,6 +142,13 @@ final class MarkdownContentView: NSView {
     // MARK: - Loading / Saving
 
     private func reloadFromDisk(_ url: URL, force: Bool) {
+        // Concurrency guard: if a save is in flight, the file watcher event
+        // was triggered by our own write. Skip the reload to avoid
+        // overwriting in-progress local edits with the file we just saved.
+        if !force, pendingSaveWorkItem != nil {
+            return
+        }
+
         guard let rawContent = try? String(contentsOf: url, encoding: .utf8) else {
             let errorText = "Failed to load file: \(url.lastPathComponent)"
             document = MarkdownDocument(
@@ -178,6 +185,9 @@ final class MarkdownContentView: NSView {
         } catch {
             NSLog("MarkdownContentView failed to save %@: %@", url.path, String(describing: error))
         }
+        // Clear the work item after save completes so future file watcher
+        // events from external editors are not blocked by the guard.
+        pendingSaveWorkItem = nil
     }
 
     // MARK: - Setup
@@ -229,6 +239,12 @@ final class MarkdownContentView: NSView {
             guard let self, let path = self.filePath else { return }
             self.loadFile(path)
         }
+        toolbar.onExportPDF = { [weak self] in
+            self?.exportPDF()
+        }
+        toolbar.onExportHTML = { [weak self] in
+            self?.exportHTML()
+        }
         toolbar.isOutlineVisible = isOutlineVisible
         toolbar.mode = mode
     }
@@ -242,6 +258,10 @@ final class MarkdownContentView: NSView {
     private func wireSourceCallbacks() {
         sourceView.onSourceChanged = { [weak self] source in
             self?.handleSourceEdited(source)
+        }
+        sourceView.onScrollChanged = { [weak self] fraction in
+            guard let self, self.mode == .split else { return }
+            self.previewView.scrollToFraction(fraction)
         }
         sourceView.onShortcutCommand = { [weak self] command in
             self?.handleSourceShortcut(command) ?? false
@@ -334,6 +354,46 @@ final class MarkdownContentView: NSView {
         }
     }
 
+    // MARK: - Export
+
+    private func exportPDF() {
+        guard let printOp = previewView.createPrintOperation() else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = defaultExportName(extension: "pdf")
+        panel.beginSheetModal(for: window ?? NSApp.mainWindow ?? NSWindow()) { response in
+            guard response == .OK, let url = panel.url else { return }
+            printOp.printInfo.dictionary()[NSPrintInfo.AttributeKey("NSPrintSaveJob")] = url.path
+            printOp.showsPrintPanel = false
+            printOp.showsProgressPanel = true
+            printOp.run()
+        }
+    }
+
+    private func exportHTML() {
+        previewView.captureRenderedHTML { [weak self] html in
+            guard let self, let html else { return }
+
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.html]
+            panel.nameFieldStringValue = self.defaultExportName(extension: "html")
+            panel.beginSheetModal(for: self.window ?? NSApp.mainWindow ?? NSWindow()) { response in
+                guard response == .OK, let url = panel.url else { return }
+                do {
+                    try html.write(to: url, atomically: true, encoding: .utf8)
+                } catch {
+                    NSLog("Export HTML failed: %@", String(describing: error))
+                }
+            }
+        }
+    }
+
+    private func defaultExportName(extension ext: String) -> String {
+        let baseName = filePath?.deletingPathExtension().lastPathComponent ?? "document"
+        return "\(baseName).\(ext)"
+    }
+
     // MARK: - Outline Navigation
 
     private func scrollToOutlineEntry(_ entry: MarkdownOutlineEntry) {
@@ -385,9 +445,20 @@ final class MarkdownContentView: NSView {
                 break
             }
         }
-        if flags.contains(.command) && flags.contains(.shift), characters == "o" {
-            isOutlineVisible.toggle()
-            return true
+        if flags.contains(.command) && flags.contains(.shift) {
+            switch characters {
+            case "o":
+                isOutlineVisible.toggle()
+                return true
+            case "e":
+                exportPDF()
+                return true
+            case "h":
+                exportHTML()
+                return true
+            default:
+                break
+            }
         }
         return false
     }
