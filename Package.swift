@@ -22,8 +22,6 @@ let package = Package(
             path: "Sources",
             resources: [
                 .process("App/Assets.xcassets"),
-                .copy("../Resources/Fonts"),
-                .copy("../Resources/shell-integration"),
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency")

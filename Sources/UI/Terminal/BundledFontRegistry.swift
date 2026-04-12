@@ -36,11 +36,21 @@ enum BundledFontRegistry {
         FontFallbackResolver.invalidateCaches()
     }
 
-    /// Returns URLs for font files shipped with the target resources.
-    static func fontResourceURLs(bundle: Bundle = .module) -> [URL] {
+    /// Returns URLs for font files shipped inside the production `.app`.
+    ///
+    /// Scans `Bundle.main.resourceURL/Fonts/` which is populated by
+    /// `build-app.sh` step 6d. In SwiftPM dev/test contexts this directory
+    /// does not exist, so the method returns an empty array — the
+    /// `FontFallbackResolver` chain falls back to system fonts.
+    ///
+    /// We never access `Bundle.module` because the SwiftPM-synthesized
+    /// `static let module` accessor triggers `fatalError` when the resource
+    /// bundle is absent — which is always the case in a production `.app`.
+    /// See the v0.1.53 crash report (2026-04-11).
+    static func fontResourceURLs() -> [URL] {
         var discovered = Set<URL>()
 
-        for directory in candidateDirectories(bundle: bundle) {
+        for directory in candidateDirectories() {
             guard let urls = try? FileManager.default.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: nil,
@@ -82,38 +92,31 @@ enum BundledFontRegistry {
             && CFErrorGetCode(error) == CTFontManagerError.alreadyRegistered.rawValue
     }
 
-    private static func candidateDirectories(bundle: Bundle) -> [URL] {
-        // We only look in the two bundles that ship the `Fonts/` directory
-        // as a real resource: the Swift Package target bundle (which is
-        // also what `Bundle.main` resolves to under `swift run` and `swift
-        // test`) and the application `.app` bundle in production.
+    private static func candidateDirectories() -> [URL] {
+        // Production `.app` ships fonts in `Contents/Resources/Fonts/` via
+        // `build-app.sh` step 6d. `Bundle.main.resourceURL` resolves to
+        // that directory.
         //
-        // Earlier iterations of this helper tried to be extra-defensive by
-        // walking every entry in `Bundle.allBundles` and
-        // `Bundle.allFrameworks`, plus every ancestor of those bundles'
-        // `resourceURL`, plus every ancestor of `currentDirectoryPath`
-        // and `executableURL`. In a typical xctest process that exploded
-        // into >200 bundles × ~10 ancestor levels each, each level doing
-        // three CoreFoundation URL allocations and a `stat(2)` syscall.
-        // Measured with `sample`, the loop was emitting ~766 iterations
-        // per second — meaning one call to `candidateDirectories` would
-        // spend several minutes inside CoreFoundation and never return,
-        // silently hanging any test that exercised the resolver (most
-        // visibly `FontFallbackTests.testAvailableFixedPitchFamiliesContainsMenlo`).
+        // In SwiftPM dev/test contexts (`swift run`, `swift test`),
+        // `Bundle.main` points to the test runner or raw executable, which
+        // does not have a `Fonts/` subdirectory. Font registration is a
+        // no-op in that context — system-installed fonts or Menlo serve as
+        // fallback via the `FontFallbackResolver` chain.
         //
-        // Keep this simple: Swift Package / main bundle only. `Bundle.module`
-        // is populated by SwiftPM from the `.copy("../Resources/Fonts")`
-        // entry in `Package.swift`, and the release bundle script copies
-        // the same folder into `Contents/Resources/Fonts`, so both paths
-        // find the files.
+        // We intentionally do NOT access `Bundle.module` here. The
+        // SwiftPM-synthesized accessor triggers `fatalError` inside
+        // `dispatch_once` when the resource bundle is absent — which is
+        // always the case in a production `.app` that does not ship the
+        // SwiftPM resource bundle. See the v0.1.53 crash report
+        // (2026-04-11). Keep this minimal: main bundle only.
+        //
+        // Earlier iterations walked `Bundle.allBundles` and
+        // `Bundle.allFrameworks` with ancestor walks (200+ bundles ×
+        // ~10 levels × 3 CF ops each), hanging xctest processes for
+        // minutes. See `feedback_bundle_allframeworks_loop.md`.
         var discovered = Set<URL>()
 
-        if let resourceURL = bundle.resourceURL {
-            collectFontsDirectory(at: resourceURL, into: &discovered)
-        }
-
-        if let mainResourceURL = Bundle.main.resourceURL,
-           mainResourceURL != bundle.resourceURL {
+        if let mainResourceURL = Bundle.main.resourceURL {
             collectFontsDirectory(at: mainResourceURL, into: &discovered)
         }
 

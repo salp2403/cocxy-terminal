@@ -120,6 +120,17 @@ jobs:
           [ -f Resources/AppIcon.png ] && cp Resources/AppIcon.png "$RESOURCES_DIR/" || true
           [ -f Resources/CocxyTerminal.sdef ] && \
             cp Resources/CocxyTerminal.sdef "$RESOURCES_DIR/" || true
+          [ -d Resources/Fonts ] && cp -R Resources/Fonts "$RESOURCES_DIR/" || true
+          [ -d Resources/shell-integration ] && \
+            cp -R Resources/shell-integration "$RESOURCES_DIR/" || true
+          [ -d Resources/defaults ] && cp -R Resources/defaults "$RESOURCES_DIR/" || true
+          [ -d Resources/Sounds ] && cp -R Resources/Sounds "$RESOURCES_DIR/" || true
+
+      - name: Verify app bundle contents
+        run: |
+          APP_DIR="build/Cocxy Terminal Nightly.app"
+          chmod +x scripts/verify-app-bundle.sh
+          ./scripts/verify-app-bundle.sh "$APP_DIR"
 
       - name: Code sign with Developer ID
         env:

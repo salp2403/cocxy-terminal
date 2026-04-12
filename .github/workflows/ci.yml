@@ -39,3 +39,13 @@ jobs:
 
       - name: Build Release
         run: swift build -c release
+
+      - name: Build App Bundle
+        run: |
+          chmod +x scripts/build-app.sh
+          ./scripts/build-app.sh release
+
+      - name: Verify App Bundle
+        run: |
+          chmod +x scripts/verify-app-bundle.sh
+          ./scripts/verify-app-bundle.sh build/CocxyTerminal.app
