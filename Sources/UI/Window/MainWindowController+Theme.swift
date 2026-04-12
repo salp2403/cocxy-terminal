@@ -63,18 +63,38 @@ extension MainWindowController {
         applyEffectiveAppearance(config.appearance)
 
         // Determine which runtime-facing terminal settings changed. CocxyCore
-        // can apply theme and font updates in place, while shell defaults only
-        // affect surfaces created after the change.
+        // can apply theme, font, ligature and image-transport updates in
+        // place, while shell defaults only affect surfaces created after
+        // the change.
+        //
+        // IMPORTANT: every flag in this predicate MUST be handled by
+        // `AppDelegate.applyBridgeConfigurationChanges(from:to:)` below,
+        // and vice versa — any flag handled there that is missing here
+        // will be silently dropped because `applyBridgeConfigurationChanges`
+        // is never invoked. The `ligatures` flag was the canonical example:
+        // before this predicate listed it, toggling "Enable ligatures" in
+        // preferences did nothing visible until another unrelated change
+        // happened to flip this flag. The image settings listed below had
+        // the same latent bug — they are applied by `applyImageSettings`
+        // in the bridge, but the predicate never detected that they had
+        // changed, so toggling file transfer / Sixel / Kitty / memory
+        // limit silently failed until the user also changed a font or
+        // theme.
         let old = lastAppliedConfig
         let runtimeTerminalConfigChanged =
             old?.appearance.theme != config.appearance.theme ||
             old?.appearance.fontFamily != config.appearance.fontFamily ||
             old?.appearance.fontSize != config.appearance.fontSize ||
+            old?.appearance.ligatures != config.appearance.ligatures ||
             old?.appearance.windowPadding != config.appearance.windowPadding ||
             old?.appearance.windowPaddingX != config.appearance.windowPaddingX ||
             old?.appearance.windowPaddingY != config.appearance.windowPaddingY ||
             old?.general.shell != config.general.shell ||
-            old?.terminal.clipboardReadAccess != config.terminal.clipboardReadAccess
+            old?.terminal.clipboardReadAccess != config.terminal.clipboardReadAccess ||
+            old?.terminal.imageMemoryLimitMB != config.terminal.imageMemoryLimitMB ||
+            old?.terminal.imageFileTransfer != config.terminal.imageFileTransfer ||
+            old?.terminal.enableSixelImages != config.terminal.enableSixelImages ||
+            old?.terminal.enableKittyImages != config.terminal.enableKittyImages
 
         lastAppliedConfig = config
 

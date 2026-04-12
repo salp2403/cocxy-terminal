@@ -203,13 +203,13 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         AppearanceConfig(
             theme: "catppuccin-mocha",
             lightTheme: "catppuccin-latte",
-            fontFamily: "JetBrainsMono Nerd Font",
+            fontFamily: "JetBrainsMono Nerd Font Mono",
             fontSize: 14,
             tabPosition: .left,
             windowPadding: 8,
             windowPaddingX: nil,
             windowPaddingY: nil,
-            ligatures: true,
+            ligatures: false,
             backgroundOpacity: 1.0,
             backgroundBlurRadius: 0
         )

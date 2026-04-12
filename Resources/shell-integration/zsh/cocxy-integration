@@ -1,5 +1,43 @@
 # Copyright (c) 2026 Said Arturo Lopez. MIT License.
 # Minimal Cocxy shell integration for zsh.
+#
+# Design notes
+# ============
+#
+# This script provides OSC 7 (cwd reporting) and OSC 133 (semantic prompt
+# marks) so Cocxy Terminal can track shell state without polling. It is
+# designed to coexist with full-featured prompt frameworks like Prezto,
+# Oh-My-Zsh, Powerlevel10k and YADR by following two strict rules:
+#
+#   1. NEVER mutate $PS1, $PS2, $PROMPT or any other prompt variable.
+#      Frameworks own those — touching them breaks their renderers,
+#      width calculators and segment caches in ways that surface as
+#      "bad math expression: operand expected at '%F{135}%~%...'" errors
+#      because those frameworks evaluate prompt fragments via (( )).
+#
+#   2. NEVER use a local variable named `status`. In zsh, `status` is a
+#      read-only built-in alias of `$?`. `local status=$?` triggers a
+#      "read-only variable: status" error and aborts the calling
+#      function silently in some configurations.
+#
+# OSC 133 marks are emitted directly to the TTY via `print -nu` from the
+# precmd / preexec hooks instead of being embedded in PS1. This is the
+# same approach Ghostty uses and avoids every prompt-machinery
+# interaction.
+#
+# Known limitation: PS2 continuation prompts
+# ------------------------------------------
+# Multi-line commands (backslash continuation, open strings, heredocs)
+# show the `$PS2` prompt, not `$PS1`. Because rule 1 above forbids
+# mutating `$PS2`, no OSC 133;A mark is emitted for continuation lines.
+# In practice this means the IDE click-to-position feature does not
+# activate while typing a continuation line — the host does not know a
+# prompt is visible there. A future iteration may add an opt-in wrap
+# of `$PS2` guarded by a `COCXY_SHELL_FEATURES=*ps2*` flag for users
+# who know their framework leaves PS2 alone. Do not enable this by
+# default: Prezto and Powerlevel10k themes DO re-render PS2 through
+# the same machinery they use for PS1, and the wrap would regress them
+# the way the PS1 wrap regressed Prezto/YADR before v0.1.53.
 
 _cocxy_integration_entrypoint() {
     emulate -L zsh -o no_aliases -o no_warn_create_global
@@ -8,10 +46,6 @@ _cocxy_integration_entrypoint() {
     (( ${+_cocxy_integration_loaded} == 0 )) || return 0
     typeset -g _cocxy_integration_loaded=1
 
-    typeset -g _COCXY_SAVED_PS1="$PS1"
-    typeset -g _COCXY_SAVED_PS2="$PS2"
-    typeset -g _COCXY_MARKED_PS1=""
-    typeset -g _COCXY_MARKED_PS2=""
     typeset -g _COCXY_LAST_REPORTED_CWD=""
     typeset -gi _COCXY_EXECUTING=0
     typeset -gi _COCXY_FD=1
@@ -71,39 +105,21 @@ _cocxy_report_pwd() {
     fi
 }
 
-_cocxy_wrap_prompts() {
-    emulate -L zsh -o no_aliases -o no_warn_create_global
-
-    if [[ -n "${_COCXY_MARKED_PS1}" && "$PS1" == "$_COCXY_MARKED_PS1" ]]; then
-        PS1="$_COCXY_SAVED_PS1"
-        PS2="$_COCXY_SAVED_PS2"
-    else
-        _COCXY_SAVED_PS1="$PS1"
-        _COCXY_SAVED_PS2="$PS2"
-    fi
-
-    local prompt_start=$'%{\e]133;A\a%}'
-
-    PS1="${prompt_start}${_COCXY_SAVED_PS1}"
-    PS2="${prompt_start}${_COCXY_SAVED_PS2}"
-    _COCXY_MARKED_PS1="$PS1"
-    _COCXY_MARKED_PS2="$PS2"
-}
-
-_cocxy_restore_prompts() {
-    emulate -L zsh -o no_aliases -o no_warn_create_global
-    if [[ -n "${_COCXY_MARKED_PS1}" && "$PS1" == "$_COCXY_MARKED_PS1" ]]; then
-        PS1="$_COCXY_SAVED_PS1"
-        PS2="$_COCXY_SAVED_PS2"
-    fi
-}
-
 _cocxy_precmd() {
+    # Capture $? BEFORE `emulate -L` so we report the user's last command
+    # exit status, not emulate's own success status. zsh's add-zsh-hook
+    # passes `$?` from the user's command to every precmd as the inherited
+    # shell status; emulate -L would clobber it.
+    #
+    # NOTE: do NOT name this `status` — `status` is a read-only built-in
+    # alias of `$?` in zsh and `local status=$?` aborts the function with
+    # "read-only variable: status".
+    local _cocxy_last_status=$?
+
     emulate -L zsh -o no_aliases -o no_warn_create_global
-    local status=$?
 
     if (( _COCXY_EXECUTING )); then
-        _cocxy_print $'\e]133;D;'"$status"$'\a'
+        _cocxy_print $'\e]133;D;'"$_cocxy_last_status"$'\a'
         _COCXY_EXECUTING=0
     fi
 
@@ -113,20 +129,33 @@ _cocxy_precmd() {
         _cocxy_print $'\e]2;'"${PWD/#$HOME/~}"$'\a'
     fi
 
-    _cocxy_wrap_prompts
+    # Emit OSC 133;A directly to the TTY so Cocxy can mark the start of
+    # the prompt without modifying $PS1. Modifying $PS1 would interact
+    # with the user's prompt framework (Prezto, P10K, Oh-My-Zsh, YADR…)
+    # and break their renderers — see Design notes at the top.
+    _cocxy_print $'\e]133;A\a'
 }
 
 _cocxy_preexec() {
     emulate -L zsh -o no_aliases -o no_warn_create_global
     local command_text="$1"
 
-    _cocxy_restore_prompts
-
     if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$command_text" ]]; then
         _cocxy_print $'\e]2;'"${command_text//[$'\x00'-$'\x1f']/}"$'\a'
     fi
 
+    # OSC 133;B marks the end of the prompt / start of the command.
+    # The host's CommandDurationTracker and cocxycore's semantic lexer
+    # both listen for ;B (not ;C) to emit `commandStarted`, which drives
+    # the running-command state, duration tracking and exit-code pill
+    # in the status bar. Without ;B here, zsh sessions (including Prezto,
+    # Powerlevel10k, YADR and Oh-My-Zsh) show no "running" state and no
+    # duration for any command — only fish worked before this line
+    # because its integration already emitted both.
     _cocxy_print $'\e]133;B\a'
+    # OSC 133;C marks that the command is actually being executed.
+    # Emitted right after ;B so hosts that treat them as a pair (or that
+    # prefer ;C over ;B) both see a consistent signal.
     _cocxy_print $'\e]133;C\a'
     _COCXY_EXECUTING=1
 }

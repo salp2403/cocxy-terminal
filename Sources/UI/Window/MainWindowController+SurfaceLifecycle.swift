@@ -406,20 +406,22 @@ extension MainWindowController {
             tabBarViewModel?.syncWithManager()
             refreshStatusBar()
 
-            // Notify IDE cursor controller only for the active tab.
+            // Notify the IDE cursor controller of the real prompt row/col
+            // from the backing CocxyCore terminal. Only the active tab's
+            // surface is notified because pattern detection on background
+            // tabs would otherwise race with the user's focused surface.
+            //
+            // The previous implementation used `viewHeight / cellHeight - 1`
+            // (i.e. the last visible row) as the prompt row, which is
+            // always wrong and produced the v0.1.52 "stray blinking line
+            // near the status bar" bug. The real cursor row is the only
+            // reliable source.
             if (sourceTabID == nil || sourceTabID == visibleTabID),
                let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
                     ?? activeTerminalSurfaceView {
-                let promptRow: Int
-                if let surfaceView = surfaceView as? CocxyCoreView {
-                    let cursorCtrl = surfaceView.ideCursorController
-                    let viewHeight = surfaceView.bounds.height
-                    let cellHeight = cursorCtrl.cellHeight
-                    promptRow = cellHeight > 0 ? max(0, Int(viewHeight / cellHeight) - 1) : 0
-                } else {
-                    promptRow = 0
+                if let cocxyView = surfaceView as? CocxyCoreView {
+                    cocxyView.handleShellPromptAtCurrentCursor()
                 }
-                surfaceView.handleShellPrompt(row: promptRow, column: 2)
             }
 
             feedDetectionEngine(

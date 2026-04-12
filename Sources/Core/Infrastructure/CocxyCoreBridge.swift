@@ -483,6 +483,33 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    /// Returns the current cursor position `(row, col)` for a surface.
+    ///
+    /// Reads `cocxycore_terminal_cursor_row` and `cocxycore_terminal_cursor_col`
+    /// while holding the per-surface terminal lock so the snapshot cannot
+    /// tear against the background PTY feed loop (which owns the same lock
+    /// around `cocxycore_terminal_feed` / `build_frame`).
+    ///
+    /// Values are 0-based: row `0` is the top visible row of the terminal
+    /// grid and column `0` is the leftmost cell. The coordinates refer to
+    /// the terminal grid, not the SwiftUI view or its backing layer.
+    ///
+    /// Consumers use this to feed the IDE cursor controller with the real
+    /// prompt row when OSC 133 `A` is received, so that the click-to-position
+    /// feature validates clicks against the correct row instead of the
+    /// bottom of the view.
+    ///
+    /// - Parameter surface: The target surface identifier.
+    /// - Returns: The cursor `(row, col)` pair, or `nil` if the surface is
+    ///   unknown.
+    func cursorPosition(for surface: SurfaceID) -> (row: Int, col: Int)? {
+        return withTerminalLock(surface) { state in
+            let row = Int(cocxycore_terminal_cursor_row(state.terminal))
+            let col = Int(cocxycore_terminal_cursor_col(state.terminal))
+            return (row, col)
+        }
+    }
+
     // MARK: - Terminal Lock Helper
 
     /// Runs `body` while holding the per-surface terminal lock.
@@ -753,8 +780,24 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func applyLigaturesEnabled(_ enabled: Bool, to surface: SurfaceID) {
-        // Step 1: ligature toggle mutates the C terminal's glyph atlas
-        //         configuration; serialize against the background feed.
+        // Keep the bridge-wide default in sync so any surface created
+        // after this point picks up the new shaping preference.
+        updateDefaults(ligaturesEnabled: enabled)
+
+        // Flip the C terminal's shaper flag, serialized against the
+        // background feed loop via the per-surface terminal lock.
+        //
+        // The visible fix for "ligatures toggle has no effect" lives in
+        // `src/metal.zig` inside cocxycore: before that fix, the render
+        // pipeline only applied shaped runs when the shaper returned a
+        // collapsed ligature with strictly fewer glyphs than characters.
+        // `JetBrainsMono Nerd Font` on macOS emits `--`, `->`, `==` and
+        // similar sequences as contextual runs with the same glyph
+        // count, so the old pipeline discarded them and rendered the
+        // same as with ligatures off. The current pipeline accepts
+        // contextual and partially-collapsed shaped runs too, which
+        // means flipping this flag plus forcing a redraw is sufficient
+        // — no atlas rebuild hack is needed from the Swift side.
         withTerminalLock(surface) { state in
             cocxycore_terminal_set_ligatures(state.terminal, enabled)
             if let webState = state.webServer {
@@ -762,10 +805,11 @@ final class CocxyCoreBridge: TerminalEngine {
             }
         }
 
-        // Step 2: UI notifications OUTSIDE the lock. updateInteractionMetrics
-        //         transitively calls bridge.resize which acquires the same
-        //         lock, so dispatching here would deadlock (NSLock is not
-        //         reentrant).
+        // Host-view notifications OUTSIDE the lock. `updateInteractionMetrics`
+        // transitively calls `bridge.resize` which acquires the same
+        // lock, so dispatching here would deadlock (NSLock is not
+        // reentrant). `requestImmediateRedraw` sets `needsRender = true`
+        // so the next CVDisplayLink tick picks up the new shaper state.
         guard let hostView = surfaces[surface]?.hostView as? TerminalHostView else {
             return
         }
@@ -1887,14 +1931,30 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Handle process tracking events from CocxyCore.
     ///
-    /// Routes child exit as OSCNotification and feeds ALL events
-    /// to the semantic adapter for subagent visualization.
+    /// Routes the ROOT shell exit as `OSCNotification.processExited` and
+    /// feeds ALL events (including subprocess exits) to the semantic
+    /// adapter for subagent visualization.
+    ///
+    /// **Critical**: `OSCNotification.processExited` is ONLY emitted when
+    /// the root PTY child (the shell itself) terminates. Subprocess exits
+    /// — `git status`, `cat`, `bash -c ...`, or any tool that an AI agent
+    /// like Claude Code spawns while it runs — are delivered to the
+    /// semantic adapter only. The window controller treats `processExited`
+    /// as "the session is over, reset the tab to idle", so forwarding
+    /// every subprocess exit would wipe the detected agent every time the
+    /// agent used a tool. That is the v0.1.52 "sidebar stays Ready while
+    /// Claude Code is clearly running" bug.
     private func handleProcessEvent(
         _ event: cocxycore_process_event,
         for surfaceID: SurfaceID
     ) {
         if event.event_type == 1 { // CHILD_EXITED
-            dispatchOSC(.processExited, for: surfaceID)
+            // Only the shell's root process exit counts as a session end.
+            // `state.childPID` is the shell's PID captured in createSurface;
+            // `event.pid` is the PID of the process that just exited.
+            if let state = surfaces[surfaceID], event.pid == state.childPID {
+                dispatchOSC(.processExited, for: surfaceID)
+            }
         }
 
         let cwd = currentWorkingDirectory(for: surfaceID)

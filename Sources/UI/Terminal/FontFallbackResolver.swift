@@ -7,14 +7,9 @@ import AppKit
 
 /// Resolves a font family to a usable NSFont, falling back through a chain.
 ///
-/// Terminal applications need reliable font rendering. If the user-configured
-/// font (e.g., "JetBrainsMono Nerd Font") is not installed, we fall back to:
-/// 1. "JetBrains Mono" (the base font without Nerd Font patches)
-/// 2. "Menlo" (always available on macOS)
-///
-/// For arbitrary font families, the chain is:
-/// 1. The requested family
-/// 2. "Menlo" (system default monospace)
+/// Terminal applications need reliable font rendering. Cocxy now ships a
+/// small bundled font set so clean Macs still get a curated terminal look
+/// without requiring manual installs.
 ///
 /// CocxyCore handles terminal font rendering itself, so this resolver
 /// is primarily used for:
@@ -26,6 +21,12 @@ enum FontFallbackResolver {
 
     // MARK: - Known Font Families
 
+    /// The preferred terminal font family with Nerd Font icons and strict mono spacing.
+    static let jetBrainsMonoNerdFontMono = "JetBrainsMono Nerd Font Mono"
+
+    /// A bundled, more editorial-feeling monospace option surfaced in preferences.
+    static let monaspaceNeon = "Monaspace Neon"
+
     /// The preferred terminal font family with Nerd Font icons.
     static let jetBrainsMonoNerdFont = "JetBrainsMono Nerd Font"
 
@@ -34,6 +35,41 @@ enum FontFallbackResolver {
 
     /// macOS default monospace font. Always available.
     static let menlo = "Menlo"
+
+    /// Older but still reliable built-in monospace option.
+    static let monaco = "Monaco"
+
+    /// Curated terminal-friendly font families to surface prominently in the UI.
+    private static let curatedFamilies = [
+        jetBrainsMonoNerdFontMono,
+        monaspaceNeon,
+        jetBrainsMonoNerdFont,
+        "JetBrains Mono",
+        "SF Mono",
+        "Monaspace Krypton",
+        "CommitMono",
+        "Fira Code",
+        "Iosevka Term",
+        "Inconsolata",
+        "Inconsolata XL",
+        "PT Mono",
+        menlo,
+        monaco,
+        "Andale Mono",
+        "Consolas",
+        "Courier New",
+    ]
+
+    @MainActor
+    static var bundledFamilies: [String] {
+        BundledFontRegistry.bundledFamilies
+    }
+
+    @MainActor
+    private static var cachedAvailableFixedPitchFamilies: [String]?
+
+    @MainActor
+    private static var cachedRecommendedFamilies: [String]?
 
     // MARK: - Resolution
 
@@ -49,36 +85,58 @@ enum FontFallbackResolver {
     /// - Returns: An NSFont, or nil if no font could be resolved (should not happen).
     @MainActor
     static func resolveFont(family: String, size: CGFloat) -> NSFont? {
-        let chain = fallbackChain(for: family)
+        BundledFontRegistry.ensureRegistered()
 
-        for candidate in chain {
-            if let font = NSFont(name: candidate, size: size) {
-                return font
-            }
+        if let resolvedFamily = resolvedFamily(for: family) {
+            return instantiateFont(family: resolvedFamily, size: size)
         }
 
         // Absolute last resort: system monospace font.
         return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
+    /// Resolves a family name to the concrete installed family that will be used.
+    ///
+    /// - Parameter family: The requested font family.
+    /// - Returns: The installed family name that wins the fallback chain, if any.
+    @MainActor
+    static func resolvedFamily(for family: String) -> String? {
+        BundledFontRegistry.ensureRegistered()
+
+        for candidate in fallbackChain(for: family) {
+            guard let font = instantiateFont(family: candidate, size: 13) else { continue }
+            return font.familyName ?? candidate
+        }
+        return nil
+    }
+
     /// Returns the fallback chain for a given font family.
     ///
-    /// For JetBrainsMono Nerd Font, the chain includes the base variant.
+    /// For the JetBrains Mono variants, the chain preserves patched/mono variants
+    /// before falling back to broadly available monospace fonts.
     /// For all other fonts, the chain ends with Menlo.
     ///
     /// - Parameter family: The primary font family name.
     /// - Returns: An ordered array of font family names to try.
     static func fallbackChain(for family: String) -> [String] {
+        if family == jetBrainsMonoNerdFontMono {
+            return [jetBrainsMonoNerdFontMono, jetBrainsMonoNerdFont, jetBrainsMono, menlo]
+        }
+
+        if family == monaspaceNeon {
+            return [monaspaceNeon, jetBrainsMonoNerdFontMono, jetBrainsMonoNerdFont, jetBrainsMono, menlo]
+        }
+
         if family == jetBrainsMonoNerdFont {
-            return [jetBrainsMonoNerdFont, jetBrainsMono, menlo]
+            return [jetBrainsMonoNerdFont, jetBrainsMonoNerdFontMono, jetBrainsMono, menlo]
         }
 
         if family == jetBrainsMono {
             return [jetBrainsMono, menlo]
         }
 
-        // Unknown font: try it, then fall back to Menlo.
-        return [family, menlo]
+        // Unknown font: try it, then fall back to Cocxy's bundled safe defaults.
+        return [family, jetBrainsMonoNerdFontMono, jetBrainsMonoNerdFont, jetBrainsMono, menlo]
     }
 
     // MARK: - Availability Check
@@ -89,7 +147,9 @@ enum FontFallbackResolver {
     /// - Returns: Whether the font family can be instantiated.
     @MainActor
     static func isFontAvailable(_ family: String) -> Bool {
-        if NSFont(name: family, size: 13) != nil {
+        BundledFontRegistry.ensureRegistered()
+
+        if instantiateFont(family: family, size: 13) != nil {
             return true
         }
 
@@ -101,5 +161,77 @@ enum FontFallbackResolver {
             .family: family,
         ])
         return NSFont(descriptor: descriptor, size: 13) != nil
+    }
+
+    /// Returns installed fixed-pitch font families available on this Mac.
+    @MainActor
+    static func availableFixedPitchFamilies() -> [String] {
+        BundledFontRegistry.ensureRegistered()
+
+        if let cachedAvailableFixedPitchFamilies {
+            return cachedAvailableFixedPitchFamilies
+        }
+
+        var families = Set<String>()
+
+        for family in curatedFamilies {
+            if let font = instantiateFont(family: family, size: 13), font.isFixedPitch {
+                families.insert(font.familyName ?? family)
+            }
+        }
+
+        for family in NSFontManager.shared.availableFontFamilies {
+            guard let font = instantiateFont(family: family, size: 13), font.isFixedPitch else { continue }
+            families.insert(font.familyName ?? family)
+        }
+
+        let resolvedFamilies = families.sorted { lhs, rhs in
+            lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
+        cachedAvailableFixedPitchFamilies = resolvedFamilies
+        return resolvedFamilies
+    }
+
+    /// Returns a curated list of installed monospaced fonts worth surfacing first.
+    @MainActor
+    static func recommendedFamilies() -> [String] {
+        BundledFontRegistry.ensureRegistered()
+
+        if let cachedRecommendedFamilies {
+            return cachedRecommendedFamilies
+        }
+
+        let available = Set(availableFixedPitchFamilies())
+        var ordered: [String] = []
+
+        for family in curatedFamilies where available.contains(family) {
+            ordered.append(family)
+        }
+
+        // Ensure the list is never empty even on unusual systems.
+        if ordered.isEmpty, available.contains(menlo) {
+            ordered.append(menlo)
+        }
+
+        cachedRecommendedFamilies = ordered
+        return ordered
+    }
+
+    @MainActor
+    static func invalidateCaches() {
+        cachedAvailableFixedPitchFamilies = nil
+        cachedRecommendedFamilies = nil
+    }
+
+    @MainActor
+    private static func instantiateFont(family: String, size: CGFloat) -> NSFont? {
+        if let direct = NSFont(name: family, size: size) {
+            return direct
+        }
+
+        let descriptor = NSFontDescriptor(fontAttributes: [
+            .family: family,
+        ])
+        return NSFont(descriptor: descriptor, size: size)
     }
 }

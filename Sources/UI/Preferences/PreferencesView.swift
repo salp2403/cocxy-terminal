@@ -2,6 +2,7 @@
 // PreferencesView.swift - SwiftUI preferences window with editable settings.
 
 import SwiftUI
+import AppKit
 
 // MARK: - Preferences View
 
@@ -221,10 +222,68 @@ struct EditableAppearanceSection: View {
             }
 
             Section("Font") {
-                TextField("Font family", text: $viewModel.fontFamily)
-                    .textFieldStyle(.roundedBorder)
+                FontFamilyComboBox(
+                    text: $viewModel.fontFamily,
+                    options: viewModel.availableFontFamilies
+                )
+                .frame(height: 24)
 
-                Toggle("Enable ligatures", isOn: $viewModel.ligatures)
+                Text("Choose any installed monospaced font. The dropdown is filtered to terminal-safe families, but you can still type a custom family name manually.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !viewModel.bundledFontFamilies.isEmpty {
+                    Text("Included with Cocxy: \(viewModel.bundledFontFamilies.joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !viewModel.recommendedFontFamilies.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recommended")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(viewModel.recommendedFontFamilies, id: \.self) { family in
+                                    FontQuickPickButton(
+                                        family: family,
+                                        isSelected: viewModel.fontFamily == family,
+                                        isBundled: viewModel.bundledFontFamilies.contains { bundled in
+                                            bundled.caseInsensitiveCompare(family) == .orderedSame
+                                        }
+                                    ) {
+                                        viewModel.fontFamily = family
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 1)
+                        }
+                    }
+                }
+
+                FontPreviewCard(viewModel: viewModel)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Enable ligatures", isOn: $viewModel.ligatures)
+                        .help(
+                            "Some fonts combine symbol pairs like --, ==, -> "
+                            + "into a single wider glyph. Disable this option "
+                            + "if command text such as --dangerously-skip-permissions "
+                            + "looks misaligned or crowded in your prompt."
+                        )
+                    Text(
+                        "Some fonts combine symbol pairs like --, ==, -> "
+                        + "into a single glyph. Disable if command text "
+                        + "appears misaligned in the prompt."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
 
                 VStack(alignment: .leading) {
                     HStack {
@@ -277,6 +336,137 @@ struct EditableAppearanceSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Appearance")
+    }
+}
+
+// MARK: - Font Picker Helpers
+
+/// Native macOS combo box for selecting or typing a font family.
+struct FontFamilyComboBox: NSViewRepresentable {
+    @Binding var text: String
+    let options: [String]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSComboBox {
+        let comboBox = NSComboBox()
+        comboBox.usesDataSource = false
+        comboBox.isEditable = true
+        comboBox.completes = true
+        comboBox.numberOfVisibleItems = min(max(options.count, 8), 14)
+        comboBox.delegate = context.coordinator
+        comboBox.setAccessibilityLabel("Font family")
+        comboBox.placeholderString = "Font family"
+        comboBox.addItems(withObjectValues: options)
+        comboBox.stringValue = text
+        return comboBox
+    }
+
+    func updateNSView(_ comboBox: NSComboBox, context: Context) {
+        if context.coordinator.cachedOptions != options {
+            comboBox.removeAllItems()
+            comboBox.addItems(withObjectValues: options)
+            comboBox.numberOfVisibleItems = min(max(options.count, 8), 14)
+            context.coordinator.cachedOptions = options
+        }
+
+        if comboBox.stringValue != text {
+            comboBox.stringValue = text
+        }
+    }
+
+    final class Coordinator: NSObject, NSComboBoxDelegate, NSControlTextEditingDelegate {
+        var parent: FontFamilyComboBox
+        var cachedOptions: [String]
+
+        init(_ parent: FontFamilyComboBox) {
+            self.parent = parent
+            self.cachedOptions = parent.options
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let comboBox = notification.object as? NSComboBox else { return }
+            if parent.text != comboBox.stringValue {
+                parent.text = comboBox.stringValue
+            }
+        }
+
+        func comboBoxSelectionDidChange(_ notification: Notification) {
+            guard let comboBox = notification.object as? NSComboBox else { return }
+            if parent.text != comboBox.stringValue {
+                parent.text = comboBox.stringValue
+            }
+        }
+    }
+}
+
+/// Live preview for the currently selected font family and size.
+struct FontPreviewCard: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+
+    private var previewFont: Font {
+        .custom(viewModel.effectiveFontFamily, size: CGFloat(max(viewModel.fontSize, 12)))
+    }
+
+    private var summaryColor: Color {
+        viewModel.isSelectedFontInstalled ? .secondary : .orange
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Preview")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("0Oo Il1 | [] {} () => -> == != --")
+                .font(previewFont)
+
+            Text("claude --dangerously-skip-permissions")
+                .font(previewFont)
+                .textSelection(.enabled)
+
+            Text(viewModel.fontResolutionSummary)
+                .font(.caption)
+                .foregroundStyle(summaryColor)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.18), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private struct FontQuickPickButton: View {
+    let family: String
+    let isSelected: Bool
+    let isBundled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(family)
+                    .font(.caption)
+                    .lineLimit(1)
+                if isBundled {
+                    Text("Bundled")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.18), in: Capsule())
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                isSelected
+                    ? Color.accentColor.opacity(0.22)
+                    : Color.secondary.opacity(0.12),
+                in: Capsule()
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

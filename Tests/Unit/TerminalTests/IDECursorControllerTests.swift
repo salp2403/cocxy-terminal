@@ -286,32 +286,8 @@ final class SelectionHighlightLayerTests: XCTestCase {
     }
 }
 
-// MARK: - IDE Cursor Indicator Layer Tests
+// NOTE: `IDECursorIndicatorLayer` was removed in v0.1.53 together with the
+// synthetic blink overlay — the real shell cursor rendered by CocxyCore /
+// Metal is now the only on-screen cursor indicator. The previous layer-based
+// tests lived here; they were deleted with the layer itself.
 
-final class IDECursorIndicatorLayerTests: XCTestCase {
-
-    func testInitialState() {
-        let layer = IDECursorIndicatorLayer()
-        XCTAssertFalse(layer.isOpaque)
-        XCTAssertEqual(layer.cursorX, 0)
-    }
-
-    func testCursorWidth() {
-        XCTAssertEqual(IDECursorIndicatorLayer.cursorWidth, 2)
-    }
-
-    func testBlinkingStopSetsFullOpacity() {
-        let layer = IDECursorIndicatorLayer()
-        layer.startBlinking()
-        layer.stopBlinking()
-        XCTAssertEqual(layer.opacity, 1.0)
-    }
-
-    func testIsCursorVisibleSetsOpacity() {
-        let layer = IDECursorIndicatorLayer()
-        layer.isCursorVisible = false
-        XCTAssertEqual(layer.opacity, 0.0)
-        layer.isCursorVisible = true
-        XCTAssertEqual(layer.opacity, 1.0)
-    }
-}

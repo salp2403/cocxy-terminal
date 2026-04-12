@@ -309,7 +309,7 @@ enum OSCNotification: Sendable {
 /// This is a snapshot of the engine-relevant subset of `CocxyConfig`.
 /// Changes after initialization are applied via engine-specific APIs.
 struct TerminalEngineConfig: Sendable {
-    /// Font family name (e.g., "JetBrainsMono Nerd Font").
+    /// Font family name (e.g., "JetBrainsMono Nerd Font Mono").
     let fontFamily: String
     /// Font size in points.
     let fontSize: Double

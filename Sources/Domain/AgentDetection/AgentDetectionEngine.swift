@@ -395,7 +395,9 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         stateMachine.processEvent(signal.event)
         let newState = stateMachine.currentState
 
-        guard newState != previousState else { return }
+        guard newState != previousState else {
+            return
+        }
 
         lastTransitionTimestamp = now
         lastTransitionEventKey = eventKey

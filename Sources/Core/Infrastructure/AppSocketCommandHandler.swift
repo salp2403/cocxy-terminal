@@ -1106,6 +1106,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         let accepted = receiver.receiveRawJSON(payloadData)
+
         if accepted {
             return .ok(id: request.id, data: ["status": "accepted"])
         } else {

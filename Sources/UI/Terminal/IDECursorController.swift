@@ -16,9 +16,16 @@ import AppKit
 /// ## The Solution
 ///
 /// When the user clicks within the current prompt line, this controller:
-/// 1. Detects the current cursor column position (from the shell).
+/// 1. Detects the current cursor column position (tracked from the shell).
 /// 2. Calculates the target column from the click coordinates.
-/// 3. Sends the correct number of arrow key presses to move the cursor.
+/// 3. Sends the correct number of arrow key presses to move the shell cursor.
+///
+/// The real shell cursor — drawn by `CocxyCoreBridge` / `MetalTerminalRenderer`
+/// via the Metal glyph atlas — is the only on-screen cursor indicator. It
+/// already blinks naturally. This controller does NOT render its own blink
+/// layer; an earlier incarnation did, and it caused a persistent double-cursor
+/// regression where the synthetic blink drifted away from the real cursor on
+/// every click.
 ///
 /// ## Requirements
 ///
@@ -44,6 +51,16 @@ final class IDECursorController {
 
     /// Returns the current terminal font size.
     private let fontSizeProvider: () -> CGFloat
+
+    /// Returns the **real** terminal cursor position `(row, col)` for the
+    /// backing surface, read directly from CocxyCore. Falls back to `nil`
+    /// when no terminal is attached.
+    ///
+    /// Used by `arrowKeysForClick` to compute click-to-position deltas from
+    /// the authoritative shell cursor column instead of an internally
+    /// tracked value that drifts against prompts rendered with escape
+    /// sequences, colors, and wide characters.
+    private let cursorPositionProvider: () -> (row: Int, col: Int)?
 
     /// Sends the requested arrow-key movement to the active terminal engine.
     private let arrowKeySender: ([ArrowDirection]) -> Void
@@ -78,19 +95,17 @@ final class IDECursorController {
     /// Padding from the top edge of the terminal view to the first row.
     var topPadding: CGFloat = 0
 
-    /// The visual indicator layer that blinks on the prompt line.
-    /// Lazily installed into the surface view's layer hierarchy.
-    private var indicatorLayer: IDECursorIndicatorLayer?
-
     // MARK: - Initialization
 
     init(
         hostView: NSView,
         fontSizeProvider: @escaping () -> CGFloat,
+        cursorPositionProvider: @escaping () -> (row: Int, col: Int)? = { nil },
         arrowKeySender: @escaping ([ArrowDirection]) -> Void
     ) {
         self.hostView = hostView
         self.fontSizeProvider = fontSizeProvider
+        self.cursorPositionProvider = cursorPositionProvider
         self.arrowKeySender = arrowKeySender
         updateCellDimensions()
     }
@@ -114,58 +129,37 @@ final class IDECursorController {
     // MARK: - Prompt Tracking
 
     /// Called when a shell prompt is detected (OSC 133 ;A).
-    /// Records the prompt position for cursor calculations and activates the blink indicator.
+    ///
+    /// Records the prompt row and column so subsequent click-to-position
+    /// operations can validate that the click lands on the current prompt
+    /// line. No visual indicator is installed — the real shell cursor drawn
+    /// by CocxyCore is the only on-screen cursor marker.
+    ///
+    /// The row and column must come from the real terminal cursor position,
+    /// not from a geometric heuristic over the view bounds, otherwise the
+    /// click-to-position row comparison will never match.
     func shellPromptDetected(row: Int, column: Int) {
         promptRow = row
         promptColumn = column
         cursorColumn = column
         isOnPromptLine = true
-        installIndicatorIfNeeded()
-        updateIndicatorPosition()
-        indicatorLayer?.startBlinking()
     }
 
     /// Called when user input changes the cursor position.
-    /// Tracks the cursor column for relative movement calculations.
+    ///
+    /// Tracks the cursor column so the next click-to-position uses an
+    /// accurate baseline. This is called from the view layer after arrow
+    /// keys and printable characters are delivered to the terminal.
     func cursorMoved(toColumn column: Int) {
         cursorColumn = column
-        updateIndicatorPosition()
     }
 
     /// Called when a command is executed (return key pressed).
-    /// Marks that the cursor is no longer on the prompt line and stops the blink indicator.
+    ///
+    /// Clears the `isOnPromptLine` flag so future clicks (before a new
+    /// prompt arrives) are not handled as cursor positioning.
     func commandExecuted() {
         isOnPromptLine = false
-        indicatorLayer?.stopBlinking()
-    }
-
-    // MARK: - Indicator Layer Management
-
-    /// Installs the IDE cursor indicator layer into the surface view if not already present.
-    private func installIndicatorIfNeeded() {
-        guard indicatorLayer == nil, let layer = hostView?.layer else { return }
-        let indicator = IDECursorIndicatorLayer()
-        indicator.cursorHeight = cellHeight
-        layer.addSublayer(indicator)
-        indicatorLayer = indicator
-    }
-
-    /// Updates the indicator layer position to match the current cursor column and prompt row.
-    ///
-    /// The layer frame is sized to exactly one cell row at the prompt position.
-    /// Since the host terminal view is flipped, y increases downward,
-    /// so `promptRow * cellHeight` places the layer at the correct row.
-    private func updateIndicatorPosition() {
-        guard let indicator = indicatorLayer, isOnPromptLine,
-              let viewBounds = hostView?.bounds else { return }
-        let rowY = topPadding + CGFloat(promptRow) * cellHeight
-        indicator.frame = CGRect(
-            x: 0, y: rowY,
-            width: viewBounds.width, height: cellHeight
-        )
-        indicator.cursorX = leftPadding + CGFloat(cursorColumn) * cellWidth
-        indicator.cursorHeight = cellHeight
-        indicator.setNeedsDisplay()
     }
 
     // MARK: - Click-to-Position
@@ -173,11 +167,19 @@ final class IDECursorController {
     /// Handles a click at the given location and returns the arrow keys
     /// needed to move the cursor to that position.
     ///
+    /// The cursor column used for the delta is read from the **real**
+    /// terminal state via `cursorPositionProvider` so that prompts with
+    /// invisible escape sequences, colors, emojis or wide characters do
+    /// not cause drift. The internally-tracked `cursorColumn` is kept in
+    /// sync as a fallback for tests that inject the controller with no
+    /// terminal backing.
+    ///
     /// - Parameters:
     ///   - location: The click point in the terminal view's coordinate space.
     ///   - viewBounds: The bounds of the terminal view.
-    /// - Returns: An array of `ArrowDirection` movements, or nil if the click
-    ///   is not on the prompt line or cursor positioning is not possible.
+    /// - Returns: An array of `ArrowDirection` movements, or `nil` if the
+    ///   click is not on the prompt line or cursor positioning is not
+    ///   possible.
     func arrowKeysForClick(at location: CGPoint, viewBounds: NSRect) -> [ArrowDirection]? {
         guard isEnabled, isOnPromptLine else { return nil }
 
@@ -185,14 +187,23 @@ final class IDECursorController {
         let targetColumn = columnForX(location.x)
         let targetRow = rowForY(location.y)
 
-        // Only reposition if clicking on the prompt row.
-        guard targetRow == promptRow else { return nil }
+        // Prefer the live terminal cursor position over the tracked
+        // value. On prompts rendered by Prezto / Powerlevel10k / YADR the
+        // tracked `cursorColumn` drifts by several columns because escape
+        // sequences and emoji runs are counted differently by CocxyCore's
+        // grid. Reading the real row/col eliminates that drift entirely.
+        let liveCursor = cursorPositionProvider()
+        let referenceRow = liveCursor?.row ?? promptRow
+        let referenceCol = liveCursor?.col ?? cursorColumn
+
+        // Only reposition if clicking on the current cursor row.
+        guard targetRow == referenceRow else { return nil }
 
         // Ensure target is within the editable area (after prompt).
         let effectiveTarget = max(targetColumn, promptColumn)
 
-        // Calculate the difference.
-        let delta = effectiveTarget - cursorColumn
+        // Calculate the difference from the authoritative reference.
+        let delta = effectiveTarget - referenceCol
 
         if delta == 0 { return [] }
 
@@ -202,8 +213,14 @@ final class IDECursorController {
 
     /// Sends arrow keys to the terminal to reposition the cursor.
     ///
+    /// Returns `true` when the click was on the current prompt line and the
+    /// cursor movement (if any) has been requested via `arrowKeySender`.
+    /// The real shell cursor drawn by CocxyCore moves asynchronously once
+    /// the terminal processes the injected arrow keys; this controller does
+    /// not render its own cursor overlay.
+    ///
     /// - Parameter location: Click location in the terminal view.
-    /// - Returns: `true` if arrow keys were sent (click was on prompt line).
+    /// - Returns: `true` if the click was handled (click was on prompt line).
     func handleClickToPosition(at location: CGPoint) -> Bool {
         guard let view = hostView else {
             return false
@@ -214,13 +231,15 @@ final class IDECursorController {
         }
 
         guard !arrows.isEmpty else {
-            // Already at the right position.
+            // Click already at the current cursor column.
             return true
         }
 
         arrowKeySender(arrows)
 
-        // Update our tracked cursor position.
+        // Update our tracked cursor position to match the new shell cursor.
+        // The live provider supersedes this value on the next click, but
+        // maintaining it keeps the legacy fallback path consistent.
         let delta = arrows.count * (arrows[0] == .right ? 1 : -1)
         cursorColumn += delta
 
@@ -258,85 +277,4 @@ final class IDECursorController {
 enum ArrowDirection: Sendable {
     case left
     case right
-}
-
-// MARK: - IDE Cursor Visual Layer
-
-/// CALayer that renders an IDE-style cursor indicator on the prompt line.
-///
-/// Shows a thin vertical line (I-beam) at the cursor position, with a subtle
-/// blink animation. Only visible when the cursor is on the prompt line.
-final class IDECursorIndicatorLayer: CALayer {
-
-    /// The cursor color (matches the theme accent).
-    var cursorColor: CGColor = CocxyColors.blue.cgColor {
-        didSet { setNeedsDisplay() }
-    }
-
-    /// The cursor position in the layer (x coordinate).
-    var cursorX: CGFloat = 0 {
-        didSet { setNeedsDisplay() }
-    }
-
-    /// The cursor height.
-    var cursorHeight: CGFloat = 16 {
-        didSet { setNeedsDisplay() }
-    }
-
-    /// The cursor width (thin line for I-beam).
-    static let cursorWidth: CGFloat = 2
-
-    /// Whether the cursor is currently visible (for blink).
-    var isCursorVisible: Bool = true {
-        didSet { opacity = isCursorVisible ? 1.0 : 0.0 }
-    }
-
-    override init() {
-        super.init()
-        isOpaque = false
-        backgroundColor = CGColor.clear
-    }
-
-    override init(layer: Any) {
-        super.init(layer: layer)
-        if let other = layer as? IDECursorIndicatorLayer {
-            cursorColor = other.cursorColor
-            cursorX = other.cursorX
-            cursorHeight = other.cursorHeight
-        }
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("IDECursorIndicatorLayer does not support NSCoding")
-    }
-
-    override func draw(in ctx: CGContext) {
-        let rect = CGRect(
-            x: cursorX,
-            y: (bounds.height - cursorHeight) / 2,
-            width: Self.cursorWidth,
-            height: cursorHeight
-        )
-        ctx.setFillColor(cursorColor)
-        ctx.fill(rect)
-    }
-
-    /// Starts a blink animation.
-    func startBlinking() {
-        let animation = CABasicAnimation(keyPath: "opacity")
-        animation.fromValue = 1.0
-        animation.toValue = 0.0
-        animation.duration = 0.5
-        animation.autoreverses = true
-        animation.repeatCount = .infinity
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        add(animation, forKey: "blink")
-    }
-
-    /// Stops the blink animation.
-    func stopBlinking() {
-        removeAnimation(forKey: "blink")
-        opacity = 1.0
-    }
 }

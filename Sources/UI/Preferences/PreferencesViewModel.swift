@@ -3,6 +3,7 @@
 
 import Foundation
 import Combine
+import AppKit
 
 // MARK: - Preferences View Model
 
@@ -48,7 +49,7 @@ final class PreferencesViewModel: ObservableObject {
     /// Name of the active theme (e.g., "catppuccin-mocha").
     @Published var theme: String
 
-    /// Font family for terminal text (e.g., "JetBrainsMono Nerd Font").
+    /// Font family for terminal text (e.g., "JetBrainsMono Nerd Font Mono").
     @Published var fontFamily: String
 
     /// Font size in points. Clamped to 8...32 on save.
@@ -149,6 +150,15 @@ final class PreferencesViewModel: ObservableObject {
 
     /// Theme names available for selection in the picker.
     let availableThemes: [String]
+
+    /// Installed fixed-pitch font families available on this Mac.
+    let availableFontFamilies: [String]
+
+    /// Curated installed fonts surfaced as quick picks.
+    let recommendedFontFamilies: [String]
+
+    /// Curated fonts shipped directly inside the app bundle.
+    let bundledFontFamilies: [String]
 
     /// Callback invoked after a successful save.
     var onSave: (() -> Void)?
@@ -277,6 +287,50 @@ final class PreferencesViewModel: ObservableObject {
 
         // Available themes from built-in list.
         self.availableThemes = Self.defaultThemeNames()
+        self.availableFontFamilies = FontFallbackResolver.availableFixedPitchFamilies()
+        self.recommendedFontFamilies = FontFallbackResolver.recommendedFamilies()
+        self.bundledFontFamilies = FontFallbackResolver.bundledFamilies
+    }
+
+    // MARK: - Font Resolution
+
+    /// The concrete installed font family that will be used after fallback resolution.
+    var effectiveFontFamily: String {
+        FontFallbackResolver.resolvedFamily(for: fontFamily) ?? FontFallbackResolver.menlo
+    }
+
+    /// Whether the selected family is shipped with the app bundle.
+    var isSelectedFontBundled: Bool {
+        FontFallbackResolver.bundledFamilies.contains {
+            $0.caseInsensitiveCompare(fontFamily) == .orderedSame
+        }
+    }
+
+    /// Whether the resolved family comes from Cocxy's bundled set.
+    var isEffectiveFontBundled: Bool {
+        FontFallbackResolver.bundledFamilies.contains {
+            $0.caseInsensitiveCompare(effectiveFontFamily) == .orderedSame
+        }
+    }
+
+    /// Whether the user-entered family resolves directly without fallback.
+    var isSelectedFontInstalled: Bool {
+        FontFallbackResolver.isFontAvailable(fontFamily)
+    }
+
+    /// Human-friendly explanation of the effective font choice.
+    var fontResolutionSummary: String {
+        let effective = effectiveFontFamily
+        if isSelectedFontInstalled, isSelectedFontBundled {
+            return "Included with Cocxy: \(effective)"
+        }
+        if isSelectedFontInstalled {
+            return "Using installed font: \(effective)"
+        }
+        if isEffectiveFontBundled {
+            return "\"\(fontFamily)\" is not installed. Cocxy will fall back to bundled \(effective)."
+        }
+        return "\"\(fontFamily)\" is not installed. Cocxy will fall back to \(effective)."
     }
 
     // MARK: - Save

@@ -70,6 +70,12 @@ final class CocxyCoreView: NSView {
         fontSizeProvider: { [weak self] in
             self?.viewModel?.currentFontSize ?? 14.0
         },
+        cursorPositionProvider: { [weak self] in
+            guard let self = self,
+                  let bridge = self.bridge,
+                  let sid = self.surfaceID else { return nil }
+            return bridge.cursorPosition(for: sid)
+        },
         arrowKeySender: { [weak self] arrows in
             self?.sendArrowKeys(arrows)
         }
@@ -572,10 +578,30 @@ final class CocxyCoreView: NSView {
     }
 
     private func sendArrowKeys(_ arrows: [ArrowDirection]) {
-        guard !arrows.isEmpty else { return }
-        let seq = arrows[0] == .left ? "\u{1B}[D" : "\u{1B}[C"
-        for _ in arrows {
-            sendControlSequence(seq)
+        guard !arrows.isEmpty, let bridge, let sid = surfaceID else { return }
+        // Route arrow key synthesis through the bridge's key event path
+        // so the terminal emits the correct CSI/SS3 escape sequence for
+        // its current keypad / cursor mode.
+        //
+        // Sending raw `\e[D` / `\e[C` here would bypass the terminal's
+        // mode flags and cause shells in application keypad mode — which
+        // every popular zsh framework (Prezto, Powerlevel10k, oh-my-zsh,
+        // YADR, Spaceship, Starship) enables by default — to ignore the
+        // synthesized arrows. That was the root cause of the v0.1.52
+        // click-to-position bug where the IDE blink moved to the click
+        // position but the real shell cursor stayed at the end of the
+        // line.
+        for arrow in arrows {
+            // macOS hardware key codes for the arrow keys:
+            // 123 → NSLeftArrowFunctionKey, 124 → NSRightArrowFunctionKey.
+            let keyCode: UInt16 = arrow == .left ? 123 : 124
+            let keyEvent = KeyEvent(
+                characters: nil,
+                keyCode: keyCode,
+                modifiers: [],
+                isKeyDown: true
+            )
+            _ = bridge.sendKeyEvent(keyEvent, to: sid)
         }
     }
 
@@ -1025,6 +1051,24 @@ extension CocxyCoreView: TerminalHostingView {
     func handleShellPrompt(row: Int, column: Int) {
         refreshIDECursorMetrics()
         ideCursorController.shellPromptDetected(row: row, column: column)
+    }
+
+    /// Reads the real cursor row/col from the backing CocxyCore terminal
+    /// and notifies the IDE cursor controller that a shell prompt has
+    /// been detected at that position.
+    ///
+    /// Preferred over `handleShellPrompt(row:column:)` for OSC 133 `A`
+    /// routing, because the real cursor position is the only reliable
+    /// source for the prompt row — the view-geometry heuristic
+    /// (`viewHeight / cellHeight - 1`) always yields the last visible
+    /// row and is never the right answer, which is the root cause of
+    /// the v0.1.52 "blinking line near the status bar" bug.
+    func handleShellPromptAtCurrentCursor() {
+        guard let bridge, let sid = surfaceID,
+              let position = bridge.cursorPosition(for: sid) else {
+            return
+        }
+        handleShellPrompt(row: position.row, column: position.col)
     }
 
     func updateInteractionMetrics() {

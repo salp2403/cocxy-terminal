@@ -225,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        BundledFontRegistry.ensureRegistered()
         themeEngine = ThemeEngineImpl()
         initializeConfigService()
         startConfigWatcher()

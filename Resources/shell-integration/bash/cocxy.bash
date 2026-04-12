@@ -1,5 +1,42 @@
 # Copyright (c) 2026 Said Arturo Lopez. MIT License.
 # Minimal manual shell integration for bash.
+#
+# Design notes
+# ============
+#
+# This script provides OSC 7 (cwd reporting) and OSC 133 (semantic prompt
+# marks) so Cocxy Terminal can track shell state without polling. It is
+# designed to coexist with full-featured prompt frameworks like
+# bash-it, oh-my-bash and Liquidprompt by following two strict rules:
+#
+#   1. NEVER mutate $PS1, $PS2, $PROMPT or any other prompt variable.
+#      Frameworks own those — touching them breaks their renderers,
+#      width calculators and segment caches in ways that surface as
+#      "bad math expression" or "unbound variable" errors because those
+#      frameworks evaluate prompt fragments via (( )) or [[ ]].
+#
+#   2. NEVER use a local variable named `status`. While bash does not
+#      enforce a read-only `status` like zsh, the symmetry with the zsh
+#      integration script keeps the two implementations consistent.
+#
+# OSC 133 marks are emitted directly to the TTY via `printf` from the
+# precmd / preexec hooks instead of being embedded in PS1. This is the
+# same approach Ghostty uses and avoids every prompt-machinery
+# interaction.
+#
+# Known limitation: PS2 continuation prompts
+# ------------------------------------------
+# Multi-line commands (backslash continuation, open strings, heredocs)
+# show the `$PS2` prompt, not `$PS1`. Because rule 1 above forbids
+# mutating `$PS2`, no OSC 133;A mark is emitted for continuation lines.
+# In practice this means the IDE click-to-position feature does not
+# activate while typing a continuation line — the host does not know a
+# prompt is visible there. A future iteration may add an opt-in wrap
+# of `$PS2` guarded by a `COCXY_SHELL_FEATURES=*ps2*` flag for users
+# who know their framework leaves PS2 alone. Do not enable this by
+# default: some bash frameworks do mirror PS2 through the same layout
+# machinery they use for PS1, and the wrap would regress them the way
+# the PS1 wrap regressed Prezto/YADR before v0.1.53.
 
 [[ "$-" == *i* ]] || return 0
 
@@ -11,10 +48,7 @@ _COCXY_BASH_INTEGRATION_LOADED=1
 _COCXY_EXECUTING=0
 _COCXY_PREEXEC_FIRED=0
 _COCXY_LAST_REPORTED_CWD=""
-_COCXY_SAVED_PS1="$PS1"
-_COCXY_SAVED_PS2="$PS2"
-_COCXY_MARKED_PS1=""
-_COCXY_MARKED_PS2=""
+
 # Preserve PROMPT_COMMAND as array (Bash 5.1+) or string (older).
 if [[ ${#PROMPT_COMMAND[@]} -gt 1 ]] 2>/dev/null; then
   _COCXY_OLD_PROMPT_COMMAND=("${PROMPT_COMMAND[@]}")
@@ -60,34 +94,15 @@ __cocxy_uri_encode_path() {
   builtin printf '%s' "$output"
 }
 
-__cocxy_wrap_prompts() {
-  if [[ -n "$_COCXY_MARKED_PS1" && "$PS1" == "$_COCXY_MARKED_PS1" ]]; then
-    PS1="$_COCXY_SAVED_PS1"
-    PS2="$_COCXY_SAVED_PS2"
-  else
-    _COCXY_SAVED_PS1="$PS1"
-    _COCXY_SAVED_PS2="$PS2"
-  fi
-
-  local prompt_start='\[\e]133;A\a\]'
-  PS1="${prompt_start}${_COCXY_SAVED_PS1}"
-  PS2="${prompt_start}${_COCXY_SAVED_PS2}"
-  _COCXY_MARKED_PS1="$PS1"
-  _COCXY_MARKED_PS2="$PS2"
-}
-
-__cocxy_restore_prompts() {
-  if [[ -n "$_COCXY_MARKED_PS1" && "$PS1" == "$_COCXY_MARKED_PS1" ]]; then
-    PS1="$_COCXY_SAVED_PS1"
-    PS2="$_COCXY_SAVED_PS2"
-  fi
-}
-
 __cocxy_precmd() {
-  local status="$?"
+  # Capture $? FIRST so it reports the user's last command exit status,
+  # not the success status of any helper we run inside this function.
+  #
+  # NOTE: do NOT name this `status` (see Design notes at the top).
+  local _cocxy_last_status=$?
 
   if [[ "$_COCXY_EXECUTING" == "1" ]]; then
-    builtin printf '\e]133;D;%s\a' "$status"
+    builtin printf '\e]133;D;%s\a' "$_cocxy_last_status"
     _COCXY_EXECUTING=0
   fi
   _COCXY_PREEXEC_FIRED=0
@@ -98,7 +113,11 @@ __cocxy_precmd() {
     builtin printf '\e]2;%s\a' "${PWD/#$HOME/~}"
   fi
 
-  __cocxy_wrap_prompts
+  # Emit OSC 133;A directly to the TTY so Cocxy can mark the start of
+  # the prompt without modifying $PS1. Modifying $PS1 would interact
+  # with the user's prompt framework (bash-it, oh-my-bash, Liquidprompt)
+  # and break their renderers — see Design notes at the top.
+  builtin printf '\e]133;A\a'
 }
 
 __cocxy_preexec() {
@@ -111,13 +130,21 @@ __cocxy_preexec() {
 
   local command_text="$1"
 
-  __cocxy_restore_prompts
-
   if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$command_text" ]]; then
     builtin printf '\e]2;%s\a' "${command_text//[$'\x00'-$'\x1f']/}"
   fi
 
+  # OSC 133;B marks the end of the prompt / start of the command.
+  # The host's CommandDurationTracker and cocxycore's semantic lexer
+  # both listen for ;B (not ;C) to emit `commandStarted`, which drives
+  # the running-command state, duration tracking and exit-code pill
+  # in the status bar. Without ;B here, bash sessions show no
+  # "running" state and no duration for any command — only fish worked
+  # before this line because its integration already emitted both.
   builtin printf '\e]133;B\a'
+  # OSC 133;C marks that the command is actually being executed.
+  # Emitted right after ;B so hosts that treat them as a pair (or that
+  # prefer ;C over ;B) both see a consistent signal.
   builtin printf '\e]133;C\a'
   _COCXY_EXECUTING=1
 }
@@ -126,7 +153,7 @@ __cocxy_debug_trap() {
   local command_text="${BASH_COMMAND:-}"
 
   case "$command_text" in
-    __cocxy_precmd*|__cocxy_preexec*|__cocxy_debug_trap*|__cocxy_wrap_prompts*|__cocxy_restore_prompts*|__cocxy_report_pwd*|trap*DEBUG*|"")
+    __cocxy_precmd*|__cocxy_preexec*|__cocxy_debug_trap*|__cocxy_report_pwd*|trap*DEBUG*|"")
       ;;
     *)
       __cocxy_preexec "$command_text"

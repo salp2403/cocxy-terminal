@@ -61,6 +61,7 @@ final class PreferencesViewModelTests: XCTestCase {
                 fontFamily: "Fira Code", fontSize: 16,
                 tabPosition: .top, windowPadding: 12,
                 windowPaddingX: nil, windowPaddingY: nil,
+                ligatures: false,
                 backgroundOpacity: 1.0, backgroundBlurRadius: 0
             ),
             terminal: .defaults,
@@ -88,7 +89,7 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.fontSize, 16)
         XCTAssertEqual(viewModel.tabPosition, "top")
         XCTAssertEqual(viewModel.windowPadding, 12)
-        XCTAssertTrue(viewModel.ligatures)
+        XCTAssertFalse(viewModel.ligatures)
         XCTAssertFalse(viewModel.agentDetectionEnabled)
         XCTAssertEqual(viewModel.idleTimeoutSeconds, 10)
         XCTAssertFalse(viewModel.macosNotifications)
@@ -105,6 +106,40 @@ final class PreferencesViewModelTests: XCTestCase {
         let viewModel = PreferencesViewModel(config: .defaults)
         // Theme names use display format ("Catppuccin Mocha") to match ThemeEngine.
         XCTAssertTrue(viewModel.availableThemes.contains("Catppuccin Mocha"))
+    }
+
+    func testAvailableFontFamiliesContainsMenlo() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+        XCTAssertTrue(viewModel.availableFontFamilies.contains("Menlo"))
+    }
+
+    func testRecommendedFontFamiliesIsNotEmpty() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+        XCTAssertFalse(viewModel.recommendedFontFamilies.isEmpty)
+    }
+
+    func testBundledFontFamiliesExposeCuratedFonts() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+
+        XCTAssertTrue(viewModel.bundledFontFamilies.contains("JetBrainsMono Nerd Font Mono"))
+        XCTAssertTrue(viewModel.bundledFontFamilies.contains("Monaspace Neon"))
+    }
+
+    func testMissingFontReportsFallbackSummary() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+        viewModel.fontFamily = "MissingFont_ABC123"
+
+        XCTAssertFalse(viewModel.isSelectedFontInstalled)
+        XCTAssertTrue(viewModel.fontResolutionSummary.contains("bundled"))
+        XCTAssertEqual(viewModel.effectiveFontFamily, "JetBrainsMono Nerd Font Mono")
+    }
+
+    func testBundledFontSummaryIdentifiesCocxyFonts() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+        viewModel.fontFamily = "Monaspace Neon"
+
+        XCTAssertTrue(viewModel.isSelectedFontBundled)
+        XCTAssertTrue(viewModel.fontResolutionSummary.contains("Included with Cocxy"))
     }
 
     // MARK: - TOML Generation

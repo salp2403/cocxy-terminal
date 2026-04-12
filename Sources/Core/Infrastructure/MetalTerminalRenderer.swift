@@ -203,8 +203,11 @@ final class MetalTerminalRenderer {
 
         // Sampler
         let samplerDesc = MTLSamplerDescriptor()
-        samplerDesc.minFilter = .nearest
-        samplerDesc.magFilter = .nearest
+        // Glyph placement from CocxyCore uses real font metrics and can land on
+        // fractional pixel positions. Linear sampling avoids the harsh stair-step
+        // artifacts that nearest filtering introduces on the grayscale atlas.
+        samplerDesc.minFilter = .linear
+        samplerDesc.magFilter = .linear
         samplerDesc.sAddressMode = .clampToZero
         samplerDesc.tAddressMode = .clampToZero
         guard let sampler = dev.makeSamplerState(descriptor: samplerDesc) else {

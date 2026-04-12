@@ -11,11 +11,11 @@ import Combine
 /// Tests that font family and size are correctly read from config.
 final class FontConfigTests: XCTestCase {
 
-    func testDefaultFontFamilyIsJetBrainsMono() {
+    func testDefaultFontFamilyIsJetBrainsMonoNerdMono() {
         let defaults = AppearanceConfig.defaults
         XCTAssertEqual(
-            defaults.fontFamily, "JetBrainsMono Nerd Font",
-            "Default font family must be JetBrainsMono Nerd Font"
+            defaults.fontFamily, "JetBrainsMono Nerd Font Mono",
+            "Default font family must be JetBrainsMono Nerd Font Mono"
         )
     }
 
@@ -46,9 +46,9 @@ final class FontConfigTests: XCTestCase {
 
 // MARK: - Font Fallback Tests
 
-/// Tests the font fallback chain: JetBrainsMono NF -> JetBrains Mono -> Menlo.
-@MainActor
-final class FontFallbackTests: XCTestCase {
+    /// Tests the font fallback chain for the default terminal families.
+    @MainActor
+    final class FontFallbackTests: XCTestCase {
 
     func testFontFallbackReturnsUsableFont() {
         let resolved = FontFallbackResolver.resolveFont(
@@ -75,15 +75,28 @@ final class FontFallbackTests: XCTestCase {
         )
     }
 
-    func testFontFallbackChainForJetBrainsMono() {
+    func testFontFallbackChainForJetBrainsMonoNerdMono() {
+        let chain = FontFallbackResolver.fallbackChain(
+            for: "JetBrainsMono Nerd Font Mono"
+        )
+
+        XCTAssertEqual(chain.count, 4, "Fallback chain must have 4 entries")
+        XCTAssertEqual(chain[0], "JetBrainsMono Nerd Font Mono")
+        XCTAssertEqual(chain[1], "JetBrainsMono Nerd Font")
+        XCTAssertEqual(chain[2], "JetBrains Mono")
+        XCTAssertEqual(chain[3], "Menlo")
+    }
+
+    func testFontFallbackChainForJetBrainsMonoNerdFont() {
         let chain = FontFallbackResolver.fallbackChain(
             for: "JetBrainsMono Nerd Font"
         )
 
-        XCTAssertEqual(chain.count, 3, "Fallback chain must have 3 entries")
+        XCTAssertEqual(chain.count, 4, "Fallback chain must have 4 entries")
         XCTAssertEqual(chain[0], "JetBrainsMono Nerd Font")
-        XCTAssertEqual(chain[1], "JetBrains Mono")
-        XCTAssertEqual(chain[2], "Menlo")
+        XCTAssertEqual(chain[1], "JetBrainsMono Nerd Font Mono")
+        XCTAssertEqual(chain[2], "JetBrains Mono")
+        XCTAssertEqual(chain[3], "Menlo")
     }
 
     func testFontFallbackChainAlwaysEndWithMenlo() {
@@ -91,6 +104,35 @@ final class FontFallbackTests: XCTestCase {
         XCTAssertEqual(chain.last, "Menlo",
             "Fallback chain must always end with Menlo"
         )
+        XCTAssertEqual(chain[1], "JetBrainsMono Nerd Font Mono")
+    }
+
+    func testAvailableFixedPitchFamiliesContainsMenlo() {
+        let families = FontFallbackResolver.availableFixedPitchFamilies()
+        XCTAssertTrue(families.contains("Menlo"))
+    }
+
+    func testRecommendedFamiliesIsNotEmpty() {
+        XCTAssertFalse(FontFallbackResolver.recommendedFamilies().isEmpty)
+    }
+
+    func testBundledFontsAreExposedToResolver() {
+        XCTAssertTrue(FontFallbackResolver.bundledFamilies.contains("JetBrainsMono Nerd Font Mono"))
+        XCTAssertTrue(FontFallbackResolver.bundledFamilies.contains("Monaspace Neon"))
+    }
+
+    func testBundledFontFilesArePresentInResources() {
+        XCTAssertFalse(BundledFontRegistry.fontResourceURLs().isEmpty)
+    }
+
+    func testBundledMonaspaceResolvesToUsableFont() {
+        let resolved = FontFallbackResolver.resolveFont(
+            family: "Monaspace Neon",
+            size: 14.0
+        )
+
+        XCTAssertNotNil(resolved)
+        XCTAssertEqual(resolved?.familyName, "Monaspace Neon")
     }
 }
 
