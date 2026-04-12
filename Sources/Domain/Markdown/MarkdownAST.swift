@@ -105,6 +105,9 @@ public enum MarkdownInline: Equatable, Sendable {
     /// inlines so `[**bold**](url)` round-trips correctly.
     case link(text: [MarkdownInline], url: String)
 
+    /// Image (`![alt](url)`). The alt text and source URL.
+    case image(alt: String, url: String)
+
     /// Autolink (`<http://...>`). The URL doubles as display text.
     case autolink(url: String)
 

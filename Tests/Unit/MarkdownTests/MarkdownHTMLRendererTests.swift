@@ -285,4 +285,54 @@ struct MarkdownHTMLRendererTests {
 
         #expect(html.isEmpty)
     }
+
+    // MARK: - Image
+
+    @Test("image renders as img tag with escaped attributes")
+    func imageRendersAsImgTag() {
+        let blocks: [MarkdownBlock] = [
+            .paragraph(inlines: [.image(alt: "a photo", url: "pic.png")])
+        ]
+        let result = MarkdownParseResult(blocks: blocks, locations: [])
+        let html = MarkdownHTMLRenderer.render(result)
+        #expect(html.contains("<img src=\"pic.png\" alt=\"a photo\" />"))
+    }
+
+    @Test("image with special characters in alt/url is escaped")
+    func imageEscapesSpecialChars() {
+        let blocks: [MarkdownBlock] = [
+            .paragraph(inlines: [.image(alt: "a<b", url: "x\"y.png")])
+        ]
+        let result = MarkdownParseResult(blocks: blocks, locations: [])
+        let html = MarkdownHTMLRenderer.render(result)
+        #expect(html.contains("alt=\"a&lt;b\""))
+        #expect(html.contains("src=\"x&quot;y.png\""))
+    }
+
+    // MARK: - Preview Template
+
+    @Test("Preview template contains floating TOC elements")
+    func previewTemplateContainsTOC() {
+        let html = MarkdownPreviewTemplate.build()
+        #expect(html.contains("toc-toggle"))
+        #expect(html.contains("toc-panel"))
+        #expect(html.contains("buildTOC"))
+    }
+
+    @Test("Preview template TOC uses safe DOM creation, not innerHTML concatenation")
+    func previewTemplateTOCUsesSafeDOM() {
+        let html = MarkdownPreviewTemplate.build()
+        // buildTOC must use createElement + textContent, never innerHTML with heading text
+        #expect(html.contains("document.createElement('a')"))
+        #expect(html.contains("link.textContent"))
+        #expect(html.contains("panel.appendChild"))
+        // Must NOT concatenate heading text into an innerHTML string
+        #expect(!html.contains("html += '<a"))
+    }
+
+    @Test("Preview template contains scrollToFraction function")
+    func previewTemplateContainsScrollToFraction() {
+        let html = MarkdownPreviewTemplate.build()
+        #expect(html.contains("scrollToFraction"))
+    }
 }

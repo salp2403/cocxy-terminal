@@ -26,11 +26,34 @@ final class MarkdownPreviewView: NSView {
 
     private let webView: WKWebView
     private var isTemplateLoaded = false
+    private var latestContentGeneration: UInt64 = 0
+    private var isContentUpdatePending = false
     private var pendingHTML: String?
+    private var pendingActions: [() -> Void] = []
 
     /// Current document. Setting this re-renders the preview.
     var document: MarkdownDocument = .empty {
         didSet { updatePreview() }
+    }
+
+    /// Base directory for resolving relative image paths.
+    /// Setting this reloads the template with the new baseURL so that
+    /// `<img src="image.png">` resolves to a local file.
+    var baseDirectory: URL? {
+        didSet {
+            if oldValue != baseDirectory {
+                // Reset template state so updatePreview queues content into
+                // pendingHTML instead of calling evaluateJavaScript on a page
+                // that is mid-navigation. didFinish will flush pendingHTML.
+                isTemplateLoaded = false
+                isContentUpdatePending = false
+                latestContentGeneration &+= 1
+                // Discard pending export actions from the previous document —
+                // they would run against the wrong page after the reload.
+                pendingActions.removeAll()
+                loadTemplate()
+            }
+        }
     }
 
     // MARK: - Init
@@ -68,6 +91,20 @@ final class MarkdownPreviewView: NSView {
         ) { _, _ in }
     }
 
+    /// Whether the preview template has finished loading and is ready for
+    /// export operations. Callers can check this to defer actions.
+    var isReady: Bool { isTemplateLoaded && !isContentUpdatePending }
+
+    /// Enqueues an action to execute after the template finishes loading.
+    /// If already loaded, executes immediately.
+    func whenReady(_ action: @escaping () -> Void) {
+        if isTemplateLoaded {
+            action()
+        } else {
+            pendingActions.append(action)
+        }
+    }
+
     /// Creates a print operation for PDF export via the system print dialog.
     func createPrintOperation() -> NSPrintOperation? {
         guard isTemplateLoaded else { return nil }
@@ -81,9 +118,13 @@ final class MarkdownPreviewView: NSView {
 
     /// Captures the fully rendered DOM (including Mermaid SVGs and KaTeX spans)
     /// as a standalone HTML string with CSS inlined.
+    /// If the template is still loading (e.g., after a directory change), the
+    /// capture is deferred until the template finishes loading.
     func captureRenderedHTML(completion: @escaping (String?) -> Void) {
         guard isTemplateLoaded else {
-            completion(nil)
+            pendingActions.append { [weak self] in
+                self?.captureRenderedHTML(completion: completion)
+            }
             return
         }
         webView.evaluateJavaScript("document.documentElement.outerHTML") { result, error in
@@ -130,14 +171,14 @@ final class MarkdownPreviewView: NSView {
             autoRenderJS: autoRenderJS
         )
 
-        webView.loadHTMLString(html, baseURL: nil)
+        webView.loadHTMLString(html, baseURL: baseDirectory)
     }
 
     /// Reads a JS/CSS resource from the Markdown resources directory.
     ///
     /// Resolution: `Bundle.main/Resources/Markdown/` in production `.app`,
     /// then project root `Resources/Markdown/` for development.
-    private func loadResourceFile(named name: String, ext: String) -> String {
+    func loadResourceFile(named name: String, ext: String) -> String {
         let fileName = "\(name).\(ext)"
 
         // Production .app: Contents/Resources/Markdown/
@@ -186,11 +227,26 @@ final class MarkdownPreviewView: NSView {
     }
 
     private func injectContent(_ html: String) {
+        latestContentGeneration &+= 1
+        let generation = latestContentGeneration
+        isContentUpdatePending = true
         let escaped = escapeJSString(html)
         webView.evaluateJavaScript("updateContent('\(escaped)')") { _, error in
+            guard generation == self.latestContentGeneration else { return }
+            self.isContentUpdatePending = false
             if let error {
                 NSLog("MarkdownPreviewView JS error: %@", String(describing: error))
             }
+            self.flushPendingActionsIfReady()
+        }
+    }
+
+    private func flushPendingActionsIfReady() {
+        guard isReady else { return }
+        let actions = pendingActions
+        pendingActions.removeAll()
+        for action in actions {
+            action()
         }
     }
 
@@ -223,7 +279,9 @@ extension MarkdownPreviewView: WKNavigationDelegate {
         if let html = pendingHTML {
             pendingHTML = nil
             injectContent(html)
+            return
         }
+        flushPendingActionsIfReady()
     }
 
     func webView(

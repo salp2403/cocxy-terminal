@@ -42,14 +42,32 @@ final class MarkdownContentView: NSView {
     /// The file being displayed. Preserved from the previous implementation.
     private(set) var filePath: URL?
 
+    /// Workspace root directory for the file explorer and multi-file search.
+    /// Set once at creation time by the caller. If nil, falls back to the
+    /// file's parent directory.
+    private(set) var workspaceDirectory: URL?
+
     // MARK: - Properties (new)
 
     private let toolbar = MarkdownToolbarView()
-    private let outlineView = MarkdownOutlineView()
-    private let sourceView: MarkdownSourceView
-    private let previewView: MarkdownPreviewView
+    private let sidebar = MarkdownSidebarView()
+    let sourceView: MarkdownSourceView
+    let previewView: MarkdownPreviewView
+    let diffView = MarkdownDiffView()
     private let splitContainer = NSSplitView()
-    private let contentContainer = NSView()
+    let contentContainer = NSView()
+    let statusBar = MarkdownStatusBarView()
+
+    /// Whether the diff view is currently shown instead of the normal content.
+    var isDiffVisible = false
+
+    /// Whether the blame view is currently shown instead of the normal content.
+    var isBlameVisible = false
+
+    /// Monotonically increasing counter invalidating in-flight git requests.
+    /// Each call to toggleBlame/toggleDiff bumps this; callbacks whose captured
+    /// generation doesn't match are discarded.
+    var gitRequestGeneration: UInt64 = 0
 
     /// File-system watcher that reloads the document when the source file
     /// changes on disk.
@@ -57,7 +75,7 @@ final class MarkdownContentView: NSView {
     private var pendingSaveWorkItem: DispatchWorkItem?
 
     /// Current view mode. Setting updates the displayed subview and toolbar.
-    private(set) var mode: MarkdownViewMode = .source {
+    var mode: MarkdownViewMode = .source {
         didSet {
             if oldValue != mode {
                 applyMode()
@@ -81,16 +99,20 @@ final class MarkdownContentView: NSView {
         didSet { propagateDocument() }
     }
 
-    /// Outline column width constraint (toggled between fixed value and 0).
-    private var outlineWidthConstraint: NSLayoutConstraint!
+    /// Sidebar column width constraint (toggled between fixed value and 0).
+    private var sidebarWidthConstraint: NSLayoutConstraint!
 
-    /// Fixed width applied when the outline is visible.
-    private static let outlineWidth: CGFloat = 200
+    /// Fixed width applied when the sidebar is visible.
+    private static let sidebarWidth: CGFloat = 210
 
     // MARK: - Init
 
-    init(filePath: URL? = nil) {
+    /// Image file extensions accepted for drag-and-drop insertion.
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "tiff"]
+
+    init(filePath: URL? = nil, workspaceDirectory: URL? = nil) {
         self.filePath = filePath
+        self.workspaceDirectory = workspaceDirectory
         self.sourceView = MarkdownSourceView()
         self.previewView = MarkdownPreviewView()
         super.init(frame: .zero)
@@ -98,6 +120,7 @@ final class MarkdownContentView: NSView {
         wireToolbarCallbacks()
         wireOutlineCallback()
         wireSourceCallbacks()
+        registerForDraggedTypes([.fileURL])
 
         if let path = filePath {
             loadFile(path)
@@ -133,6 +156,34 @@ final class MarkdownContentView: NSView {
     func loadFile(_ url: URL) {
         self.filePath = url
         toolbar.fileName = url.lastPathComponent
+
+        // Invalidate any in-flight git blame/diff from the previous file
+        gitRequestGeneration &+= 1
+
+        // If blame or diff was visible, return to normal content mode
+        if isBlameVisible || isDiffVisible {
+            isBlameVisible = false
+            isDiffVisible = false
+            applyMode()
+        }
+
+        // Determine the sidebar root. Use the workspace directory if the file
+        // is inside it; otherwise fall back to the file's parent directory so
+        // files opened from outside the workspace still get a useful tree.
+        let fileDir = url.deletingLastPathComponent()
+        let effectiveRoot: URL
+        if let wsDir = workspaceDirectory,
+           url.standardizedFileURL.path.hasPrefix(wsDir.standardizedFileURL.path + "/") {
+            effectiveRoot = wsDir
+        } else {
+            effectiveRoot = fileDir
+        }
+        if sidebar.fileExplorer.rootDirectory != effectiveRoot {
+            sidebar.fileExplorer.setRootDirectory(effectiveRoot)
+            sidebar.searchView.rootDirectory = effectiveRoot
+        }
+        sidebar.fileExplorer.activeFilePath = url
+        previewView.baseDirectory = url.deletingLastPathComponent()
 
         reloadFromDisk(url, force: true)
     }
@@ -199,13 +250,16 @@ final class MarkdownContentView: NSView {
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         addSubview(toolbar)
 
-        outlineView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(outlineView)
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(sidebar)
 
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
         addSubview(contentContainer)
 
-        outlineWidthConstraint = outlineView.widthAnchor.constraint(equalToConstant: Self.outlineWidth)
+        statusBar.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(statusBar)
+
+        sidebarWidthConstraint = sidebar.widthAnchor.constraint(equalToConstant: Self.sidebarWidth)
 
         NSLayoutConstraint.activate([
             toolbar.topAnchor.constraint(equalTo: topAnchor),
@@ -213,15 +267,20 @@ final class MarkdownContentView: NSView {
             toolbar.trailingAnchor.constraint(equalTo: trailingAnchor),
             toolbar.heightAnchor.constraint(equalToConstant: MarkdownToolbarView.height),
 
-            outlineView.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
-            outlineView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            outlineView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            outlineWidthConstraint,
+            statusBar.bottomAnchor.constraint(equalTo: bottomAnchor),
+            statusBar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            statusBar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            statusBar.heightAnchor.constraint(equalToConstant: MarkdownStatusBarView.height),
+
+            sidebar.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            sidebar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            sidebar.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+            sidebarWidthConstraint,
 
             contentContainer.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
-            contentContainer.leadingAnchor.constraint(equalTo: outlineView.trailingAnchor),
+            contentContainer.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
             contentContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
-            contentContainer.bottomAnchor.constraint(equalTo: bottomAnchor)
+            contentContainer.bottomAnchor.constraint(equalTo: statusBar.topAnchor)
         ])
 
         applyMode()
@@ -239,19 +298,41 @@ final class MarkdownContentView: NSView {
             guard let self, let path = self.filePath else { return }
             self.loadFile(path)
         }
+        toolbar.onBlameToggle = { [weak self] in
+            self?.toggleBlame()
+        }
+        toolbar.onDiffToggle = { [weak self] in
+            self?.toggleDiff()
+        }
         toolbar.onExportPDF = { [weak self] in
             self?.exportPDF()
         }
         toolbar.onExportHTML = { [weak self] in
             self?.exportHTML()
         }
+        toolbar.onExportSlides = { [weak self] in
+            self?.exportSlides()
+        }
         toolbar.isOutlineVisible = isOutlineVisible
         toolbar.mode = mode
     }
 
     private func wireOutlineCallback() {
-        outlineView.onSelect = { [weak self] entry in
+        sidebar.outlineView.onSelect = { [weak self] entry in
             self?.scrollToOutlineEntry(entry)
+        }
+        sidebar.fileExplorer.onFileSelected = { [weak self] url in
+            self?.loadFile(url)
+        }
+        sidebar.searchView.onResultSelected = { [weak self] url, lineNumber in
+            guard let self else { return }
+            if self.filePath != url {
+                self.loadFile(url)
+            }
+            self.sourceView.scrollToSourceLine(lineNumber)
+            if self.mode == .preview {
+                self.mode = .split
+            }
         }
     }
 
@@ -270,7 +351,11 @@ final class MarkdownContentView: NSView {
 
     // MARK: - Mode Switching
 
-    private func applyMode() {
+    func applyMode() {
+        isDiffVisible = false
+        isBlameVisible = false
+        gitRequestGeneration &+= 1
+
         // Clear current content
         contentContainer.subviews.forEach { $0.removeFromSuperview() }
         for arranged in splitContainer.arrangedSubviews {
@@ -294,7 +379,7 @@ final class MarkdownContentView: NSView {
         }
     }
 
-    private func embed(_ subview: NSView, in container: NSView) {
+    func embed(_ subview: NSView, in container: NSView) {
         subview.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(subview)
         NSLayoutConstraint.activate([
@@ -306,8 +391,8 @@ final class MarkdownContentView: NSView {
     }
 
     private func applyOutlineVisibility() {
-        outlineWidthConstraint.constant = isOutlineVisible ? Self.outlineWidth : 0
-        outlineView.isHidden = !isOutlineVisible
+        sidebarWidthConstraint.constant = isOutlineVisible ? Self.sidebarWidth : 0
+        sidebar.isHidden = !isOutlineVisible
         needsLayout = true
     }
 
@@ -316,7 +401,9 @@ final class MarkdownContentView: NSView {
     private func propagateDocument() {
         sourceView.document = document
         previewView.document = document
-        outlineView.outline = document.outline
+        sidebar.outlineView.outline = document.outline
+        sidebar.fileExplorer.activeFilePath = filePath
+        statusBar.wordCount = MarkdownWordCount.count(body: document.body)
     }
 
     private func showEmptyState() {
@@ -352,46 +439,6 @@ final class MarkdownContentView: NSView {
             }
             return false
         }
-    }
-
-    // MARK: - Export
-
-    private func exportPDF() {
-        guard let printOp = previewView.createPrintOperation() else { return }
-
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = defaultExportName(extension: "pdf")
-        panel.beginSheetModal(for: window ?? NSApp.mainWindow ?? NSWindow()) { response in
-            guard response == .OK, let url = panel.url else { return }
-            printOp.printInfo.dictionary()[NSPrintInfo.AttributeKey("NSPrintSaveJob")] = url.path
-            printOp.showsPrintPanel = false
-            printOp.showsProgressPanel = true
-            printOp.run()
-        }
-    }
-
-    private func exportHTML() {
-        previewView.captureRenderedHTML { [weak self] html in
-            guard let self, let html else { return }
-
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [.html]
-            panel.nameFieldStringValue = self.defaultExportName(extension: "html")
-            panel.beginSheetModal(for: self.window ?? NSApp.mainWindow ?? NSWindow()) { response in
-                guard response == .OK, let url = panel.url else { return }
-                do {
-                    try html.write(to: url, atomically: true, encoding: .utf8)
-                } catch {
-                    NSLog("Export HTML failed: %@", String(describing: error))
-                }
-            }
-        }
-    }
-
-    private func defaultExportName(extension ext: String) -> String {
-        let baseName = filePath?.deletingPathExtension().lastPathComponent ?? "document"
-        return "\(baseName).\(ext)"
     }
 
     // MARK: - Outline Navigation
@@ -455,6 +502,9 @@ final class MarkdownContentView: NSView {
                 return true
             case "h":
                 exportHTML()
+                return true
+            case "s":
+                exportSlides()
                 return true
             default:
                 break

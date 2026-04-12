@@ -193,7 +193,7 @@ struct MarkdownContentViewTests {
 
     @Test("Cmd+Shift+E triggers export PDF shortcut without crash")
     func cmdShiftETriggersPDFExport() throws {
-        let url = try createTempMarkdownFile(content:"# Export test")
+        let url = createTempMarkdownFile(content:"# Export test")
         let view = MarkdownContentView(filePath: url)
         defer { cleanup(url) }
 
@@ -205,7 +205,7 @@ struct MarkdownContentViewTests {
 
     @Test("Cmd+Shift+H triggers export HTML shortcut without crash")
     func cmdShiftHTriggerHTMLExport() throws {
-        let url = try createTempMarkdownFile(content:"# Export HTML test")
+        let url = createTempMarkdownFile(content:"# Export HTML test")
         let view = MarkdownContentView(filePath: url)
         defer { cleanup(url) }
 
@@ -218,7 +218,7 @@ struct MarkdownContentViewTests {
 
     @Test("file watcher reload is skipped during pending save")
     func concurrencyGuardSkipsReloadDuringSave() throws {
-        let url = try createTempMarkdownFile(content:"# Original")
+        let url = createTempMarkdownFile(content:"# Original")
         let view = MarkdownContentView(filePath: url)
         defer { cleanup(url) }
 
@@ -242,6 +242,215 @@ struct MarkdownContentViewTests {
         // After force reload, external content should appear.
         let docAfterReload = view.sourceViewForTesting.currentSource
         #expect(docAfterReload.contains("External"))
+    }
+
+    // MARK: - Word Count / Status Bar
+
+    @Test("Status bar shows word count after loading a document")
+    func statusBarShowsWordCount() {
+        let url = createTempMarkdownFile(content: "Hello world from test")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        let statusBar = view.subviews.compactMap { $0 as? MarkdownStatusBarView }.first
+        #expect(statusBar != nil)
+        #expect(statusBar?.wordCount.words == 4)
+        // Characters counted on the body after frontmatter extraction
+        #expect(statusBar?.wordCount.characters ?? 0 >= 20)
+    }
+
+    @Test("Status bar updates when document changes via editing")
+    func statusBarUpdatesOnEdit() {
+        let url = createTempMarkdownFile(content: "one two")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        let statusBar = view.subviews.compactMap { $0 as? MarkdownStatusBarView }.first
+        #expect(statusBar?.wordCount.words == 2)
+
+        // Simulate an edit via the source view
+        view.sourceViewForTesting.replaceEntireSource(with: "one two three four")
+        // The source callback should propagate and update the status bar
+        #expect(statusBar?.wordCount.words == 4)
+    }
+
+    // MARK: - Blame / Diff Flag Consistency
+
+    @Test("toggleBlame from visible state restores normal mode")
+    func toggleBlameFromVisibleRestores() {
+        let url = createTempMarkdownFile(content: "# Test")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        // Set blame as active
+        view.isBlameVisible = true
+        view.isDiffVisible = false
+        let genBefore = view.gitRequestGeneration
+
+        // Calling toggleBlame when already visible should turn it off
+        view.toggleBlame()
+
+        #expect(view.isBlameVisible == false)
+        #expect(view.isDiffVisible == false)
+        // Generation must have advanced to invalidate any in-flight request
+        #expect(view.gitRequestGeneration > genBefore)
+    }
+
+    @Test("toggleDiff from visible state restores normal mode")
+    func toggleDiffFromVisibleRestores() {
+        let url = createTempMarkdownFile(content: "# Test")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        view.isDiffVisible = true
+        view.isBlameVisible = false
+        let genBefore = view.gitRequestGeneration
+
+        view.toggleDiff()
+
+        #expect(view.isDiffVisible == false)
+        #expect(view.isBlameVisible == false)
+        #expect(view.gitRequestGeneration > genBefore)
+    }
+
+    @Test("toggleBlame then toggleDiff advances generation twice")
+    func blameToThenDiffAdvancesGenerationTwice() {
+        let url = createTempMarkdownFile(content: "# Test")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        let initial = view.gitRequestGeneration
+
+        // Fire blame (async, won't complete in test)
+        view.toggleBlame()
+        let afterBlame = view.gitRequestGeneration
+        #expect(afterBlame == initial &+ 1)
+
+        // Fire diff immediately — should bump generation again
+        view.toggleDiff()
+        let afterDiff = view.gitRequestGeneration
+        #expect(afterDiff == initial &+ 2)
+
+        // Both blame and diff callbacks with generation < afterDiff will be discarded
+    }
+
+    @Test("applyMode resets flags and invalidates in-flight git requests")
+    func applyModeResetsFlags() {
+        let url = createTempMarkdownFile(content: "# Test")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        view.isBlameVisible = true
+        view.isDiffVisible = true
+        let genBefore = view.gitRequestGeneration
+
+        view.applyMode()
+
+        #expect(view.isBlameVisible == false)
+        #expect(view.isDiffVisible == false)
+        #expect(view.gitRequestGeneration > genBefore)
+    }
+
+    @Test("loadFile invalidates in-flight git requests from previous file")
+    func loadFileInvalidatesGitRequests() {
+        let urlA = createTempMarkdownFile(content: "# File A")
+        let urlB = createTempMarkdownFile(content: "# File B")
+        defer { cleanup(urlA); cleanup(urlB) }
+
+        let view = MarkdownContentView(filePath: urlA)
+
+        // Simulate blame in-flight for file A
+        view.toggleBlame()
+        let genAfterBlame = view.gitRequestGeneration
+
+        // Switch to file B before blame completes
+        view.loadFile(urlB)
+        let genAfterLoad = view.gitRequestGeneration
+
+        // loadFile must have bumped the generation
+        #expect(genAfterLoad > genAfterBlame)
+        // The blame callback (if it arrives) will see generation mismatch and discard
+        #expect(view.isBlameVisible == false)
+        #expect(view.filePath == urlB)
+    }
+
+    @Test("loadFile resets blame/diff view when switching files")
+    func loadFileResetsBlameDiffView() {
+        let urlA = createTempMarkdownFile(content: "# A")
+        let urlB = createTempMarkdownFile(content: "# B")
+        defer { cleanup(urlA); cleanup(urlB) }
+
+        let view = MarkdownContentView(filePath: urlA)
+        // Pretend blame was active
+        view.isBlameVisible = true
+        view.isDiffVisible = false
+
+        view.loadFile(urlB)
+
+        #expect(view.isBlameVisible == false)
+        #expect(view.isDiffVisible == false)
+    }
+
+    // MARK: - Drag & Drop
+
+    @Test("View registers for file URL drag types")
+    func registersForDragTypes() {
+        let view = MarkdownContentView(filePath: nil)
+        let registered = view.registeredDraggedTypes
+        #expect(registered.contains(.fileURL))
+    }
+
+    @Test("insertImageReference inserts markdown image syntax into source")
+    func insertImageReferenceInsertsMarkdown() {
+        let url = createTempMarkdownFile(content: "Hello world")
+        defer { cleanup(url) }
+
+        // Create a temporary image file to reference
+        let imageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("test-image-\(UUID().uuidString).png")
+        FileManager.default.createFile(atPath: imageURL.path, contents: Data([0x89, 0x50]))
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let view = MarkdownContentView(filePath: url)
+        let sourceBefore = view.sourceViewForTesting.currentSource
+        #expect(!sourceBefore.contains("!["))
+
+        // Call the actual function
+        view.insertImageReference(for: imageURL)
+
+        let sourceAfter = view.sourceViewForTesting.currentSource
+        #expect(sourceAfter.contains("!["))
+        #expect(sourceAfter.contains(imageURL.deletingPathExtension().lastPathComponent))
+    }
+
+    @Test("insertImageReference does not misclassify sibling directory as ancestor")
+    func insertImageReferenceSiblingDir() throws {
+        // Create /tmpdir/docs/file.md and /tmpdir/docs-old/image.png
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("imgtest-\(UUID().uuidString)")
+        let docsDir = root.appendingPathComponent("docs")
+        let docsOldDir = root.appendingPathComponent("docs-old")
+        try FileManager.default.createDirectory(at: docsDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: docsOldDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let mdURL = docsDir.appendingPathComponent("file.md")
+        try "# Test".write(to: mdURL, atomically: true, encoding: .utf8)
+
+        let imageURL = docsOldDir.appendingPathComponent("photo.png")
+        FileManager.default.createFile(atPath: imageURL.path, contents: Data([0x89, 0x50]))
+
+        let view = MarkdownContentView(filePath: mdURL)
+        view.insertImageReference(for: imageURL)
+
+        let source = view.sourceViewForTesting.currentSource
+        // The image is NOT inside docs/, so the path must be absolute, not a
+        // bogus relative path. With the old hasPrefix bug, the markdown would be
+        // "![photo](-old/photo.png)" — a relative path starting with "-old/".
+        // The correct result is "![photo](/absolute/.../docs-old/photo.png)".
+        #expect(!source.contains("](-old/"))
+        #expect(source.contains("](/"))
+        #expect(source.contains(imageURL.path))
     }
 
     private func cleanup(_ url: URL) {

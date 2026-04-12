@@ -131,7 +131,9 @@ extension MainWindowController {
             let browserView = BrowserContentView(viewModel: browserVM)
             panelView = browserView
         case .markdown:
-            let mdView = MarkdownContentView(filePath: panel.filePath)
+            let workspaceDir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+                ?? tabManager.activeTab?.workingDirectory
+            let mdView = MarkdownContentView(filePath: panel.filePath, workspaceDirectory: workspaceDir)
             panelView = mdView
         case .subagent:
             guard let dashboardVM = injectedDashboardViewModel,

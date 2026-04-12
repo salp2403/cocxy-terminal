@@ -129,4 +129,49 @@ struct MarkdownInlineParserTests {
             .link(text: [.text("e")], url: "f")
         ])
     }
+
+    // MARK: - Images
+
+    @Test("image syntax produces image inline")
+    func imageInline() {
+        let result = parser.parse("![alt text](image.png)")
+        #expect(result == [.image(alt: "alt text", url: "image.png")])
+    }
+
+    @Test("image with empty alt")
+    func imageEmptyAlt() {
+        let result = parser.parse("![](photo.jpg)")
+        #expect(result == [.image(alt: "", url: "photo.jpg")])
+    }
+
+    @Test("image mixed with text")
+    func imageMixedWithText() {
+        let result = parser.parse("See ![logo](logo.png) here")
+        #expect(result.count == 3)
+        #expect(result[0] == .text("See "))
+        #expect(result[1] == .image(alt: "logo", url: "logo.png"))
+        #expect(result[2] == .text(" here"))
+    }
+
+    @Test("link URL can contain balanced parentheses")
+    func linkURLWithParentheses() {
+        let result = parser.parse("[Docs](https://example.com/foo(bar)/baz)")
+        #expect(result == [
+            .link(text: [.text("Docs")], url: "https://example.com/foo(bar)/baz")
+        ])
+    }
+
+    @Test("image URL can contain balanced parentheses")
+    func imageURLWithParentheses() {
+        let result = parser.parse("![diagram](assets/diagram (1).png)")
+        #expect(result == [
+            .image(alt: "diagram", url: "assets/diagram (1).png")
+        ])
+    }
+
+    @Test("bare exclamation mark is text")
+    func bareExclamation() {
+        let result = parser.parse("Hello! World")
+        #expect(result == [.text("Hello! World")])
+    }
 }

@@ -214,6 +214,11 @@ enum MarkdownHTMLRenderer {
         case .strike(let inlines):
             return "<del>\(renderInlines(inlines))</del>"
 
+        case .image(let alt, let url):
+            let src = escapeHTML(url)
+            let altText = escapeHTML(alt)
+            return "<img src=\"\(src)\" alt=\"\(altText)\" />"
+
         case .link(let text, let url):
             let href = escapeHTML(url)
             return "<a href=\"\(href)\">\(renderInlines(text))</a>"

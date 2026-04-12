@@ -460,6 +460,17 @@ public struct MarkdownRenderer {
                     .backgroundColor: theme.codeBackground
                 ]))
 
+            case .image(let alt, let url):
+                // In source mode, show the image as a styled placeholder link
+                let display = alt.isEmpty ? url : alt
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: baseFont,
+                    .foregroundColor: theme.linkColor,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    .link: URL(string: url) as Any
+                ]
+                output.append(NSAttributedString(string: "[\(display)]", attributes: attrs))
+
             case .link(let textNodes, let url):
                 let inner = renderInlines(textNodes, baseFont: baseFont, baseColor: theme.linkColor, bold: bold, italic: italic)
                 let mutable = NSMutableAttributedString(attributedString: inner)

@@ -85,6 +85,8 @@ public struct MarkdownOutline: Equatable, Sendable {
                 buffer.append(plainText(from: nested))
             case .code(let s):
                 buffer.append(s)
+            case .image(let alt, _):
+                buffer.append(alt)
             case .link(let text, _):
                 buffer.append(plainText(from: text))
             case .autolink(let url):

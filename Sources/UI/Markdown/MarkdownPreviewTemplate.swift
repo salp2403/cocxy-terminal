@@ -39,6 +39,8 @@ enum MarkdownPreviewTemplate {
         \(autoRenderJS.isEmpty ? "" : "<script>\(autoRenderJS)</script>")
         </head>
         <body>
+        <button id="toc-toggle" title="Table of Contents">&#9776;</button>
+        <div id="toc-panel"></div>
         <div id="content"></div>
         \(mermaidJS.isEmpty ? "" : "<script>\(mermaidJS)</script>")
         <script>\(updateScript)</script>
@@ -91,6 +93,12 @@ enum MarkdownPreviewTemplate {
 
             // Restore scroll position after DOM update.
             window.scrollTo(0, savedY);
+
+            // Rebuild floating TOC if it is visible
+            var tocPanel = document.getElementById('toc-panel');
+            if (tocPanel && tocPanel.classList.contains('visible')) {
+                buildTOC();
+            }
         }
 
         function scrollToHeading(title) {
@@ -123,6 +131,65 @@ enum MarkdownPreviewTemplate {
                     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace'
                 }
             });
+        }
+
+        // Floating TOC — uses DOM API (createElement + textContent) to avoid
+        // re-injecting unescaped heading text via innerHTML, which would break
+        // the renderer's XSS guarantee.
+        function buildTOC() {
+            var panel = document.getElementById('toc-panel');
+            if (!panel) return;
+            var headings = document.querySelectorAll('#content h1, #content h2, #content h3, #content h4, #content h5, #content h6');
+
+            // Clear previous TOC entries safely
+            while (panel.firstChild) panel.removeChild(panel.firstChild);
+
+            if (headings.length === 0) {
+                var empty = document.createElement('div');
+                empty.className = 'toc-empty';
+                empty.textContent = 'No headings';
+                panel.appendChild(empty);
+                return;
+            }
+
+            for (var i = 0; i < headings.length; i++) {
+                var h = headings[i];
+                var level = h.tagName.toLowerCase();
+                var id = 'toc-heading-' + i;
+                h.id = id;
+
+                var link = document.createElement('a');
+                link.href = '#';
+                link.className = 'toc-' + level;
+                link.setAttribute('data-target', id);
+                // textContent is safe: it sets text, never parses HTML
+                link.textContent = h.textContent.trim();
+                link.addEventListener('click', (function(targetId) {
+                    return function(e) {
+                        e.preventDefault();
+                        var el = document.getElementById(targetId);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    };
+                })(id));
+                panel.appendChild(link);
+            }
+        }
+
+        // Toggle TOC panel visibility
+        var tocToggle = document.getElementById('toc-toggle');
+        if (tocToggle) {
+            tocToggle.addEventListener('click', function() {
+                var panel = document.getElementById('toc-panel');
+                if (!panel) return;
+                var isVisible = panel.classList.toggle('visible');
+                tocToggle.classList.toggle('active', isVisible);
+                if (isVisible) buildTOC();
+            });
+        }
+
+        function scrollToFraction(fraction) {
+            var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+            window.scrollTo(0, Math.round(maxScroll * fraction));
         }
         """
     }
@@ -304,6 +371,65 @@ enum MarkdownPreviewTemplate {
 
         /* Selection */
         ::selection { background: rgba(137, 180, 250, 0.3); }
+
+        /* Floating TOC */
+        #toc-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1px solid var(--surface1);
+            background: var(--mantle);
+            color: var(--subtext0);
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
+            transition: opacity 0.15s, background 0.15s;
+        }
+        #toc-toggle:hover { opacity: 1; background: var(--surface0); }
+        #toc-toggle.active { opacity: 1; color: var(--blue); border-color: var(--blue); }
+
+        #toc-panel {
+            position: fixed;
+            top: 44px;
+            right: 10px;
+            z-index: 999;
+            width: 220px;
+            max-height: 60vh;
+            overflow-y: auto;
+            background: var(--mantle);
+            border: 1px solid var(--surface0);
+            border-radius: 8px;
+            padding: 10px 0;
+            display: none;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+        #toc-panel.visible { display: block; }
+        #toc-panel a {
+            display: block;
+            padding: 3px 14px;
+            color: var(--subtext1);
+            text-decoration: none;
+            font-size: 12px;
+            line-height: 1.5;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #toc-panel a:hover { background: var(--surface0); color: var(--text); }
+        #toc-panel a.toc-h1 { font-weight: 600; color: var(--blue); padding-left: 14px; }
+        #toc-panel a.toc-h2 { padding-left: 24px; }
+        #toc-panel a.toc-h3 { padding-left: 34px; color: var(--overlay0); }
+        #toc-panel a.toc-h4,
+        #toc-panel a.toc-h5,
+        #toc-panel a.toc-h6 { padding-left: 44px; color: var(--overlay0); font-size: 11px; }
+        #toc-panel .toc-empty { padding: 8px 14px; color: var(--overlay0); font-style: italic; font-size: 12px; }
         """
     }
 }

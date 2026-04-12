@@ -47,7 +47,7 @@ public struct MarkdownInlineParser {
 
     private static func flattenSingle(_ inline: MarkdownInline) -> MarkdownInline {
         switch inline {
-        case .text, .code, .autolink, .lineBreak:
+        case .text, .code, .autolink, .lineBreak, .image:
             return inline
         case .strong(let nested):
             return .strong(inlines: flatten(nested))
@@ -139,6 +139,17 @@ private extension MarkdownInlineParser {
 
                 case "~":
                     if let (node, newIndex) = parseStrike(from: index) {
+                        flushText()
+                        output.append(node)
+                        index = newIndex
+                    } else {
+                        textBuffer.append(ch)
+                        index += 1
+                    }
+
+                case "!":
+                    if index + 1 < chars.count, chars[index + 1] == "[",
+                       let (node, newIndex) = parseImage(from: index) {
                         flushText()
                         output.append(node)
                         index = newIndex
@@ -362,23 +373,62 @@ private extension MarkdownInlineParser {
                 return nil
             }
 
-            // Parse URL up to the matching `)`.
+            // Parse URL up to the matching `)`, allowing balanced parentheses
+            // inside the URL itself (`foo(bar).png`).
             var j = afterBracket + 1
             var urlBuffer = ""
-            while j < chars.count, chars[j] != ")" {
+            var parenDepth = 1
+            while j < chars.count {
                 if chars[j] == "\\" && j + 1 < chars.count {
                     urlBuffer.append(chars[j + 1])
                     j += 2
                     continue
                 }
+                if chars[j] == "(" {
+                    parenDepth += 1
+                    urlBuffer.append(chars[j])
+                    j += 1
+                    continue
+                }
+                if chars[j] == ")" {
+                    parenDepth -= 1
+                    if parenDepth == 0 {
+                        break
+                    }
+                    urlBuffer.append(chars[j])
+                    j += 1
+                    continue
+                }
                 urlBuffer.append(chars[j])
                 j += 1
             }
-            guard j < chars.count, chars[j] == ")" else { return nil }
+            guard j < chars.count, chars[j] == ")", parenDepth == 0 else { return nil }
 
             let linkText = String(chars[textRange])
             let innerNodes = MarkdownInlineParser().parse(linkText)
             return (.link(text: innerNodes, url: urlBuffer.trimmingCharacters(in: .whitespaces)), j + 1)
+        }
+
+        // MARK: Image
+
+        mutating func parseImage(from start: Int) -> (MarkdownInline, Int)? {
+            // Image syntax: ![alt](url)
+            // start points to '!', start+1 must be '['
+            guard start + 1 < chars.count, chars[start] == "!", chars[start + 1] == "[" else {
+                return nil
+            }
+
+            // Reuse link parsing from the '[' position
+            guard let (linkNode, endIndex) = parseLink(from: start + 1) else {
+                return nil
+            }
+
+            // Extract alt text and URL from the link node
+            if case .link(let textInlines, let url) = linkNode {
+                let alt = MarkdownOutline.plainText(from: textInlines)
+                return (.image(alt: alt, url: url), endIndex)
+            }
+            return nil
         }
 
         // MARK: Autolink

@@ -20,8 +20,11 @@ final class MarkdownToolbarView: NSView {
     private let iconView = NSImageView()
     private let fileNameLabel = NSTextField(labelWithString: "Untitled.md")
     private let modeSegmented = NSSegmentedControl()
+    private let blameButton = NSButton()
+    private let diffButton = NSButton()
     private let exportPDFButton = NSButton()
     private let exportHTMLButton = NSButton()
+    private var exportSlidesButton: NSButton!
     private let outlineToggleButton = NSButton()
     private let reloadButton = NSButton()
 
@@ -57,11 +60,20 @@ final class MarkdownToolbarView: NSView {
     /// Invoked when the reload button is clicked.
     var onReload: (() -> Void)?
 
+    /// Invoked when Blame toggle is clicked.
+    var onBlameToggle: (() -> Void)?
+
+    /// Invoked when Diff toggle is clicked.
+    var onDiffToggle: (() -> Void)?
+
     /// Invoked when Export PDF is clicked.
     var onExportPDF: (() -> Void)?
 
     /// Invoked when Export HTML is clicked.
     var onExportHTML: (() -> Void)?
+
+    /// Invoked when Export Slides is clicked.
+    var onExportSlides: (() -> Void)?
 
     // MARK: - Init
 
@@ -111,6 +123,24 @@ final class MarkdownToolbarView: NSView {
         modeSegmented.translatesAutoresizingMaskIntoConstraints = false
         addSubview(modeSegmented)
 
+        // Blame
+        configureIconButton(
+            blameButton,
+            systemName: "person.text.rectangle",
+            accessibility: "Git Blame",
+            action: #selector(blameClicked)
+        )
+        addSubview(blameButton)
+
+        // Diff
+        configureIconButton(
+            diffButton,
+            systemName: "arrow.left.arrow.right",
+            accessibility: "Git Diff",
+            action: #selector(diffClicked)
+        )
+        addSubview(diffButton)
+
         // Export PDF
         configureIconButton(
             exportPDFButton,
@@ -128,6 +158,17 @@ final class MarkdownToolbarView: NSView {
             action: #selector(exportHTMLClicked)
         )
         addSubview(exportHTMLButton)
+
+        // Export Slides
+        let exportSlidesButton = NSButton()
+        configureIconButton(
+            exportSlidesButton,
+            systemName: "rectangle.split.3x1",
+            accessibility: "Export Slides",
+            action: #selector(exportSlidesClicked)
+        )
+        addSubview(exportSlidesButton)
+        self.exportSlidesButton = exportSlidesButton
 
         // Outline toggle
         configureIconButton(
@@ -165,12 +206,17 @@ final class MarkdownToolbarView: NSView {
             reloadButton.widthAnchor.constraint(equalToConstant: 22),
             reloadButton.heightAnchor.constraint(equalToConstant: 22),
 
+            exportSlidesButton.trailingAnchor.constraint(equalTo: outlineToggleButton.leadingAnchor, constant: -4),
+            exportSlidesButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            exportSlidesButton.widthAnchor.constraint(equalToConstant: 22),
+            exportSlidesButton.heightAnchor.constraint(equalToConstant: 22),
+
             outlineToggleButton.trailingAnchor.constraint(equalTo: reloadButton.leadingAnchor, constant: -4),
             outlineToggleButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             outlineToggleButton.widthAnchor.constraint(equalToConstant: 22),
             outlineToggleButton.heightAnchor.constraint(equalToConstant: 22),
 
-            exportHTMLButton.trailingAnchor.constraint(equalTo: outlineToggleButton.leadingAnchor, constant: -4),
+            exportHTMLButton.trailingAnchor.constraint(equalTo: exportSlidesButton.leadingAnchor, constant: -4),
             exportHTMLButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             exportHTMLButton.widthAnchor.constraint(equalToConstant: 22),
             exportHTMLButton.heightAnchor.constraint(equalToConstant: 22),
@@ -178,7 +224,17 @@ final class MarkdownToolbarView: NSView {
             exportPDFButton.trailingAnchor.constraint(equalTo: exportHTMLButton.leadingAnchor, constant: -4),
             exportPDFButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             exportPDFButton.widthAnchor.constraint(equalToConstant: 22),
-            exportPDFButton.heightAnchor.constraint(equalToConstant: 22)
+            exportPDFButton.heightAnchor.constraint(equalToConstant: 22),
+
+            diffButton.trailingAnchor.constraint(equalTo: exportPDFButton.leadingAnchor, constant: -4),
+            diffButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            diffButton.widthAnchor.constraint(equalToConstant: 22),
+            diffButton.heightAnchor.constraint(equalToConstant: 22),
+
+            blameButton.trailingAnchor.constraint(equalTo: diffButton.leadingAnchor, constant: -4),
+            blameButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            blameButton.widthAnchor.constraint(equalToConstant: 22),
+            blameButton.heightAnchor.constraint(equalToConstant: 22)
         ])
     }
 
@@ -216,12 +272,24 @@ final class MarkdownToolbarView: NSView {
         onReload?()
     }
 
+    @objc private func blameClicked() {
+        onBlameToggle?()
+    }
+
+    @objc private func diffClicked() {
+        onDiffToggle?()
+    }
+
     @objc private func exportPDFClicked() {
         onExportPDF?()
     }
 
     @objc private func exportHTMLClicked() {
         onExportHTML?()
+    }
+
+    @objc private func exportSlidesClicked() {
+        onExportSlides?()
     }
 
     // MARK: - Helpers
