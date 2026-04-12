@@ -5,6 +5,11 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.57] - 2026-04-12
+
+### Fixed
+- V0.1.57 — harden per-surface terminal locking across all public bridge paths
+
 ## [0.1.56] - 2026-04-12
 
 ### Added
@@ -682,6 +687,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero telemetry — no PostHog, no Sentry, no analytics
 - MIT License
 
+[0.1.57]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.56...v0.1.57
 [0.1.56]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.55...v0.1.56
 [0.1.55]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.54...v0.1.55
 [0.1.54]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.53...v0.1.54
