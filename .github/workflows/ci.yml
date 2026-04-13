@@ -40,6 +40,9 @@ jobs:
       - name: Build Release
         run: swift build -c release
 
+      - name: Install xcodegen
+        run: brew install xcodegen
+
       - name: Build App Bundle
         run: |
           chmod +x scripts/build-app.sh
