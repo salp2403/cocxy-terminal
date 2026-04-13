@@ -32,6 +32,8 @@
 	<string>public.app-category.developer-tools</string>
 	<key>SUFeedURL</key>
 	<string>https://cocxy.dev/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>gMWhWC+AqrUZqRg1RbTr32MDdkk7H3DhLfnEqtQnWQU=</string>
 	<key>NSAppleScriptEnabled</key>
 	<true/>
 	<key>OSAScriptingDefinition</key>

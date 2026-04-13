@@ -11,18 +11,25 @@ struct AgentNativePatternProjectionSwiftTestingTests {
         let compiled = AgentConfigService.defaultAgentConfigs().map(AgentConfigService.compile)
         let patterns = AgentConfigService.nativeSemanticPatterns(from: compiled)
 
-        #expect(patterns.contains(where: {
+        let hasCodexLaunch = patterns.contains {
             $0.type == .agentLaunch && $0.mode == .prefix && $0.text == "codex"
-        }))
-        #expect(patterns.contains(where: {
+        }
+        #expect(hasCodexLaunch)
+
+        let hasCodexBanner = patterns.contains {
             $0.type == .agentLaunch && $0.mode == .contains && $0.text == "Welcome to Codex"
-        }))
-        #expect(patterns.contains(where: {
+        }
+        #expect(hasCodexBanner)
+
+        let hasClaudeBanner = patterns.contains {
             $0.type == .agentLaunch && $0.mode == .contains && $0.text == "Claude Code v"
-        }))
-        #expect(patterns.contains(where: {
+        }
+        #expect(hasClaudeBanner)
+
+        let hasFinishedPrompt = patterns.contains {
             $0.type == .agentFinished && $0.mode == .suffix && $0.text == ">"
-        }))
+        }
+        #expect(hasFinishedPrompt)
     }
 
     @Test("projection stays conservative for regex-heavy launch patterns")
@@ -30,8 +37,9 @@ struct AgentNativePatternProjectionSwiftTestingTests {
         let compiled = AgentConfigService.defaultAgentConfigs().map(AgentConfigService.compile)
         let patterns = AgentConfigService.nativeSemanticPatterns(from: compiled)
 
-        #expect(!patterns.contains(where: {
+        let hasBroadPython = patterns.contains {
             $0.type == .agentLaunch && $0.mode == .prefix && $0.text == "python"
-        }))
+        }
+        #expect(!hasBroadPython)
     }
 }
