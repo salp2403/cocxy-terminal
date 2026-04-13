@@ -5,6 +5,11 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.61] - 2026-04-13
+
+### Fixed
+- V0.1.61 — add SUFeedURL to Info.plist for Sparkle auto-update
+
 ## [0.1.60] - 2026-04-12
 
 ### Fixed
@@ -716,6 +721,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero telemetry — no PostHog, no Sentry, no analytics
 - MIT License
 
+[0.1.61]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.60...v0.1.61
 [0.1.59]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.58...v0.1.59
 [0.1.58]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.57...v0.1.58
 [0.1.57]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.56...v0.1.57
