@@ -10,6 +10,7 @@ final class PreviewProvider: NSViewController, QLPreviewingController, WKNavigat
     private lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop
+        configuration.websiteDataStore = .nonPersistent()
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.translatesAutoresizingMaskIntoConstraints = false
         view.navigationDelegate = self
@@ -49,6 +50,10 @@ final class PreviewProvider: NSViewController, QLPreviewingController, WKNavigat
         }
 
         let document = MarkdownDocument.parse(source)
+        let renderedDocument = MarkdownQuickLookHTMLSanitizer.makeOfflinePreviewHTML(
+            from: MarkdownHTMLRenderer.renderDocument(document),
+            baseDirectory: url.deletingLastPathComponent()
+        )
         let html = MarkdownPreviewTemplate.build(
             mermaidJS: loadMarkdownResource(named: "mermaid.min", ext: "js"),
             katexJS: loadMarkdownResource(named: "katex.min", ext: "js"),
@@ -62,9 +67,9 @@ final class PreviewProvider: NSViewController, QLPreviewingController, WKNavigat
         webView.loadHTMLString(
             html.replacingOccurrences(
                 of: "<div id=\"content\"></div>",
-                with: "<div id=\"content\">\(MarkdownHTMLRenderer.renderDocument(document))</div>"
+                with: "<div id=\"content\">\(renderedDocument)</div>"
             ),
-            baseURL: url.deletingLastPathComponent()
+            baseURL: nil
         )
     }
 

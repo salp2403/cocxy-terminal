@@ -788,6 +788,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleHooksList(request)
         case .hookHandler:
             return handleHookHandler(request)
+        case .setupHooks:
+            return .failure(
+                id: request.id,
+                error: "Command 'setup-hooks' must be run locally from the Cocxy CLI."
+            )
 
         // SSH (v4)
         case .ssh:

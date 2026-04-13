@@ -113,8 +113,43 @@ enum AgentState: String, Codable, Sendable {
 struct DetectedAgent: Codable, Equatable, Sendable {
     /// Short identifier of the agent (e.g., "claude", "codex", "aider").
     let name: String
+    /// Human-readable display name shown in the UI.
+    let displayName: String
     /// The full command that launched the agent.
     let launchCommand: String
     /// Timestamp when the agent was first detected.
     let startedAt: Date
+
+    init(
+        name: String,
+        displayName: String? = nil,
+        launchCommand: String,
+        startedAt: Date
+    ) {
+        self.name = name
+        self.displayName = displayName ?? name
+        self.launchCommand = launchCommand
+        self.startedAt = startedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case displayName
+        case launchCommand
+        case startedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let name = try container.decode(String.self, forKey: .name)
+        let displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? name
+        let launchCommand = try container.decode(String.self, forKey: .launchCommand)
+        let startedAt = try container.decode(Date.self, forKey: .startedAt)
+        self.init(
+            name: name,
+            displayName: displayName,
+            launchCommand: launchCommand,
+            startedAt: startedAt
+        )
+    }
 }

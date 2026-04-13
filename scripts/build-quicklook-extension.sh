@@ -72,8 +72,15 @@ if ! plutil -extract "NSExtension.NSExtensionPointIdentifier" raw -o - "${INFO_P
     exit 1
 fi
 
-if ! codesign -d --entitlements :- "${APPEX_PATH}" 2>/dev/null | grep -q "<key>com.apple.security.app-sandbox</key><true/>"; then
+ENTITLEMENTS_XML="$(codesign -d --entitlements :- "${APPEX_PATH}" 2>/dev/null || true)"
+
+if ! printf '%s' "${ENTITLEMENTS_XML}" | grep -q "<key>com.apple.security.app-sandbox</key><true/>"; then
     echo "ERROR: QuickLook sandbox entitlement was not written to ${APPEX_PATH}"
+    exit 1
+fi
+
+if ! printf '%s' "${ENTITLEMENTS_XML}" | grep -q "<key>com.apple.security.network.client</key><true/>"; then
+    echo "ERROR: QuickLook network client entitlement was not written to ${APPEX_PATH}"
     exit 1
 fi
 

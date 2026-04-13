@@ -46,6 +46,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy hook-handler` (reads JSON from stdin)
     case hookHandler
 
+    /// `cocxy setup-hooks [--agent claude|codex|gemini|kiro|all] [--remove]`
+    case setupHooks(agent: SetupHooksTarget?, remove: Bool)
+
     /// `cocxy --help` or `cocxy help`
     case help
 
@@ -393,6 +396,9 @@ public enum CLIArgumentParser {
         case "hook-handler":
             return .hookHandler
 
+        case "setup-hooks":
+            return try parseSetupHooks(arguments: Array(arguments.dropFirst()))
+
         // MARK: v2 compound commands
 
         case "tab":
@@ -601,6 +607,47 @@ public enum CLIArgumentParser {
                 reason: "Unknown subcommand. Use install, uninstall, or status."
             )
         }
+    }
+
+    /// Parses `cocxy setup-hooks [--agent <name>] [--remove]`.
+    private static func parseSetupHooks(arguments: [String]) throws -> ParsedCommand {
+        var selectedAgent: SetupHooksTarget?
+        var remove = false
+        var index = 0
+
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--remove":
+                remove = true
+                index += 1
+
+            case "--agent":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "setup-hooks", argument: "agent")
+                }
+
+                let rawAgent = arguments[index + 1].lowercased()
+                guard let parsedAgent = SetupHooksTarget(rawValue: rawAgent) else {
+                    throw CLIError.invalidArgument(
+                        command: "setup-hooks",
+                        argument: rawAgent,
+                        reason: "Must be claude, codex, gemini, kiro, or all."
+                    )
+                }
+
+                selectedAgent = parsedAgent
+                index += 2
+
+            default:
+                throw CLIError.invalidArgument(
+                    command: "setup-hooks",
+                    argument: arguments[index],
+                    reason: "Unknown flag. Use --agent <name> and/or --remove."
+                )
+            }
+        }
+
+        return .setupHooks(agent: selectedAgent, remove: remove)
     }
 
     // MARK: - Private: v2 Subcommand Parsers

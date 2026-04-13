@@ -2,8 +2,9 @@
 # build-app.sh - Build Cocxy Terminal as a macOS .app bundle.
 #
 # Usage:
-#   ./scripts/build-app.sh          # Debug build
-#   ./scripts/build-app.sh release  # Release build (optimized)
+#   ./scripts/build-app.sh                   # Debug build
+#   ./scripts/build-app.sh release           # Release build (optimized)
+#   ./scripts/build-app.sh release --install # Build, install, and register Quick Look
 #
 # Output: build/CocxyTerminal.app
 #
@@ -12,11 +13,28 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_MODE="${1:-debug}"
+BUILD_MODE="debug"
+INSTALL_AFTER_BUILD=0
 APP_NAME="CocxyTerminal"
 BUNDLE_NAME="Cocxy Terminal"
 APP_ENTITLEMENTS="${PROJECT_ROOT}/Resources/CocxyTerminal.entitlements"
 QL_ENTITLEMENTS="${PROJECT_ROOT}/QuickLook/CocxyQuickLook.entitlements"
+
+for arg in "$@"; do
+    case "$arg" in
+        debug|release)
+            BUILD_MODE="$arg"
+            ;;
+        --install|install)
+            INSTALL_AFTER_BUILD=1
+            ;;
+        *)
+            echo "ERROR: Unknown argument: $arg"
+            echo "Usage: ./scripts/build-app.sh [debug|release] [--install]"
+            exit 1
+            ;;
+    esac
+done
 
 # Determine build configuration.
 if [ "$BUILD_MODE" = "release" ]; then
@@ -142,4 +160,10 @@ echo "    Binary: ${MACOS}/${APP_NAME}"
 echo "    Mode: ${BUILD_MODE}"
 echo ""
 echo "    To run: open ${APP_BUNDLE}"
-echo "    To install: cp -R ${APP_BUNDLE} /Applications/"
+echo "    To install/register Quick Look: ${PROJECT_ROOT}/scripts/install-local-app.sh ${APP_BUNDLE}"
+
+if [ "${INSTALL_AFTER_BUILD}" -eq 1 ]; then
+    echo ""
+    echo "==> Installing built app into /Applications..."
+    "${PROJECT_ROOT}/scripts/install-local-app.sh" "${APP_BUNDLE}"
+fi

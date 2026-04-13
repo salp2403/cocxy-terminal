@@ -67,6 +67,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Cancellable for the remote unread count subscription.
     private var remoteUnreadCancellable: AnyCancellable?
 
+    /// Workspace wake observers that refresh terminal rendering after macOS
+    /// display sleep / system wake. Without this safety net, a visible surface
+    /// can remain visually blank until another UI action (for example a tab
+    /// switch) requests a redraw.
+    private var workspaceWakeObservers: [NSObjectProtocol] = []
+
     /// Event bus for receiving cross-window events (theme sync, config
     /// reload, focus session). Injected by AppDelegate.
     var windowEventBus: (any WindowEventBroadcasting)? {
@@ -381,6 +387,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         super.init(window: window)
         self.lastAppliedConfig = configService?.current
         configureWindow(window)
+        installWorkspaceWakeObservers()
         subscribeToConfigChanges()
         subscribeToActiveTabChanges()
         startProcessMonitor()
@@ -989,6 +996,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         eventBusCancellable = nil
         remoteUnreadCancellable?.cancel()
         remoteUnreadCancellable = nil
+        removeWorkspaceWakeObservers()
 
         destroyAllSurfaces()
 
@@ -1066,6 +1074,64 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         for savedSplits in savedTabSplitSurfaceViews.values {
             for view in savedSplits.values { anchor(view) }
         }
+    }
+
+    /// Re-anchors every managed terminal surface and requests an immediate
+    /// redraw for the currently visible ones.
+    ///
+    /// This is the recovery path for cases where macOS display sleep/wake or
+    /// app reactivation leaves the Metal-backed terminal visually stale until a
+    /// later UI event forces a redraw.
+    func recoverTerminalRenderingAfterWake() {
+        refreshAllSurfaceDisplayLinkAnchors()
+        refreshVisibleTerminalInteractionState()
+    }
+
+    private func installWorkspaceWakeObservers() {
+        guard workspaceWakeObservers.isEmpty else { return }
+        let center = NSWorkspace.shared.notificationCenter
+
+        workspaceWakeObservers = [
+            center.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main,
+                using: { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        self?.recoverTerminalRenderingAfterWake()
+                    }
+                    DispatchQueue.main.async { [weak self] in
+                        MainActor.assumeIsolated {
+                            self?.recoverTerminalRenderingAfterWake()
+                        }
+                    }
+                }
+            ),
+            center.addObserver(
+                forName: NSWorkspace.screensDidWakeNotification,
+                object: nil,
+                queue: .main,
+                using: { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        self?.recoverTerminalRenderingAfterWake()
+                    }
+                    DispatchQueue.main.async { [weak self] in
+                        MainActor.assumeIsolated {
+                            self?.recoverTerminalRenderingAfterWake()
+                        }
+                    }
+                }
+            ),
+        ]
+    }
+
+    private func removeWorkspaceWakeObservers() {
+        guard !workspaceWakeObservers.isEmpty else { return }
+        let center = NSWorkspace.shared.notificationCenter
+        for observer in workspaceWakeObservers {
+            center.removeObserver(observer)
+        }
+        workspaceWakeObservers.removeAll()
     }
 
     // MARK: - Responsive Layout

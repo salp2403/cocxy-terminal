@@ -84,6 +84,8 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case hooks
     /// Handle incoming Claude Code hook event from stdin. CLI-only, forwards via hook-event.
     case hookHandler = "hook-handler"
+    /// Configure supported external agent hooks. Local-first, mirrored here for wire parity.
+    case setupHooks = "setup-hooks"
 
     // MARK: - Tab extended (v2)
 

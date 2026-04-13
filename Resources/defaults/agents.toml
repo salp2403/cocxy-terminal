@@ -34,39 +34,44 @@ finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^>\\s*$"]
 [codex]
 display-name = "Codex CLI"
 osc-supported = false
-launch-patterns = ["^codex\\b"]
-waiting-patterns = ["\\? ", "Enter to confirm"]
-error-patterns = ["Error:", "Failed"]
-finished-indicators = ["^\\$\\s*$"]
+launch-patterns = ["^codex\\b", "Welcome to Codex", "OpenAI's command-line coding agent"]
+waiting-patterns = ["Enter to confirm", "\\? ", "ctrl \\+ c again to quit"]
+error-patterns = ["Error:", "Failed", "rate limit"]
+finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^>\\s*$"]
+idle-timeout-override = 8
 
 [aider]
 display-name = "Aider"
 osc-supported = false
-launch-patterns = ["^aider\\b", "^python.*aider"]
-waiting-patterns = ["^>\\s*$", "^aider>"]
-error-patterns = ["Error:", "Exception:", "Traceback"]
-finished-indicators = ["^\\$\\s*$"]
+launch-patterns = ["^aider(?:\\s|$)", "^python.*aider", "Aider v\\d+\\.\\d+", "Main model:.*edit format"]
+waiting-patterns = ["^(diff|whole|udiff|architect|ask|help)?( multi)?> $", "^aider>", "^> $"]
+error-patterns = ["Error:", "Exception:", "Traceback", "has hit a token limit", "did not conform to the edit format", "Retrying in \\d+ seconds"]
+finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "Tokens:.*sent.*received", "Applied edit to"]
+idle-timeout-override = 10
 
 [gemini-cli]
 display-name = "Gemini CLI"
 osc-supported = false
-launch-patterns = ["^gemini\\b"]
-waiting-patterns = ["^>\\s*$", "Enter your prompt"]
+launch-patterns = ["^gemini\\b", "Gemini CLI v\\d+", "Gemini CLI v[0-9]"]
+waiting-patterns = ["^> $", "^! $", "Waiting for user confirmation"]
 error-patterns = ["Error:", "Failed"]
-finished-indicators = ["^\\$\\s*$"]
+finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^> $"]
+idle-timeout-override = 8
 
 [kiro]
 display-name = "Kiro"
 osc-supported = false
-launch-patterns = ["^kiro\\b"]
-waiting-patterns = ["\\? "]
-error-patterns = ["Error:"]
-finished-indicators = ["^\\$\\s*$"]
+launch-patterns = ["^kiro\\b", "^kiro-cli\\b", "Welcome to Kiro"]
+waiting-patterns = ["^(\\[.*\\]\\s+)?(\\d+%\\s+)?!?> $", "Thinking\\.\\.\\.", "\\? "]
+error-patterns = ["Error:", "rate limit reached", "having trouble responding"]
+finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^> $"]
+idle-timeout-override = 8
 
 [opencode]
 display-name = "OpenCode"
 osc-supported = false
-launch-patterns = ["^opencode\\b"]
-waiting-patterns = ["^>\\s*$"]
-error-patterns = ["Error:"]
-finished-indicators = ["^\\$\\s*$"]
+launch-patterns = ["^opencode\\b", "Loading plugins"]
+waiting-patterns = ["Ask anything", "^> $"]
+error-patterns = ["Error:", "✗"]
+finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "✓"]
+idle-timeout-override = 8

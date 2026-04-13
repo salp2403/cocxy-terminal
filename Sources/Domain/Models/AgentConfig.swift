@@ -229,3 +229,27 @@ struct CompiledAgentConfig: Sendable {
     /// Patterns from the source config that failed to compile.
     let invalidPatterns: [String]
 }
+
+// MARK: - Native Terminal Pattern Projection
+
+/// Conservative literal pattern that can be registered with CocxyCore's native
+/// semantic matcher without widening into a more permissive regex.
+struct TerminalSemanticNativePattern: Hashable, Sendable {
+    enum PatternType: Hashable, Sendable {
+        case agentLaunch
+        case agentWaiting
+        case agentError
+        case agentFinished
+    }
+
+    enum MatchMode: Hashable, Sendable {
+        case prefix
+        case contains
+        case suffix
+    }
+
+    let type: PatternType
+    let mode: MatchMode
+    let text: String
+    let confidence: Float
+}

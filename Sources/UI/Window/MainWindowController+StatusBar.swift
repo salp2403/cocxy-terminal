@@ -36,7 +36,7 @@ extension MainWindowController {
 
         if let activeTab = tabManager.activeTab,
            activeTab.agentState != .idle {
-            let agentName = activeTab.detectedAgent?.name
+            let agentName = activeTab.detectedAgent?.displayName
                 ?? activeTab.processName
                 ?? "Agent"
             let statusText: String

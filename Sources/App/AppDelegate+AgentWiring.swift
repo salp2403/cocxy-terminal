@@ -32,6 +32,9 @@ extension AppDelegate {
         try? agentConfigService.reload()
         self.agentConfigService = agentConfigService
         let compiledConfigs = agentConfigService.currentConfigs
+        if let cocxyBridge = bridge as? CocxyCoreBridge {
+            cocxyBridge.updateNativeAgentPatterns(from: compiledConfigs)
+        }
 
         let engine = AgentDetectionEngineImpl(
             compiledConfigs: compiledConfigs,
@@ -66,8 +69,11 @@ extension AppDelegate {
         agentConfigService.configChangedPublisher
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak engine] newConfigs in
+            .sink { [weak engine, weak self] newConfigs in
                 engine?.updateAgentConfigs(newConfigs)
+                if let cocxyBridge = self?.bridge as? CocxyCoreBridge {
+                    cocxyBridge.updateNativeAgentPatterns(from: newConfigs)
+                }
             }
             .store(in: &hookCancellables)
     }
@@ -193,6 +199,7 @@ extension AppDelegate {
 
                 let controller = target.controller
                 let tabID = target.tabID
+                let displayName = self.resolvedAgentDisplayName(context.agentName)
                 controller.tabManager.updateTab(id: tabID) { tab in
                     tab.agentState = agentState
                     tab.lastActivityAt = Date()
@@ -213,6 +220,7 @@ extension AppDelegate {
                         } else {
                             tab.detectedAgent = DetectedAgent(
                                 name: agentName,
+                                displayName: displayName,
                                 launchCommand: agentName,
                                 startedAt: Date()
                             )
@@ -235,7 +243,7 @@ extension AppDelegate {
                 controller.sessionRegistry?.updateAgentState(
                     sessionID,
                     state: agentState,
-                    agentName: context.agentName
+                    agentName: displayName
                 )
 
                 controller.tabBarViewModel?.syncWithManager()
@@ -697,10 +705,17 @@ extension AppDelegate {
                     previousState: previousState,
                     for: target.tabID,
                     tabTitle: tab.title,
-                    agentName: context.agentName
+                    agentName: self.resolvedAgentDisplayName(context.agentName)
                 )
             }
             .store(in: &hookCancellables)
+    }
+
+    func resolvedAgentDisplayName(_ rawName: String?) -> String? {
+        guard let rawName else { return nil }
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return agentConfigService?.displayName(forAgentIdentifier: trimmed) ?? trimmed
     }
 
     // MARK: - Tab CWD Matching

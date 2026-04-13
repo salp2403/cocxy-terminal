@@ -1038,7 +1038,7 @@ extension MainWindowController {
             return
         }
 
-        let agentName = tab.detectedAgent?.name ?? tab.processName ?? "Agent"
+        let agentName = tab.detectedAgent?.displayName ?? tab.processName ?? "Agent"
         let durationText: String? = tab.detectedAgent.map { agent in
             let seconds = Int(Date().timeIntervalSince(agent.startedAt))
             if seconds < 60 { return "\(seconds)s" }

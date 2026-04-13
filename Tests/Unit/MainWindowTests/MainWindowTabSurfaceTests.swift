@@ -1034,4 +1034,42 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             "Shared view must be re-anchored exactly once even though it appears in multiple slots"
         )
     }
+
+    func testRecoverTerminalRenderingAfterWakeRefreshesAnchorsAndVisibleViews() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let primaryView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = primaryView
+
+        let tabMappedDetachedView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[TabID()] = tabMappedDetachedView
+
+        let splitView = TrackingTerminalHostView()
+        controller.splitSurfaceViews[SurfaceID()] = splitView
+
+        let savedView = TrackingTerminalHostView()
+        controller.savedTabSplitSurfaceViews[TabID()] = [SurfaceID(): savedView]
+
+        controller.recoverTerminalRenderingAfterWake()
+
+        XCTAssertEqual(primaryView.refreshDisplayLinkAnchorCallCount, 1)
+        XCTAssertEqual(splitView.refreshDisplayLinkAnchorCallCount, 1)
+        XCTAssertEqual(tabMappedDetachedView.refreshDisplayLinkAnchorCallCount, 1)
+        XCTAssertEqual(savedView.refreshDisplayLinkAnchorCallCount, 1)
+
+        XCTAssertEqual(primaryView.updateMetricsCallCount, 1)
+        XCTAssertEqual(primaryView.redrawCallCount, 1)
+        XCTAssertEqual(splitView.updateMetricsCallCount, 1)
+        XCTAssertEqual(splitView.redrawCallCount, 1)
+
+        XCTAssertEqual(
+            tabMappedDetachedView.redrawCallCount, 0,
+            "Detached tab-mapped views must not be redrawn as visible surfaces"
+        )
+        XCTAssertEqual(
+            savedView.redrawCallCount, 0,
+            "Saved detached split views must only refresh their anchor, not redraw as visible surfaces"
+        )
+    }
 }

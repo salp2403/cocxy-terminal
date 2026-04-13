@@ -221,7 +221,7 @@ extension MainWindowController {
                 title: state.tab.displayTitle,
                 workingDirectory: state.tab.workingDirectory,
                 agentState: state.tab.agentState,
-                detectedAgentName: state.tab.detectedAgent?.name,
+                detectedAgentName: state.tab.detectedAgent?.displayName,
                 hasUnreadNotification: state.tab.hasUnreadNotification
             ))
         }

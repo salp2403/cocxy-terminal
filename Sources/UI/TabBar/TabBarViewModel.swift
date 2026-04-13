@@ -264,7 +264,7 @@ final class TabBarViewModel: ObservableObject {
                     for: tab.agentState,
                     processName: tab.processName,
                     activity: tab.agentActivity,
-                    detectedAgentName: tab.detectedAgent?.name
+                    detectedAgentName: tab.detectedAgent?.displayName
                 ),
                 directoryPath: shortPath(tab.workingDirectory),
                 timeSinceActivity: relativeTime(since: tab.lastActivityAt),

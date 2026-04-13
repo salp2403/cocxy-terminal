@@ -178,6 +178,40 @@ final class AgentConfigService {
         configSubject.value.first { $0.config.name == name }
     }
 
+    /// Resolves an agent identifier or common alias to the display name used in the UI.
+    func displayName(forAgentIdentifier identifier: String) -> String {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return identifier }
+
+        if let exactMatch = configSubject.value.first(where: {
+            $0.config.name == trimmed || $0.config.displayName == trimmed
+        }) {
+            return exactMatch.config.displayName
+        }
+
+        let normalized = Self.normalizedAgentLookupKey(trimmed)
+        if let normalizedMatch = configSubject.value.first(where: { compiled in
+            Self.normalizedAgentLookupKey(compiled.config.name) == normalized
+                || Self.normalizedAgentLookupKey(compiled.config.displayName) == normalized
+        }) {
+            return normalizedMatch.config.displayName
+        }
+
+        let aliasMap: [String: String] = [
+            "claude": "Claude Code",
+            "claudecode": "Claude Code",
+            "codex": "Codex CLI",
+            "codexcli": "Codex CLI",
+            "aider": "Aider",
+            "gemini": "Gemini CLI",
+            "geminicli": "Gemini CLI",
+            "kiro": "Kiro",
+            "kirocli": "Kiro",
+            "opencode": "OpenCode"
+        ]
+        return aliasMap[normalized] ?? trimmed
+    }
+
     // MARK: - Default Config
 
     /// Returns the built-in default agent configurations.
@@ -211,52 +245,107 @@ final class AgentConfigService {
             AgentConfig(
                 name: "codex",
                 displayName: "Codex CLI",
-                launchPatterns: ["^codex\\b"],
-                waitingPatterns: ["\\? ", "Enter to confirm"],
-                errorPatterns: ["Error:", "Failed"],
-                finishedIndicators: ["^\\$\\s*$"],
+                launchPatterns: [
+                    "^codex\\b",
+                    "Welcome to Codex",
+                    "OpenAI's command-line coding agent",
+                ],
+                waitingPatterns: [
+                    "Enter to confirm",
+                    "\\? ",
+                    "ctrl \\+ c again to quit",
+                ],
+                errorPatterns: ["Error:", "Failed", "rate limit"],
+                finishedIndicators: ["^\\$\\s*$", "^❯\\s*$", "^>\\s*$"],
                 oscSupported: false,
-                idleTimeoutOverride: nil
+                idleTimeoutOverride: 8
             ),
             AgentConfig(
                 name: "aider",
                 displayName: "Aider",
-                launchPatterns: ["^aider(?:\\s|$)", "^python.*aider"],
-                waitingPatterns: ["^>\\s*$", "^aider>\\s*$"],
-                errorPatterns: ["Error:", "Exception:", "Traceback"],
-                finishedIndicators: ["^\\$\\s*$"],
+                launchPatterns: [
+                    "^aider(?:\\s|$)",
+                    "^python.*aider",
+                    "Aider v\\d+\\.\\d+",
+                    "Main model:.*edit format",
+                ],
+                waitingPatterns: [
+                    "^(diff|whole|udiff|architect|ask|help)?( multi)?> $",
+                    "^aider>",
+                    "^> $",
+                ],
+                errorPatterns: [
+                    "Error:",
+                    "Exception:",
+                    "Traceback",
+                    "has hit a token limit",
+                    "did not conform to the edit format",
+                    "Retrying in \\d+ seconds",
+                ],
+                finishedIndicators: [
+                    "^\\$\\s*$",
+                    "^❯\\s*$",
+                    "Tokens:.*sent.*received",
+                    "Applied edit to",
+                ],
                 oscSupported: false,
-                idleTimeoutOverride: 10  // Aider is slower
+                idleTimeoutOverride: 10
             ),
             AgentConfig(
                 name: "gemini-cli",
                 displayName: "Gemini CLI",
-                launchPatterns: ["^gemini\\b"],
-                waitingPatterns: ["^>\\s*$", "Enter your prompt"],
+                launchPatterns: [
+                    "^gemini\\b",
+                    "Gemini CLI v\\d+",
+                    "Gemini CLI v[0-9]",
+                ],
+                waitingPatterns: [
+                    "^> $",
+                    "^! $",
+                    "Waiting for user confirmation",
+                ],
                 errorPatterns: ["Error:", "Failed"],
-                finishedIndicators: ["^\\$\\s*$"],
+                finishedIndicators: ["^\\$\\s*$", "^❯\\s*$", "^> $"],
                 oscSupported: false,
-                idleTimeoutOverride: 8  // Gemini can be slow on first response
+                idleTimeoutOverride: 8
             ),
             AgentConfig(
                 name: "kiro",
                 displayName: "Kiro",
-                launchPatterns: ["^kiro\\b"],
-                waitingPatterns: ["\\? "],
-                errorPatterns: ["Error:"],
-                finishedIndicators: ["^\\$\\s*$"],
+                launchPatterns: [
+                    "^kiro\\b",
+                    "^kiro-cli\\b",
+                    "Welcome to Kiro",
+                ],
+                waitingPatterns: [
+                    "^(\\[.*\\]\\s+)?(\\d+%\\s+)?!?> $",
+                    "Thinking\\.\\.\\.",
+                    "\\? ",
+                ],
+                errorPatterns: [
+                    "Error:",
+                    "rate limit reached",
+                    "having trouble responding",
+                ],
+                finishedIndicators: ["^\\$\\s*$", "^❯\\s*$", "^> $"],
                 oscSupported: false,
-                idleTimeoutOverride: nil
+                idleTimeoutOverride: 8
             ),
             AgentConfig(
                 name: "opencode",
                 displayName: "OpenCode",
-                launchPatterns: ["^opencode\\b"],
-                waitingPatterns: ["^>\\s*$"],
-                errorPatterns: ["Error:"],
-                finishedIndicators: ["^\\$\\s*$"],
+                launchPatterns: [
+                    "^opencode\\b",
+                    "Loading plugins",
+                ],
+                waitingPatterns: [
+                    "Ask anything",
+                    "^> $",
+                ],
+                errorPatterns: ["Error:", "✗"],
+                finishedIndicators: ["^\\$\\s*$", "^❯\\s*$", "✓"],
                 oscSupported: false,
-                idleTimeoutOverride: nil
+                idleTimeoutOverride: 8
             ),
         ]
     }
@@ -270,7 +359,7 @@ final class AgentConfigService {
 
         for config in configs {
             lines.append("[\(config.name)]")
-            lines.append("display-name = \"\(config.displayName)\"")
+            lines.append("display-name = \(formatTOMLBasicString(config.displayName))")
             lines.append("osc-supported = \(config.oscSupported)")
             lines.append("launch-patterns = [\(formatPatternArray(config.launchPatterns))]")
             lines.append("waiting-patterns = [\(formatPatternArray(config.waitingPatterns))]")
@@ -378,6 +467,50 @@ final class AgentConfigService {
         )
     }
 
+    /// Projects compiled agent configs into the subset of literal pattern
+    /// shapes that CocxyCore's native semantic engine can match directly.
+    ///
+    /// The projection is intentionally conservative: unsupported regex-heavy
+    /// patterns are skipped rather than widened into looser literals that
+    /// could create false positives in the native semantic layer.
+    static func nativeSemanticPatterns(
+        from compiledConfigs: [CompiledAgentConfig]
+    ) -> [TerminalSemanticNativePattern] {
+        var seen = Set<TerminalSemanticNativePattern>()
+        var result: [TerminalSemanticNativePattern] = []
+
+        func appendUnique(_ patterns: [TerminalSemanticNativePattern]) {
+            for pattern in patterns where seen.insert(pattern).inserted {
+                result.append(pattern)
+            }
+        }
+
+        for compiled in compiledConfigs {
+            appendUnique(nativePatterns(
+                from: compiled.config.launchPatterns,
+                type: .agentLaunch,
+                defaultConfidence: 0.9
+            ))
+            appendUnique(nativePatterns(
+                from: compiled.config.waitingPatterns,
+                type: .agentWaiting,
+                defaultConfidence: 0.82
+            ))
+            appendUnique(nativePatterns(
+                from: compiled.config.errorPatterns,
+                type: .agentError,
+                defaultConfidence: 0.78
+            ))
+            appendUnique(nativePatterns(
+                from: compiled.config.finishedIndicators,
+                type: .agentFinished,
+                defaultConfidence: 0.76
+            ))
+        }
+
+        return result
+    }
+
     /// Compiles an array of pattern strings into `NSRegularExpression` instances.
     ///
     /// Patterns that fail to compile are appended to `invalid` and excluded
@@ -400,6 +533,74 @@ final class AgentConfigService {
         }
 
         return (compiled, matchers)
+    }
+
+    private static func nativePatterns(
+        from patterns: [String],
+        type: TerminalSemanticNativePattern.PatternType,
+        defaultConfidence: Float
+    ) -> [TerminalSemanticNativePattern] {
+        patterns.flatMap { pattern in
+            nativePatterns(from: pattern, type: type, defaultConfidence: defaultConfidence)
+        }
+    }
+
+    private static func nativePatterns(
+        from pattern: String,
+        type: TerminalSemanticNativePattern.PatternType,
+        defaultConfidence: Float
+    ) -> [TerminalSemanticNativePattern] {
+        func make(
+            mode: TerminalSemanticNativePattern.MatchMode,
+            text: String,
+            confidence: Float = defaultConfidence
+        ) -> [TerminalSemanticNativePattern] {
+            guard !text.isEmpty else { return [] }
+            return [
+                TerminalSemanticNativePattern(
+                    type: type,
+                    mode: mode,
+                    text: text,
+                    confidence: confidence
+                )
+            ]
+        }
+
+        if let alternations = parseLiteralAlternationPattern(pattern) {
+            let mode: TerminalSemanticNativePattern.MatchMode = pattern.hasPrefix("^") ? .prefix : .contains
+            return alternations.map {
+                TerminalSemanticNativePattern(
+                    type: type,
+                    mode: mode,
+                    text: $0,
+                    confidence: defaultConfidence * 0.88
+                )
+            }
+        }
+
+        if let literal = parseTrimmedEqualsPattern(pattern) {
+            // CocxyCore trims trailing spaces before matching completed lines,
+            // so a suffix match is the closest safe native representation.
+            return make(mode: .suffix, text: literal, confidence: defaultConfidence * 0.85)
+        }
+
+        if let literal = parseAnchoredWordPrefix(pattern) {
+            return make(mode: .prefix, text: literal)
+        }
+
+        if let literal = parseAnchoredPrefix(pattern) {
+            return make(mode: .prefix, text: literal)
+        }
+
+        if let literal = parseLiteralPattern(pattern) {
+            return make(mode: .contains, text: literal)
+        }
+
+        if !pattern.hasPrefix("^"), let prefixLiteral = parseRegexLiteralPrefix(pattern), prefixLiteral.count >= 4 {
+            return make(mode: .contains, text: prefixLiteral, confidence: defaultConfidence * 0.72)
+        }
+
+        return []
     }
 
     private static func makeMatcher(
@@ -476,6 +677,63 @@ final class AgentConfigService {
         return parsed
     }
 
+    private static func parseLiteralAlternationPattern(_ pattern: String) -> [String]? {
+        var working = pattern
+        var modeIsPrefix = false
+        if working.hasPrefix("^") {
+            modeIsPrefix = true
+            working.removeFirst()
+        }
+
+        guard let open = working.firstIndex(of: "("),
+              let close = working[open...].firstIndex(of: ")") else {
+            return nil
+        }
+
+        let prefixRaw = working[..<open]
+        let suffixRaw = working[working.index(after: close)...]
+        let groupRaw = working[working.index(after: open)..<close]
+
+        let prefix = parseLiteralSegment(prefixRaw)
+        let suffix = parseLiteralSegment(suffixRaw)
+        guard let prefix, let suffix else { return nil }
+
+        let options = groupRaw.split(separator: "|").compactMap(parseLiteralSegment)
+        guard !options.isEmpty, options.count == groupRaw.split(separator: "|").count else { return nil }
+
+        let joined = options.map { prefix + $0 + suffix }
+        return modeIsPrefix ? joined : joined
+    }
+
+    private static func parseRegexLiteralPrefix(_ pattern: String) -> String? {
+        var literal = ""
+        var iterator = pattern.makeIterator()
+        var sawEscapedLiteral = false
+
+        while let character = iterator.next() {
+            if character == "\\" {
+                guard let escaped = iterator.next() else { break }
+                switch escaped {
+                case "\\", "^", "$", "*", "+", "?", ".", "(", ")", "[", "]", "{", "}", "|":
+                    literal.append(escaped)
+                    sawEscapedLiteral = true
+                    continue
+                default:
+                    return literal.isEmpty && !sawEscapedLiteral ? nil : literal
+                }
+            }
+
+            switch character {
+            case "^", "$", "*", "+", "?", ".", "(", ")", "[", "]", "{", "}", "|":
+                return literal.isEmpty ? nil : literal
+            default:
+                literal.append(character)
+            }
+        }
+
+        return literal.isEmpty ? nil : literal
+    }
+
     private static func parseLiteralSegment<S: StringProtocol>(_ segment: S) -> String? {
         let regexMetacharacters: Set<Character> = ["^", "$", "*", "+", "?", ".", "(", ")", "[", "]", "{", "}", "|"]
         var literal = ""
@@ -506,6 +764,14 @@ final class AgentConfigService {
         }
 
         return isEscaped ? nil : literal
+    }
+
+    private static func normalizedAgentLookupKey(_ value: String) -> String {
+        value
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
     }
 
     // MARK: - Value Extractors
@@ -542,10 +808,33 @@ final class AgentConfigService {
 
     /// Formats an array of pattern strings for TOML output.
     ///
-    /// Uses TOML literal strings (single-quoted) so backslashes in regex
-    /// patterns like `\b` (word boundary) are preserved verbatim. This is
-    /// forward-compatible with any TOML parser, including spec-compliant ones.
+    /// Uses TOML basic strings so regex backslashes, apostrophes, quotes,
+    /// and control characters round-trip safely.
     private static func formatPatternArray(_ patterns: [String]) -> String {
-        patterns.map { "'\($0)'" }.joined(separator: ", ")
+        patterns.map(formatTOMLBasicString).joined(separator: ", ")
+    }
+
+    private static func formatTOMLBasicString(_ value: String) -> String {
+        var escaped = ""
+        escaped.reserveCapacity(value.count + 8)
+
+        for scalar in value.unicodeScalars {
+            switch scalar {
+            case "\\":
+                escaped += "\\\\"
+            case "\"":
+                escaped += "\\\""
+            case "\n":
+                escaped += "\\n"
+            case "\r":
+                escaped += "\\r"
+            case "\t":
+                escaped += "\\t"
+            default:
+                escaped.unicodeScalars.append(scalar)
+            }
+        }
+
+        return "\"\(escaped)\""
     }
 }

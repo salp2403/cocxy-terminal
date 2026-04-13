@@ -68,6 +68,8 @@ public struct CommandRunner {
             return executeHooksStatus()
         case .hookHandler:
             return HookHandlerCommand.execute(socketClient: socketClient)
+        case .setupHooks(let agent, let remove):
+            return SetupHooksCommand.execute(target: agent, remove: remove)
         default:
             break
         }
@@ -239,7 +241,7 @@ public struct CommandRunner {
         case .status:
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
-        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler:
+        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks:
             // These are handled locally; should never reach socket request building.
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 

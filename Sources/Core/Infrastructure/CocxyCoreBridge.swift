@@ -237,6 +237,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
     private var surfaces: [SurfaceID: SurfaceState] = [:]
     private var config: TerminalEngineConfig?
+    private var nativeSemanticPatterns: [TerminalSemanticNativePattern] = []
     var clipboardService: any ClipboardServiceProtocol = SystemClipboardService()
     var clipboardReadAuthorizationHandler: ((NSWindow?) -> Bool)?
 
@@ -272,6 +273,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Semantic block capacity (number of classified blocks stored).
     private static let semanticBlockCapacity: UInt32 = 1024
+    private static let appSemanticPatternTag: UInt32 = 0x434F4358 // "COCX"
 
     /// Process tracker capacity (max concurrent child processes).
     private static let processTrackerCapacity: UInt32 = 64
@@ -330,6 +332,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         // 3. Configure terminal (theme, font, scrollback, semantic)
         configureTerminal(terminal, config: config)
+        applyNativeSemanticPatterns(to: terminal)
 
         // 4. Spawn PTY with shell
         let shellPath = command ?? config.shell
@@ -1698,6 +1701,63 @@ final class CocxyCoreBridge: TerminalEngine {
 
             let sel = Self.parseHexColor(palette.selectionBackground)
             cocxycore_terminal_set_selection_color(terminal, sel.r, sel.g, sel.b, 128)
+        }
+    }
+
+    /// Updates the app-managed semantic patterns mirrored into CocxyCore's
+    /// native matcher and reapplies them to all live surfaces.
+    func updateNativeAgentPatterns(from compiledConfigs: [CompiledAgentConfig]) {
+        nativeSemanticPatterns = AgentConfigService.nativeSemanticPatterns(from: compiledConfigs)
+        for surfaceID in allSurfaceIDs {
+            refreshNativeSemanticPatterns(for: surfaceID)
+        }
+    }
+
+    private func refreshNativeSemanticPatterns(for surface: SurfaceID) {
+        _ = withTerminalLock(surface) { state in
+            self.applyNativeSemanticPatterns(to: state.terminal)
+        }
+    }
+
+    private func applyNativeSemanticPatterns(to terminal: OpaquePointer) {
+        cocxycore_terminal_clear_patterns_by_tag(terminal, Self.appSemanticPatternTag)
+
+        for pattern in nativeSemanticPatterns {
+            registerNativeSemanticPattern(pattern, to: terminal)
+        }
+    }
+
+    private func registerNativeSemanticPattern(
+        _ pattern: TerminalSemanticNativePattern,
+        to terminal: OpaquePointer
+    ) {
+        let patternType: UInt8
+        switch pattern.type {
+        case .agentLaunch: patternType = 0
+        case .agentWaiting: patternType = 1
+        case .agentError: patternType = 2
+        case .agentFinished: patternType = 3
+        }
+
+        let matchMode: UInt8
+        switch pattern.mode {
+        case .prefix: matchMode = 0
+        case .contains: matchMode = 1
+        case .suffix: matchMode = 2
+        }
+
+        let utf8 = Array(pattern.text.utf8)
+        utf8.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            _ = cocxycore_terminal_add_pattern_tagged(
+                terminal,
+                patternType,
+                matchMode,
+                baseAddress,
+                buffer.count,
+                pattern.confidence,
+                Self.appSemanticPatternTag
+            )
         }
     }
 

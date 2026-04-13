@@ -42,27 +42,42 @@ public enum HookHandlerCommand {
 
     /// Builds a socket request from raw hook JSON data.
     ///
-    /// The JSON from Claude Code is forwarded as-is inside the
-    /// `payload` parameter of a `hook-event` socket request.
+    /// The JSON is normalized into Cocxy's canonical hook schema before
+    /// being forwarded inside the `payload` parameter of a `hook-event`
+    /// socket request.
     ///
     /// - Parameter data: Raw JSON bytes from stdin.
     /// - Returns: A `CLISocketRequest` ready to send to the socket server.
     /// - Throws: `HooksError.emptyInput` if data is empty.
     /// - Throws: `HooksError.invalidHookJSON` if data is not valid JSON.
-    public static func buildRequest(from data: Data) throws -> CLISocketRequest {
+    public static func buildRequest(
+        from data: Data,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> CLISocketRequest {
         guard !data.isEmpty else {
             throw HooksError.emptyInput
         }
 
-        // Validate that it's parseable JSON before forwarding
-        guard (try? JSONSerialization.jsonObject(with: data)) != nil else {
+        let normalizedData: Data
+        do {
+            normalizedData = try HookEventNormalizer.normalizePayload(
+                data,
+                environment: environment
+            )
+        } catch {
             throw HooksError.invalidHookJSON(
                 reason: "Input is not valid JSON"
             )
         }
 
-        // Forward the raw JSON as a string payload
-        guard let payloadString = String(data: data, encoding: .utf8) else {
+        guard (try? JSONSerialization.jsonObject(with: normalizedData)) != nil else {
+            throw HooksError.invalidHookJSON(
+                reason: "Input is not valid JSON"
+            )
+        }
+
+        // Forward the normalized JSON as a string payload.
+        guard let payloadString = String(data: normalizedData, encoding: .utf8) else {
             throw HooksError.invalidHookJSON(
                 reason: "Input is not valid UTF-8"
             )
@@ -97,7 +112,7 @@ public enum HookHandlerCommand {
 
         let request: CLISocketRequest
         do {
-            request = try buildRequest(from: stdinData)
+            request = try buildRequest(from: stdinData, environment: environment)
         } catch {
             // Fail silently -- don't block Claude Code
             return CLIResult(exitCode: 0, stdout: "", stderr: "")

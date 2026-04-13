@@ -24,6 +24,7 @@ public enum CLICommand: String, CaseIterable {
     case hookEvent = "hook-event"
     case hooks
     case hookHandler = "hook-handler"
+    case setupHooks = "setup-hooks"
 
     // MARK: - Tab extended (v2)
 
@@ -184,7 +185,8 @@ public enum CLICommand: String, CaseIterable {
         case .status: return "Show application status"
         case .hookEvent: return "Receive a Claude Code hook event (internal)"
         case .hooks: return "Manage Claude Code hooks (install/uninstall/status)"
-        case .hookHandler: return "Handle incoming Claude Code hook event from stdin"
+        case .hookHandler: return "Handle incoming supported agent hook event from stdin"
+        case .setupHooks: return "Configure Cocxy hook forwarding for supported agent CLIs"
 
         // Tab extended
         case .tabRename: return "Rename a tab by UUID"
@@ -316,6 +318,7 @@ public enum CLICommand: String, CaseIterable {
         case .hookEvent: return "cocxy hook-event '{\"type\":\"Stop\",...}'"
         case .hooks: return "cocxy hooks install|uninstall|status"
         case .hookHandler: return "cocxy hook-handler (reads JSON from stdin)"
+        case .setupHooks: return "cocxy setup-hooks [--agent claude|codex|gemini|kiro|all] [--remove]"
 
         // Tab extended
         case .tabRename: return "cocxy tab rename <id> <name>"

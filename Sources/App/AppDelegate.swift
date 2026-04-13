@@ -340,6 +340,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Ensure the main window is visible when the app is activated
         // (e.g., via Dock click).
         windowController?.showWindow(nil)
+        let allControllers = [windowController].compactMap { $0 } + additionalWindowControllers
+        for controller in allControllers {
+            controller.recoverTerminalRenderingAfterWake()
+        }
     }
 
     func applicationShouldHandleReopen(
@@ -1080,7 +1084,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             title: resolvedTitle,
             workingDirectory: tab.workingDirectory,
             agentState: tab.agentState,
-            detectedAgentName: tab.detectedAgent?.name,
+            detectedAgentName: tab.detectedAgent?.displayName,
             hasUnreadNotification: tab.hasUnreadNotification
         ))
 

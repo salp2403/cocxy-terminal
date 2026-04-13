@@ -42,6 +42,13 @@ public struct ClaudeSettingsManager {
         return "cocxy hook-handler"
     }()
 
+    static func hookCommand(for source: AgentSource?) -> String {
+        guard let source, source != .claudeCode else {
+            return cocxyHookCommand
+        }
+        return "COCXY_HOOK_AGENT=\(source.cliArgumentName) \(cocxyHookCommand)"
+    }
+
     /// The hook event types that cocxy registers for.
     ///
     /// Includes all Claude Code hook events that drive agent detection:
@@ -132,6 +139,7 @@ public struct ClaudeSettingsManager {
 
         settings["hooks"] = hooks
 
+        try createBackupIfNeeded()
         try writeSettings(settings)
 
         return HooksInstallResult(
@@ -202,6 +210,7 @@ public struct ClaudeSettingsManager {
             )
         }
 
+        try createBackupIfNeeded()
         try writeSettings(settings)
 
         return HooksUninstallResult(
@@ -292,6 +301,26 @@ public struct ClaudeSettingsManager {
             options: [.prettyPrinted, .sortedKeys]
         )
         try data.write(to: URL(fileURLWithPath: settingsFilePath), options: .atomic)
+    }
+
+    private func createBackupIfNeeded() throws {
+        guard FileManager.default.fileExists(atPath: settingsFilePath) else {
+            return
+        }
+
+        let backupPath = "\(settingsFilePath).cocxy-backup"
+        guard !FileManager.default.fileExists(atPath: backupPath) else {
+            return
+        }
+
+        do {
+            try FileManager.default.copyItem(
+                at: URL(fileURLWithPath: settingsFilePath),
+                to: URL(fileURLWithPath: backupPath)
+            )
+        } catch {
+            throw HooksError.fileSystemError(reason: error.localizedDescription)
+        }
     }
 
     // MARK: - Private: Hook Detection

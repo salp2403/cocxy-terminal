@@ -123,9 +123,10 @@ struct HookEvent: Codable, Sendable {
 
             case .sessionStart:
                 let cwd = try? container.decode(String.self, forKey: .cwd)
+                let agentType = (try? container.decode(String.self, forKey: .agentType)) ?? "claude-code"
                 self.data = .sessionStart(SessionStartData(
                     model: nil,
-                    agentType: "claude-code",
+                    agentType: agentType,
                     workingDirectory: cwd
                 ))
 

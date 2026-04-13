@@ -446,6 +446,28 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.semanticBlocks(for: surfaceID, limit: 5).isEmpty)
     }
 
+    @Test("native agent patterns are registered into CocxyCore semantics")
+    func nativeAgentPatternsAreRegisteredIntoCocxyCore() throws {
+        let bridge = try makeBridge()
+        bridge.updateNativeAgentPatterns(
+            from: AgentConfigService.defaultAgentConfigs().map(AgentConfigService.compile)
+        )
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        // Enter command-running state so an agent launch pattern can promote
+        // the semantic state to agent_active inside CocxyCore.
+        feed("\u{1B}]133;A\u{07}", to: state.terminal)
+        feed("\u{1B}]133;B\u{07}", to: state.terminal)
+        feed("\u{1B}]133;C\u{07}", to: state.terminal)
+        feed("Welcome to Codex\r\n", to: state.terminal)
+
+        let diagnostics = try #require(bridge.semanticDiagnostics(for: surfaceID))
+        #expect(diagnostics.state == 4)
+        #expect(diagnostics.currentBlockType == 5)
+    }
+
     @Test("applyFont updates the live terminal font metrics")
     func applyFontUpdatesLiveMetrics() throws {
         let bridge = try makeBridge()
