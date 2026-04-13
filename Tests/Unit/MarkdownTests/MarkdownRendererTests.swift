@@ -3,6 +3,7 @@
 import AppKit
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownRenderer")
 @MainActor

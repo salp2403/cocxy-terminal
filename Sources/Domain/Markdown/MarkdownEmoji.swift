@@ -4,14 +4,10 @@
 import Foundation
 
 enum MarkdownEmoji {
-    private static let table: [String: String] = [
+    private static let base: [String: String] = [
         "+1": "👍",
         "-1": "👎",
         "100": "💯",
-        "arrow_down": "⬇️",
-        "arrow_left": "⬅️",
-        "arrow_right": "➡️",
-        "arrow_up": "⬆️",
         "art": "🎨",
         "beers": "🍻",
         "bell": "🔔",
@@ -81,6 +77,9 @@ enum MarkdownEmoji {
         "wrench": "🔧",
         "x": "❌",
         "zap": "⚡",
+    ]
+
+    private static let smileys: [String: String] = [
         "smile": "😄",
         "grin": "😁",
         "joy": "😂",
@@ -93,9 +92,248 @@ enum MarkdownEmoji {
         "angry": "😠",
         "neutral_face": "😐",
         "robot": "🤖",
+        "laughing": "😆",
+        "blush": "😊",
+        "smiley": "😃",
+        "grinning": "😀",
+        "heart_eyes": "😍",
+        "kissing_heart": "😘",
+        "stuck_out_tongue_winking_eye": "😜",
+        "smirk": "😏",
+        "rofl": "🤣",
+        "relieved": "😌",
+        "unamused": "😒",
+        "sweat_smile": "😅",
+        "scream": "😱",
+        "rage": "😡",
+        "sleeping": "😴",
+        "mask": "😷",
+        "skull": "💀",
+        "alien": "👽",
+        "clown_face": "🤡",
+        "nerd_face": "🤓",
+        "shushing_face": "🤫",
+        "zany_face": "🤪",
+        "pleading_face": "🥺",
+        "yawning_face": "🥱",
         "waveform": "〰️",
-        "white_check_mark": "✅"
     ]
+
+    private static let gestures: [String: String] = [
+        "ok_hand": "👌",
+        "raised_hands": "🙌",
+        "pray": "🙏",
+        "muscle": "💪",
+        "point_up": "☝️",
+        "point_down": "👇",
+        "point_left": "👈",
+        "crossed_fingers": "🤞",
+        "v": "✌️",
+        "vulcan_salute": "🖖",
+        "writing_hand": "✍️",
+        "fist": "✊",
+        "raised_hand": "✋",
+        "call_me_hand": "🤙",
+    ]
+
+    private static let hearts: [String: String] = [
+        "broken_heart": "💔",
+        "sparkling_heart": "💖",
+        "blue_heart": "💙",
+        "green_heart": "💚",
+        "yellow_heart": "💛",
+        "purple_heart": "💜",
+        "black_heart": "🖤",
+        "white_heart": "🤍",
+        "orange_heart": "🧡",
+        "brown_heart": "🤎",
+        "star2": "🌟",
+    ]
+
+    private static let nature: [String: String] = [
+        "cloud": "☁️",
+        "umbrella": "☔",
+        "snowflake": "❄️",
+        "rainbow": "🌈",
+        "earth_americas": "🌎",
+        "earth_africa": "🌍",
+        "earth_asia": "🌏",
+        "crescent_moon": "🌙",
+        "sun_with_face": "🌞",
+        "full_moon_with_face": "🌝",
+        "tulip": "🌷",
+        "rose": "🌹",
+        "hibiscus": "🌺",
+        "cherry_blossom": "🌸",
+        "maple_leaf": "🍁",
+        "four_leaf_clover": "🍀",
+        "zap_cloud": "🌩️",
+    ]
+
+    private static let animals: [String: String] = [
+        "dog": "🐶",
+        "cat": "🐱",
+        "mouse_face": "🐭",
+        "bear": "🐻",
+        "panda_face": "🐼",
+        "monkey_face": "🐵",
+        "chicken": "🐔",
+        "penguin": "🐧",
+        "frog": "🐸",
+        "snail": "🐌",
+        "bee": "🐝",
+        "butterfly": "🦋",
+        "unicorn": "🦄",
+        "fox_face": "🦊",
+        "owl": "🦉",
+        "wolf": "🐺",
+        "octopus": "🐙",
+        "whale": "🐳",
+        "dolphin": "🐬",
+        "turtle": "🐢",
+        "snake": "🐍",
+        "bird": "🐦",
+        "rabbit": "🐰",
+        "lion": "🦁",
+        "koala": "🐨",
+        "pig": "🐷",
+    ]
+
+    private static let food: [String: String] = [
+        "apple": "🍎",
+        "green_apple": "🍏",
+        "pizza": "🍕",
+        "hamburger": "🍔",
+        "fries": "🍟",
+        "beer": "🍺",
+        "wine_glass": "🍷",
+        "cake": "🍰",
+        "cookie": "🍪",
+        "doughnut": "🍩",
+        "ice_cream": "🍨",
+        "taco": "🌮",
+        "burrito": "🌯",
+        "popcorn": "🍿",
+        "champagne": "🍾",
+        "tropical_drink": "🍹",
+        "tea": "🍵",
+        "coffee_beans": "🫘",
+        "banana": "🍌",
+        "watermelon": "🍉",
+        "strawberry": "🍓",
+    ]
+
+    private static let activities: [String: String] = [
+        "soccer": "⚽",
+        "basketball": "🏀",
+        "football": "🏈",
+        "baseball": "⚾",
+        "tennis": "🎾",
+        "trophy": "🏆",
+        "medal_sports": "🏅",
+        "guitar": "🎸",
+        "microphone": "🎤",
+        "headphones": "🎧",
+        "video_game": "🎮",
+        "dart": "🎯",
+        "dice": "🎲",
+        "bowling": "🎳",
+        "balloon": "🎈",
+        "ribbon": "🎀",
+        "violin": "🎻",
+        "drum": "🥁",
+        "chess_pawn": "♟️",
+    ]
+
+    private static let travel: [String: String] = [
+        "airplane": "✈️",
+        "car": "🚗",
+        "bus": "🚌",
+        "bike": "🚲",
+        "helicopter": "🚁",
+        "train": "🚆",
+        "taxi": "🚕",
+        "rocket_launch": "🛰️",
+    ]
+
+    private static let techOffice: [String: String] = [
+        "keyboard": "⌨️",
+        "phone": "☎️",
+        "email": "📧",
+        "envelope": "✉️",
+        "pencil": "📝",
+        "pen": "🖊️",
+        "book": "📖",
+        "books": "📚",
+        "scissors": "✂️",
+        "gear": "⚙️",
+        "microscope": "🔬",
+        "telescope": "🔭",
+        "floppy_disk": "💾",
+        "desktop_computer": "🖥️",
+        "printer": "🖨️",
+        "iphone": "📱",
+        "file_folder": "📁",
+        "open_file_folder": "📂",
+        "scroll": "📜",
+    ]
+
+    private static let symbols: [String: String] = [
+        "arrow_down": "⬇️",
+        "arrow_left": "⬅️",
+        "arrow_right": "➡️",
+        "arrow_up": "⬆️",
+        "small_blue_diamond": "🔹",
+        "small_orange_diamond": "🔸",
+        "white_check_mark": "✅",
+        "red_circle": "🔴",
+        "green_circle": "🟢",
+        "blue_circle": "🔵",
+        "yellow_circle": "🟡",
+        "purple_circle": "🟣",
+    ]
+
+    private static let flags: [String: String] = [
+        "flag_us": "🇺🇸",
+        "flag_gb": "🇬🇧",
+        "flag_fr": "🇫🇷",
+        "flag_de": "🇩🇪",
+        "flag_jp": "🇯🇵",
+        "flag_cn": "🇨🇳",
+        "flag_kr": "🇰🇷",
+        "flag_br": "🇧🇷",
+        "flag_in": "🇮🇳",
+        "flag_au": "🇦🇺",
+        "flag_ca": "🇨🇦",
+        "flag_es": "🇪🇸",
+        "flag_it": "🇮🇹",
+        "flag_mx": "🇲🇽",
+        "flag_ar": "🇦🇷",
+        "flag_hn": "🇭🇳",
+    ]
+
+    private static let table: [String: String] = {
+        var combined: [String: String] = [:]
+        for group in [
+            base,
+            smileys,
+            gestures,
+            hearts,
+            nature,
+            animals,
+            food,
+            activities,
+            travel,
+            techOffice,
+            symbols,
+            flags
+        ] {
+            combined.merge(group) { _, new in new }
+        }
+        return combined
+    }()
+
+    static var count: Int { table.count }
 
     static func resolve(_ shortcode: String) -> String? {
         table[shortcode]

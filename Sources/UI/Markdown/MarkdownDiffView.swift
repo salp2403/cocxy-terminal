@@ -2,6 +2,7 @@
 // MarkdownDiffView.swift - Displays git diff output for a markdown file.
 
 import AppKit
+import CocxyMarkdownLib
 
 // MARK: - Diff View
 

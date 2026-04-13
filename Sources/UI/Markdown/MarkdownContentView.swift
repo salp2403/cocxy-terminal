@@ -14,6 +14,7 @@
 // `MainWindowController+SplitActions` keeps working without modification.
 
 import AppKit
+import CocxyMarkdownLib
 
 // MARK: - Markdown Content View
 
@@ -314,6 +315,18 @@ final class MarkdownContentView: NSView {
         toolbar.onExportSlides = { [weak self] in
             self?.exportSlides()
         }
+        toolbar.onCopyMarkdown = { [weak self] in
+            self?.copyAsMarkdown()
+        }
+        toolbar.onCopyHTML = { [weak self] in
+            self?.copyAsHTML()
+        }
+        toolbar.onCopyRichText = { [weak self] in
+            self?.copyAsRichText()
+        }
+        toolbar.onCopyPlainText = { [weak self] in
+            self?.copyAsPlainText()
+        }
         toolbar.isOutlineVisible = isOutlineVisible
         toolbar.mode = mode
     }
@@ -324,6 +337,28 @@ final class MarkdownContentView: NSView {
         }
         sidebar.fileExplorer.onFileSelected = { [weak self] url in
             self?.loadFile(url)
+        }
+        sidebar.fileExplorer.onFileRenamed = { [weak self] oldURL, newURL in
+            guard let self else { return }
+            if self.filePath == oldURL {
+                self.loadFile(newURL)
+            } else if let active = self.filePath {
+                let oldPath = oldURL.standardizedFileURL.path.hasSuffix("/")
+                    ? oldURL.standardizedFileURL.path
+                    : oldURL.standardizedFileURL.path + "/"
+                let activePath = active.standardizedFileURL.path
+                if activePath.hasPrefix(oldPath) {
+                    let suffix = String(activePath.dropFirst(oldPath.count))
+                    self.loadFile(newURL.appendingPathComponent(suffix))
+                }
+            }
+        }
+        sidebar.fileExplorer.onFileDeleted = { [weak self] deletedURL in
+            guard let self else { return }
+            if self.filePath == deletedURL {
+                self.filePath = nil
+                self.showEmptyState()
+            }
         }
         sidebar.searchView.onResultSelected = { [weak self] url, lineNumber in
             guard let self else { return }
@@ -364,6 +399,9 @@ final class MarkdownContentView: NSView {
             }
             self.sourceView.scrollToSourceLine(sourceLine)
             self.sourceView.focusEditor()
+        }
+        previewView.onCopyToClipboard = { [weak self] text in
+            self?.copyTextToPasteboard(text)
         }
     }
 

@@ -15,6 +15,8 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_MODE="${1:-debug}"
 APP_NAME="CocxyTerminal"
 BUNDLE_NAME="Cocxy Terminal"
+APP_ENTITLEMENTS="${PROJECT_ROOT}/Resources/CocxyTerminal.entitlements"
+QL_ENTITLEMENTS="${PROJECT_ROOT}/QuickLook/CocxyQuickLook.entitlements"
 
 # Determine build configuration.
 if [ "$BUILD_MODE" = "release" ]; then
@@ -30,6 +32,7 @@ APP_BUNDLE="${OUTPUT_DIR}/${APP_NAME}.app"
 CONTENTS="${APP_BUNDLE}/Contents"
 MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
+PLUGINS="${CONTENTS}/PlugIns"
 
 echo "==> Building ${BUNDLE_NAME} (${BUILD_MODE})..."
 
@@ -50,6 +53,7 @@ FRAMEWORKS="${CONTENTS}/Frameworks"
 mkdir -p "${MACOS}"
 mkdir -p "${RESOURCES}"
 mkdir -p "${FRAMEWORKS}"
+mkdir -p "${PLUGINS}"
 
 # Step 3: Copy binary.
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS}/${APP_NAME}"
@@ -111,6 +115,13 @@ if [ -d "${PROJECT_ROOT}/Resources/Markdown" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Markdown" "${RESOURCES}/Markdown"
 fi
 
+# Step 6f: Build and embed the QuickLook extension.
+echo "==> Building QuickLook extension..."
+QL_APPEX="$("${PROJECT_ROOT}/scripts/build-quicklook-extension.sh" "${BUILD_MODE}")"
+cp -R "${QL_APPEX}" "${PLUGINS}/"
+codesign --force --sign - --entitlements "${QL_ENTITLEMENTS}" "${PLUGINS}/$(basename "${QL_APPEX}")" >/dev/null
+echo "    QuickLook: ${PLUGINS}/$(basename "${QL_APPEX}")"
+
 # Step 7: Also build the CLI companion and place it in Resources.
 echo "==> Building CLI companion..."
 swift build --target cocxy ${SWIFT_FLAGS} 2>&1 | tail -1
@@ -121,7 +132,7 @@ fi
 
 # Step 8: Ad-hoc code sign (required for local execution on modern macOS).
 echo "==> Signing app bundle (ad-hoc)..."
-codesign --force --deep --sign - "${APP_BUNDLE}" 2>/dev/null || true
+codesign --force --sign - --entitlements "${APP_ENTITLEMENTS}" "${APP_BUNDLE}" 2>/dev/null || true
 
 # Step 9: Print summary.
 echo ""

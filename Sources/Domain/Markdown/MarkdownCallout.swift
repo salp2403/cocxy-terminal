@@ -12,6 +12,13 @@ public enum MarkdownCalloutType: String, CaseIterable, Equatable, Sendable {
     case abstract
     case todo
     case bug
+    case example
+    case quote
+    case danger
+    case failure
+    case success
+    case question
+    case info
 
     public var marker: String {
         rawValue.uppercased()
@@ -27,6 +34,13 @@ public enum MarkdownCalloutType: String, CaseIterable, Equatable, Sendable {
         case .abstract: return "Abstract"
         case .todo: return "Todo"
         case .bug: return "Bug"
+        case .example: return "Example"
+        case .quote: return "Quote"
+        case .danger: return "Danger"
+        case .failure: return "Failure"
+        case .success: return "Success"
+        case .question: return "Question"
+        case .info: return "Info"
         }
     }
 
@@ -40,6 +54,13 @@ public enum MarkdownCalloutType: String, CaseIterable, Equatable, Sendable {
         case .abstract: return "📋"
         case .todo: return "☑"
         case .bug: return "🐞"
+        case .example: return "📝"
+        case .quote: return "❝"
+        case .danger: return "⚡"
+        case .failure: return "✗"
+        case .success: return "✓"
+        case .question: return "❓"
+        case .info: return "ℹ"
         }
     }
 }

@@ -2,6 +2,7 @@
 // MarkdownSourceView.swift - NSTextView subview showing the raw markdown source with syntax highlighting.
 
 import AppKit
+import CocxyMarkdownLib
 
 // MARK: - Source View
 
@@ -172,6 +173,10 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
         toggleDelimitedSelection(prefix: "*", suffix: "*")
     }
 
+    func applyStrikethrough() {
+        toggleDelimitedSelection(prefix: "~~", suffix: "~~")
+    }
+
     func applyLink() {
         let text = textView.string as NSString
         let selection = clampedRange(textView.selectedRange(), maxLength: text.length)
@@ -190,6 +195,68 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
             let placeholderRange = NSRange(location: selection.location + 1, length: (placeholder as NSString).length)
             applyReplacement(in: selection, with: replacement, selectedRange: placeholderRange)
         }
+    }
+
+    func cycleHeading() {
+        let text = textView.string as NSString
+        let selection = clampedRange(textView.selectedRange(), maxLength: text.length)
+        let lineRange = text.lineRange(for: NSRange(location: selection.location, length: 0))
+        let rawLine = text.substring(with: lineRange)
+
+        let hasTrailingNewline = rawLine.hasSuffix("\n")
+        let lineBody = hasTrailingNewline ? String(rawLine.dropLast()) : rawLine
+        let prefixRange = lineBody.range(of: #"^(#{1,6})\s+"#, options: .regularExpression)
+
+        let replacement: String
+        let cursorOffset: Int
+
+        if let prefixRange {
+            let prefix = String(lineBody[prefixRange])
+            let level = prefix.prefix { $0 == "#" }.count
+            let body = String(lineBody[prefixRange.upperBound...])
+            if level >= 6 {
+                replacement = body
+                cursorOffset = max(0, selection.location - lineRange.location - prefix.count)
+            } else {
+                replacement = String(repeating: "#", count: level + 1) + " " + body
+                cursorOffset = selection.location - lineRange.location + 1
+            }
+        } else {
+            replacement = "# " + lineBody
+            cursorOffset = selection.location - lineRange.location + 2
+        }
+
+        let finalReplacement = hasTrailingNewline ? replacement + "\n" : replacement
+        let cursor = lineRange.location + min(max(0, cursorOffset), (replacement as NSString).length)
+        applyReplacement(
+            in: lineRange,
+            with: finalReplacement,
+            selectedRange: NSRange(location: cursor, length: selection.length)
+        )
+    }
+
+    func insertTable() {
+        insertSnippet("""
+        | Column 1 | Column 2 |
+        | --- | --- |
+        | Value 1 | Value 2 |
+        """)
+    }
+
+    func insertBlockquote() {
+        insertSnippet("> ")
+    }
+
+    func insertHorizontalRule() {
+        insertSnippet("---")
+    }
+
+    func insertCodeBlock() {
+        insertSnippet("```\n\n```", cursorOffset: 4)
+    }
+
+    func insertMathBlock() {
+        insertSnippet("$$\n\n$$", cursorOffset: 3)
     }
 
     override var acceptsFirstResponder: Bool { true }
@@ -353,8 +420,41 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
             }
         }
 
-        if flags.contains(.command) && flags.contains(.shift), characters == "o" {
-            return onShortcutCommand?(.toggleOutline) ?? false
+        if flags.contains(.command) && flags.contains(.shift) {
+            switch characters {
+            case "o":
+                return onShortcutCommand?(.toggleOutline) ?? false
+            case "x":
+                applyStrikethrough()
+                return true
+            case "h":
+                cycleHeading()
+                return true
+            default:
+                break
+            }
+        }
+
+        if flags.contains(.command) && flags.contains(.option) {
+            switch characters {
+            case "t":
+                insertTable()
+                return true
+            case "q":
+                insertBlockquote()
+                return true
+            case "-":
+                insertHorizontalRule()
+                return true
+            case "c":
+                insertCodeBlock()
+                return true
+            case "m":
+                insertMathBlock()
+                return true
+            default:
+                break
+            }
         }
 
         return false
@@ -403,6 +503,25 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
         let maxLength = textStorage.length
         textView.setSelectedRange(clampedRange(selectedRange, maxLength: maxLength))
         textView.scrollRangeToVisible(textView.selectedRange())
+    }
+
+    private func insertSnippet(_ snippet: String, cursorOffset: Int? = nil) {
+        let text = textView.string as NSString
+        let selection = clampedRange(textView.selectedRange(), maxLength: text.length)
+        let before = text.substring(to: selection.location)
+        let after = text.substring(from: NSMaxRange(selection))
+
+        let prefix = (!before.isEmpty && !before.hasSuffix("\n")) ? "\n" : ""
+        let suffix = (!after.isEmpty && !after.hasPrefix("\n")) ? "\n" : ""
+        let insertion = prefix + snippet + suffix
+        let safeCursorOffset = cursorOffset ?? (snippet as NSString).length
+        let cursor = selection.location + (prefix as NSString).length + safeCursorOffset
+
+        applyReplacement(
+            in: selection,
+            with: insertion,
+            selectedRange: NSRange(location: cursor, length: 0)
+        )
     }
 
     private func clampedRange(_ range: NSRange, maxLength: Int) -> NSRange {

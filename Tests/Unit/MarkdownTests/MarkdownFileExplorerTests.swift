@@ -4,8 +4,12 @@
 import Testing
 import Foundation
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
-@Suite("MarkdownFileExplorer")
+import AppKit
+
+@Suite("MarkdownFileExplorer", .serialized)
+@MainActor
 struct MarkdownFileExplorerTests {
 
     // MARK: - FileTreeNode.buildTree
@@ -122,6 +126,38 @@ struct MarkdownFileExplorerTests {
         let tree = FileTreeNode.buildTree(from: dir)
         #expect(tree.count == 1)
         #expect(tree[0].name == "visible.md")
+    }
+
+    @Test("renameItem renames a markdown file and refreshes root")
+    func renameItemRenamesFile() throws {
+        let dir = createTempDir()
+        defer { cleanup(dir) }
+
+        let original = dir.appendingPathComponent("README.md")
+        try "# Hello".write(to: original, atomically: true, encoding: .utf8)
+
+        let view = MarkdownFileExplorerView()
+        view.setRootDirectory(dir)
+
+        let renamed = try view.renameItem(at: original, to: "Guide.md")
+        #expect(renamed.lastPathComponent == "Guide.md")
+        #expect(FileManager.default.fileExists(atPath: renamed.path))
+        #expect(!FileManager.default.fileExists(atPath: original.path))
+    }
+
+    @Test("deleteItem moves a file to trash")
+    func deleteItemMovesFileToTrash() throws {
+        let dir = createTempDir()
+        defer { cleanup(dir) }
+
+        let original = dir.appendingPathComponent("README.md")
+        try "# Hello".write(to: original, atomically: true, encoding: .utf8)
+
+        let view = MarkdownFileExplorerView()
+        view.setRootDirectory(dir)
+
+        try view.deleteItem(at: original)
+        #expect(!FileManager.default.fileExists(atPath: original.path))
     }
 
     // MARK: - Helpers

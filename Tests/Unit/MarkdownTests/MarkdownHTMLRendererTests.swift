@@ -3,6 +3,7 @@
 
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownHTMLRenderer")
 struct MarkdownHTMLRendererTests {
@@ -18,9 +19,12 @@ struct MarkdownHTMLRendererTests {
         let result = parse("# Title\n## Subtitle\n### H3")
         let html = MarkdownHTMLRenderer.render(result)
 
-        #expect(html.contains("<h1 data-source-line=\"0\">Title</h1>"))
-        #expect(html.contains("<h2 data-source-line=\"1\">Subtitle</h2>"))
-        #expect(html.contains("<h3 data-source-line=\"2\">H3</h3>"))
+        #expect(html.contains("<h1 data-source-line=\"0\""))
+        #expect(html.contains("id=\"heading-0\">Title</h1>"))
+        #expect(html.contains("<h2 data-source-line=\"1\""))
+        #expect(html.contains("id=\"heading-1\">Subtitle</h2>"))
+        #expect(html.contains("<h3 data-source-line=\"2\""))
+        #expect(html.contains("id=\"heading-2\">H3</h3>"))
     }
 
     // MARK: - Paragraphs
@@ -99,6 +103,16 @@ struct MarkdownHTMLRendererTests {
         #expect(html.contains("<pre class=\"mermaid\">"))
         #expect(html.contains("graph TD"))
         #expect(html.contains("code-block-mermaid"))
+    }
+
+    @Test("code block title renders as header div")
+    func codeBlockTitleHTML() {
+        let source = "```js title=\"app.js\"\nconsole.log('hi')\n```"
+        let result = parse(source)
+        let html = MarkdownHTMLRenderer.render(result)
+
+        #expect(html.contains("class=\"code-filename\""))
+        #expect(html.contains("app.js"))
     }
 
     // MARK: - Lists
@@ -235,7 +249,8 @@ struct MarkdownHTMLRendererTests {
 
         #expect(html.contains("frontmatter"))
         #expect(html.contains("Test"))
-        #expect(html.contains("<h1 data-source-line=\"3\">Hello</h1>"))
+        #expect(html.contains("<h1 data-source-line=\"3\""))
+        #expect(html.contains(">Hello</h1>"))
     }
 
     @Test("renderDocument omits frontmatter section when empty")
@@ -245,7 +260,8 @@ struct MarkdownHTMLRendererTests {
         let html = MarkdownHTMLRenderer.renderDocument(doc)
 
         #expect(!html.contains("frontmatter"))
-        #expect(html.contains("<h1 data-source-line=\"0\">Hello</h1>"))
+        #expect(html.contains("<h1 data-source-line=\"0\""))
+        #expect(html.contains(">Hello</h1>"))
     }
 
     // MARK: - Frontmatter Edge Cases

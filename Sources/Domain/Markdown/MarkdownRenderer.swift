@@ -5,6 +5,23 @@ import AppKit
 
 // MARK: - Theme
 
+private enum MarkdownThemePalette {
+    static let text = NSColor(calibratedRed: 0.804, green: 0.839, blue: 0.957, alpha: 1)
+    static let subtext0 = NSColor(calibratedRed: 0.651, green: 0.678, blue: 0.784, alpha: 1)
+    static let subtext1 = NSColor(calibratedRed: 0.729, green: 0.761, blue: 0.871, alpha: 1)
+    static let surface0 = NSColor(calibratedRed: 0.192, green: 0.196, blue: 0.267, alpha: 1)
+    static let surface1 = NSColor(calibratedRed: 0.271, green: 0.278, blue: 0.353, alpha: 1)
+    static let overlay0 = NSColor(calibratedRed: 0.424, green: 0.439, blue: 0.525, alpha: 1)
+    static let blue = NSColor(calibratedRed: 0.537, green: 0.706, blue: 0.98, alpha: 1)
+    static let green = NSColor(calibratedRed: 0.651, green: 0.89, blue: 0.631, alpha: 1)
+    static let yellow = NSColor(calibratedRed: 0.976, green: 0.886, blue: 0.686, alpha: 1)
+    static let peach = NSColor(calibratedRed: 0.98, green: 0.702, blue: 0.529, alpha: 1)
+    static let mauve = NSColor(calibratedRed: 0.796, green: 0.651, blue: 0.969, alpha: 1)
+    static let teal = NSColor(calibratedRed: 0.58, green: 0.886, blue: 0.835, alpha: 1)
+    static let lavender = NSColor(calibratedRed: 0.706, green: 0.745, blue: 0.996, alpha: 1)
+    static let sky = NSColor(calibratedRed: 0.537, green: 0.863, blue: 0.922, alpha: 1)
+}
+
 /// Visual theme used by `MarkdownRenderer`. Colors are always provided by
 /// the caller so the renderer stays decoupled from `CocxyColors` for tests.
 ///
@@ -71,9 +88,9 @@ public struct MarkdownRenderTheme {
         self.headingColors = headingColors
     }
 
-    /// Default theme built from the project's centralized palette.
+    /// Default theme built from Cocxy's Catppuccin-based palette.
     @MainActor
-    public static let cocxyDefault: MarkdownRenderTheme = {
+    public static func cocxyDefaultTheme() -> MarkdownRenderTheme {
         let bodySize: CGFloat = 13
         let codeSize: CGFloat = 12
         let headingSize: CGFloat = 20
@@ -98,26 +115,26 @@ public struct MarkdownRenderTheme {
             boldItalicFont: boldItalic,
             codeFont: code,
             headingBaseFont: heading,
-            textColor: CocxyColors.text,
-            subtleColor: CocxyColors.subtext0,
-            codeColor: CocxyColors.green,
-            codeBackground: CocxyColors.surface0,
-            quoteColor: CocxyColors.subtext1,
-            quoteBar: CocxyColors.overlay0,
-            linkColor: CocxyColors.blue,
-            strikeColor: CocxyColors.subtext0,
-            tableBorder: CocxyColors.surface1,
-            rule: CocxyColors.surface0,
+            textColor: MarkdownThemePalette.text,
+            subtleColor: MarkdownThemePalette.subtext0,
+            codeColor: MarkdownThemePalette.green,
+            codeBackground: MarkdownThemePalette.surface0,
+            quoteColor: MarkdownThemePalette.subtext1,
+            quoteBar: MarkdownThemePalette.overlay0,
+            linkColor: MarkdownThemePalette.blue,
+            strikeColor: MarkdownThemePalette.subtext0,
+            tableBorder: MarkdownThemePalette.surface1,
+            rule: MarkdownThemePalette.surface0,
             headingColors: [
-                CocxyColors.blue,       // H1
-                CocxyColors.mauve,      // H2
-                CocxyColors.teal,       // H3
-                CocxyColors.lavender,   // H4
-                CocxyColors.sky,        // H5
-                CocxyColors.peach       // H6
+                MarkdownThemePalette.blue,       // H1
+                MarkdownThemePalette.mauve,      // H2
+                MarkdownThemePalette.teal,       // H3
+                MarkdownThemePalette.lavender,   // H4
+                MarkdownThemePalette.sky,        // H5
+                MarkdownThemePalette.peach       // H6
             ]
         )
-    }()
+    }
 }
 
 // MARK: - Renderer
@@ -132,8 +149,8 @@ public struct MarkdownRenderer {
 
     public let theme: MarkdownRenderTheme
 
-    public init(theme: MarkdownRenderTheme = .cocxyDefault) {
-        self.theme = theme
+    public init(theme: MarkdownRenderTheme? = nil) {
+        self.theme = theme ?? MarkdownRenderTheme.cocxyDefaultTheme()
     }
 
     /// Produces an attributed string for the document's body. Frontmatter
@@ -165,8 +182,8 @@ public struct MarkdownRenderer {
             appendCallout(type: type, title: title, blocks: blocks, into: output)
         case .list(let ordered, let start, let items):
             appendList(ordered: ordered, start: start, items: items, into: output)
-        case .codeBlock(let language, let text):
-            appendCodeBlock(language: language, text: text, into: output)
+        case .codeBlock(let language, let title, let text):
+            appendCodeBlock(language: language, title: title, text: text, into: output)
         case .table(let headers, let alignments, let rows):
             appendTable(headers: headers, alignments: alignments, rows: rows, into: output)
         case .footnoteDefinition(let id, let blocks):
@@ -361,6 +378,7 @@ public struct MarkdownRenderer {
 
     private func appendCodeBlock(
         language: String?,
+        title: String?,
         text: String,
         into output: NSMutableAttributedString
     ) {
@@ -375,6 +393,15 @@ public struct MarkdownRenderer {
             .backgroundColor: theme.codeBackground,
             .paragraphStyle: paragraph
         ]
+
+        if let title, !title.isEmpty {
+            let titleLine = NSAttributedString(string: "\(title)\n", attributes: [
+                .font: theme.codeFont,
+                .foregroundColor: theme.subtleColor,
+                .paragraphStyle: paragraph
+            ])
+            output.append(titleLine)
+        }
 
         if let language, !language.isEmpty {
             let label = NSAttributedString(string: "\(language)\n", attributes: [
@@ -504,7 +531,7 @@ public struct MarkdownRenderer {
                 let mutable = NSMutableAttributedString(attributedString: inner)
                 mutable.addAttribute(
                     .backgroundColor,
-                    value: CocxyColors.yellow.withAlphaComponent(0.35),
+                    value: MarkdownThemePalette.yellow.withAlphaComponent(0.35),
                     range: NSRange(location: 0, length: mutable.length)
                 )
                 output.append(mutable)

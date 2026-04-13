@@ -38,6 +38,10 @@ extension MarkdownPreviewView: WKScriptMessageHandler {
             guard let sourceLine = payload["sourceLine"] as? Int else { return }
             onClickToSource?(sourceLine)
 
+        case "copyToClipboard":
+            guard let text = payload["text"] as? String else { return }
+            onCopyToClipboard?(text)
+
         default:
             break
         }

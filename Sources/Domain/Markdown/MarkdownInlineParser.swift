@@ -15,13 +15,16 @@ import Foundation
 /// Adjacent text fragments are collapsed so consumers can assume no two
 /// consecutive `.text` cases appear in the output.
 public struct MarkdownInlineParser {
+    let linkDefinitions: [String: String]
 
-    public init() {}
+    public init(linkDefinitions: [String: String] = [:]) {
+        self.linkDefinitions = linkDefinitions
+    }
 
     /// Parses a single inline string into AST nodes.
     public func parse(_ text: String) -> [MarkdownInline] {
         if text.isEmpty { return [] }
-        var scanner = Scanner(text)
+        var scanner = Scanner(text, linkDefinitions: linkDefinitions)
         let inlines = scanner.parseRun()
         return MarkdownInlineParser.flatten(inlines)
     }
@@ -69,19 +72,25 @@ public struct MarkdownInlineParser {
 
 // MARK: - Scanner
 
-private extension MarkdownInlineParser {
+extension MarkdownInlineParser {
 
     /// Character-level scanner with cursor + lookahead. Designed for one
     /// pass per inline parse; callers never share a scanner.
     struct Scanner {
         let chars: [Character]
+        let linkDefinitions: [String: String]
         var index: Int = 0
 
-        init(_ text: String) {
+        init(_ text: String, linkDefinitions: [String: String]) {
             self.chars = Array(text)
+            self.linkDefinitions = linkDefinitions
         }
 
         var isAtEnd: Bool { index >= chars.count }
+
+        func parseNested(_ text: String) -> [MarkdownInline] {
+            MarkdownInlineParser(linkDefinitions: linkDefinitions).parse(text)
+        }
 
         // MARK: Parsing
 
@@ -343,7 +352,7 @@ private extension MarkdownInlineParser {
 
                     if closeLen >= target {
                         let innerText = String(chars[runStart..<i])
-                        let innerNodes = MarkdownInlineParser().parse(innerText)
+                        let innerNodes = parseNested(innerText)
                         if tripleMode && closeLen >= 3 {
                             let wrapped: [MarkdownInline] = [
                                 .strong(inlines: [.emphasis(inlines: innerNodes)])
@@ -381,7 +390,7 @@ private extension MarkdownInlineParser {
                 }
                 if chars[i] == "~" && chars[i + 1] == "~" {
                     let innerText = String(chars[contentStart..<i])
-                    let innerNodes = MarkdownInlineParser().parse(innerText)
+                    let innerNodes = parseNested(innerText)
                     return (.strike(inlines: innerNodes), i + 2)
                 }
                 i += 1
@@ -406,7 +415,7 @@ private extension MarkdownInlineParser {
                 if chars[i] == "=" && chars[i + 1] == "=" {
                     let innerText = String(chars[contentStart..<i])
                     guard !innerText.isEmpty else { return nil }
-                    let innerNodes = MarkdownInlineParser().parse(innerText)
+                    let innerNodes = parseNested(innerText)
                     return (.highlight(inlines: innerNodes), i + 2)
                 }
                 i += 1
@@ -446,7 +455,7 @@ private extension MarkdownInlineParser {
                           !innerText.hasPrefix(" "),
                           !innerText.hasSuffix(" "),
                           !innerText.contains("\n") else { return nil }
-                    let innerNodes = MarkdownInlineParser().parse(innerText)
+                    let innerNodes = parseNested(innerText)
                     return (wrap(innerNodes), i + 1)
                 }
                 i += 1
@@ -454,7 +463,7 @@ private extension MarkdownInlineParser {
             return nil
         }
 
-        // MARK: Link
+        // MARK: Footnotes
 
         mutating func parseFootnoteRef(from start: Int) -> (MarkdownInline, Int)? {
             guard start + 3 < chars.count,
@@ -476,90 +485,6 @@ private extension MarkdownInlineParser {
                 return nil
             }
             return (.footnoteRef(id: idBuffer), i + 1)
-        }
-
-        mutating func parseLink(from start: Int) -> (MarkdownInline, Int)? {
-            guard start < chars.count, chars[start] == "[" else { return nil }
-
-            // Find matching `]` respecting nested brackets.
-            var depth = 1
-            var i = start + 1
-            while i < chars.count {
-                let ch = chars[i]
-                if ch == "\\" { i += 2; continue }
-                if ch == "[" { depth += 1 }
-                else if ch == "]" {
-                    depth -= 1
-                    if depth == 0 { break }
-                }
-                i += 1
-            }
-            guard i < chars.count, depth == 0 else { return nil }
-
-            let textRange = (start + 1)..<i
-            let afterBracket = i + 1
-
-            // Expect immediately a `(` for an inline link.
-            guard afterBracket < chars.count, chars[afterBracket] == "(" else {
-                return nil
-            }
-
-            // Parse URL up to the matching `)`, allowing balanced parentheses
-            // inside the URL itself (`foo(bar).png`).
-            var j = afterBracket + 1
-            var urlBuffer = ""
-            var parenDepth = 1
-            while j < chars.count {
-                if chars[j] == "\\" && j + 1 < chars.count {
-                    urlBuffer.append(chars[j + 1])
-                    j += 2
-                    continue
-                }
-                if chars[j] == "(" {
-                    parenDepth += 1
-                    urlBuffer.append(chars[j])
-                    j += 1
-                    continue
-                }
-                if chars[j] == ")" {
-                    parenDepth -= 1
-                    if parenDepth == 0 {
-                        break
-                    }
-                    urlBuffer.append(chars[j])
-                    j += 1
-                    continue
-                }
-                urlBuffer.append(chars[j])
-                j += 1
-            }
-            guard j < chars.count, chars[j] == ")", parenDepth == 0 else { return nil }
-
-            let linkText = String(chars[textRange])
-            let innerNodes = MarkdownInlineParser().parse(linkText)
-            return (.link(text: innerNodes, url: urlBuffer.trimmingCharacters(in: .whitespaces)), j + 1)
-        }
-
-        // MARK: Image
-
-        mutating func parseImage(from start: Int) -> (MarkdownInline, Int)? {
-            // Image syntax: ![alt](url)
-            // start points to '!', start+1 must be '['
-            guard start + 1 < chars.count, chars[start] == "!", chars[start + 1] == "[" else {
-                return nil
-            }
-
-            // Reuse link parsing from the '[' position
-            guard let (linkNode, endIndex) = parseLink(from: start + 1) else {
-                return nil
-            }
-
-            // Extract alt text and URL from the link node
-            if case .link(let textInlines, let url) = linkNode {
-                let alt = MarkdownOutline.plainText(from: textInlines)
-                return (.image(alt: alt, url: url), endIndex)
-            }
-            return nil
         }
 
         // MARK: Autolink

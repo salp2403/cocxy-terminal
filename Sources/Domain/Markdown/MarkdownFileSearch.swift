@@ -6,18 +6,18 @@ import Foundation
 // MARK: - Search Result
 
 /// A single match within a markdown file.
-struct MarkdownSearchResult: Equatable, Sendable {
+public struct MarkdownSearchResult: Equatable, Sendable {
     /// Path to the file containing the match.
-    let fileURL: URL
+    public let fileURL: URL
 
     /// The file name (for display).
-    let fileName: String
+    public let fileName: String
 
     /// 1-based line number of the match.
-    let lineNumber: Int
+    public let lineNumber: Int
 
     /// The text of the matching line (trimmed).
-    let lineText: String
+    public let lineText: String
 }
 
 // MARK: - Search Engine
@@ -26,7 +26,7 @@ struct MarkdownSearchResult: Equatable, Sendable {
 ///
 /// All operations are synchronous and intended to be called from a background
 /// queue. The caller is responsible for dispatching to main for UI updates.
-struct MarkdownFileSearch: Sendable {
+public struct MarkdownFileSearch: Sendable {
 
     /// Searches all .md/.markdown files under `root` for lines containing `query`.
     ///
@@ -35,7 +35,7 @@ struct MarkdownFileSearch: Sendable {
     ///   - root: The root directory to scan recursively.
     ///   - maxResults: Maximum number of results to return (default 200).
     /// - Returns: An array of search results sorted by file name then line number.
-    static func search(
+    public static func search(
         query: String,
         in root: URL,
         maxResults: Int = 200

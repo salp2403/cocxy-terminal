@@ -2,6 +2,7 @@
 
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownOutline")
 struct MarkdownOutlineTests {

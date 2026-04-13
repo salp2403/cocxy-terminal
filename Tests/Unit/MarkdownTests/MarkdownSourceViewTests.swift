@@ -3,6 +3,7 @@
 import AppKit
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownSourceView", .serialized)
 @MainActor
@@ -67,6 +68,31 @@ struct MarkdownSourceViewTests {
         #expect(view.selectedSourceRange == NSRange(location: 8, length: 8))
     }
 
+    @Test("applyStrikethrough wraps selected text")
+    func applyStrikethroughWrapsSelection() {
+        let view = MarkdownSourceView()
+        view.document = MarkdownDocument.parse("hello")
+        view.setSelectedSourceRange(NSRange(location: 0, length: 5))
+
+        view.applyStrikethrough()
+
+        #expect(view.currentSource == "~~hello~~")
+        #expect(view.selectedSourceRange == NSRange(location: 2, length: 5))
+    }
+
+    @Test("cycleHeading adds and increments heading markers")
+    func cycleHeadingUpdatesCurrentLine() {
+        let view = MarkdownSourceView()
+        view.document = MarkdownDocument.parse("Heading")
+        view.setSelectedSourceRange(NSRange(location: 0, length: 0))
+
+        view.cycleHeading()
+        #expect(view.currentSource == "# Heading")
+
+        view.cycleHeading()
+        #expect(view.currentSource == "## Heading")
+    }
+
     @Test("Cmd+B key equivalent formats the current selection")
     func commandBFormatsSelection() {
         let view = MarkdownSourceView()
@@ -78,6 +104,59 @@ struct MarkdownSourceViewTests {
 
         #expect(handled == true)
         #expect(view.currentSource == "**hello**")
+    }
+
+    @Test("Cmd+Shift+X applies strikethrough")
+    func commandShiftXStrikethrough() {
+        let view = MarkdownSourceView()
+        view.document = MarkdownDocument.parse("hello")
+        view.setSelectedSourceRange(NSRange(location: 0, length: 5))
+
+        let event = makeKeyEvent(characters: "x", modifiers: [.command, .shift])
+        let handled = view.editorTextView.performKeyEquivalent(with: event)
+
+        #expect(handled == true)
+        #expect(view.currentSource == "~~hello~~")
+    }
+
+    @Test("Cmd+Shift+H cycles heading level")
+    func commandShiftHCyclesHeading() {
+        let view = MarkdownSourceView()
+        view.document = MarkdownDocument.parse("Heading")
+        view.setSelectedSourceRange(NSRange(location: 0, length: 0))
+
+        let event = makeKeyEvent(characters: "h", modifiers: [.command, .shift])
+
+        #expect(view.editorTextView.performKeyEquivalent(with: event) == true)
+        #expect(view.currentSource == "# Heading")
+
+        #expect(view.editorTextView.performKeyEquivalent(with: event) == true)
+        #expect(view.currentSource == "## Heading")
+    }
+
+    @Test("insert helpers create common markdown blocks")
+    func insertHelpersCreateBlocks() {
+        let view = MarkdownSourceView()
+        view.document = MarkdownDocument.parse("")
+
+        view.insertTable()
+        #expect(view.currentSource.contains("| Column 1 | Column 2 |"))
+
+        view.replaceEntireSource(with: "")
+        view.insertBlockquote()
+        #expect(view.currentSource == "> ")
+
+        view.replaceEntireSource(with: "")
+        view.insertHorizontalRule()
+        #expect(view.currentSource == "---")
+
+        view.replaceEntireSource(with: "")
+        view.insertCodeBlock()
+        #expect(view.currentSource == "```\n\n```")
+
+        view.replaceEntireSource(with: "")
+        view.insertMathBlock()
+        #expect(view.currentSource == "$$\n\n$$")
     }
 
     private func makeKeyEvent(

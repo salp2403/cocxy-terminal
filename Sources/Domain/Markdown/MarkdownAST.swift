@@ -33,8 +33,10 @@ public enum MarkdownBlock: Equatable, Sendable {
     case list(ordered: Bool, start: Int, items: [MarkdownListItem])
 
     /// A fenced or indented code block. `language` is `nil` for indented
-    /// blocks and for fenced blocks without an info string.
-    case codeBlock(language: String?, text: String)
+    /// blocks and for fenced blocks without an info string. `title` carries
+    /// an optional filename/header extracted from fenced info strings like
+    /// ```swift title="main.swift"```.
+    case codeBlock(language: String?, title: String?, text: String)
 
     /// A GitHub-flavored table with header row, column alignments, and rows.
     case table(headers: [[MarkdownInline]], alignments: [MarkdownTableAlignment], rows: [[[MarkdownInline]]])

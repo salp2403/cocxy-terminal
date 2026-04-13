@@ -2,6 +2,7 @@
 // MarkdownContentView+Actions.swift - Export, Git, and Drag & Drop actions.
 
 import AppKit
+import CocxyMarkdownLib
 
 // MARK: - Git Blame & Diff
 
@@ -68,6 +69,66 @@ extension MarkdownContentView {
 
 extension MarkdownContentView {
 
+    func copyAsMarkdown() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(document.source, forType: .string)
+    }
+
+    func copyAsHTML() {
+        let html = MarkdownHTMLRenderer.renderDocument(document)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(html, forType: .html)
+        pasteboard.setString(html, forType: .string)
+    }
+
+    func copyAsRichText() {
+        let html = MarkdownHTMLRenderer.renderDocument(document)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+
+        if let attributed = attributedString(fromHTML: html),
+           let rtf = attributed.rtf(from: NSRange(location: 0, length: attributed.length), documentAttributes: [:]) {
+            pasteboard.setData(rtf, forType: .rtf)
+            pasteboard.setString(attributed.string, forType: .string)
+        } else {
+            pasteboard.setString(html, forType: .string)
+        }
+    }
+
+    func copyAsPlainText() {
+        let html = MarkdownHTMLRenderer.renderDocument(document)
+        let plain = attributedString(fromHTML: html)?.string
+            ?? html.replacingOccurrences(
+                of: "<[^>]+>",
+                with: "",
+                options: NSString.CompareOptions.regularExpression
+            )
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(plain, forType: .string)
+    }
+
+    func copyTextToPasteboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private func attributedString(fromHTML html: String) -> NSAttributedString? {
+        guard let data = html.data(using: .utf8) else { return nil }
+        return try? NSAttributedString(
+            data: data,
+            options: [
+                .documentType: NSAttributedString.DocumentType.html,
+                .characterEncoding: String.Encoding.utf8.rawValue
+            ],
+            documentAttributes: nil
+        )
+    }
+
     func exportPDF() {
         // If the template is reloading (e.g., after a directory change),
         // defer the export until it finishes loading.
@@ -109,7 +170,7 @@ extension MarkdownContentView {
             panel.beginSheetModal(for: self.window ?? NSApp.mainWindow ?? NSWindow()) { response in
                 guard response == .OK, let url = panel.url else { return }
                 do {
-                    try standalone.write(to: url, atomically: true, encoding: .utf8)
+                    try standalone.write(to: url, atomically: true, encoding: String.Encoding.utf8)
                 } catch {
                     NSLog("Export HTML failed: %@", String(describing: error))
                 }
@@ -139,7 +200,7 @@ extension MarkdownContentView {
         panel.beginSheetModal(for: window ?? NSApp.mainWindow ?? NSWindow()) { response in
             guard response == .OK, let url = panel.url else { return }
             do {
-                try html.write(to: url, atomically: true, encoding: .utf8)
+                try html.write(to: url, atomically: true, encoding: String.Encoding.utf8)
             } catch {
                 NSLog("Export Slides failed: %@", String(describing: error))
             }

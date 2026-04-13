@@ -4,6 +4,7 @@
 import AppKit
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownContentView", .serialized)
 @MainActor
@@ -223,6 +224,27 @@ struct MarkdownContentViewTests {
         let event = makeKeyEvent(characters: "h", modifiers: [.command, .shift])
         let handled = view.performKeyEquivalent(with: event)
         #expect(handled)
+    }
+
+    @Test("copy actions write expected clipboard formats")
+    func copyActionsPopulatePasteboard() {
+        let url = createTempMarkdownFile(content: "# Hello\n\nWorld")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        let pasteboard = NSPasteboard.general
+
+        view.copyAsMarkdown()
+        #expect(pasteboard.string(forType: .string)?.contains("# Hello") == true)
+
+        view.copyAsHTML()
+        #expect(pasteboard.string(forType: .html)?.contains("<h1") == true)
+
+        view.copyAsPlainText()
+        #expect(pasteboard.string(forType: .string)?.contains("Hello") == true)
+
+        view.copyAsRichText()
+        #expect(pasteboard.data(forType: .rtf) != nil || pasteboard.string(forType: .string) != nil)
     }
 
     // MARK: - Concurrency Guard

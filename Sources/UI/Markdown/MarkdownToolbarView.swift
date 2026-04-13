@@ -22,6 +22,7 @@ final class MarkdownToolbarView: NSView {
     private let modeSegmented = NSSegmentedControl()
     private let blameButton = NSButton()
     private let diffButton = NSButton()
+    private let copyButton = NSButton()
     private let exportPDFButton = NSButton()
     private let exportHTMLButton = NSButton()
     private var exportSlidesButton: NSButton!
@@ -77,6 +78,18 @@ final class MarkdownToolbarView: NSView {
 
     /// Invoked when Export Slides is clicked.
     var onExportSlides: (() -> Void)?
+
+    /// Invoked when Copy As > Markdown is selected.
+    var onCopyMarkdown: (() -> Void)?
+
+    /// Invoked when Copy As > HTML is selected.
+    var onCopyHTML: (() -> Void)?
+
+    /// Invoked when Copy As > Rich Text is selected.
+    var onCopyRichText: (() -> Void)?
+
+    /// Invoked when Copy As > Plain Text is selected.
+    var onCopyPlainText: (() -> Void)?
 
     // MARK: - Init
 
@@ -145,6 +158,15 @@ final class MarkdownToolbarView: NSView {
             action: #selector(diffClicked)
         )
         addSubview(diffButton)
+
+        // Copy menu
+        configureIconButton(
+            copyButton,
+            systemName: "doc.on.clipboard",
+            accessibility: "Copy As",
+            action: #selector(copyClicked(_:))
+        )
+        addSubview(copyButton)
 
         // Export PDF
         configureIconButton(
@@ -231,7 +253,12 @@ final class MarkdownToolbarView: NSView {
             exportPDFButton.widthAnchor.constraint(equalToConstant: 22),
             exportPDFButton.heightAnchor.constraint(equalToConstant: 22),
 
-            diffButton.trailingAnchor.constraint(equalTo: exportPDFButton.leadingAnchor, constant: -4),
+            copyButton.trailingAnchor.constraint(equalTo: exportPDFButton.leadingAnchor, constant: -4),
+            copyButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            copyButton.widthAnchor.constraint(equalToConstant: 22),
+            copyButton.heightAnchor.constraint(equalToConstant: 22),
+
+            diffButton.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -4),
             diffButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             diffButton.widthAnchor.constraint(equalToConstant: 22),
             diffButton.heightAnchor.constraint(equalToConstant: 22),
@@ -287,6 +314,16 @@ final class MarkdownToolbarView: NSView {
         onDiffToggle?()
     }
 
+    @objc private func copyClicked(_ sender: NSButton) {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Copy as Markdown", action: #selector(copyMarkdownClicked), keyEquivalent: "")
+        menu.addItem(withTitle: "Copy as HTML", action: #selector(copyHTMLClicked), keyEquivalent: "")
+        menu.addItem(withTitle: "Copy as Rich Text", action: #selector(copyRichTextClicked), keyEquivalent: "")
+        menu.addItem(withTitle: "Copy as Plain Text", action: #selector(copyPlainTextClicked), keyEquivalent: "")
+        menu.items.forEach { $0.target = self }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
     @objc private func exportPDFClicked() {
         onExportPDF?()
     }
@@ -297,6 +334,22 @@ final class MarkdownToolbarView: NSView {
 
     @objc private func exportSlidesClicked() {
         onExportSlides?()
+    }
+
+    @objc private func copyMarkdownClicked() {
+        onCopyMarkdown?()
+    }
+
+    @objc private func copyHTMLClicked() {
+        onCopyHTML?()
+    }
+
+    @objc private func copyRichTextClicked() {
+        onCopyRichText?()
+    }
+
+    @objc private func copyPlainTextClicked() {
+        onCopyPlainText?()
     }
 
     // MARK: - Helpers

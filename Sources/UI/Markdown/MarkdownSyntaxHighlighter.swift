@@ -2,6 +2,7 @@
 // MarkdownSyntaxHighlighter.swift - Applies per-token styling to raw markdown source.
 
 import AppKit
+import CocxyMarkdownLib
 
 // MARK: - Syntax Highlighter
 
@@ -25,8 +26,8 @@ public struct MarkdownSyntaxHighlighter {
 
     public let theme: MarkdownRenderTheme
 
-    public init(theme: MarkdownRenderTheme = .cocxyDefault) {
-        self.theme = theme
+    public init(theme: MarkdownRenderTheme? = nil) {
+        self.theme = theme ?? MarkdownRenderTheme.cocxyDefaultTheme()
     }
 
     // MARK: - Entry Point

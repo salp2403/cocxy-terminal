@@ -2,6 +2,7 @@
 // MarkdownOutlineView.swift - Sidebar outline of headings in a MarkdownDocument.
 
 import AppKit
+import CocxyMarkdownLib
 
 // MARK: - Outline View
 

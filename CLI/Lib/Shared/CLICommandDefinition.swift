@@ -220,7 +220,7 @@ public enum CLICommand: String, CaseIterable {
         case .themeSet: return "Set the active theme"
 
         // System
-        case .send: return "Send text to the active terminal"
+        case .send: return "Send text to the active terminal (or read it from stdin)"
         case .sendKey: return "Send a keystroke to the active terminal"
 
         // Plugins
@@ -351,7 +351,7 @@ public enum CLICommand: String, CaseIterable {
         case .themeSet: return "cocxy theme set <name>"
 
         // System
-        case .send: return "cocxy send <text>"
+        case .send: return "cocxy send <text>|--stdin"
         case .sendKey: return "cocxy send-key <key>"
 
         // Plugins

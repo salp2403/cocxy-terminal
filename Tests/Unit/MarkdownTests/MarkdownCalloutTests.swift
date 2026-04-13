@@ -2,6 +2,7 @@
 
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownCallout")
 struct MarkdownCalloutTests {
@@ -54,5 +55,30 @@ struct MarkdownCalloutTests {
         #expect(html.contains("callout-summary"))
         #expect(html.contains("Heads up"))
         #expect(html.contains("Danger"))
+    }
+
+    @Test("parser recognizes all fifteen callout types")
+    func allFifteenCalloutTypes() {
+        let types = [
+            "NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION",
+            "ABSTRACT", "TODO", "BUG", "EXAMPLE", "QUOTE",
+            "DANGER", "FAILURE", "SUCCESS", "QUESTION", "INFO"
+        ]
+
+        for marker in types {
+            let result = MarkdownCallout.parseHeader("[!\(marker)]")
+            #expect(result != nil, "Should parse [!\(marker)]")
+        }
+    }
+
+    @Test("new callout types have correct icons")
+    func newCalloutTypeIcons() {
+        #expect(MarkdownCalloutType.example.icon == "📝")
+        #expect(MarkdownCalloutType.quote.icon == "❝")
+        #expect(MarkdownCalloutType.danger.icon == "⚡")
+        #expect(MarkdownCalloutType.failure.icon == "✗")
+        #expect(MarkdownCalloutType.success.icon == "✓")
+        #expect(MarkdownCalloutType.question.icon == "❓")
+        #expect(MarkdownCalloutType.info.icon == "ℹ")
     }
 }

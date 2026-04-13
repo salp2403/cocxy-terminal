@@ -10,7 +10,7 @@ import ImageIO
 ///
 /// This makes an exported HTML file truly standalone — it carries its images
 /// embedded in base64 instead of depending on the original filesystem paths.
-enum MarkdownImageInliner {
+public enum MarkdownImageInliner {
 
     /// Replaces local image `src` attributes with base64 data URIs.
     ///
@@ -18,7 +18,7 @@ enum MarkdownImageInliner {
     ///   - html: The HTML string to process.
     ///   - baseDirectory: The directory used to resolve relative image paths.
     /// - Returns: The HTML with local images inlined. Remote URLs are left unchanged.
-    static func inlineLocalImages(in html: String, baseDirectory: URL) -> String {
+    public static func inlineLocalImages(in html: String, baseDirectory: URL) -> String {
         // Match <img ... src="..." ...> — capture the src value
         guard let regex = try? NSRegularExpression(
             pattern: #"(<img\b[^>]*\bsrc\s*=\s*")([^"]+)("[^>]*>)"#,

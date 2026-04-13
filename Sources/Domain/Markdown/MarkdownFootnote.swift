@@ -35,7 +35,7 @@ enum MarkdownFootnote {
             return blocks.map(plainText(from:)).joined(separator: " ")
         case .list(_, _, let items):
             return items.map { $0.blocks.map(plainText(from:)).joined(separator: " ") }.joined(separator: " ")
-        case .codeBlock(_, let text):
+        case .codeBlock(_, _, let text):
             return text
         case .table(let headers, _, let rows):
             let headerText = headers.map(MarkdownOutline.plainText(from:)).joined(separator: " ")

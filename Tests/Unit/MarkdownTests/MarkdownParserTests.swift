@@ -2,6 +2,7 @@
 
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownParser")
 struct MarkdownParserTests {
@@ -74,8 +75,9 @@ struct MarkdownParserTests {
         """
         let blocks = parser.parse(source).blocks
         #expect(blocks.count == 1)
-        if case .codeBlock(let lang, let text) = blocks[0] {
+        if case .codeBlock(let lang, let title, let text) = blocks[0] {
             #expect(lang == "swift")
+            #expect(title == nil)
             #expect(text == "let x = 1")
         } else {
             Issue.record("expected codeBlock")
@@ -89,8 +91,9 @@ struct MarkdownParserTests {
         raw
         ```
         """
-        if case .codeBlock(let lang, _)? = parser.parse(source).blocks.first {
+        if case .codeBlock(let lang, let title, _)? = parser.parse(source).blocks.first {
             #expect(lang == nil)
+            #expect(title == nil)
         } else {
             Issue.record("expected codeBlock")
         }
@@ -100,12 +103,30 @@ struct MarkdownParserTests {
     func indentedCodeBlock() {
         let source = "    code line\n    second"
         let blocks = parser.parse(source).blocks
-        if case .codeBlock(let lang, let text)? = blocks.first {
+        if case .codeBlock(let lang, let title, let text)? = blocks.first {
             #expect(lang == nil)
+            #expect(title == nil)
             #expect(text == "code line\nsecond")
         } else {
             Issue.record("expected codeBlock")
         }
+    }
+
+    @Test("fenced code block with title parses filename")
+    func codeBlockTitle() {
+        let source = """
+        ```python title="main.py"
+        print('hi')
+        ```
+        """
+        let blocks = parser.parse(source).blocks
+        guard case .codeBlock(let lang, let title, let text)? = blocks.first else {
+            Issue.record("expected codeBlock")
+            return
+        }
+        #expect(lang == "python")
+        #expect(title == "main.py")
+        #expect(text == "print('hi')")
     }
 
     // MARK: - Lists
@@ -214,6 +235,80 @@ struct MarkdownParserTests {
         } else {
             Issue.record("expected horizontalRule")
         }
+    }
+
+    // MARK: - Setext Headings
+
+    @Test("setext heading level 1 with equals")
+    func setextH1() {
+        let result = parser.parse("My Title\n========")
+        guard case .heading(let level, let inlines)? = result.blocks.first else {
+            Issue.record("Expected heading")
+            return
+        }
+        #expect(level == 1)
+        #expect(MarkdownOutline.plainText(from: inlines) == "My Title")
+    }
+
+    @Test("setext heading level 2 with dashes")
+    func setextH2() {
+        let result = parser.parse("Subtitle\n--------")
+        guard case .heading(let level, _)? = result.blocks.first else {
+            Issue.record("Expected heading")
+            return
+        }
+        #expect(level == 2)
+    }
+
+    @Test("dashes after blank line remain horizontal rule")
+    func dashesAfterBlankStayHR() {
+        let result = parser.parse("Text\n\n---")
+        #expect(result.blocks.count == 2)
+        guard case .paragraph = result.blocks[0] else {
+            Issue.record("Expected paragraph")
+            return
+        }
+        guard case .horizontalRule = result.blocks[1] else {
+            Issue.record("Expected horizontalRule")
+            return
+        }
+    }
+
+    // MARK: - Reference Links
+
+    @Test("reference-style link resolves to inline link")
+    func referenceStyleLink() {
+        let source = """
+        [Click here][example]
+
+        [example]: https://example.com
+        """
+        let result = MarkdownParser().parse(source)
+        #expect(result.linkDefinitions["example"] == "https://example.com")
+
+        guard case .paragraph(let inlines)? = result.blocks.first,
+              case .link(_, let url)? = inlines.first else {
+            Issue.record("Expected paragraph with link")
+            return
+        }
+        #expect(url == "https://example.com")
+        #expect(result.blocks.count == 1)
+    }
+
+    @Test("shortcut reference link resolves")
+    func shortcutReferenceLink() {
+        let source = """
+        [example][]
+
+        [example]: https://example.com
+        """
+        let result = MarkdownParser().parse(source)
+        guard case .paragraph(let inlines)? = result.blocks.first,
+              case .link(_, let url)? = inlines.first else {
+            Issue.record("Expected paragraph with link")
+            return
+        }
+        #expect(url == "https://example.com")
     }
 
     // MARK: - Block Locations

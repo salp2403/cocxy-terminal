@@ -11,6 +11,7 @@
 
 import AppKit
 import WebKit
+import CocxyMarkdownLib
 
 // MARK: - Preview View
 
@@ -59,6 +60,7 @@ final class MarkdownPreviewView: NSView {
 
     var onCheckboxToggle: ((Int, Bool) -> Void)?
     var onClickToSource: ((Int) -> Void)?
+    var onCopyToClipboard: ((String) -> Void)?
 
     // MARK: - Init
 

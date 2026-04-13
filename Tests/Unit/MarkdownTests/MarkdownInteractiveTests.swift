@@ -3,6 +3,7 @@
 import AppKit
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownInteractive", .serialized)
 @MainActor
@@ -41,6 +42,15 @@ struct MarkdownInteractiveTests {
         #expect(html.contains("copyCode"))
     }
 
+    @Test("preview template contains sortable table and TSV copy infrastructure")
+    func previewTemplateContainsTableEnhancements() {
+        let html = MarkdownPreviewTemplate.build(highlightJS: "window.hljs={};")
+        #expect(html.contains("makeSortable"))
+        #expect(html.contains("tableToTSV"))
+        #expect(html.contains("copyToClipboard"))
+        #expect(html.contains("sort-indicator"))
+    }
+
     @Test("source view toggles nth checkbox marker")
     func sourceViewTogglesNthCheckbox() {
         let view = MarkdownSourceView()
@@ -75,6 +85,21 @@ struct MarkdownInteractiveTests {
 
         #expect(url.deletingLastPathComponent() == FileManager.default.temporaryDirectory)
         #expect(url.lastPathComponent.hasPrefix("paste-19700101-000000"))
+    }
+
+    @Test("TOC placeholder renders inline nav")
+    func tocPlaceholderRendersInlineNav() {
+        let html = MarkdownHTMLRenderer.render(MarkdownParser().parse("""
+        [TOC]
+
+        # Title
+        ## Child
+        """))
+
+        #expect(html.contains("class=\"toc-inline\""))
+        #expect(html.contains("Table of Contents"))
+        #expect(html.contains("href=\"#heading-0\""))
+        #expect(html.contains("href=\"#heading-1\""))
     }
 
     private func createTempMarkdownFile(content: String) -> URL {

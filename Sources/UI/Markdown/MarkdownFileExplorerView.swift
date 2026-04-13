@@ -10,17 +10,24 @@ import AppKit
 /// Shows only `.md` and `.markdown` files and the directories that contain them.
 /// Clicking a file invokes `onFileSelected(url)` so the content panel can load it.
 @MainActor
-final class MarkdownFileExplorerView: NSView {
+final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
 
     // MARK: - Properties
 
     private let scrollView = NSScrollView()
     private let outlineView = NSOutlineView()
+    private let contextMenu = NSMenu()
     private var dataSource: FileTreeDataSource?
     private var delegateObject: FileTreeDelegate?
 
     /// Invoked when a file is clicked. The URL points to the selected .md file.
     var onFileSelected: ((URL) -> Void)?
+
+    /// Invoked after a file or directory is renamed.
+    var onFileRenamed: ((URL, URL) -> Void)?
+
+    /// Invoked after a file or directory is deleted.
+    var onFileDeleted: ((URL) -> Void)?
 
     /// The currently highlighted file path (used to show which file is open).
     var activeFilePath: URL? {
@@ -78,6 +85,8 @@ final class MarkdownFileExplorerView: NSView {
         outlineView.allowsEmptySelection = true
         outlineView.target = self
         outlineView.action = #selector(rowClicked)
+        contextMenu.delegate = self
+        outlineView.menu = contextMenu
 
         let ds = FileTreeDataSource(rootNodes: [])
         outlineView.dataSource = ds
@@ -105,6 +114,116 @@ final class MarkdownFileExplorerView: NSView {
         if !node.isDirectory {
             onFileSelected?(node.url)
         }
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        guard let node = contextualNode() else { return }
+
+        let rename = NSMenuItem(title: "Rename", action: #selector(renameContextNode), keyEquivalent: "")
+        rename.target = self
+        menu.addItem(rename)
+
+        let delete = NSMenuItem(title: "Move to Trash", action: #selector(deleteContextNode), keyEquivalent: "")
+        delete.target = self
+        menu.addItem(delete)
+
+        menu.addItem(.separator())
+
+        let reveal = NSMenuItem(title: "Reveal in Finder", action: #selector(revealContextNode), keyEquivalent: "")
+        reveal.target = self
+        menu.addItem(reveal)
+
+        if node.isDirectory {
+            rename.title = "Rename Folder"
+            delete.title = "Move Folder to Trash"
+        }
+    }
+
+    internal func renameItem(at url: URL, to newName: String) throws -> URL {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return url }
+
+        let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmed)
+        guard newURL != url else { return url }
+
+        try FileManager.default.moveItem(at: url, to: newURL)
+        if activeFilePath == url {
+            activeFilePath = newURL
+        }
+        refreshTree()
+        onFileRenamed?(url, newURL)
+        return newURL
+    }
+
+    internal func deleteItem(at url: URL) throws {
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        if activeFilePath == url {
+            activeFilePath = nil
+        }
+        refreshTree()
+        onFileDeleted?(url)
+    }
+
+    internal func revealInFinder(_ url: URL) {
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func refreshTree() {
+        if let rootDirectory {
+            setRootDirectory(rootDirectory)
+        }
+    }
+
+    private func contextualNode() -> FileTreeNode? {
+        let row = outlineView.clickedRow >= 0 ? outlineView.clickedRow : outlineView.selectedRow
+        guard row >= 0 else { return nil }
+        return outlineView.item(atRow: row) as? FileTreeNode
+    }
+
+    @objc private func renameContextNode() {
+        guard let node = contextualNode() else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Rename \"\(node.name)\""
+        alert.informativeText = "Enter a new name."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+
+        let field = NSTextField(string: node.name)
+        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        alert.accessoryView = field
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            _ = try renameItem(at: node.url, to: field.stringValue)
+        } catch {
+            NSLog("MarkdownFileExplorerView rename failed: %@", String(describing: error))
+        }
+    }
+
+    @objc private func deleteContextNode() {
+        guard let node = contextualNode() else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Move \"\(node.name)\" to Trash?"
+        alert.informativeText = "This can be undone from the Trash."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Move to Trash")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try deleteItem(at: node.url)
+        } catch {
+            NSLog("MarkdownFileExplorerView delete failed: %@", String(describing: error))
+        }
+    }
+
+    @objc private func revealContextNode() {
+        guard let node = contextualNode() else { return }
+        revealInFinder(node.url)
     }
 }
 

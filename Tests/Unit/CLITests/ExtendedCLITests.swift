@@ -2,6 +2,7 @@
 // ExtendedCLITests.swift - Tests for extended CLI commands (T-077/T-078).
 
 import XCTest
+import Darwin
 @testable import CocxyCLILib
 
 // MARK: - Tab Extended Commands Tests
@@ -383,6 +384,13 @@ final class SystemCommandTests: XCTestCase {
         XCTAssertEqual(result, .send(text: "hello world"))
     }
 
+    func testSendReadsTextFromStandardInput() throws {
+        try withRedirectedStandardInput("line 1\nline 2\r") {
+            let result = try CLIArgumentParser.parse(["send", "--stdin"])
+            XCTAssertEqual(result, .send(text: "line 1\nline 2\r"))
+        }
+    }
+
     // MARK: - 29. Send-key parses key correctly
 
     func testSendKeyParsesKeyCorrectly() throws {
@@ -405,6 +413,30 @@ final class SystemCommandTests: XCTestCase {
         XCTAssertEqual(request.command, "send-key")
         XCTAssertEqual(request.params?["key"], "ctrl+c")
     }
+}
+
+private func withRedirectedStandardInput<T>(
+    _ text: String,
+    body: () throws -> T
+) throws -> T {
+    let originalStdin = dup(STDIN_FILENO)
+    XCTAssertNotEqual(originalStdin, -1)
+
+    let pipe = Pipe()
+    let data = Data(text.utf8)
+    pipe.fileHandleForWriting.write(data)
+    try? pipe.fileHandleForWriting.close()
+
+    let stdinFD = pipe.fileHandleForReading.fileDescriptor
+    XCTAssertNotEqual(dup2(stdinFD, STDIN_FILENO), -1)
+
+    defer {
+        _ = dup2(originalStdin, STDIN_FILENO)
+        close(originalStdin)
+        try? pipe.fileHandleForReading.close()
+    }
+
+    return try body()
 }
 
 // MARK: - Extended CLI Error Tests

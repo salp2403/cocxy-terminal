@@ -2,6 +2,7 @@
 // MarkdownSearchView.swift - Search panel for finding text across markdown files.
 
 import AppKit
+import CocxyMarkdownLib
 
 // MARK: - Search View
 

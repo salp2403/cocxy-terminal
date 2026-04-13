@@ -4,6 +4,7 @@
 import Testing
 import Foundation
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownSlideExporter")
 struct MarkdownSlideExporterTests {

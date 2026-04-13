@@ -2,6 +2,7 @@
 
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownInlineParser")
 struct MarkdownInlineParserTests {
@@ -167,6 +168,40 @@ struct MarkdownInlineParserTests {
         #expect(result == [
             .image(alt: "diagram", url: "assets/diagram (1).png")
         ])
+    }
+
+    @Test("reference-style link resolves against provided definitions")
+    func referenceStyleLink() {
+        let parser = MarkdownInlineParser(linkDefinitions: ["example": "https://example.com"])
+        let result = parser.parse("[Click here][example]")
+        #expect(result == [
+            .link(text: [.text("Click here")], url: "https://example.com")
+        ])
+    }
+
+    @Test("shortcut reference link resolves using link text")
+    func shortcutReferenceLink() {
+        let parser = MarkdownInlineParser(linkDefinitions: ["example": "https://example.com"])
+        let result = parser.parse("[example][]")
+        #expect(result == [
+            .link(text: [.text("example")], url: "https://example.com")
+        ])
+    }
+
+    @Test("collapsed reference link resolves with same label")
+    func collapsedReferenceLink() {
+        let parser = MarkdownInlineParser(linkDefinitions: ["example": "https://example.com"])
+        let result = parser.parse("[example]")
+        #expect(result == [
+            .link(text: [.text("example")], url: "https://example.com")
+        ])
+    }
+
+    @Test("unresolved reference link stays literal")
+    func unresolvedReferenceLink() {
+        let parser = MarkdownInlineParser()
+        let result = parser.parse("[text][missing]")
+        #expect(result == [.text("[text][missing]")])
     }
 
     @Test("bare exclamation mark is text")

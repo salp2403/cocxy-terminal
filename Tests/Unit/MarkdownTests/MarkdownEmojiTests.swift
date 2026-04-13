@@ -2,6 +2,7 @@
 
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownEmoji")
 struct MarkdownEmojiTests {
@@ -25,5 +26,29 @@ struct MarkdownEmojiTests {
     @Test("parser leaves unknown shortcode literal")
     func parserLeavesUnknownShortcodeLiteral() {
         #expect(parser.parse(":unknown:") == [.text(":unknown:")])
+    }
+
+    @Test("emoji table covers representative 200+ shortcode set")
+    func emojiTableCoverage() {
+        let required: [(String, String)] = [
+            ("rocket", "🚀"),
+            ("heart_eyes", "😍"),
+            ("ok_hand", "👌"),
+            ("dog", "🐶"),
+            ("pizza", "🍕"),
+            ("soccer", "⚽"),
+            ("airplane", "✈️"),
+            ("gear", "⚙️"),
+            ("flag_us", "🇺🇸"),
+            ("broken_heart", "💔"),
+            ("rainbow", "🌈"),
+            ("trophy", "🏆"),
+        ]
+
+        #expect(MarkdownEmoji.count >= 200)
+
+        for (code, emoji) in required {
+            #expect(MarkdownEmoji.resolve(code) == emoji, "Missing shortcode :\(code):")
+        }
     }
 }

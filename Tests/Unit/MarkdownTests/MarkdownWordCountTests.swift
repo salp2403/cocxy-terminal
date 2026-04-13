@@ -3,6 +3,7 @@
 
 import Testing
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownWordCount")
 struct MarkdownWordCountTests {

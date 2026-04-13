@@ -5,6 +5,7 @@ import Testing
 import Foundation
 import AppKit
 @testable import CocxyTerminal
+@testable import CocxyMarkdownLib
 
 @Suite("MarkdownImageInliner")
 struct MarkdownImageInlinerTests {

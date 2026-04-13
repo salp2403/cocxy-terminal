@@ -6,44 +6,44 @@ import Foundation
 // MARK: - Blame Line
 
 /// A single line of git blame output.
-struct GitBlameLine: Equatable, Sendable {
+public struct GitBlameLine: Equatable, Sendable {
     /// The abbreviated commit hash.
-    let commitHash: String
+    public let commitHash: String
 
     /// The author name.
-    let author: String
+    public let author: String
 
     /// The date string (YYYY-MM-DD).
-    let date: String
+    public let date: String
 
     /// 1-based line number.
-    let lineNumber: Int
+    public let lineNumber: Int
 
     /// The line content.
-    let content: String
+    public let content: String
 }
 
 // MARK: - Diff Hunk
 
 /// A section of a git diff.
-struct GitDiffHunk: Equatable, Sendable {
+public struct GitDiffHunk: Equatable, Sendable {
     /// The hunk header (e.g., "@@ -10,5 +10,7 @@").
-    let header: String
+    public let header: String
 
     /// Lines in this hunk with their change type.
-    let lines: [GitDiffLine]
+    public let lines: [GitDiffLine]
 }
 
 /// A single line in a diff hunk.
-struct GitDiffLine: Equatable, Sendable {
-    enum ChangeType: Equatable, Sendable {
+public struct GitDiffLine: Equatable, Sendable {
+    public enum ChangeType: Equatable, Sendable {
         case context
         case addition
         case deletion
     }
 
-    let type: ChangeType
-    let text: String
+    public let type: ChangeType
+    public let text: String
 }
 
 // MARK: - Git Service
@@ -52,14 +52,14 @@ struct GitDiffLine: Equatable, Sendable {
 ///
 /// All operations run `git` as a child process on a background queue.
 /// Results are delivered asynchronously via completion handlers on main.
-enum MarkdownGitService {
+public enum MarkdownGitService {
 
     /// Checks whether the given file is tracked by git.
     ///
     /// - Parameters:
     ///   - fileURL: The file to check.
     ///   - completion: Called on main with `true` if the file is tracked.
-    static func isTracked(fileURL: URL, completion: @escaping @Sendable (Bool) -> Void) {
+    public static func isTracked(fileURL: URL, completion: @escaping @Sendable (Bool) -> Void) {
         let dir = fileURL.deletingLastPathComponent().path
         let file = fileURL.lastPathComponent
         runGit(args: ["ls-files", "--error-unmatch", file], workingDirectory: dir) { output, exitCode in
@@ -72,7 +72,7 @@ enum MarkdownGitService {
     /// - Parameters:
     ///   - fileURL: The file to blame.
     ///   - completion: Called on main with the parsed blame lines (empty if not a git file).
-    static func blame(fileURL: URL, completion: @escaping @Sendable ([GitBlameLine]) -> Void) {
+    public static func blame(fileURL: URL, completion: @escaping @Sendable ([GitBlameLine]) -> Void) {
         let dir = fileURL.deletingLastPathComponent().path
         let file = fileURL.lastPathComponent
         runGit(args: ["blame", "--porcelain", file], workingDirectory: dir) { output, exitCode in
@@ -86,7 +86,7 @@ enum MarkdownGitService {
     /// - Parameters:
     ///   - fileURL: The file to diff.
     ///   - completion: Called on main with parsed diff hunks (empty if no changes or not tracked).
-    static func diff(fileURL: URL, completion: @escaping @Sendable ([GitDiffHunk]) -> Void) {
+    public static func diff(fileURL: URL, completion: @escaping @Sendable ([GitDiffHunk]) -> Void) {
         let dir = fileURL.deletingLastPathComponent().path
         let file = fileURL.lastPathComponent
         runGit(args: ["diff", "HEAD", "--", file], workingDirectory: dir) { output, exitCode in
@@ -131,7 +131,7 @@ enum MarkdownGitService {
     // MARK: - Blame Parsing
 
     /// Parses `git blame --porcelain` output into structured blame lines.
-    static func parseBlameOutput(_ output: String) -> [GitBlameLine] {
+    public static func parseBlameOutput(_ output: String) -> [GitBlameLine] {
         guard !output.isEmpty else { return [] }
 
         var results: [GitBlameLine] = []
@@ -182,7 +182,7 @@ enum MarkdownGitService {
     // MARK: - Diff Parsing
 
     /// Parses unified diff output into structured hunks.
-    static func parseDiffOutput(_ output: String) -> [GitDiffHunk] {
+    public static func parseDiffOutput(_ output: String) -> [GitDiffHunk] {
         guard !output.isEmpty else { return [] }
 
         var hunks: [GitDiffHunk] = []

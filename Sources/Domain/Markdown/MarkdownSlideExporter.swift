@@ -12,7 +12,7 @@ import Foundation
 ///
 /// The exported HTML is fully standalone with embedded CSS and JavaScript —
 /// no external dependencies or network calls required.
-enum MarkdownSlideExporter {
+public enum MarkdownSlideExporter {
 
     /// Splits a markdown document body into slides using the parsed AST locations.
     ///
@@ -23,7 +23,7 @@ enum MarkdownSlideExporter {
     ///
     /// - Parameter body: The body text of the document (after frontmatter extraction).
     /// - Returns: An array of slide body strings, each preserving the original markdown.
-    static func splitIntoSlides(body: String) -> [String] {
+    public static func splitIntoSlides(body: String) -> [String] {
         let result = MarkdownParser().parse(body)
         let lines = body.components(separatedBy: "\n")
         guard !result.blocks.isEmpty else { return [] }
@@ -85,7 +85,7 @@ enum MarkdownSlideExporter {
     ///   - katexCSS: Contents of `katex.min.css` to embed, or empty to skip.
     ///   - autoRenderJS: Contents of `katex-auto-render.min.js` to embed, or empty to skip.
     /// - Returns: A complete HTML string ready to save to a file.
-    static func export(
+    public static func export(
         document: MarkdownDocument,
         title: String? = nil,
         mermaidJS: String = "",
@@ -223,6 +223,14 @@ enum MarkdownSlideExporter {
             overflow: hidden;
             margin: 0.8em 0;
         }
+        .slide-content .code-filename {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.68em;
+            padding: 6px 14px;
+            background: rgba(49, 50, 68, 0.6);
+            color: #a6adc8;
+            border-bottom: 1px solid #313244;
+        }
         .slide-content .code-header {
             display: flex;
             align-items: center;
@@ -290,6 +298,13 @@ enum MarkdownSlideExporter {
         .slide-content .callout-bug { border-left-color: #f38ba8; }
         .slide-content .callout-abstract { border-left-color: #94e2d5; }
         .slide-content .callout-todo { border-left-color: #b4befe; }
+        .slide-content .callout-example { border-left-color: #cba6f7; }
+        .slide-content .callout-quote { border-left-color: #6c7086; }
+        .slide-content .callout-danger,
+        .slide-content .callout-failure { border-left-color: #f38ba8; }
+        .slide-content .callout-success { border-left-color: #a6e3a1; }
+        .slide-content .callout-question { border-left-color: #f9e2af; }
+        .slide-content .callout-info { border-left-color: #89b4fa; }
         .slide-content table { border-collapse: collapse; margin: 0.8em 0; width: 100%; }
         .slide-content th, .slide-content td { border: 1px solid #45475a; padding: 8px 12px; text-align: left; }
         .slide-content th { background: #313244; font-weight: 600; }

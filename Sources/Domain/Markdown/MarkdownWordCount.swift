@@ -9,19 +9,19 @@ import Foundation
 ///
 /// Frontmatter is excluded from the count because it is metadata, not content.
 /// Code blocks are included because they contribute to the document's substance.
-struct MarkdownWordCount: Equatable, Sendable {
+public struct MarkdownWordCount: Equatable, Sendable {
 
     /// Number of whitespace-delimited words in the body.
-    let words: Int
+    public let words: Int
 
     /// Number of characters in the body (excluding leading/trailing whitespace).
-    let characters: Int
+    public let characters: Int
 
     /// Number of lines in the body (empty body = 0, non-empty = at least 1).
-    let lines: Int
+    public let lines: Int
 
     /// An empty count with all values at zero.
-    static let zero = MarkdownWordCount(words: 0, characters: 0, lines: 0)
+    public static let zero = MarkdownWordCount(words: 0, characters: 0, lines: 0)
 
     /// Computes word count statistics from a markdown document's body.
     ///
@@ -31,7 +31,7 @@ struct MarkdownWordCount: Equatable, Sendable {
     ///
     /// - Parameter body: The body text of the markdown document (after frontmatter extraction).
     /// - Returns: A `MarkdownWordCount` with word, character, and line counts.
-    static func count(body: String) -> MarkdownWordCount {
+    public static func count(body: String) -> MarkdownWordCount {
         guard !body.isEmpty else { return .zero }
 
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)

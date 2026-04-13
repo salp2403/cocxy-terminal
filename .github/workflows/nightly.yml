@@ -57,6 +57,12 @@ jobs:
       - name: Build CLI companion
         run: swift build --target cocxy -c release --arch arm64 || true
 
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Build QuickLook extension
+        run: ./scripts/build-quicklook-extension.sh release
+
       - name: Create app bundle (nightly)
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
@@ -64,8 +70,9 @@ jobs:
           CONTENTS_DIR="$APP_DIR/Contents"
           MACOS_DIR="$CONTENTS_DIR/MacOS"
           RESOURCES_DIR="$CONTENTS_DIR/Resources"
+          PLUGINS_DIR="$CONTENTS_DIR/PlugIns"
           FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
-          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
+          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR" "$PLUGINS_DIR"
 
           cp ".build/arm64-apple-macosx/release/CocxyTerminal" "$MACOS_DIR/Cocxy Terminal Nightly"
 
@@ -126,6 +133,8 @@ jobs:
           [ -d Resources/defaults ] && cp -R Resources/defaults "$RESOURCES_DIR/" || true
           [ -d Resources/Sounds ] && cp -R Resources/Sounds "$RESOURCES_DIR/" || true
           [ -d Resources/Markdown ] && cp -R Resources/Markdown "$RESOURCES_DIR/" || true
+          [ -d build/QuickLookDerived/Build/Products/Release/CocxyQuickLook.appex ] && \
+            cp -R build/QuickLookDerived/Build/Products/Release/CocxyQuickLook.appex "$PLUGINS_DIR/" || true
 
       - name: Verify app bundle contents
         run: |
@@ -161,6 +170,11 @@ jobs:
               --entitlements "$ENTITLEMENTS" \
               --sign "$SIGNING_IDENTITY" \
               "$APP_DIR/Contents/Resources/cocxy" || true
+
+          [ -d "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex" ] && \
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex"
 
           codesign --force --options runtime --timestamp \
             --entitlements "$ENTITLEMENTS" \

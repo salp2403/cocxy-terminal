@@ -1,0 +1,45 @@
+name: CocxyExtensions
+options:
+  minimumXcodeGenVersion: 2.45.0
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  CocxyTerminalPackage:
+    path: .
+targets:
+  CocxyQuickLook:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: QuickLook
+      - path: Sources/UI/Markdown/MarkdownPreviewTemplate.swift
+      - path: Sources/UI/Markdown/MarkdownPreviewTemplate+CSS.swift
+      - path: Sources/UI/Markdown/MarkdownPreviewTemplate+JS.swift
+      - path: Resources/Markdown
+        buildPhase: resources
+        type: folder
+    dependencies:
+      - package: CocxyTerminalPackage
+        product: CocxyMarkdownLib
+    info:
+      path: QuickLook/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.quicklook.preview
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PreviewProvider
+          NSExtensionAttributes:
+            QLSupportedContentTypes:
+              - net.daringfireball.markdown
+            QLSupportsSearchableItems: false
+            QLIsDataBasedPreview: false
+    settings:
+      base:
+        PRODUCT_NAME: CocxyQuickLook
+        PRODUCT_BUNDLE_IDENTIFIER: dev.cocxy.terminal.quicklook
+        SWIFT_VERSION: 5.10
+        MACOSX_DEPLOYMENT_TARGET: 14.0
+        CODE_SIGN_ENTITLEMENTS: QuickLook/CocxyQuickLook.entitlements
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: NO

@@ -877,6 +877,16 @@ public enum CLIArgumentParser {
         guard !arguments.isEmpty else {
             throw CLIError.missingArgument(command: "send", argument: "text")
         }
+        if arguments == ["--stdin"] || arguments == ["-"] {
+            let text = String(
+                decoding: FileHandle.standardInput.readDataToEndOfFile(),
+                as: UTF8.self
+            )
+            guard !text.isEmpty else {
+                throw CLIError.missingArgument(command: "send --stdin", argument: "stdin")
+            }
+            return .send(text: text)
+        }
         let text = arguments.joined(separator: " ")
         return .send(text: text)
     }
@@ -1427,6 +1437,7 @@ public enum CLIArgumentParser {
         lines.append("  cocxy config get font.size")
         lines.append("  cocxy theme set dracula")
         lines.append("  cocxy core semantic --limit 5")
+        lines.append("  printf 'echo hi\\r' | cocxy send --stdin")
         lines.append("")
         return lines.joined(separator: "\n")
     }

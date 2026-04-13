@@ -8,18 +8,31 @@ let package = Package(
     platforms: [
         .macOS(.v14)
     ],
+    products: [
+        .library(
+            name: "CocxyMarkdownLib",
+            targets: ["CocxyMarkdownLib"]
+        ),
+    ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
     ],
     targets: [
+        .target(
+            name: "CocxyMarkdownLib",
+            dependencies: [],
+            path: "Sources/Domain/Markdown"
+        ),
         // MARK: - Main App
         .executableTarget(
             name: "CocxyTerminal",
             dependencies: [
+                "CocxyMarkdownLib",
                 "CocxyCoreKit",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources",
+            exclude: ["Domain/Markdown"],
             resources: [
                 .process("App/Assets.xcassets"),
             ],
@@ -36,7 +49,10 @@ let package = Package(
         ),
         .testTarget(
             name: "CocxyTerminalTests",
-            dependencies: ["CocxyTerminal"],
+            dependencies: [
+                "CocxyTerminal",
+                "CocxyMarkdownLib",
+            ],
             path: "Tests",
             exclude: ["Unit/CLITests"]
         ),

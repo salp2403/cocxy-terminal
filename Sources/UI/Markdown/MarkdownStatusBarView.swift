@@ -2,6 +2,7 @@
 // MarkdownStatusBarView.swift - Bottom status bar showing word/character/line counts.
 
 import AppKit
+import CocxyMarkdownLib
 
 // MARK: - Status Bar View
 

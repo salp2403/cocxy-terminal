@@ -8,7 +8,7 @@ import Foundation
 /// The renderer produces semantic HTML with enough metadata for the preview to
 /// support click-to-source, interactive task toggles, lightbox images,
 /// footnote popovers, Mermaid, KaTeX, and Highlight.js post-processing.
-enum MarkdownHTMLRenderer {
+public enum MarkdownHTMLRenderer {
 
     private struct FootnoteBundle {
         let definitions: [String: [MarkdownBlock]]
@@ -17,14 +17,32 @@ enum MarkdownHTMLRenderer {
         let previews: [String: String]
     }
 
+    private struct HeadingEntry {
+        let level: Int
+        let title: String
+        let id: String
+    }
+
     private struct RenderContext {
         let footnotes: FootnoteBundle
+        let headings: [HeadingEntry]
         var checkboxIndex = 0
+        var headingIndex = 0
+
+        mutating func nextHeadingEntry() -> HeadingEntry? {
+            guard headingIndex < headings.count else { return nil }
+            let entry = headings[headingIndex]
+            headingIndex += 1
+            return entry
+        }
     }
 
     /// Renders a parse result to an HTML fragment (no `<html>` wrapper).
-    static func render(_ result: MarkdownParseResult, bodyLineOffset: Int = 0) -> String {
-        var context = RenderContext(footnotes: collectFootnotes(from: result.blocks))
+    public static func render(_ result: MarkdownParseResult, bodyLineOffset: Int = 0) -> String {
+        var context = RenderContext(
+            footnotes: collectFootnotes(from: result.blocks),
+            headings: collectHeadings(from: result.blocks)
+        )
         var parts: [String] = []
 
         for (index, block) in result.blocks.enumerated() {
@@ -46,7 +64,7 @@ enum MarkdownHTMLRenderer {
     }
 
     /// Renders a full document including optional frontmatter section.
-    static func renderDocument(_ document: MarkdownDocument) -> String {
+    public static func renderDocument(_ document: MarkdownDocument) -> String {
         var parts: [String] = []
 
         let frontmatterHTML = renderFrontmatter(document.frontmatter)
@@ -63,7 +81,7 @@ enum MarkdownHTMLRenderer {
     }
 
     /// Renders frontmatter metadata as a styled section.
-    static func renderFrontmatter(_ frontmatter: MarkdownFrontmatter) -> String {
+    public static func renderFrontmatter(_ frontmatter: MarkdownFrontmatter) -> String {
         guard !frontmatter.isEmpty else { return "" }
 
         var rows: [String] = []
@@ -104,9 +122,13 @@ enum MarkdownHTMLRenderer {
         switch block {
         case .heading(let level, let inlines):
             let tag = "h\(level)"
-            return "<\(tag)\(sourceAttribute)>\(renderInlines(inlines, context: &context))</\(tag)>"
+            let headingID = context.nextHeadingEntry()?.id ?? "heading-\(context.headingIndex)"
+            return "<\(tag)\(sourceAttribute) id=\"\(headingID)\">\(renderInlines(inlines, context: &context))</\(tag)>"
 
         case .paragraph(let inlines):
+            if isInlineTOCPlaceholder(inlines) {
+                return renderInlineTOC(headings: context.headings, sourceAttribute: sourceAttribute)
+            }
             return "<p\(sourceAttribute)>\(renderInlines(inlines, context: &context))</p>"
 
         case .blockquote(let blocks):
@@ -142,8 +164,13 @@ enum MarkdownHTMLRenderer {
             let inner = items.map { renderListItem($0, context: &context) }.joined(separator: "\n")
             return "<\(tag)\(startAttr)\(sourceAttribute)>\n\(inner)\n</\(tag)>"
 
-        case .codeBlock(let language, let text):
-            return renderCodeBlock(language: language, text: text, sourceAttribute: sourceAttribute)
+        case .codeBlock(let language, let title, let text):
+            return renderCodeBlock(
+                language: language,
+                title: title,
+                text: text,
+                sourceAttribute: sourceAttribute
+            )
 
         case .table(let headers, let alignments, let rows):
             return renderTable(
@@ -164,13 +191,22 @@ enum MarkdownHTMLRenderer {
 
     // MARK: - Code Blocks
 
-    private static func renderCodeBlock(language: String?, text: String, sourceAttribute: String) -> String {
+    private static func renderCodeBlock(
+        language: String?,
+        title: String?,
+        text: String,
+        sourceAttribute: String
+    ) -> String {
         let escaped = escapeHTML(text)
         let label = escapeHTML(language?.lowercased() ?? "text")
+        let filenameHeader = title.map { title in
+            "<div class=\"code-filename\">\(escapeHTML(title))</div>"
+        } ?? ""
 
         if let lang = language?.lowercased(), lang == "mermaid" {
             return """
             <div class="code-block code-block-mermaid"\(sourceAttribute)>
+              \(filenameHeader)
               <div class="code-header">
                 <span class="code-lang">\(label)</span>
                 <button type="button" class="code-copy">Copy</button>
@@ -186,6 +222,7 @@ enum MarkdownHTMLRenderer {
         let classAttribute = language.map { " class=\"language-\(escapeHTML($0))\"" } ?? ""
         return """
         <div class="code-block"\(sourceAttribute)>
+          \(filenameHeader)
           <div class="code-header">
             <span class="code-lang">\(label)</span>
             <button type="button" class="code-copy">Copy</button>
@@ -335,6 +372,33 @@ enum MarkdownHTMLRenderer {
 
     // MARK: - Footnotes
 
+    private static func collectHeadings(from blocks: [MarkdownBlock]) -> [HeadingEntry] {
+        var headings: [HeadingEntry] = []
+
+        func walk(_ blocks: [MarkdownBlock]) {
+            for block in blocks {
+                switch block {
+                case .heading(let level, let inlines):
+                    let title = MarkdownOutline.plainText(from: inlines).trimmingCharacters(in: .whitespacesAndNewlines)
+                    headings.append(HeadingEntry(level: level, title: title, id: "heading-\(headings.count)"))
+                case .blockquote(let blocks),
+                     .callout(_, _, _, let blocks),
+                     .footnoteDefinition(_, let blocks):
+                    walk(blocks)
+                case .list(_, _, let items):
+                    for item in items {
+                        walk(item.blocks)
+                    }
+                case .paragraph, .codeBlock, .table, .horizontalRule:
+                    break
+                }
+            }
+        }
+
+        walk(blocks)
+        return headings
+    }
+
     private static func collectFootnotes(from blocks: [MarkdownBlock]) -> FootnoteBundle {
         var definitions: [String: [MarkdownBlock]] = [:]
         var order: [String] = []
@@ -355,6 +419,29 @@ enum MarkdownHTMLRenderer {
         }
 
         return FootnoteBundle(definitions: definitions, order: order, labels: labels, previews: previews)
+    }
+
+    private static func isInlineTOCPlaceholder(_ inlines: [MarkdownInline]) -> Bool {
+        guard inlines.count == 1 else { return false }
+        guard case .text(let text) = inlines[0] else { return false }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines) == "[TOC]"
+    }
+
+    private static func renderInlineTOC(headings: [HeadingEntry], sourceAttribute: String) -> String {
+        guard !headings.isEmpty else {
+            return "<nav class=\"toc-inline\"\(sourceAttribute)><div class=\"toc-empty\">No headings</div></nav>"
+        }
+
+        let links = headings.map { heading in
+            "<a class=\"toc-inline-link toc-h\(heading.level)\" href=\"#\(heading.id)\">\(escapeHTML(heading.title))</a>"
+        }.joined(separator: "\n")
+
+        return """
+        <nav class="toc-inline"\(sourceAttribute)>
+          <div class="toc-inline-title">Table of Contents</div>
+          \(links)
+        </nav>
+        """
     }
 
     private static func renderFootnotesSection(context: RenderContext) -> String {

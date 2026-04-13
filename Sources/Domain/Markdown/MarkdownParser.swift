@@ -18,9 +18,17 @@ public struct MarkdownParseResult: Equatable, Sendable {
     /// `locations.count == blocks.count`.
     public let locations: [MarkdownBlockLocation]
 
-    public init(blocks: [MarkdownBlock], locations: [MarkdownBlockLocation]) {
+    /// Collected reference-style link definitions keyed by normalized label.
+    public let linkDefinitions: [String: String]
+
+    public init(
+        blocks: [MarkdownBlock],
+        locations: [MarkdownBlockLocation],
+        linkDefinitions: [String: String] = [:]
+    ) {
         self.blocks = blocks
         self.locations = locations
+        self.linkDefinitions = linkDefinitions
     }
 }
 
@@ -58,8 +66,11 @@ public struct MarkdownBlockLocation: Equatable, Sendable {
 /// extracted by `MarkdownFrontmatter` before `MarkdownParser.parse(_:)` runs
 /// so the block parser never has to reason about it.
 public struct MarkdownParser {
+    private let linkDefinitions: [String: String]
 
-    public init() {}
+    public init(linkDefinitions: [String: String] = [:]) {
+        self.linkDefinitions = linkDefinitions
+    }
 
     // MARK: Entry Point
 
@@ -70,11 +81,31 @@ public struct MarkdownParser {
     ///   endings may be `\n` or `\r\n`; both are normalized internally.
     public func parse(_ source: String) -> MarkdownParseResult {
         let lines = Self.splitLines(source)
+        if linkDefinitions.isEmpty {
+            let (definitions, skippedLines) = Self.collectReferenceLinkDefinitions(from: lines)
+            return MarkdownParser(linkDefinitions: definitions).parseLines(
+                lines,
+                skippedLines: skippedLines
+            )
+        }
+
+        return parseLines(lines, skippedLines: [])
+    }
+
+    private var inlineParser: MarkdownInlineParser {
+        MarkdownInlineParser(linkDefinitions: linkDefinitions)
+    }
+
+    private func parseLines(_ lines: [String], skippedLines: Set<Int>) -> MarkdownParseResult {
         var cursor = 0
         var blocks: [MarkdownBlock] = []
         var locations: [MarkdownBlockLocation] = []
 
         while cursor < lines.count {
+            if skippedLines.contains(cursor) {
+                cursor += 1
+                continue
+            }
             if Self.isBlankLine(lines[cursor]) {
                 cursor += 1
                 continue
@@ -91,7 +122,11 @@ public struct MarkdownParser {
             cursor += consumed
         }
 
-        return MarkdownParseResult(blocks: blocks, locations: locations)
+        return MarkdownParseResult(
+            blocks: blocks,
+            locations: locations,
+            linkDefinitions: linkDefinitions
+        )
     }
 
     // MARK: - Block Dispatch
@@ -180,84 +215,8 @@ public struct MarkdownParser {
         }
         text = text.trimmingCharacters(in: .whitespaces)
 
-        let inlines = MarkdownInlineParser().parse(text)
+        let inlines = inlineParser.parse(text)
         return (.heading(level: level, inlines: inlines), 1)
-    }
-
-    // MARK: - Fenced Code Block
-
-    private func parseFencedCodeBlock(
-        lines: [String],
-        at start: Int
-    ) -> (MarkdownBlock, Int)? {
-        let line = lines[start]
-        let trimmed = Self.leadingSpacesTrimmed(line, max: 3)
-        guard trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") else { return nil }
-
-        let fenceChar: Character = trimmed.first!
-        var fenceLen = 0
-        for ch in trimmed {
-            if ch == fenceChar { fenceLen += 1 } else { break }
-        }
-        guard fenceLen >= 3 else { return nil }
-
-        let info = String(trimmed.dropFirst(fenceLen)).trimmingCharacters(in: .whitespaces)
-        let language = info.isEmpty ? nil : String(info.split(separator: " ").first ?? Substring(info))
-
-        var collected: [String] = []
-        var cursor = start + 1
-        while cursor < lines.count {
-            let raw = lines[cursor]
-            let stripped = Self.leadingSpacesTrimmed(raw, max: 3)
-            if stripped.hasPrefix(String(repeating: String(fenceChar), count: fenceLen)) &&
-               stripped.allSatisfy({ $0 == fenceChar || $0 == " " }) {
-                return (.codeBlock(language: language, text: collected.joined(separator: "\n")), cursor - start + 1)
-            }
-            collected.append(raw)
-            cursor += 1
-        }
-        // Unterminated — treat the rest of the document as code.
-        return (.codeBlock(language: language, text: collected.joined(separator: "\n")), cursor - start)
-    }
-
-    // MARK: - Indented Code Block
-
-    private func parseIndentedCodeBlock(
-        lines: [String],
-        at start: Int
-    ) -> (MarkdownBlock, Int)? {
-        let line = lines[start]
-        guard line.hasPrefix("    ") else { return nil }
-
-        var collected: [String] = []
-        var cursor = start
-        while cursor < lines.count {
-            let raw = lines[cursor]
-            if raw.hasPrefix("    ") {
-                collected.append(String(raw.dropFirst(4)))
-                cursor += 1
-            } else if Self.isBlankLine(raw) {
-                // A blank line can either terminate the block or be part
-                // of it if the next line is still indented.
-                let next = cursor + 1
-                if next < lines.count, lines[next].hasPrefix("    ") {
-                    collected.append("")
-                    cursor += 1
-                } else {
-                    break
-                }
-            } else {
-                break
-            }
-        }
-
-        // Trim trailing blank lines from the code block body.
-        while let last = collected.last, last.isEmpty {
-            collected.removeLast()
-        }
-        if collected.isEmpty { return nil }
-
-        return (.codeBlock(language: nil, text: collected.joined(separator: "\n")), cursor - start)
     }
 
     // MARK: - Lists
@@ -397,7 +356,7 @@ public struct MarkdownParser {
         }
 
         let joined = body.joined(separator: "\n")
-        let nestedBlocks = parse(joined).blocks
+        let nestedBlocks = MarkdownParser(linkDefinitions: linkDefinitions).parse(joined).blocks
         let finalBlocks = nestedBlocks.isEmpty ? [.paragraph(inlines: [])] : nestedBlocks
         return MarkdownListItem(blocks: finalBlocks, taskState: taskState)
     }
@@ -418,7 +377,7 @@ public struct MarkdownParser {
         guard let alignments = parseTableAlignments(separatorLine) else {
             return nil
         }
-        let headers = splitTableRow(headerLine).map { MarkdownInlineParser().parse($0) }
+        let headers = splitTableRow(headerLine).map { inlineParser.parse($0) }
         guard headers.count == alignments.count else { return nil }
 
         var rows: [[[MarkdownInline]]] = []
@@ -426,7 +385,7 @@ public struct MarkdownParser {
         while cursor < lines.count {
             let row = lines[cursor]
             if !row.contains("|") { break }
-            var cells = splitTableRow(row).map { MarkdownInlineParser().parse($0) }
+            var cells = splitTableRow(row).map { inlineParser.parse($0) }
             // Pad or trim to match header column count.
             while cells.count < headers.count {
                 cells.append([])
@@ -510,9 +469,15 @@ public struct MarkdownParser {
             if Self.isBlankLine(line) { break }
             // Stop if a new block starts mid-stream.
             if cursor > start {
+                if let setextLevel = Self.setextHeadingLevel(line), !collected.isEmpty {
+                    let text = collected.joined(separator: "\n")
+                    let inlines = inlineParser.parse(text)
+                    return (.heading(level: setextLevel, inlines: inlines), cursor + 1 - start)
+                }
                 if parseHorizontalRule(line) != nil { break }
                 if parseAtxHeading(line) != nil { break }
                 if Self.leadingSpacesTrimmed(line, max: 3).hasPrefix("```") { break }
+                if Self.leadingSpacesTrimmed(line, max: 3).hasPrefix("~~~") { break }
                 if Self.isBlockquoteLine(line) { break }
                 if parseFootnoteDefinition(lines: lines, at: cursor) != nil { break }
                 if matchListMarker(line) != nil { break }
@@ -524,7 +489,7 @@ public struct MarkdownParser {
             return (nil, 1)
         }
         let text = collected.joined(separator: "\n")
-        let inlines = MarkdownInlineParser().parse(text)
+        let inlines = inlineParser.parse(text)
         guard !inlines.isEmpty else { return (nil, cursor - start) }
         return (.paragraph(inlines: inlines), cursor - start)
     }
@@ -539,6 +504,18 @@ public struct MarkdownParser {
 
     private static func isBlankLine(_ line: String) -> Bool {
         line.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private static func setextHeadingLevel(_ line: String) -> Int? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.allSatisfy({ $0 == "=" }) {
+            return trimmed.count >= 1 ? 1 : nil
+        }
+        if trimmed.allSatisfy({ $0 == "-" }) {
+            return trimmed.count >= 1 ? 2 : nil
+        }
+        return nil
     }
 
     static func leadingSpacesTrimmed(_ line: String, max: Int) -> String {
