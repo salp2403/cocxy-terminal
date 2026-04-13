@@ -170,6 +170,37 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.visibleLineText(for: SurfaceID(), visibleRow: 0) == nil)
     }
 
+    @Test("TUI status glyphs stay narrow so incremental redraws do not smear text")
+    func tuiStatusGlyphsStayNarrow() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        let glyphs = ["⏸", "⏹", "⏺", "✳", "✴"]
+        for glyph in glyphs {
+            cocxycore_terminal_resize(state.terminal, 24, 80)
+            feed("\u{1B}[2J\u{1B}[H", to: state.terminal)
+            feed(glyph, to: state.terminal)
+
+            #expect(cocxycore_terminal_cursor_col(state.terminal) == 1)
+            #expect(cocxycore_terminal_cell_width(state.terminal, 0, 0) == 0)
+        }
+    }
+
+    @Test("TUI-style incremental redraw stays aligned after status glyphs")
+    func tuiStyleIncrementalRedrawStaysAligned() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}[2J\u{1B}[H⏺abc\r\u{1B}[CX", to: state.terminal)
+
+        #expect(bridge.visibleLineText(for: surfaceID, visibleRow: 0) == "⏺Xbc")
+        #expect(cocxycore_terminal_cursor_col(state.terminal) == 2)
+    }
+
     @Test("sendPreeditText activates preedit state")
     func sendPreeditTextActivatesPreedit() throws {
         let bridge = try makeBridge()
