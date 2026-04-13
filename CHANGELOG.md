@@ -5,10 +5,29 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.59] - 2026-04-13
+## [0.1.60] - 2026-04-12
+
+### Fixed
+- Hook handler now only forwards events from shells spawned inside Cocxy, preventing unrelated lifecycle events from other terminals
+- QuickLook extension registration now verified from the installed app path
 
 ### Added
-- V0.1.59 — markdown Fase 5 complete, QuickLook extension, CLI send --stdin
+- `install-local-app.sh` script for local app installation with QuickLook registration verification
+- Swift Testing suite for hook handler forwarding logic
+
+## [0.1.59] - 2026-04-12
+
+### Added
+- Markdown Fase 5 complete — reference-style links, setext headings, code block filenames, sortable tables, TSV table copy, inline [TOC] generation, copy as Markdown/HTML/Rich Text/Plain Text
+- QuickLook extension for previewing `.md` files in Finder with Mermaid, KaTeX, and syntax highlighting
+- File explorer context menu: rename, move to trash, reveal in Finder
+- `CocxyMarkdownLib` extracted as independent SPM library target
+- CLI `send --stdin` for multiline and escape-safe input
+- 15 callout types and 200+ emoji shortcodes in markdown parser
+
+### Fixed
+- CocxyCore charwidth: U+23F8-23FA and U+2733-2734 reclassified as narrow, fixing smeared TUI delta redraws
+- Markdown preview template refactored from 667 LOC monolith into 3 focused files (base + CSS + JS)
 
 ## [0.1.58] - 2026-04-12
 

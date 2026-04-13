@@ -1823,6 +1823,7 @@ final class CocxyCoreBridge: TerminalEngine {
         env["COCXY_RESOURCES_DIR"] = resourcesPath
         env["COCXY_SHELL_INTEGRATION_DIR"] = shellIntegrationRoot.path
         env["COCXY_SHELL_FEATURES"] = "marks,cwd,title"
+        env["COCXY_CLAUDE_HOOKS"] = "1"
 
         switch shellName {
         case "zsh":

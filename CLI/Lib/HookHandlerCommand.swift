@@ -15,6 +15,31 @@ import Foundation
 /// On socket errors: fails silently (never blocks Claude Code).
 public enum HookHandlerCommand {
 
+    /// Environment flag set only for shells spawned inside Cocxy.
+    ///
+    /// Agent hooks are installed globally, so this marker prevents
+    /// sessions running in other terminals from polluting Cocxy
+    /// with unrelated lifecycle events.
+    static let cocxyHookEnvironmentKey = "COCXY_CLAUDE_HOOKS"
+
+    /// Returns true when the current process environment indicates the hook
+    /// event originated from a shell session launched by Cocxy.
+    static func shouldForwardHook(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        if environment[cocxyHookEnvironmentKey] == "1" {
+            return true
+        }
+
+        // Backward-compatible fallback for shells started before the explicit
+        // marker existed. Cocxy shell sessions already carry these variables.
+        if environment["COCXY_RESOURCES_DIR"] != nil || environment["COCXY_SHELL_INTEGRATION_DIR"] != nil {
+            return true
+        }
+
+        return false
+    }
+
     /// Builds a socket request from raw hook JSON data.
     ///
     /// The JSON from Claude Code is forwarded as-is inside the
@@ -58,7 +83,15 @@ public enum HookHandlerCommand {
     ///
     /// - Parameter socketClient: The socket client to use.
     /// - Returns: A `CLIResult` with exit code 0 on success or silent failure.
-    public static func execute(socketClient: SocketClient) -> CLIResult {
+    public static func execute(
+        socketClient: SocketClient,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> CLIResult {
+        // Ignore globally-installed hooks outside Cocxy shells.
+        guard shouldForwardHook(environment: environment) else {
+            return CLIResult(exitCode: 0, stdout: "", stderr: "")
+        }
+
         // Read all of stdin
         let stdinData = FileHandle.standardInput.readDataToEndOfFile()
 

@@ -544,6 +544,7 @@ struct CocxyCoreBridgeTests {
         #expect(env["TERM"] == "xterm-256color")
         #expect(env["COCXY_RESOURCES_DIR"] == root.path)
         #expect(env["COCXY_SHELL_INTEGRATION_DIR"] == root.appendingPathComponent("shell-integration").path)
+        #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
         #expect(env["ZDOTDIR"] == zshDir.path)
         #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == "/Users/test/.config/zsh")
     }
@@ -576,6 +577,7 @@ struct CocxyCoreBridgeTests {
 
         #expect(env["TERM"] == "xterm-256color")
         #expect(env["COCXY_RESOURCES_DIR"] == root.path)
+        #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
         #expect(env["HOME"] == bashDir.path)
         #expect(env["COCXY_BASH_ORIG_HOME"] == "/Users/test")
         #expect(env["ZDOTDIR"] == nil)
@@ -614,6 +616,7 @@ struct CocxyCoreBridgeTests {
 
         #expect(env["TERM"] == "xterm-256color")
         #expect(env["COCXY_RESOURCES_DIR"] == root.path)
+        #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
         #expect(env["XDG_CONFIG_HOME"] == root.appendingPathComponent("shell-integration").path)
         #expect(env["COCXY_FISH_ORIG_HOME"] == "/Users/test")
         #expect(env["COCXY_FISH_ORIG_XDG_CONFIG_HOME"] == "/Users/test/.config")
