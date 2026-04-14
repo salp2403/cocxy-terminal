@@ -5,6 +5,17 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.65] - 2026-04-14
+
+### Added
+- Agent Code Review panel is now resizable with `-` / `+` controls in the header; the preferred width is persisted across sessions and restored on re-launch.
+
+### Changed
+- CocxyCore compatibility matrix tests use explicit higher timeouts on heavy scenarios (vim, nano, less, man, curl progress, rsync progress) so failures stay deterministic under full-suite CPU contention instead of being masked by retries.
+
+### Fixed
+- Review panel width no longer loses the user's preference after the window is temporarily shrunk and then re-grown.
+
 ## [0.1.63] - 2026-04-13
 
 ### Fixed
