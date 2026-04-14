@@ -42,6 +42,17 @@ public enum OutputFormatter {
         case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks:
             // These commands are handled locally, not via socket.
             return response.data?.values.joined(separator: "\n") ?? ""
+        case .review:
+            return "Code review toggled."
+        case .reviewRefresh:
+            return "Code review refreshed."
+        case .reviewSubmit:
+            if let submitted = response.data?["submitted_comments"] ?? response.data?["submittedComments"] {
+                return "Submitted \(submitted) comments."
+            }
+            return "Code review comments submitted."
+        case .reviewStats:
+            return formatDataOrJSON(response: response)
         case .help, .version:
             return ""
 

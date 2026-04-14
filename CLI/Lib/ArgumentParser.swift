@@ -49,6 +49,18 @@ public enum ParsedCommand: Equatable {
     /// `cocxy setup-hooks [--agent claude|codex|gemini|kiro|all] [--remove]`
     case setupHooks(agent: SetupHooksTarget?, remove: Bool)
 
+    /// `cocxy review`
+    case review
+
+    /// `cocxy review --refresh`
+    case reviewRefresh
+
+    /// `cocxy review --submit`
+    case reviewSubmit
+
+    /// `cocxy review --stats`
+    case reviewStats
+
     /// `cocxy --help` or `cocxy help`
     case help
 
@@ -399,6 +411,9 @@ public enum CLIArgumentParser {
         case "setup-hooks":
             return try parseSetupHooks(arguments: Array(arguments.dropFirst()))
 
+        case "review":
+            return try parseReview(arguments: Array(arguments.dropFirst()))
+
         // MARK: v2 compound commands
 
         case "tab":
@@ -648,6 +663,41 @@ public enum CLIArgumentParser {
         }
 
         return .setupHooks(agent: selectedAgent, remove: remove)
+    }
+
+    private static func parseReview(arguments: [String]) throws -> ParsedCommand {
+        guard !arguments.isEmpty else { return .review }
+
+        let flags = Set(arguments)
+        let supported = Set(["--refresh", "--submit", "--stats"])
+        let unsupported = flags.subtracting(supported)
+        if let invalid = unsupported.first {
+            throw CLIError.invalidArgument(
+                command: "review",
+                argument: invalid,
+                reason: "Unknown flag. Use --refresh, --submit, or --stats."
+            )
+        }
+
+        if flags.count > 1 {
+            throw CLIError.invalidArgument(
+                command: "review",
+                argument: arguments.joined(separator: " "),
+                reason: "Only one review action can be requested at a time."
+            )
+        }
+
+        if flags.contains("--refresh") {
+            return .reviewRefresh
+        }
+        if flags.contains("--submit") {
+            return .reviewSubmit
+        }
+        if flags.contains("--stats") {
+            return .reviewStats
+        }
+
+        return .review
     }
 
     // MARK: - Private: v2 Subcommand Parsers

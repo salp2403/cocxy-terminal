@@ -50,10 +50,33 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let appearance: AppearanceConfig
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
+    let codeReview: CodeReviewConfig
     let notifications: NotificationConfig
     let quickTerminal: QuickTerminalConfig
     let keybindings: KeybindingsConfig
     let sessions: SessionsConfig
+
+    init(
+        general: GeneralConfig,
+        appearance: AppearanceConfig,
+        terminal: TerminalConfig,
+        agentDetection: AgentDetectionConfig,
+        codeReview: CodeReviewConfig = .defaults,
+        notifications: NotificationConfig,
+        quickTerminal: QuickTerminalConfig,
+        keybindings: KeybindingsConfig,
+        sessions: SessionsConfig
+    ) {
+        self.general = general
+        self.appearance = appearance
+        self.terminal = terminal
+        self.agentDetection = agentDetection
+        self.codeReview = codeReview
+        self.notifications = notifications
+        self.quickTerminal = quickTerminal
+        self.keybindings = keybindings
+        self.sessions = sessions
+    }
 
     /// Creates a configuration with all default values.
     static var defaults: CocxyConfig {
@@ -62,6 +85,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             appearance: .defaults,
             terminal: .defaults,
             agentDetection: .defaults,
+            codeReview: .defaults,
             notifications: .defaults,
             quickTerminal: .defaults,
             keybindings: .defaults,
@@ -113,6 +137,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             appearance: mergedAppearance,
             terminal: terminal,
             agentDetection: agentDetection,
+            codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
             keybindings: mergedKeybindings,
@@ -346,6 +371,18 @@ struct AgentDetectionConfig: Codable, Sendable, Equatable {
             timingHeuristics: true,
             idleTimeoutSeconds: 5
         )
+    }
+}
+
+// MARK: - Code Review Config
+
+/// `[code-review]` section of the configuration.
+struct CodeReviewConfig: Codable, Sendable, Equatable {
+    /// Whether the agent review panel should auto-open when a tracked agent session ends.
+    let autoShowOnSessionEnd: Bool
+
+    static var defaults: CodeReviewConfig {
+        CodeReviewConfig(autoShowOnSessionEnd: true)
     }
 }
 

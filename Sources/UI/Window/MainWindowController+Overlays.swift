@@ -133,6 +133,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "agent.review",
+                name: "Toggle Code Review",
+                description: "Review agent-generated file changes",
+                shortcut: "Cmd+Option+R",
+                category: .agent,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.toggleCodeReview() }
+                }
+            ),
+            CommandAction(
                 id: "timeline.toggle",
                 name: "Toggle Timeline",
                 description: "Show or hide the agent timeline panel",
@@ -424,11 +435,7 @@ extension MainWindowController {
 
         overlayContainer.addSubview(hostingView)
         isDashboardVisible = true
-
-        // If the timeline is already visible, shift it left to make room.
-        if isTimelineVisible {
-            repositionTimelineForCoexistence()
-        }
+        layoutRightDockedAgentPanels()
     }
 
     func dismissDashboard() {
@@ -455,10 +462,274 @@ extension MainWindowController {
             }
         })
 
-        // If the timeline is still visible, move it back to the right edge.
-        if isTimelineVisible {
-            repositionTimelineForCoexistence()
+        layoutRightDockedAgentPanels()
+    }
+
+    // MARK: - Code Review Panel (Cmd+Option+R)
+
+    func toggleCodeReview() {
+        if isCodeReviewVisible {
+            dismissCodeReview()
+        } else {
+            showCodeReviewPanel()
         }
+    }
+
+    @objc func toggleCodeReviewAction(_ sender: Any?) {
+        toggleCodeReview()
+    }
+
+    func showCodeReviewPanel() {
+        guard let overlayContainer = overlayContainerView else { return }
+
+        let viewModel = resolveCodeReviewViewModel()
+        viewModel.refreshDiffs()
+
+        codeReviewHostingView?.removeFromSuperview()
+        let swiftUIView = CodeReviewPanelView(
+            viewModel: viewModel,
+            onDismiss: { [weak self] in self?.dismissCodeReview() }
+        )
+        let hostingView = NSHostingView(rootView: swiftUIView)
+        hostingView.wantsLayer = true
+        hostingView.frame = NSRect(
+            x: overlayContainer.bounds.width - CodeReviewPanelView.panelWidth,
+            y: 0,
+            width: CodeReviewPanelView.panelWidth,
+            height: overlayContainer.bounds.height
+        )
+        hostingView.autoresizingMask = [.height, .minXMargin]
+
+        codeReviewHostingView = hostingView
+        overlayContainer.addSubview(hostingView)
+        isCodeReviewVisible = true
+        viewModel.isVisible = true
+        layoutRightDockedAgentPanels()
+    }
+
+    func dismissCodeReview() {
+        guard let hostingView = codeReviewHostingView,
+              let overlayContainer = overlayContainerView else {
+            codeReviewHostingView?.removeFromSuperview()
+            codeReviewHostingView = nil
+            codeReviewViewModel?.isVisible = false
+            isCodeReviewVisible = false
+            return
+        }
+
+        isCodeReviewVisible = false
+        codeReviewViewModel?.isVisible = false
+
+        let targetX = overlayContainer.bounds.width
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            hostingView.animator().frame.origin.x = targetX
+        }, completionHandler: {
+            Task { @MainActor [weak self] in
+                self?.codeReviewHostingView?.removeFromSuperview()
+                self?.codeReviewHostingView = nil
+                self?.layoutRightDockedAgentPanels()
+                self?.focusActiveTerminalSurface()
+            }
+        })
+    }
+
+    func resolveCodeReviewViewModel() -> CodeReviewPanelViewModel {
+        if let codeReviewViewModel {
+            configureCodeReviewViewModel(codeReviewViewModel)
+            return codeReviewViewModel
+        }
+
+        if let injectedCodeReviewViewModel {
+            codeReviewViewModel = injectedCodeReviewViewModel
+            configureCodeReviewViewModel(injectedCodeReviewViewModel)
+            return injectedCodeReviewViewModel
+        }
+
+        let hookReceiver = (NSApp.delegate as? AppDelegate)?.hookEventReceiver
+        let tracker = injectedSessionDiffTracker ?? SessionDiffTrackerImpl()
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: tracker,
+            hookEventReceiver: hookReceiver
+        )
+        codeReviewViewModel = viewModel
+        configureCodeReviewViewModel(viewModel)
+        return viewModel
+    }
+
+    private func configureCodeReviewViewModel(_ viewModel: CodeReviewPanelViewModel) {
+        viewModel.activeTabCwdProvider = { [weak self] in
+            self?.currentCodeReviewWorkingDirectory()
+        }
+        viewModel.activeTabIDProvider = { [weak self] in
+            self?.visibleTabID ?? self?.tabManager.activeTabID
+        }
+        viewModel.activeSessionIdProvider = { [weak self] in
+            guard let self,
+                  let tracker = self.injectedSessionDiffTracker,
+                  let workingDirectory = self.currentCodeReviewWorkingDirectory() else {
+                return nil
+            }
+            return tracker.latestSessionId(for: workingDirectory)
+        }
+        viewModel.referenceProvider = { [weak self] in
+            guard let self,
+                  let tabID = self.visibleTabID ?? self.tabManager.activeTabID else {
+                return nil
+            }
+            return self.tabManager.tab(for: tabID)?.gitBranch
+        }
+        viewModel.ptyWriteHandler = { [weak self] text, sessionId, workingDirectory, tabID in
+            self?.sendCodeReviewFeedback(
+                text,
+                sessionId: sessionId,
+                workingDirectory: workingDirectory,
+                tabID: tabID
+            ) ?? false
+        }
+        viewModel.autoShowEnabledProvider = { [weak self] in
+            self?.configService?.current.codeReview.autoShowOnSessionEnd ?? true
+        }
+
+        if codeReviewCancellables.isEmpty {
+            viewModel.$shouldAutoShow
+                .removeDuplicates()
+                .filter { $0 }
+                .sink { [weak self, weak viewModel] _ in
+                    guard let self else { return }
+                    self.showCodeReviewPanel()
+                    viewModel?.shouldAutoShow = false
+                }
+                .store(in: &codeReviewCancellables)
+        }
+    }
+
+    func codeReviewStatsSnapshot() -> [String: String] {
+        let viewModel = resolveCodeReviewViewModel()
+        let totalAdditions = viewModel.currentDiffs.reduce(0) { $0 + $1.additions }
+        let totalDeletions = viewModel.currentDiffs.reduce(0) { $0 + $1.deletions }
+        var data: [String: String] = [
+            "visible": isCodeReviewVisible ? "true" : "false",
+            "files": "\(viewModel.currentDiffs.count)",
+            "additions": "\(totalAdditions)",
+            "deletions": "\(totalDeletions)",
+            "pending_comments": "\(viewModel.pendingCommentCount)",
+            "review_rounds": "\(viewModel.reviewRounds.count)",
+            "mode": viewModel.diffMode.rawValue
+        ]
+        if let selectedFilePath = viewModel.selectedFilePath {
+            data["selected_file"] = selectedFilePath
+        }
+        if let sessionID = viewModel.activeSessionId {
+            data["session_id"] = sessionID
+        }
+        return data
+    }
+
+    func refreshCodeReviewFromCLI() -> [String: String] {
+        let viewModel = resolveCodeReviewViewModel()
+        viewModel.refreshDiffs()
+        var data = codeReviewStatsSnapshot()
+        data["status"] = "refreshing"
+        return data
+    }
+
+    func submitCodeReviewFromCLI() -> [String: String] {
+        let viewModel = resolveCodeReviewViewModel()
+        let pendingCount = viewModel.pendingCommentCount
+        guard pendingCount > 0 else {
+            return ["status": "no_comments", "pending_comments": "0"]
+        }
+        viewModel.submitComments()
+        return [
+            "status": "submitted",
+            "submitted_comments": "\(pendingCount)"
+        ]
+    }
+
+    private func currentCodeReviewWorkingDirectory() -> URL? {
+        if let surfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID,
+           let surfaceDirectory = surfaceWorkingDirectories[surfaceID] {
+            return surfaceDirectory
+        }
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return nil }
+        return tabManager.tab(for: tabID)?.workingDirectory
+    }
+
+    private func sendCodeReviewFeedback(
+        _ text: String,
+        sessionId: String?,
+        workingDirectory: URL?,
+        tabID: TabID?
+    ) -> Bool {
+        guard let surfaceID = resolveCodeReviewSurfaceID(
+            sessionId: sessionId,
+            workingDirectory: workingDirectory,
+            tabID: tabID
+        ) else {
+            return false
+        }
+        bridge.sendText(text, to: surfaceID)
+        return true
+    }
+
+    private func resolveCodeReviewSurfaceID(
+        sessionId: String?,
+        workingDirectory: URL?,
+        tabID: TabID?
+    ) -> SurfaceID? {
+        if let tabID, let liveSurface = preferredCodeReviewSurfaceID(for: tabID) {
+            return liveSurface
+        }
+
+        let resolvedWorkingDirectory = sessionId
+            .flatMap { injectedSessionDiffTracker?.workingDirectory(for: $0) }
+            ?? workingDirectory
+
+        if let sessionId,
+           let matchingTab = tabManager.tabs.first(where: {
+               injectedSessionDiffTracker?.latestSessionId(for: $0.workingDirectory) == sessionId
+           }),
+           let surfaceID = preferredCodeReviewSurfaceID(for: matchingTab.id) {
+            return surfaceID
+        }
+
+        if let resolvedWorkingDirectory {
+            let standardized = resolvedWorkingDirectory.standardizedFileURL
+            if let matchingTab = tabManager.tabs.first(where: {
+                $0.workingDirectory.standardizedFileURL == standardized
+            }),
+               let surfaceID = preferredCodeReviewSurfaceID(for: matchingTab.id) {
+                return surfaceID
+            }
+        }
+
+        return nil
+    }
+
+    private func preferredCodeReviewSurfaceID(for tabID: TabID) -> SurfaceID? {
+        func isLive(_ surfaceID: SurfaceID) -> Bool {
+            guard let cocxyBridge = bridge as? CocxyCoreBridge else { return true }
+            return cocxyBridge.withTerminalLock(surfaceID) { _ in true } == true
+        }
+
+        if displayedTabID == tabID {
+            if let focusedSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID,
+               isLive(focusedSurfaceID) {
+                return focusedSurfaceID
+            }
+            if let activeSurfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
+               isLive(activeSurfaceID) {
+                return activeSurfaceID
+            }
+        }
+
+        if let primarySurfaceID = tabSurfaceMap[tabID], isLive(primarySurfaceID) {
+            return primarySurfaceID
+        }
+
+        return surfaceIDs(for: tabID).first(where: isLive)
     }
 
     // MARK: - Search Bar (Cmd+F)
@@ -689,6 +960,7 @@ extension MainWindowController {
 
         overlayContainer.addSubview(hostingView)
         isTimelineVisible = true
+        layoutRightDockedAgentPanels()
     }
 
     func dismissTimeline() {
@@ -714,34 +986,35 @@ extension MainWindowController {
                 self?.timelineHostingView?.removeFromSuperview()
                 self?.timelineHostingView = nil
                 self?.timelineViewModel = nil
+                self?.layoutRightDockedAgentPanels()
             }
         })
     }
 
-    /// Repositions the timeline panel based on whether the dashboard is also visible.
-    ///
-    /// When both panels coexist, the timeline sits to the left of the dashboard.
-    /// When only the timeline is visible, it occupies the right edge.
-    private func repositionTimelineForCoexistence() {
-        guard let overlayContainer = overlayContainerView,
-              let hostingView = timelineHostingView else { return }
+    private func layoutRightDockedAgentPanels() {
+        guard let overlayContainer = overlayContainerView else { return }
 
-        let panelWidth: CGFloat = DashboardPanelView.panelWidth
-        let containerBounds = overlayContainer.bounds
-
-        let timelineOriginX: CGFloat
-        if isDashboardVisible {
-            timelineOriginX = containerBounds.width - panelWidth * 2
-        } else {
-            timelineOriginX = containerBounds.width - panelWidth
+        struct DockedPanel {
+            let width: CGFloat
+            let view: NSView
         }
 
-        hostingView.frame = NSRect(
-            x: timelineOriginX,
-            y: 0,
-            width: panelWidth,
-            height: containerBounds.height
-        )
+        let visiblePanels: [DockedPanel] = [
+            isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!) : nil,
+            isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!) : nil,
+            isCodeReviewVisible ? DockedPanel(width: CodeReviewPanelView.panelWidth, view: codeReviewHostingView!) : nil
+        ].compactMap { $0 }
+
+        var currentX = overlayContainer.bounds.width
+        for panel in visiblePanels.reversed() {
+            currentX -= panel.width
+            panel.view.frame = NSRect(
+                x: currentX,
+                y: 0,
+                width: panel.width,
+                height: overlayContainer.bounds.height
+            )
+        }
     }
 
     static func saveExportedData(_ data: Data, suggestedName: String) {
@@ -1095,6 +1368,8 @@ extension MainWindowController {
             dismissBrowser()
         } else if isNotificationPanelVisible {
             dismissNotificationPanel()
+        } else if isCodeReviewVisible {
+            dismissCodeReview()
         } else if isDashboardVisible {
             dismissDashboard()
         } else if isTimelineVisible {

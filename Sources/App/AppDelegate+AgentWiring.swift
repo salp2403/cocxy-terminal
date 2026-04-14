@@ -55,6 +55,15 @@ extension AppDelegate {
         }
 
         hookEventReceiver = HookEventReceiverImpl()
+        let sessionDiffTracker = SessionDiffTrackerImpl()
+        self.sessionDiffTracker = sessionDiffTracker
+
+        hookEventReceiver?.eventPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak sessionDiffTracker] event in
+                sessionDiffTracker?.handleHookEvent(event)
+            }
+            .store(in: &hookCancellables)
 
         // Start watching agents.toml for hot-reload. File changes are
         // debounced (500ms) and routed through the config service's

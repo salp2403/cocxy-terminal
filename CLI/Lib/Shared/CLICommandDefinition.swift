@@ -25,6 +25,10 @@ public enum CLICommand: String, CaseIterable {
     case hooks
     case hookHandler = "hook-handler"
     case setupHooks = "setup-hooks"
+    case review
+    case reviewRefresh = "review-refresh"
+    case reviewSubmit = "review-submit"
+    case reviewStats = "review-stats"
 
     // MARK: - Tab extended (v2)
 
@@ -187,6 +191,10 @@ public enum CLICommand: String, CaseIterable {
         case .hooks: return "Manage Claude Code hooks (install/uninstall/status)"
         case .hookHandler: return "Handle incoming supported agent hook event from stdin"
         case .setupHooks: return "Configure Cocxy hook forwarding for supported agent CLIs"
+        case .review: return "Toggle the agent code review panel"
+        case .reviewRefresh: return "Refresh the agent code review diff"
+        case .reviewSubmit: return "Submit all pending review comments to the active agent"
+        case .reviewStats: return "Print the current agent code review statistics"
 
         // Tab extended
         case .tabRename: return "Rename a tab by UUID"
@@ -319,6 +327,10 @@ public enum CLICommand: String, CaseIterable {
         case .hooks: return "cocxy hooks install|uninstall|status"
         case .hookHandler: return "cocxy hook-handler (reads JSON from stdin)"
         case .setupHooks: return "cocxy setup-hooks [--agent claude|codex|gemini|kiro|all] [--remove]"
+        case .review: return "cocxy review"
+        case .reviewRefresh: return "cocxy review --refresh"
+        case .reviewSubmit: return "cocxy review --submit"
+        case .reviewStats: return "cocxy review --stats"
 
         // Tab extended
         case .tabRename: return "cocxy tab rename <id> <name>"

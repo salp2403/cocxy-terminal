@@ -932,7 +932,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     // MARK: - 43. All commands exist (current catalog size)
 
     func testAllCommandsExist() {
-        XCTAssertEqual(CLICommand.allCases.count, 89)
+        XCTAssertEqual(CLICommand.allCases.count, 93)
     }
 
     // MARK: - 39. Raw values match server protocol

@@ -61,6 +61,47 @@ extension AppSocketCommandHandler {
     }
 }
 
+// MARK: - V4 Code Review Handlers
+
+extension AppSocketCommandHandler {
+
+    func handleReviewToggle(_ request: SocketRequest) -> SocketResponse {
+        guard let toggle = reviewToggleProvider else {
+            return .failure(id: request.id, error: "Code review not available")
+        }
+
+        let isVisible = toggle()
+        return .ok(id: request.id, data: [
+            "status": "toggled",
+            "visible": isVisible ? "true" : "false"
+        ])
+    }
+
+    func handleReviewRefresh(_ request: SocketRequest) -> SocketResponse {
+        guard let refresh = reviewRefreshProvider,
+              let data = refresh() else {
+            return .failure(id: request.id, error: "Code review not available")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleReviewSubmit(_ request: SocketRequest) -> SocketResponse {
+        guard let submit = reviewSubmitProvider,
+              let data = submit() else {
+            return .failure(id: request.id, error: "Code review not available")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleReviewStats(_ request: SocketRequest) -> SocketResponse {
+        guard let stats = reviewStatsProvider,
+              let data = stats() else {
+            return .failure(id: request.id, error: "Code review not available")
+        }
+        return .ok(id: request.id, data: data)
+    }
+}
+
 // MARK: - V4 Timeline Handlers
 
 extension AppSocketCommandHandler {

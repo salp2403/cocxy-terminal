@@ -111,6 +111,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var hookEventReceiver: HookEventReceiverImpl?
 
+    /// Tracks git snapshots and touched files per agent hook session for the code review panel.
+    var sessionDiffTracker: SessionDiffTrackerImpl?
+
     /// The agent detection engine for terminal output analysis.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentDetectionEngine: AgentDetectionEngineImpl?
@@ -1029,6 +1032,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerWindow: Bool = true
     ) {
         controller.injectedAgentDetectionEngine = agentDetectionEngine
+        controller.injectedSessionDiffTracker = sessionDiffTracker
         controller.injectedDashboardViewModel = agentDashboardViewModel
         controller.injectedTimelineStore = agentTimelineStore
         controller.injectedNotificationManager = notificationManager
@@ -1701,6 +1705,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let totalErrors = sessions.reduce(0) { $0 + $1.totalErrors }
                     data["total_errors"] = "\(totalErrors)"
                     return data
+                }
+            },
+            reviewToggleProvider: {
+                syncOnMainActor {
+                    guard let wc = focusedControllerProvider() else { return false }
+                    wc.toggleCodeReview()
+                    return wc.isCodeReviewVisible
+                }
+            },
+            reviewRefreshProvider: {
+                syncOnMainActor {
+                    focusedControllerProvider()?.refreshCodeReviewFromCLI()
+                }
+            },
+            reviewSubmitProvider: {
+                syncOnMainActor {
+                    focusedControllerProvider()?.submitCodeReviewFromCLI()
+                }
+            },
+            reviewStatsProvider: {
+                syncOnMainActor {
+                    guard let wc = focusedControllerProvider() else { return nil }
+                    return wc.codeReviewStatsSnapshot()
                 }
             },
             // V4: Timeline query — return events for a tab.

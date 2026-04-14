@@ -485,13 +485,86 @@ final class ExtendedCLIErrorTests: XCTestCase {
 
 // MARK: - Enum Parity Tests
 
+/// Tests for agent code review commands.
+final class ReviewCommandTests: XCTestCase {
+
+    private let runner = CommandRunner(
+        socketClient: SocketClient(socketPath: "/tmp/test.sock")
+    )
+
+    func testReviewParsesCorrectly() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["review"]), .review)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "--refresh"]), .reviewRefresh)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "--submit"]), .reviewSubmit)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "--stats"]), .reviewStats)
+    }
+
+    func testReviewRejectsMultipleFlags() {
+        XCTAssertThrowsError(try CLIArgumentParser.parse(["review", "--refresh", "--stats"])) { error in
+            guard let cliError = error as? CLIError else {
+                XCTFail("Expected CLIError, got \(error)")
+                return
+            }
+            XCTAssertEqual(
+                cliError,
+                .invalidArgument(
+                    command: "review",
+                    argument: "--refresh --stats",
+                    reason: "Only one review action can be requested at a time."
+                )
+            )
+        }
+    }
+
+    func testReviewBuildRequestsUseDedicatedCommands() {
+        XCTAssertEqual(runner.buildRequest(from: .review).command, "review")
+        XCTAssertEqual(runner.buildRequest(from: .reviewRefresh).command, "review-refresh")
+        XCTAssertEqual(runner.buildRequest(from: .reviewSubmit).command, "review-submit")
+        XCTAssertEqual(runner.buildRequest(from: .reviewStats).command, "review-stats")
+    }
+
+    func testReviewSuccessMessagesAreReadable() {
+        let emptyResponse = CLISocketResponse(id: "review-1", success: true, data: nil, error: nil)
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(command: .review, response: emptyResponse),
+            "Code review toggled."
+        )
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(command: .reviewRefresh, response: emptyResponse),
+            "Code review refreshed."
+        )
+
+        let submitResponse = CLISocketResponse(
+            id: "review-2",
+            success: true,
+            data: ["submittedComments": "3"],
+            error: nil
+        )
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(command: .reviewSubmit, response: submitResponse),
+            "Submitted 3 comments."
+        )
+
+        let snakeCaseResponse = CLISocketResponse(
+            id: "review-3",
+            success: true,
+            data: ["submitted_comments": "2"],
+            error: nil
+        )
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(command: .reviewSubmit, response: snakeCaseResponse),
+            "Submitted 2 comments."
+        )
+    }
+}
+
 /// Tests that CLICommand and CLICommandName have matching cases.
 final class EnumParityTests: XCTestCase {
 
     // MARK: - 34. CLICommand has all expected cases
 
     func testCLICommandHasExpectedCaseCount() {
-        XCTAssertEqual(CLICommand.allCases.count, 89)
+        XCTAssertEqual(CLICommand.allCases.count, 93)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription

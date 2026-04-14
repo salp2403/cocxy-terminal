@@ -159,6 +159,13 @@ extension AppDelegate {
         )
         dashboardItem.keyEquivalentModifierMask = [.command, .option]
 
+        let codeReviewItem = viewMenu.addItem(
+            withTitle: "Agent Code Review",
+            action: #selector(MainWindowController.toggleCodeReviewAction(_:)),
+            keyEquivalent: "r"
+        )
+        codeReviewItem.keyEquivalentModifierMask = [.command, .option]
+
         // Smart Routing: Cmd+Shift+U (replaces Quick Switch)
         let smartRoutingItem = viewMenu.addItem(
             withTitle: "Smart Routing",
