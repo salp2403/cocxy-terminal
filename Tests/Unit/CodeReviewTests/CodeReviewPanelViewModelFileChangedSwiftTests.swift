@@ -1,0 +1,165 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// CodeReviewPanelViewModelFileChangedSwiftTests.swift
+// Phase 2 coverage for the FileChanged auto-refresh handler — debounce,
+// CWD exact match, file boundary check and visibility gating.
+
+import Foundation
+import Testing
+@testable import CocxyTerminal
+
+@MainActor
+@Suite("CodeReviewPanelViewModel FileChanged auto-refresh")
+struct CodeReviewPanelViewModelFileChangedSwiftTests {
+
+    private static let activeCwd = URL(fileURLWithPath: "/private/tmp/active-project", isDirectory: true)
+    private static let unrelatedCwd = URL(fileURLWithPath: "/private/tmp/unrelated", isDirectory: true)
+
+    @Test("FileChanged inside the active CWD triggers exactly one debounced refresh")
+    func fileChangedInActiveCwdTriggersDebouncedRefresh() async throws {
+        let harness = makeHarness()
+        emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
+             filePath: Self.activeCwd.appendingPathComponent("src/main.swift").path,
+             changeType: "edit")
+
+        try await waitForCondition { harness.refreshCount() >= 1 }
+        // Flush the run loop a bit longer to make sure no stray refresh sneaks in.
+        try await Task.sleep(nanoseconds: 80_000_000)
+        #expect(harness.refreshCount() == 1)
+    }
+
+    @Test("FileChanged in an unrelated CWD does not refresh")
+    func fileChangedInDifferentCwdIsIgnored() async throws {
+        let harness = makeHarness()
+        emit(.fileChanged, on: harness.receiver, cwd: Self.unrelatedCwd.path,
+             filePath: Self.unrelatedCwd.appendingPathComponent("foo.swift").path)
+
+        try await Task.sleep(nanoseconds: 120_000_000)
+        #expect(harness.refreshCount() == 0)
+    }
+
+    @Test("Multiple rapid FileChanged events collapse into a single refresh")
+    func multipleRapidFileChangedFiresOnlyOneRefresh() async throws {
+        let harness = makeHarness()
+        for index in 0..<6 {
+            emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
+                 filePath: Self.activeCwd.appendingPathComponent("burst-\(index).swift").path,
+                 changeType: "write")
+        }
+
+        try await waitForCondition { harness.refreshCount() >= 1 }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(harness.refreshCount() == 1)
+    }
+
+    @Test("FileChanged with file_path outside the active CWD is ignored")
+    func fileChangedOutsideCwdPathIsIgnored() async throws {
+        let harness = makeHarness()
+        emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
+             filePath: "/private/tmp/somewhere-else/file.swift")
+
+        try await Task.sleep(nanoseconds: 120_000_000)
+        #expect(harness.refreshCount() == 0)
+    }
+
+    @Test("FileChanged without a file_path is tolerated and skipped")
+    func fileChangedWithoutFilePathIsTolerated() async throws {
+        let harness = makeHarness()
+        emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
+             filePath: "")
+
+        try await Task.sleep(nanoseconds: 120_000_000)
+        #expect(harness.refreshCount() == 0)
+    }
+
+    @Test("Hidden panel skips FileChanged refreshes")
+    func noRefreshWhenPanelNotVisible() async throws {
+        let harness = makeHarness(initiallyVisible: false)
+        emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
+             filePath: Self.activeCwd.appendingPathComponent("ignored.swift").path)
+
+        try await Task.sleep(nanoseconds: 120_000_000)
+        #expect(harness.refreshCount() == 0)
+    }
+
+    // MARK: - Harness
+
+    private struct Harness {
+        let viewModel: CodeReviewPanelViewModel
+        let receiver: HookEventReceiverImpl
+        let refreshCount: () -> Int
+    }
+
+    private func makeHarness(initiallyVisible: Bool = true) -> Harness {
+        let receiver = HookEventReceiverImpl()
+        let counter = AtomicInt()
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: SessionDiffTrackerImpl(),
+            hookEventReceiver: receiver,
+            directDiffLoader: { _, _, _ in
+                counter.increment()
+                return []
+            }
+        )
+        viewModel.activeTabCwdProvider = { Self.activeCwd }
+        viewModel.fileChangeRefreshDebounce = 0.05
+        viewModel.refreshDelay = 0
+        viewModel.isVisible = initiallyVisible
+        return Harness(
+            viewModel: viewModel,
+            receiver: receiver,
+            refreshCount: { counter.value }
+        )
+    }
+
+    private func emit(
+        _ type: HookEventType,
+        on receiver: HookEventReceiverImpl,
+        cwd: String,
+        filePath: String,
+        changeType: String? = nil
+    ) {
+        var payload: [String: Any] = [
+            "hook_event_name": type.rawValue,
+            "session_id": "sess-fc-test",
+            "cwd": cwd,
+            "file_path": filePath
+        ]
+        if let changeType {
+            payload["change_type"] = changeType
+        }
+        let data = try! JSONSerialization.data(withJSONObject: payload)
+        receiver.receiveRawJSON(data)
+    }
+
+    private func waitForCondition(
+        timeoutNanoseconds: UInt64 = 2_000_000_000,
+        pollNanoseconds: UInt64 = 15_000_000,
+        _ condition: () -> Bool
+    ) async throws {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+        while condition() == false {
+            if DispatchTime.now().uptimeNanoseconds >= deadline {
+                Issue.record("Timed out waiting for refresh count update")
+                return
+            }
+            try await Task.sleep(nanoseconds: pollNanoseconds)
+        }
+    }
+}
+
+/// Lock-protected counter shared between the directDiffLoader closure
+/// (called off the main actor) and the test body (main actor).
+private final class AtomicInt: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: Int = 0
+
+    var value: Int {
+        lock.lock(); defer { lock.unlock() }
+        return _value
+    }
+
+    func increment() {
+        lock.lock(); defer { lock.unlock() }
+        _value += 1
+    }
+}

@@ -39,6 +39,20 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     private var refreshGeneration: UInt64 = 0
     private var refreshTask: Task<Void, Never>?
 
+    /// Debounced refresh trigger for FileChanged hooks. A new event resets the
+    /// pending work item so a burst of edits collapses into a single diff
+    /// refresh after the burst settles.
+    ///
+    /// Module-internal (not `private`) so the `+FileChanged` extension can
+    /// own the scheduling/cancellation logic. External callers cannot reach
+    /// this because the type itself is internal to `CocxyTerminal`.
+    var fileChangeRefreshWorkItem: DispatchWorkItem?
+
+    /// Debounce window applied to FileChanged events before refreshing diffs.
+    /// Keeping this internal (test-tunable, not exposed in production) lets the
+    /// integration tests collapse the wait without weakening the real default.
+    var fileChangeRefreshDebounce: TimeInterval = 0.2
+
     init(
         tracker: SessionDiffTracking,
         hookEventReceiver: HookEventReceiving? = nil,
@@ -432,12 +446,18 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                         self.shouldAutoShow = true
                         self.refreshDiffs()
                     }
+                case .fileChanged:
+                    self.handleFileChangedHook(event)
                 default:
                     break
                 }
             }
             .store(in: &cancellables)
     }
+
+    // FileChanged handling lives in `+FileChanged.swift` to keep this file
+    // under the 600-LOC ceiling and to give the new behaviour a clear,
+    // self-documenting home.
 
     private func applyDiffResult(_ result: Result<[FileDiff], Error>, sessionId: String, generation: UInt64) {
         guard generation == refreshGeneration else { return }
