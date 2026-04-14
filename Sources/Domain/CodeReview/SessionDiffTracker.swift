@@ -165,7 +165,12 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
                 trackFile(sessionId: event.sessionId, filePath: candidate, agentName: Self.agentName(from: event.data))
             }
 
-        case .taskCompleted, .sessionEnd, .stop, .notification, .teammateIdle, .subagentStart, .subagentStop, .userPromptSubmit:
+        case .taskCompleted, .sessionEnd, .stop, .notification, .teammateIdle,
+             .subagentStart, .subagentStop, .userPromptSubmit,
+             .cwdChanged, .fileChanged:
+            // FileChanged and CwdChanged are handled by higher-level consumers
+            // (CodeReviewPanelViewModel refreshes diffs, AppDelegate syncs tab
+            // CWD). The snapshot tracker reacts only to tool use events.
             break
         }
     }

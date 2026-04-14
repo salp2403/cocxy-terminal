@@ -214,6 +214,38 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
             if case .taskCompleted(let data) = hookEvent.data {
                 summary = data.taskDescription ?? "Task completed"
             }
+
+        case .cwdChanged:
+            // Surface CWD changes in the timeline so users can trace when
+            // Claude Code moved into a new directory. The CWD itself lives on
+            // HookEvent.cwd; previousCwd adds context when available.
+            eventType = .stateChange
+            if let currentCwd = hookEvent.cwd, !currentCwd.isEmpty {
+                if case .cwdChanged(let data) = hookEvent.data,
+                   let previous = data.previousCwd, !previous.isEmpty {
+                    summary = "Changed directory: \(previous) -> \(currentCwd)"
+                } else {
+                    summary = "Changed directory: \(currentCwd)"
+                }
+            } else {
+                summary = "Working directory changed"
+            }
+
+        case .fileChanged:
+            // Filesystem mutations surface as stateChange rows, keeping the
+            // native filePath column populated so the UI can link to the file.
+            eventType = .stateChange
+            if case .fileChanged(let data) = hookEvent.data, !data.filePath.isEmpty {
+                filePath = data.filePath
+                let fileName = URL(fileURLWithPath: data.filePath).lastPathComponent
+                if let change = data.changeType?.trimmingCharacters(in: .whitespaces), !change.isEmpty {
+                    summary = "File \(change): \(fileName)"
+                } else {
+                    summary = "File changed: \(fileName)"
+                }
+            } else {
+                summary = "File changed"
+            }
         }
 
         return TimelineEvent(

@@ -349,8 +349,11 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
                 source: source
             )
 
-        case .notification, .subagentStart, .subagentStop, .userPromptSubmit:
+        case .notification, .subagentStart, .subagentStop, .userPromptSubmit,
+             .cwdChanged, .fileChanged:
             // These events are informational; they do not change agent state.
+            // CwdChanged/FileChanged are consumed by TabManager and CodeReview
+            // panels, not by the detection state machine.
             return nil
         }
     }

@@ -208,6 +208,15 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         case .notification, .userPromptSubmit:
             // Informational events -- no dashboard state change.
             break
+        case .cwdChanged:
+            // CwdChanged is consumed by the tab wiring layer
+            // (updates `Tab.workingDirectory`). No dashboard effect.
+            break
+        case .fileChanged:
+            // Routed through the `+FileChanged` extension so that Phase 1
+            // keeps this switch exhaustive even before Phase 3 wires the
+            // real attribution logic. The default dispatch is a no-op.
+            handleFileChangedEvent(event)
         }
     }
 

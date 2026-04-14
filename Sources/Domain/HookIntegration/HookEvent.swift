@@ -5,12 +5,13 @@ import Foundation
 
 // MARK: - Hook Event Type
 
-/// The 12 lifecycle events Cocxy consumes from Claude Code hooks.
+/// The 14 lifecycle events Cocxy consumes from Claude Code hooks.
 ///
 /// Each event maps to a specific phase in the agent's lifecycle.
 /// Unknown event types fail decoding (forward compatibility via receiver layer).
 ///
 /// - SeeAlso: ADR-008 (Agent Intelligence Architecture)
+/// - SeeAlso: ADR-012 (CwdChanged + FileChanged hooks, Claude Code 2.1.83+)
 enum HookEventType: String, Codable, Sendable, CaseIterable {
     case sessionStart       = "SessionStart"
     case sessionEnd         = "SessionEnd"
@@ -24,6 +25,8 @@ enum HookEventType: String, Codable, Sendable, CaseIterable {
     case notification       = "Notification"
     case teammateIdle       = "TeammateIdle"
     case taskCompleted      = "TaskCompleted"
+    case cwdChanged         = "CwdChanged"
+    case fileChanged        = "FileChanged"
 }
 
 // MARK: - Hook Event
@@ -79,6 +82,12 @@ struct HookEvent: Codable, Sendable {
         case agentId = "agent_id"
         // Task event keys
         case taskDescription = "task_description"
+        // Filesystem event keys (Claude Code 2.1.83+).
+        // previous_cwd ships with CwdChanged; file_path and change_type ship
+        // with FileChanged. Tolerant decoding: missing fields stay nil.
+        case previousCwd = "previous_cwd"
+        case filePath = "file_path"
+        case changeType = "change_type"
         // Legacy format keys (camelCase, backward compatibility)
         case type
         case sessionIdCamel = "sessionId"
@@ -151,6 +160,21 @@ struct HookEvent: Codable, Sendable {
 
             case .userPromptSubmit:
                 self.data = .generic
+
+            case .cwdChanged:
+                // previous_cwd may be absent on the very first CwdChanged event
+                // (no previous directory to compare against). Consumers that need
+                // it should guard with `if let`.
+                let previous = try? container.decode(String.self, forKey: .previousCwd)
+                self.data = .cwdChanged(CwdChangedData(previousCwd: previous))
+
+            case .fileChanged:
+                // file_path is REQUIRED by the Claude Code schema for FileChanged.
+                // If it is missing we still decode successfully (defensive) but
+                // keep the path empty so consumers skip the event cleanly.
+                let path = (try? container.decode(String.self, forKey: .filePath)) ?? ""
+                let change = try? container.decode(String.self, forKey: .changeType)
+                self.data = .fileChanged(FileChangedData(filePath: path, changeType: change))
             }
             return
         }
@@ -288,13 +312,16 @@ enum HookEventData: Codable, Sendable {
     case notification(NotificationData)
     case taskCompleted(TaskCompletedData)
     case teammateIdle(TeammateIdleData)
+    case cwdChanged(CwdChangedData)
+    case fileChanged(FileChangedData)
     case generic
 
     // MARK: - Coding Keys
 
     private enum CodingKeys: String, CodingKey {
         case sessionStart, stop, toolUse, subagent
-        case notification, taskCompleted, teammateIdle, generic
+        case notification, taskCompleted, teammateIdle
+        case cwdChanged, fileChanged, generic
     }
 
     // MARK: - Decodable
@@ -316,6 +343,10 @@ enum HookEventData: Codable, Sendable {
             self = .taskCompleted(value)
         } else if let value = try container.decodeIfPresent(TeammateIdleData.self, forKey: .teammateIdle) {
             self = .teammateIdle(value)
+        } else if let value = try container.decodeIfPresent(CwdChangedData.self, forKey: .cwdChanged) {
+            self = .cwdChanged(value)
+        } else if let value = try container.decodeIfPresent(FileChangedData.self, forKey: .fileChanged) {
+            self = .fileChanged(value)
         } else {
             self = .generic
         }
@@ -334,6 +365,8 @@ enum HookEventData: Codable, Sendable {
         case .notification(let value): try container.encode(value, forKey: .notification)
         case .taskCompleted(let value): try container.encode(value, forKey: .taskCompleted)
         case .teammateIdle(let value): try container.encode(value, forKey: .teammateIdle)
+        case .cwdChanged(let value): try container.encode(value, forKey: .cwdChanged)
+        case .fileChanged(let value): try container.encode(value, forKey: .fileChanged)
         case .generic: try container.encode(EmptyPayload(), forKey: .generic)
         }
     }
@@ -412,6 +445,55 @@ struct TeammateIdleData: Codable, Sendable, Equatable {
     init(teammateId: String? = nil, reason: String? = nil) {
         self.teammateId = teammateId
         self.reason = reason
+    }
+}
+
+/// Payload for the `CwdChanged` lifecycle event (Claude Code 2.1.83+).
+///
+/// Emitted when Claude Code's working directory changes mid-session (for
+/// instance when the agent runs `cd`). The new CWD lives in `HookEvent.cwd`
+/// carried at the top level; this struct only holds the previous CWD so
+/// consumers can verify they are updating the correct tab.
+///
+/// Missing `previousCwd` is tolerated (the field may be absent on the very
+/// first CwdChanged event when no prior directory exists).
+struct CwdChangedData: Codable, Sendable, Equatable {
+    /// Previous working directory, before the change. May be `nil` on first emit.
+    let previousCwd: String?
+
+    init(previousCwd: String? = nil) {
+        self.previousCwd = previousCwd
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case previousCwd = "previous_cwd"
+    }
+}
+
+/// Payload for the `FileChanged` lifecycle event (Claude Code 2.1.83+).
+///
+/// Emitted when Claude Code writes, edits, or deletes a file through any of
+/// its tools. The file path is always an absolute path on disk. The change
+/// type is optional and informative only (`write`, `edit`, `delete`, ...).
+///
+/// Invariant: consumers MUST guard on an empty `filePath` before acting.
+/// The decoder preserves a zero-length path to keep the event stream intact
+/// even when a payload is malformed, leaving the decision to skip to the
+/// consumer where it can be logged with richer context.
+struct FileChangedData: Codable, Sendable, Equatable {
+    /// Absolute file system path reported by Claude Code.
+    let filePath: String
+    /// Optional kind of change (`write`, `edit`, `delete`, or custom).
+    let changeType: String?
+
+    init(filePath: String, changeType: String? = nil) {
+        self.filePath = filePath
+        self.changeType = changeType
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case filePath = "file_path"
+        case changeType = "change_type"
     }
 }
 
