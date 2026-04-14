@@ -241,6 +241,67 @@ final class TabSurfaceMappingTests: XCTestCase {
         )
     }
 
+    func testCodeReviewSubmitRoutesToOriginatingTabSurface() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        guard let tabA = controller.tabManager.tabs.first?.id else {
+            XCTFail("Expected an initial tab")
+            return
+        }
+        let cwdA = URL(fileURLWithPath: "/tmp/code-review-tab-a", isDirectory: true)
+        controller.tabManager.updateTab(id: tabA) { $0.workingDirectory = cwdA }
+        controller.handleTabSwitch(to: tabA)
+
+        controller.newTabAction(nil)
+        guard let tabB = controller.tabManager.activeTabID else {
+            XCTFail("Expected a second tab")
+            return
+        }
+        let cwdB = URL(fileURLWithPath: "/tmp/code-review-tab-b", isDirectory: true)
+        controller.tabManager.updateTab(id: tabB) { $0.workingDirectory = cwdB }
+        controller.handleTabSwitch(to: tabB)
+
+        let surfaceA = controller.viewModelForTab(tabA)?.surfaceID ?? SurfaceID()
+        let surfaceB = controller.viewModelForTab(tabB)?.surfaceID ?? SurfaceID()
+        controller.tabSurfaceMap[tabA] = surfaceA
+        controller.tabSurfaceMap[tabB] = surfaceB
+
+        let tracker = SessionDiffTrackerImpl()
+        tracker.recordSnapshot(sessionId: "session-a", ref: "aaa111", workingDirectory: cwdA)
+        tracker.recordSnapshot(sessionId: "session-b", ref: "bbb222", workingDirectory: cwdB)
+
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: tracker,
+            hookEventReceiver: nil,
+            directDiffLoader: { _, _, _ in
+                [FileDiff(filePath: "foo.swift", status: .modified, hunks: [])]
+            }
+        )
+
+        controller.injectedSessionDiffTracker = tracker
+        controller.injectedCodeReviewViewModel = viewModel
+        let resolvedViewModel = controller.resolveCodeReviewViewModel()
+        resolvedViewModel.refreshDelay = 0
+
+        controller.tabManager.setActive(id: tabA)
+        controller.handleTabSwitch(to: tabA)
+        resolvedViewModel.refreshDiffs()
+
+        controller.tabManager.setActive(id: tabB)
+        controller.handleTabSwitch(to: tabB)
+        resolvedViewModel.addComment(filePath: "foo.swift", line: 5, body: "Route back to tab A")
+        resolvedViewModel.submitComments()
+
+        XCTAssertEqual(
+            bridge.sentTexts.last?.surface,
+            surfaceA,
+            "Submitting review feedback must target the tab that originated the review, not the focused tab"
+        )
+        XCTAssertNotEqual(bridge.sentTexts.last?.surface, surfaceB)
+    }
+
     // MARK: - Close Tab Cleanup
 
     func testCloseTabRemovesSurfaceViewMapping() {

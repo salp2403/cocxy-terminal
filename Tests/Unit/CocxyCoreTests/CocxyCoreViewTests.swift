@@ -177,6 +177,45 @@ struct CocxyCoreViewTests {
         #expect(state.terminalLock.try() == true)
         state.terminalLock.unlock()
     }
+
+    @Test("Cmd+Option+R is routed to the main menu before terminal input")
+    func commandOptionRRoutesThroughMenu() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+
+        let application = NSApplication.shared
+        let oldMenu = application.mainMenu
+        let target = MenuActionTarget()
+        let mainMenu = NSMenu(title: "Main")
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu(title: "App")
+        let reviewItem = NSMenuItem(
+            title: "Toggle Code Review",
+            action: #selector(MenuActionTarget.toggleCodeReview(_:)),
+            keyEquivalent: "r"
+        )
+        reviewItem.keyEquivalentModifierMask = [.command, .option]
+        reviewItem.target = target
+        appMenu.addItem(reviewItem)
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+        application.mainMenu = mainMenu
+        defer { application.mainMenu = oldMenu }
+
+        let event = makeKeyEvent(characters: "r", modifiers: [.command, .option])
+
+        #expect(harness.view.performKeyEquivalent(with: event) == true)
+        #expect(target.didInvoke == true)
+    }
+}
+
+@MainActor
+private final class MenuActionTarget: NSObject {
+    private(set) var didInvoke = false
+
+    @objc func toggleCodeReview(_ sender: Any?) {
+        didInvoke = true
+    }
 }
 
 @MainActor
@@ -209,4 +248,22 @@ private func makeViewHarness(command: String = "/bin/cat") throws -> ViewHarness
         view: view,
         surfaceID: surfaceID
     )
+}
+
+private func makeKeyEvent(
+    characters: String,
+    modifiers: NSEvent.ModifierFlags
+) -> NSEvent {
+    NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: modifiers,
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: 0,
+        context: nil,
+        characters: characters,
+        charactersIgnoringModifiers: characters.lowercased(),
+        isARepeat: false,
+        keyCode: 15
+    )!
 }

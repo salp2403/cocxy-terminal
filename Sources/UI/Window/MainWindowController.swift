@@ -183,6 +183,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var browserHostingView: NSHostingView<BrowserPanelView>?
     var isBrowserVisible: Bool = false
 
+    var codeReviewViewModel: CodeReviewPanelViewModel?
+    var codeReviewHostingView: NSHostingView<CodeReviewPanelView>?
+    var isCodeReviewVisible: Bool = false
+    var codeReviewCancellables = Set<AnyCancellable>()
+    var injectedCodeReviewViewModel: CodeReviewPanelViewModel?
+
     // MARK: - Remote Workspace Overlay State
 
     var remoteConnectionViewModel: RemoteConnectionViewModel?
@@ -279,6 +285,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Agent detection engine injected by AppDelegate.
     /// When set, terminal output from ALL surfaces is routed to the engine.
     var injectedAgentDetectionEngine: AgentDetectionEngineImpl?
+
+    /// Session diff tracker injected by AppDelegate for the code review panel.
+    var injectedSessionDiffTracker: SessionDiffTracking?
 
     /// Port scanner for detecting active dev servers. Injected by AppDelegate.
     var portScanner: PortScannerImpl?

@@ -203,6 +203,9 @@ final class ConfigService: ConfigProviding {
         timing-heuristics = \(defaults.agentDetection.timingHeuristics)
         idle-timeout-seconds = \(defaults.agentDetection.idleTimeoutSeconds)
 
+        [code-review]
+        auto-show-on-session-end = \(defaults.codeReview.autoShowOnSessionEnd)
+
         [notifications]
         macos-notifications = \(defaults.notifications.macosNotifications)
         sound = \(defaults.notifications.sound)
@@ -253,6 +256,7 @@ final class ConfigService: ConfigProviding {
         let appearance = parseAppearanceConfig(from: parsed)
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
+        let codeReview = parseCodeReviewConfig(from: parsed)
         let notifications = parseNotificationConfig(from: parsed)
         let quickTerminal = parseQuickTerminalConfig(from: parsed)
         let keybindings = parseKeybindingsConfig(from: parsed)
@@ -263,6 +267,7 @@ final class ConfigService: ConfigProviding {
             appearance: appearance,
             terminal: terminal,
             agentDetection: agentDetection,
+            codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
             keybindings: keybindings,
@@ -377,6 +382,16 @@ final class ConfigService: ConfigProviding {
             patternMatching: boolValue(table["pattern-matching"]) ?? defaults.patternMatching,
             timingHeuristics: boolValue(table["timing-heuristics"]) ?? defaults.timingHeuristics,
             idleTimeoutSeconds: validatedTimeout
+        )
+    }
+
+    /// Parses the `[notifications]` section.
+    private func parseCodeReviewConfig(from parsed: [String: TOMLValue]) -> CodeReviewConfig {
+        let table = extractTable("code-review", from: parsed)
+        let defaults = CodeReviewConfig.defaults
+
+        return CodeReviewConfig(
+            autoShowOnSessionEnd: boolValue(table["auto-show-on-session-end"]) ?? defaults.autoShowOnSessionEnd
         )
     }
 

@@ -168,6 +168,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Returns dashboard status: isVisible, sessionCount, activeCount.
     let dashboardStatusProvider: (@Sendable () -> [String: String])?
 
+    /// Toggles the code review panel and returns whether it is visible afterwards.
+    let reviewToggleProvider: (@Sendable () -> Bool)?
+
+    /// Refreshes the code review state and returns a lightweight snapshot.
+    let reviewRefreshProvider: (@Sendable () -> [String: String]?)?
+
+    /// Submits pending code review comments and returns submission metadata.
+    let reviewSubmitProvider: (@Sendable () -> [String: String]?)?
+
+    /// Returns current code review statistics.
+    let reviewStatsProvider: (@Sendable () -> [String: String]?)?
+
     /// Queries timeline data, optionally scoped to a specific tab.
     let timelineQueryProvider: (@Sendable (String?) -> TimelineQueryResult?)?
 
@@ -322,6 +334,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         // V4 providers
         dashboardToggleProvider: (@Sendable () -> Bool)? = nil,
         dashboardStatusProvider: (@Sendable () -> [String: String])? = nil,
+        reviewToggleProvider: (@Sendable () -> Bool)? = nil,
+        reviewRefreshProvider: (@Sendable () -> [String: String]?)? = nil,
+        reviewSubmitProvider: (@Sendable () -> [String: String]?)? = nil,
+        reviewStatsProvider: (@Sendable () -> [String: String]?)? = nil,
         timelineQueryProvider: (@Sendable (String?) -> TimelineQueryResult?)? = nil,
         timelineExportProvider: (@Sendable (String?, String) -> Data?)? = nil,
         splitCreateProvider: (@Sendable (Bool) -> Bool)? = nil,
@@ -379,6 +395,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.capturePaneProvider = capturePaneProvider
         self.dashboardToggleProvider = dashboardToggleProvider
         self.dashboardStatusProvider = dashboardStatusProvider
+        self.reviewToggleProvider = reviewToggleProvider
+        self.reviewRefreshProvider = reviewRefreshProvider
+        self.reviewSubmitProvider = reviewSubmitProvider
+        self.reviewStatsProvider = reviewStatsProvider
         self.timelineQueryProvider = timelineQueryProvider
         self.timelineExportProvider = timelineExportProvider
         self.splitCreateProvider = splitCreateProvider
@@ -766,6 +786,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleDashboardToggle(request)
         case .dashboardStatus:
             return handleDashboardStatus(request)
+        case .review:
+            return handleReviewToggle(request)
+        case .reviewRefresh:
+            return handleReviewRefresh(request)
+        case .reviewSubmit:
+            return handleReviewSubmit(request)
+        case .reviewStats:
+            return handleReviewStats(request)
 
         // Timeline (v4)
         case .timelineShow:

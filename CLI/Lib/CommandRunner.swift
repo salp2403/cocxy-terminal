@@ -245,6 +245,18 @@ public struct CommandRunner {
             // These are handled locally; should never reach socket request building.
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
+        case .review:
+            return CLISocketRequest(id: requestID, command: "review", params: nil)
+
+        case .reviewRefresh:
+            return CLISocketRequest(id: requestID, command: "review-refresh", params: nil)
+
+        case .reviewSubmit:
+            return CLISocketRequest(id: requestID, command: "review-submit", params: nil)
+
+        case .reviewStats:
+            return CLISocketRequest(id: requestID, command: "review-stats", params: nil)
+
         case .help, .version:
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 

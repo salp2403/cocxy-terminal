@@ -86,6 +86,14 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case hookHandler = "hook-handler"
     /// Configure supported external agent hooks. Local-first, mirrored here for wire parity.
     case setupHooks = "setup-hooks"
+    /// Toggle the agent code review panel.
+    case review
+    /// Refresh review panel diffs.
+    case reviewRefresh = "review-refresh"
+    /// Submit pending review comments.
+    case reviewSubmit = "review-submit"
+    /// Print current review statistics.
+    case reviewStats = "review-stats"
 
     // MARK: - Tab extended (v2)
 
