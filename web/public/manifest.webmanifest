@@ -1,0 +1,22 @@
+{
+  "name": "Cocxy Terminal",
+  "short_name": "Cocxy",
+  "description": "The native macOS terminal for AI coding agents. Real-time agent detection, inline code review, Markdown workspace, zero telemetry.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1e1e2e",
+  "theme_color": "#1e1e2e",
+  "lang": "en-US",
+  "dir": "ltr",
+  "orientation": "portrait-primary",
+  "categories": ["developer", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/images/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

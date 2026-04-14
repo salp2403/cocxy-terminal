@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Features — Native macOS Terminal for AI Coding Agents | Cocxy Terminal</title>
+  <meta name="description" content="Every feature of Cocxy Terminal in depth: multi-layer AI agent detection, inline code review, native Markdown workspace with Mermaid and KaTeX, QuickLook extension, Metal GPU rendering, persistent SSH sessions, plugin system, 93-command CLI, and zero telemetry.">
+  <meta name="keywords" content="macOS terminal features, AI agent terminal, Claude Code integration, Codex CLI terminal, Gemini CLI terminal, Aider terminal, agent code review, markdown editor macOS, Metal GPU terminal, SSH multiplexing, terminal plugin system, native macOS app, zero telemetry terminal">
+  <meta name="author" content="Said Arturo Lopez">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cocxy Terminal">
+  <meta property="og:title" content="Features — Native macOS Terminal for AI Coding Agents | Cocxy Terminal">
+  <meta property="og:description" content="In-depth look at every Cocxy feature: agent detection, code review panel, Markdown workspace, QuickLook, GPU rendering, remote workspaces, CLI, and more.">
+  <meta property="og:url" content="https://cocxy.dev/features.html">
+  <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Cocxy Terminal features overview">
+  <meta property="og:locale" content="en_US">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@cocxyterminal">
+  <meta name="twitter:title" content="Features — Cocxy Terminal">
+  <meta name="twitter:description" content="Every feature in depth: agent detection, code review, Markdown workspace, GPU rendering, remote workspaces, plugin system, zero telemetry.">
+  <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
+
+  <meta name="theme-color" content="#1e1e2e">
+  <link rel="canonical" href="https://cocxy.dev/features.html">
+  <link rel="icon" type="image/png" href="/images/icon.png">
+  <link rel="apple-touch-icon" href="/images/icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://cocxy.dev/"},
+      {"@type": "ListItem", "position": 2, "name": "Features", "item": "https://cocxy.dev/features.html"}
+    ]
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "name": "Cocxy Terminal Features",
+    "itemListOrder": "https://schema.org/ItemListOrderAscending",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Multi-Layer AI Agent Detection"},
+      {"@type": "ListItem", "position": 2, "name": "Agent Code Review Panel"},
+      {"@type": "ListItem", "position": 3, "name": "Native Markdown Workspace"},
+      {"@type": "ListItem", "position": 4, "name": "QuickLook Preview Extension"},
+      {"@type": "ListItem", "position": 5, "name": "GPU Terminal Engine (CocxyCore)"},
+      {"@type": "ListItem", "position": 6, "name": "Remote Workspaces"},
+      {"@type": "ListItem", "position": 7, "name": "Built-in Browser"},
+      {"@type": "ListItem", "position": 8, "name": "Web Terminal Embed"},
+      {"@type": "ListItem", "position": 9, "name": "Plugin System"},
+      {"@type": "ListItem", "position": 10, "name": "Per-Project Configuration"},
+      {"@type": "ListItem", "position": 11, "name": "AppleScript Automation"},
+      {"@type": "ListItem", "position": 12, "name": "Shell Integration"},
+      {"@type": "ListItem", "position": 13, "name": "Zero Telemetry"},
+      {"@type": "ListItem", "position": 14, "name": "93-Command CLI Companion"}
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header" role="banner">
+    <nav class="nav" aria-label="Main navigation">
+      <a href="/" class="nav-logo" aria-label="Cocxy Terminal home">
+        <img src="/images/icon.png" alt="" width="28" height="28">
+        <span>Cocxy</span>
+      </a>
+      <div class="nav-links">
+        <a href="/features.html" class="nav-active">Features</a>
+        <a href="/releases.html">Releases</a>
+        <a href="/getting-started.html">Docs</a>
+        <a href="/faq.html">FAQ</a>
+        <a href="/#download">Download</a>
+        <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer" aria-label="Cocxy on GitHub (opens in new tab)">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="container" style="padding-top:8rem;padding-bottom:4rem;max-width:960px;">
+      <nav aria-label="Breadcrumb" style="margin-bottom:1rem;">
+        <ol style="list-style:none;display:flex;gap:0.5rem;padding:0;margin:0;color:var(--subtext0);font-size:0.85rem;">
+          <li><a href="/" style="color:var(--subtext0);">Home</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page">Features</li>
+        </ol>
+      </nav>
+
+      <h1 style="font-size:2.75rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">All Features</h1>
+      <p style="color:var(--subtext0);font-size:1.1rem;max-width:680px;margin-bottom:3rem;">Cocxy Terminal is a native macOS terminal built from scratch in Swift and Metal for developers who ship code with AI coding agents. Every feature on this page exists because it solves a real friction point in the agent-assisted workflow.</p>
+
+      <nav aria-label="Feature table of contents" style="background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:1.5rem 2rem;margin-bottom:3rem;">
+        <h2 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--overlay0);margin-bottom:1rem;font-weight:600;">On this page</h2>
+        <ul style="list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.4rem;font-size:0.9rem;">
+          <li><a href="#agent-detection" style="color:var(--lavender);">Multi-Layer Agent Detection</a></li>
+          <li><a href="#code-review" style="color:var(--lavender);">Agent Code Review Panel</a></li>
+          <li><a href="#markdown" style="color:var(--lavender);">Markdown Workspace</a></li>
+          <li><a href="#quicklook" style="color:var(--lavender);">QuickLook Extension</a></li>
+          <li><a href="#gpu" style="color:var(--lavender);">GPU Terminal Engine</a></li>
+          <li><a href="#remote" style="color:var(--lavender);">Remote Workspaces</a></li>
+          <li><a href="#browser" style="color:var(--lavender);">Built-in Browser</a></li>
+          <li><a href="#web-terminal" style="color:var(--lavender);">Web Terminal</a></li>
+          <li><a href="#plugins" style="color:var(--lavender);">Plugin System</a></li>
+          <li><a href="#per-project" style="color:var(--lavender);">Per-Project Config</a></li>
+          <li><a href="#applescript" style="color:var(--lavender);">AppleScript</a></li>
+          <li><a href="#shell" style="color:var(--lavender);">Shell Integration</a></li>
+          <li><a href="#privacy" style="color:var(--lavender);">Zero Telemetry</a></li>
+          <li><a href="#cli" style="color:var(--lavender);">93-Command CLI</a></li>
+        </ul>
+      </nav>
+
+      <!-- ===== Feature sections ===== -->
+
+      <section id="agent-detection" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Multi-Layer AI Agent Detection</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">Cocxy's detection engine recognizes AI coding agents in real time without intercepting or modifying agent traffic. Four independent layers (hooks, OSC sequences, pattern matching, and timing heuristics) cross-validate each other so detection stays accurate even when one signal is missing.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Six agents supported out of the box:</strong> Claude Code, Codex CLI, Gemini CLI, Aider, Kiro, and OpenCode. Custom agents can be added via <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">~/.config/cocxy/agents.toml</code>.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Run <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy setup-hooks</code></strong> once to auto-configure the hook protocol in every agent installed on your machine. Claude Code, Codex, Kiro, and Gemini get hook support; Aider and OpenCode fall back to pattern matching.</p>
+        <p style="color:var(--subtext1);line-height:1.75;"><strong style="color:var(--text);">Dashboard, timeline, and smart routing:</strong> live view of every session's state, a chronological event log with six filters, and a one-keystroke jump to the tab that needs attention.</p>
+      </section>
+
+      <section id="code-review" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Agent Code Review Panel</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">A native panel that shows every file an agent touched during a session. Press <kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">Cmd</kbd>+<kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">Option</kbd>+<kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">R</kbd> to open.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Diff viewer</strong> — File tree with status icons (added, modified, deleted, renamed), unified diff with line numbers, and per-author chips when multiple agents edited the same session.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Inline comments</strong> — Click any line in the gutter to attach a comment. Submit all pending comments via the PTY; the agent formats the feedback as context and re-runs.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Accept or reject hunks</strong> — Granular control via <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">git apply --cached</code> to accept and <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">git apply --reverse</code> to reject. Queued serially so hunks never race.</p>
+        <p style="color:var(--subtext1);line-height:1.75;"><strong style="color:var(--text);">Keyboard-first</strong> — j, k, n, p, c, a, r, d shortcuts for navigation and actions. Cross-tab-safe: feedback always reaches the agent in the originating tab.</p>
+      </section>
+
+      <section id="markdown" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Native Markdown Workspace</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">A first-class Markdown panel that renders in a split pane next to your terminal. Written from scratch in pure Swift — no third-party parser, no network calls, no WebView dependency for the core renderer.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Editable source view</strong> — Undo / redo, AppKit Find bar, debounced auto-save, file watcher deduplication, and AppKit autosubstitutions disabled so Markdown syntax is never silently rewritten. <kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">Cmd</kbd>+<kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">B</kbd>, <kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">Cmd</kbd>+<kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">I</kbd>, <kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">Cmd</kbd>+<kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">K</kbd> for formatting.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Live preview</strong> — Mermaid diagrams, KaTeX math, GitHub Flavored Markdown, fifteen callout types, footnotes with hover previews, highlight / superscript / subscript, 200+ emoji shortcodes, reference-style links, setext headings, sortable tables, inline <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">[TOC]</code>, and syntax highlighting for 190+ languages via bundled Highlight.js.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Interactive preview</strong> — Clickable task list checkboxes that write back to the source, double-click to jump from preview to source, image lightbox, clipboard image paste, drag-and-drop image insertion, and one-click TSV copy for tables.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Workspace features</strong> — Outline sidebar, multi-file full-text search, file explorer with rename / move-to-trash / reveal-in-Finder, and live git blame and diff views.</p>
+        <p style="color:var(--subtext1);line-height:1.75;"><strong style="color:var(--text);">Export</strong> — Print to PDF, standalone HTML with inlined base64 images, slide deck split on horizontal rules, and copy as Markdown / HTML / RTF / plain text.</p>
+      </section>
+
+      <section id="quicklook" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">QuickLook Preview Extension</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">A system-integrated extension that renders <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">.md</code> files directly in macOS Finder's QuickLook. Select a Markdown file in Finder, press <kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">Space</kbd>, and see the fully rendered preview with Mermaid diagrams, KaTeX math, callouts, and syntax highlighting — all offline, all local.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">Built as a sandboxed <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">.appex</code> plugin following Apple's app extension conventions. Registered automatically when you install Cocxy.</p>
+      </section>
+
+      <section id="gpu" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">GPU Terminal Engine (CocxyCore)</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">A custom terminal engine built in Zig with a stable C ABI, running on Metal for GPU-accelerated rendering. Cross-platform ready for macOS and Linux.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Metal-accelerated rendering</strong> — 120 fps smooth scrolling with a GPU-backed glyph atlas. Per-surface locking serializes the PTY feed against the frame build to eliminate render race conditions. CVDisplayLink re-anchoring when the window moves between displays with different backing scales.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Font ligatures</strong> — OpenType ligatures via CoreText shaping with a configurable toggle and per-glyph caching.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Inline image protocols</strong> — Sixel and graphics-protocol image display with configurable memory limits, transfer toggles, and atlas management.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">GPU-accelerated regex search</strong> — Native scrollback search runs on the GPU with a Swift fallback for compatibility.</p>
+        <p style="color:var(--subtext1);line-height:1.75;"><strong style="color:var(--text);">Diagnostics</strong> — Inspect cursor visibility, alt-screen state, application cursor mode, semantic block count, and bridge mode from the CLI with <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy core-modes</code>.</p>
+      </section>
+
+      <section id="remote" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Remote Workspaces</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">SSH multiplexing with persistent sessions, proxy management, agent relay, and a remote daemon — all from the client, zero installation required on the server.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Persistent tmux-backed sessions</strong> survive SSH disconnects. Reconnect and re-attach with state intact.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">SSH multiplexing via OpenSSH ControlMaster</strong> shares a single authenticated TCP connection across every tab talking to the same host.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">SOCKS5 and HTTP CONNECT proxy</strong> with system-wide macOS integration, PAC generation, per-host exclusion lists, and health monitoring with auto-failover.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Agent relay</strong> — Multi-channel reverse tunnels with HMAC-SHA256 authentication, per-channel ACLs, JSON audit logs, token rotation, and Keychain persistence.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Remote daemon</strong> — POSIX shell daemon with three-level session fallback (tmux / screen / native PTY), persistent port forwards, file sync watching, and 24-hour auto-cleanup.</p>
+        <p style="color:var(--subtext1);line-height:1.75;"><strong style="color:var(--text);">SFTP browser</strong> and auto-reconnect with exponential backoff for dropped connections.</p>
+      </section>
+
+      <section id="browser" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Built-in Browser</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Preview dev servers, read docs, and inspect web output without switching apps. Isolated profiles for cookies and storage, integrated DevTools with Console / Network / DOM inspection, nested bookmarks, and downloads with progress. Dock it as an overlay panel or embed it side-by-side with your terminal in a split.</p>
+      </section>
+
+      <section id="web-terminal" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Web Terminal Embed</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Expose any local terminal over HTTP with a zero-dependency frontend. Tunable frame rate, on-demand full-frame refresh, per-terminal attach and detach, and connection-level events exposed to plugins for custom integrations. Useful for peer programming, remote assistance, or embedding a live terminal into an internal dashboard.</p>
+      </section>
+
+      <section id="plugins" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Plugin System</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">Event-driven plugin architecture. Drop a manifest and shell scripts into <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">~/.config/cocxy/plugins/</code> and respond to eight terminal events: session start / end, agent detected, agent state changed, command complete, tab created / closed, and directory changed.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">Scripts run in a sandboxed environment with a clean PATH, a timeout enforcement, and no privilege escalation. Manage with <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy plugin-list</code>, <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy plugin-enable</code>, and <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy plugin-disable</code>.</p>
+      </section>
+
+      <section id="per-project" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Per-Project Configuration</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Drop a <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">.cocxy.toml</code> file in any project root to override global settings per directory. Cocxy detects it when you <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cd</code> in and applies the overrides with hot-reload. Override fonts, padding, opacity, agent detection rules, and keyboard shortcuts on a per-project basis. Useful for projects with specific agent workflows or visual requirements.</p>
+      </section>
+
+      <section id="applescript" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">AppleScript Automation</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Full AppleScript vocabulary so you can script workflows and integrate Cocxy with Shortcuts, Automator, and Raycast. Create tabs, run commands, split panes, and read agent state from any automation framework that speaks OSA.</p>
+      </section>
+
+      <section id="shell" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Shell Integration</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">Native shell integration for zsh, bash, and fish. Installed automatically, no setup required. Designed to coexist with Prezto, Oh My Zsh, YADR, starship, and custom prompts without disturbing them.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">OSC 7 provides URI-encoded working-directory reporting; OSC 133 provides semantic prompts for command boundaries, duration, and exit codes. All environment variable injection restores your original <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">ZDOTDIR</code>, <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">HOME</code>, and <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">XDG_CONFIG_HOME</code> before loading your framework.</p>
+      </section>
+
+      <section id="privacy" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Zero Telemetry</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">Cocxy sends <strong style="color:var(--text);">zero data</strong> to any external server. No analytics, no crash reporting, no usage tracking, no ping-home. Your terminal activity never leaves your machine.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">This is a design constraint enforced by the code. The app requests no network entitlement beyond what Sparkle needs to check the update feed at cocxy.dev. You can verify with Little Snitch, LuLu, or any network monitor.</p>
+      </section>
+
+      <section id="cli" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">93-Command CLI Companion</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">The <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy</code> CLI exposes every major capability through a local Unix Domain Socket with per-UID authentication. Ninety-three commands covering tabs, splits, windows, sessions, agents, hooks, code review, Markdown, browser, remote, proxy, plugins, themes, timeline, diagnostics, and more.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">Everything visible in the UI is scriptable from the shell. Integrate Cocxy into CI scripts, IDE extensions, or any workflow that benefits from terminal automation.</p>
+      </section>
+
+      <!-- CTA -->
+      <section style="text-align:center;margin-top:4rem;padding:3rem 2rem;background:var(--surface0);border:1px solid var(--surface1);border-radius:16px;">
+        <h2 style="font-size:1.75rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Ready to try it?</h2>
+        <p style="color:var(--subtext0);margin-bottom:2rem;max-width:480px;margin-left:auto;margin-right:auto;">Free, open source, MIT licensed. macOS 14.0+ on Apple Silicon or Intel.</p>
+        <div style="display:inline-flex;gap:0.75rem;flex-wrap:wrap;justify-content:center;">
+          <a href="/#download" class="btn btn-primary">Download for macOS</a>
+          <a href="/getting-started.html" class="btn btn-secondary">Read the Docs</a>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <img src="/images/icon.png" alt="" width="24" height="24">
+          <span>Cocxy Terminal</span>
+        </div>
+        <nav class="footer-links" aria-label="Footer navigation">
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+          <a href="/releases.html">Changelog</a>
+          <a href="/getting-started.html">Docs</a>
+          <a href="/#download">Download</a>
+          <a href="https://github.com/salp2403/cocxy-terminal/security/policy" target="_blank" rel="noopener noreferrer">Security</a>
+        </nav>
+        <p class="footer-credit">Made by Said Arturo Lopez · Honduras</p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
