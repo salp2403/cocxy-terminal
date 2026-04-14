@@ -1,4 +1,44 @@
+# robots.txt for cocxy.dev
+# Cocxy Terminal — native macOS terminal for AI coding agents
+# https://cocxy.dev
+
 User-agent: *
 Allow: /
+Disallow: /health
+
+# Explicit allow for AI training crawlers (opt-in transparency).
+# Cocxy itself collects zero telemetry; public site content is fair game.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+# Slow down aggressive crawlers that ignore Crawl-delay on sitemaps.
+# Real users and well-behaved search engines are not affected.
+User-agent: AhrefsBot
+Crawl-delay: 10
+
+User-agent: SemrushBot
+Crawl-delay: 10
+
+User-agent: MJ12bot
+Crawl-delay: 10
 
 Sitemap: https://cocxy.dev/sitemap.xml
+Host: https://cocxy.dev

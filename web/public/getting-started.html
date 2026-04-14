@@ -2,28 +2,57 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Documentation - Cocxy Terminal</title>
+  <title>Documentation — Cocxy Terminal</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Cocxy Terminal documentation. Installation, configuration, keyboard shortcuts, agent detection, and more.">
-  <meta property="og:title" content="Documentation - Cocxy Terminal">
-  <meta property="og:description" content="Installation, configuration, keyboard shortcuts, agent detection, and more.">
-  <meta property="og:type" content="website">
+  <meta name="description" content="Cocxy Terminal documentation. Installation, configuration, keyboard shortcuts, agent detection, code review panel, Markdown workspace, remote workspaces, CLI reference, and more.">
+  <meta name="keywords" content="Cocxy docs, macOS terminal docs, AI agent detection, agent code review, Markdown workspace, SSH terminal, CLI reference, keyboard shortcuts">
+  <meta name="author" content="Said Arturo Lopez">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cocxy Terminal">
+  <meta property="og:title" content="Documentation — Cocxy Terminal">
+  <meta property="og:description" content="Installation, configuration, shortcuts, agent detection, code review panel, Markdown workspace, CLI reference, and troubleshooting.">
   <meta property="og:url" content="https://cocxy.dev/getting-started.html">
   <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Cocxy Terminal documentation">
   <meta property="og:locale" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Documentation - Cocxy Terminal">
-  <meta name="twitter:description" content="Installation, configuration, keyboard shortcuts, agent detection, and more.">
+  <meta name="twitter:site" content="@cocxyterminal">
+  <meta name="twitter:title" content="Documentation — Cocxy Terminal">
+  <meta name="twitter:description" content="Installation, configuration, shortcuts, agent detection, code review, Markdown workspace, CLI, and troubleshooting.">
   <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
   <link rel="canonical" href="https://cocxy.dev/getting-started.html">
   <link rel="icon" type="image/png" href="/images/icon.png">
   <link rel="apple-touch-icon" href="/images/icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://cocxy.dev/"},
+      {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://cocxy.dev/getting-started.html"}
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Cocxy Terminal Documentation",
+    "description": "Complete guide to installing, configuring, and using Cocxy Terminal on macOS.",
+    "author": {"@type": "Person", "name": "Said Arturo Lopez"},
+    "publisher": {"@type": "Organization", "name": "Cocxy", "logo": {"@type": "ImageObject", "url": "https://cocxy.dev/images/icon.png"}},
+    "inLanguage": "en-US",
+    "url": "https://cocxy.dev/getting-started.html"
+  }
+  </script>
   <style>
     /* ===== Docs Layout ===== */
     body { background: var(--bg-deep); }
@@ -425,8 +454,13 @@
     <div class="sidebar-group">
       <h3>Features</h3>
       <a href="#agent-detection" class="sidebar-link">Agent Detection</a>
+      <a href="#code-review" class="sidebar-link">Code Review Panel</a>
+      <a href="#markdown" class="sidebar-link">Markdown Workspace</a>
+      <a href="#quicklook" class="sidebar-link">QuickLook Extension</a>
       <a href="#browser" class="sidebar-link">Browser</a>
       <a href="#remote-workspaces" class="sidebar-link">Remote Workspaces</a>
+      <a href="#web-terminal" class="sidebar-link">Web Terminal</a>
+      <a href="#shell-integration" class="sidebar-link">Shell Integration</a>
       <a href="#per-project-config" class="sidebar-link">Per-Project Config</a>
       <a href="#applescript" class="sidebar-link">AppleScript</a>
       <a href="#plugin-system" class="sidebar-link">Plugin System</a>
@@ -440,8 +474,10 @@
       <h3>Agent Integrations</h3>
       <a href="#agent-claude" class="sidebar-link sub">Claude Code</a>
       <a href="#agent-codex" class="sidebar-link sub">Codex CLI</a>
-      <a href="#agent-aider" class="sidebar-link sub">Aider</a>
       <a href="#agent-gemini" class="sidebar-link sub">Gemini CLI</a>
+      <a href="#agent-aider" class="sidebar-link sub">Aider</a>
+      <a href="#agent-kiro" class="sidebar-link sub">Kiro</a>
+      <a href="#agent-opencode" class="sidebar-link sub">OpenCode</a>
       <a href="#agent-custom" class="sidebar-link sub">Custom Agents</a>
     </div>
     <div class="sidebar-group">
@@ -458,7 +494,7 @@
 
     <!-- Getting Started -->
     <h1 id="getting-started">Getting Started</h1>
-    <p>Cocxy Terminal is a native macOS terminal built for AI agent workflows. Zero telemetry, GPU-accelerated rendering, and first-class support for Claude Code, Codex, Gemini CLI, Aider, and more.</p>
+    <p>Cocxy Terminal is a native macOS terminal built for AI agent workflows. Zero telemetry, GPU-accelerated rendering, an inline agent code review panel, a full native Markdown workspace, and first-class support for Claude Code, Codex CLI, Gemini CLI, Aider, Kiro, and OpenCode.</p>
 
     <h3>System Requirements</h3>
     <ul>
@@ -499,7 +535,7 @@
     <p>The vertical sidebar on the left is your workspace. Each entry is a <strong>tab</strong> with its own terminal session. Tabs show the current directory, git branch, and agent state in real time.</p>
 
     <h3>Agent Detection</h3>
-    <p>Cocxy automatically detects AI agents running in your terminal. When you launch <code>claude</code>, <code>codex</code>, <code>aider</code>, or <code>gemini</code>, the tab indicator changes to show the agent's state: launching, working, waiting for input, finished, or error.</p>
+    <p>Cocxy automatically detects AI agents running in your terminal. When you launch <code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>aider</code>, <code>kiro</code>, or <code>opencode</code>, the tab indicator changes to show the agent's state: launching, working, waiting for input, finished, or error.</p>
 
     <h3>Splits</h3>
     <p>Any tab can be split horizontally or vertically to show multiple terminal sessions or panels (browser, markdown preview) side by side.</p>
@@ -604,13 +640,16 @@ restore-on-launch = true</code></pre>
     <table class="docs-table">
       <tr><th>Shortcut</th><th>Action</th></tr>
       <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></td><td>Command Palette</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td><td>Browser panel</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd></td><td>Remote Workspaces</td></tr>
+      <tr><td><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>R</kbd></td><td>Agent Code Review Panel</td></tr>
       <tr><td><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>A</kbd></td><td>Agent Dashboard</td></tr>
       <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></td><td>Agent Timeline</td></tr>
       <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></td><td>Smart Routing (Quick Switch)</td></tr>
       <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd></td><td>Notifications panel</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>F</kbd></td><td>Search terminal / Find in browser</td></tr>
+      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td><td>Browser panel</td></tr>
+      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd></td><td>Remote Workspaces</td></tr>
+      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd></td><td>Markdown outline sidebar (when active)</td></tr>
+      <tr><td><kbd>Cmd</kbd>+<kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd></td><td>Markdown source / preview / split mode</td></tr>
+      <tr><td><kbd>Cmd</kbd>+<kbd>F</kbd></td><td>Search terminal / Find in browser / Find in Markdown</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Dismiss overlay</td></tr>
     </table>
 
@@ -629,11 +668,11 @@ restore-on-launch = true</code></pre>
 
     <!-- Agent Detection -->
     <h2 id="agent-detection">Agent Detection</h2>
-    <p>Cocxy uses a 4-layer detection engine to identify AI agents running in your terminal. Each layer cross-validates with the others for high-confidence results:</p>
+    <p>Cocxy uses a multi-layer detection engine to identify AI agents running in your terminal. Each layer cross-validates with the others for high-confidence results:</p>
     <ol>
-      <li><strong>Hook Events</strong> (highest priority) — Claude Code hook integration streams 12 event types in real time: tool calls, responses, session lifecycle.</li>
-      <li><strong>OSC Sequences</strong> — Shell integration markers (OSC 133, OSC 7, OSC 99) for working directory and prompt detection.</li>
-      <li><strong>Pattern Matching</strong> — Regex patterns matched against terminal output to detect agent launch commands and prompts.</li>
+      <li><strong>Hook Events</strong> (highest priority) — Multi-agent hook integration streams events from Claude Code, Codex CLI, Gemini CLI, and Kiro in real time: tool calls, responses, session lifecycle, subagent spawn, and error signals. Run <code>cocxy setup-hooks</code> to auto-configure hooks across every installed agent.</li>
+      <li><strong>OSC Sequences</strong> — Shell integration markers (OSC 133, OSC 7) for working directory and command boundary detection.</li>
+      <li><strong>Pattern Matching</strong> — Regex patterns matched against terminal output to detect agent launch commands, waiting prompts, completion markers, and errors.</li>
       <li><strong>Timing Heuristics</strong> (fallback) — Detects idle timeouts and sustained output patterns when the other layers don't match.</li>
     </ol>
 
@@ -649,19 +688,28 @@ restore-on-launch = true</code></pre>
     </table>
 
     <h3 id="agent-claude">Claude Code</h3>
-    <p>Claude Code has first-class integration via hooks. Cocxy receives real-time events (session start/end, tool use, errors) for accurate state tracking. The tab sidebar shows the current tool being used (e.g., "Read: main.swift").</p>
-    <p>Detection patterns: <code>^claude\b</code>, <code>^claude-code\b</code>, <code>npx claude</code></p>
+    <p>Claude Code has first-class integration through the full hook event set. Cocxy receives real-time events (session start/end, tool use, subagent spawn, errors) for accurate state tracking. The tab sidebar shows the current tool being used (for example, "Read: main.swift"). OSC 7 and OSC 133 provide the working directory and prompt boundaries.</p>
+    <p>Detection patterns: <code>^claude\b</code>, <code>^claude-code\b</code>, <code>npx claude</code>, <code>Claude Code v[0-9]</code>, <code>Claude (Max|Pro)</code></p>
 
     <h3 id="agent-codex">Codex CLI</h3>
-    <p>Detection patterns: <code>^codex\b</code></p>
-
-    <h3 id="agent-aider">Aider</h3>
-    <p>Aider has a longer idle timeout (10s) because it takes longer to respond.</p>
-    <p>Detection patterns: <code>^aider\b</code>, <code>^python.*aider</code></p>
+    <p>Codex CLI uses the same hook protocol as Claude Code (its implementation reads hooks from <code>~/.codex/hooks.json</code>). Detection falls back to pattern matching for the launch banner and waiting prompts.</p>
+    <p>Detection patterns: <code>^codex\b</code>, <code>Welcome to Codex</code>, <code>OpenAI's command-line coding agent</code></p>
 
     <h3 id="agent-gemini">Gemini CLI</h3>
-    <p>Gemini CLI has an 8-second idle timeout for slower initial responses.</p>
-    <p>Detection patterns: <code>^gemini\b</code></p>
+    <p>Gemini CLI exposes an 11-event hook system whose events are mapped to Cocxy's normalized protocol at ingestion time. Has an 8-second idle timeout for slower initial responses.</p>
+    <p>Detection patterns: <code>^gemini\b</code>, <code>Gemini CLI v\d+</code></p>
+
+    <h3 id="agent-aider">Aider</h3>
+    <p>Aider is detected through pattern matching only (it does not expose a hook system). It has a longer 10-second idle timeout because it takes longer to respond.</p>
+    <p>Detection patterns: <code>^aider(?:\s|$)</code>, <code>^python.*aider</code>, <code>Aider v\d+\.\d+</code>, <code>Main model:.*edit format</code></p>
+
+    <h3 id="agent-kiro">Kiro</h3>
+    <p>Kiro supports hooks via its five-event system (<code>preToolUse</code>, <code>postToolUse</code>, <code>agentSpawn</code>, <code>stop</code>, <code>userPromptSubmit</code>). Hook support is the primary detection layer; pattern matching is the fallback.</p>
+    <p>Detection patterns: <code>^kiro\b</code>, <code>^kiro-cli\b</code>, <code>Welcome to Kiro</code></p>
+
+    <h3 id="agent-opencode">OpenCode</h3>
+    <p>OpenCode is detected through pattern matching. Hooks are not wired because the agent's plugin system is more invasive to integrate, but detection is reliable through the launch banner and prompt patterns.</p>
+    <p>Detection patterns: <code>^opencode\b</code>, <code>Loading plugins</code></p>
 
     <h3 id="agent-custom">Custom Agents</h3>
     <p>Add your own agents by editing <code>~/.config/cocxy/agents.toml</code>:</p>
@@ -676,6 +724,138 @@ error-patterns = ['Error:']
 finished-indicators = ['^\$\s*$']
 idle-timeout-override = 8</code></pre>
     </div>
+
+    <!-- Code Review Panel -->
+    <h2 id="code-review">Agent Code Review Panel</h2>
+    <p>A native panel to review every change an AI coding agent made during a session. Comment inline, submit feedback back to the agent, and accept or reject individual hunks — all without leaving Cocxy.</p>
+
+    <h3>Opening the Panel</h3>
+    <ul>
+      <li><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>R</kbd> — Toggle the panel for the active tab</li>
+      <li><code>cocxy review</code> — Toggle via the CLI</li>
+      <li><strong>Auto-trigger</strong> — The panel opens automatically when an agent session ends (configurable via <code>[code-review] auto-show-on-session-end</code>)</li>
+    </ul>
+
+    <h3>Reviewing Changes</h3>
+    <ul>
+      <li><strong>File tree</strong> — Shows every file the agent touched, with status icons (added, modified, deleted, renamed) and per-author chips when multiple agents edited the same session</li>
+      <li><strong>Unified diff</strong> — Rendered with line numbers and syntax-aware colors</li>
+      <li><strong>Inline comments</strong> — Click any line in the gutter, type a comment, press <kbd>Enter</kbd>; a comment bubble anchors under that line</li>
+      <li><strong>Stats toolbar</strong> — Live counts of pending comments, files changed, hunks accepted or rejected</li>
+    </ul>
+
+    <h3>Feedback Loop</h3>
+    <p>Click <strong>Submit N Comments</strong> (or press <kbd>Cmd</kbd>+<kbd>Enter</kbd>) and the formatted feedback is sent through the agent's PTY. The agent picks up the corrections and re-runs the task. The panel refreshes automatically as the agent produces new changes.</p>
+
+    <h3>Accept or Reject Hunks</h3>
+    <ul>
+      <li><strong>Accept</strong> — Stages the hunk with <code>git apply --cached</code>, keeping the agent's change</li>
+      <li><strong>Reject</strong> — Reverses the hunk with <code>git apply --reverse</code>, discarding it from the working tree</li>
+      <li>All operations are serialized through a dedicated queue to prevent races</li>
+    </ul>
+
+    <h3>Keyboard Navigation</h3>
+    <table class="docs-table">
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Next / previous hunk</td></tr>
+      <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>Next / previous file</td></tr>
+      <tr><td><kbd>c</kbd></td><td>Start a comment on the current line</td></tr>
+      <tr><td><kbd>a</kbd> / <kbd>r</kbd></td><td>Accept / reject the current hunk</td></tr>
+      <tr><td><kbd>d</kbd></td><td>Toggle between session-diff mode and working-tree mode</td></tr>
+      <tr><td><kbd>Cmd</kbd>+<kbd>Enter</kbd></td><td>Submit all pending comments</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close the panel</td></tr>
+    </table>
+
+    <h3>CLI Commands</h3>
+    <pre><code>cocxy review                     # Toggle the panel
+cocxy review --refresh           # Force refresh diffs
+cocxy review --submit            # Submit all pending comments to the agent
+cocxy review --stats             # Print stats for the active session</code></pre>
+
+    <!-- Markdown Workspace -->
+    <h2 id="markdown">Markdown Workspace</h2>
+    <p>A first-class native Markdown panel that renders in a split pane next to your terminal. Written from scratch in pure Swift — no external parser dependency, no network calls.</p>
+
+    <h3>Opening Markdown</h3>
+    <ul>
+      <li>Drag a <code>.md</code> file onto any tab or split pane</li>
+      <li>Use the Command Palette: <strong>Open Markdown</strong></li>
+      <li>Double-click a <code>.md</code> file in the file explorer sidebar</li>
+    </ul>
+
+    <h3>View Modes</h3>
+    <ul>
+      <li><kbd>Cmd</kbd>+<kbd>1</kbd> — Source (editable plain text with syntax highlighting)</li>
+      <li><kbd>Cmd</kbd>+<kbd>2</kbd> — Preview (WKWebView with Mermaid, KaTeX, callouts, footnotes)</li>
+      <li><kbd>Cmd</kbd>+<kbd>3</kbd> — Split (source + preview side by side with scroll sync)</li>
+    </ul>
+
+    <h3>Editor</h3>
+    <ul>
+      <li><kbd>Cmd</kbd>+<kbd>B</kbd> — Toggle <strong>bold</strong> on the selection</li>
+      <li><kbd>Cmd</kbd>+<kbd>I</kbd> — Toggle <em>italic</em></li>
+      <li><kbd>Cmd</kbd>+<kbd>K</kbd> — Wrap in a Markdown link</li>
+      <li>Native AppKit Find bar with <kbd>Cmd</kbd>+<kbd>F</kbd></li>
+      <li>Debounced auto-save (150 ms) with atomic writes</li>
+      <li>File watcher dedup by content — no reload loops when the editor saves</li>
+      <li>All AppKit autosubstitutions disabled so Markdown syntax is never rewritten</li>
+    </ul>
+
+    <h3>Rendering</h3>
+    <ul>
+      <li>GitHub Flavored Markdown (tables, task lists, strikethrough, autolinks)</li>
+      <li>Reference-style links and setext headings</li>
+      <li>Fifteen callout types (<code>[!note]</code>, <code>[!tip]</code>, <code>[!warning]</code>, <code>[!important]</code>, etc.)</li>
+      <li>Footnotes with hover previews</li>
+      <li>Highlight (<code>==text==</code>), superscript (<code>^text^</code>), subscript (<code>~text~</code>)</li>
+      <li>200+ emoji shortcodes (<code>:rocket:</code>, <code>:warning:</code>)</li>
+      <li>Mermaid diagrams and KaTeX math (bundled offline, zero network)</li>
+      <li>Syntax highlighting for 190+ languages via Highlight.js (bundled)</li>
+      <li>Sortable tables with three-state (none / asc / desc) numeric-aware sort</li>
+      <li>Inline <code>[TOC]</code> placeholder generates a table of contents</li>
+    </ul>
+
+    <h3>Sidebar and Search</h3>
+    <ul>
+      <li><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> — Toggle the outline / files / search sidebar</li>
+      <li><strong>Outline</strong> — Heading tree navigation (click to jump)</li>
+      <li><strong>Files</strong> — Browse the workspace's Markdown files with rename, move-to-trash, reveal-in-Finder</li>
+      <li><strong>Search</strong> — Multi-file full-text search with debounced results</li>
+    </ul>
+
+    <h3>Git Integration</h3>
+    <ul>
+      <li><strong>Blame</strong> — Inline line-by-line authorship and commit history</li>
+      <li><strong>Diff</strong> — Side-by-side working-tree vs last commit view</li>
+    </ul>
+
+    <h3>Export and Copy</h3>
+    <ul>
+      <li>Export to PDF via the system print dialog</li>
+      <li>Export to standalone HTML with inlined images as base64 data URIs</li>
+      <li>Slide exporter: split the document on horizontal rules, preserve original formatting, embed Mermaid and KaTeX inline</li>
+      <li>Copy as Markdown, HTML, rich text (RTF), or plain text</li>
+    </ul>
+
+    <h3>Interactive Preview</h3>
+    <ul>
+      <li><strong>Clickable checkboxes</strong> — Toggle task list checkboxes directly in the preview; changes write back to the source</li>
+      <li><strong>Click-to-source</strong> — Double-click any block to jump to its line in the source editor</li>
+      <li><strong>Image lightbox</strong> — Click any image to expand</li>
+      <li><strong>Paste PNG or TIFF</strong> — Cmd+V pastes image data from the clipboard directly into the document</li>
+      <li><strong>Drag and drop</strong> — Drop an image file to insert an inline reference</li>
+      <li><strong>Copy table as TSV</strong> — One-click copy for pasting into spreadsheets</li>
+    </ul>
+
+    <!-- QuickLook -->
+    <h2 id="quicklook">QuickLook Preview Extension</h2>
+    <p>A system-integrated QuickLook extension that renders <code>.md</code> files directly in macOS Finder. Select a Markdown file in Finder and press <kbd>Space</kbd>.</p>
+    <ul>
+      <li>Same renderer as the in-app preview: Mermaid, KaTeX, callouts, footnotes, Highlight.js</li>
+      <li>Bundled offline with zero network dependency</li>
+      <li>Sandboxed as an <code>.appex</code> plugin following macOS security conventions</li>
+      <li>Registered automatically when you install Cocxy; verify with <code>cocxy hooks install</code> which also checks QuickLook registration</li>
+    </ul>
 
     <!-- Browser -->
     <h2 id="browser">Browser</h2>
@@ -740,6 +920,49 @@ idle-timeout-override = 8</code></pre>
       <li><strong>Reconnect</strong> — After an SSH drop, your tmux sessions are still alive. Reconnect and re-attach</li>
       <li><strong>Session UI</strong> — Visual panel showing all remote sessions with status, window count, and controls</li>
       <li><strong>CLI</strong> — <code>cocxy remote-list</code>, <code>cocxy remote-connect &lt;name&gt;</code>, <code>cocxy remote-status</code></li>
+    </ul>
+
+    <h3>SOCKS5 + HTTP CONNECT Proxy</h3>
+    <p>A native proxy that tunnels traffic through a connected SSH host. System-wide macOS integration, PAC generation, per-host exclusion lists, and health monitoring with auto-failover to a backup host.</p>
+
+    <h3>Agent Relay</h3>
+    <p>Multi-channel reverse tunnels with HMAC-SHA256 authentication, per-channel ACLs, audit logs (JSON lines), token rotation, and Keychain persistence. Useful for exposing a local agent to a remote tool chain securely.</p>
+
+    <h3>Remote Daemon</h3>
+    <p>A POSIX shell daemon (no compilation required on the server) with three-level session fallback (tmux / screen / native PTY), persistent port forwards managed from the daemon, file sync watching, and 24-hour auto-cleanup for orphan sessions.</p>
+
+    <!-- Web Terminal -->
+    <h2 id="web-terminal">Web Terminal Embed</h2>
+    <p>Expose any local Cocxy terminal over HTTP with a zero-dependency frontend. Useful for peer programming, remote assistance, or embedding a live terminal into an internal dashboard.</p>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>cocxy web-start --port 8080         # Expose the active terminal on http://localhost:8080
+cocxy web-stop                       # Stop the web server
+cocxy web-status                     # Show active connections and frame rate</code></pre>
+    </div>
+    <ul>
+      <li>Tunable frame rate (default 30 fps, up to 60 fps)</li>
+      <li>On-demand full-frame refresh from the server</li>
+      <li>Per-terminal attach and detach</li>
+      <li>Plugin events for connection open / close</li>
+    </ul>
+
+    <!-- Shell Integration -->
+    <h2 id="shell-integration">Shell Integration</h2>
+    <p>Native shell integration for zsh, bash, and fish. Installed automatically — no setup required. Designed to coexist safely with Prezto, Oh My Zsh, YADR, starship, and any custom prompt.</p>
+
+    <h3>What It Provides</h3>
+    <ul>
+      <li><strong>OSC 7</strong> — Working directory reporting with URI encoding for paths with spaces and non-ASCII characters</li>
+      <li><strong>OSC 133</strong> — Semantic prompts for command boundaries, duration tracking, and exit code reporting</li>
+      <li><strong>Safe env injection</strong> — Cocxy's integration scripts restore your original <code>ZDOTDIR</code>, <code>HOME</code>, and <code>XDG_CONFIG_HOME</code> before loading your framework, so nothing about your existing setup changes</li>
+    </ul>
+
+    <h3>Per-Shell Behavior</h3>
+    <ul>
+      <li><strong>zsh</strong> — Integration via <code>ZDOTDIR</code> pointing at Cocxy's shim that bootstraps your real config. Works with Prezto, Oh My Zsh, and starship out of the box.</li>
+      <li><strong>bash</strong> — Integration via <code>HOME</code> pointing at a shim that sources your real <code>.bashrc</code>. Preserves any existing <code>DEBUG</code> trap and <code>PROMPT_COMMAND</code>.</li>
+      <li><strong>fish</strong> — Integration via <code>XDG_CONFIG_HOME</code> pointing at Cocxy's fish config that then sources yours. Uses fish's native <code>--on-variable PWD</code> hook, no DEBUG trap required.</li>
     </ul>
 
     <!-- Per-Project Config -->
@@ -894,70 +1117,81 @@ restore-on-launch = true</code></pre>
 
     <!-- CLI Companion -->
     <h2 id="cli-companion">CLI Companion</h2>
-    <p>The <code>cocxy</code> CLI provides 65 commands for scripting and automation via a local Unix domain socket.</p>
+    <p>The <code>cocxy</code> CLI provides 93 commands for scripting and automation via a local Unix Domain Socket with per-UID authentication.</p>
     <div class="code-wrap">
       <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
       <pre><code># Tab management
 cocxy new-tab --dir ~/projects/my-app
 cocxy list-tabs
-cocxy tab duplicate
-cocxy tab pin
+cocxy tab-duplicate
+cocxy tab-pin
 
-# Agent hooks
-cocxy hooks install          # Configure Claude Code integration
+# Agent hooks (one command sets up every installed agent)
+cocxy setup-hooks
+cocxy hooks install
+
+# Agent code review
+cocxy review                     # Toggle the panel
+cocxy review --refresh           # Force diff refresh
+cocxy review --submit            # Send pending comments to the agent
+cocxy review --stats             # Print review stats
 
 # Window and session management
-cocxy window list
-cocxy session save my-workspace
-cocxy session restore my-workspace
+cocxy window-list
+cocxy session-save my-workspace
+cocxy session-restore my-workspace
 
 # Panels and dashboards
-cocxy dashboard toggle
-cocxy timeline export &lt;tab-id&gt; --format json
+cocxy dashboard-toggle
+cocxy timeline-export --format json &gt; events.json
 
 # Remote workspaces
-cocxy remote list
-cocxy remote connect prod-web
-cocxy remote status
+cocxy remote-list
+cocxy remote-connect prod-web
+cocxy remote-status
+
+# Web terminal embed
+cocxy web-start --port 8080
+cocxy web-status
+cocxy web-stop
 
 # Plugins
-cocxy plugin list
-cocxy plugin enable my-plugin
+cocxy plugin-list
+cocxy plugin-enable my-plugin
 
 # Configuration and themes
-cocxy theme set catppuccin-mocha
-cocxy config list
-cocxy config reload
+cocxy theme-set catppuccin-mocha
+cocxy config-list
+cocxy config-reload
 
-# Output and notifications
+# Terminal diagnostics
+cocxy core-modes                 # Dump alt-screen, cursor, semantic state
 cocxy capture-pane
-cocxy notification list
+cocxy send --stdin               # Read multiline / escape-safe input from stdin
 
-# Run cocxy help for the full list of 65 commands</code></pre>
+# Run cocxy help for the full list of 93 commands</code></pre>
     </div>
-    <p>The CLI is automatically installed at <code>/opt/homebrew/bin/cocxy</code> when you install via Homebrew, or at <code>~/.local/bin/cocxy</code> via the app bundle.</p>
+    <p>The CLI is automatically installed at <code>/opt/homebrew/bin/cocxy</code> when you install via Homebrew, or symlinked from the app bundle at <code>~/.local/bin/cocxy</code>.</p>
 
     <!-- Themes -->
     <h2 id="themes">Themes</h2>
-    <p>Cocxy ships with a curated set of themes and supports custom themes via Cocxy-compatible TOML files.</p>
+    <p>Cocxy ships with a curated set of themes and supports custom themes via Cocxy-compatible TOML files. Drop a <code>.toml</code> theme into <code>~/.config/cocxy/themes/</code> and it appears immediately in the theme picker.</p>
     <h3>Built-in Themes</h3>
     <ul>
-      <li>Catppuccin Mocha (default)</li>
-      <li>Catppuccin Latte (light)</li>
+      <li>Catppuccin Mocha (default dark)</li>
+      <li>Catppuccin Latte (default light)</li>
       <li>One Dark</li>
-      <li>Dracula</li>
-      <li>Nord</li>
-      <li>Gruvbox Dark</li>
-      <li>Tokyo Night</li>
       <li>Solarized Dark</li>
+      <li>Solarized Light</li>
     </ul>
     <p>Set your theme in <code>config.toml</code>:</p>
     <div class="code-wrap">
       <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[appearance]
-theme = "one-dark"</code></pre>
+      <pre><code>[theme]
+name = "catppuccin-mocha"
+light-theme = "catppuccin-latte"</code></pre>
     </div>
-    <p>Cocxy automatically switches between dark and light themes based on macOS appearance settings.</p>
+    <p>Cocxy automatically switches between the <code>name</code> (dark) and <code>light-theme</code> pair based on macOS appearance settings. Live hot-reload applies theme changes without recreating terminal surfaces.</p>
 
     <!-- agents.toml Reference -->
     <h2 id="agents-toml">agents.toml Reference</h2>
