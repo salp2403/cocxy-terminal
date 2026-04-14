@@ -486,16 +486,18 @@ extension MainWindowController {
         viewModel.refreshDiffs()
 
         codeReviewHostingView?.removeFromSuperview()
-        let swiftUIView = CodeReviewPanelView(
-            viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissCodeReview() }
+        let panelWidth = clampedCodeReviewPanelWidth(
+            preferredCodeReviewPanelWidth,
+            containerWidth: overlayContainer.bounds.width
         )
+        codeReviewPanelWidth = panelWidth
+        let swiftUIView = makeCodeReviewPanelView(viewModel: viewModel, panelWidth: panelWidth)
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         hostingView.frame = NSRect(
-            x: overlayContainer.bounds.width - CodeReviewPanelView.panelWidth,
+            x: overlayContainer.bounds.width - panelWidth,
             y: 0,
-            width: CodeReviewPanelView.panelWidth,
+            width: panelWidth,
             height: overlayContainer.bounds.height
         )
         hostingView.autoresizingMask = [.height, .minXMargin]
@@ -533,6 +535,19 @@ extension MainWindowController {
                 self?.focusActiveTerminalSurface()
             }
         })
+    }
+
+    func adjustCodeReviewPanelWidth(by delta: CGFloat) {
+        setCodeReviewPanelWidth(preferredCodeReviewPanelWidth + delta)
+    }
+
+    func setCodeReviewPanelWidth(_ proposedWidth: CGFloat) {
+        updatePreferredCodeReviewPanelWidth(proposedWidth)
+        if isCodeReviewVisible {
+            layoutRightDockedAgentPanels()
+        } else {
+            codeReviewPanelWidth = preferredCodeReviewPanelWidth
+        }
     }
 
     func resolveCodeReviewViewModel() -> CodeReviewPanelViewModel {
@@ -991,7 +1006,7 @@ extension MainWindowController {
         })
     }
 
-    private func layoutRightDockedAgentPanels() {
+    func layoutRightDockedAgentPanels() {
         guard let overlayContainer = overlayContainerView else { return }
 
         struct DockedPanel {
@@ -999,10 +1014,19 @@ extension MainWindowController {
             let view: NSView
         }
 
+        if isCodeReviewVisible {
+            let reviewWidth = clampedCodeReviewPanelWidth(
+                preferredCodeReviewPanelWidth,
+                containerWidth: overlayContainer.bounds.width
+            )
+            codeReviewPanelWidth = reviewWidth
+            syncCodeReviewPanelRootView(panelWidth: reviewWidth)
+        }
+
         let visiblePanels: [DockedPanel] = [
             isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!) : nil,
             isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!) : nil,
-            isCodeReviewVisible ? DockedPanel(width: CodeReviewPanelView.panelWidth, view: codeReviewHostingView!) : nil
+            isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!) : nil
         ].compactMap { $0 }
 
         var currentX = overlayContainer.bounds.width
@@ -1015,6 +1039,70 @@ extension MainWindowController {
                 height: overlayContainer.bounds.height
             )
         }
+    }
+
+    private func makeCodeReviewPanelView(
+        viewModel: CodeReviewPanelViewModel,
+        panelWidth: CGFloat
+    ) -> CodeReviewPanelView {
+        let minimumWidth = minimumCodeReviewPanelWidth()
+        let maximumWidth = maximumCodeReviewPanelWidth()
+
+        return CodeReviewPanelView(
+            viewModel: viewModel,
+            panelWidth: panelWidth,
+            canDecreaseWidth: panelWidth > minimumWidth + 1,
+            canIncreaseWidth: panelWidth < maximumWidth - 1,
+            onDecreaseWidth: { [weak self] in
+                self?.adjustCodeReviewPanelWidth(by: -CodeReviewPanelView.panelResizeStep)
+            },
+            onIncreaseWidth: { [weak self] in
+                self?.adjustCodeReviewPanelWidth(by: CodeReviewPanelView.panelResizeStep)
+            },
+            onDismiss: { [weak self] in
+                self?.dismissCodeReview()
+            }
+        )
+    }
+
+    private func syncCodeReviewPanelRootView(panelWidth: CGFloat) {
+        guard isCodeReviewVisible,
+              let hostingView = codeReviewHostingView,
+              let viewModel = codeReviewViewModel else {
+            return
+        }
+        hostingView.rootView = makeCodeReviewPanelView(viewModel: viewModel, panelWidth: panelWidth)
+    }
+
+    private func minimumCodeReviewPanelWidth(containerWidth: CGFloat? = nil) -> CGFloat {
+        let effectiveContainerWidth = containerWidth ?? overlayContainerView?.bounds.width ?? CodeReviewPanelView.defaultPanelWidth
+        let occupiedSiblingWidth =
+            (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
+            (isDashboardVisible ? DashboardPanelView.panelWidth : 0)
+        let reservedTerminalWidth: CGFloat = 280
+        let adaptiveMinimum = max(360, effectiveContainerWidth - occupiedSiblingWidth - reservedTerminalWidth)
+        return min(CodeReviewPanelView.minimumPanelWidth, adaptiveMinimum)
+    }
+
+    private func maximumCodeReviewPanelWidth(containerWidth: CGFloat? = nil) -> CGFloat {
+        let effectiveContainerWidth = containerWidth ?? overlayContainerView?.bounds.width ?? CodeReviewPanelView.defaultPanelWidth
+        let occupiedSiblingWidth =
+            (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
+            (isDashboardVisible ? DashboardPanelView.panelWidth : 0)
+        let reservedTerminalWidth: CGFloat = 280
+        let minimumWidth = minimumCodeReviewPanelWidth(containerWidth: effectiveContainerWidth)
+        let adaptiveMaximum = effectiveContainerWidth - occupiedSiblingWidth - reservedTerminalWidth
+        return max(minimumWidth, min(CodeReviewPanelView.maximumPanelWidth, adaptiveMaximum))
+    }
+
+    private func clampedCodeReviewPanelWidth(
+        _ proposedWidth: CGFloat? = nil,
+        containerWidth: CGFloat? = nil
+    ) -> CGFloat {
+        let minimumWidth = minimumCodeReviewPanelWidth(containerWidth: containerWidth)
+        let maximumWidth = maximumCodeReviewPanelWidth(containerWidth: containerWidth)
+        let requestedWidth = proposedWidth ?? codeReviewPanelWidth
+        return min(max(requestedWidth, minimumWidth), maximumWidth)
     }
 
     static func saveExportedData(_ data: Data, suggestedName: String) {

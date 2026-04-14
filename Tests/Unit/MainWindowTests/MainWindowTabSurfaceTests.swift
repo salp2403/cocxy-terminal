@@ -302,6 +302,185 @@ final class TabSurfaceMappingTests: XCTestCase {
         XCTAssertNotEqual(bridge.sentTexts.last?.surface, surfaceB)
     }
 
+    func testCodeReviewPanelCanGrowWiderThanDefaultWidth() {
+        withIsolatedCodeReviewPanelWidthPreference {
+            let bridge = MockTerminalEngine()
+            let controller = MainWindowController(bridge: bridge)
+            controller.showWindow(nil)
+            controller.window?.setContentSize(NSSize(width: 1400, height: 900))
+
+            let viewModel = CodeReviewPanelViewModel(
+                tracker: SessionDiffTrackerImpl(),
+                hookEventReceiver: nil,
+                directDiffLoader: { _, _, _ in [] }
+            )
+            controller.injectedCodeReviewViewModel = viewModel
+
+            controller.showCodeReviewPanel()
+            let initialWidth = controller.codeReviewHostingView?.frame.width ?? 0
+
+            controller.adjustCodeReviewPanelWidth(by: CodeReviewPanelView.panelResizeStep)
+
+            let widenedWidth = controller.codeReviewHostingView?.frame.width ?? 0
+            XCTAssertGreaterThan(
+                widenedWidth,
+                initialWidth,
+                "The code review panel should offer a real way to widen the review surface"
+            )
+            XCTAssertEqual(controller.codeReviewPanelWidth, widenedWidth)
+        }
+    }
+
+    func testCodeReviewPanelResizeKeepsThePanelDockedToTheRightEdge() {
+        withIsolatedCodeReviewPanelWidthPreference {
+            let bridge = MockTerminalEngine()
+            let controller = MainWindowController(bridge: bridge)
+            controller.showWindow(nil)
+            controller.window?.setContentSize(NSSize(width: 1400, height: 900))
+
+            let viewModel = CodeReviewPanelViewModel(
+                tracker: SessionDiffTrackerImpl(),
+                hookEventReceiver: nil,
+                directDiffLoader: { _, _, _ in [] }
+            )
+            controller.injectedCodeReviewViewModel = viewModel
+
+            controller.showCodeReviewPanel()
+            controller.adjustCodeReviewPanelWidth(by: CodeReviewPanelView.panelResizeStep * 2)
+
+            guard let overlayContainer = controller.overlayContainerView,
+                  let hostingView = controller.codeReviewHostingView else {
+                XCTFail("Expected the code review hosting view to exist")
+                return
+            }
+
+            XCTAssertEqual(
+                hostingView.frame.maxX,
+                overlayContainer.bounds.width,
+                accuracy: 0.5,
+                "Resizing the review panel must keep it docked to the right edge"
+            )
+        }
+    }
+
+    func testCodeReviewPanelRestoresPreferredWidthAfterWindowResizeRoundTrip() {
+        withIsolatedCodeReviewPanelWidthPreference {
+            let bridge = MockTerminalEngine()
+            let controller = MainWindowController(bridge: bridge)
+            controller.showWindow(nil)
+            controller.window?.setContentSize(NSSize(width: 1400, height: 900))
+
+            let viewModel = CodeReviewPanelViewModel(
+                tracker: SessionDiffTrackerImpl(),
+                hookEventReceiver: nil,
+                directDiffLoader: { _, _, _ in [] }
+            )
+            controller.injectedCodeReviewViewModel = viewModel
+
+            controller.showCodeReviewPanel()
+            controller.setCodeReviewPanelWidth(880)
+            XCTAssertEqual(controller.preferredCodeReviewPanelWidth, 880, accuracy: 0.5)
+
+            controller.window?.setContentSize(NSSize(width: 900, height: 700))
+            controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+            XCTAssertLessThan(controller.codeReviewPanelWidth, 880)
+
+            controller.window?.setContentSize(NSSize(width: 1400, height: 900))
+            controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+
+            XCTAssertEqual(
+                controller.codeReviewHostingView?.frame.width ?? 0,
+                880,
+                accuracy: 0.5,
+                "Resizing the window back out should restore the user's preferred review width"
+            )
+        }
+    }
+
+    func testCodeReviewPanelWidthPersistsAcrossControllers() {
+        withIsolatedCodeReviewPanelWidthPreference {
+            let firstBridge = MockTerminalEngine()
+            let firstController = MainWindowController(bridge: firstBridge)
+            firstController.showWindow(nil)
+            firstController.window?.setContentSize(NSSize(width: 1400, height: 900))
+            firstController.setCodeReviewPanelWidth(880)
+
+            let secondBridge = MockTerminalEngine()
+            let secondController = MainWindowController(bridge: secondBridge)
+            secondController.showWindow(nil)
+            secondController.window?.setContentSize(NSSize(width: 1400, height: 900))
+
+            let viewModel = CodeReviewPanelViewModel(
+                tracker: SessionDiffTrackerImpl(),
+                hookEventReceiver: nil,
+                directDiffLoader: { _, _, _ in [] }
+            )
+            secondController.injectedCodeReviewViewModel = viewModel
+            secondController.showCodeReviewPanel()
+
+            XCTAssertEqual(secondController.preferredCodeReviewPanelWidth, 880, accuracy: 0.5)
+            XCTAssertEqual(secondController.codeReviewHostingView?.frame.width ?? 0, 880, accuracy: 0.5)
+        }
+    }
+
+    func testCodeReviewPanelWidthAdjustmentPreservesPreferredIntentAcrossTemporaryClamp() {
+        withIsolatedCodeReviewPanelWidthPreference {
+            let bridge = MockTerminalEngine()
+            let controller = MainWindowController(bridge: bridge)
+            controller.showWindow(nil)
+            controller.window?.setContentSize(NSSize(width: 1400, height: 900))
+
+            let viewModel = CodeReviewPanelViewModel(
+                tracker: SessionDiffTrackerImpl(),
+                hookEventReceiver: nil,
+                directDiffLoader: { _, _, _ in [] }
+            )
+            controller.injectedCodeReviewViewModel = viewModel
+
+            controller.showCodeReviewPanel()
+            controller.setCodeReviewPanelWidth(880)
+
+            controller.window?.setContentSize(NSSize(width: 900, height: 700))
+            controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+            let clampedWidth = controller.codeReviewPanelWidth
+            XCTAssertLessThan(clampedWidth, 880)
+
+            controller.adjustCodeReviewPanelWidth(by: CodeReviewPanelView.panelResizeStep)
+            XCTAssertEqual(controller.preferredCodeReviewPanelWidth, 980, accuracy: 0.5)
+
+            controller.window?.setContentSize(NSSize(width: 1400, height: 900))
+            controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+
+            XCTAssertEqual(
+                controller.codeReviewHostingView?.frame.width ?? 0,
+                980,
+                accuracy: 0.5,
+                "Incrementing while temporarily clamped should preserve the user's wider preferred width"
+            )
+        }
+    }
+
+    func testCodeReviewPanelWidthDefaultsClampCorruptStoredValues() {
+        withIsolatedCodeReviewPanelWidthPreference {
+            UserDefaults.standard.set(9_999.0, forKey: MainWindowController.codeReviewPanelWidthDefaultsKey)
+
+            let controller = MainWindowController(bridge: MockTerminalEngine())
+            XCTAssertEqual(
+                controller.preferredCodeReviewPanelWidth,
+                CodeReviewPanelView.maximumPanelWidth,
+                accuracy: 0.5
+            )
+
+            UserDefaults.standard.set(50.0, forKey: MainWindowController.codeReviewPanelWidthDefaultsKey)
+            let secondController = MainWindowController(bridge: MockTerminalEngine())
+            XCTAssertEqual(
+                secondController.preferredCodeReviewPanelWidth,
+                CodeReviewPanelView.minimumPanelWidth,
+                accuracy: 0.5
+            )
+        }
+    }
+
     // MARK: - Close Tab Cleanup
 
     func testCloseTabRemovesSurfaceViewMapping() {
@@ -432,6 +611,22 @@ final class TabSurfaceMappingTests: XCTestCase {
             "Destroying all surfaces must also clear the visible terminal hierarchy from the container"
         )
     }
+}
+
+@MainActor
+private func withIsolatedCodeReviewPanelWidthPreference(_ body: () -> Void) {
+    let defaults = UserDefaults.standard
+    let key = MainWindowController.codeReviewPanelWidthDefaultsKey
+    let previousValue = defaults.object(forKey: key)
+    defaults.removeObject(forKey: key)
+    defer {
+        if let previousValue {
+            defaults.set(previousValue, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+    }
+    body()
 }
 
 // MARK: - Tab Navigation Surface Switching Tests

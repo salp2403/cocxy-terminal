@@ -46,6 +46,21 @@ import SwiftUI
 /// - SeeAlso: `ConfigService`
 @MainActor
 final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate, DashboardTabNavigating {
+    static let codeReviewPanelWidthDefaultsKey = "agentCodeReviewPanelWidth"
+
+    static func clampStoredCodeReviewPanelWidth(_ width: CGFloat) -> CGFloat {
+        min(max(width, CodeReviewPanelView.minimumPanelWidth), CodeReviewPanelView.maximumPanelWidth)
+    }
+
+    static func loadStoredCodeReviewPanelWidth() -> CGFloat {
+        let stored = UserDefaults.standard.double(forKey: codeReviewPanelWidthDefaultsKey)
+        let candidate = stored > 0 ? CGFloat(stored) : CodeReviewPanelView.defaultPanelWidth
+        return clampStoredCodeReviewPanelWidth(candidate)
+    }
+
+    static func storeCodeReviewPanelWidth(_ width: CGFloat) {
+        UserDefaults.standard.set(Double(width), forKey: codeReviewPanelWidthDefaultsKey)
+    }
 
     // MARK: - Properties
 
@@ -186,6 +201,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var codeReviewViewModel: CodeReviewPanelViewModel?
     var codeReviewHostingView: NSHostingView<CodeReviewPanelView>?
     var isCodeReviewVisible: Bool = false
+    var codeReviewPanelWidth: CGFloat = MainWindowController.loadStoredCodeReviewPanelWidth()
+    private(set) var preferredCodeReviewPanelWidth: CGFloat = MainWindowController.loadStoredCodeReviewPanelWidth()
     var codeReviewCancellables = Set<AnyCancellable>()
     var injectedCodeReviewViewModel: CodeReviewPanelViewModel?
 
@@ -1171,12 +1188,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         if windowWidth < Self.sidebarCollapseThreshold && !isTabBarHidden {
             toggleTabBarAction(nil)
         }
+
+        if isTimelineVisible || isDashboardVisible || isCodeReviewVisible {
+            layoutRightDockedAgentPanels()
+        }
     }
 
     func windowDidBecomeMain(_ notification: Notification) {
         // Ensure the terminal view has focus when the window becomes main.
         focusActiveTerminalSurface()
         refreshVisibleTerminalInteractionState()
+    }
+
+    func updatePreferredCodeReviewPanelWidth(_ width: CGFloat) {
+        let clampedWidth = MainWindowController.clampStoredCodeReviewPanelWidth(width)
+        guard clampedWidth != preferredCodeReviewPanelWidth else { return }
+        preferredCodeReviewPanelWidth = clampedWidth
+        MainWindowController.storeCodeReviewPanelWidth(clampedWidth)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {

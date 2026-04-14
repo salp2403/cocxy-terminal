@@ -6,9 +6,17 @@ import SwiftUI
 
 struct CodeReviewPanelView: View {
     @ObservedObject var viewModel: CodeReviewPanelViewModel
+    var panelWidth: CGFloat = Self.defaultPanelWidth
+    var canDecreaseWidth: Bool = false
+    var canIncreaseWidth: Bool = true
+    var onDecreaseWidth: (() -> Void)? = nil
+    var onIncreaseWidth: (() -> Void)? = nil
     var onDismiss: (() -> Void)? = nil
 
-    static let panelWidth: CGFloat = 560
+    static let defaultPanelWidth: CGFloat = 640
+    static let minimumPanelWidth: CGFloat = 460
+    static let maximumPanelWidth: CGFloat = 980
+    static let panelResizeStep: CGFloat = 120
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -89,7 +97,7 @@ struct CodeReviewPanelView: View {
             Divider()
             ReviewToolbarView(viewModel: viewModel)
         }
-        .frame(width: Self.panelWidth)
+        .frame(minWidth: Self.minimumPanelWidth, maxWidth: .infinity)
         .frame(maxHeight: .infinity)
         .background(
             ZStack {
@@ -166,6 +174,41 @@ struct CodeReviewPanelView: View {
                 }
 
                 Spacer()
+
+                HStack(spacing: 6) {
+                    Button {
+                        onDecreaseWidth?()
+                    } label: {
+                        Image(systemName: "minus")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canDecreaseWidth)
+                    .help("Make review panel narrower")
+                    .accessibilityLabel("Make review panel narrower")
+
+                    Text("\(Int(panelWidth.rounded())) px")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                        .frame(minWidth: 54)
+
+                    Button {
+                        onIncreaseWidth?()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canIncreaseWidth)
+                    .help("Make review panel wider")
+                    .accessibilityLabel("Make review panel wider")
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color(nsColor: CocxyColors.surface0))
+                )
 
                 Button {
                     viewModel.refreshDiffs()
