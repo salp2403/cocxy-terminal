@@ -40,7 +40,7 @@ final class ClaudeSettingsManagerTests: XCTestCase {
 
         XCTAssertTrue(result.installed)
         XCTAssertFalse(result.alreadyInstalled)
-        XCTAssertEqual(result.hookEvents.count, 12)
+        XCTAssertEqual(result.hookEvents.count, ClaudeSettingsManager.hookedEventTypes.count)
         XCTAssertTrue(result.hookEvents.contains("Stop"))
         XCTAssertTrue(result.hookEvents.contains("PreToolUse"))
         XCTAssertTrue(result.hookEvents.contains("PostToolUse"))
@@ -53,12 +53,14 @@ final class ClaudeSettingsManagerTests: XCTestCase {
         XCTAssertTrue(result.hookEvents.contains("UserPromptSubmit"))
         XCTAssertTrue(result.hookEvents.contains("PostToolUseFailure"))
         XCTAssertTrue(result.hookEvents.contains("SubagentStart"))
+        XCTAssertTrue(result.hookEvents.contains("CwdChanged"))
+        XCTAssertTrue(result.hookEvents.contains("FileChanged"))
 
         // Verify file was written
         let data = try Data(contentsOf: URL(fileURLWithPath: settingsFilePath))
         let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         let hooks = settings["hooks"] as! [String: Any]
-        XCTAssertEqual(hooks.count, 12)
+        XCTAssertEqual(hooks.count, ClaudeSettingsManager.hookedEventTypes.count)
 
         // Verify structure of a hook entry
         let stopHooks = hooks["Stop"] as! [[String: Any]]
@@ -164,7 +166,7 @@ final class ClaudeSettingsManagerTests: XCTestCase {
         let result = try manager.uninstallHooks()
 
         XCTAssertTrue(result.uninstalled)
-        XCTAssertEqual(result.removedEvents.count, 12)
+        XCTAssertEqual(result.removedEvents.count, ClaudeSettingsManager.hookedEventTypes.count)
 
         // Verify user hooks remain
         let finalData = try Data(contentsOf: URL(fileURLWithPath: settingsFilePath))
@@ -228,7 +230,7 @@ final class ClaudeSettingsManagerTests: XCTestCase {
         let status = try manager.hooksStatus()
 
         XCTAssertTrue(status.installed)
-        XCTAssertEqual(status.installedEvents.count, 12)
+        XCTAssertEqual(status.installedEvents.count, ClaudeSettingsManager.hookedEventTypes.count)
         XCTAssertTrue(status.installedEvents.contains("Stop"))
         XCTAssertTrue(status.installedEvents.contains("PreToolUse"))
         XCTAssertTrue(status.installedEvents.contains("PostToolUse"))
@@ -320,7 +322,7 @@ final class ClaudeSettingsManagerTests: XCTestCase {
         // Step 3: Status shows installed
         let afterInstallStatus = try manager.hooksStatus()
         XCTAssertTrue(afterInstallStatus.installed)
-        XCTAssertEqual(afterInstallStatus.installedEvents.count, 12)
+        XCTAssertEqual(afterInstallStatus.installedEvents.count, ClaudeSettingsManager.hookedEventTypes.count)
 
         // Step 4: Uninstall
         let uninstallResult = try manager.uninstallHooks()

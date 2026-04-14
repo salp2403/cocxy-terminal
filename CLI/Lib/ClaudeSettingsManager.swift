@@ -59,6 +59,16 @@ public struct ClaudeSettingsManager {
     /// - Notification: OSC notification forwarding.
     /// - TeammateIdle: waiting-for-input detection (drives notification ring).
     /// - UserPromptSubmit: user interaction tracking.
+    /// - CwdChanged: keep tab.workingDirectory in sync with agent `cd` (2.1.83+).
+    /// - FileChanged: drive code-review auto-refresh and dashboard file
+    ///   attribution (2.1.83+).
+    ///
+    /// Important: this array is mirrored by
+    /// `AppDelegate+FirstLaunchSetup.eventTypes` because the GUI app cannot
+    /// import `CocxyCLILib` directly. When extending this list, update the
+    /// AppDelegate copy too — the count assertion in HooksCommandTests uses
+    /// `Self.hookedEventTypes.count`, which will surface a drift on the
+    /// CLI side; visual inspection covers the AppDelegate side.
     static let hookedEventTypes: [String] = [
         "SessionStart",
         "SessionEnd",
@@ -71,7 +81,9 @@ public struct ClaudeSettingsManager {
         "Notification",
         "TeammateIdle",
         "TaskCompleted",
-        "UserPromptSubmit"
+        "UserPromptSubmit",
+        "CwdChanged",
+        "FileChanged"
     ]
 
     /// Default path to Claude Code's settings file.

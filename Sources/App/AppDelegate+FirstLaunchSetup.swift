@@ -144,12 +144,18 @@ extension AppDelegate {
         var settings = readOrCreateSettings(at: settingsPath)
         var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
 
+        // Mirror of `ClaudeSettingsManager.hookedEventTypes`. The GUI app
+        // cannot import CocxyCLILib so the array is duplicated here on
+        // purpose. When extending, update both lists; the parity test
+        // `installHooksMatchesAppDelegateFirstLaunchSetupList` keeps them
+        // in sync.
         let eventTypes = [
             "SessionStart", "SessionEnd", "Stop",
             "PreToolUse", "PostToolUse", "PostToolUseFailure",
             "SubagentStart", "SubagentStop",
             "Notification", "TeammateIdle",
-            "TaskCompleted", "UserPromptSubmit"
+            "TaskCompleted", "UserPromptSubmit",
+            "CwdChanged", "FileChanged"
         ]
 
         var modified = false
