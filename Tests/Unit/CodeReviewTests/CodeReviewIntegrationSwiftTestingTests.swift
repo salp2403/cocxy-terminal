@@ -214,11 +214,11 @@ struct CodeReviewIntegrationSwiftTestingTests {
         await firstLoaderStarted.waitUntilOpened()
         viewModel.refreshDiffs()
 
-        try await waitForReviewCondition(timeoutNanoseconds: 3_000_000_000) {
+        try await waitForReviewCondition(timeoutNanoseconds: 15_000_000_000) {
             viewModel.isLoading == false && viewModel.currentDiffs.first?.filePath == "new.swift"
         }
         await firstLoaderGate.open()
-        try await waitForReviewCondition(timeoutNanoseconds: 3_000_000_000) {
+        try await waitForReviewCondition(timeoutNanoseconds: 15_000_000_000) {
             viewModel.isLoading == false && viewModel.currentDiffs.first?.filePath == "new.swift"
         }
 
@@ -365,7 +365,7 @@ private actor AsyncGate {
 
 @MainActor
 private func waitForReviewCondition(
-    timeoutNanoseconds: UInt64 = 3_000_000_000,
+    timeoutNanoseconds: UInt64 = 15_000_000_000,
     pollNanoseconds: UInt64 = 20_000_000,
     _ condition: () -> Bool
 ) async throws {

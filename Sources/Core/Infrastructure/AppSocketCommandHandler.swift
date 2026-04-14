@@ -1105,6 +1105,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
         let homePath = FileManager.default.homeDirectoryForCurrentUser.path
         let configPath = "\(homePath)/.config/cocxy/config.toml"
+        let configURL = URL(fileURLWithPath: configPath)
 
         let existingContent = (try? String(contentsOfFile: configPath, encoding: .utf8))
             ?? ConfigService.generateDefaultToml()
@@ -1117,6 +1118,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         )
 
         do {
+            try FileManager.default.createDirectory(
+                at: configURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             try updatedContent.write(toFile: configPath, atomically: true, encoding: .utf8)
         } catch {
             return .failure(
