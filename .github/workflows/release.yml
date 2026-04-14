@@ -94,38 +94,15 @@ jobs:
             cp ".build/arm64-apple-macosx/release/cocxy" "$RESOURCES_DIR/cocxy"
           fi
 
-          # Generate Info.plist
-          cat > "$CONTENTS_DIR/Info.plist" << PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleName</key><string>Cocxy Terminal</string>
-            <key>CFBundleDisplayName</key><string>Cocxy Terminal</string>
-            <key>CFBundleIdentifier</key><string>dev.cocxy.terminal</string>
-            <key>CFBundleVersion</key><string>$VERSION</string>
-            <key>CFBundleShortVersionString</key><string>$VERSION</string>
-            <key>CFBundleExecutable</key><string>Cocxy Terminal</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleIconFile</key><string>AppIcon</string>
-            <key>LSMinimumSystemVersion</key><string>14.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-            <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
-            <key>NSAppTransportSecurity</key>
-            <dict>
-              <key>NSAllowsLocalNetworking</key><true/>
-            </dict>
-            <key>SUFeedURL</key>
-            <string>https://cocxy.dev/appcast.xml</string>
-            <key>SUPublicEDKey</key>
-            <string>${{ secrets.SPARKLE_PUBLIC_KEY }}</string>
-            <key>NSAppleScriptEnabled</key>
-            <true/>
-            <key>OSAScriptingDefinition</key>
-            <string>CocxyTerminal.sdef</string>
-          </dict>
-          </plist>
-          PLIST
+          ./scripts/generate-app-info-plist.sh "$CONTENTS_DIR/Info.plist" \
+            --bundle-name "Cocxy Terminal" \
+            --display-name "Cocxy Terminal" \
+            --bundle-id "dev.cocxy.terminal" \
+            --executable "Cocxy Terminal" \
+            --version "$VERSION" \
+            --short-version "$VERSION" \
+            --feed-url "https://cocxy.dev/appcast.xml" \
+            --public-key "${{ secrets.SPARKLE_PUBLIC_KEY }}"
 
           # Copy resources
           [ -d Resources/Themes ] && cp -R Resources/Themes "$RESOURCES_DIR/" || true
@@ -326,7 +303,7 @@ jobs:
             - Apple Silicon or Intel Mac
           generate_release_notes: true
 
-      - name: Update CHANGELOG.md
+      - name: Update CHANGELOG and base version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -473,15 +450,19 @@ jobs:
 
           PYEOF
 
-          # Commit updated CHANGELOG back to main
+          # Sync base Info.plist version so nightlies and local builds stay current
+          plutil -replace CFBundleVersion -string "${VERSION}" Resources/Info.plist
+          plutil -replace CFBundleShortVersionString -string "${VERSION}" Resources/Info.plist
+
+          # Commit updated CHANGELOG and version back to main
           git config user.name "said lopez"
           git config user.email "dev@cocxy.dev"
-          git add CHANGELOG.md
+          git add CHANGELOG.md Resources/Info.plist
           if git diff --cached --quiet; then
-            echo "No CHANGELOG changes to commit"
+            echo "No changes to commit"
           else
             git commit -m "docs: update CHANGELOG for v${VERSION}"
-            git push origin HEAD:main || echo "CHANGELOG push failed (non-blocking)"
+            git push origin HEAD:main || echo "Push to main failed (non-blocking)"
           fi
 
       - name: Deploy website

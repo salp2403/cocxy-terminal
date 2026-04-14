@@ -89,12 +89,12 @@ fi
 # Step 3c: Set rpath for Sparkle.
 install_name_tool -add_rpath @executable_path/../Frameworks "${MACOS}/${APP_NAME}" 2>/dev/null || true
 
-# Step 4: Copy Info.plist.
-if [ -f "${PROJECT_ROOT}/Resources/Info.plist" ]; then
-    cp "${PROJECT_ROOT}/Resources/Info.plist" "${CONTENTS}/Info.plist"
-else
-    echo "WARNING: Info.plist not found, bundle may not work correctly"
-fi
+# Step 4: Generate Info.plist from the shared base template.
+"${PROJECT_ROOT}/scripts/generate-app-info-plist.sh" "${CONTENTS}/Info.plist" \
+    --bundle-name "${BUNDLE_NAME}" \
+    --display-name "${BUNDLE_NAME}" \
+    --bundle-id "dev.cocxy.terminal" \
+    --executable "${APP_NAME}"
 
 # Step 4b: Copy app icon assets.
 for icon_file in AppIcon.png; do
@@ -102,6 +102,11 @@ for icon_file in AppIcon.png; do
         cp "${PROJECT_ROOT}/Resources/${icon_file}" "${RESOURCES}/${icon_file}"
     fi
 done
+
+# Step 4c: Copy AppleScript definition if present.
+if [ -f "${PROJECT_ROOT}/Resources/CocxyTerminal.sdef" ]; then
+    cp "${PROJECT_ROOT}/Resources/CocxyTerminal.sdef" "${RESOURCES}/CocxyTerminal.sdef"
+fi
 
 # Step 5: Copy default config files.
 if [ -d "${PROJECT_ROOT}/Resources/defaults" ]; then

@@ -91,6 +91,19 @@ check_exists "$CONTENTS/Info.plist" "Info.plist"
 check_exists "$CONTENTS/MacOS" "MacOS directory"
 check_dir_not_empty "$CONTENTS/MacOS" "Executable binary"
 
+bundle_id="$(plutil -extract CFBundleIdentifier raw -o - "$CONTENTS/Info.plist" 2>/dev/null || true)"
+case "$bundle_id" in
+    dev.cocxy.terminal.nightly)
+        expected_feed_url="https://cocxy.dev/appcast-nightly.xml"
+        ;;
+    *)
+        expected_feed_url="https://cocxy.dev/appcast.xml"
+        ;;
+esac
+check_plist_string "$CONTENTS/Info.plist" "SUFeedURL" "$expected_feed_url" "Sparkle feed URL"
+check_plist_exists "$CONTENTS/Info.plist" "SUPublicEDKey" "Sparkle public key"
+check_plist_exists "$CONTENTS/Info.plist" "OSAScriptingDefinition" "AppleScript definition key"
+
 # 2. Frameworks
 echo ""
 echo "[Frameworks]"
@@ -126,6 +139,7 @@ check_exists "$RESOURCES/cocxy" "CLI companion binary"
 echo ""
 echo "[Assets]"
 check_exists "$RESOURCES/AppIcon.png" "App icon"
+check_exists "$RESOURCES/CocxyTerminal.sdef" "AppleScript definition"
 
 # 8. Markdown preview resources (Mermaid, KaTeX)
 echo ""
