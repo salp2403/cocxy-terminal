@@ -14,6 +14,13 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
     private static let activeCwd = URL(fileURLWithPath: "/private/tmp/active-project", isDirectory: true)
     private static let unrelatedCwd = URL(fileURLWithPath: "/private/tmp/unrelated", isDirectory: true)
 
+    // Negative-path quiet windows: under parallel CI load, GCD scheduling
+    // jitter means a refresh that would have fired could still be pending
+    // ~1 s after we believe the work item should have run. Keeping the
+    // quiet window generous (1.5 s) avoids relying on retries to mask
+    // flakiness — see `feedback_no_retry_for_timeouts`.
+    private static let negativeQuietWindowNanoseconds: UInt64 = 1_500_000_000
+
     @Test("FileChanged inside the active CWD triggers exactly one debounced refresh")
     func fileChangedInActiveCwdTriggersDebouncedRefresh() async throws {
         let harness = makeHarness()
@@ -22,8 +29,9 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
              changeType: "edit")
 
         try await waitForCondition { harness.refreshCount() >= 1 }
-        // Flush the run loop a bit longer to make sure no stray refresh sneaks in.
-        try await Task.sleep(nanoseconds: 80_000_000)
+        // Flush the run loop a bit longer to make sure no stray refresh
+        // sneaks in. 400 ms is enough even under parallel CI load.
+        try await Task.sleep(nanoseconds: 400_000_000)
         #expect(harness.refreshCount() == 1)
     }
 
@@ -33,7 +41,7 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
         emit(.fileChanged, on: harness.receiver, cwd: Self.unrelatedCwd.path,
              filePath: Self.unrelatedCwd.appendingPathComponent("foo.swift").path)
 
-        try await Task.sleep(nanoseconds: 120_000_000)
+        try await Task.sleep(nanoseconds: Self.negativeQuietWindowNanoseconds)
         #expect(harness.refreshCount() == 0)
     }
 
@@ -47,7 +55,7 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
         }
 
         try await waitForCondition { harness.refreshCount() >= 1 }
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await Task.sleep(nanoseconds: 400_000_000)
         #expect(harness.refreshCount() == 1)
     }
 
@@ -57,7 +65,7 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
         emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
              filePath: "/private/tmp/somewhere-else/file.swift")
 
-        try await Task.sleep(nanoseconds: 120_000_000)
+        try await Task.sleep(nanoseconds: Self.negativeQuietWindowNanoseconds)
         #expect(harness.refreshCount() == 0)
     }
 
@@ -67,7 +75,7 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
         emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
              filePath: "")
 
-        try await Task.sleep(nanoseconds: 120_000_000)
+        try await Task.sleep(nanoseconds: Self.negativeQuietWindowNanoseconds)
         #expect(harness.refreshCount() == 0)
     }
 
@@ -77,7 +85,7 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
         emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
              filePath: Self.activeCwd.appendingPathComponent("ignored.swift").path)
 
-        try await Task.sleep(nanoseconds: 120_000_000)
+        try await Task.sleep(nanoseconds: Self.negativeQuietWindowNanoseconds)
         #expect(harness.refreshCount() == 0)
     }
 
@@ -132,7 +140,10 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
     }
 
     private func waitForCondition(
-        timeoutNanoseconds: UInt64 = 2_000_000_000,
+        // 8 s tolerates worst-case GCD scheduling delays observed under
+        // parallel CI load. Using a generous timeout instead of retries
+        // keeps stalls deterministic — see `feedback_no_retry_for_timeouts`.
+        timeoutNanoseconds: UInt64 = 8_000_000_000,
         pollNanoseconds: UInt64 = 15_000_000,
         _ condition: () -> Bool
     ) async throws {

@@ -163,6 +163,14 @@ extension AppDelegate {
                     resolved.controller.refreshStatusBar()
                 }
 
+                // CwdChanged is consumed by the dedicated tab-sync handler.
+                // It runs alongside the engine dispatch (which treats it as
+                // informational and returns nil) so tab.workingDirectory
+                // stays in sync without needing a separate subscription.
+                if event.type == .cwdChanged {
+                    self.handleCwdChangedHook(event)
+                }
+
                 engine?.processHookEvent(event)
 
                 if event.type == .sessionEnd {
