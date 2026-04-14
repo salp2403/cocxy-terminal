@@ -500,6 +500,22 @@ jobs:
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/public/sitemap.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}sitemap.xml
 
+          # Deploy PWA manifest
+          if [ -f web/public/manifest.webmanifest ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/manifest.webmanifest ${DEPLOY_TARGET}:${DEPLOY_PATH}manifest.webmanifest
+          fi
+
+          # Deploy secondary landing pages (features + FAQ)
+          if [ -f web/public/features.html ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/features.html ${DEPLOY_TARGET}:${DEPLOY_PATH}features.html
+          fi
+          if [ -f web/public/faq.html ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/faq.html ${DEPLOY_TARGET}:${DEPLOY_PATH}faq.html
+          fi
+
           # Fetch releases with body content for release notes (gh release list lacks body field, use API)
           gh api repos/salp2403/cocxy-terminal/releases?per_page=50 \
             --jq '[.[] | {tagName: .tag_name, publishedAt: .published_at, body: .body}]' \
@@ -665,12 +681,18 @@ jobs:
               web/public/getting-started.html ${DEPLOY_TARGET}:${DEPLOY_PATH}getting-started.html
           fi
 
-          # Update version-specific values on all deployed pages (must run AFTER all SCP operations)
+          # Update version-specific values on all deployed pages (must run AFTER all SCP operations).
+          # The 0.0.0 tokens in web/public/*.html are intentional placeholders — they only
+          # become the real version when these sed commands rewrite them on the server.
+          # Match the regex [0-9]*\.[0-9]*\.[0-9]* so any prior version also gets replaced.
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html && \
              sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html && \
+             [ -f ${DEPLOY_PATH}features.html ] && sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}features.html || true; \
+             [ -f ${DEPLOY_PATH}faq.html ] && sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}faq.html || true; \
+             [ -f ${DEPLOY_PATH}releases.html ] && sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}releases.html || true; \
              sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}index.html"
 
           rm /tmp/deploy_key
