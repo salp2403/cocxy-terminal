@@ -164,10 +164,12 @@ Use the affected module or directory: `agent-detection`, `config`, `theme`, `ses
 ### Example
 
 ```
-feat(agent-detection): add OSC sequence detector for Kiro
+feat(agent-detection): add pattern detector for a new agent
 
-Implements OSC-based detection for the Kiro coding agent. Uses the same
-three-layer strategy as other agents (OSC > pattern > timing).
+Implements launch and completion pattern detection for a coding agent.
+Uses the multi-layer strategy documented in Sources/Domain/AgentDetection/
+(hooks, OSC, pattern, timing) and falls back gracefully when a layer is
+unavailable for a given agent.
 
 Closes #42
 ```

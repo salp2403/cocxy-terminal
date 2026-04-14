@@ -12,14 +12,36 @@ body:
     attributes:
       label: Cocxy Version
       description: "Run `cocxy --version` or check About Cocxy"
-      placeholder: "0.1.0"
+      placeholder: "0.1.64"
     validations:
       required: true
   - type: input
     id: macos
     attributes:
       label: macOS Version
+      description: "Example: 15.3 (Sequoia), 14.7 (Sonoma), 26 (Tahoe)"
       placeholder: "15.3 (Sequoia)"
+    validations:
+      required: true
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Chip
+      description: "Select your Mac hardware"
+      options:
+        - Apple Silicon (M1 / M2 / M3 / M4)
+        - Intel
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install Cocxy?
+      options:
+        - Homebrew Cask
+        - Direct DMG download
+        - Nightly build
+        - Built from source
     validations:
       required: true
   - type: textarea
