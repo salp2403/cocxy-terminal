@@ -2,41 +2,46 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>Cocxy Terminal</string>
 	<key>CFBundleDisplayName</key>
 	<string>Cocxy Terminal</string>
-	<key>CFBundleIdentifier</key>
-	<string>dev.cocxy.terminal</string>
-	<key>CFBundleVersion</key>
-	<string>2.0.0</string>
-	<key>CFBundleShortVersionString</key>
-	<string>2.0.0</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
 	<key>CFBundleExecutable</key>
 	<string>CocxyTerminal</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.cocxy.terminal</string>
+	<key>CFBundleName</key>
+	<string>Cocxy Terminal</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.64</string>
+	<key>CFBundleVersion</key>
+	<string>0.1.64</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSAppleScriptEnabled</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright (c) 2026 Said Arturo Lopez. MIT License.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.developer-tools</string>
+	<key>OSAScriptingDefinition</key>
+	<string>CocxyTerminal.sdef</string>
 	<key>SUFeedURL</key>
 	<string>https://cocxy.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>gMWhWC+AqrUZqRg1RbTr32MDdkk7H3DhLfnEqtQnWQU=</string>
-	<key>NSAppleScriptEnabled</key>
-	<true/>
-	<key>OSAScriptingDefinition</key>
-	<string>CocxyTerminal.sdef</string>
 </dict>
 </plist>

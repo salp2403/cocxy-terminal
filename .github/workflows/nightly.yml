@@ -25,7 +25,7 @@ jobs:
       - name: Generate nightly version
         id: version
         run: |
-          BASE_VERSION=$(grep -A1 CFBundleShortVersionString Resources/Info.plist | tail -1 | sed 's/.*<string>\(.*\)<\/string>.*/\1/')
+          BASE_VERSION=$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)
           NIGHTLY_VERSION="${BASE_VERSION}-nightly.$(date +%Y%m%d)"
           echo "VERSION=$NIGHTLY_VERSION" >> "$GITHUB_OUTPUT"
           echo "Nightly version: $NIGHTLY_VERSION"
@@ -90,38 +90,15 @@ jobs:
             cp ".build/arm64-apple-macosx/release/cocxy" "$RESOURCES_DIR/cocxy"
           fi
 
-          # Nightly-specific Info.plist
-          cat > "$CONTENTS_DIR/Info.plist" << PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleName</key><string>Cocxy Terminal Nightly</string>
-            <key>CFBundleDisplayName</key><string>Cocxy Terminal Nightly</string>
-            <key>CFBundleIdentifier</key><string>dev.cocxy.terminal.nightly</string>
-            <key>CFBundleVersion</key><string>$VERSION</string>
-            <key>CFBundleShortVersionString</key><string>$VERSION</string>
-            <key>CFBundleExecutable</key><string>Cocxy Terminal Nightly</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleIconFile</key><string>AppIcon</string>
-            <key>LSMinimumSystemVersion</key><string>14.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-            <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
-            <key>NSAppTransportSecurity</key>
-            <dict>
-              <key>NSAllowsLocalNetworking</key><true/>
-            </dict>
-            <key>SUFeedURL</key>
-            <string>https://cocxy.dev/appcast-nightly.xml</string>
-            <key>SUPublicEDKey</key>
-            <string>${{ secrets.SPARKLE_PUBLIC_KEY }}</string>
-            <key>NSAppleScriptEnabled</key>
-            <true/>
-            <key>OSAScriptingDefinition</key>
-            <string>CocxyTerminal.sdef</string>
-          </dict>
-          </plist>
-          PLIST
+          ./scripts/generate-app-info-plist.sh "$CONTENTS_DIR/Info.plist" \
+            --bundle-name "Cocxy Terminal Nightly" \
+            --display-name "Cocxy Terminal Nightly" \
+            --bundle-id "dev.cocxy.terminal.nightly" \
+            --executable "Cocxy Terminal Nightly" \
+            --version "$VERSION" \
+            --short-version "$VERSION" \
+            --feed-url "https://cocxy.dev/appcast-nightly.xml" \
+            --public-key "${{ secrets.SPARKLE_PUBLIC_KEY }}"
 
           [ -d Resources/Themes ] && cp -R Resources/Themes "$RESOURCES_DIR/" || true
           [ -f Resources/AppIcon.png ] && cp Resources/AppIcon.png "$RESOURCES_DIR/" || true
