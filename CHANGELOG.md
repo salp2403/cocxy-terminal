@@ -5,6 +5,20 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.67] - 2026-04-14
+
+### Added
+- Agent Code Review panel auto-refreshes within ~200 ms of any file change reported by the integrated coding agent, eliminating the previous polling/manual-refresh latency.
+- Agent Dashboard now uses the agent's own filesystem signal as the canonical source for `touchedFilePaths`, attributing edits to the active subagent when one is uniquely identifiable and to the session otherwise.
+- Tab working directory follows the agent when it changes directory mid-session, complementing the existing OSC 7 path so the sidebar and status bar stay accurate even for tools that bypass the shell.
+- `cocxy setup-hooks` (and the auto-installer that runs on every launch) now register the two new lifecycle event types alongside the existing twelve.
+
+### Changed
+- Hook event coverage expanded from 12 to 14 event types end-to-end (CLI handler, normalizer, socket router, in-process publisher, detection engine, dashboard, timeline, code-review panel, snapshot tracker).
+
+### Security
+- Continued strict CWD exact-match enforcement for the new hook consumers — no parent-directory fallback, eliminating cross-terminal contamination as a possible regression vector.
+
 ## [0.1.65] - 2026-04-14
 
 ### Added
