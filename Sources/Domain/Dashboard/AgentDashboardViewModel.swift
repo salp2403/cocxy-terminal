@@ -56,7 +56,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// Mutable session data keyed by session ID.
     /// The `AgentSessionInfo` structs are immutable; this dictionary holds
     /// the mutable internal representation that gets rebuilt on each change.
-    private var sessionDataStore: [String: MutableSessionData] = [:]
+    ///
+    /// Module-internal so the FileChanged extension (and tests) can mutate
+    /// it. External code never sees this — `sessions` remains the read-only
+    /// public surface.
+    var sessionDataStore: [String: MutableSessionData] = [:]
 
     /// Subject that emits the full session list on every change.
     private let sessionsSubject = CurrentValueSubject<[AgentSessionInfo], Never>([])
@@ -644,10 +648,14 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         if changed { rebuildSessions() }
     }
 
-    // MARK: - Private: Session Rebuild
+    // MARK: - Session Rebuild
 
     /// Rebuilds the sorted `sessions` array from the mutable data store.
-    private func rebuildSessions() {
+    ///
+    /// Module-internal because the `+FileChanged` extension calls it after
+    /// mutating `sessionDataStore`. External code observes via the
+    /// `@Published var sessions` property.
+    func rebuildSessions() {
         sessions = sessionDataStore.values
             .map { data in
                 let windowID = windowIDForTabProvider?(data.tabId)
@@ -722,7 +730,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 ///
 /// The `AgentSessionInfo` struct is immutable (value type). This class holds
 /// the mutable state that gets rebuilt into `AgentSessionInfo` on every change.
-private struct MutableSessionData {
+struct MutableSessionData {
     let id: String
     let projectName: String
     let tabId: UUID
