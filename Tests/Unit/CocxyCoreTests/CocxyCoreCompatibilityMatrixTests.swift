@@ -22,6 +22,9 @@ struct CocxyCoreCompatibilityMatrixTests {
         try "fixture-line\n".write(to: fixtureFile, atomically: true, encoding: .utf8)
 
         let scenarios: [CompatibilityScenario] = [
+            // Interactive full-screen editors are slow under parallel CI load. We keep
+            // the timeout high here instead of using retries so stalls still fail
+            // deterministically on the first run with useful output.
             .init(
                 name: "zsh non-interactive command",
                 requiredCommands: ["zsh"],
@@ -60,7 +63,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 scriptBody: "exec vim -Nu NONE -n",
                 expectedSubstrings: ["VIM - Vi IMproved"],
                 inputs: [.init(delayNanoseconds: 1_200_000_000, text: ":q!\r")],
-                timeoutNanoseconds: 10_000_000_000
+                timeoutNanoseconds: 20_000_000_000
             ),
             .init(
                 name: "vim opens a file",
@@ -68,7 +71,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 scriptBody: "exec vim -Nu NONE -n \(shQuote(fixtureFile.path))",
                 expectedSubstrings: [fixtureFile.lastPathComponent],
                 inputs: [.init(delayNanoseconds: 1_200_000_000, text: ":q!\r")],
-                timeoutNanoseconds: 10_000_000_000
+                timeoutNanoseconds: 20_000_000_000
             ),
             .init(
                 name: "nano startup screen",
@@ -76,7 +79,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 scriptBody: "exec nano \(shQuote(fixtureFile.path))",
                 expectedSubstrings: ["PICO 5.09"],
                 inputs: [.init(delayNanoseconds: 1_000_000_000, text: String(UnicodeScalar(24)))],
-                timeoutNanoseconds: 10_000_000_000
+                timeoutNanoseconds: 20_000_000_000
             ),
             .init(
                 name: "nano version",
@@ -112,6 +115,9 @@ struct CocxyCoreCompatibilityMatrixTests {
         let repoPath = repoFixture.repoURL.path
 
         let scenarios: [CompatibilityScenario] = [
+            // Pagers, progress meters and local transfer tools can slow down a lot under
+            // full-suite CPU contention in CI. Use explicit higher limits instead of
+            // retries so a real stall still fails on the first attempt.
             .init(
                 name: "screen lists sessions",
                 requiredCommands: ["screen"],
@@ -130,7 +136,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 scriptBody: "exec less \(shQuote(lessFile.path))",
                 expectedSubstrings: ["localhost"],
                 inputs: [.init(delayNanoseconds: 1_200_000_000, text: "q")],
-                timeoutNanoseconds: 10_000_000_000
+                timeoutNanoseconds: 20_000_000_000
             ),
             .init(
                 name: "man renders a manual page",
@@ -138,7 +144,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 scriptBody: "exec man ssh",
                 expectedSubstrings: ["SSH(1)"],
                 inputs: [.init(delayNanoseconds: 1_500_000_000, text: "q")],
-                timeoutNanoseconds: 12_000_000_000
+                timeoutNanoseconds: 20_000_000_000
             ),
             .init(
                 name: "git status in the repo",
@@ -181,7 +187,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["curl"],
                 scriptBody: "exec curl -L file:///etc/hosts -o /dev/null",
                 expectedSubstrings: ["% Total"],
-                timeoutNanoseconds: 10_000_000_000
+                timeoutNanoseconds: 20_000_000_000
             ),
             .init(
                 name: "rsync reports its version",
@@ -194,7 +200,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["rsync"],
                 scriptBody: "exec rsync --progress \(shQuote(rsyncSource.path)) \(shQuote(rsyncDest.path))",
                 expectedSubstrings: ["100%"],
-                timeoutNanoseconds: 12_000_000_000
+                timeoutNanoseconds: 20_000_000_000
             ),
         ]
 
@@ -319,6 +325,20 @@ private struct GitFixtureRepo {
     let trackedFileName: String
 }
 
+private struct ScenarioTimeoutError: LocalizedError {
+    let scenarioName: String
+    let timeoutNanoseconds: UInt64
+    let outputTail: String
+
+    var errorDescription: String? {
+        """
+        Scenario '\(scenarioName)' timed out after \(Double(timeoutNanoseconds) / 1_000_000_000)s.
+        Tail:
+        \(outputTail)
+        """
+    }
+}
+
 @MainActor
 private func runScenarios(
     _ scenarios: [CompatibilityScenario],
@@ -330,45 +350,86 @@ private func runScenarios(
             continue
         }
 
-        let scriptURL = tempDir.appendingPathComponent("\(UUID().uuidString).zsh")
-        let script = """
-        #!/bin/zsh
-        set -e
-        \(scenario.scriptBody)
-        """
-        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        try await runScenario(scenario, tempDir: tempDir, timeoutNanoseconds: scenario.timeoutNanoseconds)
+    }
+}
 
-        let bridge = try makeBridge()
-        let (surfaceID, _) = try createCompatibilitySurface(using: bridge, command: scriptURL.path)
-        let sink = TestDataSink()
-        bridge.setOutputHandler(for: surfaceID) { data in
-            sink.data.append(data)
+@MainActor
+private func runScenario(
+    _ scenario: CompatibilityScenario,
+    tempDir: URL,
+    timeoutNanoseconds: UInt64
+) async throws {
+    let scriptURL = tempDir.appendingPathComponent("\(UUID().uuidString).zsh")
+    let script = """
+    #!/bin/zsh
+    set -e
+    \(scenario.scriptBody)
+    """
+    try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+
+    let bridge = try makeBridge()
+    let (surfaceID, _) = try createCompatibilitySurface(using: bridge, command: scriptURL.path)
+    let sink = TestDataSink()
+    bridge.setOutputHandler(for: surfaceID) { data in
+        sink.data.append(data)
+    }
+
+    let inputTasks = scenario.inputs.map { input in
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: input.delayNanoseconds)
+            guard !Task.isCancelled else { return }
+            bridge.sendText(input.text, to: surfaceID)
         }
+    }
 
-        defer {
-            bridge.destroySurface(surfaceID)
-            try? FileManager.default.removeItem(at: scriptURL)
-        }
+    defer {
+        inputTasks.forEach { $0.cancel() }
+        bridge.destroySurface(surfaceID)
+        try? FileManager.default.removeItem(at: scriptURL)
+    }
 
-        for input in scenario.inputs {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: input.delayNanoseconds)
-                bridge.sendText(input.text, to: surfaceID)
-            }
-        }
-
-        try await waitUntil(timeoutNanoseconds: scenario.timeoutNanoseconds) {
+    try await waitForScenarioOutput(
+        scenarioName: scenario.name,
+        timeoutNanoseconds: timeoutNanoseconds,
+        condition: {
             let output = String(decoding: sink.data, as: UTF8.self)
             return scenario.expectedSubstrings.allSatisfy { output.localizedCaseInsensitiveContains($0) }
+        },
+        outputTail: {
+            String(String(decoding: sink.data, as: UTF8.self).suffix(2_000))
         }
+    )
 
-        let output = String(decoding: sink.data, as: UTF8.self)
-        #expect(
-            scenario.expectedSubstrings.allSatisfy { output.localizedCaseInsensitiveContains($0) },
-            Comment("Scenario '\(scenario.name)' did not emit the expected output. Tail:\n\(String(output.suffix(2_000)))")
-        )
+    let output = String(decoding: sink.data, as: UTF8.self)
+    #expect(
+        scenario.expectedSubstrings.allSatisfy { output.localizedCaseInsensitiveContains($0) },
+        Comment("Scenario '\(scenario.name)' did not emit the expected output. Tail:\n\(String(output.suffix(2_000)))")
+    )
+}
+
+@MainActor
+private func waitForScenarioOutput(
+    scenarioName: String,
+    timeoutNanoseconds: UInt64,
+    pollNanoseconds: UInt64 = 50_000_000,
+    condition: @escaping @Sendable @MainActor () -> Bool,
+    outputTail: @escaping @Sendable @MainActor () -> String
+) async throws {
+    let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+    while DispatchTime.now().uptimeNanoseconds < deadline {
+        if await MainActor.run(body: condition) {
+            return
+        }
+        try await Task.sleep(nanoseconds: pollNanoseconds)
     }
+
+    throw ScenarioTimeoutError(
+        scenarioName: scenarioName,
+        timeoutNanoseconds: timeoutNanoseconds,
+        outputTail: await MainActor.run(body: outputTail)
+    )
 }
 
 private func executablePath(for command: String) -> String? {
