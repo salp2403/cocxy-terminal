@@ -365,7 +365,7 @@ private actor AsyncGate {
 
 @MainActor
 private func waitForReviewCondition(
-    timeoutNanoseconds: UInt64 = 15_000_000_000,
+    timeoutNanoseconds: UInt64 = 3_000_000_000,
     pollNanoseconds: UInt64 = 20_000_000,
     _ condition: () -> Bool
 ) async throws {
