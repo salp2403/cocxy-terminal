@@ -61,10 +61,13 @@ final class ClaudeCodeOSCSessionTests: XCTestCase {
         let osc133D0: [UInt8] = [0x1B, 0x5D] + Array("133".utf8) + [0x3B] + Array("D;0".utf8) + [0x07]
         engine.processTerminalOutput(Data(osc133D0))
 
-        let expectation = expectation(description: "Wait for async dispatch")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { expectation.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        let reachedFullLifecycle = MainActorTestSupport.waitForMainCondition {
+            states.contains(.agentLaunched)
+                && states.contains(.working)
+                && states.contains(.finished)
+        }
 
+        XCTAssertTrue(reachedFullLifecycle, "Claude OSC lifecycle should reach launched, working, and finished")
         XCTAssertTrue(states.contains(.agentLaunched), "Should pass through launched state")
         XCTAssertTrue(states.contains(.working), "Should pass through working state")
         XCTAssertTrue(states.contains(.finished), "Should reach finished state")
@@ -89,10 +92,9 @@ final class ClaudeCodeOSCSessionTests: XCTestCase {
         let osc133DError: [UInt8] = [0x1B, 0x5D] + Array("133".utf8) + [0x3B] + Array("D;127".utf8) + [0x07]
         engine.processTerminalOutput(Data(osc133DError))
 
-        let expectation = expectation(description: "Wait for state update")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { expectation.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        let reachedError = MainActorTestSupport.waitForMainCondition { engine.currentState == .error }
 
+        XCTAssertTrue(reachedError, "Non-zero exit code should eventually transition to error")
         XCTAssertEqual(engine.currentState, .error, "Non-zero exit code must transition to error state")
     }
 
@@ -126,10 +128,11 @@ final class ClaudeCodeOSCSessionTests: XCTestCase {
             let osc99: [UInt8] = [0x1B, 0x5D] + Array("99".utf8) + [0x3B] + Array(payload.utf8) + [0x07]
             engine.processTerminalOutput(Data(osc99))
 
-            let exp = expectation(description: "OSC99 \(payload) -> \(expectedState)")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { exp.fulfill() }
-            waitForExpectations(timeout: 1.0)
+            let reachedExpectedState = MainActorTestSupport.waitForMainCondition {
+                engine.currentState == expectedState
+            }
 
+            XCTAssertTrue(reachedExpectedState, "OSC99 payload '\(payload)' should eventually produce state \(expectedState)")
             XCTAssertEqual(engine.currentState, expectedState,
                            "OSC99 payload '\(payload)' should produce state \(expectedState)")
         }
@@ -178,9 +181,7 @@ final class AiderPatternSessionTests: XCTestCase {
         sendLine("aider --model gpt-4")
         sendLine("aider --model gpt-4")  // second line triggers hysteresis
 
-        let exp = expectation(description: "Wait for dispatch")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.15)
 
         XCTAssertTrue(
             states.contains(.agentLaunched),
@@ -219,9 +220,7 @@ final class AiderPatternSessionTests: XCTestCase {
         sendLine("> ")
         sendLine("> ")
 
-        let exp = expectation(description: "Wait for dispatch")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.15)
 
         XCTAssertTrue(states.contains(.waitingInput),
                       "> prompt should trigger waitingInput state via pattern matching")
@@ -588,8 +587,11 @@ final class ConcurrencyEdgeCaseTests: XCTestCase {
         }
 
         let exp = expectation(description: "No crash during concurrent reset")
-        group.notify(queue: .main) { exp.fulfill() }
-        waitForExpectations(timeout: 5.0)
+        group.notify(queue: .global(qos: .background)) { exp.fulfill() }
+        // This stress case competes with the rest of the suite for CPU on CI.
+        // Keep the assertion strict (no retries), but allow enough headroom
+        // that scheduler pressure does not masquerade as a product failure.
+        waitForExpectations(timeout: 20.0)
         // No crash = pass
     }
 
@@ -608,10 +610,13 @@ final class ConcurrencyEdgeCaseTests: XCTestCase {
 
         DispatchQueue.global(qos: .userInteractive).async {
             capturedEngine.processTerminalOutput(data)
-            DispatchQueue.main.async { exp.fulfill() }
+            exp.fulfill()
         }
 
-        waitForExpectations(timeout: 5.0)
+        // This is intentionally a heavy stress test (~1MB in a single burst).
+        // CI runners can take well over 10 seconds under whole-suite load even
+        // when the engine is healthy, so the timeout must reflect that load.
+        waitForExpectations(timeout: 20.0)
         // Completes within timeout = pass
     }
 
@@ -622,9 +627,7 @@ final class ConcurrencyEdgeCaseTests: XCTestCase {
         // Should not crash, should not change state
         engine.processTerminalOutput(Data())
 
-        let exp = expectation(description: "No side effects from empty data")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.1)
 
         XCTAssertEqual(engine.currentState, .idle, "Empty input must not change state from idle")
     }
@@ -712,9 +715,7 @@ final class FalsePositiveRateTests: XCTestCase {
             engine.processTerminalOutput(Data((line + "\n").utf8))
         }
 
-        let exp = expectation(description: "Wait for async dispatch")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.1)
 
         XCTAssertEqual(transitionCount, 0,
                        "Normal terminal output must produce zero false positive agent detections")
@@ -745,9 +746,7 @@ final class FalsePositiveRateTests: XCTestCase {
             engine.processTerminalOutput(Data((line + "\n").utf8))
         }
 
-        let exp = expectation(description: "Wait for dispatch")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.1)
 
         XCTAssertEqual(errorSignalCount, 0,
                        "Git error output from idle state must not trigger agent error state")
@@ -776,9 +775,7 @@ final class FalsePositiveRateTests: XCTestCase {
             engine.processTerminalOutput(Data((line + "\n").utf8))
         }
 
-        let exp = expectation(description: "Wait for dispatch")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.1)
 
         XCTAssertEqual(transitionCount, 0,
                        "Shell prompts from idle state must not trigger agent detection")
@@ -805,9 +802,7 @@ final class FalsePositiveRateTests: XCTestCase {
         engine.processTerminalOutput(Data(oscColor))
         engine.processTerminalOutput(Data(oscClipboard))
 
-        let exp = expectation(description: "Wait for dispatch")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.1)
 
         XCTAssertEqual(transitionCount, 0,
                        "Non-agent OSC sequences must be ignored and not trigger state changes")
@@ -1030,9 +1025,7 @@ final class EngineAdditionalEdgeCases: XCTestCase {
         engine.notifyProcessExited()
 
         // Wait past debounce interval (0.01s + margin)
-        let exp = expectation(description: "Wait past debounce interval")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.1)
 
         // Second detection: same event, should pass through now
         engine.injectSignal(DetectionSignal(
@@ -1040,9 +1033,7 @@ final class EngineAdditionalEdgeCases: XCTestCase {
             confidence: 1.0, source: .osc(code: 99)
         ))
 
-        let exp2 = expectation(description: "Wait for second transition")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { exp2.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.05)
 
         XCTAssertGreaterThanOrEqual(transitionCount, 3,
             "After debounce interval, same event must be processed again: got \(transitionCount) transitions")
@@ -1092,9 +1083,7 @@ final class EngineAdditionalEdgeCases: XCTestCase {
 
         engine.notifyProcessExited()
 
-        let exp = expectation(description: "Wait for all transitions")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        waitForExpectations(timeout: 1.0)
+        MainActorTestSupport.waitForMainDispatch(delay: 0.1)
 
         XCTAssertTrue(observedNames.contains("aider"), "detectedAgentName must be 'aider' after detection")
         XCTAssertTrue(observedNames.contains(nil), "detectedAgentName must be nil after process exit")

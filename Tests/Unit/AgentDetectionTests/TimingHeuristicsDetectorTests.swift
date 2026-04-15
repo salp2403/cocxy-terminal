@@ -159,26 +159,32 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
     }
 
     func testConfirmWorkingAfterSustainedOutput() {
+        let detector = TimingHeuristicsDetector(
+            defaultIdleTimeout: 0.2,
+            sustainedOutputThreshold: 0.05
+        )
+        defer { detector.stop() }
+
         let expectation = expectation(description: "Sustained output confirms working")
 
-        sut.notifyStateChanged(to: .agentLaunched)
+        detector.notifyStateChanged(to: .agentLaunched)
 
-        sut.onSignalEmitted = { signal in
+        detector.onSignalEmitted = { signal in
             if case .outputReceived = signal.event {
                 expectation.fulfill()
             }
         }
 
-        // Send output continuously for more than sustainedOutputThreshold (0.1s)
-        let _ = sut.processBytes(Data("chunk1".utf8))
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
-            let _ = self.sut.processBytes(Data("chunk2".utf8))
-        }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.12) {
-            let _ = self.sut.processBytes(Data("chunk3".utf8))
-        }
+        // Drive the detector with real elapsed time instead of three queued
+        // asyncAfter hops near the threshold. This keeps the test stable under
+        // suite-wide CI load while still proving sustained output promotion.
+        let _ = detector.processBytes(Data("chunk1".utf8))
+        Thread.sleep(forTimeInterval: 0.08)
+        let _ = detector.processBytes(Data("chunk2".utf8))
+        Thread.sleep(forTimeInterval: 0.08)
+        let _ = detector.processBytes(Data("chunk3".utf8))
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 2.0)
     }
 
     func testPauseWhenUnfocused() {

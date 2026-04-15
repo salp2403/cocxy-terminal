@@ -160,20 +160,26 @@ final class SearchBarIntegrationTests: XCTestCase {
         }
 
         viewModel.query = "error"
-        waitForSearchDebounce()
-        XCTAssertEqual(viewModel.totalMatches, 2)
+        waitForSearchMatchCount(2, in: viewModel)
 
         viewModel.caseSensitive = true
-        waitForSearchDebounce()
-        XCTAssertEqual(viewModel.totalMatches, 1)
+        waitForSearchMatchCount(1, in: viewModel)
     }
 
-    private func waitForSearchDebounce() {
-        let expectation = expectation(description: "search debounce")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            expectation.fulfill()
+    private func waitForSearchMatchCount(
+        _ expectedCount: Int,
+        in viewModel: ScrollbackSearchBarViewModel,
+        timeout: TimeInterval = 3.0,
+        pollInterval: TimeInterval = 0.02
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if viewModel.totalMatches == expectedCount {
+                return
+            }
+            RunLoop.main.run(until: Date().addingTimeInterval(pollInterval))
         }
-        wait(for: [expectation], timeout: 1.0)
+        XCTFail("Timed out waiting for search results to reach \(expectedCount); current value: \(viewModel.totalMatches)")
     }
 }
 

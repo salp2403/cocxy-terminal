@@ -63,6 +63,42 @@ final class MockSocketCommandHandler: SocketCommandHandling, @unchecked Sendable
 /// main thread to avoid deadlocks with the server's accept loop.
 enum SocketTestClient {
 
+    /// Waits until the server is actually accepting connections.
+    ///
+    /// Using a fixed sleep here is flaky under CI load because the accept loop
+    /// may not be ready even though `start()` already returned.
+    static func waitUntilReady(
+        socketPath: String,
+        timeout: TimeInterval = 2.0,
+        pollInterval: TimeInterval = 0.01
+    ) throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastError: Error?
+
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: socketPath) {
+                do {
+                    let fd = try connect(to: socketPath)
+                    Darwin.close(fd)
+                    return
+                } catch {
+                    lastError = error
+                }
+            }
+
+            Thread.sleep(forTimeInterval: pollInterval)
+        }
+
+        throw lastError ?? NSError(
+            domain: "test",
+            code: -1,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Timed out waiting for socket server readiness at \(socketPath)"
+            ]
+        )
+    }
+
     /// Connects to the socket at the given path.
     ///
     /// - Parameter socketPath: Path to the Unix Domain Socket.
@@ -234,8 +270,7 @@ final class SocketServerTests: XCTestCase {
             commandHandler: handler
         )
         try server.start()
-        // Give the accept loop time to start.
-        Thread.sleep(forTimeInterval: 0.05)
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
         return (server, handler)
     }
 
@@ -384,9 +419,6 @@ final class SocketServerTests: XCTestCase {
         let response = try performRoundTrip(request: request)
 
         XCTAssertTrue(response.success)
-
-        // Give the handler time to record.
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.count, 1)
         XCTAssertEqual(handler.receivedRequests.first?.command, "notify")
         XCTAssertEqual(handler.receivedRequests.first?.params?["message"], "Build completed")
@@ -404,7 +436,6 @@ final class SocketServerTests: XCTestCase {
         let response = try performRoundTrip(request: request)
 
         XCTAssertTrue(response.success)
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.first?.command, "list-tabs")
     }
 
@@ -420,7 +451,6 @@ final class SocketServerTests: XCTestCase {
         let response = try performRoundTrip(request: request)
 
         XCTAssertTrue(response.success)
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.first?.command, "status")
     }
 
@@ -499,8 +529,6 @@ final class SocketServerTests: XCTestCase {
         XCTAssertTrue(responses[0].success)
         XCTAssertEqual(responses[1].id, "multi-2")
         XCTAssertTrue(responses[1].success)
-
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.count, 2)
     }
 
@@ -617,7 +645,6 @@ final class SocketServerTests: XCTestCase {
         let response = try performRoundTrip(request: request)
 
         XCTAssertTrue(response.success)
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.first?.command, "new-tab")
     }
 
@@ -633,7 +660,6 @@ final class SocketServerTests: XCTestCase {
         let response = try performRoundTrip(request: request)
 
         XCTAssertTrue(response.success)
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.first?.command, "focus-tab")
     }
 
@@ -649,7 +675,6 @@ final class SocketServerTests: XCTestCase {
         let response = try performRoundTrip(request: request)
 
         XCTAssertTrue(response.success)
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.first?.command, "close-tab")
     }
 
@@ -669,7 +694,6 @@ final class SocketServerTests: XCTestCase {
         let response = try performRoundTrip(request: request)
 
         XCTAssertTrue(response.success)
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.first?.command, "split")
     }
 

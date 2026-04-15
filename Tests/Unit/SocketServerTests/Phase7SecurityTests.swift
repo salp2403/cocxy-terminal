@@ -56,7 +56,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
             commandHandler: handler
         )
         try server.start()
-        Thread.sleep(forTimeInterval: 0.05)
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
         return (server, handler)
     }
 
@@ -197,14 +197,16 @@ final class Phase7SocketSecurityTests: XCTestCase {
         let (server, _) = try startServer(handler: handler)
         defer { server.stop() }
 
-        let group = DispatchGroup()
         let reconnectCount = 5
+        let expectation = expectation(description: "Rapid reconnections complete")
         var successfulConnections = 0
-        let lock = NSLock()
+        var connectionErrors: [String] = []
+        let resultsLock = NSLock()
+        let group = DispatchGroup()
 
         for i in 0..<reconnectCount {
             group.enter()
-            DispatchQueue.global().async { [testSocketPath] in
+            DispatchQueue.global(qos: .userInitiated).async { [testSocketPath] in
                 defer { group.leave() }
                 do {
                     let fd = try SocketTestClient.connect(to: testSocketPath!)
@@ -213,22 +215,30 @@ final class Phase7SocketSecurityTests: XCTestCase {
                     let req = SocketRequest(id: "rapid-\(i)", command: "status", params: nil)
                     let resp = try SocketTestClient.sendRequest(req, on: fd)
 
+                    resultsLock.lock()
                     if resp.success {
-                        lock.lock()
                         successfulConnections += 1
-                        lock.unlock()
+                    } else {
+                        connectionErrors.append("Request rapid-\(i) returned success=false")
                     }
+                    resultsLock.unlock()
                 } catch {
-                    // Some connections may fail under rapid load — that is acceptable.
+                    resultsLock.lock()
+                    connectionErrors.append("rapid-\(i): \(error.localizedDescription)")
+                    resultsLock.unlock()
                 }
             }
         }
 
-        let expectation = expectation(description: "Rapid reconnections complete")
-        group.notify(queue: .main) { expectation.fulfill() }
+        group.notify(queue: .main) {
+            expectation.fulfill()
+        }
         wait(for: [expectation], timeout: 10.0)
 
-        // All connections should succeed — the server must remain stable.
+        XCTAssertTrue(
+            connectionErrors.isEmpty,
+            "Rapid successive reconnections must complete cleanly. Errors: \(connectionErrors.joined(separator: "; "))"
+        )
         XCTAssertEqual(successfulConnections, reconnectCount,
                        "All \(reconnectCount) rapid reconnections should succeed")
         XCTAssertTrue(server.isRunning,
@@ -330,7 +340,6 @@ final class Phase7SocketSecurityTests: XCTestCase {
         XCTAssertNotNil(response)
         XCTAssertTrue(response?.success == true,
                       "Large but valid params dict should be accepted")
-        Thread.sleep(forTimeInterval: 0.05)
         XCTAssertEqual(handler.receivedRequests.first?.command, "notify")
     }
 }

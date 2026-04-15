@@ -318,12 +318,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate WITHOUT calling stop() -- relies on deinit to clean up.
         detector = nil
 
-        // Brief wait to allow async queue to process.
-        let expectation = expectation(description: "deinit completes cleanly")
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
-            expectation.fulfill()
-        }
-        waitForExpectations(timeout: 1.0)
+        waitForBackgroundQueueSettling()
 
         XCTAssertNil(weakRef.value,
             "TimingHeuristicsDetector was not deallocated via deinit path.")
@@ -416,12 +411,7 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate WITHOUT calling stopAutoSave.
         manager = nil
 
-        // Wait briefly for async queue settling.
-        let expectation = expectation(description: "async settling")
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
-            expectation.fulfill()
-        }
-        waitForExpectations(timeout: 1.0)
+        waitForBackgroundQueueSettling()
 
         XCTAssertNil(weakRef.value,
             "SessionManagerImpl leaked: DispatchSourceTimer event handler holds strong reference.")
@@ -621,15 +611,31 @@ final class MemoryLeakTests: XCTestCase {
         // Deallocate while async work may still be pending.
         engine = nil
 
-        // Wait for main queue to drain.
+        waitForMainQueueDrain()
+
+        XCTAssertNil(weakRef.value,
+            "AgentDetectionEngineImpl leaked: processTerminalOutput closure holds strong reference.")
+    }
+}
+
+private extension XCTestCase {
+    func waitForBackgroundQueueSettling(
+        timeout: TimeInterval = 5.0,
+        settleDelay: TimeInterval = 0.05
+    ) {
+        let expectation = expectation(description: "background queue settling")
+        DispatchQueue.global().asyncAfter(deadline: .now() + settleDelay) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: timeout)
+    }
+
+    func waitForMainQueueDrain(timeout: TimeInterval = 5.0) {
         let expectation = expectation(description: "main queue drain")
         DispatchQueue.main.async {
             expectation.fulfill()
         }
-        waitForExpectations(timeout: 1.0)
-
-        XCTAssertNil(weakRef.value,
-            "AgentDetectionEngineImpl leaked: processTerminalOutput closure holds strong reference.")
+        wait(for: [expectation], timeout: timeout)
     }
 }
 
