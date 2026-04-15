@@ -79,6 +79,44 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
         #expect(harness.refreshCount() == 0)
     }
 
+    @Test("FileChanged matches symlinked tmp paths after canonicalization")
+    func fileChangedCanonicalizesSymlinkedTmpPaths() async throws {
+        let directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("file-changed-\(UUID().uuidString)", isDirectory: true)
+        let nestedFile = directory.appendingPathComponent("src/main.swift")
+        try FileManager.default.createDirectory(
+            at: nestedFile.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let receiver = HookEventReceiverImpl()
+        let counter = AtomicInt()
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: SessionDiffTrackerImpl(),
+            hookEventReceiver: receiver,
+            directDiffLoader: { _, _, _ in
+                counter.increment()
+                return []
+            }
+        )
+        viewModel.activeTabCwdProvider = { directory }
+        viewModel.fileChangeRefreshDebounce = 0.05
+        viewModel.refreshDelay = 0
+        viewModel.isVisible = true
+
+        emit(
+            .fileChanged,
+            on: receiver,
+            cwd: directory.resolvingSymlinksInPath().path,
+            filePath: nestedFile.resolvingSymlinksInPath().path
+        )
+
+        try await waitForCondition { counter.value >= 1 }
+        try await Task.sleep(nanoseconds: 400_000_000)
+        #expect(counter.value == 1)
+    }
+
     @Test("Hidden panel skips FileChanged refreshes")
     func noRefreshWhenPanelNotVisible() async throws {
         let harness = makeHarness(initiallyVisible: false)

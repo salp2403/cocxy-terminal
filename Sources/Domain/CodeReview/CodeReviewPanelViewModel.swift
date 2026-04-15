@@ -430,9 +430,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
             .sink { [weak self] event in
                 guard let self else { return }
                 let activeSessionId = self.activeSessionIdProvider?()
-                let activeDirectory = self.activeTabCwdProvider?()?.standardizedFileURL
+                let activeDirectory = self.activeTabCwdProvider?().map(HookPathNormalizer.normalize)
                 let sameSession = activeSessionId == event.sessionId
-                let sameDirectory = event.cwd.map { URL(fileURLWithPath: $0).standardizedFileURL == activeDirectory } ?? false
+                let sameDirectory = activeDirectory != nil
+                    && event.cwd.map(HookPathNormalizer.normalize) == activeDirectory
 
                 switch event.type {
                 case .postToolUse, .postToolUseFailure:

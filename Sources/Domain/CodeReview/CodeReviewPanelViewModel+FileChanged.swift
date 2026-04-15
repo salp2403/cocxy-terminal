@@ -40,12 +40,12 @@ extension CodeReviewPanelViewModel {
               let activeCwdURL = activeTabCwdProvider?() else {
             return
         }
-        let eventCwdPath = URL(fileURLWithPath: eventCwd).standardizedFileURL.path
-        let activeCwdPath = activeCwdURL.standardizedFileURL.path
+        let eventCwdPath = HookPathNormalizer.normalize(eventCwd)
+        let activeCwdPath = HookPathNormalizer.normalize(activeCwdURL.path)
         guard eventCwdPath == activeCwdPath else {
             return
         }
-        let filePath = URL(fileURLWithPath: data.filePath).standardizedFileURL.path
+        let filePath = HookPathNormalizer.normalize(data.filePath)
         guard filePath == activeCwdPath || filePath.hasPrefix(activeCwdPath + "/") else {
             return
         }

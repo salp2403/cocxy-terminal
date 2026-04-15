@@ -16,16 +16,13 @@ import Testing
 /// drop perfectly legitimate hook events because `/tmp` does not equal
 /// `/private/tmp` lexically.
 ///
-/// This suite exercises the normalization helper directly. It uses the
-/// `normalizedWorkingDirectoryPathForTesting` static seam exposed by
-/// `AppDelegate` so the tests do not need to construct an entire
-/// `AppDelegate` instance just to verify pure path normalization.
+/// This suite exercises the shared hook path normalization helper directly.
 @Suite("AppDelegate hook cwd path normalization")
 struct HookMatchingTests {
     @Test("/tmp and /private/tmp resolve to the same canonical path")
     func tmpAndPrivateTmpResolveEqually() {
-        let a = AppDelegate.normalizedWorkingDirectoryPathForTesting("/tmp")
-        let b = AppDelegate.normalizedWorkingDirectoryPathForTesting("/private/tmp")
+        let a = HookPathNormalizer.normalize("/tmp")
+        let b = HookPathNormalizer.normalize("/private/tmp")
         #expect(
             a == b,
             "Expected canonical equality, got \(a) vs \(b)"
@@ -34,22 +31,22 @@ struct HookMatchingTests {
 
     @Test("Trailing slash normalizes to the same canonical path")
     func trailingSlashNormalizes() {
-        let withSlash = AppDelegate.normalizedWorkingDirectoryPathForTesting("/tmp/")
-        let withoutSlash = AppDelegate.normalizedWorkingDirectoryPathForTesting("/tmp")
+        let withSlash = HookPathNormalizer.normalize("/tmp/")
+        let withoutSlash = HookPathNormalizer.normalize("/tmp")
         #expect(withSlash == withoutSlash)
     }
 
     @Test("file:// URL form resolves to the same canonical path as a plain path")
     func fileUrlMatchesPlainPath() {
-        let fileURL = AppDelegate.normalizedWorkingDirectoryPathForTesting("file:///tmp")
-        let plain = AppDelegate.normalizedWorkingDirectoryPathForTesting("/tmp")
+        let fileURL = HookPathNormalizer.normalize("file:///tmp")
+        let plain = HookPathNormalizer.normalize("/tmp")
         #expect(fileURL == plain)
     }
 
     @Test("Whitespace around the path is trimmed")
     func whitespaceIsTrimmed() {
-        let trimmed = AppDelegate.normalizedWorkingDirectoryPathForTesting("/tmp")
-        let surrounded = AppDelegate.normalizedWorkingDirectoryPathForTesting("  /tmp  \n")
+        let trimmed = HookPathNormalizer.normalize("/tmp")
+        let surrounded = HookPathNormalizer.normalize("  /tmp  \n")
         #expect(trimmed == surrounded)
     }
 
@@ -60,8 +57,8 @@ struct HookMatchingTests {
         // therefore agree on the same lexical canonical form, even if
         // there is no underlying inode.
         let path = "/Users/no_such_user/cocxy-fake-1234567890"
-        let normalized = AppDelegate.normalizedWorkingDirectoryPathForTesting(path)
-        let normalizedAgain = AppDelegate.normalizedWorkingDirectoryPathForTesting(path)
+        let normalized = HookPathNormalizer.normalize(path)
+        let normalizedAgain = HookPathNormalizer.normalize(path)
         #expect(normalized == normalizedAgain)
         #expect(normalized.hasSuffix("/cocxy-fake-1234567890"))
     }

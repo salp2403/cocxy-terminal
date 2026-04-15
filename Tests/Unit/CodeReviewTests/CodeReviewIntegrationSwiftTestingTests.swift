@@ -186,6 +186,28 @@ struct CodeReviewIntegrationSwiftTestingTests {
         #expect(viewModel.activeSessionId == "s1")
     }
 
+    @Test("session end without cwd does not nil-match an inactive tab directory")
+    func sessionEndWithoutCwdDoesNotAutoShowFromNilDirectoryMatch() async throws {
+        let tracker = SessionDiffTrackerImpl()
+        let cwd = URL(fileURLWithPath: "/tmp/code-review-auto-show-nil-cwd", isDirectory: true)
+        tracker.recordSnapshot(sessionId: "s1", ref: "abc123", workingDirectory: cwd)
+        tracker.trackFile(sessionId: "s1", filePath: "Sources/Foo.swift", agentName: "codex")
+
+        let hookReceiver = HookEventReceiverStub()
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: tracker,
+            hookEventReceiver: hookReceiver,
+            directDiffLoader: { _, _, _ in [] }
+        )
+        viewModel.autoShowEnabledProvider = { true }
+
+        hookReceiver.send(HookEvent(type: .sessionEnd, sessionId: "s1", cwd: nil))
+        await MainActorTestSupport.drainMainQueue()
+
+        #expect(viewModel.shouldAutoShow == false)
+        #expect(viewModel.activeSessionId == nil)
+    }
+
     @Test("refreshDiffs ignores stale completions from an older request")
     func refreshDiffsIgnoresStaleCompletion() async throws {
         let cwd = URL(fileURLWithPath: "/tmp/review-stale", isDirectory: true)

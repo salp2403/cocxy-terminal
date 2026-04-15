@@ -112,8 +112,8 @@ struct CwdChangedResolverSwiftTests {
         #expect(resolution == nil)
     }
 
-    @Test("Multi-controller search returns the first matching window")
-    func multiControllerSearchReturnsFirstMatch() {
+    @Test("Multi-controller search resolves the uniquely matching window")
+    func multiControllerSearchReturnsTheUniqueMatch() {
         let tabA = makeTab(workingDirectory: "/tmp/win-A")
         let tabB = makeTab(workingDirectory: "/tmp/win-B")
         let snapshotA = TabManagerSnapshot(tabs: [tabA])
@@ -127,6 +127,22 @@ struct CwdChangedResolverSwiftTests {
         #expect(resolution?.controllerIndex == 1)
         #expect(resolution?.tabID == tabB.id)
         #expect(resolution?.newWorkingDirectory.path == "/tmp/win-B-new")
+    }
+
+    @Test("Ambiguous duplicate previous CWDs are dropped instead of picking arbitrarily")
+    func ambiguousDuplicatePreviousCwdsAreDropped() {
+        let firstTab = makeTab(workingDirectory: "/tmp/shared")
+        let secondTab = makeTab(workingDirectory: "/tmp/shared")
+
+        let resolution = CwdChangedResolver.resolve(
+            event: cwdChangedEvent(previous: "/tmp/shared", current: "/tmp/shared-next"),
+            controllers: [
+                TabManagerSnapshot(tabs: [firstTab]),
+                TabManagerSnapshot(tabs: [secondTab]),
+            ]
+        )
+
+        #expect(resolution == nil)
     }
 
     @Test("Wrong event.type yields nil even when payload looks valid")
@@ -146,6 +162,35 @@ struct CwdChangedResolverSwiftTests {
             controllers: [snapshot]
         )
         #expect(resolution == nil)
+    }
+
+    @Test("CwdChanged normalizes symlinked macOS paths before exact matching")
+    func cwdChangedNormalizesSymlinkedPaths() throws {
+        let baseDirectory = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("cwd-changed-\(UUID().uuidString)", isDirectory: true)
+        let nextDirectory = baseDirectory.appendingPathComponent("next", isDirectory: true)
+        try FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: nextDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: baseDirectory) }
+
+        let tab = makeTab(workingDirectory: baseDirectory.path)
+        let snapshot = TabManagerSnapshot(tabs: [tab])
+
+        let resolution = CwdChangedResolver.resolve(
+            event: cwdChangedEvent(
+                previous: baseDirectory.resolvingSymlinksInPath().path,
+                current: nextDirectory.path
+            ),
+            controllers: [snapshot]
+        )
+
+        #expect(resolution != nil)
+        #expect(resolution?.tabID == tab.id)
+        #expect(
+            HookPathNormalizer.normalize(
+                resolution?.newWorkingDirectory.path ?? ""
+            ) == HookPathNormalizer.normalize(nextDirectory.path)
+        )
     }
 
     // MARK: - Helpers

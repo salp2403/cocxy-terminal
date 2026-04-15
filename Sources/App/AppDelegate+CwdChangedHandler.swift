@@ -23,25 +23,72 @@ extension AppDelegate {
     ///   dedup against OSC 7).
     /// - Tab matching is exact, never a parent-directory fallback.
     func handleCwdChangedHook(_ event: HookEvent) {
-        let snapshots = allWindowControllers.map(TabManagerSnapshot.init)
-        guard let resolution = CwdChangedResolver.resolve(
-            event: event,
-            controllers: snapshots
-        ) else {
+        if let resolution = resolutionForCwdChanged(event) {
+            let controller = allWindowControllers[resolution.controllerIndex]
+            controller.tabManager.updateTab(id: resolution.tabID) { mutated in
+                mutated.workingDirectory = resolution.newWorkingDirectory
+                mutated.lastActivityAt = Date()
+            }
+            controller.tabBarViewModel?.syncWithManager()
+            controller.refreshStatusBar()
+        } else {
             return
         }
+    }
 
-        let controller = allWindowControllers[resolution.controllerIndex]
-        controller.tabManager.updateTab(id: resolution.tabID) { mutated in
-            mutated.workingDirectory = resolution.newWorkingDirectory
-            mutated.lastActivityAt = Date()
+    private func resolutionForCwdChanged(_ event: HookEvent) -> CwdChangedResolver.Resolution? {
+        guard event.type == .cwdChanged,
+              case .cwdChanged(let data) = event.data,
+              let previousCwd = data.previousCwd, !previousCwd.isEmpty,
+              let newCwd = event.cwd, !newCwd.isEmpty
+        else {
+            return nil
         }
-        controller.tabBarViewModel?.syncWithManager()
-        controller.refreshStatusBar()
+
+        let previousPath = HookPathNormalizer.normalize(previousCwd)
+        let newPath = HookPathNormalizer.normalize(newCwd)
+        guard previousPath != newPath else { return nil }
+
+        if let bound = boundResolutionForCwdChanged(
+            sessionID: event.sessionId,
+            previousPath: previousPath,
+            newCwd: newCwd
+        ) {
+            return bound
+        }
+
+        return CwdChangedResolver.resolve(
+            event: event,
+            controllers: allWindowControllers.map(TabManagerSnapshot.init(controller:))
+        )
+    }
+
+    private func boundResolutionForCwdChanged(
+        sessionID: String?,
+        previousPath: String,
+        newCwd: String
+    ) -> CwdChangedResolver.Resolution? {
+        guard let sessionID,
+              let boundTabID = hookSessionTabBindings[sessionID],
+              let boundController = controllerContainingTab(boundTabID),
+              let controllerIndex = allWindowControllers.firstIndex(where: { $0 === boundController }),
+              let tab = boundController.tabManager.tab(for: boundTabID)
+        else {
+            return nil
+        }
+
+        let currentPath = HookPathNormalizer.normalize(tab.workingDirectory.path)
+        guard currentPath == previousPath else { return nil }
+
+        return CwdChangedResolver.Resolution(
+            controllerIndex: controllerIndex,
+            tabID: boundTabID,
+            newWorkingDirectory: URL(fileURLWithPath: newCwd, isDirectory: true)
+        )
     }
 }
 
-// MARK: - Pure resolver (test-friendly)
+// MARK: - Pure resolver shared by production and tests
 
 /// Snapshot of a controller's tabs at the moment the hook arrives. Captured
 /// once so the resolver can stay free of MainActor-only operations.
@@ -60,8 +107,9 @@ struct TabManagerSnapshot: Sendable {
 
 /// Pure resolution of a CwdChanged hook against a list of tab snapshots.
 ///
-/// Extracted so unit tests can validate the routing logic without booting
-/// AppKit or the MainWindowController stack.
+/// Production uses this as the unbound fallback path after attempting an
+/// exact session-to-tab binding match. Tests also exercise it directly so
+/// the fallback routing stays hermetic and easy to reason about.
 enum CwdChangedResolver {
 
     struct Resolution: Equatable {
@@ -82,28 +130,30 @@ enum CwdChangedResolver {
             return nil
         }
 
-        let previousPath = URL(fileURLWithPath: previousCwd).standardizedFileURL.path
-        let newPath = URL(fileURLWithPath: newCwd).standardizedFileURL.path
+        let previousPath = HookPathNormalizer.normalize(previousCwd)
+        let newPath = HookPathNormalizer.normalize(newCwd)
         guard previousPath != newPath else { return nil }
 
+        var matches: [(index: Int, tab: Tab)] = []
         for (index, snapshot) in controllers.enumerated() {
-            guard let tab = snapshot.tabs.first(where: {
-                $0.workingDirectory.standardizedFileURL.path == previousPath
-            }) else {
-                continue
+            for tab in snapshot.tabs where HookPathNormalizer.normalize(tab.workingDirectory.path) == previousPath {
+                matches.append((index, tab))
             }
-            // Race-free dedup: if OSC 7 already wrote the new CWD, don't
-            // re-fire UI refreshes.
-            let currentPath = tab.workingDirectory.standardizedFileURL.path
-            guard currentPath != newPath else { return nil }
-
-            return Resolution(
-                controllerIndex: index,
-                tabID: tab.id,
-                newWorkingDirectory: URL(fileURLWithPath: newCwd, isDirectory: true)
-            )
         }
 
-        return nil
+        guard matches.count == 1, let match = matches.first else {
+            return nil
+        }
+
+        // Race-free dedup: if OSC 7 already wrote the new CWD, don't
+        // re-fire UI refreshes.
+        let currentPath = HookPathNormalizer.normalize(match.tab.workingDirectory.path)
+        guard currentPath != newPath else { return nil }
+
+        return Resolution(
+            controllerIndex: match.index,
+            tabID: match.tab.id,
+            newWorkingDirectory: URL(fileURLWithPath: newCwd, isDirectory: true)
+        )
     }
 }
