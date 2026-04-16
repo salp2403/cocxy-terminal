@@ -5,6 +5,18 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.70] - 2026-04-16
+
+### Fixed
+- Baseline jitter between neighbouring letters on the same line. Glyphs are now rasterised onto a whole-pixel grid in the atlas (subpixel positioning and subpixel quantisation disabled) and every per-cell `glyph_x` / `glyph_y` snaps to an integer pixel before reaching the GPU. Characters like `o`, `p`, `e`, `n` on the same line share a stable baseline regardless of the fractional bearings returned by CoreText for the active font.
+
+### Changed
+- Bumped the bundled CocxyCore engine to v0.13.2. The new engine ships the pixel-aligned rasterisation path and keeps the ligature / shaped-run offsets intact.
+- Metal glyph sampler comment in `MetalTerminalRenderer` now reflects the pixel-aligned pipeline so future readers do not mistake linear sampling for a workaround around subpixel placement.
+
+### Testing
+- New Zig regression suite `metal_pixel_align_test.zig` locks the integer-snap contract in place across both the atlas-hit and fallback code paths in `MetalPipeline.build`. Any future refactor that removes one of the `@round(...)` calls fails the test instead of silently reintroducing the jitter.
+
 ## [0.1.69] - 2026-04-16
 
 ### Added
