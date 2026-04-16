@@ -63,7 +63,23 @@ struct SessionDiffTrackerSwiftTestingTests {
 
     @Test("SessionStart event records pending snapshot directory")
     func sessionStartTriggersPendingSnapshot() {
-        let tracker = SessionDiffTrackerImpl(gitRunner: { _, _ in "abc123\n" })
+        // `handleHookEvent` synchronously sets `pendingSnapshotDirectory` to
+        // the event's cwd, then kicks off an async task (`snapshotCurrentHead`)
+        // that clears it once HEAD is resolved. On a loaded CI runner the
+        // async clear can race ahead of the `#expect` below, causing the
+        // pending value to be nil at observation time even though the
+        // production code is correct.
+        //
+        // Block the gitRunner so the async task cannot clear the pending
+        // directory before we read it. The semaphore is released after the
+        // assertion so the task can finish cleanly and no threads leak.
+        let gate = DispatchSemaphore(value: 0)
+        let tracker = SessionDiffTrackerImpl(gitRunner: { _, _ in
+            gate.wait()
+            return "abc123\n"
+        })
+        defer { gate.signal() }
+
         let event = HookEvent(
             type: .sessionStart,
             sessionId: "test-session",

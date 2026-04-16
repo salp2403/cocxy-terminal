@@ -81,32 +81,44 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
     }
 
     func testResetTimerOnNewOutput() {
+        // Local detector with a more generous idleTimeout than the default
+        // 0.2s of `sut`: on busy CI runners `asyncAfter(0.05)` slips past
+        // 0.2s, which lets the first-output timer fire before the reset
+        // arrives. 0.6s idle plus 0.15s spacing keeps the reset safely
+        // inside the window on every realistic runner.
+        let detector = TimingHeuristicsDetector(
+            defaultIdleTimeout: 0.6,
+            sustainedOutputThreshold: 0.1
+        )
+        defer { detector.stop() }
+
         let expectation = expectation(description: "Timer reset prevents early firing")
         expectation.isInverted = true
 
-        sut.notifyStateChanged(to: .working)
-        let _ = sut.processBytes(Data("first output".utf8))
+        detector.notifyStateChanged(to: .working)
+        let _ = detector.processBytes(Data("first output".utf8))
 
-        sut.onSignalEmitted = { signal in
+        detector.onSignalEmitted = { signal in
             if case .completionDetected = signal.event {
                 expectation.fulfill()
             }
         }
 
-        // Keep sending output before the 0.2s timeout
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
-            let _ = self.sut.processBytes(Data("second output".utf8))
-        }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.10) {
-            let _ = self.sut.processBytes(Data("third output".utf8))
-        }
+        // Keep sending output well before the 0.6s idle window expires.
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) {
-            let _ = self.sut.processBytes(Data("fourth output".utf8))
+            let _ = detector.processBytes(Data("second output".utf8))
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.30) {
+            let _ = detector.processBytes(Data("third output".utf8))
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.45) {
+            let _ = detector.processBytes(Data("fourth output".utf8))
         }
 
-        // The timer should keep getting reset, so no timeout in 0.25s
-        // (Each output resets the 0.2s window)
-        wait(for: [expectation], timeout: 0.25)
+        // Each output resets the 0.6s window; the last output at t=0.45
+        // rearms the timer to t=1.05, so observe up to 0.75s without any
+        // early fire.
+        wait(for: [expectation], timeout: 0.75)
     }
 
     func testCustomTimeoutPerAgent() {
@@ -136,26 +148,38 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
     }
 
     func testNoTriggerDuringActiveOutput() {
+        // Local detector with a more generous idleTimeout than the default
+        // 0.2s of `sut`: asyncAfter deadlines on loaded CI runners can slip
+        // past 0.2s, which lets the idle timer fire between chunks. 0.6s
+        // plus 0.15s chunk spacing keeps resets comfortably inside the
+        // window on every realistic runner.
+        let detector = TimingHeuristicsDetector(
+            defaultIdleTimeout: 0.6,
+            sustainedOutputThreshold: 0.1
+        )
+        defer { detector.stop() }
+
         let expectation = expectation(description: "No trigger during active output")
         expectation.isInverted = true
 
-        sut.notifyStateChanged(to: .working)
+        detector.notifyStateChanged(to: .working)
 
-        sut.onSignalEmitted = { signal in
+        detector.onSignalEmitted = { signal in
             if case .completionDetected = signal.event {
                 expectation.fulfill()
             }
         }
 
-        // Continuously send output every 50ms for 500ms
+        // Continuously send output every 150ms for 1.35s (10 chunks).
         for i in 0..<10 {
-            DispatchQueue.global().asyncAfter(deadline: .now() + Double(i) * 0.05) {
-                let _ = self.sut.processBytes(Data("output chunk \(i)".utf8))
+            DispatchQueue.global().asyncAfter(deadline: .now() + Double(i) * 0.15) {
+                let _ = detector.processBytes(Data("output chunk \(i)".utf8))
             }
         }
 
-        // Since output keeps coming, the timeout should never fire
-        wait(for: [expectation], timeout: 0.6)
+        // Since output keeps coming, the timeout should never fire within
+        // the observation window (< 0.6s after the last chunk at t=1.35s).
+        wait(for: [expectation], timeout: 1.5)
     }
 
     func testConfirmWorkingAfterSustainedOutput() {
