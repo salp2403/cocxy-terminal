@@ -5,6 +5,15 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.68] - 2026-04-15
+
+### Added
+- Five new built-in color themes: Catppuccin Frappe, Catppuccin Macchiato, Nord, Gruvbox Dark, and Tokyo Night (fixes #1, #2, #3). The built-in catalog now ships 11 themes, each with the full palette (background, foreground, cursor, selection, tab states, badge colors, and 16 ANSI colors) sourced from the official specification of each project. Custom themes via `~/.config/cocxy/themes/*.toml` continue to extend the catalog.
+- Agent detection patterns for Cursor Agent and Windsurf (fixes #5). The detection catalog now covers 8 agents out of the box, with launch, waiting, error, and finished indicators plus idle-timeout override per agent.
+
+### Changed
+- The reference `Resources/defaults/agents.toml` snapshot is now kept in sync with the authoritative `AgentConfigService.defaultAgentConfigs()` source of truth via a dedicated parity test; the runtime continues to read from the Swift-side source so the TOML file remains a documentation/manual-install reference.
+
 ## [0.1.67] - 2026-04-14
 
 ### Added
