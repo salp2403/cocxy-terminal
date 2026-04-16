@@ -104,17 +104,43 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         debounceBuckets[surfaceID]?.eventKey
     }
 
+    /// Returns the hook sessions currently active on a surface, or an
+    /// empty set if the surface has no bucket. Exposed as `internal` for
+    /// white-box tests of the per-surface hook-suppression contract.
+    internal func _hookSessionsForTesting(
+        surfaceID: SurfaceID?
+    ) -> Set<String> {
+        hookActiveSurfaces[surfaceID] ?? []
+    }
+
     /// Cancellables for internal subscriptions.
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Hook Integration (Layer 0, ADR-008)
 
-    /// Sessions that have active hook integration.
+    /// Sessions that have active hook integration, keyed by the surface
+    /// that owns them.
     ///
-    /// When a session is in this set, its signals come from Layer 0 (hooks)
-    /// with absolute priority. Layers 1-3 remain operational for fallback
-    /// and logging, but their signals are superseded by hook signals.
-    private(set) var hookActiveSessions: Set<String> = []
+    /// When a surface has any active hook session in its bucket, its Layer
+    /// 0 (hooks) signals take absolute priority over Layer 2 (pattern) and
+    /// Layer 3 (timing) signals produced by the same surface. A surface
+    /// without active hooks still accepts pattern/timing signals, even if
+    /// some other surface has a hook session running — this is the key
+    /// isolation property for multi-split terminals.
+    ///
+    /// Legacy call sites that do not thread a surfaceID share the `nil`
+    /// bucket, which reproduces the previous global-suppression behavior
+    /// for callers that have not been migrated yet.
+    private(set) var hookActiveSurfaces: [SurfaceID?: Set<String>] = [:]
+
+    /// Flat view over ``hookActiveSurfaces`` used by existing tests and
+    /// external consumers that only need to know whether *any* hook
+    /// session is alive anywhere in the engine. Preserved as a
+    /// backward-compatible projection so the XCTest coverage of hook
+    /// tracking keeps compiling unchanged.
+    var hookActiveSessions: Set<String> {
+        hookActiveSurfaces.values.reduce(into: Set<String>()) { $0.formUnion($1) }
+    }
 
     // MARK: - Initialization
 
@@ -261,6 +287,7 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         currentState = .idle
         detectedAgentName = nil
         debounceBuckets.removeAll()
+        hookActiveSurfaces.removeAll()
         oscDetector.reset()
         patternDetector.reset()
         timingDetector.notifyStateChanged(to: .idle)
@@ -311,12 +338,17 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     ///     sub-phases of the per-surface migration will have the wiring
     ///     extension resolve the cwd to a surfaceID before dispatching.
     func processHookEvent(_ event: HookEvent, surfaceID: SurfaceID? = nil) {
-        // Track active sessions
+        // Track active sessions per surface. Legacy call sites that pass
+        // `nil` share the `nil` bucket, matching the previous
+        // single-global-set behavior for untouched callers.
         switch event.type {
         case .sessionStart:
-            hookActiveSessions.insert(event.sessionId)
+            hookActiveSurfaces[surfaceID, default: []].insert(event.sessionId)
         case .sessionEnd, .stop:
-            hookActiveSessions.remove(event.sessionId)
+            hookActiveSurfaces[surfaceID]?.remove(event.sessionId)
+            if hookActiveSurfaces[surfaceID]?.isEmpty == true {
+                hookActiveSurfaces.removeValue(forKey: surfaceID)
+            }
         default:
             break
         }
@@ -426,10 +458,16 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         hookCwd: String? = nil,
         surfaceID: SurfaceID? = nil
     ) {
-        // Suppress lower-layer signals when hook sessions are active (ADR-008).
-        // Hook signals (Layer 0) have absolute priority over pattern (L2) and
-        // timing (L3) detections to prevent conflicting state transitions.
-        if !hookActiveSessions.isEmpty {
+        // Suppress lower-layer signals when hook sessions are active on
+        // the SAME surface (ADR-008). Hook signals (Layer 0) have absolute
+        // priority over pattern (L2) and timing (L3) signals for the
+        // surface they belong to, while other surfaces remain free to
+        // produce pattern/timing transitions. When `surfaceID` is `nil`
+        // (legacy callers), the `nil` bucket provides the historical
+        // global-suppression behavior unchanged.
+        let surfaceHasActiveHooks =
+            !(hookActiveSurfaces[surfaceID]?.isEmpty ?? true)
+        if surfaceHasActiveHooks {
             switch signal.source {
             case .hook:
                 break

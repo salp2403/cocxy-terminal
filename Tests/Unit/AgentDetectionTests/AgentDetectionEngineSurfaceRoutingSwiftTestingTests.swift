@@ -240,4 +240,122 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
         #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceB) == nil)
         #expect(engine._debounceEventKeyForTesting(surfaceID: nil) == nil)
     }
+
+    // MARK: - Per-surface hook session buckets
+
+    private func hookEvent(
+        type: HookEventType,
+        sessionId: String
+    ) -> HookEvent {
+        HookEvent(type: type, sessionId: sessionId)
+    }
+
+    @Test("No hook sessions are tracked before any SessionStart event")
+    func noHookSessionsInitially() {
+        let engine = makeEngine()
+        #expect(engine.hookActiveSurfaces.isEmpty)
+        #expect(engine.hookActiveSessions.isEmpty)
+    }
+
+    @Test("SessionStart registers the session in the surface's hook bucket")
+    func sessionStartRegistersInSurfaceBucket() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-1"),
+            surfaceID: surface
+        )
+
+        #expect(engine._hookSessionsForTesting(surfaceID: surface) == ["sess-1"])
+        #expect(engine._hookSessionsForTesting(surfaceID: nil).isEmpty)
+    }
+
+    @Test("Hook sessions from distinct surfaces live in distinct buckets")
+    func hookBucketsAreIndependent() {
+        let engine = makeEngine()
+        let surfaceA = SurfaceID()
+        let surfaceB = SurfaceID()
+
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-A"),
+            surfaceID: surfaceA
+        )
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-B"),
+            surfaceID: surfaceB
+        )
+
+        #expect(engine._hookSessionsForTesting(surfaceID: surfaceA) == ["sess-A"])
+        #expect(engine._hookSessionsForTesting(surfaceID: surfaceB) == ["sess-B"])
+        #expect(engine.hookActiveSessions == ["sess-A", "sess-B"])
+    }
+
+    @Test("SessionEnd removes the session and prunes the bucket when empty")
+    func sessionEndRemovesFromBucket() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-1"),
+            surfaceID: surface
+        )
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-2"),
+            surfaceID: surface
+        )
+        #expect(engine._hookSessionsForTesting(surfaceID: surface) == ["sess-1", "sess-2"])
+
+        engine.processHookEvent(
+            hookEvent(type: .sessionEnd, sessionId: "sess-1"),
+            surfaceID: surface
+        )
+        // Surface still tracked because sess-2 remains.
+        #expect(engine._hookSessionsForTesting(surfaceID: surface) == ["sess-2"])
+        #expect(engine.hookActiveSurfaces[surface] != nil)
+
+        engine.processHookEvent(
+            hookEvent(type: .stop, sessionId: "sess-2"),
+            surfaceID: surface
+        )
+        // Bucket is pruned once empty.
+        #expect(engine._hookSessionsForTesting(surfaceID: surface).isEmpty)
+        #expect(engine.hookActiveSurfaces[surface] == nil)
+    }
+
+    @Test("Legacy nil-surfaceID callers keep sessions in their own bucket")
+    func legacyNilBucketSharedAcrossLegacyCallers() {
+        let engine = makeEngine()
+
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "legacy-1")
+        )
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "legacy-2")
+        )
+
+        #expect(engine._hookSessionsForTesting(surfaceID: nil) == ["legacy-1", "legacy-2"])
+        #expect(engine._hookSessionsForTesting(surfaceID: SurfaceID()).isEmpty)
+    }
+
+    @Test("reset() clears every per-surface hook bucket")
+    func resetClearsHookBuckets() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-1"),
+            surfaceID: surface
+        )
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "legacy-1")
+        )
+
+        #expect(!engine.hookActiveSessions.isEmpty)
+
+        engine.reset()
+
+        #expect(engine.hookActiveSurfaces.isEmpty)
+        #expect(engine.hookActiveSessions.isEmpty)
+    }
 }
