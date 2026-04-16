@@ -5,6 +5,17 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.69] - 2026-04-16
+
+### Added
+- Configurable font stroke thickening: new `font-thicken` key under `[appearance]` in `config.toml`, plus a "Thicken font strokes" switch in Preferences → Appearance. Off by default so glyph strokes render thin and crisp on the grayscale atlas; turn it on to boost stroke weight for users who prefer a heavier look.
+
+### Changed
+- Bumped the bundled CocxyCore engine to v0.13.1. Previous builds applied `CGContextSetShouldSmoothFonts(true)` unconditionally during glyph rasterization; upgrading installs will see thinner, crisper strokes by default. The engine now exposes `cocxycore_terminal_set_thicken` / `_get_thicken` and persists the flag across font changes, so switching fonts no longer resets the preference.
+
+### Fixed
+- CocxyCore's WebSocket handshake now tolerates fragmented HTTP upgrade headers across short socket read timeouts, eliminating sporadic `ConnectionClosed` / `ConnectionResetByPeer` failures that surfaced in the web-relay test suite when the upgrade request arrived as more than one TCP segment.
+
 ## [0.1.68] - 2026-04-15
 
 ### Added
