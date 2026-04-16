@@ -338,6 +338,92 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
         #expect(engine._hookSessionsForTesting(surfaceID: SurfaceID()).isEmpty)
     }
 
+    // MARK: - notifyUserInput / notifyProcessExited surfaceID threading
+
+    @Test("notifyUserInput threads surfaceID into the emitted StateContext")
+    func notifyUserInputThreadsSurfaceID() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        // Walk the state machine to .waitingInput so .userInput has a
+        // valid transition to .working.
+        engine.injectSignal(launchSignal(), surfaceID: surface)
+        engine.injectSignal(
+            DetectionSignal(
+                event: .outputReceived,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: surface
+        )
+        engine.injectSignal(
+            DetectionSignal(
+                event: .promptDetected,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: surface
+        )
+        // State is now .waitingInput; surfaceID threaded through every emission.
+
+        engine.notifyUserInput(surfaceID: surface)
+
+        // 4 transitions: idle -> agentLaunched -> working -> waitingInput -> working.
+        #expect(captured.count == 4)
+        #expect(captured.last?.state == .working)
+        #expect(captured.last?.surfaceID == surface)
+        #expect(captured.allSatisfy { $0.surfaceID == surface })
+    }
+
+    @Test("notifyProcessExited threads surfaceID into the emitted StateContext")
+    func notifyProcessExitedThreadsSurfaceID() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        engine.injectSignal(launchSignal(), surfaceID: surface)
+        engine.notifyProcessExited(surfaceID: surface)
+
+        #expect(captured.count == 2)
+        #expect(captured.last?.state == .idle)
+        #expect(captured.last?.surfaceID == surface)
+    }
+
+    @Test("Legacy notifyUserInput/notifyProcessExited default to nil surfaceID")
+    func legacyNotifyHelpersSeedNilSurfaceID() {
+        let engine = makeEngine()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        // Exercise the default implementations from the protocol extension
+        // by calling through an AgentDetecting reference.
+        let detector: AgentDetecting = engine
+        engine.injectSignal(launchSignal())  // idle -> agentLaunched
+        detector.notifyProcessExited()       // legacy overload -> nil
+
+        #expect(captured.count == 2)
+        #expect(captured[0].surfaceID == nil)
+        #expect(captured[1].state == .idle)
+        #expect(captured[1].surfaceID == nil)
+    }
+
+    // MARK: - reset
+
     @Test("reset() clears every per-surface hook bucket")
     func resetClearsHookBuckets() {
         let engine = makeEngine()

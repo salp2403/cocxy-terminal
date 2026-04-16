@@ -199,26 +199,44 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         }
     }
 
-    /// Notifies the engine that the user typed input.
+    /// Notifies the engine that the user typed input on a specific
+    /// surface.
     ///
     /// Triggers the `waitingInput -> working` transition when applicable.
-    func notifyUserInput() {
-        processResolvedSignal(DetectionSignal(
-            event: .userInput,
-            confidence: 1.0,
-            source: .osc(code: 0)
-        ))
+    /// The `surfaceID` is carried into the emitted `StateContext` so the
+    /// resulting transition can be routed to the split that produced the
+    /// input. Callers that have not been migrated to per-surface routing
+    /// use the legacy `notifyUserInput()` overload provided by the
+    /// `AgentDetecting` extension, which forwards `nil`.
+    func notifyUserInput(surfaceID: SurfaceID?) {
+        processResolvedSignal(
+            DetectionSignal(
+                event: .userInput,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: surfaceID
+        )
     }
 
-    /// Notifies the engine that the terminal process has exited.
+    /// Notifies the engine that the terminal process on a specific
+    /// surface has exited.
     ///
-    /// Transitions to idle regardless of current state.
-    func notifyProcessExited() {
-        processResolvedSignal(DetectionSignal(
-            event: .agentExited,
-            confidence: 1.0,
-            source: .osc(code: 0)
-        ))
+    /// Transitions to idle regardless of current state. The `surfaceID`
+    /// is carried into the emitted `StateContext` so the transition is
+    /// associated with the surface whose process ended rather than with
+    /// whichever split happens to be focused. Callers that have not been
+    /// migrated to per-surface routing use the legacy
+    /// `notifyProcessExited()` overload, which forwards `nil`.
+    func notifyProcessExited(surfaceID: SurfaceID?) {
+        processResolvedSignal(
+            DetectionSignal(
+                event: .agentExited,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: surfaceID
+        )
     }
 
     /// Injects a signal directly into the engine.

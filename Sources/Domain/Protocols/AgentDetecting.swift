@@ -54,16 +54,52 @@ protocol AgentDetecting: AnyObject {
     ///     when the caller has not been migrated to per-surface routing.
     nonisolated func processTerminalOutput(_ data: Data, surfaceID: SurfaceID?)
 
-    /// Notifies the engine that the user has submitted input (e.g., pressed Enter).
+    /// Notifies the engine that the user has submitted input (e.g.,
+    /// pressed Enter).
     ///
-    /// Triggers the `waitingInput -> working` transition when the
-    /// agent was waiting for user input.
+    /// Legacy entry point preserved for backward compatibility. The
+    /// default implementation routes to the surfaceID-aware variant with
+    /// `nil`, which matches the previous behavior where the user-input
+    /// signal was applied to the shared engine state without surface
+    /// context.
+    ///
+    /// New call sites should prefer ``notifyUserInput(surfaceID:)``.
     func notifyUserInput()
+
+    /// Notifies the engine that the user has submitted input, associating
+    /// the resulting transition with the originating terminal surface.
+    ///
+    /// Triggers the `waitingInput -> working` transition when the surface
+    /// was waiting for input. Carrying the surfaceID ensures the
+    /// transition is attributed to the correct split once subscribers
+    /// start routing per-surface.
+    ///
+    /// - Parameter surfaceID: Surface whose user submitted the input, or
+    ///   `nil` when the caller has not been migrated to per-surface
+    ///   routing.
+    func notifyUserInput(surfaceID: SurfaceID?)
 
     /// Notifies the engine that the terminal process has exited.
     ///
-    /// Transitions to idle regardless of current state.
+    /// Legacy entry point preserved for backward compatibility. The
+    /// default implementation routes to the surfaceID-aware variant with
+    /// `nil`, which matches the previous behavior where process-exit
+    /// signals affected the shared engine state.
+    ///
+    /// New call sites should prefer ``notifyProcessExited(surfaceID:)``.
     func notifyProcessExited()
+
+    /// Notifies the engine that the terminal process for a specific
+    /// surface has exited.
+    ///
+    /// Transitions to idle regardless of current state. Carrying the
+    /// surfaceID ensures the transition is associated with the surface
+    /// whose process ended, not with whichever split happens to be
+    /// focused at the moment of emission.
+    ///
+    /// - Parameter surfaceID: Surface whose process exited, or `nil`
+    ///   when the caller has not been migrated to per-surface routing.
+    func notifyProcessExited(surfaceID: SurfaceID?)
 
     /// Pauses the timing detector when the terminal window loses focus.
     ///
@@ -105,6 +141,20 @@ extension AgentDetecting {
     /// unchanged and produce `nil` surfaceIDs in the emitted context.
     nonisolated func processTerminalOutput(_ data: Data) {
         processTerminalOutput(data, surfaceID: nil)
+    }
+
+    /// Default bridge from the legacy ``notifyUserInput()`` entry point
+    /// to the surfaceID-aware variant, preserving behavior for callers
+    /// that have not been migrated.
+    func notifyUserInput() {
+        notifyUserInput(surfaceID: nil)
+    }
+
+    /// Default bridge from the legacy ``notifyProcessExited()`` entry
+    /// point to the surfaceID-aware variant, preserving behavior for
+    /// callers that have not been migrated.
+    func notifyProcessExited() {
+        notifyProcessExited(surfaceID: nil)
     }
 }
 

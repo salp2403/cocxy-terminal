@@ -4,19 +4,39 @@
 import Combine
 import Foundation
 
-/// Main-actor store that tracks the agent-detection state of each terminal
-/// surface independently.
+/// Main-actor store that tracks the agent-detection state of each
+/// terminal surface independently.
 ///
-/// This is the canonical source of truth for per-surface agent activity.
-/// During the v0.1.71 transition, `Tab` retains its agent fields as a
-/// forwarding layer to the primary surface of each tab; this store holds
-/// the underlying truth and the forwarding is a safety net. In v0.1.72 the
-/// `Tab` fields are removed and views subscribe to this store directly.
+/// **Current rollout state (v0.1.71 migration in progress).** The store
+/// is introduced dormant: it exists in the target module but no
+/// production writer fills it yet. `Tab` remains the source of truth for
+/// agent activity, and all UI consumers continue to read the `Tab`
+/// fields. The store is staged here so the detection engine, hook
+/// receiver, and UI can be migrated in small, independently verifiable
+/// sub-phases.
+///
+/// Migration roadmap:
+/// - **Fase 1 (done)**: this store plus `SurfaceAgentState` are in tree
+///   and unit-tested.
+/// - **Fase 2**: the engine threads `surfaceID` through its entry
+///   points, debounce, and hook-session tracking (internal work; no
+///   production call site writes to the store yet).
+/// - **Fase 2g–2i**: production wiring calls write to both `Tab` (for
+///   now) and this store, enabling per-surface reads without breaking
+///   the existing tab-level flow.
+/// - **Fase 3**: UI consumers subscribe to this store instead of
+///   reading `Tab`; dual-write stays in place as a safety net.
+/// - **Fase 4**: the forwarding fields on `Tab` are removed and this
+///   store becomes the sole source of truth.
+///
+/// Treat this type as migration infrastructure, not as the active state
+/// carrier, until Fase 4 ships — verify the writer and reader paths of
+/// any code path before trusting the store's contents in that path.
 ///
 /// The store runs on the main actor to align with the existing agent
 /// infrastructure (`AgentStateAggregator`, `AgentDashboardViewModel`)
-/// which already expects main-actor isolation. All publishers emit on the
-/// main thread.
+/// which already expects main-actor isolation. All publishers emit on
+/// the main thread.
 @MainActor
 final class AgentStatePerSurfaceStore: ObservableObject {
 
