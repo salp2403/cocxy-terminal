@@ -117,10 +117,17 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     ///
     /// Thread-safe: can be called from any thread. Output is distributed
     /// to all three detection layers. Resulting signals are resolved and
-    /// dispatched to the main thread.
+    /// dispatched to the main thread. The optional `surfaceID` is carried
+    /// through to the emitted `StateContext` so subscribers can associate
+    /// the transition with a specific terminal surface; callers that have
+    /// not been migrated to per-surface routing pass `nil` (either
+    /// directly or via the legacy `processTerminalOutput(_:)` overload
+    /// provided by the `AgentDetecting` protocol extension).
     ///
-    /// - Parameter data: Raw bytes from the terminal.
-    nonisolated func processTerminalOutput(_ data: Data) {
+    /// - Parameters:
+    ///   - data: Raw bytes from the terminal.
+    ///   - surfaceID: Surface whose output produced the bytes.
+    nonisolated func processTerminalOutput(_ data: Data, surfaceID: SurfaceID?) {
         let oscSignals = oscDetector.processBytes(data)
         let patternSignals = patternDetector.processBytes(data)
         _ = timingDetector.processBytes(data)
@@ -132,7 +139,7 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         let resolved = resolveConflictingSignals(allSignals)
 
         DispatchQueue.main.async { [weak self] in
-            self?.processResolvedSignal(resolved)
+            self?.processResolvedSignal(resolved, surfaceID: surfaceID)
         }
     }
 
@@ -163,9 +170,13 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     /// Used for testing and direct integration with detection layers.
     /// Must be called on the main thread.
     ///
-    /// - Parameter signal: The detection signal to process.
-    func injectSignal(_ signal: DetectionSignal) {
-        processResolvedSignal(signal)
+    /// - Parameters:
+    ///   - signal: The detection signal to process.
+    ///   - surfaceID: Surface the signal is associated with, carried into
+    ///     the emitted `StateContext`. Defaults to `nil` for backward
+    ///     compatibility with legacy test call sites.
+    func injectSignal(_ signal: DetectionSignal, surfaceID: SurfaceID? = nil) {
+        processResolvedSignal(signal, surfaceID: surfaceID)
     }
 
     /// Injects multiple signals as a batch, resolving conflicts before applying.
@@ -174,11 +185,15 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     /// layers produce signals from the same chunk of output. The winning
     /// signal is selected via confidence and source priority.
     ///
-    /// - Parameter signals: The batch of signals to resolve and apply.
-    func injectSignalBatch(_ signals: [DetectionSignal]) {
+    /// - Parameters:
+    ///   - signals: The batch of signals to resolve and apply.
+    ///   - surfaceID: Surface the signals are associated with, carried
+    ///     into the emitted `StateContext`. Defaults to `nil` for
+    ///     backward compatibility with legacy test call sites.
+    func injectSignalBatch(_ signals: [DetectionSignal], surfaceID: SurfaceID? = nil) {
         guard !signals.isEmpty else { return }
         let resolved = resolveConflictingSignals(signals)
-        processResolvedSignal(resolved)
+        processResolvedSignal(resolved, surfaceID: surfaceID)
     }
 
     /// Pauses the timing detector when the terminal window loses focus.
@@ -259,8 +274,13 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     /// - TaskCompleted -> completionDetected
     /// - Notification/SubagentStart/SubagentStop/UserPromptSubmit -> no state change
     ///
-    /// - Parameter event: The parsed hook event.
-    func processHookEvent(_ event: HookEvent) {
+    /// - Parameters:
+    ///   - event: The parsed hook event.
+    ///   - surfaceID: Surface resolved from the event's `cwd`, when the
+    ///     caller has already determined it. Defaults to `nil`; later
+    ///     sub-phases of the per-surface migration will have the wiring
+    ///     extension resolve the cwd to a surfaceID before dispatching.
+    func processHookEvent(_ event: HookEvent, surfaceID: SurfaceID? = nil) {
         // Track active sessions
         switch event.type {
         case .sessionStart:
@@ -276,7 +296,12 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
             return
         }
 
-        processResolvedSignal(signal, hookSessionId: event.sessionId, hookCwd: event.cwd)
+        processResolvedSignal(
+            signal,
+            hookSessionId: event.sessionId,
+            hookCwd: event.cwd,
+            surfaceID: surfaceID
+        )
     }
 
     /// Maps a hook event type to the corresponding detection signal.
@@ -368,7 +393,8 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     private func processResolvedSignal(
         _ signal: DetectionSignal,
         hookSessionId: String? = nil,
-        hookCwd: String? = nil
+        hookCwd: String? = nil,
+        surfaceID: SurfaceID? = nil
     ) {
         // Suppress lower-layer signals when hook sessions are active (ADR-008).
         // Hook signals (Layer 0) have absolute priority over pattern (L2) and
@@ -414,12 +440,12 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
 
         if let lastContext = stateMachine.transitionHistory.last {
             // Enrich with hook metadata so subscribers can identify the
-            // session and tab without reading mutable receiver state.
-            // `surfaceID` is preserved from the existing context (the state
-            // machine seeds it as `nil`); later sub-phases of the per-surface
-            // migration will thread the real surfaceID through this call
-            // site so subscribers can route the transition to a specific
-            // surface instead of the focused tab.
+            // session and tab without reading mutable receiver state. The
+            // `surfaceID` passed by the caller replaces the state
+            // machine's default of `nil` so downstream subscribers can
+            // route the transition to the specific terminal surface that
+            // produced it. When `surfaceID` is `nil` (legacy call sites),
+            // subscribers fall back to tab-level resolution.
             let enriched = AgentStateMachine.StateContext(
                 state: lastContext.state,
                 previousState: lastContext.previousState,
@@ -429,7 +455,7 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
                 metadata: lastContext.metadata,
                 hookSessionId: hookSessionId,
                 hookCwd: hookCwd,
-                surfaceID: lastContext.surfaceID
+                surfaceID: surfaceID
             )
             stateChangedSubject.send(enriched)
         }

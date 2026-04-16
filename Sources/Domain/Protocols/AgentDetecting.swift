@@ -27,12 +27,32 @@ protocol AgentDetecting: AnyObject {
 
     /// Processes a chunk of raw output from the terminal PTY.
     ///
-    /// Thread-safe: can be called from any thread. Output is distributed
-    /// to all three detection layers. Resulting signals are resolved and
-    /// dispatched to the main thread.
+    /// Legacy entry point preserved for backward compatibility. The default
+    /// implementation routes the call to the surfaceID-aware variant with
+    /// `nil`, which makes the engine behave exactly as before (no
+    /// surface-level routing).
+    ///
+    /// New call sites should prefer
+    /// ``processTerminalOutput(_:surfaceID:)``.
     ///
     /// - Parameter data: Raw bytes from the terminal output.
     nonisolated func processTerminalOutput(_ data: Data)
+
+    /// Processes a chunk of raw output from the terminal PTY, associating
+    /// any resulting state transition with the originating surface.
+    ///
+    /// Thread-safe: can be called from any thread. Output is distributed
+    /// to all three detection layers; resulting signals are resolved and
+    /// dispatched to the main thread. When a non-nil `surfaceID` is
+    /// provided, it is carried into `StateContext.surfaceID` so downstream
+    /// subscribers can route the transition to a specific terminal
+    /// surface instead of the focused tab.
+    ///
+    /// - Parameters:
+    ///   - data: Raw bytes from the terminal output.
+    ///   - surfaceID: Surface whose output produced the bytes, or `nil`
+    ///     when the caller has not been migrated to per-surface routing.
+    nonisolated func processTerminalOutput(_ data: Data, surfaceID: SurfaceID?)
 
     /// Notifies the engine that the user has submitted input (e.g., pressed Enter).
     ///
@@ -75,6 +95,17 @@ protocol AgentDetecting: AnyObject {
 
     /// Publisher that emits on every valid state transition.
     var stateChanged: AnyPublisher<AgentStateMachine.StateContext, Never> { get }
+}
+
+// MARK: - Backward-compatible Defaults
+
+extension AgentDetecting {
+    /// Default bridge from the legacy entry point to the surfaceID-aware
+    /// variant. Existing callers that pass only `Data` continue to work
+    /// unchanged and produce `nil` surfaceIDs in the emitted context.
+    nonisolated func processTerminalOutput(_ data: Data) {
+        processTerminalOutput(data, surfaceID: nil)
+    }
 }
 
 // MARK: - Agent State
