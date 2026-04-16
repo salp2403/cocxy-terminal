@@ -126,14 +126,14 @@ final class AgentConfigModelTests: XCTestCase {
 
 final class AgentConfigServiceParseTests: XCTestCase {
 
-    func testParseCompleteAgentsTomlReturnsSixAgents() throws {
+    func testParseCompleteAgentsTomlReturnsEightAgents() throws {
         let toml = AgentConfigService.generateDefaultAgentsToml()
         let fileProvider = InMemoryAgentConfigFileProvider(content: toml)
         let service = AgentConfigService(fileProvider: fileProvider)
         try service.reload()
 
         let configs = service.agentConfigs()
-        XCTAssertEqual(configs.count, 6, "Default agents.toml must define exactly 6 agents")
+        XCTAssertEqual(configs.count, 8, "Default agents.toml must define exactly 8 agents")
     }
 
     func testParseCompleteAgentsTomlContainsAllExpectedAgents() throws {
@@ -143,7 +143,7 @@ final class AgentConfigServiceParseTests: XCTestCase {
         try service.reload()
 
         let names = service.agentConfigs().map { $0.name }.sorted()
-        let expectedNames = ["aider", "claude", "codex", "gemini-cli", "kiro", "opencode"]
+        let expectedNames = ["aider", "claude", "codex", "cursor", "gemini-cli", "kiro", "opencode", "windsurf"]
         XCTAssertEqual(names, expectedNames)
     }
 
@@ -281,7 +281,7 @@ final class AgentConfigServiceDefaultsTests: XCTestCase {
         )
 
         let configs = service.agentConfigs()
-        XCTAssertEqual(configs.count, 6, "Default config must define 6 agents")
+        XCTAssertEqual(configs.count, 8, "Default config must define 8 agents")
     }
 
     func testMalformedTomlFallsBackToDefaults() throws {
@@ -292,7 +292,7 @@ final class AgentConfigServiceDefaultsTests: XCTestCase {
         try service.reload()
 
         let configs = service.agentConfigs()
-        XCTAssertEqual(configs.count, 6, "Malformed TOML must fall back to 6 default agents")
+        XCTAssertEqual(configs.count, 8, "Malformed TOML must fall back to 8 default agents")
     }
 }
 

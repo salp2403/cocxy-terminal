@@ -1,5 +1,9 @@
 # Cocxy Terminal - Agent Detection Configuration
 #
+# Reference snapshot for docs/manual installs.
+# Runtime defaults are generated from AgentConfigService.defaultAgentConfigs().
+# AgentConfigDefaultsParitySwiftTests keeps this file in sync with those defaults.
+#
 # Each section defines an AI agent that Cocxy can detect in terminal output.
 # Patterns use regular expressions (NSRegularExpression syntax).
 #
@@ -74,4 +78,22 @@ launch-patterns = ["^opencode\\b", "Loading plugins"]
 waiting-patterns = ["Ask anything", "^> $"]
 error-patterns = ["Error:", "✗"]
 finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "✓"]
+idle-timeout-override = 8
+
+[cursor]
+display-name = "Cursor Agent"
+osc-supported = false
+launch-patterns = ["^cursor(?:\\s|$)", "Cursor Agent", "Cursor v\\d+"]
+waiting-patterns = ["^> $", "\\? ", "Accept\\?"]
+error-patterns = ["Error:", "Failed", "rate limit"]
+finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^> $"]
+idle-timeout-override = 8
+
+[windsurf]
+display-name = "Windsurf"
+osc-supported = false
+launch-patterns = ["^windsurf(?:\\s|$)", "^cascade(?:\\s|$)", "Cascade v\\d+", "Windsurf v\\d+"]
+waiting-patterns = ["^> $", "Cascade>", "\\? "]
+error-patterns = ["Error:", "Failed", "rate limit"]
+finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^> $"]
 idle-timeout-override = 8

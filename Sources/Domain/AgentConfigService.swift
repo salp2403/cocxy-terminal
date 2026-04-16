@@ -207,7 +207,11 @@ final class AgentConfigService {
             "geminicli": "Gemini CLI",
             "kiro": "Kiro",
             "kirocli": "Kiro",
-            "opencode": "OpenCode"
+            "opencode": "OpenCode",
+            "cursor": "Cursor Agent",
+            "cursoragent": "Cursor Agent",
+            "windsurf": "Windsurf",
+            "cascade": "Windsurf",
         ]
         return aliasMap[normalized] ?? trimmed
     }
@@ -344,6 +348,43 @@ final class AgentConfigService {
                 ],
                 errorPatterns: ["Error:", "✗"],
                 finishedIndicators: ["^\\$\\s*$", "^❯\\s*$", "✓"],
+                oscSupported: false,
+                idleTimeoutOverride: 8
+            ),
+            AgentConfig(
+                name: "cursor",
+                displayName: "Cursor Agent",
+                launchPatterns: [
+                    "^cursor(?:\\s|$)",
+                    "Cursor Agent",
+                    "Cursor v\\d+",
+                ],
+                waitingPatterns: [
+                    "^> $",
+                    "\\? ",
+                    "Accept\\?",
+                ],
+                errorPatterns: ["Error:", "Failed", "rate limit"],
+                finishedIndicators: ["^\\$\\s*$", "^❯\\s*$", "^> $"],
+                oscSupported: false,
+                idleTimeoutOverride: 8
+            ),
+            AgentConfig(
+                name: "windsurf",
+                displayName: "Windsurf",
+                launchPatterns: [
+                    "^windsurf(?:\\s|$)",
+                    "^cascade(?:\\s|$)",
+                    "Cascade v\\d+",
+                    "Windsurf v\\d+",
+                ],
+                waitingPatterns: [
+                    "^> $",
+                    "Cascade>",
+                    "\\? ",
+                ],
+                errorPatterns: ["Error:", "Failed", "rate limit"],
+                finishedIndicators: ["^\\$\\s*$", "^❯\\s*$", "^> $"],
                 oscSupported: false,
                 idleTimeoutOverride: 8
             ),

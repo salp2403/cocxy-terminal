@@ -15,10 +15,15 @@ import Foundation
 /// Built-in themes:
 /// - Catppuccin Mocha (dark)
 /// - Catppuccin Latte (light)
+/// - Catppuccin Frappe (dark)
+/// - Catppuccin Macchiato (dark)
 /// - One Dark (dark)
 /// - Solarized Dark (dark)
 /// - Solarized Light (light)
 /// - Dracula (dark)
+/// - Nord (dark)
+/// - Gruvbox Dark (dark)
+/// - Tokyo Night (dark)
 ///
 /// - SeeAlso: ADR-007 (Theme system)
 /// - SeeAlso: `ThemeProviding` protocol
@@ -129,15 +134,20 @@ final class ThemeEngineImpl: ThemeProviding {
 
     // MARK: - Built-In Theme Loading
 
-    /// Loads all 6 built-in themes defined in ADR-007.
+    /// Loads all 11 built-in themes.
     private static func loadBuiltInThemes() -> [Theme] {
         [
             catppuccinMocha(),
             catppuccinLatte(),
+            catppuccinFrappe(),
+            catppuccinMacchiato(),
             oneDark(),
             solarizedDark(),
             solarizedLight(),
-            dracula()
+            dracula(),
+            nord(),
+            gruvboxDark(),
+            tokyoNight()
         ]
     }
 
@@ -344,6 +354,181 @@ final class ThemeEngineImpl: ThemeProviding {
                 name: "Solarized Light",
                 variant: .light,
                 author: "Ethan Schoonover",
+                source: .builtIn
+            ),
+            palette: palette
+        )
+    }
+
+    /// Catppuccin Frappe (dark) - catppuccin.com
+    private static func catppuccinFrappe() -> Theme {
+        let palette = ThemePalette(
+            background: "#303446",
+            foreground: "#c6d0f5",
+            cursor: "#f2d5cf",
+            selectionBackground: "#626880",
+            selectionForeground: "#c6d0f5",
+            tabActiveBackground: "#303446",
+            tabActiveForeground: "#c6d0f5",
+            tabInactiveBackground: "#292c3c",
+            tabInactiveForeground: "#737994",
+            badgeAttention: "#e5c890",
+            badgeCompleted: "#a6d189",
+            badgeError: "#e78284",
+            badgeWorking: "#8caaee",
+            ansiColors: [
+                "#414559", "#e78284", "#a6d189", "#e5c890",
+                "#8caaee", "#f4b8e4", "#81c8be", "#b5bfe2",
+                "#51576d", "#e78284", "#a6d189", "#e5c890",
+                "#8caaee", "#f4b8e4", "#81c8be", "#a5adce"
+            ]
+        )
+
+        return Theme(
+            metadata: ThemeMetadata(
+                name: "Catppuccin Frappe",
+                variant: .dark,
+                author: "Catppuccin",
+                source: .builtIn
+            ),
+            palette: palette
+        )
+    }
+
+    /// Catppuccin Macchiato (dark) - catppuccin.com
+    private static func catppuccinMacchiato() -> Theme {
+        let palette = ThemePalette(
+            background: "#24273a",
+            foreground: "#cad3f5",
+            cursor: "#f4dbd6",
+            selectionBackground: "#5b6078",
+            selectionForeground: "#cad3f5",
+            tabActiveBackground: "#24273a",
+            tabActiveForeground: "#cad3f5",
+            tabInactiveBackground: "#1e2030",
+            tabInactiveForeground: "#6e738d",
+            badgeAttention: "#eed49f",
+            badgeCompleted: "#a6da95",
+            badgeError: "#ed8796",
+            badgeWorking: "#8aadf4",
+            ansiColors: [
+                "#363a4f", "#ed8796", "#a6da95", "#eed49f",
+                "#8aadf4", "#f5bde6", "#8bd5ca", "#b8c0e0",
+                "#494d64", "#ed8796", "#a6da95", "#eed49f",
+                "#8aadf4", "#f5bde6", "#8bd5ca", "#a5adcb"
+            ]
+        )
+
+        return Theme(
+            metadata: ThemeMetadata(
+                name: "Catppuccin Macchiato",
+                variant: .dark,
+                author: "Catppuccin",
+                source: .builtIn
+            ),
+            palette: palette
+        )
+    }
+
+    /// Nord (dark) - nordtheme.com
+    private static func nord() -> Theme {
+        let palette = ThemePalette(
+            background: "#2e3440",
+            foreground: "#d8dee9",
+            cursor: "#d8dee9",
+            selectionBackground: "#434c5e",
+            selectionForeground: "#d8dee9",
+            tabActiveBackground: "#2e3440",
+            tabActiveForeground: "#d8dee9",
+            tabInactiveBackground: "#272c36",
+            tabInactiveForeground: "#4c566a",
+            badgeAttention: "#ebcb8b",
+            badgeCompleted: "#a3be8c",
+            badgeError: "#bf616a",
+            badgeWorking: "#81a1c1",
+            ansiColors: [
+                "#3b4252", "#bf616a", "#a3be8c", "#ebcb8b",
+                "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
+                "#4c566a", "#bf616a", "#a3be8c", "#ebcb8b",
+                "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4"
+            ]
+        )
+
+        return Theme(
+            metadata: ThemeMetadata(
+                name: "Nord",
+                variant: .dark,
+                author: "Arctic Ice Studio",
+                source: .builtIn
+            ),
+            palette: palette
+        )
+    }
+
+    /// Gruvbox Dark - github.com/morhetz/gruvbox
+    private static func gruvboxDark() -> Theme {
+        let palette = ThemePalette(
+            background: "#282828",
+            foreground: "#ebdbb2",
+            cursor: "#ebdbb2",
+            selectionBackground: "#504945",
+            selectionForeground: "#ebdbb2",
+            tabActiveBackground: "#282828",
+            tabActiveForeground: "#ebdbb2",
+            tabInactiveBackground: "#1d2021",
+            tabInactiveForeground: "#928374",
+            badgeAttention: "#fabd2f",
+            badgeCompleted: "#b8bb26",
+            badgeError: "#fb4934",
+            badgeWorking: "#83a598",
+            ansiColors: [
+                "#282828", "#cc241d", "#98971a", "#d79921",
+                "#458588", "#b16286", "#689d6a", "#a89984",
+                "#928374", "#fb4934", "#b8bb26", "#fabd2f",
+                "#83a598", "#d3869b", "#8ec07c", "#ebdbb2"
+            ]
+        )
+
+        return Theme(
+            metadata: ThemeMetadata(
+                name: "Gruvbox Dark",
+                variant: .dark,
+                author: "Pavel Pertsev",
+                source: .builtIn
+            ),
+            palette: palette
+        )
+    }
+
+    /// Tokyo Night - github.com/enkia/tokyo-night-vscode-theme
+    private static func tokyoNight() -> Theme {
+        let palette = ThemePalette(
+            background: "#1a1b26",
+            foreground: "#a9b1d6",
+            cursor: "#c0caf5",
+            selectionBackground: "#33467c",
+            selectionForeground: "#c0caf5",
+            tabActiveBackground: "#1a1b26",
+            tabActiveForeground: "#a9b1d6",
+            tabInactiveBackground: "#16161e",
+            tabInactiveForeground: "#565f89",
+            badgeAttention: "#e0af68",
+            badgeCompleted: "#9ece6a",
+            badgeError: "#f7768e",
+            badgeWorking: "#7aa2f7",
+            ansiColors: [
+                "#414868", "#f7768e", "#9ece6a", "#e0af68",
+                "#7aa2f7", "#bb9af7", "#7dcfff", "#c0caf5",
+                "#414868", "#f7768e", "#9ece6a", "#e0af68",
+                "#7aa2f7", "#bb9af7", "#7dcfff", "#c0caf5"
+            ]
+        )
+
+        return Theme(
+            metadata: ThemeMetadata(
+                name: "Tokyo Night",
+                variant: .dark,
+                author: "Enkia",
                 source: .builtIn
             ),
             palette: palette

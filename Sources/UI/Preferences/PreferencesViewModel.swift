@@ -507,10 +507,15 @@ final class PreferencesViewModel: ObservableObject {
         [
             "Catppuccin Mocha",
             "Catppuccin Latte",
+            "Catppuccin Frappe",
+            "Catppuccin Macchiato",
             "One Dark",
             "Solarized Dark",
             "Solarized Light",
             "Dracula",
+            "Nord",
+            "Gruvbox Dark",
+            "Tokyo Night",
         ]
     }
 
