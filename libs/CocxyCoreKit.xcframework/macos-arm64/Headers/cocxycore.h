@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.13.2 (Pixel-aligned atlas rasterization to reduce glyph wobble)
+ * Version: 0.13.3 (Baseline-consistent bearing_y for rasterised glyphs)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 13
-#define COCXYCORE_VERSION_PATCH 2
-#define COCXYCORE_VERSION_STRING "0.13.2"
+#define COCXYCORE_VERSION_PATCH 3
+#define COCXYCORE_VERSION_STRING "0.13.3"
 
 /* Platform detection. */
 #if defined(__APPLE__)

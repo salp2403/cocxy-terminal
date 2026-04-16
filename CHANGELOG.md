@@ -8,14 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.70] - 2026-04-16
 
 ### Fixed
-- Baseline jitter between neighbouring letters on the same line. Glyphs are now rasterised onto a whole-pixel grid in the atlas (subpixel positioning and subpixel quantisation disabled) and every per-cell `glyph_x` / `glyph_y` snaps to an integer pixel before reaching the GPU. Characters like `o`, `p`, `e`, `n` on the same line share a stable baseline regardless of the fractional bearings returned by CoreText for the active font.
+- Baseline jitter between neighbouring letters on the same line. The fix has two parts that must land together: (1) each glyph is rasterised onto a whole-pixel grid in the atlas (CoreGraphics subpixel positioning and subpixel quantisation disabled, bitmap origin rounded) so no fractional offset is baked into the cached pixels; (2) the per-glyph `bearing_y` is stored as an integer distance from the top of the bitmap to the baseline, derived from the same `@ceil`/`@round` expressions that sized the bitmap, so every cell on a row resolves to the same `glyph_y + bearing_y` and therefore a stable baseline regardless of whether the glyph has a descender or a tall ascender.
 
 ### Changed
-- Bumped the bundled CocxyCore engine to v0.13.2. The new engine ships the pixel-aligned rasterisation path and keeps the ligature / shaped-run offsets intact.
+- Bumped the bundled CocxyCore engine to v0.13.3. The new engine ships the pixel-aligned rasterisation path and the baseline-consistent `bearing_y` formula used by every consumer of `GlyphInfo`.
 - Metal glyph sampler comment in `MetalTerminalRenderer` now reflects the pixel-aligned pipeline so future readers do not mistake linear sampling for a workaround around subpixel placement.
 
 ### Testing
-- New Zig regression suite `metal_pixel_align_test.zig` locks the integer-snap contract in place across both the atlas-hit and fallback code paths in `MetalPipeline.build`. Any future refactor that removes one of the `@round(...)` calls fails the test instead of silently reintroducing the jitter.
+- New Zig regression suite `metal_pixel_align_test.zig` locks two contracts simultaneously: per-cell `glyph_x` / `glyph_y` must be integers (covered on both the atlas-hit and fallback paths), and `glyph_y + bearing_y` must be constant for every glyph on a given row (the baseline invariant). Any future refactor that drops a `@round(...)` or reverts the integer bearing formula fails the test instead of silently reintroducing the jitter.
 
 ## [0.1.69] - 2026-04-16
 
