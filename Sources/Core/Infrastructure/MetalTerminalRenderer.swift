@@ -203,9 +203,13 @@ final class MetalTerminalRenderer {
 
         // Sampler
         let samplerDesc = MTLSamplerDescriptor()
-        // Glyph placement from CocxyCore uses real font metrics and can land on
-        // fractional pixel positions. Linear sampling avoids the harsh stair-step
-        // artifacts that nearest filtering introduces on the grayscale atlas.
+        // CocxyCore pixel-aligns glyph origins (`@round(glyph_x)`, `@round(glyph_y)`
+        // in metal.zig) and rasterises each atlas glyph onto a whole-pixel grid
+        // (SubpixelPositionFonts/SubpixelQuantizeFonts disabled in coretext.zig),
+        // so glyph quads map 1:1 onto the destination pixels. Linear filtering
+        // remains as a gentle safety net for fractional DPR values on Retina
+        // displays and for accidental half-pixel quads during resize; with the
+        // current pipeline it is effectively nearest-texel sampling.
         samplerDesc.minFilter = .linear
         samplerDesc.magFilter = .linear
         samplerDesc.sAddressMode = .clampToZero
