@@ -415,6 +415,11 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         if let lastContext = stateMachine.transitionHistory.last {
             // Enrich with hook metadata so subscribers can identify the
             // session and tab without reading mutable receiver state.
+            // `surfaceID` is preserved from the existing context (the state
+            // machine seeds it as `nil`); later sub-phases of the per-surface
+            // migration will thread the real surfaceID through this call
+            // site so subscribers can route the transition to a specific
+            // surface instead of the focused tab.
             let enriched = AgentStateMachine.StateContext(
                 state: lastContext.state,
                 previousState: lastContext.previousState,
@@ -423,7 +428,8 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
                 transitionEvent: lastContext.transitionEvent,
                 metadata: lastContext.metadata,
                 hookSessionId: hookSessionId,
-                hookCwd: hookCwd
+                hookCwd: hookCwd,
+                surfaceID: lastContext.surfaceID
             )
             stateChangedSubject.send(enriched)
         }

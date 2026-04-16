@@ -99,6 +99,14 @@ final class AgentStateMachine: ObservableObject {
         let hookSessionId: String?
         /// Working directory from the hook event (nil for pattern/timing).
         let hookCwd: String?
+        /// Terminal surface that originated this transition, when known.
+        ///
+        /// Pattern and timing detectors populate this from the surface whose
+        /// output produced the signal; hook-based transitions populate it
+        /// after resolving the hook's `cwd` to a live surface. Remains `nil`
+        /// for call sites that have not been migrated to the per-surface
+        /// API (backward compatibility during the v0.1.71 transition).
+        let surfaceID: SurfaceID?
     }
 
     // MARK: - Properties
@@ -213,7 +221,9 @@ final class AgentStateMachine: ObservableObject {
         // Transition.
         currentState = newState
 
-        // Build context (hook metadata is injected by the engine after transition).
+        // Build context (hook metadata and surfaceID are injected by the
+        // engine after transition, since the state machine itself does not
+        // know which surface produced the event).
         let context = StateContext(
             state: newState,
             previousState: previousState,
@@ -222,7 +232,8 @@ final class AgentStateMachine: ObservableObject {
             transitionEvent: event,
             metadata: metadata,
             hookSessionId: nil,
-            hookCwd: nil
+            hookCwd: nil,
+            surfaceID: nil
         )
 
         // Record in history (capped).
