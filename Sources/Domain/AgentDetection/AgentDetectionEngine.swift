@@ -68,11 +68,41 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     /// window are suppressed.
     private let debounceInterval: TimeInterval
 
-    /// Timestamp of the last successful state transition.
-    private var lastTransitionTimestamp: Date = .distantPast
+    /// Debounce bucket recording the last transition seen for a given
+    /// surface (or the legacy global bucket when the caller has not
+    /// been migrated to per-surface routing).
+    private struct DebounceBucket {
+        var timestamp: Date
+        var eventKey: String
+    }
 
-    /// The event key that caused the last transition, for dedup comparison.
-    private var lastTransitionEventKey: String?
+    /// Per-surface debounce state, keyed by the originating surface.
+    ///
+    /// The optional key preserves the legacy behavior of call sites that
+    /// do not yet pass a surfaceID: all of those share the `nil` bucket,
+    /// which reproduces the previous single global debounce exactly.
+    /// Callers that thread a real surfaceID get an independent bucket,
+    /// so an event on surface A never suppresses an identical event on
+    /// surface B.
+    private var debounceBuckets: [SurfaceID?: DebounceBucket] = [:]
+
+    // MARK: - Testing Hooks (internal)
+
+    /// Returns the number of distinct debounce buckets currently tracked.
+    /// Exposed as `internal` for white-box tests of the per-surface
+    /// debounce contract; not intended for production call sites.
+    internal var _debounceBucketCountForTesting: Int {
+        debounceBuckets.count
+    }
+
+    /// Returns the event key stored in the debounce bucket for a surface,
+    /// or `nil` if the surface has never produced a transition. Exposed
+    /// as `internal` for white-box tests.
+    internal func _debounceEventKeyForTesting(
+        surfaceID: SurfaceID?
+    ) -> String? {
+        debounceBuckets[surfaceID]?.eventKey
+    }
 
     /// Cancellables for internal subscriptions.
     private var cancellables = Set<AnyCancellable>()
@@ -224,13 +254,13 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
 
     /// Resets the engine to its initial state.
     ///
-    /// Clears the state machine, debounce state, and the agent name.
+    /// Clears the state machine, every per-surface debounce bucket, and
+    /// the agent name.
     func reset() {
         stateMachine.reset()
         currentState = .idle
         detectedAgentName = nil
-        lastTransitionTimestamp = .distantPast
-        lastTransitionEventKey = nil
+        debounceBuckets.removeAll()
         oscDetector.reset()
         patternDetector.reset()
         timingDetector.notifyStateChanged(to: .idle)
@@ -412,11 +442,14 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
 
         let eventKey = Self.eventKey(for: signal.event)
         let now = Date()
-        let timeSinceLastTransition = now.timeIntervalSince(lastTransitionTimestamp)
 
-        // Debounce: suppress if same event within interval
-        if eventKey == lastTransitionEventKey
-            && timeSinceLastTransition < debounceInterval {
+        // Debounce: suppress if the same event fired on the same surface
+        // within the debounce window. Callers with distinct surfaceIDs
+        // have independent buckets, so a repeat event on surface A does
+        // not mute a first-time event on surface B.
+        if let bucket = debounceBuckets[surfaceID],
+           bucket.eventKey == eventKey,
+           now.timeIntervalSince(bucket.timestamp) < debounceInterval {
             return
         }
 
@@ -428,8 +461,10 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
             return
         }
 
-        lastTransitionTimestamp = now
-        lastTransitionEventKey = eventKey
+        debounceBuckets[surfaceID] = DebounceBucket(
+            timestamp: now,
+            eventKey: eventKey
+        )
         currentState = newState
         detectedAgentName = stateMachine.agentName
 
