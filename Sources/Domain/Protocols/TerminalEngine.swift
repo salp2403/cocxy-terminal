@@ -331,6 +331,8 @@ struct TerminalEngineConfig: Sendable {
     let clipboardReadAccess: ClipboardReadAccess
     /// Whether typographic ligatures should be enabled.
     let ligaturesEnabled: Bool
+    /// Whether font thickening is enabled (maps to font-thicken / CGContextSetShouldSmoothFonts).
+    let fontThickenEnabled: Bool
     /// Maximum inline-image memory budget in bytes.
     let imageMemoryLimitBytes: UInt64
     /// Whether inline image file-transfer mode is enabled.
@@ -351,6 +353,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingY: Double = 4,
         clipboardReadAccess: ClipboardReadAccess = .prompt,
         ligaturesEnabled: Bool = true,
+        fontThickenEnabled: Bool = false,
         imageMemoryLimitBytes: UInt64 = 256 * 1024 * 1024,
         imageFileTransferEnabled: Bool = false,
         sixelImagesEnabled: Bool = true,
@@ -366,6 +369,7 @@ struct TerminalEngineConfig: Sendable {
         self.windowPaddingY = windowPaddingY
         self.clipboardReadAccess = clipboardReadAccess
         self.ligaturesEnabled = ligaturesEnabled
+        self.fontThickenEnabled = fontThickenEnabled
         self.imageMemoryLimitBytes = imageMemoryLimitBytes
         self.imageFileTransferEnabled = imageFileTransferEnabled
         self.sixelImagesEnabled = sixelImagesEnabled
@@ -383,6 +387,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
         ligaturesEnabled: Bool? = nil,
+        fontThickenEnabled: Bool? = nil,
         imageMemoryLimitBytes: UInt64? = nil,
         imageFileTransferEnabled: Bool? = nil,
         sixelImagesEnabled: Bool? = nil,
@@ -399,6 +404,7 @@ struct TerminalEngineConfig: Sendable {
             windowPaddingY: windowPaddingY ?? self.windowPaddingY,
             clipboardReadAccess: clipboardReadAccess ?? self.clipboardReadAccess,
             ligaturesEnabled: ligaturesEnabled ?? self.ligaturesEnabled,
+            fontThickenEnabled: fontThickenEnabled ?? self.fontThickenEnabled,
             imageMemoryLimitBytes: imageMemoryLimitBytes ?? self.imageMemoryLimitBytes,
             imageFileTransferEnabled: imageFileTransferEnabled ?? self.imageFileTransferEnabled,
             sixelImagesEnabled: sixelImagesEnabled ?? self.sixelImagesEnabled,

@@ -453,6 +453,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? TerminalConfig.defaults.clipboardReadAccess,
             ligaturesEnabled: configService?.current.appearance.ligatures
                 ?? AppearanceConfig.defaults.ligatures,
+            fontThickenEnabled: configService?.current.appearance.fontThicken
+                ?? AppearanceConfig.defaults.fontThicken,
             imageMemoryLimitBytes: UInt64(
                 (configService?.current.terminal.imageMemoryLimitMB
                     ?? TerminalConfig.defaults.imageMemoryLimitMB) * 1024 * 1024
@@ -542,6 +544,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowPaddingY: newConfig.appearance.effectivePaddingY,
             clipboardReadAccess: newConfig.terminal.clipboardReadAccess,
             ligaturesEnabled: newConfig.appearance.ligatures,
+            fontThickenEnabled: newConfig.appearance.fontThicken,
             imageMemoryLimitBytes: UInt64(newConfig.terminal.imageMemoryLimitMB) * 1024 * 1024,
             imageFileTransferEnabled: newConfig.terminal.imageFileTransfer,
             sixelImagesEnabled: newConfig.terminal.enableSixelImages,
@@ -555,6 +558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             oldConfig?.appearance.effectivePaddingX != newConfig.appearance.effectivePaddingX ||
             oldConfig?.appearance.effectivePaddingY != newConfig.appearance.effectivePaddingY
         let ligaturesChanged = oldConfig?.appearance.ligatures != newConfig.appearance.ligatures
+        let fontThickenChanged = oldConfig?.appearance.fontThicken != newConfig.appearance.fontThicken
         let imageSettingsChanged =
             oldConfig?.terminal.imageMemoryLimitMB != newConfig.terminal.imageMemoryLimitMB ||
             oldConfig?.terminal.imageFileTransfer != newConfig.terminal.imageFileTransfer ||
@@ -567,8 +571,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 family: newConfig.appearance.fontFamily,
                 size: newConfig.appearance.fontSize
             )
-        } else if ligaturesChanged {
-            cocxyBridge.applyLigaturesEnabled(newConfig.appearance.ligatures)
+            // applyFont recreates the shaper; CocxyCore persists the thicken
+            // flag on the Terminal struct and re-applies it to the new
+            // shaper, so no extra call is needed unless the value also
+            // changed in this diff.
+            if fontThickenChanged {
+                cocxyBridge.applyFontThickenEnabled(newConfig.appearance.fontThicken)
+            }
+        } else {
+            if ligaturesChanged {
+                cocxyBridge.applyLigaturesEnabled(newConfig.appearance.ligatures)
+            }
+            if fontThickenChanged {
+                cocxyBridge.applyFontThickenEnabled(newConfig.appearance.fontThicken)
+            }
         }
 
         if imageSettingsChanged {
@@ -637,6 +653,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? TerminalConfig.defaults.clipboardReadAccess,
             ligaturesEnabled: configService?.current.appearance.ligatures
                 ?? AppearanceConfig.defaults.ligatures,
+            fontThickenEnabled: configService?.current.appearance.fontThicken
+                ?? AppearanceConfig.defaults.fontThicken,
             imageMemoryLimitBytes: UInt64(
                 (configService?.current.terminal.imageMemoryLimitMB
                     ?? TerminalConfig.defaults.imageMemoryLimitMB) * 1024 * 1024

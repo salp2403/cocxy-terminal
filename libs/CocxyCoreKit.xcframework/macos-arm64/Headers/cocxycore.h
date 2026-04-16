@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.13.0 (Web Terminal — WebSocket streaming + WebGL client)
+ * Version: 0.13.1 (Font thickening toggle for glyph rasterization)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 13
-#define COCXYCORE_VERSION_PATCH 0
-#define COCXYCORE_VERSION_STRING "0.13.0"
+#define COCXYCORE_VERSION_PATCH 1
+#define COCXYCORE_VERSION_STRING "0.13.1"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -1302,6 +1302,20 @@ void cocxycore_terminal_set_ligatures(cocxycore_terminal* term, bool enabled);
 
 /** Query whether ligatures are currently enabled. */
 bool cocxycore_terminal_get_ligatures(const cocxycore_terminal* term);
+
+/**
+ * Enable or disable font thickening on the current font shaper.
+ *
+ * When enabled, rasterized glyphs receive CGContextSetShouldSmoothFonts(true)
+ * on macOS, which boosts perceived stroke weight on the grayscale atlas.
+ * Default is off so strokes stay thin. The setting persists on the terminal
+ * and survives subsequent cocxycore_terminal_set_font calls; invalidates
+ * the glyph atlas so the next frame re-rasterizes every glyph.
+ */
+void cocxycore_terminal_set_thicken(cocxycore_terminal* term, bool enabled);
+
+/** Query whether font thickening is currently enabled. */
+bool cocxycore_terminal_get_thicken(const cocxycore_terminal* term);
 
 /* -- Frame building -- */
 

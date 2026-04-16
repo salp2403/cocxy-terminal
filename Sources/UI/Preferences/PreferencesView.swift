@@ -285,6 +285,23 @@ struct EditableAppearanceSection: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Thicken font strokes", isOn: $viewModel.fontThicken)
+                        .help(
+                            "Enables CoreText font smoothing during glyph rasterization, "
+                            + "which boosts perceived stroke weight. Off by default for a "
+                            + "cleaner, thinner look. Turn on if the rendered text looks "
+                            + "too thin on your display."
+                        )
+                    Text(
+                        "Boosts stroke weight via font smoothing. Off keeps glyphs "
+                        + "thin and crisp; on makes them look heavier."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
                 VStack(alignment: .leading) {
                     HStack {
                         Text("Font size")

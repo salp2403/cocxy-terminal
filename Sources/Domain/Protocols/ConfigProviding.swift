@@ -112,6 +112,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             windowPaddingX: overrides.windowPaddingX ?? appearance.windowPaddingX,
             windowPaddingY: overrides.windowPaddingY ?? appearance.windowPaddingY,
             ligatures: appearance.ligatures,
+            fontThicken: appearance.fontThicken,
             backgroundOpacity: overrides.backgroundOpacity ?? appearance.backgroundOpacity,
             backgroundBlurRadius: overrides.backgroundBlurRadius ?? appearance.backgroundBlurRadius
         )
@@ -188,6 +189,13 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     let windowPaddingY: Double?
     /// Whether typographic ligatures should be enabled.
     let ligatures: Bool
+    /// Whether to thicken font strokes during rasterization (font-thicken).
+    ///
+    /// Maps directly to CocxyCore's `cocxycore_terminal_set_thicken`, which
+    /// toggles `CGContextSetShouldSmoothFonts` on the grayscale glyph atlas.
+    /// Off by default so strokes stay thin; users who prefer a heavier look
+    /// can enable it in Preferences.
+    let fontThicken: Bool
     /// Window background opacity (0.0 = fully transparent, 1.0 = opaque).
     let backgroundOpacity: Double
     /// Background blur radius in points (0 = no blur).
@@ -208,6 +216,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         windowPaddingX: Double?,
         windowPaddingY: Double?,
         ligatures: Bool = true,
+        fontThicken: Bool = false,
         backgroundOpacity: Double,
         backgroundBlurRadius: Double
     ) {
@@ -220,6 +229,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         self.windowPaddingX = windowPaddingX
         self.windowPaddingY = windowPaddingY
         self.ligatures = ligatures
+        self.fontThicken = fontThicken
         self.backgroundOpacity = backgroundOpacity
         self.backgroundBlurRadius = backgroundBlurRadius
     }
@@ -235,6 +245,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             windowPaddingX: nil,
             windowPaddingY: nil,
             ligatures: false,
+            fontThicken: false,
             backgroundOpacity: 1.0,
             backgroundBlurRadius: 0
         )

@@ -9,6 +9,23 @@ import Foundation
 import Testing
 @testable import CocxyTerminal
 
+private final class LockedHookEventBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var events: [HookEvent] = []
+
+    func append(_ event: HookEvent) {
+        lock.lock()
+        defer { lock.unlock() }
+        events.append(event)
+    }
+
+    func snapshot() -> [HookEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return events
+    }
+}
+
 @Suite("AppSocketCommandHandler routing for CwdChanged / FileChanged")
 struct HandleHookEventRoutingSwiftTests {
 
@@ -50,14 +67,11 @@ struct HandleHookEventRoutingSwiftTests {
         )
 
         // Capture the next event published on the eventPublisher.
-        var collectedEvents: [HookEvent] = []
+        let collectedEvents = LockedHookEventBuffer()
         var cancellable: AnyCancellable?
-        let lock = NSLock()
         cancellable = receiver.eventPublisher
             .sink { event in
-                lock.lock()
                 collectedEvents.append(event)
-                lock.unlock()
             }
         defer { cancellable?.cancel() }
 
@@ -84,9 +98,7 @@ struct HandleHookEventRoutingSwiftTests {
         // sleep keeps the test resilient to scheduler quirks under load.
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        lock.lock()
-        let events = collectedEvents
-        lock.unlock()
+        let events = collectedEvents.snapshot()
 
         guard let event = events.first else {
             Issue.record("No hook event reached the subscriber")

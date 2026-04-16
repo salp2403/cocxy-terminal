@@ -186,6 +186,7 @@ final class ConfigService: ConfigProviding {
         tab-position = "\(defaults.appearance.tabPosition.rawValue)"
         window-padding = \(defaults.appearance.windowPadding)
         ligatures = \(defaults.appearance.ligatures)
+        font-thicken = \(defaults.appearance.fontThicken)
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
@@ -329,6 +330,7 @@ final class ConfigService: ConfigProviding {
             windowPaddingX: doubleValue(table["window-padding-x"]),
             windowPaddingY: doubleValue(table["window-padding-y"]),
             ligatures: boolValue(table["ligatures"]) ?? defaults.ligatures,
+            fontThicken: boolValue(table["font-thicken"]) ?? defaults.fontThicken,
             backgroundOpacity: clamp(rawOpacity, min: 0.1, max: 1.0),
             backgroundBlurRadius: clamp(rawBlur, min: 0, max: 100)
         )

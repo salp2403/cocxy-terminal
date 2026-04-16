@@ -62,6 +62,8 @@ final class PreferencesViewModel: ObservableObject {
     @Published var windowPadding: Double
     /// Whether typographic ligatures are enabled.
     @Published var ligatures: Bool
+    /// Whether font stroke thickening is enabled (maps to font-thicken).
+    @Published var fontThicken: Bool
 
     /// Window background opacity (0.3 = very transparent, 1.0 = fully opaque).
     /// Controls vibrancy on sidebar, tab strip, and status bar.
@@ -184,6 +186,7 @@ final class PreferencesViewModel: ObservableObject {
             || tabPosition != c.appearance.tabPosition.rawValue
             || windowPadding != c.appearance.windowPadding
             || ligatures != c.appearance.ligatures
+            || fontThicken != c.appearance.fontThicken
             || backgroundOpacity != c.appearance.backgroundOpacity
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
@@ -213,6 +216,7 @@ final class PreferencesViewModel: ObservableObject {
         tabPosition = c.appearance.tabPosition.rawValue
         windowPadding = c.appearance.windowPadding
         ligatures = c.appearance.ligatures
+        fontThicken = c.appearance.fontThicken
         backgroundOpacity = c.appearance.backgroundOpacity
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
@@ -265,6 +269,7 @@ final class PreferencesViewModel: ObservableObject {
         self.tabPosition = config.appearance.tabPosition.rawValue
         self.windowPadding = config.appearance.windowPadding
         self.ligatures = config.appearance.ligatures
+        self.fontThicken = config.appearance.fontThicken
         self.backgroundOpacity = config.appearance.backgroundOpacity
 
         // Agent Detection
@@ -373,6 +378,7 @@ final class PreferencesViewModel: ObservableObject {
                 windowPaddingX: savedConfig.appearance.windowPaddingX,
                 windowPaddingY: savedConfig.appearance.windowPaddingY,
                 ligatures: ligatures,
+                fontThicken: fontThicken,
                 backgroundOpacity: clampedOpacity,
                 backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius
             ),
@@ -445,6 +451,7 @@ final class PreferencesViewModel: ObservableObject {
         tab-position = "\(tabPosition)"
         window-padding = \(clampedPadding)
         ligatures = \(ligatures)
+        font-thicken = \(fontThicken)
         background-opacity = \(String(format: "%.2f", clampedOpacity))
 
         [terminal]

@@ -854,6 +854,33 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    /// Apply the font-thicken setting to all live surfaces and future surfaces.
+    ///
+    /// Toggling thickening invalidates the glyph atlas inside the C core
+    /// (via `cocxycore_terminal_set_thicken`) and marks the screen dirty so
+    /// the next frame re-rasterizes every glyph with the new rendering
+    /// flags — guaranteeing no half-old / half-new mix remains on screen.
+    func applyFontThickenEnabled(_ enabled: Bool) {
+        updateDefaults(fontThickenEnabled: enabled)
+        for surface in surfaces.keys {
+            applyFontThickenEnabled(enabled, to: surface)
+        }
+    }
+
+    /// Apply the font-thicken setting to a specific live surface.
+    func applyFontThickenEnabled(_ enabled: Bool, to surface: SurfaceID) {
+        updateDefaults(fontThickenEnabled: enabled)
+
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_thicken(state.terminal, enabled)
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+        }
+
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
     func applyLigaturesEnabled(_ enabled: Bool, to surface: SurfaceID) {
         // Keep the bridge-wide default in sync so any surface created
         // after this point picks up the new shaping preference.
@@ -1539,6 +1566,7 @@ final class CocxyCoreBridge: TerminalEngine {
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
         ligaturesEnabled: Bool? = nil,
+        fontThickenEnabled: Bool? = nil,
         imageMemoryLimitBytes: UInt64? = nil,
         imageFileTransferEnabled: Bool? = nil,
         sixelImagesEnabled: Bool? = nil,
@@ -1555,6 +1583,7 @@ final class CocxyCoreBridge: TerminalEngine {
             windowPaddingY: windowPaddingY,
             clipboardReadAccess: clipboardReadAccess,
             ligaturesEnabled: ligaturesEnabled,
+            fontThickenEnabled: fontThickenEnabled,
             imageMemoryLimitBytes: imageMemoryLimitBytes,
             imageFileTransferEnabled: imageFileTransferEnabled,
             sixelImagesEnabled: sixelImagesEnabled,
@@ -1675,6 +1704,12 @@ final class CocxyCoreBridge: TerminalEngine {
             ligaturesEnabled: config.ligaturesEnabled,
             to: terminal
         )
+
+        // Apply font-thicken AFTER set_font so the rendering flag is set
+        // on the freshly created shaper; set_font resets the shaper, and
+        // cocxycore_terminal_set_thicken also invalidates the atlas to
+        // guarantee the next frame rasterizes with the right weight.
+        cocxycore_terminal_set_thicken(terminal, config.fontThickenEnabled)
 
         cocxycore_image_set_memory_limit(terminal, config.imageMemoryLimitBytes)
         cocxycore_image_set_file_transfer(terminal, config.imageFileTransferEnabled)
