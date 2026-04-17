@@ -288,6 +288,28 @@ extension AppDelegate {
                             state.agentActivity = "Waiting for input"
                         }
                     }
+
+                    // Arm or cancel the `.launched` watchdog based on
+                    // the new state. Surfaces that enter `.launched`
+                    // and never progress (agent crashed before output,
+                    // launch aborted before `SessionStart`) would
+                    // otherwise keep the store entry frozen forever;
+                    // the watchdog flushes the state after
+                    // `AgentLaunchedWatchdog.defaultTimeout` seconds.
+                    // Every other transition cancels the pending
+                    // watchdog so it never fires once real agent
+                    // activity is flowing or the agent has already
+                    // concluded via a higher-priority signal.
+                    if agentState == .launched {
+                        controller.scheduleLaunchedWatchdog(
+                            surfaceID: targetSurfaceID,
+                            tabID: tabID
+                        )
+                    } else {
+                        controller.cancelLaunchedWatchdog(
+                            surfaceID: targetSurfaceID
+                        )
+                    }
                 }
 
                 // Propagate agent state to the session registry so the

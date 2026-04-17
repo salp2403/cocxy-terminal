@@ -311,6 +311,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// teardown paths guard for `nil` and skip the reset.
     var injectedPerSurfaceStore: AgentStatePerSurfaceStore?
 
+    /// Watchdog that guards against surfaces that enter `.launched`
+    /// and never transition further because the agent terminated
+    /// without emitting a `SessionEnd` hook. Owned by the controller
+    /// (not injected) because each window has its own per-surface
+    /// lifecycle and the watchdog stores `DispatchWorkItem`s keyed
+    /// by `SurfaceID`. See `MainWindowController+AgentLifecycleRecovery`
+    /// for the schedule/cancel call sites and the recovery routine.
+    let agentLaunchedWatchdog = AgentLaunchedWatchdog()
+
     /// Session diff tracker injected by AppDelegate for the code review panel.
     var injectedSessionDiffTracker: SessionDiffTracking?
 

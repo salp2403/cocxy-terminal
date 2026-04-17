@@ -362,6 +362,10 @@ extension MainWindowController {
             // Destroy the surface in the engine.
             if let sid = surfaceIDToDestroy {
                 clearSurfaceTracking(for: sid)
+                // Cancel any pending `.launched` watchdog before we
+                // tear the surface down so the scheduled reset cannot
+                // fire against the already-cleared store entry.
+                cancelLaunchedWatchdog(surfaceID: sid)
                 // Release per-surface detection state (engine bucket +
                 // shadow store entry) before the bridge tears down the
                 // terminal so no stale split state is retained.

@@ -203,6 +203,10 @@ extension MainWindowController {
         guard let tabID = visibleTabID,
               let surfaceID = tabSurfaceMap[tabID] ?? tabViewModels[tabID]?.surfaceID else { return }
         clearSurfaceTracking(for: surfaceID)
+        // Cancel any pending `.launched` watchdog first so its
+        // `DispatchWorkItem` cannot fire against a surface that is
+        // about to be destroyed.
+        cancelLaunchedWatchdog(surfaceID: surfaceID)
         // Release any per-surface state the detection engine accumulated
         // (debounce bucket + hook-session record) before the underlying
         // terminal is torn down. Calling after destroySurface would leave
@@ -264,6 +268,12 @@ extension MainWindowController {
         if let primaryID = terminalViewModel.surfaceID {
             surfacesToDestroy.insert(primaryID)
         }
+
+        // Cancel every pending `.launched` watchdog in one pass so no
+        // fire-and-forget `DispatchWorkItem` outlives the window. Done
+        // outside the per-surface loop because the watchdog exposes a
+        // single-call API for a full sweep.
+        agentLaunchedWatchdog.cancelAll()
 
         // Destroy each surface exactly once.
         for surfaceID in surfacesToDestroy {
@@ -496,6 +506,23 @@ extension MainWindowController {
                     }
                 }
             }
+            // Safety net: if the agent exited without emitting a
+            // `SessionEnd` hook (crash, abort, `--skip-permissions` fast
+            // exit), the shell prompt comes back but the per-surface
+            // store keeps the stale `.launched` / `.finished` /
+            // `.waitingInput` state forever. Ask the recovery helper
+            // whether the PTY foreground is now a login shell and, if
+            // so, run the same reset routine used by explicit teardown
+            // paths. The helper is conservative: it only resets when
+            // the foreground matches a known shell binary, so editors,
+            // sub-commands invoked by the agent, and long-running
+            // builds keep their state intact.
+            if let sid = sourceSurfaceID {
+                recoverAgentStateOnShellPromptIfNeeded(
+                    surfaceID: sid,
+                    tabID: tabID
+                )
+            }
             tabBarViewModel?.syncWithManager()
             refreshStatusBar()
 
@@ -615,6 +642,12 @@ extension MainWindowController {
             if let sid = sourceSurfaceID {
                 injectedAgentDetectionEngine?.clearSurface(sid)
                 injectedPerSurfaceStore?.reset(surfaceID: sid)
+                // Defensive: if a launched-watchdog was armed for this
+                // surface (rare — the shell process normally exits
+                // after the agent, not while `.launched` is in flight),
+                // cancel it so the callback does not double-fire a
+                // reset on an already-cleared store entry.
+                cancelLaunchedWatchdog(surfaceID: sid)
             }
             tabBarViewModel?.syncWithManager()
         }

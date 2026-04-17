@@ -18,8 +18,9 @@ import Foundation
 /// surface, then any other surface with live activity, and finally
 /// `.idle` as a safety net. `AppDelegate+AgentWiring` writes every
 /// state transition straight to this store; surface teardown paths
-/// reset the entry here alongside the engine's debounce and
-/// hook-session buckets.
+/// and the v0.1.73 agent-lifecycle recovery (see
+/// `MainWindowController+AgentLifecycleRecovery`) reset the entry
+/// here alongside the engine's debounce and hook-session buckets.
 ///
 /// Migration roadmap:
 /// - **Fase 1 (done)**: this store plus `SurfaceAgentState` are in
