@@ -123,7 +123,16 @@ extension MainWindowController {
                     fromTabID: capturedTabID,
                     surfaceID: capturedSurfaceID
                 ) == true {
-                    engine?.processTerminalOutput(data)
+                    // Thread the surface ID into the detection engine so
+                    // the emitted StateContext carries the split that
+                    // produced the output. Subscribers can then target
+                    // per-surface state without falling back to the
+                    // focused tab (regresar a ese fallback contaminaría
+                    // los splits hermanos del mismo tab).
+                    engine?.processTerminalOutput(
+                        data,
+                        surfaceID: capturedSurfaceID
+                    )
                 }
                 buffer?.append(data)
             }
@@ -136,7 +145,12 @@ extension MainWindowController {
         }
 
         surfaceView.onUserInputSubmitted = { [weak engine] in
-            engine?.notifyUserInput()
+            // `capturedSurfaceID` is a value-type `SurfaceID` captured
+            // implicitly by the closure; propagate it so the
+            // waitingInput -> working transition is attributed to the
+            // originating split rather than whatever surface happens
+            // to be focused when Enter is pressed.
+            engine?.notifyUserInput(surfaceID: capturedSurfaceID)
         }
     }
 
@@ -189,6 +203,12 @@ extension MainWindowController {
         guard let tabID = visibleTabID,
               let surfaceID = tabSurfaceMap[tabID] ?? tabViewModels[tabID]?.surfaceID else { return }
         clearSurfaceTracking(for: surfaceID)
+        // Release any per-surface state the detection engine accumulated
+        // (debounce bucket + hook-session record) before the underlying
+        // terminal is torn down. Calling after destroySurface would leave
+        // a brief window where late-arriving signals could re-seed the
+        // bucket on a surface that no longer exists.
+        injectedAgentDetectionEngine?.clearSurface(surfaceID)
         bridge.destroySurface(surfaceID)
         tabViewModels[tabID]?.markStopped()
     }
@@ -243,6 +263,11 @@ extension MainWindowController {
         // Destroy each surface exactly once.
         for surfaceID in surfacesToDestroy {
             clearSurfaceTracking(for: surfaceID)
+            // Release any per-surface detection state before the
+            // underlying terminal is torn down, so the engine does not
+            // retain debounce buckets or hook-session records keyed to
+            // surfaces that no longer exist.
+            injectedAgentDetectionEngine?.clearSurface(surfaceID)
             bridge.destroySurface(surfaceID)
         }
 
@@ -507,7 +532,9 @@ extension MainWindowController {
                 tab.lastActivityAt = Date()
             }
             tabBarViewModel?.syncWithManager()
-            injectedAgentDetectionEngine?.notifyProcessExited()
+            injectedAgentDetectionEngine?.notifyProcessExited(
+                surfaceID: sourceSurfaceID
+            )
         }
     }
 
@@ -535,7 +562,7 @@ extension MainWindowController {
         ) else { return }
         let oscSequence = "\u{1b}]\(oscCode);\(payload)\u{07}"
         if let data = oscSequence.data(using: .utf8) {
-            engine.processTerminalOutput(data)
+            engine.processTerminalOutput(data, surfaceID: sourceSurfaceID)
         }
     }
 

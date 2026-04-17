@@ -109,6 +109,10 @@ extension MainWindowController {
         // Destroy the primary terminal surface.
         if let surfaceID = tabSurfaceMap[tabID] {
             clearSurfaceTracking(for: surfaceID)
+            // Release any per-surface detection state before the bridge
+            // tears the terminal down, so the engine does not retain
+            // debounce or hook-session records keyed to a dead surface.
+            injectedAgentDetectionEngine?.clearSurface(surfaceID)
             bridge.destroySurface(surfaceID)
         }
         tabViewModels[tabID]?.markStopped()
@@ -137,6 +141,9 @@ extension MainWindowController {
 
         for (surfaceID, _) in tabSplitSurfaces {
             clearSurfaceTracking(for: surfaceID)
+            // Release per-surface detection state for each split before
+            // the bridge frees the underlying terminal.
+            injectedAgentDetectionEngine?.clearSurface(surfaceID)
             bridge.destroySurface(surfaceID)
             tabSplitVMs[surfaceID]?.markStopped()
         }
