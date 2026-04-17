@@ -7,31 +7,42 @@ import Foundation
 /// Main-actor store that tracks the agent-detection state of each
 /// terminal surface independently.
 ///
-/// **Current rollout state (v0.1.71 migration in progress).** The store
-/// is introduced dormant: it exists in the target module but no
-/// production writer fills it yet. `Tab` remains the source of truth for
-/// agent activity, and all UI consumers continue to read the `Tab`
-/// fields. The store is staged here so the detection engine, hook
-/// receiver, and UI can be migrated in small, independently verifiable
-/// sub-phases.
+/// **Current rollout state (v0.1.71 Fase 2 landed).** The store is
+/// live as a shadow source of truth: `AppDelegate+AgentWiring`
+/// dual-writes every tab-level agent mutation onto it (see
+/// ``wireAgentDetectionToTabs`` and ``wireHookReceiverToEngine``), the
+/// surface lifecycle (`destroyTerminalSurface`, `destroyAllSurfaces`,
+/// `performCloseTab`, `closeSplitAction`) resets its entries alongside
+/// the engine's debounce and hook-session buckets, and the detection
+/// engine carries `surfaceID` through every public entry point so each
+/// emitted `StateContext` can be routed per split. `Tab` is still the
+/// field UI consumers read — the store shadows it so Fase 3 can flip
+/// readers one component at a time while the tab-level fallback stays
+/// available as a safety net.
 ///
 /// Migration roadmap:
-/// - **Fase 1 (done)**: this store plus `SurfaceAgentState` are in tree
-///   and unit-tested.
-/// - **Fase 2**: the engine threads `surfaceID` through its entry
-///   points, debounce, and hook-session tracking (internal work; no
-///   production call site writes to the store yet).
-/// - **Fase 2g–2i**: production wiring calls write to both `Tab` (for
-///   now) and this store, enabling per-surface reads without breaking
-///   the existing tab-level flow.
-/// - **Fase 3**: UI consumers subscribe to this store instead of
-///   reading `Tab`; dual-write stays in place as a safety net.
-/// - **Fase 4**: the forwarding fields on `Tab` are removed and this
-///   store becomes the sole source of truth.
+/// - **Fase 1 (done)**: this store plus `SurfaceAgentState` are in
+///   tree and unit-tested (`AgentStatePerSurfaceStoreSwiftTestingTests`).
+/// - **Fase 2 (done)**: the engine threads `surfaceID` through its
+///   entry points, debounce, and hook-session tracking; the bridge
+///   exposes `resolveSurfaceID(matchingCwd:)`; the AgentWiring sink
+///   dual-writes every transition onto Tab and the store; surface
+///   teardown resets both the engine's per-surface buckets and this
+///   store's entry. End-to-end coverage lives in
+///   `AgentWiringDualWriteSwiftTestingTests`.
+/// - **Fase 3 (pending)**: UI consumers (sidebar pills, status bar,
+///   notification rings, dashboard) subscribe to this store instead of
+///   reading `Tab`. Dual-write stays in place as a safety net during
+///   and after the flip.
+/// - **Fase 4 (pending)**: the forwarding fields on `Tab` are removed
+///   and this store becomes the sole source of truth.
 ///
-/// Treat this type as migration infrastructure, not as the active state
-/// carrier, until Fase 4 ships — verify the writer and reader paths of
-/// any code path before trusting the store's contents in that path.
+/// Treat this type as a shadow source of truth until Fase 4 ships.
+/// Production writers (AgentWiring) and teardown paths
+/// (MainWindowController extensions) are already aligned with it, so
+/// new writers should mirror the same dual-write pattern. Readers
+/// migrating over should keep a Tab-based fallback until Fase 3 is
+/// complete for that consumer.
 ///
 /// The store runs on the main actor to align with the existing agent
 /// infrastructure (`AgentStateAggregator`, `AgentDashboardViewModel`)
