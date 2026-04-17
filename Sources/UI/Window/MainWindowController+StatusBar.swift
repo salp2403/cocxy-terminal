@@ -17,49 +17,52 @@ extension MainWindowController {
     }
 
     /// Computes agent activity summary across all tabs.
+    ///
+    /// Every tab is resolved through `resolveSurfaceAgentState(for:tab:)`
+    /// so splits running independent agents contribute via their most
+    /// relevant surface (focused > primary > any active > Tab fallback).
+    /// The resolver already falls back to the Tab-level fields when the
+    /// per-surface store is empty, so the summary never regresses when a
+    /// surface has no store entry yet.
     func computeAgentSummary() -> AgentSummary {
         var summary = AgentSummary()
         for tab in tabManager.tabs {
-            switch tab.agentState {
-            case .working, .launched:
+            let resolved = resolveSurfaceAgentState(for: tab.id, tab: tab)
+            switch AgentStatusTextFormatter.counterBucket(for: resolved.agentState) {
+            case .working?:
                 summary.working += 1
-            case .waitingInput:
+            case .waiting?:
                 summary.waiting += 1
-            case .error:
+            case .errors?:
                 summary.errors += 1
-            case .finished:
+            case .finished?:
                 summary.finished += 1
-            case .idle:
+            case nil:
                 break
             }
         }
 
-        if let activeTab = tabManager.activeTab,
-           activeTab.agentState != .idle {
-            let agentName = activeTab.detectedAgent?.displayName
+        if let activeTab = tabManager.activeTab {
+            let resolved = resolveSurfaceAgentState(for: activeTab.id, tab: activeTab)
+
+            // `processName` stays on the Tab fallback path during Fase 3
+            // because foreground-process tracking is not mirrored into
+            // the per-surface store in this phase. Using the resolved
+            // detected agent first keeps the label synced with whichever
+            // split the resolver picked.
+            let agentName = resolved.detectedAgent?.displayName
                 ?? activeTab.processName
                 ?? "Agent"
-            let statusText: String
-            switch activeTab.agentState {
-            case .launched:
-                statusText = "\(agentName) starting..."
-            case .working:
-                statusText = activeTab.agentActivity ?? "\(agentName) working"
-            case .waitingInput:
-                statusText = "\(agentName) waiting for input"
-            case .finished:
-                statusText = "\(agentName) finished"
-            case .error:
-                statusText = "\(agentName) error"
-            case .idle:
-                statusText = ""
-            }
 
-            summary.activeAgentText = statusText.isEmpty ? nil : statusText
-            summary.activeToolCount = activeTab.agentToolCount
-            summary.activeErrorCount = activeTab.agentErrorCount
+            summary.activeAgentText = AgentStatusTextFormatter.activeAgentStatusText(
+                state: resolved.agentState,
+                agentName: agentName,
+                agentActivity: resolved.agentActivity
+            )
+            summary.activeToolCount = resolved.agentToolCount
+            summary.activeErrorCount = resolved.agentErrorCount
 
-            switch activeTab.agentState {
+            switch resolved.agentState {
             case .working, .launched:
                 summary.activeAgentColor = CocxyColors.blue
             case .waitingInput:
