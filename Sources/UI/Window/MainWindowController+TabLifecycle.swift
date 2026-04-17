@@ -112,7 +112,10 @@ extension MainWindowController {
             // Release any per-surface detection state before the bridge
             // tears the terminal down, so the engine does not retain
             // debounce or hook-session records keyed to a dead surface.
+            // The shadow store entry is released in the same step so the
+            // surface's agent state does not outlive its terminal.
             injectedAgentDetectionEngine?.clearSurface(surfaceID)
+            injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
             bridge.destroySurface(surfaceID)
         }
         tabViewModels[tabID]?.markStopped()
@@ -141,9 +144,11 @@ extension MainWindowController {
 
         for (surfaceID, _) in tabSplitSurfaces {
             clearSurfaceTracking(for: surfaceID)
-            // Release per-surface detection state for each split before
-            // the bridge frees the underlying terminal.
+            // Release per-surface detection state (engine + shadow
+            // store) for each split before the bridge frees the
+            // underlying terminal.
             injectedAgentDetectionEngine?.clearSurface(surfaceID)
+            injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
             bridge.destroySurface(surfaceID)
             tabSplitVMs[surfaceID]?.markStopped()
         }

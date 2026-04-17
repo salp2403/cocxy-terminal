@@ -303,6 +303,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// When set, terminal output from ALL surfaces is routed to the engine.
     var injectedAgentDetectionEngine: AgentDetectionEngineImpl?
 
+    /// Per-surface agent state store injected by AppDelegate.
+    ///
+    /// Used during surface teardown so stale per-surface state is
+    /// released at the same moment the engine's debounce/hook buckets
+    /// are cleared. Remains `nil` when agent detection is disabled —
+    /// teardown paths guard for `nil` and skip the reset.
+    var injectedPerSurfaceStore: AgentStatePerSurfaceStore?
+
     /// Session diff tracker injected by AppDelegate for the code review panel.
     var injectedSessionDiffTracker: SessionDiffTracking?
 

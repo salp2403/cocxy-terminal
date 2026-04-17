@@ -362,10 +362,11 @@ extension MainWindowController {
             // Destroy the surface in the engine.
             if let sid = surfaceIDToDestroy {
                 clearSurfaceTracking(for: sid)
-                // Release per-surface detection state before the bridge
-                // tears down the terminal so the engine does not retain
-                // debounce or hook-session records for a dead split.
+                // Release per-surface detection state (engine bucket +
+                // shadow store entry) before the bridge tears down the
+                // terminal so no stale split state is retained.
                 injectedAgentDetectionEngine?.clearSurface(sid)
+                injectedPerSurfaceStore?.reset(surfaceID: sid)
                 bridge.destroySurface(sid)
                 splitViewModels[sid]?.markStopped()
                 splitSurfaceViews.removeValue(forKey: sid)

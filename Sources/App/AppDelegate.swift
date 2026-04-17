@@ -1023,6 +1023,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerWindow: Bool = true
     ) {
         controller.injectedAgentDetectionEngine = agentDetectionEngine
+        controller.injectedPerSurfaceStore = agentStatePerSurfaceStore
         controller.injectedSessionDiffTracker = sessionDiffTracker
         controller.injectedDashboardViewModel = agentDashboardViewModel
         controller.injectedTimelineStore = agentTimelineStore

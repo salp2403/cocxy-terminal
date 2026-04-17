@@ -209,6 +209,11 @@ extension MainWindowController {
         // a brief window where late-arriving signals could re-seed the
         // bucket on a surface that no longer exists.
         injectedAgentDetectionEngine?.clearSurface(surfaceID)
+        // Drop the surface's shadow entry from the per-surface store so
+        // stale agent state does not leak across future surfaces that
+        // could reuse the slot (unlikely with UUID-based SurfaceIDs, but
+        // defensive in case session restore replays the same ID).
+        injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
         bridge.destroySurface(surfaceID)
         tabViewModels[tabID]?.markStopped()
     }
@@ -266,8 +271,11 @@ extension MainWindowController {
             // Release any per-surface detection state before the
             // underlying terminal is torn down, so the engine does not
             // retain debounce buckets or hook-session records keyed to
-            // surfaces that no longer exist.
+            // surfaces that no longer exist. Drop the shadow store entry
+            // in the same step so per-surface agent state is not carried
+            // over a full window teardown.
             injectedAgentDetectionEngine?.clearSurface(surfaceID)
+            injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
             bridge.destroySurface(surfaceID)
         }
 

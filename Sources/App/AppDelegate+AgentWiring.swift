@@ -106,6 +106,7 @@ extension AppDelegate {
               let windowController = windowController else { return }
 
         windowController.injectedAgentDetectionEngine = engine
+        windowController.injectedPerSurfaceStore = agentStatePerSurfaceStore
         wireCocxyCoreBridgeIfNeeded()
         wireHookReceiverToEngine(engine)
         wireAgentDetectionToTabs(engine)
