@@ -214,14 +214,21 @@ extension MainWindowController {
                 sessionRegistry?.completeTransfer(state.sessionID, newTabID: tabID)
             }
         } else {
+            // Resolve the per-surface agent state so the registry entry
+            // reflects what the UI would render — including any active
+            // split that supersedes the tab-level fields.
+            let resolvedAgent = resolveSurfaceAgentState(
+                for: tabID,
+                tab: state.tab
+            )
             sessionRegistry?.registerSession(SessionEntry(
                 sessionID: state.sessionID,
                 ownerWindowID: windowID,
                 tabID: tabID,
                 title: state.tab.displayTitle,
                 workingDirectory: state.tab.workingDirectory,
-                agentState: state.tab.agentState,
-                detectedAgentName: state.tab.detectedAgent?.displayName,
+                agentState: resolvedAgent.agentState,
+                detectedAgentName: resolvedAgent.detectedAgent?.displayName,
                 hasUnreadNotification: state.tab.hasUnreadNotification
             ))
         }

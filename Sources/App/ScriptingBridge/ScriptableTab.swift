@@ -62,9 +62,22 @@ final class ScriptableTab: NSObject, @unchecked Sendable {
     }
 
     /// Agent state as string (KVC key: "agentState").
+    ///
+    /// Resolves the per-surface agent state via `AppDelegate` so the
+    /// scripting layer sees the same state the UI renders. Falls back to
+    /// `.idle` when the tab is unknown or the app delegate is unavailable.
+    ///
+    /// Uses `NSApplication.shared.delegate` instead of the `NSApp` macro
+    /// because the latter is an implicitly-unwrapped optional that can
+    /// crash in test hosts where `NSApplication` was not eagerly
+    /// referenced; the singleton accessor lazily initializes the shared
+    /// instance safely.
     @objc var agentState: String {
         MainActor.assumeIsolated {
-            tabManager?.tab(for: tabID)?.agentState.rawValue ?? "idle"
+            guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
+                return AgentState.idle.rawValue
+            }
+            return appDelegate.resolveScriptableAgentState(tabID: tabID).rawValue
         }
     }
 

@@ -350,9 +350,14 @@ final class TabBarViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    /// Maximum number of characters in a sidebar title before the view
+    /// model truncates it with an ellipsis. Keeps long project names
+    /// legible in narrow sidebars without forcing wrapping.
+    static let maxTitleLength = 20
+
     /// Truncates a title to a maximum length with ellipsis.
     private func truncatedTitle(_ title: String) -> String {
-        let maxLength = TabViewModel.maxTitleLength
+        let maxLength = Self.maxTitleLength
         guard title.count > maxLength else { return title }
         return String(title.prefix(maxLength)) + "..."
     }

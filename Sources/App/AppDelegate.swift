@@ -849,6 +849,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         allWindowControllers.first { $0.tabManager.tab(for: tabID) != nil }
     }
 
+    /// Resolves the current per-surface agent state for a tab, or `.idle`
+    /// if the tab is unknown.
+    ///
+    /// Cross-window helper used by AppleScript (`ScriptableTab.agentState`)
+    /// and other scripting surfaces that only have a `TabID` in hand and
+    /// need the resolved state the UI would render. Delegates to the
+    /// owning `MainWindowController.resolveSurfaceAgentState` so the
+    /// same priority chain (focused split > primary > any active >
+    /// `.idle` fallback) feeds the scripting layer.
+    func resolveScriptableAgentState(tabID: TabID) -> AgentState {
+        guard let controller = controllerContainingTab(tabID),
+              let tab = controller.tabManager.tab(for: tabID) else {
+            return .idle
+        }
+        return controller.resolveSurfaceAgentState(for: tabID, tab: tab).agentState
+    }
+
     func controllerContainingSurface(_ surfaceID: SurfaceID) -> MainWindowController? {
         allWindowControllers.first { controller in
             controller.tabSurfaceMap.values.contains(surfaceID)
