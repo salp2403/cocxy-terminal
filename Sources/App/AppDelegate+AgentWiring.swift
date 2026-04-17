@@ -163,6 +163,25 @@ extension AppDelegate {
                             tab.agentErrorCount += 1
                         }
                     }
+                    // Dual-write: mirror the same mutation onto the per-surface
+                    // store so UI consumers that read per-split state stay in
+                    // sync while the tab-level fields remain the source of
+                    // truth during the v0.1.71 migration.
+                    if let targetSurfaceID = self.surfaceIDForDualWrite(
+                        controller: resolved.controller,
+                        tabID: resolved.tabID,
+                        cwdHint: event.cwd
+                    ) {
+                        self.agentStatePerSurfaceStore?.update(
+                            surfaceID: targetSurfaceID
+                        ) { state in
+                            state.agentActivity = activity
+                            state.agentToolCount += 1
+                            if isError {
+                                state.agentErrorCount += 1
+                            }
+                        }
+                    }
                     // Refresh progress overlay and sidebar with new tool counts.
                     resolved.controller.updateAgentProgressOverlay()
                     resolved.controller.tabBarViewModel?.syncWithManager()
@@ -257,6 +276,54 @@ extension AppDelegate {
                         tab.agentActivity = "Error occurred"
                     } else if agentState == .waitingInput, tab.agentActivity == nil {
                         tab.agentActivity = "Waiting for input"
+                    }
+                }
+
+                // Dual-write the same transition onto the per-surface store
+                // so per-split UI consumers stay in sync during the v0.1.71
+                // migration. Resolution priority: explicit context surfaceID
+                // (pattern/timing detectors already supply it) -> bridge CWD
+                // match -> tab primary surface. Tab-level fields above remain
+                // the source of truth; the store shadows them until Fase 4.
+                if let targetSurfaceID = self.surfaceIDForDualWrite(
+                    controller: controller,
+                    tabID: tabID,
+                    preferred: context.surfaceID,
+                    cwdHint: context.hookCwd
+                ) {
+                    self.agentStatePerSurfaceStore?.update(
+                        surfaceID: targetSurfaceID
+                    ) { state in
+                        state.agentState = agentState
+
+                        if agentState == .idle {
+                            state.agentToolCount = 0
+                            state.agentErrorCount = 0
+                            state.agentActivity = nil
+                            state.detectedAgent = nil
+                        } else if let agentName = context.agentName?
+                            .trimmingCharacters(in: .whitespacesAndNewlines),
+                            !agentName.isEmpty {
+                            if let existing = state.detectedAgent,
+                               existing.name == agentName {
+                                state.detectedAgent = existing
+                            } else {
+                                state.detectedAgent = DetectedAgent(
+                                    name: agentName,
+                                    displayName: displayName,
+                                    launchCommand: agentName,
+                                    startedAt: Date()
+                                )
+                            }
+                        }
+
+                        if agentState == .finished, state.agentActivity == nil {
+                            state.agentActivity = "Task completed"
+                        } else if agentState == .error, state.agentActivity == nil {
+                            state.agentActivity = "Error occurred"
+                        } else if agentState == .waitingInput, state.agentActivity == nil {
+                            state.agentActivity = "Waiting for input"
+                        }
                     }
                 }
 
@@ -739,6 +806,53 @@ extension AppDelegate {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return agentConfigService?.displayName(forAgentIdentifier: trimmed) ?? trimmed
+    }
+
+    // MARK: - Per-Surface Store Routing
+
+    /// Resolves the surface whose per-surface store entry should mirror
+    /// a tab-level agent mutation during the v0.1.71 dual-write phase.
+    ///
+    /// Priority order:
+    /// 1. An explicit `preferred` surface — used when the caller already
+    ///    has a `StateContext.surfaceID` (pattern detector populates it
+    ///    from the originating split, hook resolution does so after 2i).
+    /// 2. CWD-based resolution through the bridge's
+    ///    `resolveSurfaceID(matchingCwd:)` — used for hook events whose
+    ///    `cwd` identifies the surface even when the engine context is
+    ///    `nil` (legacy wiring path).
+    /// 3. Tab-level fallback — the first surface registered on the tab.
+    ///    This mirrors the pre-refactor semantic where a tab had exactly
+    ///    one surface and keeps sidebar behavior intact for tabs without
+    ///    splits.
+    ///
+    /// Returns `nil` only when the controller has no surfaces for the
+    /// tab (unreachable in normal operation since a live tab always owns
+    /// at least one surface). Callers still guard for `nil` to avoid
+    /// touching the store when the tab has been torn down mid-flight.
+    ///
+    /// - Parameters:
+    ///   - controller: The controller owning the tab being mutated.
+    ///   - tabID: Tab whose primary surface is used as the final fallback.
+    ///   - preferred: Explicit surfaceID supplied by the caller.
+    ///   - cwdHint: CWD reported by the external event, when available.
+    /// - Returns: The target surface, or `nil` if the tab has no surfaces.
+    func surfaceIDForDualWrite(
+        controller: MainWindowController,
+        tabID: TabID,
+        preferred: SurfaceID? = nil,
+        cwdHint: String? = nil
+    ) -> SurfaceID? {
+        if let preferred {
+            return preferred
+        }
+        if let cwdHint,
+           !cwdHint.isEmpty,
+           let cocxyBridge = bridge as? CocxyCoreBridge,
+           let resolved = cocxyBridge.resolveSurfaceID(matchingCwd: cwdHint) {
+            return resolved
+        }
+        return controller.surfaceIDs(for: tabID).first
     }
 
     // MARK: - Tab CWD Matching
