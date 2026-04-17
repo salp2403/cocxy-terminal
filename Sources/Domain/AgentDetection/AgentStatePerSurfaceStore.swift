@@ -5,19 +5,21 @@ import Combine
 import Foundation
 
 /// Main-actor store that tracks the agent-detection state of each
-/// terminal surface independently.
+/// terminal surface independently. After Fase 4 this is the **sole
+/// source of truth** for agent state: the tab-level forwarding fields
+/// (`Tab.agentState`, `detectedAgent`, `agentActivity`, `agentToolCount`,
+/// `agentErrorCount`) were retired and callers no longer dual-write.
 ///
-/// **Current rollout state (Fase 3 landed).** The store drives every
-/// tab-scoped agent indicator in the UI: the agent progress overlay,
-/// the per-surface notification ring, the status-bar summary, the
-/// sidebar pill, and the Fase 3e multi-agent mini-pills. Reads go
-/// through `SurfaceAgentStateResolver`, whose priority chain picks
-/// the focused split first, then the primary surface, then any other
-/// surface with live activity, and finally a Tab-level snapshot as a
-/// safety net. `AppDelegate+AgentWiring` still dual-writes every
-/// state transition onto both `Tab` and this store so the fallback
-/// stays truthful; surface teardown paths reset the entry here
-/// alongside the engine's debounce and hook-session buckets.
+/// The store drives every tab-scoped agent indicator in the UI: the
+/// agent progress overlay, the per-surface notification ring, the
+/// status-bar summary, the sidebar pill, and the multi-agent
+/// mini-pills. Reads go through `SurfaceAgentStateResolver`, whose
+/// priority chain picks the focused split first, then the primary
+/// surface, then any other surface with live activity, and finally
+/// `.idle` as a safety net. `AppDelegate+AgentWiring` writes every
+/// state transition straight to this store; surface teardown paths
+/// reset the entry here alongside the engine's debounce and
+/// hook-session buckets.
 ///
 /// Migration roadmap:
 /// - **Fase 1 (done)**: this store plus `SurfaceAgentState` are in
@@ -25,30 +27,27 @@ import Foundation
 /// - **Fase 2 (done)**: the engine threads `surfaceID` through its
 ///   entry points, debounce, and hook-session tracking; the bridge
 ///   exposes `resolveSurfaceID(matchingCwd:)`; the AgentWiring sink
-///   dual-writes every transition onto Tab and the store; surface
+///   dual-wrote every transition onto Tab and the store; surface
 ///   teardown resets both the engine's per-surface buckets and this
-///   store's entry. End-to-end coverage lives in
-///   `AgentWiringDualWriteSwiftTestingTests`.
+///   store's entry.
 /// - **Fase 3 (done)**: UI consumers resolve their per-surface state
 ///   through `SurfaceAgentStateResolver` (agent progress overlay,
 ///   notification ring via `NotificationRingDecision`, status bar via
 ///   `AgentStatusTextFormatter`, sidebar pill via
 ///   `TabBarViewModel.agentStateResolver`, multi-agent mini-pills via
 ///   `additionalActiveAgentStatesProvider`). End-to-end coverage
-///   lives in `PerSurfaceStoreE2ESwiftTestingTests`. Dual-write stays
-///   in place as a safety net so a missing store entry never blanks
-///   an indicator.
-/// - **Fase 4 (pending)**: the forwarding fields on `Tab` are removed,
-///   the AgentWiring mutation collapses onto the store only, and this
-///   type becomes the sole source of truth.
+///   lives in `PerSurfaceStoreE2ESwiftTestingTests`.
+/// - **Fase 4 (done)**: the tab-level forwarding fields are retired,
+///   the AgentWiring sink writes only the store, the resolver's
+///   fallback is `.idle`, and legacy session JSONs keep decoding
+///   thanks to Swift's auto-synthesised `Codable` ignoring the
+///   retired keys. Store-only wiring coverage lives in
+///   `AgentWiringStoreOnlySwiftTestingTests`.
 ///
-/// Until Fase 4 ships, treat the store as the live source of truth for
-/// reads and the `Tab` fields as the safety-net fallback. Production
-/// writers (AgentWiring) and teardown paths (MainWindowController
-/// extensions) remain aligned with both, so new writers should mirror
-/// the same dual-write pattern. New readers should route through the
-/// resolver or the view-model closures so Fase 4 can retire the
-/// tab-level fields in a single pass.
+/// New writers should update this store directly. New readers should
+/// route through `SurfaceAgentStateResolver`, either via the static
+/// `resolve` / `resolveFull` entry points or via the view-model
+/// closures wired on the window controller.
 ///
 /// The store runs on the main actor to align with the existing agent
 /// infrastructure (`AgentStateAggregator`, `AgentDashboardViewModel`)

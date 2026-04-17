@@ -5,6 +5,23 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.72] - 2026-04-17
+
+### Changed
+- Tab-scoped agent indicators (sidebar pill, agent progress overlay, per-surface notification ring, status-bar summary, and multi-agent mini-pills) now resolve their state through `SurfaceAgentStateResolver` instead of reading tab-level fields. The resolver's priority chain is focused split > primary surface > any other surface with live activity > `.idle` fallback, so splits running independent agents drive their own indicators and the focused pane never pulses on its own tab.
+- Split panes running independent agents show their own pulsing notification ring when waiting on user input, while the pane the user is actively looking at stays quiet.
+- Tabs with multiple active splits now render mini-pills next to the primary sidebar pill, one per additional active surface (up to five inline plus a `+N` overflow label), sorted deterministically by surface UUID so successive renders stay stable.
+
+### Removed
+- Retired the five tab-level forwarding fields (`agentState`, `detectedAgent`, `agentActivity`, `agentToolCount`, `agentErrorCount`) from `Tab`. Per-surface agent state lives exclusively in `AgentStatePerSurfaceStore`; the `AppDelegate+AgentWiring` sink now writes only the store, and surface teardown releases the entry alongside the engine's debounce and hook-session buckets. Legacy session JSONs keep decoding because Swift's auto-synthesised `Codable` silently ignores the retired keys.
+- Removed the unused `TabViewModel` type and its test file. Its only production reference was the `maxTitleLength` constant, which now lives on `TabBarViewModel`.
+
+### Testing
+- Rewrote `AgentWiringDualWriteSwiftTestingTests` as `AgentWiringStoreOnlySwiftTestingTests` (16 cases) to pin the store-only wiring contract end-to-end.
+- Added Swift Testing coverage for every new helper: `SurfaceAgentStateResolver` (priority chain + tab-less signature), `NotificationRingDecision` (per-surface ring decisions), `AgentStatusTextFormatter` (status-bar label and counter bucket mapping), and `TabBarViewModel` resolver wiring (sidebar pill + multi-agent mini-pills).
+- Added `PerSurfaceStoreE2ESwiftTestingTests` wiring the real store, resolver, and view model together without booting AppKit.
+- Preserved every legacy integration test by migrating it to the per-surface store. Full suite: 2514 XCTest + 1275 Swift Testing = 3789 tests, zero failures, zero warnings, debug + release builds green.
+
 ## [0.1.71] - 2026-04-17
 
 ### Changed
