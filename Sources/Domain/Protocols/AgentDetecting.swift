@@ -123,6 +123,22 @@ protocol AgentDetecting: AnyObject {
     /// Clears the state machine, debounce state, and the agent name.
     func reset()
 
+    /// Clears all per-surface state associated with a terminal surface.
+    ///
+    /// Called from surface teardown (e.g., `destroySurface`) so the
+    /// engine does not retain stale debounce buckets or hook-session
+    /// records keyed to a surface that no longer exists. Idempotent:
+    /// calling on a surface that was never tracked or has already been
+    /// cleared is a safe no-op.
+    ///
+    /// The agent state machine itself is not touched; only per-surface
+    /// routing state is released.
+    ///
+    /// - Parameter id: Surface whose per-surface state should be
+    ///   dropped. Passing `nil` clears the legacy shared bucket used
+    ///   by callers that have not been migrated to per-surface routing.
+    func clearSurface(_ id: SurfaceID?)
+
     /// The current state of the agent lifecycle.
     var currentState: AgentStateMachine.State { get }
 
@@ -156,6 +172,12 @@ extension AgentDetecting {
     func notifyProcessExited() {
         notifyProcessExited(surfaceID: nil)
     }
+
+    /// Default no-op for conformers that do not maintain per-surface
+    /// routing state (e.g., test doubles without debounce or hook
+    /// buckets). The production engine overrides this to release the
+    /// surface's per-surface state.
+    func clearSurface(_ id: SurfaceID?) {}
 }
 
 // MARK: - Agent State

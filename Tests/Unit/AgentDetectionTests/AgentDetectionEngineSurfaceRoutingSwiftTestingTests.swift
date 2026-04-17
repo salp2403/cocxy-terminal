@@ -444,4 +444,151 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
         #expect(engine.hookActiveSurfaces.isEmpty)
         #expect(engine.hookActiveSessions.isEmpty)
     }
+
+    // MARK: - clearSurface lifecycle
+
+    @Test("clearSurface on an untouched surface is a no-op")
+    func clearSurfaceNoOpOnUntouchedSurface() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.clearSurface(surface)
+
+        #expect(engine._debounceBucketCountForTesting == 0)
+        #expect(engine._hookSessionsForTesting(surfaceID: surface).isEmpty)
+        #expect(engine.hookActiveSurfaces.isEmpty)
+    }
+
+    @Test("clearSurface removes the debounce bucket for the given surface")
+    func clearSurfaceRemovesDebounceBucket() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.injectSignal(launchSignal(), surfaceID: surface)
+        #expect(engine._debounceBucketCountForTesting == 1)
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected")
+
+        engine.clearSurface(surface)
+
+        #expect(engine._debounceBucketCountForTesting == 0)
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == nil)
+    }
+
+    @Test("clearSurface removes the hook session bucket for the given surface")
+    func clearSurfaceRemovesHookBucket() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-lifecycle"),
+            surfaceID: surface
+        )
+        #expect(engine._hookSessionsForTesting(surfaceID: surface) == ["sess-lifecycle"])
+
+        engine.clearSurface(surface)
+
+        #expect(engine._hookSessionsForTesting(surfaceID: surface).isEmpty)
+        #expect(engine.hookActiveSurfaces[surface] == nil)
+    }
+
+    @Test("clearSurface is idempotent across repeated calls")
+    func clearSurfaceIsIdempotent() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.injectSignal(launchSignal(), surfaceID: surface)
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-idem"),
+            surfaceID: surface
+        )
+
+        engine.clearSurface(surface)
+        engine.clearSurface(surface)
+        engine.clearSurface(surface)
+
+        #expect(engine._debounceBucketCountForTesting == 0)
+        #expect(engine._hookSessionsForTesting(surfaceID: surface).isEmpty)
+    }
+
+    @Test("clearSurface does not touch buckets of other surfaces")
+    func clearSurfaceIsolatesOtherSurfaces() {
+        let engine = makeEngine()
+        let surfaceA = SurfaceID()
+        let surfaceB = SurfaceID()
+
+        // Populate debounce buckets for both surfaces, returning the
+        // state machine to idle between A's two transitions so the
+        // second one (exit) can actually fire.
+        engine.injectSignal(launchSignal(), surfaceID: surfaceA)
+        engine.injectSignal(exitSignal(), surfaceID: surfaceA)
+        engine.injectSignal(launchSignal(), surfaceID: surfaceB)
+
+        // Populate hook bucket for B only.
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-B"),
+            surfaceID: surfaceB
+        )
+
+        engine.clearSurface(surfaceA)
+
+        #expect(engine._debounceBucketCountForTesting == 1)
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceA) == nil)
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceB) == "agentDetected")
+        #expect(engine._hookSessionsForTesting(surfaceID: surfaceA).isEmpty)
+        #expect(engine._hookSessionsForTesting(surfaceID: surfaceB) == ["sess-B"])
+    }
+
+    @Test("clearSurface(nil) clears only the legacy shared bucket")
+    func clearSurfaceNilClearsLegacyBucketOnly() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        // Seed the legacy (nil) bucket via the untouched-caller path,
+        // then return to idle so the real-surface path can fire its
+        // own agentDetected transition.
+        engine.injectSignal(launchSignal())
+        engine.injectSignal(exitSignal())
+        engine.injectSignal(launchSignal(), surfaceID: surface)
+
+        #expect(engine._debounceEventKeyForTesting(surfaceID: nil) == "agentExited")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected")
+
+        engine.clearSurface(nil)
+
+        #expect(engine._debounceEventKeyForTesting(surfaceID: nil) == nil)
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected")
+    }
+
+    @Test("clearSurface preserves the global state machine's current state")
+    func clearSurfacePreservesStateMachineState() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.injectSignal(launchSignal(), surfaceID: surface)
+        #expect(engine.currentState == .agentLaunched)
+
+        engine.clearSurface(surface)
+
+        // The state machine is global and does not own the per-surface
+        // bucket; clearSurface only frees routing state, it must not
+        // reset the agent lifecycle itself.
+        #expect(engine.currentState == .agentLaunched)
+    }
+
+    @Test("Via AgentDetecting protocol, clearSurface reaches the engine implementation")
+    func clearSurfaceReachableViaProtocol() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        engine.injectSignal(launchSignal(), surfaceID: surface)
+        #expect(engine._debounceBucketCountForTesting == 1)
+
+        // Exercise the method through the protocol type to confirm the
+        // engine's implementation is preferred over the default no-op
+        // provided by the extension.
+        let detector: AgentDetecting = engine
+        detector.clearSurface(surface)
+
+        #expect(engine._debounceBucketCountForTesting == 0)
+    }
 }

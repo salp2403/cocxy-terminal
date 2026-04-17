@@ -311,6 +311,26 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         timingDetector.notifyStateChanged(to: .idle)
     }
 
+    /// Releases all per-surface routing state for a single surface.
+    ///
+    /// Removes the surface's debounce bucket and hook-session record so
+    /// the engine does not retain memory for destroyed surfaces. Called
+    /// from the surface lifecycle when a terminal surface is torn down.
+    /// Idempotent: invoking on a surface that was never tracked (or has
+    /// already been cleared) leaves the engine unchanged.
+    ///
+    /// Only per-surface routing state is affected — the global state
+    /// machine, detector layers, and other surfaces' buckets are
+    /// preserved. Passing `nil` drops only the legacy shared bucket
+    /// populated by call sites that have not been migrated to the
+    /// per-surface API; other surfaces keep their buckets intact.
+    ///
+    /// - Parameter id: Surface to clear, or `nil` for the legacy bucket.
+    func clearSurface(_ id: SurfaceID?) {
+        debounceBuckets.removeValue(forKey: id)
+        hookActiveSurfaces.removeValue(forKey: id)
+    }
+
     /// Updates the pattern detector with new compiled agent configurations.
     ///
     /// Called when `agents.toml` is hot-reloaded. The pattern detector resets
