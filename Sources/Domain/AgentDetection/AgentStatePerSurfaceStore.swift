@@ -7,18 +7,17 @@ import Foundation
 /// Main-actor store that tracks the agent-detection state of each
 /// terminal surface independently.
 ///
-/// **Current rollout state (v0.1.71 Fase 2 landed).** The store is
-/// live as a shadow source of truth: `AppDelegate+AgentWiring`
-/// dual-writes every tab-level agent mutation onto it (see
-/// ``wireAgentDetectionToTabs`` and ``wireHookReceiverToEngine``), the
-/// surface lifecycle (`destroyTerminalSurface`, `destroyAllSurfaces`,
-/// `performCloseTab`, `closeSplitAction`) resets its entries alongside
-/// the engine's debounce and hook-session buckets, and the detection
-/// engine carries `surfaceID` through every public entry point so each
-/// emitted `StateContext` can be routed per split. `Tab` is still the
-/// field UI consumers read — the store shadows it so Fase 3 can flip
-/// readers one component at a time while the tab-level fallback stays
-/// available as a safety net.
+/// **Current rollout state (Fase 3 landed).** The store drives every
+/// tab-scoped agent indicator in the UI: the agent progress overlay,
+/// the per-surface notification ring, the status-bar summary, the
+/// sidebar pill, and the Fase 3e multi-agent mini-pills. Reads go
+/// through `SurfaceAgentStateResolver`, whose priority chain picks
+/// the focused split first, then the primary surface, then any other
+/// surface with live activity, and finally a Tab-level snapshot as a
+/// safety net. `AppDelegate+AgentWiring` still dual-writes every
+/// state transition onto both `Tab` and this store so the fallback
+/// stays truthful; surface teardown paths reset the entry here
+/// alongside the engine's debounce and hook-session buckets.
 ///
 /// Migration roadmap:
 /// - **Fase 1 (done)**: this store plus `SurfaceAgentState` are in
@@ -30,19 +29,26 @@ import Foundation
 ///   teardown resets both the engine's per-surface buckets and this
 ///   store's entry. End-to-end coverage lives in
 ///   `AgentWiringDualWriteSwiftTestingTests`.
-/// - **Fase 3 (pending)**: UI consumers (sidebar pills, status bar,
-///   notification rings, dashboard) subscribe to this store instead of
-///   reading `Tab`. Dual-write stays in place as a safety net during
-///   and after the flip.
-/// - **Fase 4 (pending)**: the forwarding fields on `Tab` are removed
-///   and this store becomes the sole source of truth.
+/// - **Fase 3 (done)**: UI consumers resolve their per-surface state
+///   through `SurfaceAgentStateResolver` (agent progress overlay,
+///   notification ring via `NotificationRingDecision`, status bar via
+///   `AgentStatusTextFormatter`, sidebar pill via
+///   `TabBarViewModel.agentStateResolver`, multi-agent mini-pills via
+///   `additionalActiveAgentStatesProvider`). End-to-end coverage
+///   lives in `PerSurfaceStoreE2ESwiftTestingTests`. Dual-write stays
+///   in place as a safety net so a missing store entry never blanks
+///   an indicator.
+/// - **Fase 4 (pending)**: the forwarding fields on `Tab` are removed,
+///   the AgentWiring mutation collapses onto the store only, and this
+///   type becomes the sole source of truth.
 ///
-/// Treat this type as a shadow source of truth until Fase 4 ships.
-/// Production writers (AgentWiring) and teardown paths
-/// (MainWindowController extensions) are already aligned with it, so
-/// new writers should mirror the same dual-write pattern. Readers
-/// migrating over should keep a Tab-based fallback until Fase 3 is
-/// complete for that consumer.
+/// Until Fase 4 ships, treat the store as the live source of truth for
+/// reads and the `Tab` fields as the safety-net fallback. Production
+/// writers (AgentWiring) and teardown paths (MainWindowController
+/// extensions) remain aligned with both, so new writers should mirror
+/// the same dual-write pattern. New readers should route through the
+/// resolver or the view-model closures so Fase 4 can retire the
+/// tab-level fields in a single pass.
 ///
 /// The store runs on the main actor to align with the existing agent
 /// infrastructure (`AgentStateAggregator`, `AgentDashboardViewModel`)
