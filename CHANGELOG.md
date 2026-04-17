@@ -5,6 +5,21 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.73] - 2026-04-17
+
+### Fixed
+- Per-surface agent state now resets to `.idle` when a shell prompt returns on a surface whose PTY foreground process is a login shell, even if the agent terminated without emitting a `SessionEnd` hook. Previously, agents that aborted early (an agent launch failing before bootstrap, a manual `Ctrl+C`, or any crash before the hook handshake) left the sidebar pill, status bar, and progress overlay reporting activity indefinitely. The recovery is conservative: it only fires when the PTY foreground matches a known shell binary (`zsh`, `bash`, `fish`, `sh`, `dash`, `ksh`, `tcsh`, `csh`), so editors, sub-commands invoked by the agent (`git`, `npm`, …), and long-running builds keep their state intact.
+- A secondary watchdog now flushes per-surface state back to `.idle` after 30 seconds if a surface enters `.launched` and never progresses (no output, no hook event, no teardown). This catches agents that crash before printing anything — the case where the shell-prompt recovery cannot fire because the shell never redraws its prompt.
+
+### Added
+- New `AgentLifecycleRecovery` pure helper encapsulating the shell-prompt reset decision. Testable without AppKit via `AgentLifecycleRecoverySwiftTestingTests` (17 cases covering every shell binary, every non-idle state, case-insensitivity, whitespace handling, and the `.idle` / nil / empty short-circuits).
+- New `AgentLaunchedWatchdog` main-actor scheduler around per-surface `DispatchWorkItem`. Idempotent `schedule` / `cancel` / `cancelAll` with introspection helpers for tests. 7 Swift Testing cases cover the full lifecycle.
+- New `MainWindowController+AgentLifecycleRecovery` extension that wires the recovery and the watchdog into the surface lifecycle. A single `performAgentStateReset(surfaceID:tabID:reason:)` routine mirrors the teardown reset sequence (engine bucket cleanup, store reset, session registry sync, sidebar / status-bar / overlay / notification-ring refresh) so both code paths — the shell-prompt recovery and the watchdog — produce identical UI behaviour. Integrated into `MainWindowController+SurfaceLifecycle` (case `.shellPrompt` plus every teardown path) and `AppDelegate+AgentWiring` (auto-schedule/cancel when the store transitions into or out of `.launched`). 9 Swift Testing cases cover the end-to-end integration.
+
+### Testing
+- Full suite: 2514 XCTest + 1309 Swift Testing = 3823 tests, zero failures, zero warnings, debug + release builds green.
+- +33 Swift Testing cases vs v0.1.72 (17 helper + 7 watchdog + 9 integration).
+
 ## [0.1.72] - 2026-04-17
 
 ### Changed
