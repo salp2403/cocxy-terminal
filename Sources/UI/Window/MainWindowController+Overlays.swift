@@ -1385,6 +1385,12 @@ extension MainWindowController {
     ///
     /// Called from `handleTabSwitch` and `wireAgentDetectionToTabs` whenever
     /// the active tab's agent state changes.
+    ///
+    /// Reads the overlay state from the per-surface store via
+    /// `resolveSurfaceAgentState(for:tab:)`, which picks the focused split
+    /// first and falls back to the tab primary or a Tab-level snapshot so
+    /// Fase 3 does not regress behavior when a surface has no store entry
+    /// yet.
     func updateAgentProgressOverlay() {
         guard let container = terminalContainerView,
               let tabID = displayedTabID,
@@ -1393,14 +1399,22 @@ extension MainWindowController {
             return
         }
 
-        let isActive = tab.agentState == .working || tab.agentState == .launched
+        let resolved = resolveSurfaceAgentState(for: tabID, tab: tab)
+
+        let isActive = resolved.agentState == .working || resolved.agentState == .launched
         guard isActive else {
             dismissAgentProgressOverlay()
             return
         }
 
-        let agentName = tab.detectedAgent?.displayName ?? tab.processName ?? "Agent"
-        let durationText: String? = tab.detectedAgent.map { agent in
+        // `processName` is a Tab-level field (the foreground PTY process
+        // name) used as a last-resort label when neither the resolved
+        // surface nor the tab has a detected agent yet. It intentionally
+        // stays on the Tab fallback path during Fase 3 because
+        // foreground-process tracking is not mirrored into the per-surface
+        // store in this phase.
+        let agentName = resolved.detectedAgent?.displayName ?? tab.processName ?? "Agent"
+        let durationText: String? = resolved.detectedAgent.map { agent in
             let seconds = Int(Date().timeIntervalSince(agent.startedAt))
             if seconds < 60 { return "\(seconds)s" }
             let minutes = seconds / 60
@@ -1410,8 +1424,8 @@ extension MainWindowController {
 
         let overlay = AgentProgressOverlay(
             agentName: agentName,
-            toolCount: tab.agentToolCount,
-            errorCount: tab.agentErrorCount,
+            toolCount: resolved.agentToolCount,
+            errorCount: resolved.agentErrorCount,
             durationText: durationText
         )
 
