@@ -24,7 +24,6 @@ struct PerSurfaceStoreE2ESwiftTestingTests {
     ) {
         viewModel.agentStateResolver = { tab in
             SurfaceAgentStateResolver.resolve(
-                tab: tab,
                 focusedSurfaceID: nil,
                 primarySurfaceID: primarySurfaceIDsByTab[tab.id],
                 allSurfaceIDs: allSurfaceIDsByTab[tab.id] ?? [],
@@ -33,7 +32,6 @@ struct PerSurfaceStoreE2ESwiftTestingTests {
         }
         viewModel.additionalActiveAgentStatesProvider = { tab in
             let resolution = SurfaceAgentStateResolver.resolveFull(
-                tab: tab,
                 focusedSurfaceID: nil,
                 primarySurfaceID: primarySurfaceIDsByTab[tab.id],
                 allSurfaceIDs: allSurfaceIDsByTab[tab.id] ?? [],
@@ -56,9 +54,9 @@ struct PerSurfaceStoreE2ESwiftTestingTests {
         )
     }
 
-    // MARK: - Sidebar pill reflects the store, not Tab
+    // MARK: - Sidebar pill reflects the per-surface store
 
-    @Test("display item mirrors the per-surface store while Tab remains idle")
+    @Test("display item mirrors the per-surface store")
     func displayItemMirrorsStore() {
         let manager = TabManager()
         let tabID = manager.tabs[0].id
@@ -87,11 +85,6 @@ struct PerSurfaceStoreE2ESwiftTestingTests {
         #expect(item?.agentToolCount == 3)
         #expect(item?.agentDurationText != nil)
         #expect(item?.agentStatusText.contains("Read: main.swift") == true)
-
-        // Tab itself is still idle — the store shadowed it.
-        let tabSnapshot = manager.tab(for: tabID)
-        #expect(tabSnapshot?.agentState == .idle)
-        #expect(tabSnapshot?.agentToolCount == 0)
     }
 
     // MARK: - Multi-split routing
@@ -218,7 +211,6 @@ struct PerSurfaceStoreE2ESwiftTestingTests {
         }
 
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: Tab(),
             focusedSurfaceID: nil,
             primarySurfaceID: primary,
             allSurfaceIDs: [primary],
@@ -233,27 +225,21 @@ struct PerSurfaceStoreE2ESwiftTestingTests {
         #expect(label == "Edit: server.ts")
     }
 
-    // MARK: - No store wiring = legacy behavior (Tab fallback)
+    // MARK: - No store wiring = idle fallback
 
-    @Test("display item falls back to Tab snapshot when no resolver is wired")
-    func displayItemFallsBackToTabWithoutResolver() {
+    @Test("display item stays idle when no resolver is wired")
+    func displayItemStaysIdleWithoutResolver() {
         let manager = TabManager()
-        let tabID = manager.tabs[0].id
 
-        // Seed the tab so the fallback can prove itself.
-        manager.updateTab(id: tabID) { tab in
-            tab.agentState = .working
-            tab.agentToolCount = 9
-        }
-
-        // No resolver / provider is wired — default closures keep the
-        // legacy tab-level behavior and never touch a store.
+        // No resolver / provider is wired — default closures return
+        // `.idle` and `[]`, so the sidebar pill keeps the idle visuals
+        // even if a state would otherwise have been broadcast.
         let viewModel = TabBarViewModel(tabManager: manager)
         viewModel.syncWithManager()
 
         let item = viewModel.tabItems.first
-        #expect(item?.agentState == .working)
-        #expect(item?.agentToolCount == 9)
+        #expect(item?.agentState == .idle)
+        #expect(item?.agentToolCount == 0)
         #expect(item?.additionalActiveAgentStates.isEmpty == true)
     }
 }

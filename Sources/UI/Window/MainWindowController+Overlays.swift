@@ -1387,10 +1387,9 @@ extension MainWindowController {
     /// the active tab's agent state changes.
     ///
     /// Reads the overlay state from the per-surface store via
-    /// `resolveSurfaceAgentState(for:tab:)`, which picks the focused split
-    /// first and falls back to the tab primary or a Tab-level snapshot so
-    /// Fase 3 does not regress behavior when a surface has no store entry
-    /// yet.
+    /// `resolveSurfaceAgentState(for:)`, which picks the focused split
+    /// first and falls back to the tab primary or `.idle` when no
+    /// surface of the tab has an active entry in the store.
     func updateAgentProgressOverlay() {
         guard let container = terminalContainerView,
               let tabID = displayedTabID,
@@ -1399,7 +1398,7 @@ extension MainWindowController {
             return
         }
 
-        let resolved = resolveSurfaceAgentState(for: tabID, tab: tab)
+        let resolved = resolveSurfaceAgentState(for: tabID)
 
         let isActive = resolved.agentState == .working || resolved.agentState == .launched
         guard isActive else {

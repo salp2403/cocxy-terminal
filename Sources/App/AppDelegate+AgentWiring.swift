@@ -142,8 +142,10 @@ extension AppDelegate {
                     return
                 }
 
-                // Update the tab's agentActivity and stats with tool details
-                // for real-time visibility in the sidebar.
+                // Route tool activity into the per-surface store and bump
+                // the tab's last-activity timestamp for sidebar sorting.
+                // The store is the sole source of truth for agent state;
+                // the tab only tracks timing and other non-agent metadata.
                 if let resolved, case .toolUse(let toolData) = event.data {
                     let filePath = toolData.toolInput?["file_path"]
                         ?? toolData.toolInput?["path"]
@@ -157,17 +159,8 @@ extension AppDelegate {
                     }
                     let isError = event.type == .postToolUseFailure
                     resolved.controller.tabManager.updateTab(id: resolved.tabID) { tab in
-                        tab.agentActivity = activity
-                        tab.agentToolCount += 1
                         tab.lastActivityAt = Date()
-                        if isError {
-                            tab.agentErrorCount += 1
-                        }
                     }
-                    // Dual-write: mirror the same mutation onto the per-surface
-                    // store so UI consumers that read per-split state stay in
-                    // sync while the tab-level fields remain the source of
-                    // truth during the v0.1.71 migration.
                     if let targetSurfaceID = self.surfaceIDForDualWrite(
                         controller: resolved.controller,
                         tabID: resolved.tabID,
@@ -243,49 +236,18 @@ extension AppDelegate {
                 let controller = target.controller
                 let tabID = target.tabID
                 let displayName = self.resolvedAgentDisplayName(context.agentName)
+
+                // Bump only non-agent metadata on the tab. Agent state,
+                // activity, counters, and detected-agent metadata live
+                // in the per-surface store.
                 controller.tabManager.updateTab(id: tabID) { tab in
-                    tab.agentState = agentState
                     tab.lastActivityAt = Date()
-
-                    if agentState == .idle {
-                        tab.agentToolCount = 0
-                        tab.agentErrorCount = 0
-                        tab.agentActivity = nil
-                        tab.detectedAgent = nil
-                    } else if let agentName = context.agentName?
-                        .trimmingCharacters(in: .whitespacesAndNewlines),
-                        !agentName.isEmpty {
-                        if let existing = tab.detectedAgent,
-                           existing.name == agentName {
-                            // Preserve the original start time while the same
-                            // agent continues across multiple state changes.
-                            tab.detectedAgent = existing
-                        } else {
-                            tab.detectedAgent = DetectedAgent(
-                                name: agentName,
-                                displayName: displayName,
-                                launchCommand: agentName,
-                                startedAt: Date()
-                            )
-                        }
-                    }
-
-                    // Reset tool/error counters when agent finishes or goes idle.
-                    if agentState == .finished, tab.agentActivity == nil {
-                        tab.agentActivity = "Task completed"
-                    } else if agentState == .error, tab.agentActivity == nil {
-                        tab.agentActivity = "Error occurred"
-                    } else if agentState == .waitingInput, tab.agentActivity == nil {
-                        tab.agentActivity = "Waiting for input"
-                    }
                 }
 
-                // Dual-write the same transition onto the per-surface store
-                // so per-split UI consumers stay in sync during the v0.1.71
-                // migration. Resolution priority: explicit context surfaceID
-                // (pattern/timing detectors already supply it) -> bridge CWD
-                // match -> tab primary surface. Tab-level fields above remain
-                // the source of truth; the store shadows them until Fase 4.
+                // Apply the transition onto the per-surface store.
+                // Resolution priority: explicit context surfaceID (pattern
+                // and timing detectors already supply it) -> bridge CWD
+                // match -> tab primary surface.
                 if let targetSurfaceID = self.surfaceIDForDualWrite(
                     controller: controller,
                     tabID: tabID,

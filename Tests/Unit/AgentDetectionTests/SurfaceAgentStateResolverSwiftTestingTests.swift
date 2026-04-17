@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// Tests for SurfaceAgentStateResolver — the pure priority chain used by
-// Fase 3 UI consumers to pick per-surface state with a Tab fallback.
+// Tests for SurfaceAgentStateResolver — pure priority chain used by the
+// tab-scoped UI indicators. After Fase 4 the resolver only consults the
+// per-surface store; the safety-net fallback is plain `.idle`.
 
 import Foundation
 import Testing
@@ -12,23 +13,6 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
 
     // MARK: - Test helpers
 
-    private static func makeTab(
-        agentState: AgentState = .idle,
-        detectedAgent: DetectedAgent? = nil,
-        agentActivity: String? = nil,
-        agentToolCount: Int = 0,
-        agentErrorCount: Int = 0
-    ) -> Tab {
-        var tab = Tab(
-            agentState: agentState,
-            detectedAgent: detectedAgent
-        )
-        tab.agentActivity = agentActivity
-        tab.agentToolCount = agentToolCount
-        tab.agentErrorCount = agentErrorCount
-        return tab
-    }
-
     private static func makeAgent(name: String = "claude") -> DetectedAgent {
         DetectedAgent(
             name: name,
@@ -38,50 +22,34 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         )
     }
 
-    // MARK: - Priority 4: no store / pure Tab fallback
+    // MARK: - Priority 4: `.idle` fallback
 
-    @Test("falls back to Tab when no store is provided")
-    func fallsBackToTabWithoutStore() {
-        let tab = Self.makeTab(
-            agentState: .working,
-            detectedAgent: Self.makeAgent(),
-            agentActivity: "Read: main.swift",
-            agentToolCount: 3,
-            agentErrorCount: 1
-        )
-
+    @Test("falls back to idle when no store is provided")
+    func fallsBackToIdleWithoutStore() {
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: tab,
-            focusedSurfaceID: nil,
-            primarySurfaceID: nil,
-            allSurfaceIDs: [],
+            focusedSurfaceID: SurfaceID(),
+            primarySurfaceID: SurfaceID(),
+            allSurfaceIDs: [SurfaceID()],
             store: nil
         )
 
-        #expect(resolved.agentState == .working)
-        #expect(resolved.detectedAgent?.name == "claude")
-        #expect(resolved.agentActivity == "Read: main.swift")
-        #expect(resolved.agentToolCount == 3)
-        #expect(resolved.agentErrorCount == 1)
+        #expect(resolved == .idle)
     }
 
-    @Test("falls back to Tab when every surface in the store is idle")
-    func fallsBackToTabWhenStoreEmpty() {
+    @Test("falls back to idle when every surface in the store is idle")
+    func fallsBackToIdleWhenStoreEmpty() {
         let store = AgentStatePerSurfaceStore()
         let focused = SurfaceID()
         let primary = SurfaceID()
-        let tab = Self.makeTab(agentState: .working, agentToolCount: 99)
 
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: tab,
             focusedSurfaceID: focused,
             primarySurfaceID: primary,
             allSurfaceIDs: [primary, focused],
             store: store
         )
 
-        #expect(resolved.agentState == .working)
-        #expect(resolved.agentToolCount == 99)
+        #expect(resolved == .idle)
     }
 
     // MARK: - Priority 1: focused split
@@ -102,7 +70,6 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         }
 
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: Self.makeTab(),
             focusedSurfaceID: focused,
             primarySurfaceID: primary,
             allSurfaceIDs: [primary, focused],
@@ -127,7 +94,6 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         }
 
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: Self.makeTab(),
             focusedSurfaceID: focused,
             primarySurfaceID: primary,
             allSurfaceIDs: [primary, focused],
@@ -150,7 +116,6 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         }
 
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: Self.makeTab(),
             focusedSurfaceID: shared,
             primarySurfaceID: shared,
             allSurfaceIDs: [shared, otherActive],
@@ -175,7 +140,6 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         }
 
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: Self.makeTab(),
             focusedSurfaceID: focused,
             primarySurfaceID: primary,
             allSurfaceIDs: [primary, focused, other],
@@ -207,7 +171,6 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         // Order `[focused, primary, b, a]` must still produce `b` first since
         // focused + primary are skipped in the iteration pass.
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: Self.makeTab(),
             focusedSurfaceID: focused,
             primarySurfaceID: primary,
             allSurfaceIDs: [focused, primary, b, a],
@@ -231,7 +194,6 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         }
 
         let resolved = SurfaceAgentStateResolver.resolve(
-            tab: Self.makeTab(),
             focusedSurfaceID: nil,
             primarySurfaceID: primary,
             allSurfaceIDs: [primary],
@@ -243,39 +205,7 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         #expect(resolved.agentState == .finished)
     }
 
-    // MARK: - SurfaceAgentState init from Tab
-
-    @Test("SurfaceAgentState init from Tab mirrors all five fields")
-    func surfaceStateInitFromTabMirrorsFields() {
-        let agent = Self.makeAgent()
-        let tab = Self.makeTab(
-            agentState: .working,
-            detectedAgent: agent,
-            agentActivity: "Read: main.swift",
-            agentToolCount: 7,
-            agentErrorCount: 1
-        )
-
-        let state = SurfaceAgentState(from: tab)
-
-        #expect(state.agentState == .working)
-        #expect(state.detectedAgent?.name == agent.name)
-        #expect(state.detectedAgent?.displayName == agent.displayName)
-        #expect(state.agentActivity == "Read: main.swift")
-        #expect(state.agentToolCount == 7)
-        #expect(state.agentErrorCount == 1)
-    }
-
-    @Test("SurfaceAgentState init from idle Tab produces the canonical idle state")
-    func surfaceStateInitFromIdleTabIsIdle() {
-        let tab = Self.makeTab()
-
-        let state = SurfaceAgentState(from: tab)
-
-        #expect(state == .idle)
-    }
-
-    // MARK: - resolveFull returns both state and chosen surface (Fase 3e)
+    // MARK: - resolveFull returns both state and chosen surface
 
     @Test("resolveFull returns the focused surface ID when it wins")
     func resolveFullReturnsFocusedSurfaceID() {
@@ -286,7 +216,6 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         store.update(surfaceID: focused) { $0.agentState = .working }
 
         let resolution = SurfaceAgentStateResolver.resolveFull(
-            tab: Self.makeTab(),
             focusedSurfaceID: focused,
             primarySurfaceID: primary,
             allSurfaceIDs: [primary, focused],
@@ -297,14 +226,12 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         #expect(resolution.state.agentState == .working)
     }
 
-    @Test("resolveFull reports nil when the Tab fallback is used")
-    func resolveFullNilOnFallback() {
+    @Test("resolveFull reports nil when the idle fallback is used")
+    func resolveFullNilOnIdleFallback() {
         let store = AgentStatePerSurfaceStore()
         let primary = SurfaceID()
-        let tab = Self.makeTab(agentState: .working)
 
         let resolution = SurfaceAgentStateResolver.resolveFull(
-            tab: tab,
             focusedSurfaceID: nil,
             primarySurfaceID: primary,
             allSurfaceIDs: [primary],
@@ -312,10 +239,23 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         )
 
         #expect(resolution.chosenSurfaceID == nil)
-        #expect(resolution.state.agentState == .working)
+        #expect(resolution.state == .idle)
     }
 
-    // MARK: - additionalActiveStates for Fase 3e multi-agent pills
+    @Test("resolveFull without store returns idle and nil surface")
+    func resolveFullWithoutStoreReturnsIdle() {
+        let resolution = SurfaceAgentStateResolver.resolveFull(
+            focusedSurfaceID: SurfaceID(),
+            primarySurfaceID: SurfaceID(),
+            allSurfaceIDs: [],
+            store: nil
+        )
+
+        #expect(resolution.state == .idle)
+        #expect(resolution.chosenSurfaceID == nil)
+    }
+
+    // MARK: - additionalActiveStates for multi-agent pills
 
     @Test("additionalActiveStates returns empty when no store is provided")
     func additionalActiveStatesEmptyWithoutStore() {
@@ -416,7 +356,7 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
 
     @Test("additionalActiveStates keeps the primary surface when primaryChosenSurfaceID is nil")
     func additionalActiveStatesFallbackKeepsAll() {
-        // When the primary resolver falls back to the Tab snapshot, the
+        // When the primary resolver falls back to `.idle`, the
         // chosenSurfaceID is nil; no surface must be excluded.
         let store = AgentStatePerSurfaceStore()
         let primary = SurfaceID()

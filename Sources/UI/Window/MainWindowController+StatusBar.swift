@@ -18,16 +18,15 @@ extension MainWindowController {
 
     /// Computes agent activity summary across all tabs.
     ///
-    /// Every tab is resolved through `resolveSurfaceAgentState(for:tab:)`
+    /// Every tab is resolved through `resolveSurfaceAgentState(for:)`
     /// so splits running independent agents contribute via their most
-    /// relevant surface (focused > primary > any active > Tab fallback).
-    /// The resolver already falls back to the Tab-level fields when the
-    /// per-surface store is empty, so the summary never regresses when a
-    /// surface has no store entry yet.
+    /// relevant surface (focused > primary > any active > `.idle`).
+    /// An idle tab produces no counter increment, so the summary stays
+    /// accurate whether the per-surface store is populated or not.
     func computeAgentSummary() -> AgentSummary {
         var summary = AgentSummary()
         for tab in tabManager.tabs {
-            let resolved = resolveSurfaceAgentState(for: tab.id, tab: tab)
+            let resolved = resolveSurfaceAgentState(for: tab.id)
             switch AgentStatusTextFormatter.counterBucket(for: resolved.agentState) {
             case .working?:
                 summary.working += 1
@@ -43,7 +42,7 @@ extension MainWindowController {
         }
 
         if let activeTab = tabManager.activeTab {
-            let resolved = resolveSurfaceAgentState(for: activeTab.id, tab: activeTab)
+            let resolved = resolveSurfaceAgentState(for: activeTab.id)
 
             // `processName` stays on the Tab fallback path during Fase 3
             // because foreground-process tracking is not mirrored into

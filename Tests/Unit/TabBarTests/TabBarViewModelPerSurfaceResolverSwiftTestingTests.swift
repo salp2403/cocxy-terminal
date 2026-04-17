@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// Tests for the Fase 3d sidebar-pill migration: TabBarViewModel must route
-// every tab display item through the injected `agentStateResolver` so the
-// sidebar pill reflects the per-surface store instead of the tab-level
-// fields.
+// Tests for the sidebar-pill per-surface wiring: TabBarViewModel must
+// route every tab display item through the injected `agentStateResolver`
+// so the pill reflects the per-surface store. After Fase 4 the default
+// resolver is `.idle` (no Tab fallback); tests wire explicit resolvers
+// to exercise each state.
 
 import Foundation
 import Testing
@@ -12,68 +13,28 @@ import Testing
 @Suite("TabBarViewModel per-surface agent resolver")
 struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
 
-    // MARK: - Test helpers
+    // MARK: - Default resolver returns idle
 
-    /// Mutates the manager's bootstrap tab with the given agent-related
-    /// fields so the tests can assert what the resolver overrides versus
-    /// the legacy fallback without depending on any private API.
-    private static func seedBootstrapTab(
-        on manager: TabManager,
-        agentState: AgentState,
-        detectedAgent: DetectedAgent? = nil,
-        agentActivity: String? = nil,
-        agentToolCount: Int = 0,
-        agentErrorCount: Int = 0
-    ) {
-        let id = manager.tabs[0].id
-        manager.updateTab(id: id) { tab in
-            tab.agentState = agentState
-            tab.detectedAgent = detectedAgent
-            tab.agentActivity = agentActivity
-            tab.agentToolCount = agentToolCount
-            tab.agentErrorCount = agentErrorCount
-        }
-    }
-
-    // MARK: - Default resolver (no store)
-
-    @Test("default resolver mirrors tab-level fields onto the display item")
-    func defaultResolverMirrorsTabFields() {
+    @Test("default resolver reports idle when no closure is wired")
+    func defaultResolverReportsIdle() {
         let manager = TabManager()
         let viewModel = TabBarViewModel(tabManager: manager)
-
-        Self.seedBootstrapTab(
-            on: manager,
-            agentState: .working,
-            detectedAgent: DetectedAgent(
-                name: "claude",
-                displayName: "Claude Code",
-                launchCommand: "claude",
-                startedAt: Date()
-            ),
-            agentActivity: "Read: main.swift",
-            agentToolCount: 4,
-            agentErrorCount: 1
-        )
         viewModel.syncWithManager()
 
         let item = viewModel.tabItems.first
-        #expect(item?.agentState == .working)
-        #expect(item?.agentToolCount == 4)
-        #expect(item?.agentErrorCount == 1)
-        #expect(item?.agentDurationText != nil)
+        #expect(item?.agentState == .idle)
+        #expect(item?.agentToolCount == 0)
+        #expect(item?.agentErrorCount == 0)
+        #expect(item?.agentDurationText == nil)
+        #expect(item?.additionalActiveAgentStates.isEmpty == true)
     }
 
     // MARK: - Overridden resolver drives the display item
 
-    @Test("custom resolver overrides tab-level fields on the display item")
-    func customResolverOverridesTabFields() {
+    @Test("custom resolver drives the display item fields")
+    func customResolverDrivesDisplayItem() {
         let manager = TabManager()
         let viewModel = TabBarViewModel(tabManager: manager)
-
-        // Tab looks idle, but the injected resolver reports an active
-        // agent; the display item must follow the resolver.
-        Self.seedBootstrapTab(on: manager, agentState: .idle)
 
         let resolvedAgent = DetectedAgent(
             name: "codex",
@@ -104,8 +65,6 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         let manager = TabManager()
         let viewModel = TabBarViewModel(tabManager: manager)
 
-        Self.seedBootstrapTab(on: manager, agentState: .idle)
-
         let startedAt = Date(timeIntervalSinceNow: -125)  // ~2 minutes ago
         viewModel.agentStateResolver = { _ in
             SurfaceAgentState(
@@ -124,24 +83,14 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         #expect(item?.agentDurationText == "2m")
     }
 
-    @Test("idle resolver produces no duration text even if the tab has a detected agent")
+    @Test("idle resolver produces no duration text even if the resolver carries a detected agent")
     func idleResolverSuppressesDuration() {
         let manager = TabManager()
         let viewModel = TabBarViewModel(tabManager: manager)
 
-        Self.seedBootstrapTab(
-            on: manager,
-            agentState: .working,
-            detectedAgent: DetectedAgent(
-                name: "claude",
-                displayName: "Claude Code",
-                launchCommand: "claude",
-                startedAt: Date(timeIntervalSinceNow: -300)
-            )
-        )
-
-        // Resolver reports idle even though the tab still carries a
-        // detected agent; the display item must suppress the duration.
+        // Resolver reports idle; the display item must suppress the
+        // duration even though a detected agent would otherwise be
+        // available.
         viewModel.agentStateResolver = { _ in
             SurfaceAgentState(agentState: .idle)
         }
@@ -177,14 +126,12 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         #expect(viewModel.tabItems.allSatisfy { $0.agentState == .working })
     }
 
-    // MARK: - Fase 3e additional pills
+    // MARK: - Additional pills (multi-agent)
 
     @Test("additional agent states are exposed as [AgentState] on the display item")
     func additionalAgentStatesExposedOnDisplayItem() {
         let manager = TabManager()
         let viewModel = TabBarViewModel(tabManager: manager)
-
-        Self.seedBootstrapTab(on: manager, agentState: .idle)
 
         viewModel.additionalActiveAgentStatesProvider = { _ in
             [
@@ -204,7 +151,6 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         let manager = TabManager()
         let viewModel = TabBarViewModel(tabManager: manager)
 
-        Self.seedBootstrapTab(on: manager, agentState: .working)
         viewModel.syncWithManager()
 
         let item = viewModel.tabItems.first

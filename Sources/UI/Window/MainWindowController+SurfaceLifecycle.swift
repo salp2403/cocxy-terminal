@@ -482,8 +482,18 @@ extension MainWindowController {
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
                 tab.lastActivityAt = Date()
-                if tab.agentState == .working {
-                    tab.agentState = .finished
+            }
+            // When a shell prompt appears on a surface that was running
+            // an agent, flip the per-surface store entry from `.working`
+            // to `.finished` so the indicator relaxes. Other transitions
+            // stay driven by the detection engine.
+            if let sid = sourceSurfaceID,
+               let store = injectedPerSurfaceStore {
+                let current = store.state(for: sid)
+                if current.agentState == .working {
+                    store.update(surfaceID: sid) { state in
+                        state.agentState = .finished
+                    }
                 }
             }
             tabBarViewModel?.syncWithManager()
@@ -580,14 +590,16 @@ extension MainWindowController {
             renderer.renderImage(imageData, at: position)
 
         case .processExited:
-            // Shell process exited. Reset agent state to idle and clear
-            // activity metadata so the sidebar reflects the terminated session.
+            // Shell process exited. Reset the per-surface store entry
+            // to idle and bump the tab's last-activity timestamp so the
+            // sidebar reflects the terminated session. Engine gets the
+            // event too so it can clear its own per-surface buckets.
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
-                tab.agentState = .idle
-                tab.agentActivity = nil
-                tab.detectedAgent = nil
                 tab.lastActivityAt = Date()
+            }
+            if let sid = sourceSurfaceID {
+                injectedPerSurfaceStore?.reset(surfaceID: sid)
             }
             tabBarViewModel?.syncWithManager()
             injectedAgentDetectionEngine?.notifyProcessExited(

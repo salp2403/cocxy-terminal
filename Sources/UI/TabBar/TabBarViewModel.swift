@@ -101,15 +101,14 @@ final class TabBarViewModel: ObservableObject {
 
     /// Resolves the agent snapshot that drives the sidebar pill for a tab.
     ///
-    /// Fase 3d routes this closure through
-    /// `MainWindowController.resolveSurfaceAgentState(for:tab:)` so the
-    /// sidebar reads the focused split's state (or the primary surface's
-    /// when no split is focused) instead of the tab-level fields. The
-    /// default implementation mirrors the legacy behavior by taking a
-    /// straight `SurfaceAgentState` snapshot from the `Tab`, so
+    /// Wired by `MainWindowController` through
+    /// `resolveSurfaceAgentState(for:)` so the sidebar reads the focused
+    /// split's state (or the primary surface's when no split is focused)
+    /// from the per-surface store. The default returns `.idle` so
     /// environments that never wire the resolver (tests, the session
-    /// restore bootstrap before the store is installed) keep working.
-    var agentStateResolver: (Tab) -> SurfaceAgentState = { SurfaceAgentState(from: $0) }
+    /// restore bootstrap before the store is installed) keep rendering
+    /// idle sidebar pills until real state arrives.
+    var agentStateResolver: (Tab) -> SurfaceAgentState = { _ in .idle }
 
     /// Collects every per-surface agent state for the tab that was not
     /// chosen for the primary indicator but still has live activity.

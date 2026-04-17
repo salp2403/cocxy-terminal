@@ -216,11 +216,8 @@ extension MainWindowController {
         } else {
             // Resolve the per-surface agent state so the registry entry
             // reflects what the UI would render — including any active
-            // split that supersedes the tab-level fields.
-            let resolvedAgent = resolveSurfaceAgentState(
-                for: tabID,
-                tab: state.tab
-            )
+            // split that supersedes the default idle state.
+            let resolvedAgent = resolveSurfaceAgentState(for: tabID)
             sessionRegistry?.registerSession(SessionEntry(
                 sessionID: state.sessionID,
                 ownerWindowID: windowID,

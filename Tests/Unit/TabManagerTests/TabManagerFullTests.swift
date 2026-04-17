@@ -245,14 +245,12 @@ final class TabManagerFullTests: XCTestCase {
         tabManager.updateTab(id: tab.id) { tab in
             tab.title = "Updated Title"
             tab.gitBranch = "feature/new"
-            tab.agentState = .working
             tab.processName = "claude"
         }
 
         let updated = tabManager.tab(for: tab.id)!
         XCTAssertEqual(updated.title, "Updated Title")
         XCTAssertEqual(updated.gitBranch, "feature/new")
-        XCTAssertEqual(updated.agentState, .working)
         XCTAssertEqual(updated.processName, "claude")
     }
 

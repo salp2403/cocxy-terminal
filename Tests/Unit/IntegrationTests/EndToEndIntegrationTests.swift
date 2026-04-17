@@ -815,23 +815,55 @@ final class StatusBarDataIntegrationTests: XCTestCase {
         )
     }
 
+    // MARK: - Per-surface store seeding helper
+
+    /// Attaches a per-surface store to the controller (if missing), wires
+    /// the tab to a primary surface, and seeds the surface's agent state.
+    /// The resolver then observes this state through the same path it
+    /// uses in production.
+    @discardableResult
+    private func seedTabAgentState(
+        controller: MainWindowController,
+        tabID: TabID,
+        state: AgentState,
+        detectedAgent: DetectedAgent? = nil,
+        activity: String? = nil,
+        toolCount: Int = 0,
+        errorCount: Int = 0
+    ) -> SurfaceID {
+        if controller.injectedPerSurfaceStore == nil {
+            controller.injectedPerSurfaceStore = AgentStatePerSurfaceStore()
+        }
+        let sid = SurfaceID()
+        controller.tabSurfaceMap[tabID] = sid
+        controller.injectedPerSurfaceStore?.update(surfaceID: sid) {
+            $0.agentState = state
+            $0.detectedAgent = detectedAgent
+            $0.agentActivity = activity
+            $0.agentToolCount = toolCount
+            $0.agentErrorCount = errorCount
+        }
+        return sid
+    }
+
     func testComputeAgentSummaryCountsWorkingTab() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
 
-        // Set the first tab to .working state.
         guard let firstTabID = controller.tabManager.tabs.first?.id else {
             XCTFail("TabManager must have at least one tab")
             return
         }
-        controller.tabManager.updateTab(id: firstTabID) { tab in
-            tab.agentState = .working
-            tab.detectedAgent = DetectedAgent(
+        seedTabAgentState(
+            controller: controller,
+            tabID: firstTabID,
+            state: .working,
+            detectedAgent: DetectedAgent(
                 name: "Claude Code",
                 launchCommand: "claude",
                 startedAt: Date()
             )
-        }
+        )
 
         let summary = controller.computeAgentSummary()
 
@@ -854,9 +886,7 @@ final class StatusBarDataIntegrationTests: XCTestCase {
             XCTFail("TabManager must have at least one tab")
             return
         }
-        controller.tabManager.updateTab(id: firstTabID) { tab in
-            tab.agentState = .waitingInput
-        }
+        seedTabAgentState(controller: controller, tabID: firstTabID, state: .waitingInput)
 
         let summary = controller.computeAgentSummary()
 
@@ -874,9 +904,19 @@ final class StatusBarDataIntegrationTests: XCTestCase {
             XCTFail("TabManager must have at least one tab")
             return
         }
-        controller.tabManager.updateTab(id: firstTabID) { tab in
-            tab.agentState = .error
-        }
+        // `.error` alone is not `isActive`; the resolver keeps it
+        // visible only when a detected agent stays attached. Seed one
+        // so the indicator surfaces the error count.
+        seedTabAgentState(
+            controller: controller,
+            tabID: firstTabID,
+            state: .error,
+            detectedAgent: DetectedAgent(
+                name: "Claude Code",
+                launchCommand: "claude",
+                startedAt: Date()
+            )
+        )
 
         let summary = controller.computeAgentSummary()
 
@@ -894,9 +934,18 @@ final class StatusBarDataIntegrationTests: XCTestCase {
             XCTFail("TabManager must have at least one tab")
             return
         }
-        controller.tabManager.updateTab(id: firstTabID) { tab in
-            tab.agentState = .finished
-        }
+        // `.finished` alone is not `isActive`; the resolver keeps it
+        // visible only when a detected agent stays attached.
+        seedTabAgentState(
+            controller: controller,
+            tabID: firstTabID,
+            state: .finished,
+            detectedAgent: DetectedAgent(
+                name: "Claude Code",
+                launchCommand: "claude",
+                startedAt: Date()
+            )
+        )
 
         let summary = controller.computeAgentSummary()
 
@@ -914,9 +963,7 @@ final class StatusBarDataIntegrationTests: XCTestCase {
             XCTFail("TabManager must have at least one tab")
             return
         }
-        controller.tabManager.updateTab(id: firstTabID) { tab in
-            tab.agentState = .launched
-        }
+        seedTabAgentState(controller: controller, tabID: firstTabID, state: .launched)
 
         let summary = controller.computeAgentSummary()
 
@@ -935,22 +982,19 @@ final class StatusBarDataIntegrationTests: XCTestCase {
         controller.newTabAction(nil)
         controller.newTabAction(nil)
 
-        // Set different states on each tab.
+        // Set different states on each tab via the per-surface store.
         let tabs = controller.tabManager.tabs
         XCTAssertEqual(tabs.count, 4, "Precondition: must have 4 tabs")
 
-        controller.tabManager.updateTab(id: tabs[0].id) { tab in
-            tab.agentState = .working
-        }
-        controller.tabManager.updateTab(id: tabs[1].id) { tab in
-            tab.agentState = .waitingInput
-        }
-        controller.tabManager.updateTab(id: tabs[2].id) { tab in
-            tab.agentState = .error
-        }
-        controller.tabManager.updateTab(id: tabs[3].id) { tab in
-            tab.agentState = .finished
-        }
+        let agent = DetectedAgent(
+            name: "Claude Code",
+            launchCommand: "claude",
+            startedAt: Date()
+        )
+        seedTabAgentState(controller: controller, tabID: tabs[0].id, state: .working)
+        seedTabAgentState(controller: controller, tabID: tabs[1].id, state: .waitingInput)
+        seedTabAgentState(controller: controller, tabID: tabs[2].id, state: .error, detectedAgent: agent)
+        seedTabAgentState(controller: controller, tabID: tabs[3].id, state: .finished, detectedAgent: agent)
 
         let summary = controller.computeAgentSummary()
 
@@ -973,17 +1017,19 @@ final class StatusBarDataIntegrationTests: XCTestCase {
             return
         }
 
-        controller.tabManager.updateTab(id: firstTabID) { tab in
-            tab.agentState = .working
-            tab.detectedAgent = DetectedAgent(
+        seedTabAgentState(
+            controller: controller,
+            tabID: firstTabID,
+            state: .working,
+            detectedAgent: DetectedAgent(
                 name: "Claude Code",
                 launchCommand: "claude",
                 startedAt: Date()
-            )
-            tab.agentActivity = "Read: main.swift"
-            tab.agentToolCount = 3
-            tab.agentErrorCount = 1
-        }
+            ),
+            activity: "Read: main.swift",
+            toolCount: 3,
+            errorCount: 1
+        )
 
         let summary = controller.computeAgentSummary()
 

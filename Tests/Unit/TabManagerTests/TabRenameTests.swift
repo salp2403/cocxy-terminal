@@ -168,15 +168,15 @@ final class TabManagerRenameTests: XCTestCase {
     func testRenameTabPreservesOtherFields() {
         let tabID = tabManager.tabs[0].id
         tabManager.updateTab(id: tabID) { tab in
-            tab.agentState = .working
             tab.gitBranch = "main"
+            tab.processName = "claude"
         }
 
         tabManager.renameTab(id: tabID, newTitle: "Renamed")
 
         let tab = tabManager.tabs[0]
-        XCTAssertEqual(tab.agentState, .working)
         XCTAssertEqual(tab.gitBranch, "main")
+        XCTAssertEqual(tab.processName, "claude")
         XCTAssertEqual(tab.customTitle, "Renamed")
     }
 }

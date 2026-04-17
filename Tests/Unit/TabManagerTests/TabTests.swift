@@ -23,10 +23,8 @@ final class TabTests: XCTestCase {
         let tab = Tab()
 
         XCTAssertEqual(tab.title, "Terminal")
-        XCTAssertEqual(tab.agentState, .idle)
         XCTAssertNil(tab.gitBranch)
         XCTAssertNil(tab.processName)
-        XCTAssertNil(tab.detectedAgent)
         XCTAssertFalse(tab.hasUnreadNotification)
         XCTAssertFalse(tab.isActive)
         XCTAssertNil(tab.lastCommandStartedAt)
@@ -49,7 +47,6 @@ final class TabTests: XCTestCase {
             title: "My Tab",
             workingDirectory: workingDirectory,
             gitBranch: "feature/login",
-            agentState: .working,
             isActive: true,
             processName: "claude",
             createdAt: now
@@ -58,7 +55,6 @@ final class TabTests: XCTestCase {
         XCTAssertEqual(tab.title, "My Tab")
         XCTAssertEqual(tab.workingDirectory, workingDirectory)
         XCTAssertEqual(tab.gitBranch, "feature/login")
-        XCTAssertEqual(tab.agentState, .working)
         XCTAssertTrue(tab.isActive)
         XCTAssertEqual(tab.processName, "claude")
         XCTAssertEqual(tab.createdAt, now)
@@ -71,7 +67,6 @@ final class TabTests: XCTestCase {
             title: "Encoded Tab",
             workingDirectory: URL(fileURLWithPath: "/tmp/test"),
             gitBranch: "main",
-            agentState: .waitingInput,
             isActive: true,
             processName: "node"
         )
@@ -90,7 +85,6 @@ final class TabTests: XCTestCase {
             title: "Minimal Tab",
             workingDirectory: URL(fileURLWithPath: "/tmp"),
             gitBranch: nil,
-            agentState: .idle,
             processName: nil
         )
 
@@ -105,6 +99,42 @@ final class TabTests: XCTestCase {
         XCTAssertNil(decoded.processName)
     }
 
+    func testCodableIgnoresLegacyAgentKeysInOldJSON() throws {
+        // Session JSONs persisted before Fase 4 may still carry the
+        // retired `agentState`, `detectedAgent`, `agentActivity`,
+        // `agentToolCount`, and `agentErrorCount` keys. Swift's
+        // auto-synthesized `Codable` must ignore unknown keys so the
+        // restore path keeps working without a migration.
+        let legacyJSON = """
+        {
+            "id": {"rawValue": "\(UUID().uuidString)"},
+            "title": "Legacy Tab",
+            "workingDirectory": "file:///tmp/legacy",
+            "hasUnreadNotification": false,
+            "lastActivityAt": 700000000,
+            "isActive": false,
+            "isPinned": false,
+            "createdAt": 700000000,
+            "agentState": "working",
+            "agentActivity": "Read: main.swift",
+            "agentToolCount": 4,
+            "agentErrorCount": 1,
+            "detectedAgent": {
+                "name": "claude",
+                "displayName": "Claude Code",
+                "launchCommand": "claude",
+                "startedAt": 700000000
+            }
+        }
+        """
+
+        let decoder = JSONDecoder()
+        let tab = try decoder.decode(Tab.self, from: Data(legacyJSON.utf8))
+
+        XCTAssertEqual(tab.title, "Legacy Tab")
+        XCTAssertEqual(tab.workingDirectory.path, "/tmp/legacy")
+    }
+
     // MARK: - Equatable
 
     func testEquatableWhenEqual() {
@@ -116,7 +146,6 @@ final class TabTests: XCTestCase {
             id: id,
             title: "Terminal",
             workingDirectory: workingDirectory,
-            agentState: .idle,
             lastActivityAt: date,
             isActive: false,
             createdAt: date
@@ -125,7 +154,6 @@ final class TabTests: XCTestCase {
             id: id,
             title: "Terminal",
             workingDirectory: workingDirectory,
-            agentState: .idle,
             lastActivityAt: date,
             isActive: false,
             createdAt: date
@@ -141,17 +169,6 @@ final class TabTests: XCTestCase {
 
         let tab1 = Tab(id: id, title: "Tab A", workingDirectory: workingDirectory, createdAt: date)
         let tab2 = Tab(id: id, title: "Tab B", workingDirectory: workingDirectory, createdAt: date)
-
-        XCTAssertNotEqual(tab1, tab2)
-    }
-
-    func testEquatableWhenDifferentAgentState() {
-        let id = TabID()
-        let date = Date()
-        let workingDirectory = URL(fileURLWithPath: "/tmp")
-
-        let tab1 = Tab(id: id, workingDirectory: workingDirectory, agentState: .idle, createdAt: date)
-        let tab2 = Tab(id: id, workingDirectory: workingDirectory, agentState: .working, createdAt: date)
 
         XCTAssertNotEqual(tab1, tab2)
     }

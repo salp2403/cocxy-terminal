@@ -1054,12 +1054,14 @@ final class TabBarViewModelAdditionalTests: XCTestCase {
     }
 
     func testTabItemsReflectAgentState() {
-        let tab = tabManager.tabs[0]
-        tabManager.updateTab(id: tab.id) { t in
-            t.agentState = .working
+        // Agent state now lives in the per-surface store; the sidebar
+        // pill reads it through the view model's resolver closure.
+        viewModel.agentStateResolver = { _ in
+            SurfaceAgentState(agentState: .working)
         }
         viewModel.syncWithManager()
 
+        let tab = tabManager.tabs[0]
         let item = viewModel.tabItems.first { $0.id == tab.id }
         XCTAssertNotNil(item)
         XCTAssertEqual(item?.statusColorName, "blue",
@@ -1078,8 +1080,11 @@ final class TabBarViewModelAdditionalTests: XCTestCase {
         ]
 
         for (state, expectedColor, expectedBadge) in states {
-            tabManager.updateTab(id: tabManager.tabs[0].id) { t in
-                t.agentState = state
+            // Inject the state via the resolver closure instead of
+            // mutating the tab directly — the tab no longer carries the
+            // agent fields after Fase 4.
+            viewModel.agentStateResolver = { _ in
+                SurfaceAgentState(agentState: state)
             }
             viewModel.syncWithManager()
 

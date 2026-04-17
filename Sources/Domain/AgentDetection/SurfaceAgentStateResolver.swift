@@ -1,45 +1,17 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// SurfaceAgentStateResolver.swift - Pure resolver used by Fase 3 UI consumers
-// to pick the best per-surface agent state for a tab-scoped indicator, with
-// a Tab-level fallback as safety net during the dual-write migration.
+// SurfaceAgentStateResolver.swift - Pure resolver that picks the best
+// per-surface agent state for a tab-scoped indicator. After Fase 4 the
+// resolver does not consult any Tab fields anymore; the store is the
+// sole source of truth and the safety-net fallback is plain `.idle`.
 
 import Foundation
 
-// MARK: - Tab Fallback Convenience
-
-extension SurfaceAgentState {
-
-    /// Builds a `SurfaceAgentState` snapshot from the legacy tab-level
-    /// fields.
-    ///
-    /// Used as a safety net during the Fase 3 migration: UI consumers that
-    /// start reading from `AgentStatePerSurfaceStore` fall back to this
-    /// snapshot whenever the store has no entry for the resolved surface.
-    /// This preserves the pre-refactor visual behavior and guarantees that
-    /// a missing store entry never results in a blank indicator.
-    ///
-    /// The dual-write pattern installed in Fase 2 (`AgentWiring`) keeps
-    /// `Tab` and the store in sync, so the fallback is always a truthful
-    /// snapshot of the same information the store would have held.
-    init(from tab: Tab) {
-        self.init(
-            agentState: tab.agentState,
-            detectedAgent: tab.detectedAgent,
-            agentActivity: tab.agentActivity,
-            agentToolCount: tab.agentToolCount,
-            agentErrorCount: tab.agentErrorCount
-        )
-    }
-}
-
-// MARK: - Resolver
-
 /// Resolves the `SurfaceAgentState` that drives tab-scoped UI indicators
-/// (agent progress overlay, status bar, sidebar pill) during the Fase 3
-/// migration from tab-level fields to a per-surface store.
+/// (agent progress overlay, status bar, sidebar pill, multi-agent
+/// mini-pills).
 ///
-/// The resolver is an `enum` namespace with static entry points so it can
-/// be unit-tested as a plain value without booting AppKit or SwiftUI.
+/// Pure `enum` namespace with static entry points so the resolver can be
+/// unit-tested as a plain value without booting AppKit or SwiftUI.
 ///
 /// ## Priority Chain
 ///
@@ -51,9 +23,9 @@ extension SurfaceAgentState {
 /// 3. **Any other surface with activity** — any other surface registered
 ///    for the tab (splits, restored splits, background surfaces) whose
 ///    state reports `isActive || hasAgent`. Caller ordering is preserved.
-/// 4. **Tab fallback** — synthesize a `SurfaceAgentState` from the legacy
-///    tab-level fields. Always safe: the dual-write keeps `Tab` aligned
-///    with the store.
+/// 4. **`.idle` fallback** — no store entry for any surface of the tab.
+///    Idle is always safe: new agents repopulate the store via the
+///    detection engine without needing a Tab snapshot.
 ///
 /// A surface is considered "with activity" when its state is `.launched`,
 /// `.working`, or `.waitingInput` (`isActive`), or when it has a detected
@@ -66,7 +38,7 @@ enum SurfaceAgentStateResolver {
     /// indicator and the surface ID it came from.
     ///
     /// `chosenSurfaceID` is `nil` when the resolver fell through to the
-    /// Tab-level snapshot (priority 4). Callers that need to render
+    /// `.idle` fallback (priority 4). Callers that need to render
     /// additional per-surface indicators for the remaining splits use this
     /// field to skip the surface whose state already drives the primary
     /// indicator.
@@ -79,7 +51,6 @@ enum SurfaceAgentStateResolver {
     /// surface ID it came from.
     ///
     /// - Parameters:
-    ///   - tab: Source of the tab-level fallback (priority 4).
     ///   - focusedSurfaceID: Surface ID of the focused split pane when the
     ///     owning tab is currently displayed, or `nil` when the tab is not
     ///     displayed or no split is focused.
@@ -89,20 +60,20 @@ enum SurfaceAgentStateResolver {
     ///     (primary + live splits + saved splits). The ordering provided
     ///     by the caller is preserved for priority 3 iteration.
     ///   - store: Per-surface state store. When `nil`, the resolver goes
-    ///     straight to the tab fallback; useful for tests and for safety
-    ///     during early startup before the store is injected.
+    ///     straight to `.idle`; useful for tests and for safety during
+    ///     early startup before the store is injected.
     /// - Returns: The best `SurfaceAgentState` and the surface ID it came
-    ///   from, or `chosenSurfaceID == nil` when the Tab fallback was used.
+    ///   from, or `chosenSurfaceID == nil` when the `.idle` fallback was
+    ///   used.
     @MainActor
     static func resolveFull(
-        tab: Tab,
         focusedSurfaceID: SurfaceID?,
         primarySurfaceID: SurfaceID?,
         allSurfaceIDs: [SurfaceID],
         store: AgentStatePerSurfaceStore?
     ) -> Resolution {
         guard let store else {
-            return Resolution(state: SurfaceAgentState(from: tab), chosenSurfaceID: nil)
+            return Resolution(state: .idle, chosenSurfaceID: nil)
         }
 
         if let focusedSurfaceID {
@@ -129,24 +100,22 @@ enum SurfaceAgentStateResolver {
             }
         }
 
-        return Resolution(state: SurfaceAgentState(from: tab), chosenSurfaceID: nil)
+        return Resolution(state: .idle, chosenSurfaceID: nil)
     }
 
     /// Convenience wrapper that returns only the resolved state.
     ///
-    /// Preserves the original Fase 3a signature for callers that do not
-    /// need the chosen surface ID (overlay, status bar, single sidebar
-    /// pill). Internally delegates to `resolveFull`.
+    /// Used by consumers that do not need the chosen surface ID (overlay,
+    /// status bar, single sidebar pill). Internally delegates to
+    /// `resolveFull`.
     @MainActor
     static func resolve(
-        tab: Tab,
         focusedSurfaceID: SurfaceID?,
         primarySurfaceID: SurfaceID?,
         allSurfaceIDs: [SurfaceID],
         store: AgentStatePerSurfaceStore?
     ) -> SurfaceAgentState {
         resolveFull(
-            tab: tab,
             focusedSurfaceID: focusedSurfaceID,
             primarySurfaceID: primarySurfaceID,
             allSurfaceIDs: allSurfaceIDs,
@@ -158,8 +127,9 @@ enum SurfaceAgentStateResolver {
     /// would skip, filtered to surfaces with live activity
     /// (`isActive || hasAgent`).
     ///
-    /// Used by Fase 3e to render mini-pills for splits whose agent is
-    /// active but did not drive the tab-level primary indicator.
+    /// Used by the multi-agent mini-pills to render indicators for splits
+    /// whose agent is active but did not drive the tab-level primary
+    /// indicator.
     ///
     /// The output is sorted by `SurfaceID.rawValue.uuidString` so
     /// successive renders keep the same order (no flicker as splits are
@@ -169,7 +139,7 @@ enum SurfaceAgentStateResolver {
     ///   - primaryChosenSurfaceID: Surface ID the primary resolver
     ///     selected for this tab. Pass the `chosenSurfaceID` from
     ///     `resolveFull`. When `nil`, the primary resolver fell back to
-    ///     the Tab-level snapshot and no surface is excluded.
+    ///     `.idle` and no surface is excluded.
     ///   - allSurfaceIDs: Every surface associated with the tab. The
     ///     caller ordering is ignored; the result is sorted by UUID.
     ///   - store: Per-surface state store. When `nil`, the result is

@@ -550,20 +550,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
                 sourceWindowID: self.windowID
             )
         }
-        // Route the sidebar pill through the per-surface resolver so splits
-        // running independent agents drive the tab pill via the focused
-        // pane instead of being flattened onto the tab-level fields.
+        // Route the sidebar pill through the per-surface resolver so
+        // splits running independent agents drive the tab pill via the
+        // focused pane.
         tabBarVM.agentStateResolver = { [weak self] tab in
-            guard let self else { return SurfaceAgentState(from: tab) }
-            return self.resolveSurfaceAgentState(for: tab.id, tab: tab)
+            guard let self else { return .idle }
+            return self.resolveSurfaceAgentState(for: tab.id)
         }
-        // Provide the additional per-split states for the Fase 3e
-        // multi-agent mini-pills. The resolver already excludes the
-        // surface chosen for the primary pill so the two lists never
-        // overlap.
+        // Provide the additional per-split states for the multi-agent
+        // mini-pills. The resolver already excludes the surface chosen
+        // for the primary pill so the two lists never overlap.
         tabBarVM.additionalActiveAgentStatesProvider = { [weak self] tab in
             guard let self else { return [] }
-            return self.additionalActiveAgentStates(for: tab.id, tab: tab)
+            return self.additionalActiveAgentStates(for: tab.id)
         }
 
         let sidebar = TabBarView(viewModel: tabBarVM)

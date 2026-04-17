@@ -859,11 +859,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// same priority chain (focused split > primary > any active >
     /// `.idle` fallback) feeds the scripting layer.
     func resolveScriptableAgentState(tabID: TabID) -> AgentState {
-        guard let controller = controllerContainingTab(tabID),
-              let tab = controller.tabManager.tab(for: tabID) else {
+        guard let controller = controllerContainingTab(tabID) else {
             return .idle
         }
-        return controller.resolveSurfaceAgentState(for: tabID, tab: tab).agentState
+        return controller.resolveSurfaceAgentState(for: tabID).agentState
     }
 
     func controllerContainingSurface(_ surfaceID: SurfaceID) -> MainWindowController? {
@@ -1090,14 +1089,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let resolvedTitle = titleOverride ?? tab.displayTitle
 
+        // Resolve the per-surface agent state for the registry entry
+        // so it reflects the store rather than a tab-level snapshot.
+        // Returns `.idle` with no detected agent when no surface of the
+        // tab has an active entry yet.
+        let resolved = controller.resolveSurfaceAgentState(for: tab.id)
+
         sessionRegistry?.registerSession(SessionEntry(
             sessionID: resolvedSessionID,
             ownerWindowID: controller.windowID,
             tabID: tab.id,
             title: resolvedTitle,
             workingDirectory: tab.workingDirectory,
-            agentState: tab.agentState,
-            detectedAgentName: tab.detectedAgent?.displayName,
+            agentState: resolved.agentState,
+            detectedAgentName: resolved.detectedAgent?.displayName,
             hasUnreadNotification: tab.hasUnreadNotification
         ))
 

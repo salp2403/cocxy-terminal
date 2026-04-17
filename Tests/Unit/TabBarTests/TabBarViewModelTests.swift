@@ -190,8 +190,12 @@ final class TabBarViewModelTests: XCTestCase {
     }
 
     func testTabItemStatusColorReflectsAgentState() {
-        tabManager.updateTab(id: tabManager.tabs[0].id) { tab in
-            tab.agentState = .working
+        // The sidebar pill reads per-surface state through the injected
+        // resolver closure (Fase 3 refactor). Wire a test-only closure
+        // that reports `.working` for the bootstrap tab so the display
+        // item surfaces the expected color.
+        viewModel.agentStateResolver = { _ in
+            SurfaceAgentState(agentState: .working)
         }
 
         viewModel.syncWithManager()

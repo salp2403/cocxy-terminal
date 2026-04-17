@@ -48,8 +48,7 @@ final class TabManagerTests: XCTestCase {
     func testTabDefaultState() {
         let tab = Tab()
 
-        XCTAssertEqual(tab.agentState, .idle)
-        XCTAssertNil(tab.detectedAgent)
         XCTAssertFalse(tab.hasUnreadNotification)
+        XCTAssertFalse(tab.isActive)
     }
 }

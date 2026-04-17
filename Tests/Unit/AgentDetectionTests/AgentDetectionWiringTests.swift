@@ -50,24 +50,25 @@ final class AgentDetectionWiringTests: XCTestCase {
         XCTAssertEqual(result, .error, "error debe mapear a AgentState.error")
     }
 
-    // MARK: - Engine state change updates tab via TabManager (synchronous @MainActor sink)
+    // MARK: - Engine state change updates the per-surface store
 
-    func testEngineStateChangeUpdatesActiveTab() {
-        let tabManager = TabManager()
+    func testEngineStateChangeUpdatesPerSurfaceStore() {
+        let store = AgentStatePerSurfaceStore()
+        let surfaceID = SurfaceID()
         let engine = AgentDetectionEngineImpl(
             compiledConfigs: [],
             debounceInterval: 0.0
         )
 
-        // Wire engine to tab manager using synchronous sink (both are @MainActor).
-        // No receive(on:) needed -- stateChanged emits on main actor.
+        // Wire the engine to the per-surface store. This mirrors the
+        // production path in `AppDelegate+AgentWiring.wireAgentDetectionToTabs`
+        // after Fase 4 collapsed onto the store as the sole source of
+        // truth for agent state.
         var cancellables = Set<AnyCancellable>()
         engine.stateChanged
             .sink { context in
-                guard let activeID = tabManager.activeTabID else { return }
-                let agentState = context.state.toTabAgentState
-                tabManager.updateTab(id: activeID) { tab in
-                    tab.agentState = agentState
+                store.update(surfaceID: surfaceID) { state in
+                    state.agentState = context.state.toTabAgentState
                 }
             }
             .store(in: &cancellables)
@@ -79,32 +80,33 @@ final class AgentDetectionWiringTests: XCTestCase {
             source: .hook(event: "test")
         ))
 
-        // The active tab should now reflect the launched state.
-        let activeTab = tabManager.activeTab
         XCTAssertEqual(
-            activeTab?.agentState, .launched,
-            "El tab activo debe reflejar el estado launched del engine"
+            store.state(for: surfaceID).agentState, .launched,
+            "El store debe reflejar el estado launched del engine"
         )
 
         cancellables.removeAll()
     }
 
-    func testEngineStateChangeUpdatesTabBarViewModel() {
+    func testEngineStateChangeDrivesTabBarDisplayItemViaResolver() {
         let tabManager = TabManager()
         let tabBarVM = TabBarViewModel(tabManager: tabManager)
+        let store = AgentStatePerSurfaceStore()
+        let surfaceID = SurfaceID()
         let engine = AgentDetectionEngineImpl(
             compiledConfigs: [],
             debounceInterval: 0.0
         )
 
-        // Wire engine to tab manager + tabBarViewModel sync (synchronous, same actor)
+        // Wire the view model so the sidebar pill reads the store via
+        // the same resolver chain production uses.
+        tabBarVM.agentStateResolver = { _ in store.state(for: surfaceID) }
+
         var cancellables = Set<AnyCancellable>()
         engine.stateChanged
             .sink { context in
-                guard let activeID = tabManager.activeTabID else { return }
-                let agentState = context.state.toTabAgentState
-                tabManager.updateTab(id: activeID) { tab in
-                    tab.agentState = agentState
+                store.update(surfaceID: surfaceID) { state in
+                    state.agentState = context.state.toTabAgentState
                 }
                 tabBarVM.syncWithManager()
             }
@@ -122,7 +124,6 @@ final class AgentDetectionWiringTests: XCTestCase {
             source: .hook(event: "test")
         ))
 
-        // TabBarViewModel should reflect the working state
         let displayItem = tabBarVM.tabItems.first
         XCTAssertEqual(
             displayItem?.agentState, .working,
@@ -132,8 +133,9 @@ final class AgentDetectionWiringTests: XCTestCase {
         cancellables.removeAll()
     }
 
-    func testMultipleStateTransitionsReflectedInTab() {
-        let tabManager = TabManager()
+    func testMultipleStateTransitionsReflectedInStore() {
+        let store = AgentStatePerSurfaceStore()
+        let surfaceID = SurfaceID()
         let engine = AgentDetectionEngineImpl(
             compiledConfigs: [],
             debounceInterval: 0.0
@@ -142,9 +144,8 @@ final class AgentDetectionWiringTests: XCTestCase {
         var cancellables = Set<AnyCancellable>()
         engine.stateChanged
             .sink { context in
-                guard let activeID = tabManager.activeTabID else { return }
-                tabManager.updateTab(id: activeID) { tab in
-                    tab.agentState = context.state.toTabAgentState
+                store.update(surfaceID: surfaceID) { state in
+                    state.agentState = context.state.toTabAgentState
                 }
             }
             .store(in: &cancellables)
@@ -155,35 +156,35 @@ final class AgentDetectionWiringTests: XCTestCase {
             confidence: 1.0,
             source: .hook(event: "test")
         ))
-        XCTAssertEqual(tabManager.activeTab?.agentState, .launched)
+        XCTAssertEqual(store.state(for: surfaceID).agentState, .launched)
 
         engine.injectSignal(DetectionSignal(
             event: .outputReceived,
             confidence: 1.0,
             source: .hook(event: "test")
         ))
-        XCTAssertEqual(tabManager.activeTab?.agentState, .working)
+        XCTAssertEqual(store.state(for: surfaceID).agentState, .working)
 
         engine.injectSignal(DetectionSignal(
             event: .promptDetected,
             confidence: 1.0,
             source: .hook(event: "test")
         ))
-        XCTAssertEqual(tabManager.activeTab?.agentState, .waitingInput)
+        XCTAssertEqual(store.state(for: surfaceID).agentState, .waitingInput)
 
         engine.injectSignal(DetectionSignal(
             event: .userInput,
             confidence: 1.0,
             source: .hook(event: "test")
         ))
-        XCTAssertEqual(tabManager.activeTab?.agentState, .working)
+        XCTAssertEqual(store.state(for: surfaceID).agentState, .working)
 
         engine.injectSignal(DetectionSignal(
             event: .completionDetected,
             confidence: 1.0,
             source: .hook(event: "test")
         ))
-        XCTAssertEqual(tabManager.activeTab?.agentState, .finished)
+        XCTAssertEqual(store.state(for: surfaceID).agentState, .finished)
 
         cancellables.removeAll()
     }

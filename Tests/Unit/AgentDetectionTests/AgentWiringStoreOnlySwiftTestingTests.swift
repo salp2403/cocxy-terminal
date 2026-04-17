@@ -5,13 +5,13 @@ import Foundation
 import Testing
 @testable import CocxyTerminal
 
-/// Tests the end-to-end contract of the v0.1.71 per-surface dual-write:
+/// Tests the end-to-end contract of the Fase 4 agent-state wiring:
 ///
 /// - Detection engine transitions routed through a sink that mirrors
-///   the same mutation onto `Tab` (legacy source of truth) and
-///   `AgentStatePerSurfaceStore` (new shadow per-surface state).
+///   the same mutation onto `AgentStatePerSurfaceStore` (the sole
+///   source of truth after Fase 4).
 /// - Teardown (surface destroy) releases both the engine's debounce
-///   and hook buckets AND the shadow store entry.
+///   and hook buckets AND the store entry.
 ///
 /// The sink replicates the inline logic that
 /// `AppDelegate+AgentWiring.wireAgentDetectionToTabs` wires in
@@ -20,12 +20,12 @@ import Testing
 /// wiring inline makes any divergence between production and tests
 /// obvious in diff review.
 @MainActor
-@Suite("Agent wiring dual-write to Tab and per-surface store", .serialized)
-struct AgentWiringDualWriteSwiftTestingTests {
+@Suite("Agent wiring writes to the per-surface store", .serialized)
+struct AgentWiringStoreOnlySwiftTestingTests {
 
     // MARK: - Helpers
 
-    private struct DualWriteFixture {
+    private struct StoreWiringFixture {
         let tabManager: TabManager
         let store: AgentStatePerSurfaceStore
         let engine: AgentDetectionEngineImpl
@@ -36,13 +36,14 @@ struct AgentWiringDualWriteSwiftTestingTests {
     /// Builds a minimal wiring: a tab manager with exactly one tab, an
     /// engine with patterns disabled (`compiledConfigs: []`) and zero
     /// debounce, and a per-surface store. A subscription mirrors the
-    /// production `wireAgentDetectionToTabs` closure for state changes.
+    /// production `wireAgentDetectionToTabs` closure for state changes
+    /// — now store-only, since Fase 4 retired the tab-level agent fields.
     ///
     /// - Parameter displayNameResolver: Optional override for display
     ///   name resolution. Defaults to identity (the raw agent name).
     private func makeFixture(
         displayNameResolver: @escaping (String) -> String = { $0 }
-    ) -> DualWriteFixture {
+    ) -> StoreWiringFixture {
         let tabManager = TabManager()
         let store = AgentStatePerSurfaceStore()
         let engine = AgentDetectionEngineImpl(
@@ -52,11 +53,12 @@ struct AgentWiringDualWriteSwiftTestingTests {
         let primarySurfaceID = SurfaceID()
         var cancellables = Set<AnyCancellable>()
 
-        // Attach primary surface to the active tab so callers can use
-        // it as the fallback target when context.surfaceID is nil.
+        // Ensure the manager has the expected active tab; activity
+        // timestamps still belong on the tab so we bump them from the
+        // sink below.
         guard let activeTabID = tabManager.activeTabID else {
             Issue.record("TabManager did not initialize with an active tab")
-            return DualWriteFixture(
+            return StoreWiringFixture(
                 tabManager: tabManager,
                 store: store,
                 engine: engine,
@@ -70,38 +72,10 @@ struct AgentWiringDualWriteSwiftTestingTests {
                 let agentState = context.state.toTabAgentState
                 let displayName: String? = context.agentName.map(displayNameResolver)
 
+                // Non-agent tab metadata: only the last-activity
+                // timestamp moves with every transition now.
                 tabManager.updateTab(id: activeTabID) { tab in
-                    tab.agentState = agentState
                     tab.lastActivityAt = Date()
-
-                    if agentState == .idle {
-                        tab.agentToolCount = 0
-                        tab.agentErrorCount = 0
-                        tab.agentActivity = nil
-                        tab.detectedAgent = nil
-                    } else if let agentName = context.agentName?
-                        .trimmingCharacters(in: .whitespacesAndNewlines),
-                        !agentName.isEmpty {
-                        if let existing = tab.detectedAgent,
-                           existing.name == agentName {
-                            tab.detectedAgent = existing
-                        } else {
-                            tab.detectedAgent = DetectedAgent(
-                                name: agentName,
-                                displayName: displayName,
-                                launchCommand: agentName,
-                                startedAt: Date()
-                            )
-                        }
-                    }
-
-                    if agentState == .finished, tab.agentActivity == nil {
-                        tab.agentActivity = "Task completed"
-                    } else if agentState == .error, tab.agentActivity == nil {
-                        tab.agentActivity = "Error occurred"
-                    } else if agentState == .waitingInput, tab.agentActivity == nil {
-                        tab.agentActivity = "Waiting for input"
-                    }
                 }
 
                 let targetSurfaceID = context.surfaceID ?? primarySurfaceID
@@ -140,7 +114,7 @@ struct AgentWiringDualWriteSwiftTestingTests {
             }
             .store(in: &cancellables)
 
-        return DualWriteFixture(
+        return StoreWiringFixture(
             tabManager: tabManager,
             store: store,
             engine: engine,
@@ -175,16 +149,13 @@ struct AgentWiringDualWriteSwiftTestingTests {
 
     // MARK: - Pattern-based detection with explicit surfaceID
 
-    @Test("Transition with context.surfaceID mirrors Tab and store entries for that surface")
-    func contextSurfaceIDMirrorsToStore() {
+    @Test("Transition with context.surfaceID writes the store entry for that surface")
+    func contextSurfaceIDWritesToStore() {
         var fixture = makeFixture()
         defer { fixture.cancellables.removeAll() }
 
         let splitSurfaceID = SurfaceID()
         fixture.engine.injectSignal(launchSignal(), surfaceID: splitSurfaceID)
-
-        #expect(fixture.tabManager.activeTab?.agentState == .launched)
-        #expect(fixture.tabManager.activeTab?.detectedAgent?.name == "claude")
 
         let splitState = fixture.store.state(for: splitSurfaceID)
         #expect(splitState.agentState == .launched)
@@ -209,8 +180,8 @@ struct AgentWiringDualWriteSwiftTestingTests {
         #expect(primaryState.detectedAgent?.name == "claude")
     }
 
-    @Test("Idle transition resets counters and detectedAgent on both Tab and store")
-    func idleTransitionResetsShadowState() {
+    @Test("Idle transition resets counters and detectedAgent on the store")
+    func idleTransitionResetsStoreState() {
         var fixture = makeFixture()
         defer { fixture.cancellables.removeAll() }
 
@@ -233,14 +204,6 @@ struct AgentWiringDualWriteSwiftTestingTests {
         #expect(splitState.agentErrorCount == 0)
         #expect(splitState.agentActivity == nil)
         #expect(splitState.detectedAgent == nil)
-
-        // Tab mirrors the same reset.
-        let tab = fixture.tabManager.activeTab
-        #expect(tab?.agentState == .idle)
-        #expect(tab?.agentToolCount == 0)
-        #expect(tab?.agentErrorCount == 0)
-        #expect(tab?.agentActivity == nil)
-        #expect(tab?.detectedAgent == nil)
     }
 
     // MARK: - Per-surface independence
@@ -354,7 +317,7 @@ struct AgentWiringDualWriteSwiftTestingTests {
 
     // MARK: - Activity fallbacks on lifecycle endpoints
 
-    @Test("finished transition without custom activity fills the default message on both Tab and store")
+    @Test("finished transition without custom activity fills the default message on the store")
     func finishedDefaultsToTaskCompleted() {
         var fixture = makeFixture()
         defer { fixture.cancellables.removeAll() }
@@ -370,10 +333,9 @@ struct AgentWiringDualWriteSwiftTestingTests {
         let state = fixture.store.state(for: surfaceID)
         #expect(state.agentState == .finished)
         #expect(state.agentActivity == "Task completed")
-        #expect(fixture.tabManager.activeTab?.agentActivity == "Task completed")
     }
 
-    @Test("waitingInput transition without custom activity fills the default message on both Tab and store")
+    @Test("waitingInput transition without custom activity fills the default message on the store")
     func waitingInputDefaultsToWaitingForInput() {
         var fixture = makeFixture()
         defer { fixture.cancellables.removeAll() }
@@ -389,6 +351,5 @@ struct AgentWiringDualWriteSwiftTestingTests {
         let state = fixture.store.state(for: surfaceID)
         #expect(state.agentState == .waitingInput)
         #expect(state.agentActivity == "Waiting for input")
-        #expect(fixture.tabManager.activeTab?.agentActivity == "Waiting for input")
     }
 }

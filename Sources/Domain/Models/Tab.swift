@@ -25,12 +25,23 @@ struct TabID: Hashable, Codable, Sendable {
 
 /// Domain model representing a terminal tab.
 ///
-/// A tab contains one or more terminal surfaces arranged in a split tree.
-/// Each tab tracks its working directory, git branch, and the state of any
-/// AI agent running inside it.
+/// A tab contains one or more terminal surfaces arranged in a split
+/// tree. The tab tracks the user-facing metadata (title, working
+/// directory, git branch, SSH session, pinned state, last-command
+/// timing) and the process name that the foreground PTY advertises.
+///
+/// Per-surface agent state (agent lifecycle, detected agent metadata,
+/// activity label, tool/error counters) is **not** stored on `Tab`: it
+/// lives in `AgentStatePerSurfaceStore`, keyed by `SurfaceID`, and the
+/// UI reads it through `SurfaceAgentStateResolver`. Keeping agent
+/// state off the tab lets splits running different agents display
+/// independent indicators.
 ///
 /// Conforms to `Codable` for session persistence and `Equatable` for
-/// efficient UI diffing.
+/// efficient UI diffing. Legacy session JSONs that still carry the
+/// old `agentState`/`detectedAgent`/`agentActivity`/`agentToolCount`/
+/// `agentErrorCount` keys remain decodable — Swift's auto-synthesised
+/// `Codable` implementation silently ignores unknown keys.
 struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// Unique identifier.
     let id: TabID
@@ -44,12 +55,6 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
 
     /// Current git branch name, if inside a git repository.
     var gitBranch: String?
-
-    /// Current state of the AI agent in this tab.
-    var agentState: AgentState
-
-    /// Information about the detected agent, if any.
-    var detectedAgent: DetectedAgent?
 
     /// Whether this tab has unread notifications.
     var hasUnreadNotification: Bool
@@ -69,10 +74,6 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// User-defined custom title. When set, overrides the auto-generated displayTitle.
     var customTitle: String?
 
-    /// Description of the agent's current activity (e.g., "Read: main.swift").
-    /// Updated by hook events. Shown in the tab sidebar for real-time visibility.
-    var agentActivity: String?
-
     /// Whether this tab is pinned. Pinned tabs are sorted to the top and cannot be closed.
     var isPinned: Bool
 
@@ -91,12 +92,6 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// Per-project config overrides loaded from `.cocxy.toml`.
     /// When present, these values override the global config for this tab.
     var projectConfig: ProjectConfig?
-
-    /// Cumulative tool call count from the running agent (fed by hook events).
-    var agentToolCount: Int = 0
-
-    /// Cumulative error count from the running agent (fed by hook events).
-    var agentErrorCount: Int = 0
 
     /// Whether a command is currently executing.
     var isCommandRunning: Bool {
@@ -122,8 +117,6 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         title: String = "Terminal",
         workingDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         gitBranch: String? = nil,
-        agentState: AgentState = .idle,
-        detectedAgent: DetectedAgent? = nil,
         hasUnreadNotification: Bool = false,
         lastActivityAt: Date = Date(),
         isActive: Bool = false,
@@ -140,8 +133,6 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         self.title = title
         self.workingDirectory = workingDirectory
         self.gitBranch = gitBranch
-        self.agentState = agentState
-        self.detectedAgent = detectedAgent
         self.hasUnreadNotification = hasUnreadNotification
         self.lastActivityAt = lastActivityAt
         self.isActive = isActive

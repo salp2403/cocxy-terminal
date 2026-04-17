@@ -102,7 +102,6 @@ struct TabManagerTransferTests {
             title: "My Tab",
             workingDirectory: dir,
             gitBranch: "main",
-            agentState: .working,
             hasUnreadNotification: true,
             customTitle: "Custom"
         )
@@ -113,7 +112,6 @@ struct TabManagerTransferTests {
         #expect(inserted?.title == "My Tab")
         #expect(inserted?.workingDirectory == dir)
         #expect(inserted?.gitBranch == "main")
-        #expect(inserted?.agentState == .working)
         #expect(inserted?.hasUnreadNotification == true)
         #expect(inserted?.customTitle == "Custom")
         #expect(inserted?.isActive == true)
@@ -302,14 +300,16 @@ struct MainWindowControllerTransferTests {
         registry.registerWindow(controller.windowID)
         let sessionID = controller.sessionIDForTab(tabID)
         let tab = controller.tabManager.tab(for: tabID)!
+        // Agent state is resolved from the per-surface store; fresh
+        // registry entries start idle since the test doesn't seed one.
         registry.registerSession(SessionEntry(
             sessionID: sessionID,
             ownerWindowID: controller.windowID,
             tabID: tabID,
             title: tab.displayTitle,
             workingDirectory: tab.workingDirectory,
-            agentState: tab.agentState,
-            detectedAgentName: tab.detectedAgent?.name,
+            agentState: .idle,
+            detectedAgentName: nil,
             hasUnreadNotification: tab.hasUnreadNotification
         ))
         return sessionID
