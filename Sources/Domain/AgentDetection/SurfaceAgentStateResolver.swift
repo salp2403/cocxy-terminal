@@ -62,7 +62,21 @@ extension SurfaceAgentState {
 /// the `finished` transition and the next `idle` transition.
 enum SurfaceAgentStateResolver {
 
-    /// Pure resolution entry point.
+    /// Full resolution result: both the `SurfaceAgentState` picked for the
+    /// indicator and the surface ID it came from.
+    ///
+    /// `chosenSurfaceID` is `nil` when the resolver fell through to the
+    /// Tab-level snapshot (priority 4). Callers that need to render
+    /// additional per-surface indicators for the remaining splits use this
+    /// field to skip the surface whose state already drives the primary
+    /// indicator.
+    struct Resolution: Equatable, Sendable {
+        let state: SurfaceAgentState
+        let chosenSurfaceID: SurfaceID?
+    }
+
+    /// Pure resolution entry point returning both the state and the
+    /// surface ID it came from.
     ///
     /// - Parameters:
     ///   - tab: Source of the tab-level fallback (priority 4).
@@ -77,30 +91,31 @@ enum SurfaceAgentStateResolver {
     ///   - store: Per-surface state store. When `nil`, the resolver goes
     ///     straight to the tab fallback; useful for tests and for safety
     ///     during early startup before the store is injected.
-    /// - Returns: The best `SurfaceAgentState` for the indicator.
+    /// - Returns: The best `SurfaceAgentState` and the surface ID it came
+    ///   from, or `chosenSurfaceID == nil` when the Tab fallback was used.
     @MainActor
-    static func resolve(
+    static func resolveFull(
         tab: Tab,
         focusedSurfaceID: SurfaceID?,
         primarySurfaceID: SurfaceID?,
         allSurfaceIDs: [SurfaceID],
         store: AgentStatePerSurfaceStore?
-    ) -> SurfaceAgentState {
+    ) -> Resolution {
         guard let store else {
-            return SurfaceAgentState(from: tab)
+            return Resolution(state: SurfaceAgentState(from: tab), chosenSurfaceID: nil)
         }
 
         if let focusedSurfaceID {
             let state = store.state(for: focusedSurfaceID)
             if state.isActive || state.hasAgent {
-                return state
+                return Resolution(state: state, chosenSurfaceID: focusedSurfaceID)
             }
         }
 
         if let primarySurfaceID, primarySurfaceID != focusedSurfaceID {
             let state = store.state(for: primarySurfaceID)
             if state.isActive || state.hasAgent {
-                return state
+                return Resolution(state: state, chosenSurfaceID: primarySurfaceID)
             }
         }
 
@@ -110,10 +125,70 @@ enum SurfaceAgentStateResolver {
             }
             let state = store.state(for: surfaceID)
             if state.isActive || state.hasAgent {
-                return state
+                return Resolution(state: state, chosenSurfaceID: surfaceID)
             }
         }
 
-        return SurfaceAgentState(from: tab)
+        return Resolution(state: SurfaceAgentState(from: tab), chosenSurfaceID: nil)
+    }
+
+    /// Convenience wrapper that returns only the resolved state.
+    ///
+    /// Preserves the original Fase 3a signature for callers that do not
+    /// need the chosen surface ID (overlay, status bar, single sidebar
+    /// pill). Internally delegates to `resolveFull`.
+    @MainActor
+    static func resolve(
+        tab: Tab,
+        focusedSurfaceID: SurfaceID?,
+        primarySurfaceID: SurfaceID?,
+        allSurfaceIDs: [SurfaceID],
+        store: AgentStatePerSurfaceStore?
+    ) -> SurfaceAgentState {
+        resolveFull(
+            tab: tab,
+            focusedSurfaceID: focusedSurfaceID,
+            primarySurfaceID: primarySurfaceID,
+            allSurfaceIDs: allSurfaceIDs,
+            store: store
+        ).state
+    }
+
+    /// Collects every other per-surface state that the primary resolver
+    /// would skip, filtered to surfaces with live activity
+    /// (`isActive || hasAgent`).
+    ///
+    /// Used by Fase 3e to render mini-pills for splits whose agent is
+    /// active but did not drive the tab-level primary indicator.
+    ///
+    /// The output is sorted by `SurfaceID.rawValue.uuidString` so
+    /// successive renders keep the same order (no flicker as splits are
+    /// added or removed).
+    ///
+    /// - Parameters:
+    ///   - primaryChosenSurfaceID: Surface ID the primary resolver
+    ///     selected for this tab. Pass the `chosenSurfaceID` from
+    ///     `resolveFull`. When `nil`, the primary resolver fell back to
+    ///     the Tab-level snapshot and no surface is excluded.
+    ///   - allSurfaceIDs: Every surface associated with the tab. The
+    ///     caller ordering is ignored; the result is sorted by UUID.
+    ///   - store: Per-surface state store. When `nil`, the result is
+    ///     empty — there are no per-split states to surface.
+    /// - Returns: The sorted list of additional active `SurfaceAgentState`
+    ///   snapshots, or `[]` when no other split has activity.
+    @MainActor
+    static func additionalActiveStates(
+        primaryChosenSurfaceID: SurfaceID?,
+        allSurfaceIDs: [SurfaceID],
+        store: AgentStatePerSurfaceStore?
+    ) -> [SurfaceAgentState] {
+        guard let store else { return [] }
+
+        return allSurfaceIDs
+            .filter { $0 != primaryChosenSurfaceID }
+            .map { (surfaceID: $0, state: store.state(for: $0)) }
+            .filter { $0.state.isActive || $0.state.hasAgent }
+            .sorted { $0.surfaceID.rawValue.uuidString < $1.surfaceID.rawValue.uuidString }
+            .map { $0.state }
     }
 }

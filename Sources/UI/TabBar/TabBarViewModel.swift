@@ -39,6 +39,15 @@ struct TabDisplayItem: Identifiable, Equatable {
     var agentErrorCount: Int = 0
     /// Human-readable agent duration (e.g., "2m", "1h"). Nil when no agent.
     var agentDurationText: String?
+    /// Agent states of other surfaces in this tab that were not chosen
+    /// for the primary indicator but still have live activity.
+    ///
+    /// Fase 3e renders one mini-pill per entry next to the main pill so
+    /// tabs with multiple splits running independent agents show every
+    /// state at a glance. The list is deterministically sorted by
+    /// surface UUID upstream and only contains states that report
+    /// `isActive || hasAgent`.
+    var additionalActiveAgentStates: [AgentState] = []
 }
 
 // MARK: - Tab Bar View Model
@@ -101,6 +110,17 @@ final class TabBarViewModel: ObservableObject {
     /// environments that never wire the resolver (tests, the session
     /// restore bootstrap before the store is installed) keep working.
     var agentStateResolver: (Tab) -> SurfaceAgentState = { SurfaceAgentState(from: $0) }
+
+    /// Collects every per-surface agent state for the tab that was not
+    /// chosen for the primary indicator but still has live activity.
+    ///
+    /// Fase 3e wires this closure to
+    /// `MainWindowController.additionalActiveAgentStates(for:tab:)` so
+    /// the sidebar can render mini-pills for every split running an
+    /// agent alongside the main pill. The default returns `[]`,
+    /// preserving the legacy single-pill behavior when no per-surface
+    /// store is installed.
+    var additionalActiveAgentStatesProvider: (Tab) -> [SurfaceAgentState] = { _ in [] }
 
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
@@ -299,7 +319,9 @@ final class TabBarViewModel: ObservableObject {
                 agentDurationText: agentDuration(
                     detectedAgent: resolved.detectedAgent,
                     state: resolved.agentState
-                )
+                ),
+                additionalActiveAgentStates: additionalActiveAgentStatesProvider(tab)
+                    .map(\.agentState)
             )
         }
     }

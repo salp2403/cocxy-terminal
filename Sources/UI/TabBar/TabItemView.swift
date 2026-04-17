@@ -172,6 +172,21 @@ final class TabItemView: NSView {
         return stack
     }()
 
+    /// Mini indicators for additional splits of the tab running agents
+    /// whose state did not drive the primary pill. Fase 3e renders one
+    /// small colored dot per entry (max 5, with a `+N` overflow label),
+    /// positioned on the status-label row so the user sees every agent
+    /// across the tab's splits without opening it.
+    private let miniIndicatorsStack: NSStackView = {
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.spacing = 3
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.isHidden = true
+        stack.setAccessibilityLabel("Additional active agents")
+        return stack
+    }()
+
     /// Whether the rename sheet is currently presented, used to guard against repeated clicks.
     private(set) var isEditing: Bool = false
 
@@ -212,6 +227,7 @@ final class TabItemView: NSView {
         addSubview(closeButton)
         addSubview(statusDot)
         addSubview(statusLabel)
+        addSubview(miniIndicatorsStack)
         addSubview(pathLabel)
         addSubview(statsStack)
         addSubview(notificationBadge)
@@ -252,7 +268,10 @@ final class TabItemView: NSView {
 
             statusLabel.leadingAnchor.constraint(equalTo: statusDot.trailingAnchor, constant: 5),
             statusLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
-            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
+            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: miniIndicatorsStack.leadingAnchor, constant: -6),
+
+            miniIndicatorsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            miniIndicatorsStack.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
 
             pathLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: textLeading + 20),
             pathLabel.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 2),
@@ -309,6 +328,7 @@ final class TabItemView: NSView {
         pathLabel.isHidden = pathText.isEmpty
 
         configureStatsChips(with: item)
+        configureMiniIndicators(with: item)
 
         let iconName: String
         let iconColor: NSColor
@@ -447,6 +467,61 @@ final class TabItemView: NSView {
                 )
             )
         }
+    }
+
+    // MARK: - Multi-Agent Mini Indicators (Fase 3e)
+
+    /// Maximum number of mini dots rendered inline before collapsing the
+    /// remainder into a `+N` overflow label. Five dots keeps the row
+    /// visually calm in narrow sidebars while still reflecting power
+    /// users that open many splits.
+    private static let miniIndicatorsMaxInline = 5
+
+    /// Populates the mini-indicators stack from the tab's
+    /// `additionalActiveAgentStates`. Each state becomes an 8x8 colored
+    /// dot whose color matches the primary pill scheme. An overflow
+    /// label appears when more states are present than the inline
+    /// budget allows.
+    private func configureMiniIndicators(with item: TabDisplayItem) {
+        miniIndicatorsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        guard !item.additionalActiveAgentStates.isEmpty else {
+            miniIndicatorsStack.isHidden = true
+            return
+        }
+
+        miniIndicatorsStack.isHidden = false
+
+        let visible = item.additionalActiveAgentStates.prefix(Self.miniIndicatorsMaxInline)
+        for state in visible {
+            miniIndicatorsStack.addArrangedSubview(
+                makeMiniIndicator(color: stateNSColor(for: state))
+            )
+        }
+
+        let overflow = item.additionalActiveAgentStates.count - Self.miniIndicatorsMaxInline
+        if overflow > 0 {
+            let overflowLabel = NSTextField(labelWithString: "+\(overflow)")
+            overflowLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+            overflowLabel.textColor = CocxyColors.subtext1
+            overflowLabel.translatesAutoresizingMaskIntoConstraints = false
+            overflowLabel.setAccessibilityLabel("\(overflow) more active agents")
+            miniIndicatorsStack.addArrangedSubview(overflowLabel)
+        }
+    }
+
+    /// Creates a small colored dot used for the multi-agent mini-pills.
+    private func makeMiniIndicator(color: NSColor) -> NSView {
+        let dot = NSView()
+        dot.wantsLayer = true
+        dot.layer?.cornerRadius = 4
+        dot.layer?.backgroundColor = color.cgColor
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            dot.widthAnchor.constraint(equalToConstant: 8),
+            dot.heightAnchor.constraint(equalToConstant: 8),
+        ])
+        return dot
     }
 
     /// Creates a compact stat chip (icon + value) for the stats stack.

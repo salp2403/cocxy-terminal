@@ -274,4 +274,166 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
 
         #expect(state == .idle)
     }
+
+    // MARK: - resolveFull returns both state and chosen surface (Fase 3e)
+
+    @Test("resolveFull returns the focused surface ID when it wins")
+    func resolveFullReturnsFocusedSurfaceID() {
+        let store = AgentStatePerSurfaceStore()
+        let focused = SurfaceID()
+        let primary = SurfaceID()
+
+        store.update(surfaceID: focused) { $0.agentState = .working }
+
+        let resolution = SurfaceAgentStateResolver.resolveFull(
+            tab: Self.makeTab(),
+            focusedSurfaceID: focused,
+            primarySurfaceID: primary,
+            allSurfaceIDs: [primary, focused],
+            store: store
+        )
+
+        #expect(resolution.chosenSurfaceID == focused)
+        #expect(resolution.state.agentState == .working)
+    }
+
+    @Test("resolveFull reports nil when the Tab fallback is used")
+    func resolveFullNilOnFallback() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let tab = Self.makeTab(agentState: .working)
+
+        let resolution = SurfaceAgentStateResolver.resolveFull(
+            tab: tab,
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            allSurfaceIDs: [primary],
+            store: store
+        )
+
+        #expect(resolution.chosenSurfaceID == nil)
+        #expect(resolution.state.agentState == .working)
+    }
+
+    // MARK: - additionalActiveStates for Fase 3e multi-agent pills
+
+    @Test("additionalActiveStates returns empty when no store is provided")
+    func additionalActiveStatesEmptyWithoutStore() {
+        let result = SurfaceAgentStateResolver.additionalActiveStates(
+            primaryChosenSurfaceID: nil,
+            allSurfaceIDs: [SurfaceID(), SurfaceID()],
+            store: nil
+        )
+        #expect(result.isEmpty)
+    }
+
+    @Test("additionalActiveStates excludes the primary surface")
+    func additionalActiveStatesExcludesPrimary() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let other = SurfaceID()
+
+        store.update(surfaceID: primary) { $0.agentState = .working }
+        store.update(surfaceID: other) { $0.agentState = .waitingInput }
+
+        let result = SurfaceAgentStateResolver.additionalActiveStates(
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary, other],
+            store: store
+        )
+
+        #expect(result.count == 1)
+        #expect(result.first?.agentState == .waitingInput)
+    }
+
+    @Test("additionalActiveStates filters out idle surfaces without a detected agent")
+    func additionalActiveStatesFiltersIdle() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let idleSurface = SurfaceID()
+        let activeSurface = SurfaceID()
+
+        store.update(surfaceID: activeSurface) { $0.agentState = .working }
+        // idleSurface has no entry — the store returns .idle
+
+        let result = SurfaceAgentStateResolver.additionalActiveStates(
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary, idleSurface, activeSurface],
+            store: store
+        )
+
+        #expect(result.count == 1)
+        #expect(result.first?.agentState == .working)
+    }
+
+    @Test("additionalActiveStates keeps finished surfaces that still carry a detected agent")
+    func additionalActiveStatesKeepsFinishedWithAgent() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let finished = SurfaceID()
+
+        store.update(surfaceID: finished) { state in
+            state.agentState = .finished
+            state.detectedAgent = Self.makeAgent()
+        }
+
+        let result = SurfaceAgentStateResolver.additionalActiveStates(
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary, finished],
+            store: store
+        )
+
+        #expect(result.count == 1)
+        #expect(result.first?.detectedAgent != nil)
+    }
+
+    @Test("additionalActiveStates is sorted deterministically by surface UUID")
+    func additionalActiveStatesSortedByUUID() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        // Create several active surfaces; the result must be UUID-sorted
+        // regardless of caller-provided ordering.
+        let surfaces = (0..<5).map { _ -> SurfaceID in
+            let id = SurfaceID()
+            store.update(surfaceID: id) { $0.agentState = .working }
+            return id
+        }
+
+        let first = SurfaceAgentStateResolver.additionalActiveStates(
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary] + surfaces.shuffled(),
+            store: store
+        )
+        let second = SurfaceAgentStateResolver.additionalActiveStates(
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary] + surfaces.shuffled(),
+            store: store
+        )
+
+        #expect(first.count == 5)
+        #expect(first == second)
+    }
+
+    @Test("additionalActiveStates keeps the primary surface when primaryChosenSurfaceID is nil")
+    func additionalActiveStatesFallbackKeepsAll() {
+        // When the primary resolver falls back to the Tab snapshot, the
+        // chosenSurfaceID is nil; no surface must be excluded.
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let other = SurfaceID()
+
+        store.update(surfaceID: primary) { $0.agentState = .working }
+        store.update(surfaceID: other) { $0.agentState = .waitingInput }
+
+        let result = SurfaceAgentStateResolver.additionalActiveStates(
+            primaryChosenSurfaceID: nil,
+            allSurfaceIDs: [primary, other],
+            store: store
+        )
+
+        #expect(result.count == 2)
+        let states = result.map(\.agentState)
+        #expect(states.contains(.working))
+        #expect(states.contains(.waitingInput))
+    }
 }

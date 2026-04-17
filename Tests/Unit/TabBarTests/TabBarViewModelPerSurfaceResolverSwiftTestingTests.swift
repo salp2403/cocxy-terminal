@@ -176,4 +176,38 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         #expect(seenTabIDs.contains(third.id))
         #expect(viewModel.tabItems.allSatisfy { $0.agentState == .working })
     }
+
+    // MARK: - Fase 3e additional pills
+
+    @Test("additional agent states are exposed as [AgentState] on the display item")
+    func additionalAgentStatesExposedOnDisplayItem() {
+        let manager = TabManager()
+        let viewModel = TabBarViewModel(tabManager: manager)
+
+        Self.seedBootstrapTab(on: manager, agentState: .idle)
+
+        viewModel.additionalActiveAgentStatesProvider = { _ in
+            [
+                SurfaceAgentState(agentState: .waitingInput),
+                SurfaceAgentState(agentState: .error),
+                SurfaceAgentState(agentState: .working)
+            ]
+        }
+        viewModel.syncWithManager()
+
+        let item = viewModel.tabItems.first
+        #expect(item?.additionalActiveAgentStates == [.waitingInput, .error, .working])
+    }
+
+    @Test("display item has empty additional states when provider returns nothing")
+    func additionalAgentStatesEmptyByDefault() {
+        let manager = TabManager()
+        let viewModel = TabBarViewModel(tabManager: manager)
+
+        Self.seedBootstrapTab(on: manager, agentState: .working)
+        viewModel.syncWithManager()
+
+        let item = viewModel.tabItems.first
+        #expect(item?.additionalActiveAgentStates.isEmpty == true)
+    }
 }

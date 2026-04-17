@@ -557,6 +557,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             guard let self else { return SurfaceAgentState(from: tab) }
             return self.resolveSurfaceAgentState(for: tab.id, tab: tab)
         }
+        // Provide the additional per-split states for the Fase 3e
+        // multi-agent mini-pills. The resolver already excludes the
+        // surface chosen for the primary pill so the two lists never
+        // overlap.
+        tabBarVM.additionalActiveAgentStatesProvider = { [weak self] tab in
+            guard let self else { return [] }
+            return self.additionalActiveAgentStates(for: tab.id, tab: tab)
+        }
 
         let sidebar = TabBarView(viewModel: tabBarVM)
         sidebar.onCommandPalette = { [weak self] in self?.toggleCommandPalette() }
