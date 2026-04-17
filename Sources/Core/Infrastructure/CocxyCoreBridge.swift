@@ -824,6 +824,79 @@ final class CocxyCoreBridge: TerminalEngine {
         surfaces[id]
     }
 
+    /// Resolves the first live surface whose current working directory
+    /// matches the supplied path.
+    ///
+    /// Path matching normalizes both sides via
+    /// `URL.standardizedFileURL.path`, so differences in trailing
+    /// slashes, `.` components, and symlink expansion do not cause
+    /// false negatives. Each surface's candidate path is evaluated in
+    /// priority order:
+    ///
+    /// 1. `SurfaceState.lastKnownWorkingDirectory` — freshest path
+    ///    known to the bridge (updated via OSC 7 callbacks and
+    ///    deferred fallback probes).
+    /// 2. `cwdProvider?(surfaceID)` — external hint supplied by the
+    ///    host (typically the tab's `workingDirectory`).
+    ///
+    /// Matches follow iteration order over the internal surfaces
+    /// dictionary. When multiple surfaces share the same CWD (e.g.,
+    /// splits in the same directory), callers that need focused-aware
+    /// disambiguation must resolve that themselves after the match —
+    /// the bridge has no UI focus state to break the tie.
+    ///
+    /// - Parameter cwd: Absolute path or file URL path reported by an
+    ///   external source (e.g., a Claude Code hook event's `cwd`).
+    /// - Returns: The surface with a matching CWD, or `nil` when no
+    ///   live surface matches.
+    func resolveSurfaceID(matchingCwd cwd: String) -> SurfaceID? {
+        let normalizedTarget = URL(fileURLWithPath: cwd).standardizedFileURL.path
+        guard !normalizedTarget.isEmpty else { return nil }
+
+        let pairs: [(SurfaceID, String?)] = surfaces.map { surfaceID, state in
+            let path = state.lastKnownWorkingDirectory?.path
+                ?? cwdProvider?(surfaceID)
+            return (surfaceID, path)
+        }
+
+        return Self.firstSurface(
+            matchingNormalizedCwd: normalizedTarget,
+            in: pairs
+        )
+    }
+
+    /// Pure helper exposed for white-box tests of the path-matching
+    /// contract used by ``resolveSurfaceID(matchingCwd:)``.
+    ///
+    /// Production call sites invoke the instance method on a live
+    /// bridge. This helper exists so tests can exercise the
+    /// normalization and iteration rules without allocating the Metal
+    /// and C core resources a real surface requires.
+    ///
+    /// - Parameters:
+    ///   - normalizedCwd: Target path already normalized via
+    ///     `URL.standardizedFileURL.path`. Empty strings never match.
+    ///   - candidates: Surface-to-path pairs. Pairs with `nil` or
+    ///     empty paths are skipped; all other paths are normalized
+    ///     before comparison.
+    /// - Returns: First surface whose normalized path equals the
+    ///   target, or `nil` if nothing matches.
+    nonisolated static func firstSurface(
+        matchingNormalizedCwd normalizedCwd: String,
+        in candidates: [(SurfaceID, String?)]
+    ) -> SurfaceID? {
+        guard !normalizedCwd.isEmpty else { return nil }
+        for (surfaceID, path) in candidates {
+            guard let path, !path.isEmpty else { continue }
+            let normalizedCandidate = URL(fileURLWithPath: path)
+                .standardizedFileURL.path
+            if normalizedCandidate == normalizedCwd {
+                return surfaceID
+            }
+        }
+        return nil
+    }
+
     func processMonitorRegistration(for id: SurfaceID) -> TerminalProcessMonitorRegistration? {
         guard let state = surfaces[id],
               state.childPID > 0,
