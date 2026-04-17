@@ -550,6 +550,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
                 sourceWindowID: self.windowID
             )
         }
+        // Route the sidebar pill through the per-surface resolver so splits
+        // running independent agents drive the tab pill via the focused
+        // pane instead of being flattened onto the tab-level fields.
+        tabBarVM.agentStateResolver = { [weak self] tab in
+            guard let self else { return SurfaceAgentState(from: tab) }
+            return self.resolveSurfaceAgentState(for: tab.id, tab: tab)
+        }
 
         let sidebar = TabBarView(viewModel: tabBarVM)
         sidebar.onCommandPalette = { [weak self] in self?.toggleCommandPalette() }

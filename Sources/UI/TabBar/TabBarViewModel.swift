@@ -90,6 +90,18 @@ final class TabBarViewModel: ObservableObject {
     /// so the view model can generate SessionDragData without importing AppKit.
     var dragDataProvider: ((TabID) -> SessionDragData?)?
 
+    /// Resolves the agent snapshot that drives the sidebar pill for a tab.
+    ///
+    /// Fase 3d routes this closure through
+    /// `MainWindowController.resolveSurfaceAgentState(for:tab:)` so the
+    /// sidebar reads the focused split's state (or the primary surface's
+    /// when no split is focused) instead of the tab-level fields. The
+    /// default implementation mirrors the legacy behavior by taking a
+    /// straight `SurfaceAgentState` snapshot from the `Tab`, so
+    /// environments that never wire the resolver (tests, the session
+    /// restore bootstrap before the store is installed) keep working.
+    var agentStateResolver: (Tab) -> SurfaceAgentState = { SurfaceAgentState(from: $0) }
+
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
 
@@ -250,21 +262,30 @@ final class TabBarViewModel: ObservableObject {
             let latestUnread = notificationManager?.latestUnreadForTab(tab.id)
             let previewText: String? = latestUnread.map { "\($0.title) — \($0.body)" }
 
+            // Resolve the per-surface agent snapshot for this tab. During
+            // Fase 3 the resolver picks the focused split first, then the
+            // primary surface, and finally any surface with activity,
+            // falling back to the Tab fields when the per-surface store
+            // has no entry yet. `processName` stays on the Tab because
+            // foreground-process tracking is not mirrored into the store
+            // during this phase.
+            let resolved = agentStateResolver(tab)
+
             return TabDisplayItem(
                 id: tab.id,
                 displayTitle: sshTitle(for: tab) ?? truncatedTitle(tab.displayTitle),
                 subtitle: buildSubtitle(gitBranch: tab.gitBranch, processName: tab.processName),
-                statusColorName: colorName(for: tab.agentState),
-                badgeText: badgeText(for: tab.agentState),
+                statusColorName: colorName(for: resolved.agentState),
+                badgeText: badgeText(for: resolved.agentState),
                 isActive: tab.isActive,
                 hasUnreadNotification: unreadCount > 0,
-                agentState: tab.agentState,
+                agentState: resolved.agentState,
                 isPinned: tab.isPinned,
                 agentStatusText: agentStatusText(
-                    for: tab.agentState,
+                    for: resolved.agentState,
                     processName: tab.processName,
-                    activity: tab.agentActivity,
-                    detectedAgentName: tab.detectedAgent?.displayName
+                    activity: resolved.agentActivity,
+                    detectedAgentName: resolved.detectedAgent?.displayName
                 ),
                 directoryPath: shortPath(tab.workingDirectory),
                 timeSinceActivity: relativeTime(since: tab.lastActivityAt),
@@ -273,9 +294,12 @@ final class TabBarViewModel: ObservableObject {
                 sshDisplay: tab.sshSession?.displayTitleWithPort,
                 unreadNotificationCount: unreadCount,
                 notificationPreview: previewText,
-                agentToolCount: tab.agentToolCount,
-                agentErrorCount: tab.agentErrorCount,
-                agentDurationText: agentDuration(for: tab)
+                agentToolCount: resolved.agentToolCount,
+                agentErrorCount: resolved.agentErrorCount,
+                agentDurationText: agentDuration(
+                    detectedAgent: resolved.detectedAgent,
+                    state: resolved.agentState
+                )
             )
         }
     }
@@ -403,10 +427,16 @@ final class TabBarViewModel: ObservableObject {
         return path
     }
 
-    /// Returns the running duration of the agent in this tab, or nil if idle.
-    private func agentDuration(for tab: Tab) -> String? {
-        guard let agent = tab.detectedAgent,
-              tab.agentState != .idle else { return nil }
+    /// Returns the running duration of the agent, or nil if idle.
+    ///
+    /// Operates on the resolved per-surface snapshot (detected agent +
+    /// state) so the duration follows whichever surface the resolver
+    /// picked rather than the tab-level `detectedAgent` field.
+    private func agentDuration(
+        detectedAgent: DetectedAgent?,
+        state: AgentState
+    ) -> String? {
+        guard let agent = detectedAgent, state != .idle else { return nil }
         let seconds = Int(Date().timeIntervalSince(agent.startedAt))
         if seconds < 60 { return "\(seconds)s" }
         let minutes = seconds / 60
