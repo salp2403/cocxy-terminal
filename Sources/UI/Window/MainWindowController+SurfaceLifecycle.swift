@@ -590,21 +590,33 @@ extension MainWindowController {
             renderer.renderImage(imageData, at: position)
 
         case .processExited:
-            // Shell process exited. Reset the per-surface store entry
-            // to idle and bump the tab's last-activity timestamp so the
-            // sidebar reflects the terminated session. Engine gets the
-            // event too so it can clear its own per-surface buckets.
+            // Shell process exited. Run the same teardown we'd run on
+            // surface destroy, but in-place because the surface object
+            // can outlive its backing shell (e.g. user keeps the pane
+            // around to read the final output):
+            //
+            //   1. `notifyProcessExited` emits an `agentExited`
+            //      transition so any subscribers see the final idle
+            //      state.
+            //   2. `clearSurface` drops the engine's debounce and
+            //      hook-session buckets — `notifyProcessExited` alone
+            //      does *not* do this, so skipping it would leave
+            //      stale per-surface routing state behind.
+            //   3. The per-surface store entry is reset so the sidebar
+            //      pill and other indicators relax.
+            //   4. The tab's last-activity timestamp moves forward.
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
                 tab.lastActivityAt = Date()
             }
-            if let sid = sourceSurfaceID {
-                injectedPerSurfaceStore?.reset(surfaceID: sid)
-            }
-            tabBarViewModel?.syncWithManager()
             injectedAgentDetectionEngine?.notifyProcessExited(
                 surfaceID: sourceSurfaceID
             )
+            if let sid = sourceSurfaceID {
+                injectedAgentDetectionEngine?.clearSurface(sid)
+                injectedPerSurfaceStore?.reset(surfaceID: sid)
+            }
+            tabBarViewModel?.syncWithManager()
         }
     }
 

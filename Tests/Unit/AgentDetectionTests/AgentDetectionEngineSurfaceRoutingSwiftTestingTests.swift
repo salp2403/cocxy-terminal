@@ -591,4 +591,45 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
 
         #expect(engine._debounceBucketCountForTesting == 0)
     }
+
+    // MARK: - notifyProcessExited does NOT clear buckets on its own
+
+    @Test("notifyProcessExited leaves per-surface buckets populated — clearSurface is the one that drops them")
+    func notifyProcessExitedDoesNotClearBuckets() {
+        // Regression guard for the Fase 4 process-exit handler in
+        // `MainWindowController+SurfaceLifecycle`. That call site runs
+        // both `notifyProcessExited` and `clearSurface` because the
+        // exit transition emits a final state but does NOT release the
+        // engine's debounce and hook-session buckets. If we ever drop
+        // the `clearSurface` call under the assumption that
+        // `notifyProcessExited` is enough, this test flags it.
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        // Seed debounce and hook-session state on the surface.
+        engine.injectSignal(launchSignal(), surfaceID: surface)
+        engine.processHookEvent(
+            hookEvent(type: .sessionStart, sessionId: "sess-exit"),
+            surfaceID: surface
+        )
+
+        #expect(engine._debounceBucketCountForTesting == 1)
+        #expect(engine._hookSessionsForTesting(surfaceID: surface) == ["sess-exit"])
+
+        // `notifyProcessExited` only fires the agentExited transition.
+        engine.notifyProcessExited(surfaceID: surface)
+
+        // Debounce bucket stays populated (a new key was just written
+        // by the agentExited signal), and the hook session also
+        // remains — buckets are the engine's per-surface routing
+        // state, not lifecycle state.
+        #expect(engine._debounceBucketCountForTesting >= 1)
+        #expect(engine._hookSessionsForTesting(surfaceID: surface) == ["sess-exit"])
+
+        // `clearSurface` is the one that actually drops the buckets.
+        engine.clearSurface(surface)
+
+        #expect(engine._debounceBucketCountForTesting == 0)
+        #expect(engine._hookSessionsForTesting(surfaceID: surface).isEmpty)
+    }
 }
