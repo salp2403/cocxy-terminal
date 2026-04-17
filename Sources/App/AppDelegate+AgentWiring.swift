@@ -42,6 +42,12 @@ extension AppDelegate {
         )
         self.agentDetectionEngine = engine
 
+        // Allocate the per-surface store alongside the engine so downstream
+        // wiring (wireHookReceiverToEngine, wireAgentDetectionToTabs) can
+        // dual-write agent state per split while `Tab` keeps mirroring the
+        // same fields for the existing UI consumers.
+        self.agentStatePerSurfaceStore = AgentStatePerSurfaceStore()
+
         // Inject per-agent idle timeout overrides from the compiled configs.
         // Agents like Aider and Gemini CLI are slower and need longer timeouts
         // to avoid false completion signals from the timing detector.

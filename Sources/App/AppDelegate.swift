@@ -118,6 +118,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentDetectionEngine: AgentDetectionEngineImpl?
 
+    /// Per-surface agent state store introduced by the v0.1.71 refactor.
+    ///
+    /// Writers in `AppDelegate+AgentWiring` populate this store from
+    /// detection-engine transitions and hook events so UI consumers can
+    /// read split-scoped agent state without the previous tab-level
+    /// aggregation. `Tab` keeps mirroring the same fields during the
+    /// dual-write phase; the store becomes the sole source of truth in
+    /// Fase 4 when the forwarding fields on `Tab` are retired.
+    var agentStatePerSurfaceStore: AgentStatePerSurfaceStore?
+
     /// The port scanner for detecting active dev servers on localhost.
     /// Exposed for testing purposes.
     private(set) var portScanner: PortScannerImpl?
