@@ -5,6 +5,21 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.71] - 2026-04-17
+
+### Changed
+- Agent detection is now scoped per terminal surface instead of per tab. Debounce buckets and hook-session tracking key on the originating surface, so an agent running in one split of a tab no longer masks or corrupts a sibling split's detection state. Tabs without splits keep their previous behavior exactly.
+- Every production call site in the surface lifecycle forwards the originating surface through to the detection engine (`processTerminalOutput`, `notifyUserInput`, `notifyProcessExited`), so every emitted state transition carries the split that produced it.
+- Surface teardown now releases both the engine's per-surface debounce and hook-session buckets and the new shadow per-surface agent state store, preventing stale state from outliving a destroyed split.
+
+### Added
+- `CocxyCoreBridge.resolveSurfaceID(matchingCwd:)` returns the first live surface whose working directory matches an external path. Path matching is normalized via `URL.standardizedFileURL.path`, tolerant of trailing slashes and `.` components, and rejects prefix-only matches.
+- `AgentStatePerSurfaceStore` is a new main-actor shadow source of truth that mirrors every tab-level agent mutation onto a per-surface entry. Tab fields remain the reader for now; the store is the groundwork for the upcoming UI migration so sidebar pills, status bar, and notification rings can render independent state for each split.
+- New lifecycle hook `AgentDetecting.clearSurface(_:)` lets callers release a surface's per-surface state (debounce + hook-session buckets) in one idempotent step. The production detection engine implements it; other conformers get a no-op default.
+
+### Testing
+- 34 new Swift Testing cases across three suites: per-surface debounce and hook buckets plus `clearSurface` lifecycle (`AgentDetectionEngineSurfaceRoutingSwiftTestingTests`), CWD resolution contract (`CocxyCoreBridgeCwdResolutionSwiftTestingTests`), and end-to-end dual-write coherence between `Tab` and the per-surface store (`AgentWiringDualWriteSwiftTestingTests`). Full suite: 2535 XCTest + 1223 Swift Testing = 3758 tests, zero failures.
+
 ## [0.1.70] - 2026-04-16
 
 ### Fixed
