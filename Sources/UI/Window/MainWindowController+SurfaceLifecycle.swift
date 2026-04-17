@@ -322,21 +322,71 @@ extension MainWindowController {
 
     // MARK: - Notification Ring
 
-    /// Updates the notification ring on a surface view based on agent state.
+    /// Updates the notification ring on every surface of the tab based on
+    /// per-surface agent state.
     ///
-    /// Shows a pulsing ring when the agent is waiting for input (similar to cmux).
-    /// Hides the ring when the user focuses the tab or the state changes.
+    /// Pulses a ring around a surface whose agent is waiting for user
+    /// input, as long as the user is not already looking at that exact
+    /// surface. Background tabs, background splits of the active tab, and
+    /// unfocused-but-visible splits all receive the ring so the waiting
+    /// signal is never swallowed when multiple splits run different
+    /// agents.
+    ///
+    /// Reads per-surface state from `injectedPerSurfaceStore`. The
+    /// `agentState` parameter is kept for callers that pre-date the Fase 3
+    /// migration: when the store is unavailable the method falls back to
+    /// the legacy primary-only behavior driven by that parameter.
+    ///
+    /// - Parameters:
+    ///   - tabID: Owning tab whose surfaces should be re-evaluated.
+    ///   - agentState: Last agent state reported for the tab. Used only
+    ///     on the legacy fallback path.
     func updateNotificationRing(for tabID: TabID, agentState: AgentState) {
-        guard let surfaceView = tabSurfaceViews[tabID] else { return }
+        let isTabVisible = tabID == (visibleTabID ?? tabManager.activeTabID)
 
-        switch agentState {
-        case .waitingInput:
-            // Only show ring on background tabs (not the active one).
-            if tabID != (visibleTabID ?? tabManager.activeTabID) {
-                surfaceView.showNotificationRing(color: CocxyColors.blue)
-            }
-        default:
-            surfaceView.hideNotificationRing()
+        guard let store = injectedPerSurfaceStore else {
+            // Legacy fallback: no per-surface store injected yet.
+            // The primary surface inherits the tab-level agent state;
+            // splits are untouched because we have no per-surface signal
+            // to drive them safely.
+            guard let primaryView = tabSurfaceViews[tabID] else { return }
+            let decision = NotificationRingDecision.decide(
+                agentState: agentState,
+                isTabVisible: isTabVisible,
+                isSurfaceFocused: false
+            )
+            applyNotificationRingDecision(decision, to: primaryView)
+            return
+        }
+
+        // Per-surface path: fan out to every surface of the tab so splits
+        // running independent agents get their own ring.
+        let focusedSurfaceID = isTabVisible
+            ? focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+            : nil
+
+        for surfaceID in surfaceIDs(for: tabID) {
+            guard let view = surfaceView(for: surfaceID) else { continue }
+
+            let state = store.state(for: surfaceID)
+            let decision = NotificationRingDecision.decide(
+                agentState: state.agentState,
+                isTabVisible: isTabVisible,
+                isSurfaceFocused: surfaceID == focusedSurfaceID
+            )
+            applyNotificationRingDecision(decision, to: view)
+        }
+    }
+
+    private func applyNotificationRingDecision(
+        _ decision: NotificationRingDecision,
+        to view: TerminalHostView
+    ) {
+        switch decision {
+        case .show:
+            view.showNotificationRing(color: CocxyColors.blue)
+        case .hide:
+            view.hideNotificationRing()
         }
     }
 
