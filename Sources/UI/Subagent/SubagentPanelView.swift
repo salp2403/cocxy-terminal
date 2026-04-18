@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // SubagentPanelView.swift - Live activity panel for a running subagent.
 
+import AppKit
 import SwiftUI
 
 // MARK: - Subagent Panel View
@@ -19,6 +20,13 @@ struct SubagentPanelView: View {
     let subagentId: String
     let sessionId: String
     var onClose: (() -> Void)?
+
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so subagent panels match the rest of
+    /// the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
 
     // MARK: - Computed Data
 
@@ -46,7 +54,11 @@ struct SubagentPanelView: View {
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
     }

@@ -49,12 +49,13 @@ extension MainWindowController {
         guard let viewModel = remoteConnectionViewModel else { return }
 
         remoteWorkspaceHostingView?.removeFromSuperview()
-        let swiftUIView = RemoteConnectionView(
+        var swiftUIView = RemoteConnectionView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
             sshKeyManager: sshKeyManager,
             sftpExecutor: SystemSFTPExecutor()
         )
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
 

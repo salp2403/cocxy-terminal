@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // BrowserPanelView.swift - In-app browser panel with WKWebView.
 
+import AppKit
 import SwiftUI
 import WebKit
 import Combine
@@ -38,6 +39,14 @@ struct BrowserPanelView: View {
     @ObservedObject var viewModel: BrowserViewModel
     var profileManager: BrowserProfileManager?
     var onDismiss: () -> Void
+
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// Propagated down to the DevTools and Downloads sub-panels so the
+    /// entire browser stack keeps a consistent vibrancy tint when the
+    /// user forces a transparency theme. `nil` preserves the legacy
+    /// inherit-from-window behaviour.
+    var vibrancyAppearanceOverride: NSAppearance?
 
     /// Fixed width of the browser panel.
     static let panelWidth: CGFloat = 480
@@ -99,7 +108,8 @@ struct BrowserPanelView: View {
                     onClearConsole: { consoleEntries.removeAll() },
                     onClearNetwork: { networkMonitor.clear() },
                     onRefreshDOM: { refreshDOM() },
-                    onDismiss: { showDevTools = false }
+                    onDismiss: { showDevTools = false },
+                    vibrancyAppearanceOverride: vibrancyAppearanceOverride
                 )
                 .frame(height: 200)
             }
@@ -113,7 +123,8 @@ struct BrowserPanelView: View {
                             NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
                         }
                     },
-                    onDismiss: { showDownloads = false }
+                    onDismiss: { showDownloads = false },
+                    vibrancyAppearanceOverride: vibrancyAppearanceOverride
                 )
                 .frame(maxHeight: 200)
             }
@@ -123,7 +134,11 @@ struct BrowserPanelView: View {
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .accessibilityElement(children: .contain)

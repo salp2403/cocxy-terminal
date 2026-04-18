@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // TimelineView.swift - SwiftUI view showing agent timeline events chronologically.
 
+import AppKit
 import SwiftUI
 
 // MARK: - Timeline View
@@ -65,6 +66,13 @@ struct TimelineView: View {
     /// The window hosting this timeline panel, used for local filtering.
     var currentWindowID: WindowID? = nil
 
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the timeline panel matches the
+    /// rest of the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     /// Currently selected event type filter. Nil means show all.
     @State private var selectedFilter: TimelineEventType? = nil
 
@@ -87,7 +95,11 @@ struct TimelineView: View {
             ZStack {
                 // Solid Catppuccin Mantle as reliable fallback.
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .accessibilityElement(children: .contain)

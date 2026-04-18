@@ -206,6 +206,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var codeReviewCancellables = Set<AnyCancellable>()
     var injectedCodeReviewViewModel: CodeReviewPanelViewModel?
 
+    /// Forced `NSAppearance` applied to every translucent vibrancy view.
+    ///
+    /// Cached from the last call to `applyEffectiveAppearance` so new
+    /// overlays instantiated between config changes can pick up the
+    /// current override without re-reading the config service. `nil`
+    /// means either the chrome is opaque or the user selected
+    /// `follow-system`, which preserves the legacy inherit-from-window
+    /// behaviour.
+    ///
+    /// Read-only from overlay construction sites via
+    /// `resolveVibrancyAppearanceOverride()` so the getter can evolve
+    /// without touching every caller.
+    private(set) var currentVibrancyAppearanceOverride: NSAppearance?
+
     // MARK: - Remote Workspace Overlay State
 
     var remoteConnectionViewModel: RemoteConnectionViewModel?
@@ -1785,6 +1799,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         let vibrancyAppearance: NSAppearance? = isTransparent
             ? appearance.transparencyChromeTheme.vibrancyAppearance
             : nil
+        currentVibrancyAppearanceOverride = vibrancyAppearance
 
         // Propagate vibrancy state to all chrome components.
         tabBarView?.setSidebarTransparent(isTransparent)
@@ -1803,6 +1818,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             hostingView.rootView.useVibrancy = isTransparent
             hostingView.rootView.vibrancyAppearanceOverride = vibrancyAppearance
         }
+
+        // Propagate vibrancy override to every open overlay so on-demand
+        // panels (Command Palette, Dashboard, Timeline, Code Review,
+        // Browser, etc.) repaint vibrancy with the forced appearance.
+        syncVibrancyOverrideToLiveOverlays(vibrancyAppearance)
+    }
+
+    /// Resolves the forced vibrancy `NSAppearance` for the current config.
+    ///
+    /// Returns the cached override computed by `applyEffectiveAppearance`
+    /// when available so overlays constructed between config publishes
+    /// read the same value that the chrome sees. Falls back to computing
+    /// the override directly from the active config when the cache has
+    /// not been seeded yet (for example during the very first overlay
+    /// presentation before the initial appearance pass runs).
+    ///
+    /// - Returns: The forced appearance, or `nil` when the chrome is
+    ///   opaque or the user selected `.followSystem`.
+    func resolveVibrancyAppearanceOverride() -> NSAppearance? {
+        if let override = currentVibrancyAppearanceOverride {
+            return override
+        }
+        guard let appearance = configService?.current.appearance else { return nil }
+        let isTransparent = appearance.backgroundOpacity < 1.0
+        return isTransparent ? appearance.transparencyChromeTheme.vibrancyAppearance : nil
     }
 
     // MARK: - Tab Actions

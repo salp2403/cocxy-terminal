@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // BrowserDevToolsView.swift - In-app browser developer tools panel.
 
+import AppKit
 import SwiftUI
 
 // MARK: - DevTools Tab Selection
@@ -114,6 +115,13 @@ struct BrowserDevToolsView: View {
     /// Called when the user taps the close button.
     let onDismiss: () -> Void
 
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the DevTools pane matches the
+    /// rest of the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     /// The currently selected tab.
     @State private var selectedTab: DevToolsTab = .console
 
@@ -137,7 +145,11 @@ struct BrowserDevToolsView: View {
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .accessibilityElement(children: .contain)

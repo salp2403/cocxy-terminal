@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // BrowserBookmarksView.swift - Bookmark management panel with folder hierarchy.
 
+import AppKit
 import SwiftUI
 
 // MARK: - Browser Bookmarks View
@@ -49,6 +50,13 @@ struct BrowserBookmarksView: View {
     /// Called when the user taps the close button.
     let onDismiss: () -> Void
 
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the bookmarks panel matches the
+    /// rest of the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     /// Search query text.
     @State private var searchText: String = ""
 
@@ -78,7 +86,11 @@ struct BrowserBookmarksView: View {
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .accessibilityElement(children: .contain)

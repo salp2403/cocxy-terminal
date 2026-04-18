@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // ScrollbackSearchBarView.swift - Inline search bar for terminal scrollback.
 
+import AppKit
 import SwiftUI
 import Combine
 
@@ -42,6 +43,13 @@ struct ScrollbackSearchBarView: View {
     /// Callback invoked when the current match changes (for scrolling to match).
     var onNavigateToResult: ((SearchResult) -> Void)?
 
+    /// Forced `NSAppearance` for the translucent search-bar background.
+    ///
+    /// `nil` keeps the legacy behaviour (inherit from the window chain).
+    /// `.aqua` / `.darkAqua` pin the vibrancy so the search bar matches
+    /// the rest of the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     // MARK: - Body
 
     var body: some View {
@@ -58,7 +66,11 @@ struct ScrollbackSearchBarView: View {
             ZStack {
                 // Solid Catppuccin Surface0 as reliable fallback.
                 Color(nsColor: CocxyColors.surface0)
-                VisualEffectBackground(material: .titlebar, blendingMode: .withinWindow)
+                VisualEffectBackground(
+                    material: .titlebar,
+                    blendingMode: .withinWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .accessibilityElement(children: .contain)

@@ -142,7 +142,8 @@ extension MainWindowController {
             let subView = SubagentContentView(
                 viewModel: dashboardVM,
                 subagentId: subagentId,
-                sessionId: sessionId
+                sessionId: sessionId,
+                vibrancyAppearanceOverride: resolveVibrancyAppearanceOverride()
             )
             let capturedContentID = contentID
             subView.onClose = { [weak self] in

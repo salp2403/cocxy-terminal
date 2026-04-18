@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // CommandPaletteView.swift - SwiftUI overlay for the command palette.
 
+import AppKit
 import SwiftUI
 import Combine
 
@@ -161,6 +162,13 @@ struct CommandPaletteView: View {
     /// The ViewModel driving this view.
     @ObservedObject var viewModel: CommandPaletteViewModel
 
+    /// Forced `NSAppearance` for the translucent palette background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the palette matches the rest of
+    /// the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     /// Focus state for the search text field.
     @FocusState private var isSearchFocused: Bool
 
@@ -191,7 +199,8 @@ struct CommandPaletteView: View {
                             // Vibrancy on top for native macOS feel.
                             VisualEffectBackground(
                                 material: .popover,
-                                blendingMode: .behindWindow
+                                blendingMode: .behindWindow,
+                                appearanceOverride: vibrancyAppearanceOverride
                             )
                         }
                     )

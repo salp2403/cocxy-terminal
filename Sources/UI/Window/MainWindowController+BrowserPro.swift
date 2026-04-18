@@ -92,7 +92,7 @@ extension MainWindowController {
         let activeProfileID = browserProfileManager?.activeProfileID
 
         browserHistoryHostingView?.removeFromSuperview()
-        let swiftUIView = BrowserHistoryView(
+        var swiftUIView = BrowserHistoryView(
             historyStore: historyStore,
             activeProfileID: activeProfileID,
             onNavigate: { [weak self] url in
@@ -101,6 +101,7 @@ extension MainWindowController {
             },
             onDismiss: { [weak self] in self?.dismissBrowserHistory() }
         )
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
 
@@ -157,7 +158,7 @@ extension MainWindowController {
               let bookmarkStore = browserBookmarkStore else { return }
 
         browserBookmarksHostingView?.removeFromSuperview()
-        let swiftUIView = BrowserBookmarksView(
+        var swiftUIView = BrowserBookmarksView(
             bookmarkStore: bookmarkStore,
             onNavigate: { [weak self] url in
                 self?.dismissBrowserBookmarks()
@@ -175,6 +176,7 @@ extension MainWindowController {
             },
             onDismiss: { [weak self] in self?.dismissBrowserBookmarks() }
         )
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
 

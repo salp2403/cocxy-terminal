@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // DashboardPanelView.swift - SwiftUI panel showing all agent sessions.
 
+import AppKit
 import SwiftUI
 import Combine
 
@@ -65,6 +66,13 @@ struct DashboardPanelView: View {
     /// The window hosting this panel. Used for local filtering.
     var currentWindowID: WindowID? = nil
 
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the dashboard matches the rest of
+    /// the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     /// Fixed width of the dashboard panel.
     static let panelWidth: CGFloat = 320
 
@@ -84,7 +92,11 @@ struct DashboardPanelView: View {
             ZStack {
                 // Solid Catppuccin Mantle as reliable fallback.
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .accessibilityElement(children: .contain)

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // BrowserDownloadsView.swift - Downloads panel showing progress and completed files.
 
+import AppKit
 import SwiftUI
 
 // MARK: - Download State
@@ -105,6 +106,13 @@ struct BrowserDownloadsView: View {
     /// Called when the user taps the close button.
     let onDismiss: () -> Void
 
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the downloads panel matches the
+    /// rest of the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     // MARK: - Body
 
     var body: some View {
@@ -118,7 +126,11 @@ struct BrowserDownloadsView: View {
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .accessibilityElement(children: .contain)

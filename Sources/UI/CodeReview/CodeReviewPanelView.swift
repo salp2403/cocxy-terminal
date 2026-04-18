@@ -13,6 +13,13 @@ struct CodeReviewPanelView: View {
     var onIncreaseWidth: (() -> Void)? = nil
     var onDismiss: (() -> Void)? = nil
 
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the review panel matches the rest
+    /// of the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     static let defaultPanelWidth: CGFloat = 640
     static let minimumPanelWidth: CGFloat = 460
     static let maximumPanelWidth: CGFloat = 980
@@ -102,7 +109,11 @@ struct CodeReviewPanelView: View {
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .overlay(

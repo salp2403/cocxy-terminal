@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // RemoteConnectionView.swift - Main panel for remote workspace management.
 
+import AppKit
 import SwiftUI
 import Combine
 
@@ -279,6 +280,14 @@ struct RemoteConnectionView: View {
     /// Injected SFTP executor for the file browser sub-panel.
     var sftpExecutor: (any SFTPExecutor)?
 
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the remote workspace panel
+    /// matches the rest of the chrome when the user forces a
+    /// transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     /// Sub-panel view models created lazily and retained for the panel lifetime.
     @State private var keyManagerVM: SSHKeyManagerViewModel?
     @State private var sftpBrowserVM: SFTPBrowserViewModel?
@@ -304,7 +313,11 @@ struct RemoteConnectionView: View {
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .onAppear { viewModel.loadProfiles() }

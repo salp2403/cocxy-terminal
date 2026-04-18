@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // NotificationPanelView.swift - In-app notification panel overlay.
 
+import AppKit
 import SwiftUI
 import Combine
 
@@ -115,6 +116,13 @@ struct NotificationPanelView: View {
     @ObservedObject var viewModel: NotificationPanelViewModel
     var onDismiss: () -> Void
 
+    /// Forced `NSAppearance` for the translucent panel background.
+    ///
+    /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
+    /// values pin the vibrancy view so the notification panel matches
+    /// the rest of the chrome when the user forces a transparency theme.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     static let panelWidth: CGFloat = 320
 
     // MARK: - Body
@@ -130,7 +138,11 @@ struct NotificationPanelView: View {
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .sidebar,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             }
         )
         .accessibilityElement(children: .contain)

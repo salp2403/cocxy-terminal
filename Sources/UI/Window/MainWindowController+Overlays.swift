@@ -40,7 +40,8 @@ extension MainWindowController {
         viewModel.isVisible = true
 
         commandPaletteHostingView?.removeFromSuperview()
-        let swiftUIView = CommandPaletteView(viewModel: viewModel)
+        var swiftUIView = CommandPaletteView(viewModel: viewModel)
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = FocusableHostingView(rootView: swiftUIView)
         hostingView.frame = overlayContainer.bounds
         hostingView.autoresizingMask = [.width, .height]
@@ -412,11 +413,12 @@ extension MainWindowController {
         guard let viewModel = dashboardViewModel else { return }
 
         dashboardHostingView?.removeFromSuperview()
-        let swiftUIView = DashboardPanelView(
+        var swiftUIView = DashboardPanelView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissDashboard() },
             currentWindowID: windowID
         )
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelWidth: CGFloat = DashboardPanelView.panelWidth
@@ -491,7 +493,8 @@ extension MainWindowController {
             containerWidth: overlayContainer.bounds.width
         )
         codeReviewPanelWidth = panelWidth
-        let swiftUIView = makeCodeReviewPanelView(viewModel: viewModel, panelWidth: panelWidth)
+        var swiftUIView = makeCodeReviewPanelView(viewModel: viewModel, panelWidth: panelWidth)
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         hostingView.frame = NSRect(
@@ -816,6 +819,7 @@ extension MainWindowController {
                 lineNumber: result.lineNumber
             )
         }
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.frame = NSRect(x: 0, y: container.bounds.height - 40,
                                    width: container.bounds.width, height: 40)
@@ -950,6 +954,7 @@ extension MainWindowController {
             currentWindowID: windowID
         )
         swiftUIView.navigationDispatcher = timelineDispatcher
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelWidth: CGFloat = DashboardPanelView.panelWidth
@@ -1071,7 +1076,9 @@ extension MainWindowController {
               let viewModel = codeReviewViewModel else {
             return
         }
-        hostingView.rootView = makeCodeReviewPanelView(viewModel: viewModel, panelWidth: panelWidth)
+        var view = makeCodeReviewPanelView(viewModel: viewModel, panelWidth: panelWidth)
+        view.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
+        hostingView.rootView = view
     }
 
     private func minimumCodeReviewPanelWidth(containerWidth: CGFloat? = nil) -> CGFloat {
@@ -1149,10 +1156,11 @@ extension MainWindowController {
         guard let viewModel = notificationPanelViewModel else { return }
 
         notificationPanelHostingView?.removeFromSuperview()
-        let swiftUIView = NotificationPanelView(
+        var swiftUIView = NotificationPanelView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissNotificationPanel() }
         )
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelWidth: CGFloat = NotificationPanelView.panelWidth
@@ -1227,11 +1235,12 @@ extension MainWindowController {
         guard let viewModel = browserViewModel else { return }
 
         browserHostingView?.removeFromSuperview()
-        let swiftUIView = BrowserPanelView(
+        var swiftUIView = BrowserPanelView(
             viewModel: viewModel,
             profileManager: browserProfileManager,
             onDismiss: { [weak self] in self?.dismissBrowser() }
         )
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelWidth: CGFloat = BrowserPanelView.panelWidth
@@ -1477,6 +1486,190 @@ extension MainWindowController {
             dismissTimeline()
         } else if isSearchBarVisible {
             dismissSearchBar()
+        }
+    }
+
+    // MARK: - Vibrancy Override Propagation
+
+    /// Rewrites the `rootView` of every live SwiftUI overlay hosting view
+    /// so the forced `NSAppearance` override matches the value the chrome
+    /// bordes just adopted.
+    ///
+    /// Called from `applyEffectiveAppearance` after the permanent chrome
+    /// (sidebar, horizontal tab strip, status bar) has already been
+    /// updated. Hosting views backed by a concrete
+    /// `NSHostingView<ConcreteView>` are rebuilt with the new override in
+    /// place; overlays stored as `NSView?` (timeline, remote workspace,
+    /// browser history, browser bookmarks, subagent panels) are
+    /// re-rooted via their typed hosting view helpers.
+    ///
+    /// The function is a no-op for overlays that are not visible — both
+    /// the `isXxxVisible` flags and the optional hosting-view properties
+    /// guard the re-root — so repeatedly calling it during hot-reload is
+    /// safe.
+    func syncVibrancyOverrideToLiveOverlays(_ override: NSAppearance?) {
+        syncCommandPaletteVibrancyOverride(override)
+        syncDashboardVibrancyOverride(override)
+        syncTimelineVibrancyOverride(override)
+        syncCodeReviewVibrancyOverride(override)
+        syncNotificationPanelVibrancyOverride(override)
+        syncBrowserVibrancyOverride(override)
+        syncBrowserHistoryVibrancyOverride(override)
+        syncBrowserBookmarksVibrancyOverride(override)
+        syncRemoteWorkspaceVibrancyOverride(override)
+        syncSearchBarVibrancyOverride(override)
+        syncSubagentPanelsVibrancyOverride(override)
+    }
+
+    private func syncCommandPaletteVibrancyOverride(_ override: NSAppearance?) {
+        guard isCommandPaletteVisible,
+              let hostingView = commandPaletteHostingView,
+              let viewModel = commandPaletteViewModel else { return }
+        var view = CommandPaletteView(viewModel: viewModel)
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncDashboardVibrancyOverride(_ override: NSAppearance?) {
+        guard isDashboardVisible,
+              let hostingView = dashboardHostingView,
+              let viewModel = dashboardViewModel else { return }
+        var view = DashboardPanelView(
+            viewModel: viewModel,
+            onDismiss: { [weak self] in self?.dismissDashboard() },
+            currentWindowID: windowID
+        )
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncTimelineVibrancyOverride(_ override: NSAppearance?) {
+        guard isTimelineVisible,
+              let hostingView = timelineHostingView as? NSHostingView<TimelineView>,
+              let viewModel = timelineViewModel else { return }
+        var view = TimelineView(
+            viewModel: viewModel,
+            onDismiss: { [weak self] in self?.dismissTimeline() },
+            currentWindowID: windowID
+        )
+        view.navigationDispatcher = timelineDispatcher
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncCodeReviewVibrancyOverride(_ override: NSAppearance?) {
+        guard isCodeReviewVisible,
+              let hostingView = codeReviewHostingView,
+              let viewModel = codeReviewViewModel else { return }
+        var view = makeCodeReviewPanelView(viewModel: viewModel, panelWidth: codeReviewPanelWidth)
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncNotificationPanelVibrancyOverride(_ override: NSAppearance?) {
+        guard isNotificationPanelVisible,
+              let hostingView = notificationPanelHostingView,
+              let viewModel = notificationPanelViewModel else { return }
+        var view = NotificationPanelView(
+            viewModel: viewModel,
+            onDismiss: { [weak self] in self?.dismissNotificationPanel() }
+        )
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncBrowserVibrancyOverride(_ override: NSAppearance?) {
+        guard isBrowserVisible,
+              let hostingView = browserHostingView,
+              let viewModel = browserViewModel else { return }
+        var view = BrowserPanelView(
+            viewModel: viewModel,
+            profileManager: browserProfileManager,
+            onDismiss: { [weak self] in self?.dismissBrowser() }
+        )
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncBrowserHistoryVibrancyOverride(_ override: NSAppearance?) {
+        guard isBrowserHistoryVisible,
+              let hostingView = browserHistoryHostingView as? NSHostingView<BrowserHistoryView>,
+              let historyStore = browserHistoryStore else { return }
+        var view = BrowserHistoryView(
+            historyStore: historyStore,
+            activeProfileID: browserProfileManager?.activeProfileID,
+            onNavigate: { [weak self] url in
+                self?.dismissBrowserHistory()
+                self?.activeBrowserViewModel()?.navigate(to: url)
+            },
+            onDismiss: { [weak self] in self?.dismissBrowserHistory() }
+        )
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncBrowserBookmarksVibrancyOverride(_ override: NSAppearance?) {
+        guard isBrowserBookmarksVisible,
+              let hostingView = browserBookmarksHostingView as? NSHostingView<BrowserBookmarksView>,
+              let bookmarkStore = browserBookmarkStore else { return }
+        var view = BrowserBookmarksView(
+            bookmarkStore: bookmarkStore,
+            onNavigate: { [weak self] url in
+                self?.dismissBrowserBookmarks()
+                self?.activeBrowserViewModel()?.navigate(to: url)
+            },
+            onAddBookmark: { [weak self] in
+                guard let vm = self?.activeBrowserViewModel(),
+                      let pageURL = vm.currentURL else { return }
+                let urlString = pageURL.absoluteString
+                let title = vm.pageTitle.isEmpty ? urlString : vm.pageTitle
+                try? bookmarkStore.save(BrowserBookmark(
+                    title: title,
+                    url: urlString
+                ))
+            },
+            onDismiss: { [weak self] in self?.dismissBrowserBookmarks() }
+        )
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncRemoteWorkspaceVibrancyOverride(_ override: NSAppearance?) {
+        guard isRemoteWorkspaceVisible,
+              let hostingView = remoteWorkspaceHostingView as? NSHostingView<RemoteConnectionView>,
+              let viewModel = remoteConnectionViewModel else { return }
+        var view = RemoteConnectionView(
+            viewModel: viewModel,
+            onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
+            sshKeyManager: sshKeyManager,
+            sftpExecutor: SystemSFTPExecutor()
+        )
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncSearchBarVibrancyOverride(_ override: NSAppearance?) {
+        guard isSearchBarVisible,
+              let hostingView = searchBarHostingView,
+              let viewModel = searchBarViewModel else { return }
+        var view = ScrollbackSearchBarView(
+            viewModel: viewModel,
+            onClose: { [weak self] in self?.dismissSearchBar() }
+        )
+        view.onNavigateToResult = { [weak self] result in
+            guard let self, let surfaceID = self.activeTerminalSurfaceView?.terminalViewModel?.surfaceID else { return }
+            self.bridge.scrollToSearchResult(
+                surfaceID: surfaceID,
+                lineNumber: result.lineNumber
+            )
+        }
+        view.vibrancyAppearanceOverride = override
+        hostingView.rootView = view
+    }
+
+    private func syncSubagentPanelsVibrancyOverride(_ override: NSAppearance?) {
+        for (_, view) in panelContentViews {
+            (view as? SubagentContentView)?.setVibrancyAppearanceOverride(override)
         }
     }
 }
