@@ -5,6 +5,27 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Editable **Keybindings** tab in Preferences (replaces the previous read-only list). Lists every rebindable action from a new canonical catalog — 39 actions across Window, Tabs, Splits, Navigation, Editor, Review, Markdown, and Remote categories — with the current shortcut rendered in macOS modifier glyphs. Each row exposes **Edit** and **Reset** buttons; the top of the editor has a **Reset All** button plus a banner that lists any conflicting action groups in red. Saving is blocked until conflicts are resolved.
+- **Capture modal** opens from the Edit button, consumes the next keystroke via a native `NSView`-backed field, validates it parses through `KeybindingShortcut`, and surfaces inline warnings when the captured shortcut collides with another action. Cancel abandons the edit, Save commits it, and a dedicated Clear button unbinds the action entirely.
+- New domain types: `KeybindingShortcut` (canonical plus-separated string `<->` pretty macOS glyph label `<->` `NSEvent`), `KeybindingAction` + `KeybindingActionCatalog` (single source of truth for the 36 rebindable actions, categories, defaults), and `KeybindingsConfig.customOverrides: [String: String]` for extending the TOML `[keybindings]` section without breaking the eight legacy typed fields.
+- `ConfigService` now parses both legacy kebab-case keys (`new-tab = "cmd+t"`) and quoted dotted catalog ids (`"split.close" = "cmd+shift+w"`) side-by-side. Quoted TOML keys are unquoted before lookup, unknown ids are ignored, and matching values are dropped from `customOverrides` so `[keybindings]` only stores meaningful user changes.
+- `KeybindingsConfig.tomlSection()` is the single emitter used by both `ConfigService.generateDefaultToml()` and `PreferencesViewModel.generateToml()`, keeping the wire format identical regardless of who triggers the save.
+
+### Changed
+- Extracted `KeybindingsConfig` from `Sources/Domain/Protocols/ConfigProviding.swift` into its own file under `Sources/Domain/Models/` to keep both files under the 600-line quality budget after the new catalog helpers landed.
+- `PreferencesViewModel` gained `applyKeybindings(_:)` / `effectiveKeybindings` / a lazy `keybindingsEditor`; the save path now threads pending keybindings through the same TOML writer that handles General, Appearance, Agent Detection, Notifications, and Terminal sections.
+
+### Notes / TODO
+- The menu bar shortcut `keyEquivalent` values in `Sources/App/AppDelegate+MenuSetup.swift` and `Sources/UI/Window/MainWindowController*.swift` remain hardcoded. Applying a rebinding to the live menu bar (so Cmd+Shift+T rebound to Cmd+Alt+T immediately changes the menu item's `keyEquivalent`) requires touching those files, which were reserved for a separate session — documented here so the next session can pick it up. Until then, the editor persists changes correctly to `~/.config/cocxy/config.toml` and `ConfigWatcher` picks them up on reload; menu-bar glyphs update only after a restart.
+- `KeybindingsEditorViewModel.assign` stores shortcuts in their canonical plus-separated form regardless of the order the user held modifiers, so a later rebinding pass can compare stored values without re-parsing.
+
+### Testing
+- +45 Swift Testing cases across three suites: `KeybindingShortcut` parsing/canonical/pretty/catalog integrity (19), `KeybindingsEditorViewModel` initial state/mutation/conflicts/persistence (15), and `KeybindingsConfig` TOML round-trip (11).
+- Full suite after this change: 2514 XCTest + 1354 Swift Testing = **3868 tests**, zero failures, debug + release builds green.
+
 ## [0.1.75] - 2026-04-18
 
 ### Added
