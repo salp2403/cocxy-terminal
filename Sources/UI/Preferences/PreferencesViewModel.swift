@@ -69,6 +69,22 @@ final class PreferencesViewModel: ObservableObject {
     /// Controls vibrancy on sidebar, tab strip, and status bar.
     @Published var backgroundOpacity: Double
 
+    /// Forced chrome appearance while the window is transparent.
+    ///
+    /// Has no visible effect when `backgroundOpacity >= 1.0`.
+    /// Default `.followSystem` preserves the pre-existing behaviour where
+    /// translucent chrome inherits the active system appearance.
+    @Published var transparencyChromeTheme: TransparencyChromeTheme
+
+    /// Whether the chrome theme picker should be interactive.
+    ///
+    /// Mirrors the runtime rule: the override only matters while the
+    /// window is translucent, so we disable the picker when fully opaque
+    /// so users aren't surprised by an apparently dead control.
+    var isTransparencyChromeThemeEditable: Bool {
+        backgroundOpacity < 1.0
+    }
+
     // MARK: - Agent Detection
 
     /// Master switch for agent detection.
@@ -188,6 +204,7 @@ final class PreferencesViewModel: ObservableObject {
             || ligatures != c.appearance.ligatures
             || fontThicken != c.appearance.fontThicken
             || backgroundOpacity != c.appearance.backgroundOpacity
+            || transparencyChromeTheme != c.appearance.transparencyChromeTheme
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -218,6 +235,7 @@ final class PreferencesViewModel: ObservableObject {
         ligatures = c.appearance.ligatures
         fontThicken = c.appearance.fontThicken
         backgroundOpacity = c.appearance.backgroundOpacity
+        transparencyChromeTheme = c.appearance.transparencyChromeTheme
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -271,6 +289,7 @@ final class PreferencesViewModel: ObservableObject {
         self.ligatures = config.appearance.ligatures
         self.fontThicken = config.appearance.fontThicken
         self.backgroundOpacity = config.appearance.backgroundOpacity
+        self.transparencyChromeTheme = config.appearance.transparencyChromeTheme
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -380,7 +399,8 @@ final class PreferencesViewModel: ObservableObject {
                 ligatures: ligatures,
                 fontThicken: fontThicken,
                 backgroundOpacity: clampedOpacity,
-                backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius
+                backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius,
+                transparencyChromeTheme: transparencyChromeTheme
             ),
             terminal: TerminalConfig(
                 scrollbackLines: savedConfig.terminal.scrollbackLines,
@@ -453,6 +473,7 @@ final class PreferencesViewModel: ObservableObject {
         ligatures = \(ligatures)
         font-thicken = \(fontThicken)
         background-opacity = \(String(format: "%.2f", clampedOpacity))
+        transparency-chrome-theme = "\(transparencyChromeTheme.rawValue)"
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)

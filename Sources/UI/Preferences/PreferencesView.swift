@@ -347,6 +347,39 @@ struct EditableAppearanceSection: View {
                 Text("Lower values enable a glass effect on the sidebar, tab strip, and status bar.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+
+                Picker(
+                    "Chrome theme",
+                    selection: $viewModel.transparencyChromeTheme
+                ) {
+                    Text("Follow System").tag(TransparencyChromeTheme.followSystem)
+                    Text("Light").tag(TransparencyChromeTheme.light)
+                    Text("Dark").tag(TransparencyChromeTheme.dark)
+                }
+                .disabled(!viewModel.isTransparencyChromeThemeEditable)
+                .help(
+                    viewModel.isTransparencyChromeThemeEditable
+                        ? "Pin the translucent sidebar, tab strip, and status bar "
+                        + "to a light or dark tint independently of macOS. Only "
+                        + "visible while the window is transparent."
+                        : "Requires transparency. Lower the background opacity "
+                        + "to enable this picker."
+                )
+                .accessibilityLabel("Transparency chrome theme")
+                .accessibilityHint(
+                    "Choose whether the translucent sidebar, tab strip, and "
+                    + "status bar follow the system appearance or stay "
+                    + "pinned to a light or dark tint."
+                )
+
+                Text(
+                    "Pins the sidebar, tab strip, and status bar to a light or "
+                    + "dark tint independently of macOS. Only visible while the "
+                    + "window is transparent."
+                )
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
