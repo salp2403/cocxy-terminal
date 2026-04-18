@@ -796,16 +796,22 @@ extension AppDelegate {
     // MARK: - Per-Surface Store Routing
 
     /// Resolves the surface whose per-surface store entry should mirror
-    /// a tab-level agent mutation during the v0.1.71 dual-write phase.
+    /// an agent-state mutation routed via this tab.
     ///
     /// Priority order:
     /// 1. An explicit `preferred` surface — used when the caller already
     ///    has a `StateContext.surfaceID` (pattern detector populates it
-    ///    from the originating split, hook resolution does so after 2i).
+    ///    from the originating split; hook resolution does so after the
+    ///    session-to-tab binding records the primary surface).
     /// 2. CWD-based resolution through the bridge's
-    ///    `resolveSurfaceID(matchingCwd:)` — used for hook events whose
-    ///    `cwd` identifies the surface even when the engine context is
-    ///    `nil` (legacy wiring path).
+    ///    `resolveSurfaceID(matchingCwd:within:)` — used for hook events
+    ///    whose `cwd` identifies which split of the tab fired, but
+    ///    **restricted to the surfaces that belong to `tabID`**. Without
+    ///    the restriction, two tabs sharing a CWD (which happens by
+    ///    design when a new tab inherits the previously active tab's
+    ///    working directory) could route each other's agent state,
+    ///    because the bridge iterates its surface dictionary in
+    ///    non-deterministic order.
     /// 3. Tab-level fallback — the first surface registered on the tab.
     ///    This mirrors the pre-refactor semantic where a tab had exactly
     ///    one surface and keeps sidebar behavior intact for tabs without
@@ -818,7 +824,8 @@ extension AppDelegate {
     ///
     /// - Parameters:
     ///   - controller: The controller owning the tab being mutated.
-    ///   - tabID: Tab whose primary surface is used as the final fallback.
+    ///   - tabID: Tab whose surfaces bound the CWD search and whose
+    ///     primary surface is used as the final fallback.
     ///   - preferred: Explicit surfaceID supplied by the caller.
     ///   - cwdHint: CWD reported by the external event, when available.
     /// - Returns: The target surface, or `nil` if the tab has no surfaces.
@@ -831,13 +838,18 @@ extension AppDelegate {
         if let preferred {
             return preferred
         }
+        let tabSurfaces = controller.surfaceIDs(for: tabID)
         if let cwdHint,
            !cwdHint.isEmpty,
            let cocxyBridge = bridge as? CocxyCoreBridge,
-           let resolved = cocxyBridge.resolveSurfaceID(matchingCwd: cwdHint) {
+           !tabSurfaces.isEmpty,
+           let resolved = cocxyBridge.resolveSurfaceID(
+               matchingCwd: cwdHint,
+               within: Set(tabSurfaces)
+           ) {
             return resolved
         }
-        return controller.surfaceIDs(for: tabID).first
+        return tabSurfaces.first
     }
 
     // MARK: - Tab CWD Matching

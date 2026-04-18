@@ -841,19 +841,33 @@ final class CocxyCoreBridge: TerminalEngine {
     ///
     /// Matches follow iteration order over the internal surfaces
     /// dictionary. When multiple surfaces share the same CWD (e.g.,
-    /// splits in the same directory), callers that need focused-aware
-    /// disambiguation must resolve that themselves after the match —
-    /// the bridge has no UI focus state to break the tie.
+    /// splits in the same directory, or a newly created tab whose
+    /// initial CWD is inherited from the previously active tab),
+    /// callers that already know which surfaces belong to the target
+    /// tab should pass them via `allowed` to avoid routing agent state
+    /// into a sibling tab that happens to share the same CWD.
     ///
-    /// - Parameter cwd: Absolute path or file URL path reported by an
-    ///   external source (e.g., a Claude Code hook event's `cwd`).
+    /// - Parameters:
+    ///   - cwd: Absolute path or file URL path reported by an external
+    ///     source (e.g., a Claude Code hook event's `cwd`).
+    ///   - allowed: Optional set of surface IDs to restrict the search
+    ///     to. When `nil` (default), every live surface is considered —
+    ///     preserving the historical behavior for callers that have no
+    ///     tab context. When non-nil, only surfaces in the set are
+    ///     evaluated; this eliminates cross-tab aliasing when two tabs
+    ///     share a working directory.
     /// - Returns: The surface with a matching CWD, or `nil` when no
-    ///   live surface matches.
-    func resolveSurfaceID(matchingCwd cwd: String) -> SurfaceID? {
+    ///   live surface (within `allowed`, when provided) matches.
+    func resolveSurfaceID(
+        matchingCwd cwd: String,
+        within allowed: Set<SurfaceID>? = nil
+    ) -> SurfaceID? {
         let normalizedTarget = URL(fileURLWithPath: cwd).standardizedFileURL.path
         guard !normalizedTarget.isEmpty else { return nil }
+        if let allowed, allowed.isEmpty { return nil }
 
-        let pairs: [(SurfaceID, String?)] = surfaces.map { surfaceID, state in
+        let pairs: [(SurfaceID, String?)] = surfaces.compactMap { surfaceID, state in
+            if let allowed, !allowed.contains(surfaceID) { return nil }
             let path = state.lastKnownWorkingDirectory?.path
                 ?? cwdProvider?(surfaceID)
             return (surfaceID, path)

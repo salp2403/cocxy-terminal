@@ -18,8 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TabItemView.configureMiniIndicators` now consumes `TabDisplayItem.perSurfaceAgents` (`[SurfaceAgentSnapshot]`) instead of the legacy `additionalActiveAgentStates` (`[AgentState]`). Backward compatibility is preserved: the legacy field and its provider stay populated for consumers that still depend on them; they will be retired in a follow-up cleanup once every call site has migrated.
 - `AgentSummary` gains a `perSurfaceSnapshots` field consumed by the status bar mini-matrix. Single-split tabs keep the compact header because the matrix only renders at `>=2` active agents.
 
+### Fixed
+- Agent state written in response to a hook event can no longer leak into a sibling tab that shares the same working directory. When the user creates a new tab, its initial CWD is inherited from the previously active tab; launching an agent in the new tab then sent a hook with that shared CWD, and the per-surface routing picked the first live surface the bridge iterated over — frequently the older tab's primary — so the sidebar pill, status-bar text, and notification ring appeared on the wrong tab. `CocxyCoreBridge.resolveSurfaceID(matchingCwd:)` now accepts an optional `within:` surface-ID filter, and `AppDelegate+AgentWiring.surfaceIDForDualWrite` passes the surfaces that belong to the resolved tab so the CWD match stays inside the correct boundary. The legacy single-argument call path is preserved for any caller that still lacks a tab context.
+
 ### Testing
-- +17 Swift Testing cases: 12 for the new resolver methods and `SurfaceAgentSnapshot` equality, 4 for the Fase B provider wiring on `TabBarViewModel`, 1 suite helper. Full suite: 2514 XCTest + 1326 Swift Testing = 3840 tests, zero failures, debug + release builds green.
+- +17 Swift Testing cases for the new sidebar + status-bar providers (12 resolver, 4 viewModel wiring, 1 equality).
+- +5 Swift Testing cases for the new `resolveSurfaceID(matchingCwd:within:)` filter: legacy nil-allowed behavior, restriction to an explicit surface set, exclusion when the match lies outside the set, empty-set short-circuit, and a regression scenario where two tabs share a CWD and each must resolve to its own surface.
+- Full suite: 2514 XCTest + 1331 Swift Testing = 3845 tests, zero failures, debug + release builds green.
 
 ## [0.1.73] - 2026-04-17
 
