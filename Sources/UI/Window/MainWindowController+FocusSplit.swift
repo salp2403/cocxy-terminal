@@ -48,14 +48,38 @@ extension MainWindowController {
         }
     }
 
-    /// Helper that locates the terminal host view for `surfaceID` and
-    /// installs it as the window's first responder.
+    /// Moves AppKit focus to the host view that owns `surfaceID` AND
+    /// refreshes every UI consumer that derives from the "which split
+    /// is focused" input.
     ///
     /// Extracted from `focusSplit(tabID:surfaceID:)` so tests can
     /// exercise the focus transition without having to stage a full
-    /// tab switch. The method is intentionally internal (not
-    /// `fileprivate`) so a future cleanup can share it with other
-    /// per-surface focus routes (e.g. Cmd+click on a timeline entry).
+    /// tab switch. Kept `internal` (not `fileprivate`) so a future
+    /// cleanup can share it with other per-surface focus routes
+    /// (e.g. Cmd+click on a timeline entry).
+    ///
+    /// ## Refresh set
+    ///
+    /// After `makeFirstResponder(...)`, callers that read
+    /// `focusedSplitSurfaceView?.terminalViewModel?.surfaceID` start
+    /// returning the new surface. But most sidebar/status-bar consumers
+    /// populate their snapshots during a separate render pass driven
+    /// by Combine publishers — publishers that don't fire when the
+    /// click stays on the SAME tab. Without an explicit refresh, the
+    /// Fase B focused-border stays on the old mini-pill, the status
+    /// bar mini-matrix keeps highlighting the old dot, the split
+    /// manager's `focusedLeafID` still points at the previous leaf,
+    /// and the agent-progress overlay may keep showing the previous
+    /// split's metrics.
+    ///
+    /// This method explicitly fans the change out to four places:
+    /// 1. The split manager's `focusedLeafID` (so `paneSnapshot()` and
+    ///    downstream consumers agree on who owns focus).
+    /// 2. The sidebar view model (so per-split mini-pills re-render
+    ///    with the new `isFocused` bit).
+    /// 3. The status bar (so the per-split mini-matrix re-renders).
+    /// 4. The per-terminal agent progress overlay (so its counters
+    ///    follow the newly focused split).
     @MainActor
     func applyFocusToSurface(surfaceID: SurfaceID) {
         guard
@@ -65,5 +89,39 @@ extension MainWindowController {
             return
         }
         window.makeFirstResponder(hostView)
+
+        // Keep the domain-level split focus in sync with AppKit so
+        // later queries via `paneSnapshot()` pick the right leaf.
+        syncSplitManagerFocus(to: hostView)
+
+        // Re-render every UI surface that reads focused-split state
+        // through the per-surface resolver. `syncWithManager()` re-
+        // populates `TabDisplayItem.perSurfaceAgents` (mini-pills) and
+        // `refreshStatusBar()` re-computes `AgentSummary` (mini-matrix
+        // + active-agent pill). `updateAgentProgressOverlay()` follows
+        // the resolved focused surface for its counters.
+        tabBarViewModel?.syncWithManager()
+        refreshStatusBar()
+        updateAgentProgressOverlay()
+    }
+
+    /// Aligns the active split manager's `focusedLeafID` with the
+    /// given AppKit host view.
+    ///
+    /// Uses `collectLeafViews()` to enumerate the split tree's panes
+    /// in document order and matches the target view by reference.
+    /// When the view is not in the split tree (e.g. the hostView is
+    /// the tab's primary terminal in a single-surface tab), the
+    /// lookup silently returns — `makeFirstResponder` has already
+    /// landed, and the split manager has no leaf to update.
+    @MainActor
+    private func syncSplitManagerFocus(to hostView: NSView) {
+        guard let splitManager = activeSplitManager else { return }
+        let leaves = splitManager.rootNode.allLeafIDs()
+        let leafViews = collectLeafViews()
+        guard leafViews.count == leaves.count else { return }
+        if let index = leafViews.firstIndex(where: { $0 === hostView }) {
+            splitManager.focusLeaf(id: leaves[index].leafID)
+        }
     }
 }

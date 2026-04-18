@@ -311,13 +311,16 @@ final class TabBarViewModel: ObservableObject {
             let latestUnread = notificationManager?.latestUnreadForTab(tab.id)
             let previewText: String? = latestUnread.map { "\($0.title) — \($0.body)" }
 
-            // Resolve the per-surface agent snapshot for this tab. During
-            // Fase 3 the resolver picks the focused split first, then the
-            // primary surface, and finally any surface with activity,
-            // falling back to the Tab fields when the per-surface store
-            // has no entry yet. `processName` stays on the Tab because
-            // foreground-process tracking is not mirrored into the store
-            // during this phase.
+            // Resolve the per-surface agent snapshot for this tab
+            // through the injected resolver. Post-Fase 4 the priority
+            // chain is focused split > primary surface > any other
+            // surface with activity > `.idle` fallback; the resolver
+            // no longer reads agent fields off `Tab` because those
+            // fields were retired in Fase 4 when the per-surface store
+            // became the sole source of truth. `processName` stays on
+            // `Tab` because foreground-process tracking is tab-level
+            // metadata (PTY child PID and friends), not per-surface
+            // agent state.
             let resolved = agentStateResolver(tab)
 
             return TabDisplayItem(
