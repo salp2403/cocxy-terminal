@@ -55,6 +55,14 @@ extension Design {
         var paneCountLabel: String {
             panes.count == 1 ? "1 pane" : "\(panes.count) panes"
         }
+
+        /// Panes that should populate the sidebar mini-matrix. Idle
+        /// panes are excluded per `AuroraPane.contributesToMatrix` so
+        /// the sidebar only surfaces live / just-finished activity and
+        /// stays aligned with the model contract the tests pin.
+        var matrixPanes: [AuroraPane] {
+            panes.filter(\.contributesToMatrix)
+        }
     }
 
     /// A workspace is the top-level node in the sidebar tree. It

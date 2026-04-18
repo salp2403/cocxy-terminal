@@ -68,8 +68,8 @@ struct GlassRenderModeSwiftTestingTests {
         #expect(Design.resolveGlassRenderMode(inputs) == .opaque)
     }
 
-    @Test("Reduce Transparency forces the visual-effect fallback")
-    func reduceTransparencyForcesVisualEffect() {
+    @Test("Reduce Transparency forces the opaque surface on every platform")
+    func reduceTransparencyForcesOpaque() {
         let capable = Design.GlassRenderInputs(
             supportsLiquidGlass: true,
             reduceTransparency: true,
@@ -80,8 +80,8 @@ struct GlassRenderModeSwiftTestingTests {
             reduceTransparency: true,
             increaseContrast: false
         )
-        #expect(Design.resolveGlassRenderMode(capable) == .visualEffect)
-        #expect(Design.resolveGlassRenderMode(legacy) == .visualEffect)
+        #expect(Design.resolveGlassRenderMode(capable) == .opaque)
+        #expect(Design.resolveGlassRenderMode(legacy) == .opaque)
     }
 
     // MARK: - Platform capability

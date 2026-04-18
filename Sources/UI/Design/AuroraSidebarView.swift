@@ -215,7 +215,7 @@ extension Design {
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Spacer()
-                        MiniMatrixView(panes: session.panes)
+                        MiniMatrixView(panes: session.matrixPanes)
                     }
                     HStack(spacing: Spacing.xxSmall) {
                         Circle()

@@ -91,6 +91,38 @@ struct AuroraWorkspaceModelTests {
         #expect(finished.contributesToMatrix == true)
     }
 
+    @Test("AuroraSession.matrixPanes filters idle panes so the sidebar matrix honours the contract")
+    func matrixPanesFiltersIdleStates() {
+        let idlePane = Design.AuroraPane(id: "p-idle", name: "idle", agent: .claude, state: .idle)
+        let workingPane = Design.AuroraPane(id: "p-work", name: "work", agent: .claude, state: .working)
+        let finishedPane = Design.AuroraPane(id: "p-done", name: "done", agent: .claude, state: .finished)
+        let session = Design.AuroraSession(
+            id: "s",
+            name: "mixed",
+            agent: .claude,
+            state: .working,
+            panes: [idlePane, workingPane, finishedPane]
+        )
+        let matrixIDs = session.matrixPanes.map(\.id)
+        #expect(matrixIDs == ["p-work", "p-done"])
+        #expect(session.matrixPanes.allSatisfy { $0.state != .idle })
+    }
+
+    @Test("AuroraSession.matrixPanes returns an empty list when every pane is idle")
+    func matrixPanesEmptyWhenAllIdle() {
+        let session = Design.AuroraSession(
+            id: "s",
+            name: "dormant",
+            agent: .shell,
+            state: .idle,
+            panes: [
+                Design.AuroraPane(id: "a", name: "a", agent: .shell, state: .idle),
+                Design.AuroraPane(id: "b", name: "b", agent: .shell, state: .idle),
+            ]
+        )
+        #expect(session.matrixPanes.isEmpty)
+    }
+
     // MARK: - Sample catalogue
 
     @Test("Shipping sample workspaces cover at least three distinct agent accents")

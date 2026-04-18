@@ -93,10 +93,10 @@ extension Design {
     /// 2. If Increase Contrast is on, force `.opaque`. This is
     ///    non-negotiable: the material cannot render with enough
     ///    contrast to satisfy the accessibility setting.
-    /// 3. If Reduce Transparency is on, force `.visualEffect`. Both
-    ///    Liquid Glass and the opaque surface are disallowed — users
-    ///    who opt into the vibrancy fallback still want the legacy
-    ///    blurred panel.
+    /// 3. If Reduce Transparency is on, force `.opaque` (matching the
+    ///    file-level contract and Apple's accessibility guidance).
+    ///    `NSVisualEffectView` still draws a translucent blur, so
+    ///    returning it here would silently violate the user request.
     /// 4. If the platform supports real Liquid Glass, return
     ///    `.liquid`. Otherwise fall back to `.visualEffect`.
     static func resolveGlassRenderMode(
@@ -109,7 +109,7 @@ extension Design {
             return .opaque
         }
         if inputs.reduceTransparency {
-            return .visualEffect
+            return .opaque
         }
         if inputs.supportsLiquidGlass {
             return .liquid
