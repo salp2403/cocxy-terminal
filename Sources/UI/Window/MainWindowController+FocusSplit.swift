@@ -72,7 +72,7 @@ extension MainWindowController {
     /// and the agent-progress overlay may keep showing the previous
     /// split's metrics.
     ///
-    /// This method explicitly fans the change out to four places:
+    /// This method explicitly fans the change out to five places:
     /// 1. The split manager's `focusedLeafID` (so `paneSnapshot()` and
     ///    downstream consumers agree on who owns focus).
     /// 2. The sidebar view model (so per-split mini-pills re-render
@@ -80,6 +80,8 @@ extension MainWindowController {
     /// 3. The status bar (so the per-split mini-matrix re-renders).
     /// 4. The per-terminal agent progress overlay (so its counters
     ///    follow the newly focused split).
+    /// 5. The horizontal tab strip (so the active-leaf highlight
+    ///    follows the new focused split instead of the previous one).
     @MainActor
     func applyFocusToSurface(surfaceID: SurfaceID) {
         guard
@@ -100,9 +102,14 @@ extension MainWindowController {
         // `refreshStatusBar()` re-computes `AgentSummary` (mini-matrix
         // + active-agent pill). `updateAgentProgressOverlay()` follows
         // the resolved focused surface for its counters.
+        // `refreshTabStrip()` rebuilds the horizontal workspace toolbar
+        // so the active-leaf chip highlights the new split instead of
+        // the previous one (the strip reads `activeSplitManager.focusedLeafID`
+        // which we just updated in `syncSplitManagerFocus`).
         tabBarViewModel?.syncWithManager()
         refreshStatusBar()
         updateAgentProgressOverlay()
+        refreshTabStrip()
     }
 
     /// Aligns the active split manager's `focusedLeafID` with the
