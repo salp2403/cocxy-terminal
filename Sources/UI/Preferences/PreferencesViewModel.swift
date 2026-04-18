@@ -508,15 +508,7 @@ final class PreferencesViewModel: ObservableObject {
         position = "\(defaults.quickTerminal.position.rawValue)"
         height-percentage = \(defaults.quickTerminal.heightPercentage)
 
-        [keybindings]
-        new-tab = "\(defaults.keybindings.newTab)"
-        close-tab = "\(defaults.keybindings.closeTab)"
-        next-tab = "\(defaults.keybindings.nextTab)"
-        prev-tab = "\(defaults.keybindings.prevTab)"
-        split-vertical = "\(defaults.keybindings.splitVertical)"
-        split-horizontal = "\(defaults.keybindings.splitHorizontal)"
-        goto-attention = "\(defaults.keybindings.gotoAttention)"
-        toggle-quick-terminal = "\(defaults.keybindings.toggleQuickTerminal)"
+        \(defaults.keybindings.tomlSection())
 
         [sessions]
         auto-save = \(defaults.sessions.autoSave)

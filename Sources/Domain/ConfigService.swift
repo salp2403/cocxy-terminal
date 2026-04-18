@@ -226,15 +226,7 @@ final class ConfigService: ConfigProviding {
         position = "\(defaults.quickTerminal.position.rawValue)"
         height-percentage = \(defaults.quickTerminal.heightPercentage)
 
-        [keybindings]
-        new-tab = "\(defaults.keybindings.newTab)"
-        close-tab = "\(defaults.keybindings.closeTab)"
-        next-tab = "\(defaults.keybindings.nextTab)"
-        prev-tab = "\(defaults.keybindings.prevTab)"
-        split-vertical = "\(defaults.keybindings.splitVertical)"
-        split-horizontal = "\(defaults.keybindings.splitHorizontal)"
-        goto-attention = "\(defaults.keybindings.gotoAttention)"
-        toggle-quick-terminal = "\(defaults.keybindings.toggleQuickTerminal)"
+        \(defaults.keybindings.tomlSection())
 
         [sessions]
         auto-save = \(defaults.sessions.autoSave)
@@ -479,19 +471,75 @@ final class ConfigService: ConfigProviding {
     }
 
     /// Parses the `[keybindings]` section.
+    ///
+    /// Accepts two key styles side-by-side for forward compatibility:
+    ///   1. Legacy kebab-case fields (`new-tab = "cmd+t"`) mapped to the eight
+    ///      typed properties on `KeybindingsConfig`.
+    ///   2. Dotted catalog ids (`"split.close" = "cmd+shift+w"`) that appear
+    ///      as quoted TOML keys. These end up in `customOverrides`.
+    ///
+    /// If both key styles reference the same action (e.g., `new-tab` and
+    /// `"tab.new"` both present), the dotted value wins because it is the
+    /// canonical form the editor writes back.
     private func parseKeybindingsConfig(from parsed: [String: TOMLValue]) -> KeybindingsConfig {
         let table = extractTable("keybindings", from: parsed)
         let defaults = KeybindingsConfig.defaults
 
+        // Legacy typed fields populate their dedicated properties.
+        var newTab = stringValue(table["new-tab"]) ?? defaults.newTab
+        var closeTab = stringValue(table["close-tab"]) ?? defaults.closeTab
+        var nextTab = stringValue(table["next-tab"]) ?? defaults.nextTab
+        var prevTab = stringValue(table["prev-tab"]) ?? defaults.prevTab
+        var splitVertical = stringValue(table["split-vertical"]) ?? defaults.splitVertical
+        var splitHorizontal = stringValue(table["split-horizontal"]) ?? defaults.splitHorizontal
+        var gotoAttention = stringValue(table["goto-attention"]) ?? defaults.gotoAttention
+        var toggleQuickTerminal = stringValue(table["toggle-quick-terminal"]) ?? defaults.toggleQuickTerminal
+
+        // Dotted-id entries can override either a legacy field or land in
+        // `customOverrides`. Walk every key in the TOML table once.
+        var customOverrides: [String: String] = [:]
+        let legacyActionIds: Set<String> = Set(KeybindingActionCatalog.legacyFieldMapping.values)
+        let kebabKeys: Set<String> = Set(KeybindingActionCatalog.legacyFieldMapping.keys)
+
+        for (rawKey, rawValue) in table {
+            guard case .string(let canonical) = rawValue else { continue }
+            // Quoted TOML keys arrive with their surrounding double quotes
+            // (e.g., `\"tab.new\"`). Normalize before lookup.
+            let key = Self.unquoteKey(rawKey)
+
+            // Legacy kebab keys already handled above.
+            if kebabKeys.contains(key) { continue }
+
+            // Only accept ids the editor knows about to avoid storing junk.
+            guard let action = KeybindingAction.catalogEntry(for: key) else { continue }
+
+            if legacyActionIds.contains(key) {
+                switch key {
+                case KeybindingActionCatalog.tabNew.id: newTab = canonical
+                case KeybindingActionCatalog.tabClose.id: closeTab = canonical
+                case KeybindingActionCatalog.tabNext.id: nextTab = canonical
+                case KeybindingActionCatalog.tabPrevious.id: prevTab = canonical
+                case KeybindingActionCatalog.splitVertical.id: splitVertical = canonical
+                case KeybindingActionCatalog.splitHorizontal.id: splitHorizontal = canonical
+                case KeybindingActionCatalog.remoteGoToAttention.id: gotoAttention = canonical
+                case KeybindingActionCatalog.windowQuickTerminal.id: toggleQuickTerminal = canonical
+                default: break
+                }
+            } else if canonical != action.defaultShortcut.canonical {
+                customOverrides[action.id] = canonical
+            }
+        }
+
         return KeybindingsConfig(
-            newTab: stringValue(table["new-tab"]) ?? defaults.newTab,
-            closeTab: stringValue(table["close-tab"]) ?? defaults.closeTab,
-            nextTab: stringValue(table["next-tab"]) ?? defaults.nextTab,
-            prevTab: stringValue(table["prev-tab"]) ?? defaults.prevTab,
-            splitVertical: stringValue(table["split-vertical"]) ?? defaults.splitVertical,
-            splitHorizontal: stringValue(table["split-horizontal"]) ?? defaults.splitHorizontal,
-            gotoAttention: stringValue(table["goto-attention"]) ?? defaults.gotoAttention,
-            toggleQuickTerminal: stringValue(table["toggle-quick-terminal"]) ?? defaults.toggleQuickTerminal
+            newTab: newTab,
+            closeTab: closeTab,
+            nextTab: nextTab,
+            prevTab: prevTab,
+            splitVertical: splitVertical,
+            splitHorizontal: splitHorizontal,
+            gotoAttention: gotoAttention,
+            toggleQuickTerminal: toggleQuickTerminal,
+            customOverrides: customOverrides
         )
     }
 
@@ -551,5 +599,22 @@ final class ConfigService: ConfigProviding {
     /// Clamps a comparable value to a range.
     private func clamp<T: Comparable>(_ value: T, min: T, max: T) -> T {
         Swift.min(Swift.max(value, min), max)
+    }
+
+    /// Strips surrounding double or single quotes from a TOML table key.
+    ///
+    /// The shared TOML parser preserves quotes around literal keys (for
+    /// example `\"tab.new\"` for a dotted key). Keybindings need to match
+    /// both quoted and bare forms, so this helper normalizes both.
+    fileprivate static func unquoteKey(_ rawKey: String) -> String {
+        if rawKey.count >= 2 {
+            if rawKey.hasPrefix("\"") && rawKey.hasSuffix("\"") {
+                return String(rawKey.dropFirst().dropLast())
+            }
+            if rawKey.hasPrefix("'") && rawKey.hasSuffix("'") {
+                return String(rawKey.dropFirst().dropLast())
+            }
+        }
+        return rawKey
     }
 }
