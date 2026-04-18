@@ -5,6 +5,25 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- New `appearance.transparency-chrome-theme` TOML key lets users pin the translucent sidebar, horizontal tab strip, and status bar to a light or dark tint independently of the macOS system appearance. Valid values: `"follow-system"` (default, preserves current behaviour), `"light"`, `"dark"`. Only applies while `background-opacity` is below `1.0`; otherwise the chrome is opaque and the override has no visible effect.
+- New Preferences toggle: Appearance → Transparency → Chrome theme. The Picker surfaces all three options, disables itself when the window is fully opaque (with a tooltip explaining "Requires transparency"), and hot-reloads via the existing config subscription so changes apply without restarting Cocxy.
+- Added accessibility metadata (label + hint) on the new picker so VoiceOver announces the setting's purpose.
+
+### Changed
+- `AppearanceConfig` now carries a new `transparencyChromeTheme` property. Custom `Decodable` init decodes cleanly from legacy session snapshots that lack the key (falls back to `.followSystem`) so previously persisted configs and sessions round-trip unchanged.
+- `TabBarView`, `HorizontalTabStripView`, and `StatusBarView` (plus the shared `VisualEffectBackground` wrapper used by Dashboard, Timeline, Code Review, Browser, Command Palette, and several other panels) accept an optional `NSAppearance` override on their vibrancy layers. `MainWindowController.applyEffectiveAppearance` resolves the enum once per config change and fans the override out to every chrome site; `refreshStatusBar` and `buildRootView` mirror the override on initial render.
+
+### Testing
+- 25 new Swift Testing cases across three suites: `TransparencyChromeThemeRoundTripTests` (TOML round-trip for all three values, tolerant parsing of unknown strings / wrong types / missing keys, default template, and legacy JSON backwards compatibility), `PreferencesViewModelTransparencyChromeThemeTests` (load reflects config, dirty tracking, discard, save persistence, generated TOML shape, editable flag gating on `backgroundOpacity`), and `TransparencyChromeThemeVibrancyAppearanceTests` (enum → `NSAppearance?` resolver for every case).
+- Smoke test: launched app with `~/.config/cocxy/config.toml` containing `transparency-chrome-theme = "dark"` and `background-opacity = 0.85` — sidebar footer, workspace toolbar, and status bar rendered with forced dark vibrancy regardless of macOS appearance; toggling back to `"follow-system"` restored inheritance within the debounced reload window.
+
+### Notes
+- The override intentionally does not touch terminal buffer content — CocxyCore still renders according to the selected `[appearance] theme`. Only the translucent chrome tint changes. This matches the user's intent: wallpapers with warm vs cool tones should not require flipping the entire macOS appearance.
+- `VisualEffectBackground` keeps backward compatibility: existing call sites that don't pass `appearanceOverride` get `nil` (inherit), so the Dashboard, Timeline, Code Review, Browser, and other panels not covered by the chrome-theme setting stay on system appearance as before. A future phase could thread the override into those overlays if requested — no change shipped here.
+
 ## [0.1.74] - 2026-04-18
 
 ### Added
