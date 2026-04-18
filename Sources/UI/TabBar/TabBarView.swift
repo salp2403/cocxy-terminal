@@ -226,6 +226,11 @@ final class TabBarView: NSView {
     /// The closure receives the drag data and returns true if accepted.
     var onAcceptTabDrop: ((SessionDragData) -> Bool)?
 
+    /// Invoked when the user clicks a per-split mini-pill inside a tab
+    /// row. The host activates the owning tab if needed and focuses
+    /// the split that matches the surface ID.
+    var onFocusSplit: ((TabID, SurfaceID) -> Void)?
+
     /// Updates the "N in other windows" indicator in the sidebar footer.
     /// Called by MainWindowController when the aggregator publishes changes.
     func updateRemoteUnreadCount(_ count: Int) {
@@ -580,6 +585,9 @@ final class TabBarView: NSView {
                 }
                 itemView.onDragData = { [weak self] in
                     self?.viewModel.dragDataForTab(id: item.id)
+                }
+                itemView.onFocusSplit = { [weak self] surfaceID in
+                    self?.onFocusSplit?(item.id, surfaceID)
                 }
 
                 tabStackView.insertArrangedSubview(itemView, at: index)

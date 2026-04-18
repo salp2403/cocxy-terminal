@@ -588,6 +588,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sidebar.onAcceptTabDrop = { [weak self] dragData in
             self?.handleTabDrop(dragData) ?? false
         }
+        sidebar.onFocusSplit = { [weak self] tabID, surfaceID in
+            self?.focusSplit(tabID: tabID, surfaceID: surfaceID)
+        }
         if let appearance = configService?.current.appearance {
             sidebar.setSidebarTransparent(appearance.backgroundOpacity < 1.0)
         }
