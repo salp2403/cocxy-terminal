@@ -64,4 +64,53 @@ struct SurfaceAgentSnapshot: Equatable, Sendable {
         self.isFocused = isFocused
         self.isPrimary = isPrimary
     }
+
+    /// Two-character abbreviation derived from the detected agent's
+    /// canonical name. Used by sidebar mini-pills so each split shows
+    /// which agent is running at a glance without inflating the pill
+    /// width.
+    ///
+    /// Known agents map to stable codes: `Cl` for Claude, `Co` for
+    /// Codex, `Ge` for Gemini, `Ai` for Aider, `Gh` for GitHub Copilot,
+    /// `Cu` for Cursor, `Cn` for Cline, `Ct` for Continue, `Qw` for
+    /// Qwen, `Op` for OpenCode, `Ki` for Kiro. Unknown agent names fall
+    /// back to the first two ASCII letters of the name capitalized.
+    /// Returns `··` when no agent is detected, which in practice never
+    /// renders because the snapshot filter (`isActive || hasAgent`)
+    /// excludes surfaces without an agent or activity.
+    var agentAbbreviation: String {
+        guard let agent = state.detectedAgent else { return "\u{00B7}\u{00B7}" }
+        let normalized = agent.name.lowercased()
+        switch normalized {
+        case "claude", "claude-code", "claude code":
+            return "Cl"
+        case "codex":
+            return "Co"
+        case "gemini", "gemini-cli":
+            return "Ge"
+        case "aider":
+            return "Ai"
+        case "github-copilot", "copilot":
+            return "Gh"
+        case "cursor":
+            return "Cu"
+        case "cline":
+            return "Cn"
+        case "continue":
+            return "Ct"
+        case "qwen":
+            return "Qw"
+        case "opencode":
+            return "Op"
+        case "kiro":
+            return "Ki"
+        default:
+            let letters = agent.name.filter { $0.isLetter }
+            guard let first = letters.first else { return "\u{00B7}\u{00B7}" }
+            guard let second = letters.dropFirst().first else {
+                return String(first).uppercased()
+            }
+            return String(first).uppercased() + String(second).lowercased()
+        }
+    }
 }

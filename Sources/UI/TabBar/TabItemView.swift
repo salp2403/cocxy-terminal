@@ -27,6 +27,11 @@ final class TabItemView: NSView {
     /// Returns nil if dragging is not allowed (e.g., pinned tab).
     var onDragData: (() -> SessionDragData?)?
 
+    /// Invoked when the user clicks a per-split mini-pill inside this
+    /// tab row. The host (`MainWindowController`) activates the owning
+    /// tab if needed and focuses the split that matches the surface ID.
+    var onFocusSplit: ((SurfaceID) -> Void)?
+
     /// When true, shows a confirmation alert before closing the tab.
     /// Set by the parent view based on `confirmCloseProcess` config.
     var shouldConfirmClose: Bool = false
@@ -469,37 +474,45 @@ final class TabItemView: NSView {
         }
     }
 
-    // MARK: - Multi-Agent Mini Indicators (Fase 3e)
+    // MARK: - Multi-Agent Mini Pills (Fase B)
 
-    /// Maximum number of mini dots rendered inline before collapsing the
-    /// remainder into a `+N` overflow label. Five dots keeps the row
-    /// visually calm in narrow sidebars while still reflecting power
-    /// users that open many splits.
-    private static let miniIndicatorsMaxInline = 5
+    /// Maximum number of mini pills rendered inline before collapsing
+    /// the remainder into a `+N` overflow label. Kept at four because
+    /// each pill now reserves ~30pt for the agent abbreviation, so the
+    /// sidebar stays legible in narrow widths.
+    private static let miniIndicatorsMaxInline = 4
 
-    /// Populates the mini-indicators stack from the tab's
-    /// `additionalActiveAgentStates`. Each state becomes an 8x8 colored
-    /// dot whose color matches the primary pill scheme. An overflow
-    /// label appears when more states are present than the inline
-    /// budget allows.
+    /// Populates the mini-pills stack from the tab's `perSurfaceAgents`
+    /// snapshots.
+    ///
+    /// Each entry becomes a compact pill showing the agent's two-letter
+    /// abbreviation (`Cl`, `Co`, `Ge`, `Ai`, ...) with a colored dot and
+    /// an optional 1.5pt border when the split is focused. Clicking a
+    /// pill invokes `onFocusSplit(surfaceID)` so the host can activate
+    /// the tab (if needed) and route focus to the selected split. An
+    /// overflow label appears when more snapshots are present than the
+    /// inline budget allows.
     private func configureMiniIndicators(with item: TabDisplayItem) {
         miniIndicatorsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
-        guard !item.additionalActiveAgentStates.isEmpty else {
+        guard !item.perSurfaceAgents.isEmpty else {
             miniIndicatorsStack.isHidden = true
             return
         }
 
         miniIndicatorsStack.isHidden = false
 
-        let visible = item.additionalActiveAgentStates.prefix(Self.miniIndicatorsMaxInline)
-        for state in visible {
+        let visible = item.perSurfaceAgents.prefix(Self.miniIndicatorsMaxInline)
+        for snapshot in visible {
             miniIndicatorsStack.addArrangedSubview(
-                makeMiniIndicator(color: stateNSColor(for: state))
+                makeMiniPill(
+                    snapshot: snapshot,
+                    color: stateNSColor(for: snapshot.state.agentState)
+                )
             )
         }
 
-        let overflow = item.additionalActiveAgentStates.count - Self.miniIndicatorsMaxInline
+        let overflow = item.perSurfaceAgents.count - Self.miniIndicatorsMaxInline
         if overflow > 0 {
             let overflowLabel = NSTextField(labelWithString: "+\(overflow)")
             overflowLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
@@ -510,18 +523,20 @@ final class TabItemView: NSView {
         }
     }
 
-    /// Creates a small colored dot used for the multi-agent mini-pills.
-    private func makeMiniIndicator(color: NSColor) -> NSView {
-        let dot = NSView()
-        dot.wantsLayer = true
-        dot.layer?.cornerRadius = 4
-        dot.layer?.backgroundColor = color.cgColor
-        dot.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            dot.widthAnchor.constraint(equalToConstant: 8),
-            dot.heightAnchor.constraint(equalToConstant: 8),
-        ])
-        return dot
+    /// Builds a single mini-pill for one split snapshot, wiring the
+    /// click handler through `onFocusSplit`.
+    private func makeMiniPill(
+        snapshot: SurfaceAgentSnapshot,
+        color: NSColor
+    ) -> NSView {
+        let pill = MiniAgentPillView(
+            snapshot: snapshot,
+            stateColor: color
+        )
+        pill.onClick = { [weak self] surfaceID in
+            self?.onFocusSplit?(surfaceID)
+        }
+        return pill
     }
 
     /// Creates a compact stat chip (icon + value) for the stats stack.
@@ -845,6 +860,125 @@ extension TabItemView: NSDraggingSource {
     ) -> NSDragOperation {
         // Allow move within the app (same or different window).
         context == .withinApplication ? .move : []
+    }
+}
+
+// MARK: - Multi-Agent Mini Pill View
+
+/// Compact per-split pill rendered inside `TabItemView` when the owning
+/// tab has multiple surfaces running agents.
+///
+/// Shows a colored dot (state color) followed by the agent's two-letter
+/// abbreviation. When `snapshot.isFocused` is `true`, the pill draws a
+/// 1.5pt border in the state color to echo the accent strip of the
+/// primary tab indicator. Click routing goes through `onClick`, which
+/// the owning `TabItemView` wires to `onFocusSplit(surfaceID)` so the
+/// host can activate the tab and focus the right split.
+///
+/// The view is a custom `NSView` rather than an `NSButton` because we
+/// need a compound layout (dot + label) with a precise fixed size and
+/// a border that follows the layer, not the button bezel. Click
+/// handling stays robust because `acceptsFirstMouse` lets a click
+/// activate the window and fire in the same gesture, and
+/// `mouseDownCanMoveWindow` returns `false` so the pill is not
+/// swallowed by `isMovableByWindowBackground` on the parent window.
+@MainActor
+private final class MiniAgentPillView: NSView {
+
+    /// Invoked when the user single-clicks the pill. Carries the
+    /// surface identifier so the host can target the correct split.
+    var onClick: ((SurfaceID) -> Void)?
+
+    private let surfaceID: SurfaceID
+    private let dotLayer = CALayer()
+    private let abbreviationLabel: NSTextField
+    private let backgroundColor = CocxyColors.surface1.withAlphaComponent(0.35)
+
+    init(snapshot: SurfaceAgentSnapshot, stateColor: NSColor) {
+        self.surfaceID = snapshot.surfaceID
+
+        let label = NSTextField(labelWithString: snapshot.agentAbbreviation)
+        label.font = NSFont.systemFont(ofSize: 9, weight: .bold)
+        label.textColor = CocxyColors.subtext1
+        label.alignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        self.abbreviationLabel = label
+
+        super.init(frame: .zero)
+
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        layer?.backgroundColor = backgroundColor.cgColor
+
+        dotLayer.cornerRadius = 3
+        dotLayer.backgroundColor = stateColor.cgColor
+        layer?.addSublayer(dotLayer)
+
+        addSubview(abbreviationLabel)
+        NSLayoutConstraint.activate([
+            abbreviationLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            abbreviationLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+            abbreviationLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: 14),
+            widthAnchor.constraint(equalToConstant: 30),
+        ])
+
+        if snapshot.isFocused {
+            layer?.borderWidth = 1.5
+            layer?.borderColor = stateColor.cgColor
+        } else {
+            layer?.borderWidth = 0
+        }
+
+        let agentName = snapshot.state.detectedAgent?.displayName
+            ?? snapshot.state.detectedAgent?.name
+            ?? "unknown agent"
+        let stateLabel = snapshot.state.agentState.accessibilityDescription
+        let focusSuffix = snapshot.isFocused ? ", focused" : ""
+        setAccessibilityLabel("\(agentName), \(stateLabel)\(focusSuffix)")
+        toolTip = "\(agentName) — \(stateLabel)"
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("MiniAgentPillView does not support NSCoding")
+    }
+
+    override func layout() {
+        super.layout()
+        // Center the 6x6 dot vertically, 5pt from the leading edge.
+        dotLayer.frame = NSRect(x: 5, y: (bounds.height - 6) / 2, width: 6, height: 6)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick?(surfaceID)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSCursor.pointingHand.push()
+        layer?.backgroundColor = CocxyColors.surface1.withAlphaComponent(0.55).cgColor
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSCursor.pop()
+        layer?.backgroundColor = backgroundColor.cgColor
     }
 }
 
