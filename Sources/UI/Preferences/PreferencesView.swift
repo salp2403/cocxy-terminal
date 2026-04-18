@@ -349,37 +349,59 @@ struct EditableAppearanceSection: View {
                     .foregroundStyle(.tertiary)
 
                 Picker(
-                    "Chrome theme",
+                    "Glass chrome tint",
                     selection: $viewModel.transparencyChromeTheme
                 ) {
                     Text("Follow System").tag(TransparencyChromeTheme.followSystem)
                     Text("Light").tag(TransparencyChromeTheme.light)
                     Text("Dark").tag(TransparencyChromeTheme.dark)
                 }
-                .disabled(!viewModel.isTransparencyChromeThemeEditable)
                 .help(
                     viewModel.isTransparencyChromeThemeEditable
                         ? "Pin the translucent sidebar, tab strip, and status bar "
                         + "to a light or dark tint independently of macOS. Only "
                         + "visible while the window is transparent."
-                        : "Requires transparency. Lower the background opacity "
-                        + "to enable this picker."
+                        : "Selection is saved but only takes effect while the "
+                        + "window is transparent. Lower the background opacity "
+                        + "above to see it live."
                 )
-                .accessibilityLabel("Transparency chrome theme")
+                .accessibilityLabel("Glass chrome tint")
                 .accessibilityHint(
                     "Choose whether the translucent sidebar, tab strip, and "
                     + "status bar follow the system appearance or stay "
                     + "pinned to a light or dark tint."
                 )
 
-                Text(
-                    "Pins the sidebar, tab strip, and status bar to a light or "
-                    + "dark tint independently of macOS. Only visible while the "
-                    + "window is transparent."
-                )
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+                if !viewModel.isTransparencyChromeThemeEditable {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .accessibilityHidden(true)
+                        Text(
+                            "Your selection is saved, but you'll only see the "
+                            + "tint once the window is transparent. Drop the "
+                            + "background opacity above 100% to preview it live."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(
+                        "Information: the glass chrome tint is saved but "
+                        + "only visible while the window is transparent."
+                    )
+                } else {
+                    Text(
+                        "Pins the sidebar, tab strip, and status bar to a "
+                        + "light or dark tint independently of macOS, as "
+                        + "long as the window stays transparent."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)

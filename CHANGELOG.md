@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - New `appearance.transparency-chrome-theme` TOML key lets users pin the translucent sidebar, horizontal tab strip, and status bar to a light or dark tint independently of the macOS system appearance. Valid values: `"follow-system"` (default, preserves current behaviour), `"light"`, `"dark"`. Only applies while `background-opacity` is below `1.0`; otherwise the chrome is opaque and the override has no visible effect.
-- New Preferences toggle: Appearance → Transparency → Chrome theme. The Picker surfaces all three options, disables itself when the window is fully opaque (with a tooltip explaining "Requires transparency"), and hot-reloads via the existing config subscription so changes apply without restarting Cocxy.
+- New Preferences toggle: Appearance → Transparency → Glass chrome tint. The picker surfaces all three options, stays interactive even when the window is fully opaque (so the selection persists for when the user lowers the background opacity later), and hot-reloads via the existing config subscription so changes apply without restarting Cocxy. When the window is opaque a highlighted info note below the picker explains that the tint only appears while transparency is active and points the user at the opacity slider.
 - Added accessibility metadata (label + hint) on the new picker so VoiceOver announces the setting's purpose.
 
 ### Changed
