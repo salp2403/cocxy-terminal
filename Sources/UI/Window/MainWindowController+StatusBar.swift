@@ -88,7 +88,8 @@ extension MainWindowController {
     /// Refreshes the status bar content.
     func refreshStatusBar() {
         let activeTab = tabManager.activeTab
-        let isTransparent = configService?.current.appearance.backgroundOpacity ?? 1.0 < 1.0
+        let appearance = configService?.current.appearance
+        let isTransparent = (appearance?.backgroundOpacity ?? 1.0) < 1.0
         var statusBar = StatusBarView(
             hostname: currentHostname(),
             gitBranch: activeTab?.gitBranch,
@@ -100,6 +101,9 @@ extension MainWindowController {
             isCommandRunning: activeTab?.isCommandRunning ?? false
         )
         statusBar.useVibrancy = isTransparent
+        statusBar.vibrancyAppearanceOverride = isTransparent
+            ? appearance?.transparencyChromeTheme.vibrancyAppearance
+            : nil
         statusBarHostingView?.rootView = statusBar
     }
 }

@@ -209,6 +209,17 @@ final class HorizontalTabStripView: NSView {
         solidOverlay.isHidden = transparent
     }
 
+    /// Forces a specific `NSAppearance` on the vibrancy view.
+    ///
+    /// - Parameter appearance: The forced appearance, or `nil` to follow the
+    ///   system / window chain.
+    ///
+    /// Has no visible effect in opaque mode — the solid overlay hides the
+    /// vibrancy view entirely.
+    func setVibrancyAppearanceOverride(_ appearance: NSAppearance?) {
+        vibrancyView.appearance = appearance
+    }
+
     /// Updates the tab strip with the given tab items.
     func updateTabs(_ newTabs: [(title: String, icon: String, isActive: Bool)]) {
         self.tabs = newTabs

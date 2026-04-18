@@ -42,6 +42,13 @@ struct StatusBarView: View {
     /// Whether to use vibrancy material instead of solid background.
     var useVibrancy: Bool = false
 
+    /// Optional forced `NSAppearance` for the vibrancy material.
+    ///
+    /// Ignored when `useVibrancy` is `false`. `nil` preserves the legacy
+    /// behaviour (inherit from the window chain); `.aqua` / `.darkAqua`
+    /// pin the status bar tint independently of the system appearance.
+    var vibrancyAppearanceOverride: NSAppearance?
+
     var body: some View {
         HStack(spacing: 0) {
             // Left: user@host
@@ -232,7 +239,11 @@ struct StatusBarView: View {
         .frame(height: 24)
         .background {
             if useVibrancy {
-                VisualEffectBackground(material: .headerView, blendingMode: .behindWindow)
+                VisualEffectBackground(
+                    material: .headerView,
+                    blendingMode: .behindWindow,
+                    appearanceOverride: vibrancyAppearanceOverride
+                )
             } else {
                 Color(nsColor: CocxyColors.crust)
             }

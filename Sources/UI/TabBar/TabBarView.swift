@@ -380,6 +380,19 @@ final class TabBarView: NSView {
         solidOverlay.isHidden
     }
 
+    /// Forces a specific `NSAppearance` on the vibrancy view.
+    ///
+    /// - Parameter appearance: The forced appearance, or `nil` to follow the
+    ///   system / window chain. `nil` resets to default behavior so the
+    ///   sidebar tracks `NSApp.effectiveAppearance` automatically.
+    ///
+    /// Has no visible effect when the sidebar is opaque (see
+    /// `setSidebarTransparent(_:)`): the solid overlay covers the vibrancy
+    /// layer entirely.
+    func setVibrancyAppearanceOverride(_ appearance: NSAppearance?) {
+        backgroundView.appearance = appearance
+    }
+
     // MARK: - Notification Badge
 
     /// Updates the notification bell badge count.

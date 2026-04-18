@@ -714,7 +714,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         rootView.autoresizingMask = [.width, .height]
 
         // Status bar at the bottom.
-        let isTransparent = configService?.current.appearance.backgroundOpacity ?? 1.0 < 1.0
+        let appearance = configService?.current.appearance
+        let isTransparent = (appearance?.backgroundOpacity ?? 1.0) < 1.0
         var statusBar = StatusBarView(
             hostname: currentHostname(),
             gitBranch: tabManager.activeTab?.gitBranch,
@@ -723,6 +724,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             sshSession: tabManager.activeTab?.sshSession
         )
         statusBar.useVibrancy = isTransparent
+        statusBar.vibrancyAppearanceOverride = isTransparent
+            ? appearance?.transparencyChromeTheme.vibrancyAppearance
+            : nil
         let statusBarHost = NSHostingView(rootView: statusBar)
         statusBarHost.frame = NSRect(x: 0, y: 0, width: contentFrame.width, height: Self.statusBarHeight)
         statusBarHost.wantsLayer = true
@@ -1774,11 +1778,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             isTransparent ? appearance.backgroundOpacity : 1.0
         )
 
+        // Resolve the forced NSAppearance once and fan it out to every
+        // vibrancy site. The override is only meaningful while the chrome
+        // is translucent; pass `nil` when opaque so solid chrome tracks
+        // the system appearance normally.
+        let vibrancyAppearance: NSAppearance? = isTransparent
+            ? appearance.transparencyChromeTheme.vibrancyAppearance
+            : nil
+
         // Propagate vibrancy state to all chrome components.
         tabBarView?.setSidebarTransparent(isTransparent)
+        tabBarView?.setVibrancyAppearanceOverride(vibrancyAppearance)
 
         if let strip = horizontalTabStripView as? HorizontalTabStripView {
             strip.setTransparent(isTransparent)
+            strip.setVibrancyAppearanceOverride(vibrancyAppearance)
         }
 
         // Update status bar vibrancy and hosting view background.
@@ -1787,6 +1801,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
                 ? NSColor.clear.cgColor
                 : CocxyColors.crust.cgColor
             hostingView.rootView.useVibrancy = isTransparent
+            hostingView.rootView.vibrancyAppearanceOverride = vibrancyAppearance
         }
     }
 

@@ -211,21 +211,35 @@ struct DashboardPanelView: View {
 
 /// NSVisualEffectView wrapper for SwiftUI.
 ///
-/// Provides the native macOS sidebar material for the dashboard panel background.
+/// Provides the native macOS sidebar material for translucent chrome.
+///
+/// Pass an explicit `appearanceOverride` to pin the vibrancy view to
+/// `.aqua` (light) or `.darkAqua` (dark) independently of the system
+/// appearance. Leave it `nil` to inherit from the surrounding view
+/// hierarchy, which is the default behaviour.
 struct VisualEffectBackground: NSViewRepresentable {
     let material: NSVisualEffectView.Material
     let blendingMode: NSVisualEffectView.BlendingMode
+
+    /// Optional forced appearance for the vibrancy view.
+    ///
+    /// `nil` preserves the legacy behaviour (inherit). Non-nil values pin
+    /// the view to the supplied appearance so vibrancy renders with the
+    /// requested tint regardless of the active system appearance.
+    var appearanceOverride: NSAppearance?
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = material
         view.blendingMode = blendingMode
         view.state = .active
+        view.appearance = appearanceOverride
         return view
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
+        nsView.appearance = appearanceOverride
     }
 }

@@ -3,6 +3,27 @@
 
 import AppKit
 
+// MARK: - Transparency Chrome Theme -> NSAppearance
+
+extension TransparencyChromeTheme {
+
+    /// Resolves the enum to a forced `NSAppearance` for translucent chrome.
+    ///
+    /// - Returns: `NSAppearance.aqua` for `.light`, `.darkAqua` for `.dark`,
+    ///   and `nil` for `.followSystem` so vibrancy views inherit the
+    ///   active appearance from the window chain.
+    var vibrancyAppearance: NSAppearance? {
+        switch self {
+        case .followSystem:
+            return nil
+        case .light:
+            return NSAppearance(named: .aqua)
+        case .dark:
+            return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 // MARK: - Theme Management
 
 /// Extension that handles terminal color scheme cycling and
