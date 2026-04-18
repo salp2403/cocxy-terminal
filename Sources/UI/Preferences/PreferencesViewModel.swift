@@ -219,6 +219,7 @@ final class PreferencesViewModel: ObservableObject {
             || badgeOnTab != c.notifications.badgeOnTab
             || flashTab != c.notifications.flashTab
             || showDockBadge != c.notifications.showDockBadge
+            || (pendingKeybindings != nil && pendingKeybindings != c.keybindings)
     }
 
     /// Reverts all editable properties to the original config snapshot.
@@ -250,6 +251,7 @@ final class PreferencesViewModel: ObservableObject {
         badgeOnTab = c.notifications.badgeOnTab
         flashTab = c.notifications.flashTab
         showDockBadge = c.notifications.showDockBadge
+        pendingKeybindings = nil
     }
 
     // MARK: - Private
@@ -261,6 +263,18 @@ final class PreferencesViewModel: ObservableObject {
     /// sections not exposed in the UI (terminal, quick-terminal, keybindings, sessions).
     /// Updated after each successful save so `hasUnsavedChanges` resets to false.
     private var savedConfig: CocxyConfig
+
+    /// Pending keybindings applied via `applyKeybindings(_:)` but not yet
+    /// persisted. When `nil` the writer emits `savedConfig.keybindings`.
+    private var pendingKeybindings: KeybindingsConfig?
+
+    /// Dedicated editor model for the Keybindings preferences tab.
+    ///
+    /// Constructed lazily on first access so view models used purely for
+    /// programmatic saves (e.g., CLI-driven) do not pay the cost.
+    lazy var keybindingsEditor: KeybindingsEditorViewModel = {
+        KeybindingsEditorViewModel(config: savedConfig, persistence: self)
+    }()
 
     // MARK: - Initialization
 
@@ -362,8 +376,10 @@ final class PreferencesViewModel: ObservableObject {
     /// Persists the current settings to the config file and fires `onSave`.
     ///
     /// Values are clamped to valid ranges before writing. Sections that are
-    /// not editable in the UI (terminal, quick-terminal, keybindings, sessions)
-    /// are preserved from the original config.
+    /// not directly editable here (terminal, quick-terminal, sessions)
+    /// are preserved from the original config. Keybindings are taken from
+    /// the pending value set via `applyKeybindings(_:)` when present, and
+    /// from the saved snapshot otherwise.
     ///
     /// - Throws: If the file provider cannot write to disk.
     func save() throws {
@@ -373,6 +389,26 @@ final class PreferencesViewModel: ObservableObject {
         // This prevents the "unsaved changes" alert from appearing after save.
         updateSavedSnapshot()
         onSave?()
+    }
+
+    /// Registers pending keybinding edits to be emitted on the next `save()`.
+    ///
+    /// `KeybindingsEditorViewModel` owns the editable state for shortcuts
+    /// and funnels the final result through this entry point so the shared
+    /// `save()` writes a single, consistent TOML file.
+    ///
+    /// Calling this multiple times overwrites earlier pending values; the
+    /// last call wins.
+    func applyKeybindings(_ keybindings: KeybindingsConfig) {
+        pendingKeybindings = keybindings
+    }
+
+    /// The keybindings that will be persisted on the next save.
+    ///
+    /// Returns the pending value if any edits have been staged via
+    /// `applyKeybindings(_:)`, otherwise the last-saved snapshot.
+    var effectiveKeybindings: KeybindingsConfig {
+        pendingKeybindings ?? savedConfig.keybindings
     }
 
     /// Updates the saved config snapshot to match the current editable values.
@@ -434,9 +470,10 @@ final class PreferencesViewModel: ObservableObject {
                 soundError: savedConfig.notifications.soundError
             ),
             quickTerminal: savedConfig.quickTerminal,
-            keybindings: savedConfig.keybindings,
+            keybindings: pendingKeybindings ?? savedConfig.keybindings,
             sessions: savedConfig.sessions
         )
+        pendingKeybindings = nil
     }
 
     // MARK: - TOML Generation
@@ -444,7 +481,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Generates a complete TOML configuration string from the current values.
     ///
     /// Clamps numeric values to their valid ranges. Non-editable sections are
-    /// taken from the original config snapshot to avoid data loss.
+    /// taken from the original config snapshot to avoid data loss. Pending
+    /// keybindings registered via `applyKeybindings(_:)` take precedence
+    /// over the saved snapshot.
     func generateToml() -> String {
         let clampedFontSize = Int(min(max(fontSize, 8), 32))
         let clampedPadding = Int(min(max(windowPadding, 0), 40))
@@ -453,6 +492,7 @@ final class PreferencesViewModel: ObservableObject {
         let clampedImageMemoryLimitMB = min(max(imageMemoryLimitMB, 1), 4096)
 
         let defaults = savedConfig
+        let keybindings = pendingKeybindings ?? defaults.keybindings
 
         return """
         # Cocxy Terminal Configuration
@@ -508,7 +548,7 @@ final class PreferencesViewModel: ObservableObject {
         position = "\(defaults.quickTerminal.position.rawValue)"
         height-percentage = \(defaults.quickTerminal.heightPercentage)
 
-        \(defaults.keybindings.tomlSection())
+        \(keybindings.tomlSection())
 
         [sessions]
         auto-save = \(defaults.sessions.autoSave)

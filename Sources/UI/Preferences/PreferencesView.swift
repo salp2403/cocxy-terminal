@@ -88,7 +88,7 @@ struct PreferencesView: View {
         case .terminal:
             TerminalPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .keybindings:
-            KeybindingsPreferencesSection(viewModel: viewModel)
+            KeybindingsEditorView(viewModel: viewModel.keybindingsEditor)
         case .about:
             AboutPreferencesSection()
         }
@@ -638,47 +638,6 @@ struct TerminalPreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Terminal")
-    }
-}
-
-// MARK: - Keybindings Section (Read-Only)
-
-/// Read-only display of keyboard shortcuts from config.toml.
-///
-/// Shows all configurable keybindings in monospaced font.
-/// Users edit these values directly in config.toml.
-struct KeybindingsPreferencesSection: View {
-    @ObservedObject var viewModel: PreferencesViewModel
-
-    var body: some View {
-        Form {
-            Section("Shortcuts") {
-                keybindingRow("New Tab", shortcut: viewModel.keybindingNewTab)
-                keybindingRow("Close Tab", shortcut: viewModel.keybindingCloseTab)
-                keybindingRow("Next Tab", shortcut: viewModel.keybindingNextTab)
-                keybindingRow("Previous Tab", shortcut: viewModel.keybindingPrevTab)
-                keybindingRow("Split Vertical", shortcut: viewModel.keybindingSplitVertical)
-                keybindingRow("Split Horizontal", shortcut: viewModel.keybindingSplitHorizontal)
-                keybindingRow("Go to Attention", shortcut: viewModel.keybindingGotoAttention)
-                keybindingRow("Quick Terminal", shortcut: viewModel.keybindingQuickTerminal)
-            }
-
-            Section {
-                Text("Edit config.toml directly to customize keybindings.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("Keybindings")
-    }
-
-    private func keybindingRow(_ label: String, shortcut: String) -> some View {
-        LabeledContent(label) {
-            Text(shortcut)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-        }
     }
 }
 
