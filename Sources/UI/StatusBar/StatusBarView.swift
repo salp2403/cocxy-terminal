@@ -150,6 +150,31 @@ struct StatusBarView: View {
             KeyboardShortcutsButton()
                 .padding(.trailing, 6)
 
+            // Per-split mini-matrix: shown only when the active tab has
+            // two or more agents so a single-split tab stays uncluttered.
+            // Each dot reflects the state color for its split; the
+            // focused split gets a 1.5pt border so the user can spot
+            // which split owns the keyboard without switching the eye.
+            if agentSummary.perSurfaceSnapshots.count >= 2 {
+                HStack(spacing: 4) {
+                    ForEach(
+                        Array(agentSummary.perSurfaceSnapshots.prefix(6).enumerated()),
+                        id: \.offset
+                    ) { _, snapshot in
+                        PerSurfaceAgentDot(snapshot: snapshot)
+                    }
+                    if agentSummary.perSurfaceSnapshots.count > 6 {
+                        Text(verbatim: "+\(agentSummary.perSurfaceSnapshots.count - 6)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext1))
+                    }
+                }
+                .padding(.trailing, 8)
+                .accessibilityLabel(
+                    "\(agentSummary.perSurfaceSnapshots.count) active agents across splits"
+                )
+            }
+
             if let liveAgentText = agentSummary.activeAgentText {
                 HStack(spacing: 6) {
                     Circle()
@@ -266,6 +291,55 @@ private struct AgentMetricPill: View {
     }
 }
 
+// MARK: - Per-Surface Agent Dot (Status Bar Mini-Matrix)
+
+/// Single dot in the status-bar mini-matrix. One dot per split of the
+/// active tab whose surface runs an agent, rendered between the port
+/// indicators and the primary agent text. Color follows the snapshot's
+/// state (idle is filtered out upstream by the resolver); a 1.5pt
+/// border appears around the focused split so the user always knows
+/// which split owns the keyboard. Hover tooltip carries the agent
+/// name and state for additional context.
+private struct PerSurfaceAgentDot: View {
+    let snapshot: SurfaceAgentSnapshot
+
+    private var dotColor: Color {
+        switch snapshot.state.agentState {
+        case .idle: return CocxyColors.swiftUI(CocxyColors.overlay0)
+        case .launched: return CocxyColors.swiftUI(CocxyColors.peach)
+        case .working: return CocxyColors.swiftUI(CocxyColors.blue)
+        case .waitingInput: return CocxyColors.swiftUI(CocxyColors.yellow)
+        case .finished: return CocxyColors.swiftUI(CocxyColors.green)
+        case .error: return CocxyColors.swiftUI(CocxyColors.red)
+        }
+    }
+
+    private var tooltipText: String {
+        let agentName = snapshot.state.detectedAgent?.displayName
+            ?? snapshot.state.detectedAgent?.name
+            ?? "Agent"
+        let stateLabel = snapshot.state.agentState.accessibilityDescription
+        let focusSuffix = snapshot.isFocused ? " (focused)" : ""
+        return "\(agentName) \u{2022} \(stateLabel)\(focusSuffix)"
+    }
+
+    var body: some View {
+        Circle()
+            .fill(dotColor)
+            .frame(width: 7, height: 7)
+            .overlay(
+                Circle()
+                    .stroke(
+                        snapshot.isFocused ? dotColor : Color.clear,
+                        lineWidth: snapshot.isFocused ? 1.5 : 0
+                    )
+                    .padding(-2)
+            )
+            .help(tooltipText)
+            .accessibilityLabel(tooltipText)
+    }
+}
+
 // MARK: - Agent Summary
 
 /// Aggregated agent state counts across all tabs.
@@ -278,6 +352,13 @@ struct AgentSummary: Equatable {
     var activeAgentColor: NSColor = CocxyColors.overlay1
     var activeToolCount: Int = 0
     var activeErrorCount: Int = 0
+
+    /// Per-split snapshots for the currently active tab, used by the
+    /// status bar mini-matrix to surface every agent in the tab at a
+    /// glance. Populated by `MainWindowController.computeAgentSummary()`
+    /// via `SurfaceAgentStateResolver.allActiveSnapshots(...)`. Empty
+    /// when the active tab has only one surface or no agents.
+    var perSurfaceSnapshots: [SurfaceAgentSnapshot] = []
 
     static let empty = AgentSummary()
 }

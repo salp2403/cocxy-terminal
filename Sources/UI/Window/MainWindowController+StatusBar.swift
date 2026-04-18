@@ -73,6 +73,13 @@ extension MainWindowController {
             case .idle:
                 summary.activeAgentColor = CocxyColors.overlay1
             }
+
+            // Populate the per-split mini-matrix with every active
+            // agent of the active tab (including the surface that
+            // drove the primary pill). The status bar view renders
+            // the matrix only when two or more snapshots are present
+            // so single-split tabs keep the compact layout.
+            summary.perSurfaceSnapshots = allActiveAgentSnapshots(for: activeTab.id)
         }
 
         return summary

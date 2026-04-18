@@ -90,4 +90,29 @@ extension MainWindowController {
             store: injectedPerSurfaceStore
         )
     }
+
+    /// Returns snapshots for every split of the tab with live activity,
+    /// INCLUDING the surface the primary resolver chose.
+    ///
+    /// Used by the status bar mini-matrix to render one dot per active
+    /// split so the user sees every agent of the active tab at a glance
+    /// regardless of which surface drives the primary pill.
+    ///
+    /// Filter and ordering match
+    /// `SurfaceAgentStateResolver.allActiveSnapshots`:
+    /// `state.isActive || state.hasAgent`, sorted deterministically by
+    /// UUID.
+    func allActiveAgentSnapshots(for tabID: TabID) -> [SurfaceAgentSnapshot] {
+        var focusedSurfaceID: SurfaceID?
+        if displayedTabID == tabID {
+            focusedSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+        }
+
+        return SurfaceAgentStateResolver.allActiveSnapshots(
+            focusedSurfaceID: focusedSurfaceID,
+            primarySurfaceID: tabSurfaceMap[tabID],
+            allSurfaceIDs: surfaceIDs(for: tabID),
+            store: injectedPerSurfaceStore
+        )
+    }
 }
