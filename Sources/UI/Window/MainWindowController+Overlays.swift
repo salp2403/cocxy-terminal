@@ -31,9 +31,23 @@ extension MainWindowController {
     func showCommandPaletteOverlay() {
         guard let overlayContainer = overlayContainerView else { return }
 
-        // Rebuild the engine on every open so palette shortcut labels
-        // reflect the latest `[keybindings]` config.
-        let engine = createWiredCommandPaletteEngine()
+        // Preserve the palette engine across open/close cycles so that
+        // `recentActions` and `executionCounts` accumulate during the
+        // window's lifetime. Rebuilding on every open (previous code)
+        // reset the user's recent-actions ranking — a real UX
+        // regression. Instead: create the engine lazily on first open,
+        // then refresh only the shortcut labels on subsequent opens via
+        // `rebuildBuiltInShortcuts(using:)` so palette glyphs still
+        // match the latest `[keybindings]` edits without losing state.
+        let engine: CommandPaletteEngineImpl
+        if let existing = commandPaletteEngine {
+            engine = existing
+            let keybindings = configService?.current.keybindings ?? .defaults
+            engine.rebuildBuiltInShortcuts(using: keybindings)
+        } else {
+            engine = createWiredCommandPaletteEngine()
+            commandPaletteEngine = engine
+        }
         commandPaletteViewModel = CommandPaletteViewModel(engine: engine)
 
         guard let viewModel = commandPaletteViewModel else { return }

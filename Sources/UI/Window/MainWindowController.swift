@@ -166,6 +166,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var commandPaletteHostingView: NSHostingView<CommandPaletteView>?
     var isCommandPaletteVisible: Bool = false
 
+    /// Persistent engine instance for the Command Palette.
+    ///
+    /// Kept across open/close cycles so that `recentActions` and
+    /// `executionCounts` accumulate throughout the window's lifetime.
+    /// Shortcut labels are refreshed on every palette open via
+    /// `CommandPaletteEngineImpl.rebuildBuiltInShortcuts(using:)` so
+    /// user keybinding changes still propagate without re-creating the
+    /// engine (which would reset recent actions state).
+    var commandPaletteEngine: CommandPaletteEngineImpl?
+
     var dashboardViewModel: AgentDashboardViewModel?
     var dashboardHostingView: NSHostingView<DashboardPanelView>?
     var isDashboardVisible: Bool = false

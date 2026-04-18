@@ -448,12 +448,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] keybindings in
-                guard let self,
+                // `self` is captured weakly so the observer does not
+                // outlive the delegate. Reading the instance in the
+                // guard binds the lifetime and also satisfies the
+                // compiler's unused-capture warning without a no-op
+                // assignment. Binding is local-only — no instance
+                // access is required beyond the guard, so we
+                // intentionally do not touch `self` in the body.
+                guard self != nil,
                       let mainMenu = NSApplication.shared.mainMenu else { return }
                 MenuKeybindingsBinder.apply(keybindings, to: mainMenu)
-                // Silence unused-self warning; self is captured to extend
-                // the observer lifetime to the delegate's lifetime.
-                _ = self
             }
     }
 

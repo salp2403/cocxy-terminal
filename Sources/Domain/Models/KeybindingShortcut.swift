@@ -279,7 +279,16 @@ struct KeybindingShortcut: Equatable, Hashable, Sendable {
             if scalar.isASCII {
                 let value = scalar.value
                 if value >= 0x20 && value < 0x7F {
-                    return String(first).lowercased()
+                    // `+` and `-` are separator tokens in the canonical
+                    // "cmd+shift+key" encoding. Emit their verbal names so
+                    // round-trip through `KeybindingShortcut.parse` does not
+                    // collide with the separator (e.g. "cmd++" would split
+                    // into ["cmd", "", "+"] with an empty token and fail).
+                    switch first {
+                    case "+": return "plus"
+                    case "-": return "minus"
+                    default: return String(first).lowercased()
+                    }
                 }
             }
         }
