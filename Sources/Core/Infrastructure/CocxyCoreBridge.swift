@@ -4,6 +4,26 @@
 import AppKit
 import Darwin
 import CocxyCoreKit
+import os.log
+
+// MARK: - Input Diagnostics Logger
+
+/// Dedicated logger for the PTY input path. Used only by
+/// `sendKeyEvent` / `sendText` to surface the "keystroke silently
+/// dropped" case that smoke testing surfaced in Fase B (a split pane
+/// stopped accepting input after a zsh autocorrect prompt). Kept
+/// file-private so the rest of the bridge does not accidentally emit
+/// on the same category and dilute the signal.
+///
+/// Only `.error` level messages flow through this logger on purpose:
+/// the input hot path runs hundreds of times per second when a user
+/// is typing fast, so anything more verbose would overwhelm Console
+/// during normal use. Consume via `log stream --predicate 'subsystem
+/// == "dev.cocxy.bridge"'` when reproducing input-dropped scenarios.
+private let cocxyInputLog = Logger(
+    subsystem: "dev.cocxy.bridge",
+    category: "input"
+)
 
 struct TerminalLigatureDiagnostics: Equatable, Sendable, Encodable {
     let enabled: Bool
@@ -488,7 +508,7 @@ final class CocxyCoreBridge: TerminalEngine {
         // worse, the subsequent `write_attached_pty` lands on a C buffer
         // that the parser is mid-update, which is the suspected trigger for
         // the transparent-on-Claude-launch bug.
-        return withTerminalLock(surface) { state -> Bool in
+        let lockedResult = withTerminalLock(surface) { state -> Bool in
             var buf = [UInt8](repeating: 0, count: 32)
             var bytesWritten = 0
 
@@ -519,23 +539,66 @@ final class CocxyCoreBridge: TerminalEngine {
                 // `writeBytes(_:to: SurfaceState)` calls `writeAttachedPTYBytes`
                 // which mutates the C terminal's response buffer. It must run
                 // inside the same critical section as the encode call so the
-                // background feed loop sees a consistent terminal state.
-                _ = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+                // background feed loop sees a consistent terminal state. The
+                // returned bool is logged (but not propagated as `false`) when
+                // the PTY write drops the encoded bytes — the Fase B smoke
+                // test surfaced a case where zsh autocorrect left a split
+                // silently unable to write, and this log is the observation
+                // channel we need to reproduce it in a controlled session.
+                let writeOK = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+                if !writeOK {
+                    cocxyInputLog.error(
+                        "sendKeyEvent: PTY write dropped \(bytesWritten) encoded bytes for surface \(surface.rawValue.uuidString, privacy: .public); keypress is lost"
+                    )
+                }
                 return true
             }
             return false
-        } ?? false
+        }
+
+        guard let result = lockedResult else {
+            // `withTerminalLock` only returns `nil` when the surface is
+            // missing from `bridge.surfaces`. When that happens the
+            // caller's keypress vanishes with zero visual feedback, which
+            // is exactly the failure mode reported during the Fase B smoke
+            // test. Log the drop so a future session can diagnose whether
+            // the surface was torn down prematurely by the lifecycle
+            // recovery path or by some other teardown.
+            cocxyInputLog.error(
+                "sendKeyEvent: surface \(surface.rawValue.uuidString, privacy: .public) not registered in bridge; keypress dropped"
+            )
+            return false
+        }
+        return result
     }
 
     func sendText(_ text: String, to surface: SurfaceID) {
         let bytes = Array(text.utf8)
-        if !bytes.isEmpty {
-            // Raw text injection is another PTY write path. Keep it under the
-            // same lock as key events so manual agent launches and programmatic
-            // command injection cannot race the feed/render path.
-            _ = withTerminalLock(surface) { state in
-                writeBytes(bytes, to: state)
-            }
+        guard !bytes.isEmpty else { return }
+
+        // Raw text injection is another PTY write path. Keep it under the
+        // same lock as key events so manual agent launches and programmatic
+        // command injection cannot race the feed/render path.
+        let writeResult: Bool? = withTerminalLock(surface) { state in
+            writeBytes(bytes, to: state)
+        }
+
+        if writeResult == nil {
+            // Surface vanished from the bridge while the caller held onto
+            // its `SurfaceID`. The text injection is lost silently — log
+            // it so diagnostic sessions can pair the drop with the
+            // triggering lifecycle event.
+            cocxyInputLog.error(
+                "sendText: surface \(surface.rawValue.uuidString, privacy: .public) not registered in bridge; \(bytes.count) bytes dropped"
+            )
+        } else if writeResult == false {
+            // PTY write returned 0 bytes. The terminal remains alive in
+            // the bridge but the kernel rejected the write (fd closed,
+            // process exited, etc.). Pair with the `surface not
+            // registered` log to narrow down the root cause.
+            cocxyInputLog.error(
+                "sendText: PTY write dropped \(bytes.count) bytes for surface \(surface.rawValue.uuidString, privacy: .public)"
+            )
         }
     }
 
