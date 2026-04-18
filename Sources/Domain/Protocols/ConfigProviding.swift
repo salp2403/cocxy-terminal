@@ -114,7 +114,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             ligatures: appearance.ligatures,
             fontThicken: appearance.fontThicken,
             backgroundOpacity: overrides.backgroundOpacity ?? appearance.backgroundOpacity,
-            backgroundBlurRadius: overrides.backgroundBlurRadius ?? appearance.backgroundBlurRadius
+            backgroundBlurRadius: overrides.backgroundBlurRadius ?? appearance.backgroundBlurRadius,
+            transparencyChromeTheme: appearance.transparencyChromeTheme
         )
 
         let mergedKeybindings: KeybindingsConfig
@@ -200,6 +201,19 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     let backgroundOpacity: Double
     /// Background blur radius in points (0 = no blur).
     let backgroundBlurRadius: Double
+    /// Forced NSAppearance applied to translucent chrome (sidebar, tab strip,
+    /// status bar) when the window is transparent.
+    ///
+    /// Defaults to `.followSystem`, which preserves the current behavior:
+    /// vibrancy views inherit the active `NSAppearance` from the running
+    /// system / window chain. `.light` and `.dark` force the chrome to the
+    /// chosen tint independently of the user's system appearance — useful
+    /// when the terminal's transparency exposes a wallpaper whose tone
+    /// doesn't suit the automatic vibrancy blend.
+    ///
+    /// When `backgroundOpacity >= 1.0` the setting has no visible effect
+    /// because the chrome is not translucent.
+    let transparencyChromeTheme: TransparencyChromeTheme
 
     /// Effective horizontal padding (prefers windowPaddingX, falls back to windowPadding).
     var effectivePaddingX: Double { windowPaddingX ?? windowPadding }
@@ -218,7 +232,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         ligatures: Bool = true,
         fontThicken: Bool = false,
         backgroundOpacity: Double,
-        backgroundBlurRadius: Double
+        backgroundBlurRadius: Double,
+        transparencyChromeTheme: TransparencyChromeTheme = .followSystem
     ) {
         self.theme = theme
         self.lightTheme = lightTheme
@@ -232,6 +247,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         self.fontThicken = fontThicken
         self.backgroundOpacity = backgroundOpacity
         self.backgroundBlurRadius = backgroundBlurRadius
+        self.transparencyChromeTheme = transparencyChromeTheme
     }
 
     static var defaults: AppearanceConfig {
@@ -247,9 +263,66 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             ligatures: false,
             fontThicken: false,
             backgroundOpacity: 1.0,
-            backgroundBlurRadius: 0
+            backgroundBlurRadius: 0,
+            transparencyChromeTheme: .followSystem
         )
     }
+
+    // MARK: - Codable
+
+    /// Backwards-compatible decoding: configs persisted before the
+    /// `transparencyChromeTheme` key existed decode cleanly with
+    /// `.followSystem`, matching the runtime default.
+    private enum CodingKeys: String, CodingKey {
+        case theme
+        case lightTheme
+        case fontFamily
+        case fontSize
+        case tabPosition
+        case windowPadding
+        case windowPaddingX
+        case windowPaddingY
+        case ligatures
+        case fontThicken
+        case backgroundOpacity
+        case backgroundBlurRadius
+        case transparencyChromeTheme
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.theme = try container.decode(String.self, forKey: .theme)
+        self.lightTheme = try container.decode(String.self, forKey: .lightTheme)
+        self.fontFamily = try container.decode(String.self, forKey: .fontFamily)
+        self.fontSize = try container.decode(Double.self, forKey: .fontSize)
+        self.tabPosition = try container.decode(TabPosition.self, forKey: .tabPosition)
+        self.windowPadding = try container.decode(Double.self, forKey: .windowPadding)
+        self.windowPaddingX = try container.decodeIfPresent(Double.self, forKey: .windowPaddingX)
+        self.windowPaddingY = try container.decodeIfPresent(Double.self, forKey: .windowPaddingY)
+        self.ligatures = try container.decode(Bool.self, forKey: .ligatures)
+        self.fontThicken = try container.decodeIfPresent(Bool.self, forKey: .fontThicken) ?? false
+        self.backgroundOpacity = try container.decode(Double.self, forKey: .backgroundOpacity)
+        self.backgroundBlurRadius = try container.decode(Double.self, forKey: .backgroundBlurRadius)
+        self.transparencyChromeTheme = try container.decodeIfPresent(
+            TransparencyChromeTheme.self,
+            forKey: .transparencyChromeTheme
+        ) ?? .followSystem
+    }
+}
+
+/// Forced appearance for translucent chrome (sidebar, tab strip, status bar)
+/// when the window background is transparent.
+///
+/// - `followSystem`: inherit the active NSAppearance (default, zero-effect).
+/// - `light`: pin `NSAppearance.aqua` on every vibrancy view.
+/// - `dark`: pin `NSAppearance.darkAqua` on every vibrancy view.
+///
+/// The kebab-case `rawValue` is the on-disk TOML contract; changing it is a
+/// breaking change to the `transparency-chrome-theme` config key.
+enum TransparencyChromeTheme: String, Codable, Sendable, Equatable, CaseIterable {
+    case followSystem = "follow-system"
+    case light
+    case dark
 }
 
 /// Position of the tab bar in the window.

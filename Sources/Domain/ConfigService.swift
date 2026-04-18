@@ -187,6 +187,11 @@ final class ConfigService: ConfigProviding {
         window-padding = \(defaults.appearance.windowPadding)
         ligatures = \(defaults.appearance.ligatures)
         font-thicken = \(defaults.appearance.fontThicken)
+        # follow-system (default) inherits the active NSAppearance for the
+        # translucent chrome when background-opacity < 1.0. Set to "light"
+        # or "dark" to pin sidebar / tab strip / status bar independently
+        # of the macOS appearance.
+        transparency-chrome-theme = "\(defaults.appearance.transparencyChromeTheme.rawValue)"
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
@@ -319,6 +324,7 @@ final class ConfigService: ConfigProviding {
 
         let rawOpacity = doubleValue(table["background-opacity"]) ?? defaults.backgroundOpacity
         let rawBlur = doubleValue(table["background-blur-radius"]) ?? defaults.backgroundBlurRadius
+        let chromeTheme = parseTransparencyChromeTheme(table["transparency-chrome-theme"])
 
         return AppearanceConfig(
             theme: stringValue(table["theme"]) ?? defaults.theme,
@@ -332,8 +338,39 @@ final class ConfigService: ConfigProviding {
             ligatures: boolValue(table["ligatures"]) ?? defaults.ligatures,
             fontThicken: boolValue(table["font-thicken"]) ?? defaults.fontThicken,
             backgroundOpacity: clamp(rawOpacity, min: 0.1, max: 1.0),
-            backgroundBlurRadius: clamp(rawBlur, min: 0, max: 100)
+            backgroundBlurRadius: clamp(rawBlur, min: 0, max: 100),
+            transparencyChromeTheme: chromeTheme
         )
+    }
+
+    /// Parses the `transparency-chrome-theme` value tolerantly.
+    ///
+    /// Accepts strings matching `TransparencyChromeTheme.rawValue`
+    /// (`"follow-system"`, `"light"`, `"dark"`). Everything else — unknown
+    /// strings, wrong TOML types, missing key — falls back to
+    /// `.followSystem` with a single diagnostic log. This preserves the
+    /// zero-break contract: older configs and typos never crash the app
+    /// and never alter the chrome appearance.
+    private func parseTransparencyChromeTheme(_ value: TOMLValue?) -> TransparencyChromeTheme {
+        guard let value else {
+            return .followSystem
+        }
+        switch value {
+        case .string(let raw):
+            if let parsed = TransparencyChromeTheme(rawValue: raw) {
+                return parsed
+            }
+            NSLog(
+                "[ConfigService] Unknown transparency-chrome-theme value %@; falling back to follow-system.",
+                raw
+            )
+            return .followSystem
+        default:
+            NSLog(
+                "[ConfigService] transparency-chrome-theme must be a string; falling back to follow-system."
+            )
+            return .followSystem
+        }
     }
 
     /// Parses the `[terminal]` section with validation.
