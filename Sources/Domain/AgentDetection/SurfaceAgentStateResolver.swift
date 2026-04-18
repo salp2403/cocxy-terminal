@@ -161,4 +161,107 @@ enum SurfaceAgentStateResolver {
             .sorted { $0.surfaceID.rawValue.uuidString < $1.surfaceID.rawValue.uuidString }
             .map { $0.state }
     }
+
+    /// Identity-aware variant of `additionalActiveStates` that returns
+    /// `SurfaceAgentSnapshot` values carrying the surface ID plus
+    /// `isFocused`/`isPrimary` role flags.
+    ///
+    /// Fase B mini-pills consume this list to wire click-to-focus
+    /// handlers (via `surfaceID`), render focus borders on the active
+    /// split (via `isFocused`), and attach tooltips that identify the
+    /// agent running in each split (via `state.detectedAgent`).
+    ///
+    /// The filter is identical to `additionalActiveStates`
+    /// (`state.isActive || state.hasAgent`), the exclusion rule matches
+    /// (`surfaceID != primaryChosenSurfaceID`), and the ordering is
+    /// deterministic by `SurfaceID.rawValue.uuidString` so split
+    /// identities stay stable across refreshes.
+    ///
+    /// Preserves `additionalActiveStates` for backward compatibility
+    /// with existing Fase 3e callers; this method is additive.
+    ///
+    /// - Parameters:
+    ///   - focusedSurfaceID: Focused split's surface ID when the tab is
+    ///     displayed and a split has keyboard focus; nil otherwise.
+    ///   - primarySurfaceID: The tab's primary surface ID
+    ///     (`tabSurfaceMap[tabID]`), used to set `isPrimary`. May equal
+    ///     `primaryChosenSurfaceID` when the priority resolver picked
+    ///     the primary; that's fine, the snapshot for the primary is
+    ///     excluded via `primaryChosenSurfaceID` filtering regardless.
+    ///   - primaryChosenSurfaceID: Surface ID the primary resolver
+    ///     selected for the main indicator. Pass the `chosenSurfaceID`
+    ///     from `resolveFull(...)`. When `nil`, the primary fell back to
+    ///     `.idle` and no surface is excluded.
+    ///   - allSurfaceIDs: Every surface associated with the tab
+    ///     (primary + live splits + saved splits). Caller ordering is
+    ///     ignored; output is UUID-sorted.
+    ///   - store: Per-surface state store. `nil` yields `[]`.
+    /// - Returns: UUID-sorted snapshots with live activity, excluding
+    ///   `primaryChosenSurfaceID`.
+    @MainActor
+    static func additionalActiveSnapshots(
+        focusedSurfaceID: SurfaceID?,
+        primarySurfaceID: SurfaceID?,
+        primaryChosenSurfaceID: SurfaceID?,
+        allSurfaceIDs: [SurfaceID],
+        store: AgentStatePerSurfaceStore?
+    ) -> [SurfaceAgentSnapshot] {
+        guard let store else { return [] }
+
+        return allSurfaceIDs
+            .filter { $0 != primaryChosenSurfaceID }
+            .map { surfaceID -> SurfaceAgentSnapshot in
+                let state = store.state(for: surfaceID)
+                return SurfaceAgentSnapshot(
+                    surfaceID: surfaceID,
+                    state: state,
+                    isFocused: surfaceID == focusedSurfaceID,
+                    isPrimary: surfaceID == primarySurfaceID
+                )
+            }
+            .filter { $0.state.isActive || $0.state.hasAgent }
+            .sorted { $0.surfaceID.rawValue.uuidString < $1.surfaceID.rawValue.uuidString }
+    }
+
+    /// Returns snapshots for every surface of the tab that has live
+    /// activity or a detected agent, INCLUDING the one the primary
+    /// resolver chose.
+    ///
+    /// Used by consumers that render the full per-split view (Fase C
+    /// code-review surface selector with chips for every split),
+    /// unlike `additionalActiveSnapshots` which excludes the primary
+    /// chosen surface to avoid double-counting alongside the main pill.
+    ///
+    /// Ordering and filter rules match
+    /// `additionalActiveSnapshots(...)`:
+    /// `state.isActive || state.hasAgent`, sorted by UUID.
+    ///
+    /// - Parameters:
+    ///   - focusedSurfaceID: Focused split's surface ID or nil.
+    ///   - primarySurfaceID: Tab's primary surface ID or nil.
+    ///   - allSurfaceIDs: Every surface of the tab.
+    ///   - store: Per-surface state store. `nil` yields `[]`.
+    /// - Returns: UUID-sorted snapshots for all surfaces with activity.
+    @MainActor
+    static func allActiveSnapshots(
+        focusedSurfaceID: SurfaceID?,
+        primarySurfaceID: SurfaceID?,
+        allSurfaceIDs: [SurfaceID],
+        store: AgentStatePerSurfaceStore?
+    ) -> [SurfaceAgentSnapshot] {
+        guard let store else { return [] }
+
+        return allSurfaceIDs
+            .map { surfaceID -> SurfaceAgentSnapshot in
+                let state = store.state(for: surfaceID)
+                return SurfaceAgentSnapshot(
+                    surfaceID: surfaceID,
+                    state: state,
+                    isFocused: surfaceID == focusedSurfaceID,
+                    isPrimary: surfaceID == primarySurfaceID
+                )
+            }
+            .filter { $0.state.isActive || $0.state.hasAgent }
+            .sorted { $0.surfaceID.rawValue.uuidString < $1.surfaceID.rawValue.uuidString }
+    }
 }

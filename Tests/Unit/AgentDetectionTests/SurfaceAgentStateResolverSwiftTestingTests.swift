@@ -376,4 +376,297 @@ struct SurfaceAgentStateResolverSwiftTestingTests {
         #expect(states.contains(.working))
         #expect(states.contains(.waitingInput))
     }
+
+    // MARK: - additionalActiveSnapshots (identity-aware)
+
+    @Test("additionalActiveSnapshots returns empty without store")
+    func additionalActiveSnapshotsEmptyWithoutStore() {
+        let result = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: SurfaceID(),
+            primarySurfaceID: SurfaceID(),
+            primaryChosenSurfaceID: nil,
+            allSurfaceIDs: [SurfaceID(), SurfaceID()],
+            store: nil
+        )
+        #expect(result.isEmpty)
+    }
+
+    @Test("additionalActiveSnapshots preserves surface IDs")
+    func additionalActiveSnapshotsPreservesSurfaceIDs() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let other = SurfaceID()
+
+        store.update(surfaceID: other) { $0.agentState = .working }
+
+        let result = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary, other],
+            store: store
+        )
+
+        #expect(result.count == 1)
+        #expect(result.first?.surfaceID == other)
+    }
+
+    @Test("additionalActiveSnapshots marks isFocused correctly")
+    func additionalActiveSnapshotsMarksFocused() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let focused = SurfaceID()
+        let another = SurfaceID()
+
+        store.update(surfaceID: focused) { $0.agentState = .working }
+        store.update(surfaceID: another) { $0.agentState = .waitingInput }
+
+        let result = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: focused,
+            primarySurfaceID: primary,
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary, focused, another],
+            store: store
+        )
+
+        let focusedSnapshot = result.first(where: { $0.surfaceID == focused })
+        let anotherSnapshot = result.first(where: { $0.surfaceID == another })
+        #expect(focusedSnapshot?.isFocused == true)
+        #expect(anotherSnapshot?.isFocused == false)
+    }
+
+    @Test("additionalActiveSnapshots marks isPrimary correctly")
+    func additionalActiveSnapshotsMarksPrimary() {
+        // primary surface is active and the resolver picked a different
+        // chosen surface. The primary flag reflects `primarySurfaceID`
+        // independent of the chosen filter.
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let other = SurfaceID()
+
+        store.update(surfaceID: primary) { $0.agentState = .working }
+        store.update(surfaceID: other) { $0.agentState = .waitingInput }
+
+        let result = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            primaryChosenSurfaceID: other,
+            allSurfaceIDs: [primary, other],
+            store: store
+        )
+
+        #expect(result.count == 1)
+        #expect(result.first?.surfaceID == primary)
+        #expect(result.first?.isPrimary == true)
+    }
+
+    @Test("additionalActiveSnapshots sorted by UUID")
+    func additionalActiveSnapshotsSortedByUUID() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let surfaces = (0..<4).map { _ -> SurfaceID in
+            let id = SurfaceID()
+            store.update(surfaceID: id) { $0.agentState = .working }
+            return id
+        }
+
+        let first = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary] + surfaces.shuffled(),
+            store: store
+        )
+        let second = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary] + surfaces.shuffled(),
+            store: store
+        )
+
+        #expect(first.count == 4)
+        #expect(first.map(\.surfaceID) == second.map(\.surfaceID))
+    }
+
+    @Test("additionalActiveSnapshots excludes primaryChosenSurfaceID")
+    func additionalActiveSnapshotsExcludesPrimaryChosen() {
+        let store = AgentStatePerSurfaceStore()
+        let chosen = SurfaceID()
+        let other = SurfaceID()
+
+        store.update(surfaceID: chosen) { $0.agentState = .working }
+        store.update(surfaceID: other) { $0.agentState = .waitingInput }
+
+        let result = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: chosen,
+            primaryChosenSurfaceID: chosen,
+            allSurfaceIDs: [chosen, other],
+            store: store
+        )
+
+        #expect(result.count == 1)
+        #expect(result.first?.surfaceID == other)
+    }
+
+    @Test("additionalActiveSnapshots filters idle surfaces without agent")
+    func additionalActiveSnapshotsFiltersIdle() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let idleSurface = SurfaceID()
+        let activeSurface = SurfaceID()
+
+        store.update(surfaceID: activeSurface) { $0.agentState = .working }
+        // idleSurface has no entry — the store returns .idle
+
+        let result = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary, idleSurface, activeSurface],
+            store: store
+        )
+
+        #expect(result.count == 1)
+        #expect(result.first?.surfaceID == activeSurface)
+    }
+
+    @Test("additionalActiveSnapshots keeps finished surfaces that carry a detected agent")
+    func additionalActiveSnapshotsKeepsFinishedWithAgent() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let finished = SurfaceID()
+
+        store.update(surfaceID: finished) { state in
+            state.agentState = .finished
+            state.detectedAgent = Self.makeAgent()
+        }
+
+        let result = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            primaryChosenSurfaceID: primary,
+            allSurfaceIDs: [primary, finished],
+            store: store
+        )
+
+        #expect(result.count == 1)
+        #expect(result.first?.state.detectedAgent != nil)
+    }
+
+    @Test("additionalActiveSnapshots keeps all active surfaces when primaryChosenSurfaceID is nil")
+    func additionalActiveSnapshotsFallbackKeepsAll() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let other = SurfaceID()
+
+        store.update(surfaceID: primary) { $0.agentState = .working }
+        store.update(surfaceID: other) { $0.agentState = .waitingInput }
+
+        let result = SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            primaryChosenSurfaceID: nil,
+            allSurfaceIDs: [primary, other],
+            store: store
+        )
+
+        #expect(result.count == 2)
+        let ids = Set(result.map(\.surfaceID))
+        #expect(ids.contains(primary))
+        #expect(ids.contains(other))
+    }
+
+    // MARK: - allActiveSnapshots (includes primary)
+
+    @Test("allActiveSnapshots returns empty without store")
+    func allActiveSnapshotsEmptyWithoutStore() {
+        let result = SurfaceAgentStateResolver.allActiveSnapshots(
+            focusedSurfaceID: SurfaceID(),
+            primarySurfaceID: SurfaceID(),
+            allSurfaceIDs: [SurfaceID()],
+            store: nil
+        )
+        #expect(result.isEmpty)
+    }
+
+    @Test("allActiveSnapshots includes the primary surface when active")
+    func allActiveSnapshotsIncludesPrimary() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        let other = SurfaceID()
+
+        store.update(surfaceID: primary) { $0.agentState = .working }
+        store.update(surfaceID: other) { $0.agentState = .waitingInput }
+
+        let result = SurfaceAgentStateResolver.allActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            allSurfaceIDs: [primary, other],
+            store: store
+        )
+
+        #expect(result.count == 2)
+        let primarySnapshot = result.first(where: { $0.surfaceID == primary })
+        #expect(primarySnapshot?.isPrimary == true)
+        #expect(primarySnapshot?.state.agentState == .working)
+    }
+
+    @Test("allActiveSnapshots sorts deterministically by UUID")
+    func allActiveSnapshotsSortedByUUID() {
+        let store = AgentStatePerSurfaceStore()
+        let primary = SurfaceID()
+        store.update(surfaceID: primary) { $0.agentState = .working }
+
+        let surfaces = (0..<3).map { _ -> SurfaceID in
+            let id = SurfaceID()
+            store.update(surfaceID: id) { $0.agentState = .working }
+            return id
+        }
+
+        let first = SurfaceAgentStateResolver.allActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            allSurfaceIDs: [primary] + surfaces.shuffled(),
+            store: store
+        )
+        let second = SurfaceAgentStateResolver.allActiveSnapshots(
+            focusedSurfaceID: nil,
+            primarySurfaceID: primary,
+            allSurfaceIDs: (surfaces + [primary]).shuffled(),
+            store: store
+        )
+
+        #expect(first.count == 4)
+        #expect(first.map(\.surfaceID) == second.map(\.surfaceID))
+    }
+
+    // MARK: - SurfaceAgentSnapshot equatability
+
+    @Test("SurfaceAgentSnapshot equality includes identity + role flags")
+    func surfaceAgentSnapshotEquality() {
+        let surfaceID = SurfaceID()
+        let a = SurfaceAgentSnapshot(
+            surfaceID: surfaceID,
+            state: SurfaceAgentState(agentState: .working),
+            isFocused: true,
+            isPrimary: false
+        )
+        let b = SurfaceAgentSnapshot(
+            surfaceID: surfaceID,
+            state: SurfaceAgentState(agentState: .working),
+            isFocused: true,
+            isPrimary: false
+        )
+        let c = SurfaceAgentSnapshot(
+            surfaceID: surfaceID,
+            state: SurfaceAgentState(agentState: .working),
+            isFocused: false,
+            isPrimary: false
+        )
+
+        #expect(a == b)
+        #expect(a != c)
+    }
 }
