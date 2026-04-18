@@ -156,4 +156,115 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         let item = viewModel.tabItems.first
         #expect(item?.additionalActiveAgentStates.isEmpty == true)
     }
+
+    // MARK: - perSurfaceAgentsProvider (Fase B identity-aware snapshots)
+
+    @Test("perSurfaceAgents is exposed on the display item when provider returns snapshots")
+    func perSurfaceAgentsExposedOnDisplayItem() {
+        let manager = TabManager()
+        let viewModel = TabBarViewModel(tabManager: manager)
+
+        let surfaceA = SurfaceID()
+        let surfaceB = SurfaceID()
+        let snapshots = [
+            SurfaceAgentSnapshot(
+                surfaceID: surfaceA,
+                state: SurfaceAgentState(agentState: .waitingInput),
+                isFocused: true,
+                isPrimary: false
+            ),
+            SurfaceAgentSnapshot(
+                surfaceID: surfaceB,
+                state: SurfaceAgentState(agentState: .working),
+                isFocused: false,
+                isPrimary: false
+            ),
+        ]
+
+        viewModel.perSurfaceAgentsProvider = { _ in snapshots }
+        viewModel.syncWithManager()
+
+        let item = viewModel.tabItems.first
+        #expect(item?.perSurfaceAgents.count == 2)
+        #expect(item?.perSurfaceAgents.first?.surfaceID == surfaceA)
+        #expect(item?.perSurfaceAgents.first?.isFocused == true)
+        #expect(item?.perSurfaceAgents.last?.state.agentState == .working)
+    }
+
+    @Test("perSurfaceAgents is empty by default when provider is not wired")
+    func perSurfaceAgentsEmptyByDefault() {
+        let manager = TabManager()
+        let viewModel = TabBarViewModel(tabManager: manager)
+
+        viewModel.syncWithManager()
+
+        let item = viewModel.tabItems.first
+        #expect(item?.perSurfaceAgents.isEmpty == true)
+    }
+
+    @Test("perSurfaceAgents is populated per tab so distinct tabs get distinct snapshots")
+    func perSurfaceAgentsPopulatedPerTab() {
+        let manager = TabManager()
+        let viewModel = TabBarViewModel(tabManager: manager)
+
+        let second = manager.addTab()
+
+        let surfaceFirst = SurfaceID()
+        let surfaceSecond = SurfaceID()
+
+        viewModel.perSurfaceAgentsProvider = { tab in
+            if tab.id == second.id {
+                return [
+                    SurfaceAgentSnapshot(
+                        surfaceID: surfaceSecond,
+                        state: SurfaceAgentState(agentState: .error),
+                        isFocused: false,
+                        isPrimary: true
+                    )
+                ]
+            }
+            return [
+                SurfaceAgentSnapshot(
+                    surfaceID: surfaceFirst,
+                    state: SurfaceAgentState(agentState: .working),
+                    isFocused: true,
+                    isPrimary: true
+                )
+            ]
+        }
+        viewModel.syncWithManager()
+
+        #expect(viewModel.tabItems.count == 2)
+        let firstItem = viewModel.tabItems.first(where: { $0.id != second.id })
+        let secondItem = viewModel.tabItems.first(where: { $0.id == second.id })
+        #expect(firstItem?.perSurfaceAgents.first?.state.agentState == .working)
+        #expect(secondItem?.perSurfaceAgents.first?.state.agentState == .error)
+    }
+
+    @Test("perSurfaceAgents and additionalActiveAgentStates can coexist with independent content")
+    func perSurfaceAgentsCoexistsWithLegacyProvider() {
+        // Both providers are wired simultaneously during the Fase B
+        // migration window. The display item must expose both fields
+        // without one overwriting the other.
+        let manager = TabManager()
+        let viewModel = TabBarViewModel(tabManager: manager)
+
+        viewModel.additionalActiveAgentStatesProvider = { _ in
+            [SurfaceAgentState(agentState: .waitingInput)]
+        }
+        viewModel.perSurfaceAgentsProvider = { _ in
+            [
+                SurfaceAgentSnapshot(
+                    surfaceID: SurfaceID(),
+                    state: SurfaceAgentState(agentState: .working)
+                )
+            ]
+        }
+        viewModel.syncWithManager()
+
+        let item = viewModel.tabItems.first
+        #expect(item?.additionalActiveAgentStates == [.waitingInput])
+        #expect(item?.perSurfaceAgents.count == 1)
+        #expect(item?.perSurfaceAgents.first?.state.agentState == .working)
+    }
 }

@@ -573,6 +573,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             guard let self else { return [] }
             return self.additionalActiveAgentStates(for: tab.id)
         }
+        // Identity-aware provider for Fase B mini-pills: each snapshot
+        // carries the surface ID (for click-to-focus), `isFocused`
+        // (for focus borders), and the full state (for agent name and
+        // tooltip).
+        tabBarVM.perSurfaceAgentsProvider = { [weak self] tab in
+            guard let self else { return [] }
+            return self.additionalActiveAgentSnapshots(for: tab.id)
+        }
 
         let sidebar = TabBarView(viewModel: tabBarVM)
         sidebar.onCommandPalette = { [weak self] in self?.toggleCommandPalette() }

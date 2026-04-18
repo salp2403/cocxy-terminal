@@ -47,7 +47,23 @@ struct TabDisplayItem: Identifiable, Equatable {
     /// state at a glance. The list is deterministically sorted by
     /// surface UUID upstream and only contains states that report
     /// `isActive || hasAgent`.
+    ///
+    /// Preserved for backward compatibility. Fase B consumers use
+    /// `perSurfaceAgents` instead, which carries surface IDs and the
+    /// full `SurfaceAgentState` (detected agent, activity, counts) per
+    /// entry. The two lists describe the same surfaces; this field will
+    /// be retired in a follow-up cleanup once every consumer has
+    /// migrated.
     var additionalActiveAgentStates: [AgentState] = []
+
+    /// Identity-aware snapshots for the same per-split agents exposed by
+    /// `additionalActiveAgentStates`. Fase B mini-pills consume this
+    /// list to wire click-to-focus handlers (via `surfaceID`), highlight
+    /// the focused split (via `isFocused`), and render the agent name
+    /// from `state.detectedAgent` without a second lookup. Sorted
+    /// upstream by `SurfaceID.rawValue.uuidString` for stable ordering
+    /// across refreshes.
+    var perSurfaceAgents: [SurfaceAgentSnapshot] = []
 }
 
 // MARK: - Tab Bar View Model
@@ -119,7 +135,21 @@ final class TabBarViewModel: ObservableObject {
     /// agent alongside the main pill. The default returns `[]`,
     /// preserving the legacy single-pill behavior when no per-surface
     /// store is installed.
+    ///
+    /// Preserved for backward compatibility with Fase 3e. Fase B
+    /// consumers wire `perSurfaceAgentsProvider` instead, which returns
+    /// identity-aware snapshots over the same surfaces.
     var additionalActiveAgentStatesProvider: (Tab) -> [SurfaceAgentState] = { _ in [] }
+
+    /// Identity-aware twin of `additionalActiveAgentStatesProvider`.
+    ///
+    /// Fase B wires this closure to
+    /// `MainWindowController.additionalActiveAgentSnapshots(for:tab:)`
+    /// so the sidebar mini-pills can route focus, label agents by name,
+    /// and highlight the focused split from a single snapshot per
+    /// entry. The default returns `[]`, matching the legacy quiescent
+    /// behavior when no per-surface store is installed.
+    var perSurfaceAgentsProvider: (Tab) -> [SurfaceAgentSnapshot] = { _ in [] }
 
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
@@ -320,7 +350,8 @@ final class TabBarViewModel: ObservableObject {
                     state: resolved.agentState
                 ),
                 additionalActiveAgentStates: additionalActiveAgentStatesProvider(tab)
-                    .map(\.agentState)
+                    .map(\.agentState),
+                perSurfaceAgents: perSurfaceAgentsProvider(tab)
             )
         }
     }

@@ -63,4 +63,31 @@ extension MainWindowController {
             store: injectedPerSurfaceStore
         )
     }
+
+    /// Identity-aware twin of `additionalActiveAgentStates(for:)`.
+    ///
+    /// Returns `SurfaceAgentSnapshot` values instead of bare states so
+    /// Fase B mini-pills can wire click-to-focus handlers per split,
+    /// highlight the currently focused split, and identify the agent
+    /// running in each snapshot without a second store lookup.
+    ///
+    /// Matches the existing helper's filter and ordering: excludes the
+    /// surface the primary resolver picked, keeps entries that report
+    /// `isActive || hasAgent`, and sorts deterministically by UUID.
+    func additionalActiveAgentSnapshots(for tabID: TabID) -> [SurfaceAgentSnapshot] {
+        var focusedSurfaceID: SurfaceID?
+        if displayedTabID == tabID {
+            focusedSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+        }
+
+        let resolution = resolveSurfaceAgentStateFull(for: tabID)
+
+        return SurfaceAgentStateResolver.additionalActiveSnapshots(
+            focusedSurfaceID: focusedSurfaceID,
+            primarySurfaceID: tabSurfaceMap[tabID],
+            primaryChosenSurfaceID: resolution.chosenSurfaceID,
+            allSurfaceIDs: surfaceIDs(for: tabID),
+            store: injectedPerSurfaceStore
+        )
+    }
 }
