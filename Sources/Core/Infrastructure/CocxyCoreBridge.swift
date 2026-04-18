@@ -2168,15 +2168,22 @@ final class CocxyCoreBridge: TerminalEngine {
             }
         }, context)
 
-        // Bell (BEL character)
+        // Bell (BEL character). We fire the system beep sound because that
+        // is what every mainstream terminal does when the shell or a
+        // program rings the bell (a tab-completion error, a zsh
+        // autocorrect prompt, a failed readline match, etc.). Surfacing
+        // the bell as a user-visible notification — which is what we
+        // used to do via `dispatchOSC(.notification(...))` — drowned the
+        // notification panel in low-signal entries and was reported as
+        // confusing during the Fase B smoke test. Keeping the callback
+        // registered with CocxyCore (instead of unhooking it) preserves
+        // the per-surface audit trail for any future "audible bell"
+        // preference and lets hosts override the sound without touching
+        // the C API.
         cocxycore_terminal_set_bell_callback(terminal, { ctx in
-            guard let ctx = ctx else { return }
-            let box = Unmanaged<CallbackContext>.fromOpaque(ctx).takeUnretainedValue()
+            guard ctx != nil else { return }
             DispatchQueue.main.async {
-                box.bridge?.dispatchOSC(
-                    .notification(title: "Bell", body: "Terminal bell"),
-                    for: box.surfaceID
-                )
+                NSSound.beep()
             }
         }, context)
 
