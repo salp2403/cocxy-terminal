@@ -48,8 +48,28 @@ extension MainWindowController {
     /// session registry) observes the same state-reset sequence used by
     /// explicit teardown paths.
     ///
+    /// ## Async probe
+    ///
+    /// The foreground-process lookup runs **off** the main thread via
+    /// `ForegroundProcessProbe`. The synchronous path used to block the
+    /// main thread on `sysctl(KERN_PROC_ALL)`, which could stall
+    /// keystroke delivery for the focused surface under contention —
+    /// the exact failure mode that Fase B smoke-tested as "split pane
+    /// stops accepting input after a zsh autocorrect prompt". The probe
+    /// enforces a hard 50 ms deadline; if detection does not resolve
+    /// in time the recovery is skipped for this shell-prompt event.
+    /// The next prompt and the `.launched` watchdog remain as safety
+    /// nets, so a single missed probe never strands a stale state.
+    ///
+    /// The completion handler re-reads the store state before applying
+    /// the reset because the per-surface store can advance between the
+    /// moment we armed the probe and the moment the detector resolves
+    /// (for example, a hook event may transition the surface back to
+    /// `.idle` on its own).
+    ///
     /// Designed to be safe to call on every OSC 133;A (shell prompt)
-    /// event: misses are silent and each hit performs O(1) work.
+    /// event: misses are silent and each hit performs O(1) work on the
+    /// main thread plus a bounded background probe.
     ///
     /// - Parameters:
     ///   - surfaceID: The surface that emitted the prompt.
@@ -61,19 +81,45 @@ extension MainWindowController {
     ) {
         guard let store = injectedPerSurfaceStore else { return }
 
-        let currentState = store.state(for: surfaceID).agentState
-        let foregroundName = resolveForegroundProcessName(for: surfaceID)
+        // Synchronous guards first — they match the original behaviour
+        // and let the no-registration / already-idle tests stay green
+        // without waiting on the async probe.
+        let initialState = store.state(for: surfaceID).agentState
+        guard initialState != .idle else { return }
 
-        guard AgentLifecycleRecovery.shouldResetOnShellPrompt(
-            currentState: currentState,
-            foregroundProcessName: foregroundName
-        ) else { return }
+        guard let registration = bridge.processMonitorRegistration(for: surfaceID) else {
+            return
+        }
 
-        performAgentStateReset(
+        foregroundProcessProbe.probe(
             surfaceID: surfaceID,
-            tabID: tabID,
-            reason: .shellPromptWithShellForeground
-        )
+            shellPID: registration.shellPID,
+            ptyMasterFD: registration.ptyMasterFD
+        ) { [weak self] info in
+            guard let self else { return }
+            // The probe delivered `nil` either because detection failed
+            // or because the 50 ms deadline beat the background work.
+            // Treat both the same way: skip the reset, the next prompt
+            // or the `.launched` watchdog will retry.
+            guard let info else { return }
+
+            // Re-read the state — other detection layers may have moved
+            // the surface on/off `.idle` while the probe was running.
+            // This keeps the reset idempotent and race-free.
+            guard let store = self.injectedPerSurfaceStore else { return }
+            let currentState = store.state(for: surfaceID).agentState
+
+            guard AgentLifecycleRecovery.shouldResetOnShellPrompt(
+                currentState: currentState,
+                foregroundProcessName: info.name
+            ) else { return }
+
+            self.performAgentStateReset(
+                surfaceID: surfaceID,
+                tabID: tabID,
+                reason: .shellPromptWithShellForeground
+            )
+        }
     }
 
     // MARK: - Watchdog Schedule / Cancel
@@ -128,6 +174,18 @@ extension MainWindowController {
         agentLaunchedWatchdog.cancel(surfaceID: surfaceID)
     }
 
+    /// Cancels any pending foreground-process probe for a surface.
+    ///
+    /// Called from the same teardown paths that already cancel the
+    /// `.launched` watchdog (`destroyTerminalSurface`,
+    /// `destroyAllSurfaces`, `closeSplitAction`, `.processExited`).
+    /// Dropping stale probes before the surface vanishes prevents the
+    /// completion handler from touching a missing registration and
+    /// keeps `pendingCount` accurate for diagnostics.
+    func cancelForegroundProbe(surfaceID: SurfaceID) {
+        foregroundProcessProbe.cancel(surfaceID: surfaceID)
+    }
+
     // MARK: - Reset Routine
 
     /// Flushes the per-surface agent state back to `.idle` and refreshes
@@ -144,11 +202,21 @@ extension MainWindowController {
     /// other surfaces that are still running an agent.
     ///
     /// Steps, in order:
-    /// 1. **Cancel watchdog** — avoid double-firing if reset was invoked
-    ///    by the shell-prompt path while the watchdog was still armed.
+    /// 1. **Cancel watchdog + probe** — avoid double-firing if reset
+    ///    was invoked by the shell-prompt path while the watchdog was
+    ///    still armed, and drop any in-flight foreground probe that
+    ///    would otherwise deliver a late completion onto a now-clean
+    ///    surface.
     /// 2. **Engine bucket cleanup** — `clearSurface(_:)` drops the
     ///    engine's debounce bucket and hook-session record so stale
     ///    entries cannot suppress future transitions on the surface.
+    ///    Critically, this call **does not** touch the bridge's
+    ///    `surfaces[surfaceID]` entry: the only writer to that
+    ///    dictionary is `CocxyCoreBridge.destroySurface(_:)`, which is
+    ///    not called here. That invariant is what keeps `sendKeyEvent`
+    ///    and `sendText` live after a shell-prompt recovery — regress
+    ///    it at your peril. See `feedback_process_exit_clear_buckets`
+    ///    for the paired `.processExited` path where both calls live.
     /// 3. **Store reset** — removes the per-surface entry entirely.
     ///    Subsequent reads return `.idle` from
     ///    `AgentStatePerSurfaceStore.state(for:)`.
@@ -172,6 +240,7 @@ extension MainWindowController {
         _ = reason  // Reserved for future diagnostic logging.
 
         cancelLaunchedWatchdog(surfaceID: surfaceID)
+        cancelForegroundProbe(surfaceID: surfaceID)
 
         injectedAgentDetectionEngine?.clearSurface(surfaceID)
         injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
@@ -186,35 +255,5 @@ extension MainWindowController {
         refreshStatusBar()
         updateAgentProgressOverlay()
         updateNotificationRing(for: tabID, agentState: .idle)
-    }
-
-    // MARK: - Foreground Process Resolution
-
-    /// Reads the PTY foreground process name for a surface through the
-    /// terminal engine's process-monitor registration.
-    ///
-    /// Returns `nil` when the bridge cannot supply a registration (engine
-    /// disabled, surface destroyed, shell PID unknown) or when the
-    /// `sysctl`-based detector fails. The caller treats a `nil` result as
-    /// "do not reset" which is the safe default.
-    ///
-    /// Uses the convenience overload of `ForegroundProcessDetector.detect`
-    /// that internally takes a full process snapshot. The recovery path
-    /// fires at most once per shell-prompt event — at human typing cadence
-    /// — so the one-shot `sysctl(KERN_PROC_ALL)` cost (a few milliseconds
-    /// at worst) is negligible compared to the monitoring poll that
-    /// `ProcessMonitorService` already runs every 2 seconds.
-    ///
-    /// Kept `internal` so the agent-lifecycle recovery extension and the
-    /// regression tests can reuse it; not part of the controller's public
-    /// API surface.
-    func resolveForegroundProcessName(for surfaceID: SurfaceID) -> String? {
-        guard let registration = bridge.processMonitorRegistration(for: surfaceID) else {
-            return nil
-        }
-        return ForegroundProcessDetector.detect(
-            shellPID: registration.shellPID,
-            ptyMasterFD: registration.ptyMasterFD
-        )?.name
     }
 }

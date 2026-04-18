@@ -320,6 +320,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// for the schedule/cancel call sites and the recovery routine.
     let agentLaunchedWatchdog = AgentLaunchedWatchdog()
 
+    /// Async helper that runs `ForegroundProcessDetector.detect(...)`
+    /// off the main thread with a hard deadline. Used by the shell
+    /// prompt recovery path so the main thread never blocks on
+    /// `sysctl(KERN_PROC_ALL)` — a stall there would freeze keydown
+    /// delivery for the focused surface and reproduce the Fase B
+    /// input-dead bug (split pane stops accepting typing after a zsh
+    /// autocorrect prompt). See `MainWindowController+AgentLifecycleRecovery`
+    /// for the probe / cancel call sites.
+    var foregroundProcessProbe = ForegroundProcessProbe()
+
     /// Session diff tracker injected by AppDelegate for the code review panel.
     var injectedSessionDiffTracker: SessionDiffTracking?
 

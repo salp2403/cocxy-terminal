@@ -203,10 +203,11 @@ extension MainWindowController {
         guard let tabID = visibleTabID,
               let surfaceID = tabSurfaceMap[tabID] ?? tabViewModels[tabID]?.surfaceID else { return }
         clearSurfaceTracking(for: surfaceID)
-        // Cancel any pending `.launched` watchdog first so its
-        // `DispatchWorkItem` cannot fire against a surface that is
-        // about to be destroyed.
+        // Cancel any pending `.launched` watchdog and in-flight
+        // foreground-process probe first so their `DispatchWorkItem`s
+        // cannot fire against a surface that is about to be destroyed.
         cancelLaunchedWatchdog(surfaceID: surfaceID)
+        cancelForegroundProbe(surfaceID: surfaceID)
         // Release any per-surface state the detection engine accumulated
         // (debounce bucket + hook-session record) before the underlying
         // terminal is torn down. Calling after destroySurface would leave
@@ -272,8 +273,11 @@ extension MainWindowController {
         // Cancel every pending `.launched` watchdog in one pass so no
         // fire-and-forget `DispatchWorkItem` outlives the window. Done
         // outside the per-surface loop because the watchdog exposes a
-        // single-call API for a full sweep.
+        // single-call API for a full sweep. Same applies to the
+        // foreground-process probe: a completion delivered after window
+        // teardown would touch a dead controller.
         agentLaunchedWatchdog.cancelAll()
+        foregroundProcessProbe.cancelAll()
 
         // Destroy each surface exactly once.
         for surfaceID in surfacesToDestroy {
@@ -642,12 +646,14 @@ extension MainWindowController {
             if let sid = sourceSurfaceID {
                 injectedAgentDetectionEngine?.clearSurface(sid)
                 injectedPerSurfaceStore?.reset(surfaceID: sid)
-                // Defensive: if a launched-watchdog was armed for this
-                // surface (rare — the shell process normally exits
-                // after the agent, not while `.launched` is in flight),
-                // cancel it so the callback does not double-fire a
-                // reset on an already-cleared store entry.
+                // Defensive: if a launched-watchdog or a foreground
+                // probe was armed for this surface (rare — the shell
+                // process normally exits after the agent, not while
+                // `.launched` or a probe is in flight), cancel them so
+                // the callbacks do not double-fire a reset on an
+                // already-cleared store entry.
                 cancelLaunchedWatchdog(surfaceID: sid)
+                cancelForegroundProbe(surfaceID: sid)
             }
             tabBarViewModel?.syncWithManager()
         }
