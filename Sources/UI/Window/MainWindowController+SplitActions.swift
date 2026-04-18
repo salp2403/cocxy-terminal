@@ -365,9 +365,13 @@ extension MainWindowController {
                 // Cancel any pending `.launched` watchdog or foreground
                 // probe before we tear the surface down so the scheduled
                 // callbacks cannot fire against the already-cleared
-                // store entry.
+                // store entry. The input-drop tracker is cleared in the
+                // same block so the next split created under this ID
+                // (extremely rare, UUID-based) starts with a fresh
+                // counter.
                 cancelLaunchedWatchdog(surfaceID: sid)
                 cancelForegroundProbe(surfaceID: sid)
+                cancelInputDropTracking(surfaceID: sid)
                 // Release per-surface detection state (engine bucket +
                 // shadow store entry) before the bridge tears down the
                 // terminal so no stale split state is retained.

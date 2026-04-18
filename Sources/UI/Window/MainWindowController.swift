@@ -330,6 +330,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// for the probe / cancel call sites.
     var foregroundProcessProbe = ForegroundProcessProbe()
 
+    /// Per-surface monitor that raises a notification when several PTY
+    /// input writes in a row drop silently. Wired to the bridge's
+    /// `inputDeliveryObserver` so every keystroke delivery outcome
+    /// feeds the tracker. Gives the user an observable signal ("press
+    /// Cmd+Shift+W to close this pane") when the Fase B dead-pane bug
+    /// reproduces despite the earlier defensive layers.
+    let surfaceInputDropMonitor = SurfaceInputDropMonitor()
+
     /// Session diff tracker injected by AppDelegate for the code review panel.
     var injectedSessionDiffTracker: SessionDiffTracking?
 
@@ -444,6 +452,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         subscribeToConfigChanges()
         subscribeToActiveTabChanges()
         startProcessMonitor()
+        installInputDropMonitorObserver()
     }
 
     /// Required initializer for NSCoding. Not used in practice.

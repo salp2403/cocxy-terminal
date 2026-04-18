@@ -261,6 +261,17 @@ final class CocxyCoreBridge: TerminalEngine {
     var clipboardService: any ClipboardServiceProtocol = SystemClipboardService()
     var clipboardReadAuthorizationHandler: ((NSWindow?) -> Bool)?
 
+    /// Observer fired by `sendKeyEvent` / `sendText` for every input
+    /// attempt, with either `.delivered` (bytes reached the PTY) or
+    /// `.dropped(reason)` (surface missing from the bridge map or PTY
+    /// write rejected). The main-window controller wires this to
+    /// `SurfaceInputDropMonitor` so the user gets a visible warning if
+    /// several keystrokes vanish in a row — the exact failure mode the
+    /// Fase B smoke test surfaced. Optional because the CLI / scripting
+    /// host does not need it, and tests can exercise the bridge without
+    /// a subscriber.
+    var inputDeliveryObserver: (@MainActor (SurfaceID, InputDeliveryEvent) -> Void)?
+
     /// Semantic adapter that converts CocxyCore events to HookEvent/TimelineEvent
     /// format for the existing agent detection and timeline systems.
     let semanticAdapter = CocxyCoreSemanticAdapter()
@@ -508,7 +519,7 @@ final class CocxyCoreBridge: TerminalEngine {
         // worse, the subsequent `write_attached_pty` lands on a C buffer
         // that the parser is mid-update, which is the suspected trigger for
         // the transparent-on-Claude-launch bug.
-        let lockedResult = withTerminalLock(surface) { state -> Bool in
+        let lockedResult = withTerminalLock(surface) { state -> DeliveryOutcome in
             var buf = [UInt8](repeating: 0, count: 32)
             var bytesWritten = 0
 
@@ -551,12 +562,12 @@ final class CocxyCoreBridge: TerminalEngine {
                         "sendKeyEvent: PTY write dropped \(bytesWritten) encoded bytes for surface \(surface.rawValue.uuidString, privacy: .public); keypress is lost"
                     )
                 }
-                return true
+                return DeliveryOutcome(keyHandled: true, writeSucceeded: writeOK)
             }
-            return false
+            return DeliveryOutcome(keyHandled: false, writeSucceeded: true)
         }
 
-        guard let result = lockedResult else {
+        guard let outcome = lockedResult else {
             // `withTerminalLock` only returns `nil` when the surface is
             // missing from `bridge.surfaces`. When that happens the
             // caller's keypress vanishes with zero visual feedback, which
@@ -567,9 +578,31 @@ final class CocxyCoreBridge: TerminalEngine {
             cocxyInputLog.error(
                 "sendKeyEvent: surface \(surface.rawValue.uuidString, privacy: .public) not registered in bridge; keypress dropped"
             )
+            inputDeliveryObserver?(surface, .dropped(.surfaceMissing))
             return false
         }
-        return result
+
+        // `keyHandled == false` is a benign no-op (for example, a modifier
+        // release that produced no bytes). We only emit delivery events
+        // when the key actually encoded into a write attempt so the
+        // input-drop monitor is driven off real input activity.
+        if outcome.keyHandled {
+            inputDeliveryObserver?(
+                surface,
+                outcome.writeSucceeded ? .delivered : .dropped(.ptyWriteFailed)
+            )
+        }
+        return outcome.keyHandled
+    }
+
+    /// Internal tuple that disambiguates the two boolean dimensions the
+    /// key encoder returns: whether the key produced bytes at all and,
+    /// if it did, whether those bytes reached the PTY. The observer uses
+    /// both pieces to decide between `.delivered`, `.dropped`, or
+    /// "ignore this event".
+    private struct DeliveryOutcome {
+        let keyHandled: Bool
+        let writeSucceeded: Bool
     }
 
     func sendText(_ text: String, to surface: SurfaceID) {
@@ -591,6 +624,7 @@ final class CocxyCoreBridge: TerminalEngine {
             cocxyInputLog.error(
                 "sendText: surface \(surface.rawValue.uuidString, privacy: .public) not registered in bridge; \(bytes.count) bytes dropped"
             )
+            inputDeliveryObserver?(surface, .dropped(.surfaceMissing))
         } else if writeResult == false {
             // PTY write returned 0 bytes. The terminal remains alive in
             // the bridge but the kernel rejected the write (fd closed,
@@ -599,6 +633,9 @@ final class CocxyCoreBridge: TerminalEngine {
             cocxyInputLog.error(
                 "sendText: PTY write dropped \(bytes.count) bytes for surface \(surface.rawValue.uuidString, privacy: .public)"
             )
+            inputDeliveryObserver?(surface, .dropped(.ptyWriteFailed))
+        } else {
+            inputDeliveryObserver?(surface, .delivered)
         }
     }
 

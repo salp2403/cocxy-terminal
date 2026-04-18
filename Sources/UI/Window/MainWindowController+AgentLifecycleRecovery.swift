@@ -186,6 +186,99 @@ extension MainWindowController {
         foregroundProcessProbe.cancel(surfaceID: surfaceID)
     }
 
+    /// Clears the surface-input-drop monitor entry for a surface.
+    ///
+    /// Teardown paths call this alongside the watchdog / probe cancels
+    /// so a recycled `SurfaceID` (extremely rare with UUID identities
+    /// but possible across session restore) never inherits a stale
+    /// consecutive-drop counter or a stuck `notified` flag.
+    func cancelInputDropTracking(surfaceID: SurfaceID) {
+        surfaceInputDropMonitor.clear(surfaceID: surfaceID)
+    }
+
+    // MARK: - Input-drop observer wiring
+
+    /// Connects the bridge's input-delivery observer to the per-surface
+    /// drop monitor and wires the monitor's stuck-pane handler to the
+    /// user-visible notification path.
+    ///
+    /// Idempotent: safe to call more than once. Production wiring
+    /// happens during the controller's `init` so every window gets its
+    /// own monitor from the first surface onwards. Tests that do not
+    /// need bridge events can drive the monitor directly and ignore
+    /// this plumbing.
+    ///
+    /// The wiring is conditional on the concrete `CocxyCoreBridge`
+    /// type: only that bridge emits `InputDeliveryEvent`, and other
+    /// `TerminalEngine` conformers used by tests (`MockTerminalEngine`)
+    /// have no observer field. Those code paths simply skip the
+    /// install — the monitor still works when driven directly.
+    func installInputDropMonitorObserver() {
+        surfaceInputDropMonitor.onStuckPane = { [weak self] surfaceID, reason in
+            self?.presentStuckPaneNotification(
+                surfaceID: surfaceID,
+                reason: reason
+            )
+        }
+
+        guard let cocxyBridge = bridge as? CocxyCoreBridge else { return }
+        cocxyBridge.inputDeliveryObserver = { [weak self] surfaceID, event in
+            guard let self else { return }
+            switch event {
+            case .delivered:
+                self.surfaceInputDropMonitor.recordDelivery(surfaceID: surfaceID)
+            case .dropped(let reason):
+                self.surfaceInputDropMonitor.recordDrop(
+                    surfaceID: surfaceID,
+                    reason: reason
+                )
+            }
+        }
+    }
+
+    /// Surfaces the "pane is not accepting input" notification to the
+    /// user. Invoked by the drop monitor when a surface accumulates
+    /// `SurfaceInputDropMonitor.threshold` consecutive drops since the
+    /// last successful delivery.
+    ///
+    /// The handler does three things:
+    /// 1. Emits a system beep — drops are silent by nature, the beep
+    ///    is the first signal the user gets even if the notification
+    ///    system is denied permissions.
+    /// 2. Resolves the owning tab so the notification panel groups
+    ///    correctly. Falls back to the active tab when the surface
+    ///    mapping has already vanished (surface torn down between the
+    ///    last drop and this handler).
+    /// 3. Enqueues a `.custom("input-stuck-pane")` notification via
+    ///    the injected manager. The body hints at the recovery action
+    ///    (`Cmd+Shift+W` closes the split) so the user is never stuck
+    ///    wondering how to escape the dead pane.
+    private func presentStuckPaneNotification(
+        surfaceID: SurfaceID,
+        reason: InputDropReason
+    ) {
+        NSSound.beep()
+
+        let targetTabID = tabID(for: surfaceID) ?? tabManager.activeTabID
+        guard let tabID = targetTabID else { return }
+
+        let body: String
+        switch reason {
+        case .surfaceMissing:
+            body = "This pane lost its terminal and is no longer routing input. Close it with Cmd+Shift+W."
+        case .ptyWriteFailed:
+            body = "This pane's shell is not accepting keystrokes. Close it with Cmd+Shift+W and open a fresh split."
+        }
+
+        let notification = CocxyNotification(
+            type: .custom("input-stuck-pane"),
+            tabId: tabID,
+            title: "Pane stopped accepting input",
+            body: body
+        )
+        injectedNotificationManager?.notify(notification)
+    }
+
     // MARK: - Reset Routine
 
     /// Flushes the per-surface agent state back to `.idle` and refreshes

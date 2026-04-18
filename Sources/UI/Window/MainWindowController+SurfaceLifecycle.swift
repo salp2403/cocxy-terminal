@@ -206,8 +206,11 @@ extension MainWindowController {
         // Cancel any pending `.launched` watchdog and in-flight
         // foreground-process probe first so their `DispatchWorkItem`s
         // cannot fire against a surface that is about to be destroyed.
+        // Drop the input-drop tracker entry in the same block so a
+        // recycled surface ID never inherits stale drop state.
         cancelLaunchedWatchdog(surfaceID: surfaceID)
         cancelForegroundProbe(surfaceID: surfaceID)
+        cancelInputDropTracking(surfaceID: surfaceID)
         // Release any per-surface state the detection engine accumulated
         // (debounce bucket + hook-session record) before the underlying
         // terminal is torn down. Calling after destroySurface would leave
@@ -275,9 +278,12 @@ extension MainWindowController {
         // outside the per-surface loop because the watchdog exposes a
         // single-call API for a full sweep. Same applies to the
         // foreground-process probe: a completion delivered after window
-        // teardown would touch a dead controller.
+        // teardown would touch a dead controller. The input-drop
+        // monitor also flushes here so no per-surface tracker leaks
+        // into the next window.
         agentLaunchedWatchdog.cancelAll()
         foregroundProcessProbe.cancelAll()
+        surfaceInputDropMonitor.clearAll()
 
         // Destroy each surface exactly once.
         for surfaceID in surfacesToDestroy {
@@ -651,9 +657,12 @@ extension MainWindowController {
                 // process normally exits after the agent, not while
                 // `.launched` or a probe is in flight), cancel them so
                 // the callbacks do not double-fire a reset on an
-                // already-cleared store entry.
+                // already-cleared store entry. The drop tracker is
+                // cleared alongside so a process re-exec on the same
+                // surface ID starts with a clean counter.
                 cancelLaunchedWatchdog(surfaceID: sid)
                 cancelForegroundProbe(surfaceID: sid)
+                cancelInputDropTracking(surfaceID: sid)
             }
             tabBarViewModel?.syncWithManager()
         }
