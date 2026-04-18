@@ -52,11 +52,58 @@ extension MainWindowController {
         window?.makeFirstResponder(hostingView)
     }
 
+    /// Maps each Command Palette action id to the `KeybindingActionCatalog`
+    /// action whose shortcut the UI should display.
+    ///
+    /// Palette entries without an entry here keep their hardcoded
+    /// `shortcut` literal (for actions that are not user-rebindable, such as
+    /// theme cycling or remote workspace toggling).
+    private static let paletteCatalogMapping: [String: String] = [
+        "tabs.new": KeybindingActionCatalog.tabNew.id,
+        "tabs.close": KeybindingActionCatalog.tabClose.id,
+        "tabs.next": KeybindingActionCatalog.tabNext.id,
+        "tabs.previous": KeybindingActionCatalog.tabPrevious.id,
+        "splits.vertical": KeybindingActionCatalog.splitVertical.id,
+        "splits.horizontal": KeybindingActionCatalog.splitHorizontal.id,
+        "splits.close": KeybindingActionCatalog.splitClose.id,
+        "splits.equalize": KeybindingActionCatalog.splitEqualize.id,
+        "splits.zoom": KeybindingActionCatalog.splitToggleZoom.id,
+        "dashboard.toggle": KeybindingActionCatalog.reviewDashboard.id,
+        "agent.review": KeybindingActionCatalog.reviewCodeReview.id,
+        "timeline.toggle": KeybindingActionCatalog.reviewTimeline.id,
+        "search.toggle": KeybindingActionCatalog.editorFind.id,
+        "preferences.show": KeybindingActionCatalog.windowPreferences.id,
+        "notifications.toggle": KeybindingActionCatalog.reviewNotifications.id,
+        "browser.toggle": KeybindingActionCatalog.markdownBrowser.id,
+        "navigation.quickterminal": KeybindingActionCatalog.windowQuickTerminal.id,
+    ]
+
+    /// Resolves the Command Palette shortcut label for a palette action id
+    /// against the live keybindings config.
+    ///
+    /// Returns the user's current binding (pretty macOS-glyph label) when
+    /// `paletteId` maps to a catalog action; otherwise returns `fallback`
+    /// unchanged so actions outside the catalog keep their hardcoded label.
+    private func paletteShortcutLabel(
+        _ paletteId: String,
+        fallback: String?
+    ) -> String? {
+        guard let actionId = Self.paletteCatalogMapping[paletteId] else {
+            return fallback
+        }
+        let config = configService?.current.keybindings ?? .defaults
+        return MenuKeybindingsBinder.prettyShortcut(for: actionId, in: config)
+    }
+
     /// Creates a CommandPaletteEngine with all actions wired to real handlers.
     ///
     /// Actions that require AppKit coordination (toggleDashboard, toggleTimeline, etc.)
     /// are registered with direct handlers referencing `self`, bypassing the coordinator
     /// layer which lacks access to the window controller.
+    ///
+    /// Shortcut labels for catalog-backed actions are resolved live from
+    /// `ConfigService.current.keybindings` so the palette glyph always
+    /// matches the menu bar glyph, even after a user customization.
     private func createWiredCommandPaletteEngine() -> CommandPaletteEngineImpl {
         let engine = CommandPaletteEngineImpl()
 
@@ -68,7 +115,7 @@ extension MainWindowController {
                 id: "tabs.new",
                 name: "New Tab",
                 description: "Open a new terminal tab",
-                shortcut: "Cmd+T",
+                shortcut: paletteShortcutLabel("tabs.new", fallback: nil),
                 category: .tabs,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -79,7 +126,7 @@ extension MainWindowController {
                 id: "tabs.close",
                 name: "Close Tab",
                 description: "Close the current tab",
-                shortcut: "Cmd+W",
+                shortcut: paletteShortcutLabel("tabs.close", fallback: nil),
                 category: .tabs,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -93,7 +140,7 @@ extension MainWindowController {
                 id: "splits.vertical",
                 name: "Split Vertical",
                 description: "Split the current pane vertically",
-                shortcut: "Cmd+Shift+D",
+                shortcut: paletteShortcutLabel("splits.vertical", fallback: nil),
                 category: .splits,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -104,7 +151,7 @@ extension MainWindowController {
                 id: "splits.horizontal",
                 name: "Split Horizontal",
                 description: "Split the current pane horizontally",
-                shortcut: "Cmd+D",
+                shortcut: paletteShortcutLabel("splits.horizontal", fallback: nil),
                 category: .splits,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -115,7 +162,7 @@ extension MainWindowController {
                 id: "splits.close",
                 name: "Close Split",
                 description: "Close the focused split pane",
-                shortcut: "Cmd+Shift+W",
+                shortcut: paletteShortcutLabel("splits.close", fallback: nil),
                 category: .splits,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -126,7 +173,7 @@ extension MainWindowController {
                 id: "dashboard.toggle",
                 name: "Toggle Dashboard",
                 description: "Show or hide the agent dashboard panel",
-                shortcut: "Cmd+Option+A",
+                shortcut: paletteShortcutLabel("dashboard.toggle", fallback: nil),
                 category: .dashboard,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -137,7 +184,7 @@ extension MainWindowController {
                 id: "agent.review",
                 name: "Toggle Code Review",
                 description: "Review agent-generated file changes",
-                shortcut: "Cmd+Option+R",
+                shortcut: paletteShortcutLabel("agent.review", fallback: nil),
                 category: .agent,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -148,7 +195,7 @@ extension MainWindowController {
                 id: "timeline.toggle",
                 name: "Toggle Timeline",
                 description: "Show or hide the agent timeline panel",
-                shortcut: "Cmd+Shift+T",
+                shortcut: paletteShortcutLabel("timeline.toggle", fallback: nil),
                 category: .navigation,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -159,7 +206,7 @@ extension MainWindowController {
                 id: "search.toggle",
                 name: "Find in Terminal",
                 description: "Search the scrollback buffer",
-                shortcut: "Cmd+F",
+                shortcut: paletteShortcutLabel("search.toggle", fallback: nil),
                 category: .navigation,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -170,7 +217,7 @@ extension MainWindowController {
                 id: "preferences.show",
                 name: "Show Preferences",
                 description: "Open terminal settings",
-                shortcut: "Cmd+,",
+                shortcut: paletteShortcutLabel("preferences.show", fallback: nil),
                 category: .navigation,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -203,7 +250,7 @@ extension MainWindowController {
                 id: "notifications.toggle",
                 name: "Toggle Notifications",
                 description: "Show or hide the notification panel",
-                shortcut: "Cmd+Shift+I",
+                shortcut: paletteShortcutLabel("notifications.toggle", fallback: nil),
                 category: .navigation,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -214,7 +261,7 @@ extension MainWindowController {
                 id: "browser.toggle",
                 name: "Toggle Browser",
                 description: "Show or hide the in-app browser",
-                shortcut: "Cmd+Shift+B",
+                shortcut: paletteShortcutLabel("browser.toggle", fallback: nil),
                 category: .navigation,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -305,7 +352,7 @@ extension MainWindowController {
                 id: "splits.equalize",
                 name: "Equalize Splits",
                 description: "Set all split panes to equal size",
-                shortcut: "Cmd+Shift+E",
+                shortcut: paletteShortcutLabel("splits.equalize", fallback: nil),
                 category: .splits,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -318,7 +365,7 @@ extension MainWindowController {
                 id: "splits.zoom",
                 name: "Toggle Split Zoom",
                 description: "Maximize the focused pane or restore equal sizes",
-                shortcut: "Cmd+Shift+F",
+                shortcut: paletteShortcutLabel("splits.zoom", fallback: nil),
                 category: .splits,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -331,7 +378,7 @@ extension MainWindowController {
                 id: "tabs.next",
                 name: "Next Tab",
                 description: "Switch to the next tab",
-                shortcut: "Ctrl+Tab",
+                shortcut: paletteShortcutLabel("tabs.next", fallback: nil),
                 category: .tabs,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -342,7 +389,7 @@ extension MainWindowController {
                 id: "tabs.previous",
                 name: "Previous Tab",
                 description: "Switch to the previous tab",
-                shortcut: "Ctrl+Shift+Tab",
+                shortcut: paletteShortcutLabel("tabs.previous", fallback: nil),
                 category: .tabs,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -366,7 +413,7 @@ extension MainWindowController {
                 id: "navigation.quickterminal",
                 name: "Toggle Quick Terminal",
                 description: "Show or hide the dropdown quick terminal",
-                shortcut: nil,
+                shortcut: paletteShortcutLabel("navigation.quickterminal", fallback: nil),
                 category: .navigation,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()

@@ -197,6 +197,10 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
     ///
     /// When a coordinator is set, built-in actions delegate to the coordinator's methods.
     /// When the coordinator is nil, handlers are safe no-ops.
+    ///
+    /// Shortcut labels are resolved from the `KeybindingActionCatalog` defaults.
+    /// Live user customizations are applied later via `rebuildBuiltInShortcuts(using:)`
+    /// so the palette can surface the same glyph the menu shows.
     private func registerBuiltInActions() {
         let coordinatorBox = WeakCoordinatorBox(coordinator)
 
@@ -205,7 +209,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 id: "tabs.new",
                 name: "New Tab",
                 description: "Open a new terminal tab",
-                shortcut: "Cmd+T",
+                shortcut: KeybindingActionCatalog.tabNew.defaultShortcut.prettyLabel,
                 category: .tabs,
                 handler: { coordinatorBox.coordinator?.newTab() }
             ),
@@ -213,7 +217,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 id: "tabs.close",
                 name: "Close Tab",
                 description: "Close the current tab",
-                shortcut: "Cmd+W",
+                shortcut: KeybindingActionCatalog.tabClose.defaultShortcut.prettyLabel,
                 category: .tabs,
                 handler: { coordinatorBox.coordinator?.closeTab() }
             ),
@@ -221,7 +225,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 id: "tabs.next",
                 name: "Next Tab",
                 description: "Switch to the next tab",
-                shortcut: "Ctrl+Tab",
+                shortcut: KeybindingActionCatalog.tabNext.defaultShortcut.prettyLabel,
                 category: .tabs,
                 handler: { coordinatorBox.coordinator?.nextTab() }
             ),
@@ -229,7 +233,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 id: "tabs.previous",
                 name: "Previous Tab",
                 description: "Switch to the previous tab",
-                shortcut: "Ctrl+Shift+Tab",
+                shortcut: KeybindingActionCatalog.tabPrevious.defaultShortcut.prettyLabel,
                 category: .tabs,
                 handler: { coordinatorBox.coordinator?.previousTab() }
             ),
@@ -237,7 +241,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 id: "splits.vertical",
                 name: "Split Vertical",
                 description: "Split the current pane vertically",
-                shortcut: "Cmd+D",
+                shortcut: KeybindingActionCatalog.splitVertical.defaultShortcut.prettyLabel,
                 category: .splits,
                 handler: { coordinatorBox.coordinator?.splitVertical() }
             ),
@@ -245,7 +249,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 id: "splits.horizontal",
                 name: "Split Horizontal",
                 description: "Split the current pane horizontally",
-                shortcut: "Cmd+D",
+                shortcut: KeybindingActionCatalog.splitHorizontal.defaultShortcut.prettyLabel,
                 category: .splits,
                 handler: { coordinatorBox.coordinator?.splitHorizontal() }
             ),
@@ -253,7 +257,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 id: "dashboard.toggle",
                 name: "Toggle Dashboard",
                 description: "Show or hide the agent dashboard panel",
-                shortcut: "Cmd+Option+D",
+                shortcut: KeybindingActionCatalog.reviewDashboard.defaultShortcut.prettyLabel,
                 category: .dashboard,
                 handler: { coordinatorBox.coordinator?.toggleDashboard() }
             ),
@@ -261,7 +265,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 id: "navigation.quickswitch",
                 name: "Quick Switch",
                 description: "Jump to the most urgent agent session",
-                shortcut: "Cmd+Shift+A",
+                shortcut: KeybindingActionCatalog.remoteGoToAttention.defaultShortcut.prettyLabel,
                 category: .navigation,
                 handler: { coordinatorBox.coordinator?.performQuickSwitch() }
             ),
@@ -269,6 +273,54 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
 
         for action in builtIns {
             actionsById[action.id] = action
+        }
+    }
+
+    // MARK: - Keybindings Hot-Reload
+
+    /// Rebuilds the shortcut labels of the built-in actions using the live
+    /// keybindings config.
+    ///
+    /// Called by `AppDelegate` whenever `ConfigService` publishes a new config
+    /// so the command palette shows the same glyph the user sees in the menu
+    /// bar. Unknown ids fall back to the catalog default.
+    ///
+    /// - Parameter keybindings: The current `[keybindings]` snapshot.
+    func rebuildBuiltInShortcuts(using keybindings: KeybindingsConfig) {
+        let mapping: [(paletteId: String, actionId: String)] = [
+            ("tabs.new", KeybindingActionCatalog.tabNew.id),
+            ("tabs.close", KeybindingActionCatalog.tabClose.id),
+            ("tabs.next", KeybindingActionCatalog.tabNext.id),
+            ("tabs.previous", KeybindingActionCatalog.tabPrevious.id),
+            ("splits.vertical", KeybindingActionCatalog.splitVertical.id),
+            ("splits.horizontal", KeybindingActionCatalog.splitHorizontal.id),
+            ("dashboard.toggle", KeybindingActionCatalog.reviewDashboard.id),
+            ("navigation.quickswitch", KeybindingActionCatalog.remoteGoToAttention.id),
+        ]
+
+        lock.lock()
+        defer { lock.unlock() }
+
+        for (paletteId, actionId) in mapping {
+            guard let existing = actionsById[paletteId] else { continue }
+            let raw = keybindings.shortcutString(for: actionId)
+            let label: String?
+            if raw.isEmpty {
+                label = nil
+            } else if let parsed = KeybindingShortcut.parse(raw) {
+                label = parsed.prettyLabel
+            } else {
+                label = existing.shortcut    // keep previous on parse failure
+            }
+
+            actionsById[paletteId] = CommandAction(
+                id: existing.id,
+                name: existing.name,
+                description: existing.description,
+                shortcut: label,
+                category: existing.category,
+                handler: existing.handler
+            )
         }
     }
 }

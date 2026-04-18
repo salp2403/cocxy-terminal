@@ -118,6 +118,25 @@ enum MenuKeybindingsBinder {
         }
     }
 
+    // MARK: - Command Palette Labels
+
+    /// Resolves the pretty shortcut label for a catalog action.
+    ///
+    /// Used by UI surfaces that display shortcuts as text (Command Palette
+    /// rows, tooltip hints) so they stay in sync with the live keybindings
+    /// config. Returns `nil` when the action has no binding (user cleared it
+    /// or the stored value fails to parse).
+    ///
+    /// - Parameters:
+    ///   - actionId: A catalog action id (e.g., `"tab.new"`).
+    ///   - config: The current `[keybindings]` snapshot.
+    /// - Returns: The macOS-glyph label (e.g., `⌘T`) or `nil` when unbound.
+    static func prettyShortcut(for actionId: String, in config: KeybindingsConfig) -> String? {
+        let raw = config.shortcutString(for: actionId)
+        guard !raw.isEmpty else { return nil }
+        return KeybindingShortcut.parse(raw)?.prettyLabel
+    }
+
     // MARK: - Private
 
     /// Prefix used to distinguish keybinding-managed menu items from
