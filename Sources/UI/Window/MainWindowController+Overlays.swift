@@ -31,10 +31,10 @@ extension MainWindowController {
     func showCommandPaletteOverlay() {
         guard let overlayContainer = overlayContainerView else { return }
 
-        if commandPaletteViewModel == nil {
-            let engine = createWiredCommandPaletteEngine()
-            commandPaletteViewModel = CommandPaletteViewModel(engine: engine)
-        }
+        // Rebuild the engine on every open so palette shortcut labels
+        // reflect the latest `[keybindings]` config.
+        let engine = createWiredCommandPaletteEngine()
+        commandPaletteViewModel = CommandPaletteViewModel(engine: engine)
 
         guard let viewModel = commandPaletteViewModel else { return }
         viewModel.isVisible = true

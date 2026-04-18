@@ -102,6 +102,8 @@ struct KeybindingShortcut: Equatable, Hashable, Sendable {
         case "backspace": return "\u{08}"
         case "delete": return "\u{7F}"
         case "grave": return "`"
+        case "plus": return "+"
+        case "minus": return "-"
         case "left":
             return String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!))
         case "right":
@@ -344,6 +346,8 @@ struct KeybindingShortcut: Equatable, Hashable, Sendable {
         case "up": return "\u{2191}"        // ↑
         case "down": return "\u{2193}"      // ↓
         case "grave": return "`"
+        case "plus": return "+"
+        case "minus": return "-"
         default:
             // Function keys f1...f20 render uppercase.
             if key.hasPrefix("f"), key.dropFirst().allSatisfy(\.isNumber) {

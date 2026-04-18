@@ -352,7 +352,7 @@ enum KeybindingActionCatalog {
         displayName: "Zoom In",
         summary: "Increase font size.",
         category: .editor,
-        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "=")
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "plus")
     )
 
     static let editorZoomOut = KeybindingAction(
