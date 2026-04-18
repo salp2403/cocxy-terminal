@@ -263,18 +263,18 @@ enum KeybindingActionCatalog {
 
     // MARK: - Split
 
-    static let splitHorizontal = KeybindingAction(
-        id: "split.horizontal",
-        displayName: "Split Horizontal",
-        summary: "Split the active pane side-by-side.",
+    static let splitVertical = KeybindingAction(
+        id: "split.vertical",
+        displayName: "Split Vertical",
+        summary: "Split the active pane into a new column.",
         category: .split,
         defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "d")
     )
 
-    static let splitVertical = KeybindingAction(
-        id: "split.vertical",
-        displayName: "Split Vertical",
-        summary: "Split the active pane stacked.",
+    static let splitHorizontal = KeybindingAction(
+        id: "split.horizontal",
+        displayName: "Split Horizontal",
+        summary: "Split the active pane into a new row.",
         category: .split,
         defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "d")
     )
@@ -335,14 +335,6 @@ enum KeybindingActionCatalog {
         summary: "Move focus to the split below.",
         category: .navigation,
         defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresOption: true, baseKey: "down")
-    )
-
-    static let navigationSmartRouting = KeybindingAction(
-        id: "navigation.smartRouting",
-        displayName: "Smart Routing",
-        summary: "Jump to the most urgent agent session.",
-        category: .navigation,
-        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "u")
     )
 
     // MARK: - Editor (view actions: find, zoom)
@@ -464,7 +456,6 @@ enum KeybindingActionCatalog {
         navigateSplitRight,
         navigateSplitUp,
         navigateSplitDown,
-        navigationSmartRouting,
         // Editor
         editorFind,
         editorZoomIn,
