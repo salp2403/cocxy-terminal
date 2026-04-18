@@ -94,6 +94,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// when the `[sessions]` config changes.
     var sessionAutoSaveConfigCancellable: AnyCancellable?
 
+    /// Subscription that reapplies `[keybindings]` onto the main menu
+    /// whenever `ConfigService` publishes a new config snapshot.
+    ///
+    /// Installed by `startMenuKeybindingsObserver()` right after
+    /// `setupMainMenu()` so menu shortcuts stay in sync with the editor
+    /// without requiring an app restart.
+    private var menuKeybindingsCancellable: AnyCancellable?
+
     /// The quick terminal view model for state management.
     /// Internal setter: extensions (+SessionManagement) assign during init.
     var quickTerminalViewModel: QuickTerminalViewModel?
@@ -244,6 +252,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startConfigWatcher()
         initializeSessionManager()
         setupMainMenu()
+        applyKeybindingsToMainMenu()
+        startMenuKeybindingsObserver()
         initializeBridge()
         initializeAgentDetectionEngine()
         initializeSessionRegistry()
@@ -272,6 +282,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stopSessionAutoSave()
         sessionAutoSaveConfigCancellable?.cancel()
         sessionAutoSaveConfigCancellable = nil
+        menuKeybindingsCancellable?.cancel()
+        menuKeybindingsCancellable = nil
 
         // Save the current session synchronously before shutting down.
         saveSessionBeforeTermination()
@@ -404,6 +416,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         watcher.startWatching()
         self.configWatcher = watcher
+    }
+
+    // MARK: - Menu Keybindings
+
+    /// Overlays the current keybindings config onto the main menu.
+    ///
+    /// Called once after `setupMainMenu()` so the initial menu shortcuts
+    /// reflect the user's `~/.config/cocxy/config.toml`. No-op when the
+    /// main menu has not been installed yet (e.g., in unit-test fixtures).
+    func applyKeybindingsToMainMenu() {
+        guard let mainMenu = NSApplication.shared.mainMenu else { return }
+        let config = configService?.current.keybindings ?? .defaults
+        MenuKeybindingsBinder.apply(config, to: mainMenu)
+    }
+
+    /// Subscribes to `ConfigService.configChangedPublisher` so menu shortcuts
+    /// are refreshed whenever `~/.config/cocxy/config.toml` is edited.
+    ///
+    /// Drops the first emission (the initial value) because
+    /// `applyKeybindingsToMainMenu()` already ran synchronously after
+    /// `setupMainMenu()`. Without this, the menu would be rewritten twice
+    /// at launch for no gain.
+    func startMenuKeybindingsObserver() {
+        guard let service = configService else { return }
+
+        menuKeybindingsCancellable?.cancel()
+        menuKeybindingsCancellable = service.configChangedPublisher
+            .dropFirst()
+            .map(\.keybindings)
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] keybindings in
+                guard let self,
+                      let mainMenu = NSApplication.shared.mainMenu else { return }
+                MenuKeybindingsBinder.apply(keybindings, to: mainMenu)
+                // Silence unused-self warning; self is captured to extend
+                // the observer lifetime to the delegate's lifetime.
+                _ = self
+            }
     }
 
     // MARK: - Session Registry Initialization

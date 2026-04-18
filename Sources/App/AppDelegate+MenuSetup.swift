@@ -10,6 +10,21 @@ import AppKit
 ///
 /// Extracted from AppDelegate to keep the main file focused on
 /// lifecycle management and service initialization.
+///
+/// ## Rebindable shortcuts
+///
+/// Menu items whose shortcut is surfaced in the Keybindings editor are
+/// registered via `MenuKeybindingsBinder.tag(_:with:)`. That helper both
+/// stores the catalog id on the item (via `NSUserInterfaceItemIdentifier`)
+/// and applies the catalog default `keyEquivalent`. `AppDelegate` then
+/// overlays the user's live `ConfigService.current.keybindings` on top via
+/// `MenuKeybindingsBinder.apply(_:to:)`, and re-applies whenever the config
+/// changes on disk.
+///
+/// Items that are not user-rebindable (About, Hide, Quit, Cut/Copy/Paste,
+/// Undo/Redo, Services, Bring All to Front, the hidden Escape handler,
+/// etc.) keep hardcoded `keyEquivalent` values and are never touched by the
+/// binder.
 extension AppDelegate {
 
     /// Creates the application menu bar with standard menus.
@@ -35,10 +50,17 @@ extension AppDelegate {
         appMenu.addItem(withTitle: "About Cocxy Terminal",
                         action: #selector(MainWindowController.showAboutPanel(_:)),
                         keyEquivalent: "")
+
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Settings...",
-                        action: #selector(MainWindowController.openPreferences(_:)),
-                        keyEquivalent: ",")
+
+        let preferencesItem = NSMenuItem(
+            title: "Settings...",
+            action: #selector(MainWindowController.openPreferences(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(preferencesItem, with: KeybindingActionCatalog.windowPreferences)
+        appMenu.addItem(preferencesItem)
+
         appMenu.addItem(withTitle: "Check for Updates...",
                         action: #selector(AppDelegate.checkForUpdatesMenu(_:)),
                         keyEquivalent: "")
@@ -78,19 +100,39 @@ extension AppDelegate {
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
 
-        fileMenu.addItem(withTitle: "New Tab",
-                         action: #selector(MainWindowController.newTabAction(_:)),
-                         keyEquivalent: "t")
-        fileMenu.addItem(withTitle: "New Window",
-                         action: #selector(MainWindowController.newWindowAction(_:)),
-                         keyEquivalent: "n")
-        fileMenu.addItem(withTitle: "Move Tab to New Window",
-                         action: #selector(MainWindowController.moveActiveTabToNewWindowAction(_:)),
-                         keyEquivalent: "")
+        let newTabItem = NSMenuItem(
+            title: "New Tab",
+            action: #selector(MainWindowController.newTabAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(newTabItem, with: KeybindingActionCatalog.tabNew)
+        fileMenu.addItem(newTabItem)
+
+        let newWindowItem = NSMenuItem(
+            title: "New Window",
+            action: #selector(MainWindowController.newWindowAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(newWindowItem, with: KeybindingActionCatalog.windowNewWindow)
+        fileMenu.addItem(newWindowItem)
+
+        let moveTabItem = NSMenuItem(
+            title: "Move Tab to New Window",
+            action: #selector(MainWindowController.moveActiveTabToNewWindowAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(moveTabItem, with: KeybindingActionCatalog.tabMoveToNewWindow)
+        fileMenu.addItem(moveTabItem)
+
         fileMenu.addItem(NSMenuItem.separator())
-        fileMenu.addItem(withTitle: "Close Tab",
-                         action: #selector(MainWindowController.closeTabAction(_:)),
-                         keyEquivalent: "w")
+
+        let closeTabItem = NSMenuItem(
+            title: "Close Tab",
+            action: #selector(MainWindowController.closeTabAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(closeTabItem, with: KeybindingActionCatalog.tabClose)
+        fileMenu.addItem(closeTabItem)
 
         fileMenuItem.submenu = fileMenu
         return fileMenuItem
@@ -120,11 +162,17 @@ extension AppDelegate {
                          action: #selector(NSText.selectAll(_:)),
                          keyEquivalent: "a")
         editMenu.addItem(NSMenuItem.separator())
-        editMenu.addItem(withTitle: "Find...",
-                         action: #selector(MainWindowController.toggleSearchBarAction(_:)),
-                         keyEquivalent: "f")
+
+        let findItem = NSMenuItem(
+            title: "Find...",
+            action: #selector(MainWindowController.toggleSearchBarAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(findItem, with: KeybindingActionCatalog.editorFind)
+        editMenu.addItem(findItem)
 
         // Escape key: dismiss active overlay.
+        // Not rebindable — Escape is a reserved UX contract.
         let escapeItem = NSMenuItem(
             title: "Dismiss Overlay",
             action: #selector(MainWindowController.dismissActiveOverlay(_:)),
@@ -142,154 +190,178 @@ extension AppDelegate {
         let viewMenuItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
 
-        // Command Palette: Cmd+Shift+P
-        let commandPaletteItem = viewMenu.addItem(
-            withTitle: "Command Palette",
+        let commandPaletteItem = NSMenuItem(
+            title: "Command Palette",
             action: #selector(MainWindowController.toggleCommandPaletteAction(_:)),
-            keyEquivalent: "p"
+            keyEquivalent: ""
         )
-        commandPaletteItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(commandPaletteItem, with: KeybindingActionCatalog.windowCommandPalette)
+        viewMenu.addItem(commandPaletteItem)
 
-        // Dashboard: Cmd+Option+A (Agent dashboard)
-        // Note: Cmd+Option+D conflicts with macOS Dock toggle.
-        let dashboardItem = viewMenu.addItem(
-            withTitle: "Agent Dashboard",
+        let dashboardItem = NSMenuItem(
+            title: "Agent Dashboard",
             action: #selector(MainWindowController.toggleDashboardAction(_:)),
-            keyEquivalent: "a"
+            keyEquivalent: ""
         )
-        dashboardItem.keyEquivalentModifierMask = [.command, .option]
+        MenuKeybindingsBinder.tag(dashboardItem, with: KeybindingActionCatalog.reviewDashboard)
+        viewMenu.addItem(dashboardItem)
 
-        let codeReviewItem = viewMenu.addItem(
-            withTitle: "Agent Code Review",
+        let codeReviewItem = NSMenuItem(
+            title: "Agent Code Review",
             action: #selector(MainWindowController.toggleCodeReviewAction(_:)),
-            keyEquivalent: "r"
+            keyEquivalent: ""
         )
-        codeReviewItem.keyEquivalentModifierMask = [.command, .option]
+        MenuKeybindingsBinder.tag(codeReviewItem, with: KeybindingActionCatalog.reviewCodeReview)
+        viewMenu.addItem(codeReviewItem)
 
-        // Smart Routing: Cmd+Shift+U (replaces Quick Switch)
-        let smartRoutingItem = viewMenu.addItem(
-            withTitle: "Smart Routing",
+        let smartRoutingItem = NSMenuItem(
+            title: "Smart Routing",
             action: #selector(MainWindowController.showSmartRoutingAction(_:)),
-            keyEquivalent: "u"
+            keyEquivalent: ""
         )
-        smartRoutingItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(smartRoutingItem, with: KeybindingActionCatalog.remoteGoToAttention)
+        viewMenu.addItem(smartRoutingItem)
 
-        // Timeline: Cmd+Shift+T (no conflict with Cmd+T which is New Tab)
-        let timelineItem = viewMenu.addItem(
-            withTitle: "Agent Timeline",
+        let timelineItem = NSMenuItem(
+            title: "Agent Timeline",
             action: #selector(MainWindowController.toggleTimelineAction(_:)),
-            keyEquivalent: "t"
+            keyEquivalent: ""
         )
-        timelineItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(timelineItem, with: KeybindingActionCatalog.reviewTimeline)
+        viewMenu.addItem(timelineItem)
 
-        // Notification Panel: Cmd+Shift+I
-        let notificationPanelItem = viewMenu.addItem(
-            withTitle: "Notifications",
+        let notificationPanelItem = NSMenuItem(
+            title: "Notifications",
             action: #selector(MainWindowController.toggleNotificationPanelAction(_:)),
-            keyEquivalent: "i"
+            keyEquivalent: ""
         )
-        notificationPanelItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(notificationPanelItem, with: KeybindingActionCatalog.reviewNotifications)
+        viewMenu.addItem(notificationPanelItem)
 
-        // Browser: Cmd+Shift+B
-        let browserItem = viewMenu.addItem(
-            withTitle: "Browser",
+        let browserItem = NSMenuItem(
+            title: "Browser",
             action: #selector(MainWindowController.toggleBrowserAction(_:)),
-            keyEquivalent: "b"
+            keyEquivalent: ""
         )
-        browserItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(browserItem, with: KeybindingActionCatalog.markdownBrowser)
+        viewMenu.addItem(browserItem)
 
         viewMenu.addItem(NSMenuItem.separator())
 
+        // Toggle Tab Bar: not rebindable (no catalog entry, no default shortcut).
         viewMenu.addItem(withTitle: "Toggle Tab Bar",
                          action: #selector(MainWindowController.toggleTabBarAction(_:)),
                          keyEquivalent: "")
 
-        let splitHorizontalItem = viewMenu.addItem(
-            withTitle: "Split Horizontal",
+        let splitHorizontalItem = NSMenuItem(
+            title: "Split Horizontal",
             action: #selector(MainWindowController.splitHorizontalAction(_:)),
-            keyEquivalent: "d"
+            keyEquivalent: ""
         )
-        splitHorizontalItem.keyEquivalentModifierMask = [.command]
+        MenuKeybindingsBinder.tag(splitHorizontalItem, with: KeybindingActionCatalog.splitHorizontal)
+        viewMenu.addItem(splitHorizontalItem)
 
-        let splitVerticalItem = viewMenu.addItem(
-            withTitle: "Split Vertical",
+        let splitVerticalItem = NSMenuItem(
+            title: "Split Vertical",
             action: #selector(MainWindowController.splitVerticalAction(_:)),
-            keyEquivalent: "d"
+            keyEquivalent: ""
         )
-        splitVerticalItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(splitVerticalItem, with: KeybindingActionCatalog.splitVertical)
+        viewMenu.addItem(splitVerticalItem)
 
-        let closeSplitItem = viewMenu.addItem(
-            withTitle: "Close Split",
+        let closeSplitItem = NSMenuItem(
+            title: "Close Split",
             action: #selector(MainWindowController.closeSplitAction(_:)),
-            keyEquivalent: "w"
+            keyEquivalent: ""
         )
-        closeSplitItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(closeSplitItem, with: KeybindingActionCatalog.splitClose)
+        viewMenu.addItem(closeSplitItem)
 
-        let equalizeSplitsItem = viewMenu.addItem(
-            withTitle: "Equalize Splits",
+        let equalizeSplitsItem = NSMenuItem(
+            title: "Equalize Splits",
             action: #selector(MainWindowController.equalizeSplitsAction(_:)),
-            keyEquivalent: "e"
+            keyEquivalent: ""
         )
-        equalizeSplitsItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(equalizeSplitsItem, with: KeybindingActionCatalog.splitEqualize)
+        viewMenu.addItem(equalizeSplitsItem)
 
-        let toggleZoomItem = viewMenu.addItem(
-            withTitle: "Toggle Split Zoom",
+        let toggleZoomItem = NSMenuItem(
+            title: "Toggle Split Zoom",
             action: #selector(MainWindowController.toggleSplitZoomAction(_:)),
-            keyEquivalent: "f"
+            keyEquivalent: ""
         )
-        toggleZoomItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(toggleZoomItem, with: KeybindingActionCatalog.splitToggleZoom)
+        viewMenu.addItem(toggleZoomItem)
 
         viewMenu.addItem(NSMenuItem.separator())
 
-        // Navigation between splits.
-        let navLeftItem = viewMenu.addItem(
-            withTitle: "Navigate Split Left",
+        let navLeftItem = NSMenuItem(
+            title: "Navigate Split Left",
             action: #selector(MainWindowController.navigateSplitLeftAction(_:)),
-            keyEquivalent: String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!))
+            keyEquivalent: ""
         )
-        navLeftItem.keyEquivalentModifierMask = [.command, .option]
+        MenuKeybindingsBinder.tag(navLeftItem, with: KeybindingActionCatalog.navigateSplitLeft)
+        viewMenu.addItem(navLeftItem)
 
-        let navRightItem = viewMenu.addItem(
-            withTitle: "Navigate Split Right",
+        let navRightItem = NSMenuItem(
+            title: "Navigate Split Right",
             action: #selector(MainWindowController.navigateSplitRightAction(_:)),
-            keyEquivalent: String(Character(UnicodeScalar(NSRightArrowFunctionKey)!))
+            keyEquivalent: ""
         )
-        navRightItem.keyEquivalentModifierMask = [.command, .option]
+        MenuKeybindingsBinder.tag(navRightItem, with: KeybindingActionCatalog.navigateSplitRight)
+        viewMenu.addItem(navRightItem)
 
-        let navUpItem = viewMenu.addItem(
-            withTitle: "Navigate Split Up",
+        let navUpItem = NSMenuItem(
+            title: "Navigate Split Up",
             action: #selector(MainWindowController.navigateSplitUpAction(_:)),
-            keyEquivalent: String(Character(UnicodeScalar(NSUpArrowFunctionKey)!))
+            keyEquivalent: ""
         )
-        navUpItem.keyEquivalentModifierMask = [.command, .option]
+        MenuKeybindingsBinder.tag(navUpItem, with: KeybindingActionCatalog.navigateSplitUp)
+        viewMenu.addItem(navUpItem)
 
-        let navDownItem = viewMenu.addItem(
-            withTitle: "Navigate Split Down",
+        let navDownItem = NSMenuItem(
+            title: "Navigate Split Down",
             action: #selector(MainWindowController.navigateSplitDownAction(_:)),
-            keyEquivalent: String(Character(UnicodeScalar(NSDownArrowFunctionKey)!))
+            keyEquivalent: ""
         )
-        navDownItem.keyEquivalentModifierMask = [.command, .option]
+        MenuKeybindingsBinder.tag(navDownItem, with: KeybindingActionCatalog.navigateSplitDown)
+        viewMenu.addItem(navDownItem)
 
         viewMenu.addItem(NSMenuItem.separator())
 
-        viewMenu.addItem(withTitle: "Zoom In",
-                         action: #selector(MainWindowController.zoomInAction(_:)),
-                         keyEquivalent: "+")
-        viewMenu.addItem(withTitle: "Zoom Out",
-                         action: #selector(MainWindowController.zoomOutAction(_:)),
-                         keyEquivalent: "-")
-        viewMenu.addItem(withTitle: "Reset Zoom",
-                         action: #selector(MainWindowController.resetZoomAction(_:)),
-                         keyEquivalent: "0")
+        let zoomInItem = NSMenuItem(
+            title: "Zoom In",
+            action: #selector(MainWindowController.zoomInAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(zoomInItem, with: KeybindingActionCatalog.editorZoomIn)
+        viewMenu.addItem(zoomInItem)
+
+        let zoomOutItem = NSMenuItem(
+            title: "Zoom Out",
+            action: #selector(MainWindowController.zoomOutAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(zoomOutItem, with: KeybindingActionCatalog.editorZoomOut)
+        viewMenu.addItem(zoomOutItem)
+
+        let resetZoomItem = NSMenuItem(
+            title: "Reset Zoom",
+            action: #selector(MainWindowController.resetZoomAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(resetZoomItem, with: KeybindingActionCatalog.editorResetZoom)
+        viewMenu.addItem(resetZoomItem)
 
         viewMenu.addItem(NSMenuItem.separator())
 
-        let fullScreenItem = viewMenu.addItem(
-            withTitle: "Enter Full Screen",
+        let fullScreenItem = NSMenuItem(
+            title: "Enter Full Screen",
             action: #selector(NSWindow.toggleFullScreen(_:)),
-            keyEquivalent: "f"
+            keyEquivalent: ""
         )
-        fullScreenItem.keyEquivalentModifierMask = [.command, .control]
+        MenuKeybindingsBinder.tag(fullScreenItem, with: KeybindingActionCatalog.windowToggleFullScreen)
+        viewMenu.addItem(fullScreenItem)
 
         viewMenuItem.submenu = viewMenu
         return viewMenuItem
@@ -299,28 +371,35 @@ extension AppDelegate {
         let windowMenuItem = NSMenuItem()
         let windowMenu = NSMenu(title: "Window")
 
-        windowMenu.addItem(withTitle: "Minimize",
-                           action: #selector(NSWindow.performMiniaturize(_:)),
-                           keyEquivalent: "m")
+        let minimizeItem = NSMenuItem(
+            title: "Minimize",
+            action: #selector(NSWindow.performMiniaturize(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(minimizeItem, with: KeybindingActionCatalog.windowMinimize)
+        windowMenu.addItem(minimizeItem)
+
+        // Zoom: not rebindable, no catalog entry (macOS-native window zoom).
         windowMenu.addItem(withTitle: "Zoom",
                            action: #selector(NSWindow.performZoom(_:)),
                            keyEquivalent: "")
         windowMenu.addItem(NSMenuItem.separator())
 
-        // Tab navigation shortcuts.
-        let nextTabItem = windowMenu.addItem(
-            withTitle: "Next Tab",
+        let nextTabItem = NSMenuItem(
+            title: "Next Tab",
             action: #selector(MainWindowController.nextTabAction(_:)),
-            keyEquivalent: "]"
+            keyEquivalent: ""
         )
-        nextTabItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(nextTabItem, with: KeybindingActionCatalog.tabNext)
+        windowMenu.addItem(nextTabItem)
 
-        let prevTabItem = windowMenu.addItem(
-            withTitle: "Previous Tab",
+        let prevTabItem = NSMenuItem(
+            title: "Previous Tab",
             action: #selector(MainWindowController.previousTabAction(_:)),
-            keyEquivalent: "["
+            keyEquivalent: ""
         )
-        prevTabItem.keyEquivalentModifierMask = [.command, .shift]
+        MenuKeybindingsBinder.tag(prevTabItem, with: KeybindingActionCatalog.tabPrevious)
+        windowMenu.addItem(prevTabItem)
 
         windowMenu.addItem(NSMenuItem.separator())
 
@@ -336,12 +415,25 @@ extension AppDelegate {
             #selector(MainWindowController.gotoTab8(_:)),
             #selector(MainWindowController.gotoTab9(_:)),
         ]
-        for (index, selector) in gotoSelectors.enumerated() {
-            windowMenu.addItem(
-                withTitle: "Tab \(index + 1)",
-                action: selector,
-                keyEquivalent: "\(index + 1)"
+        let gotoActions: [KeybindingAction] = [
+            KeybindingActionCatalog.tabGoto1,
+            KeybindingActionCatalog.tabGoto2,
+            KeybindingActionCatalog.tabGoto3,
+            KeybindingActionCatalog.tabGoto4,
+            KeybindingActionCatalog.tabGoto5,
+            KeybindingActionCatalog.tabGoto6,
+            KeybindingActionCatalog.tabGoto7,
+            KeybindingActionCatalog.tabGoto8,
+            KeybindingActionCatalog.tabGoto9,
+        ]
+        for index in 0..<gotoSelectors.count {
+            let gotoItem = NSMenuItem(
+                title: "Tab \(index + 1)",
+                action: gotoSelectors[index],
+                keyEquivalent: ""
             )
+            MenuKeybindingsBinder.tag(gotoItem, with: gotoActions[index])
+            windowMenu.addItem(gotoItem)
         }
 
         windowMenu.addItem(NSMenuItem.separator())

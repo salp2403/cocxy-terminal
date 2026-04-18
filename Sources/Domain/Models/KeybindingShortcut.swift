@@ -76,6 +76,92 @@ struct KeybindingShortcut: Equatable, Hashable, Sendable {
         return label
     }
 
+    // MARK: - NSMenuItem Bridge
+
+    /// The `keyEquivalent` string suitable for assigning to
+    /// `NSMenuItem.keyEquivalent`.
+    ///
+    /// Rules:
+    /// - Single-character base keys (`a`, `1`, `=`, `,`, ...) are emitted as-is.
+    /// - Named keys (arrows, function keys, space, tab, return, escape, etc.)
+    ///   are emitted as the corresponding `NSFunctionKey` / control unicode
+    ///   scalar so AppKit recognizes them. `grave` falls back to a backtick.
+    /// - Unknown or multi-character base keys map to an empty string, which
+    ///   AppKit treats as "no shortcut". Callers should guard against that via
+    ///   `isAssignableToMenuItem`.
+    ///
+    /// - Important: Shift state is carried on `modifierMask`, not on the
+    ///   returned character. AppKit renders the character with modifiers
+    ///   automatically (`a` + `.shift` renders as `⇧A`).
+    var menuKeyEquivalent: String {
+        switch baseKey {
+        case "return": return "\r"
+        case "tab": return "\t"
+        case "space": return " "
+        case "escape": return "\u{1B}"
+        case "backspace": return "\u{08}"
+        case "delete": return "\u{7F}"
+        case "grave": return "`"
+        case "left":
+            return String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!))
+        case "right":
+            return String(Character(UnicodeScalar(NSRightArrowFunctionKey)!))
+        case "up":
+            return String(Character(UnicodeScalar(NSUpArrowFunctionKey)!))
+        case "down":
+            return String(Character(UnicodeScalar(NSDownArrowFunctionKey)!))
+        case "home":
+            return String(Character(UnicodeScalar(NSHomeFunctionKey)!))
+        case "end":
+            return String(Character(UnicodeScalar(NSEndFunctionKey)!))
+        case "pageup":
+            return String(Character(UnicodeScalar(NSPageUpFunctionKey)!))
+        case "pagedown":
+            return String(Character(UnicodeScalar(NSPageDownFunctionKey)!))
+        default:
+            if baseKey.count == 1 {
+                return baseKey
+            }
+            if let fn = Self.functionKeyEquivalent(for: baseKey) {
+                return fn
+            }
+            return ""
+        }
+    }
+
+    /// The `keyEquivalentModifierMask` derived from the boolean modifier flags.
+    ///
+    /// AppKit reads `.command`, `.control`, `.option` and `.shift`; the result
+    /// is a bitmask in which the flags for the enabled modifiers are set.
+    var modifierMask: NSEvent.ModifierFlags {
+        var mask: NSEvent.ModifierFlags = []
+        if requiresCommand { mask.insert(.command) }
+        if requiresControl { mask.insert(.control) }
+        if requiresOption { mask.insert(.option) }
+        if requiresShift { mask.insert(.shift) }
+        return mask
+    }
+
+    /// Whether this shortcut can be expressed via `NSMenuItem.keyEquivalent`.
+    ///
+    /// Returns `false` only when the base key maps to an empty string above
+    /// (i.e., an unknown multi-character token). Menu items cannot render a
+    /// shortcut in that state, so callers should skip the binder for this
+    /// entry and log a warning.
+    var isAssignableToMenuItem: Bool {
+        !menuKeyEquivalent.isEmpty
+    }
+
+    /// Looks up the `NSFunctionKey` scalar for `fN` tokens (`f1`...`f15`).
+    private static func functionKeyEquivalent(for key: String) -> String? {
+        guard key.hasPrefix("f"), let n = Int(key.dropFirst()), n >= 1 else {
+            return nil
+        }
+        let base = NSF1FunctionKey
+        let scalar = UnicodeScalar(base + n - 1)
+        return scalar.map { String(Character($0)) }
+    }
+
     // MARK: - Init
 
     init(
