@@ -5,6 +5,22 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Fase B (UX sidebar + status bar per-split)
+
+### Added
+- Sidebar mini-pills now carry the agent's two-letter abbreviation (`Cl` Claude, `Co` Codex, `Ge` Gemini, `Ai` Aider, `Gh` GitHub Copilot, `Cu` Cursor, `Cn` Cline, `Ct` Continue, `Qw` Qwen, `Op` OpenCode, `Ki` Kiro; unknown agents fall back to the first two letters of the name capitalized), draw a 1.5pt border in the state color when the split is focused, and route clicks to the target split so a tap activates the tab (if needed) and lands keyboard focus on the right pane. Inline budget adjusted from 5 to 4 pills plus the `+N` overflow label because each pill now reserves ~30pt for the abbreviation.
+- Status bar renders a compact mini-matrix of agent-state dots between the port indicators and the active-agent text whenever the active tab has two or more active agents. Each dot reflects the state color of its split, uses a 1.5pt stroke overlay around the focused split, and exposes the agent name + state via hover tooltip and accessibility label. Up to six dots render inline plus a `+N` overflow counter.
+- New `SurfaceAgentSnapshot` value type bundling a surface ID with its `SurfaceAgentState` plus `isFocused` / `isPrimary` flags. The snapshot powers per-split features (Fase B mini-pills, Fase B status-bar matrix, Fase C code-review surface selector) so every consumer shares one source of truth and a click can route focus back to the correct surface.
+- `SurfaceAgentStateResolver` gains `additionalActiveSnapshots(...)` and `allActiveSnapshots(...)` — identity-aware twins of the existing `additionalActiveStates`. `MainWindowController` exposes thin wrappers (`additionalActiveAgentSnapshots(for:)`, `allActiveAgentSnapshots(for:)`) so every consumer reuses the same filter (`state.isActive || state.hasAgent`) and deterministic UUID ordering.
+- `MainWindowController+FocusSplit` extension with `focusSplit(tabID:surfaceID:)` that activates the owning tab when needed and makes the split's host view the window's first responder on the next run-loop tick. Safe with stale surface IDs (silent no-op when the split was closed between render and click).
+
+### Changed
+- `TabItemView.configureMiniIndicators` now consumes `TabDisplayItem.perSurfaceAgents` (`[SurfaceAgentSnapshot]`) instead of the legacy `additionalActiveAgentStates` (`[AgentState]`). Backward compatibility is preserved: the legacy field and its provider stay populated for consumers that still depend on them; they will be retired in a follow-up cleanup once every call site has migrated.
+- `AgentSummary` gains a `perSurfaceSnapshots` field consumed by the status bar mini-matrix. Single-split tabs keep the compact header because the matrix only renders at `>=2` active agents.
+
+### Testing
+- +17 Swift Testing cases: 12 for the new resolver methods and `SurfaceAgentSnapshot` equality, 4 for the Fase B provider wiring on `TabBarViewModel`, 1 suite helper. Full suite: 2514 XCTest + 1326 Swift Testing = 3840 tests, zero failures, debug + release builds green.
+
 ## [0.1.73] - 2026-04-17
 
 ### Fixed
