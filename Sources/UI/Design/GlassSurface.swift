@@ -40,13 +40,16 @@ extension Design {
         /// Real Liquid Glass — available starting macOS 26.
         case liquid
         /// Traditional `NSVisualEffectView` fallback with an overlay
-        /// tint. Used on macOS 14 / 15 and when the user enabled
-        /// Reduce Transparency on a macOS 26 machine.
+        /// tint. Used on macOS 14 / 15 when Liquid Glass is not yet
+        /// available. Reduce Transparency explicitly short-circuits to
+        /// `.opaque` instead; see `resolveGlassRenderMode` for the
+        /// decision table.
         case visualEffect
-        /// Opaque surface used when Increase Contrast is on. The
-        /// background is the theme's `backgroundTertiary` role so a
-        /// sidebar or status bar stays legible against high-contrast
-        /// content.
+        /// Opaque surface used when Increase Contrast is on or the user
+        /// opted into Reduce Transparency. The background is the theme's
+        /// `backgroundTertiary` role so a sidebar or status bar stays
+        /// legible against high-contrast content and honours the
+        /// accessibility opt-out from translucent material.
         case opaque
     }
 
