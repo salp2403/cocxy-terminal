@@ -5,7 +5,7 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.75] - 2026-04-18
 
 ### Added
 - New `appearance.transparency-chrome-theme` TOML key lets users pin the translucent sidebar, horizontal tab strip, and status bar to a light or dark tint independently of the macOS system appearance. Valid values: `"follow-system"` (default, preserves current behaviour), `"light"`, `"dark"`. Only applies while `background-opacity` is below `1.0`; otherwise the chrome is opaque and the override has no visible effect.
@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 25 new Swift Testing cases for the base feature: `TransparencyChromeThemeRoundTripTests` (TOML round-trip for all three values, tolerant parsing of unknown strings / wrong types / missing keys, default template, and legacy JSON backwards compatibility), `PreferencesViewModelTransparencyChromeThemeTests` (load reflects config, dirty tracking, discard, save persistence, generated TOML shape, editable flag gating on `backgroundOpacity`), and `TransparencyChromeThemeVibrancyAppearanceTests` (enum → `NSAppearance?` resolver for every case).
 - 19 additional Swift Testing cases covering overlay propagation: `ResolveVibrancyOverrideTests` (helper resolves correctly for every enum case plus the opaque guard), `OverlayVibrancyConstructionTests` (seven overlays each receive the forced appearance at construction time), `OverlayVibrancyHotReloadTests` (live overlays repaint when `applyEffectiveAppearance` is invoked with a new config, revert to `nil` on `follow-system`, and stay unaffected when the default preserves legacy behaviour), and `SubagentContentViewVibrancyTests` (initializer + `setVibrancyAppearanceOverride` round-trip).
 - Smoke test: launched app with `~/.config/cocxy/config.toml` containing `transparency-chrome-theme = "dark"` and `background-opacity = 0.85`. Command Palette, Dashboard, Timeline, Notification panel, Browser (main + History + Bookmarks + Downloads + DevTools), Code Review, and Remote Workspace all rendered with forced dark vibrancy regardless of macOS appearance; toggling to `light` hot-reloaded every live overlay without dismissal; reverting to `follow-system` restored inheritance within the debounced reload window.
+- Full suite on rebased branch: 2514 XCTest + 1394 Swift Testing = 3908 tests, zero failures, debug + release builds green.
 
 ### Notes
 - The override intentionally does not touch terminal buffer content — CocxyCore still renders according to the selected `[appearance] theme`. Only the translucent chrome tint changes. This matches the user's intent: wallpapers with warm vs cool tones should not require flipping the entire macOS appearance.
