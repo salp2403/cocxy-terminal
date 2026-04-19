@@ -32,34 +32,39 @@ extension Design {
         @Environment(\.designThemePalette) private var palette
 
         var body: some View {
-            GlassSurface(cornerRadius: .medium) {
-                HStack(spacing: Spacing.large) {
-                    LocalBadgeView()
-                    separator
-                    AgentMatrixView(panes: Self.allPanes(in: workspaces))
-                    separator
-                    PortListView(ports: ports)
-                    separator
-                    TimelineScrubberView(
-                        timeline: $timeline,
-                        onReplay: onReplay
-                    )
-                    Spacer()
-                    Text(clockLabel)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(palette.textDim.resolvedColor())
-                }
-                .padding(.horizontal, Spacing.large)
+            // The status bar sits at the bottom edge of the window,
+            // so the `GlassSurface` wrapper with `.medium` corner
+            // radius used to leave a visible gap between the terminal
+            // area and the bar's top edge (the rounded corners
+            // exposed the rootView background). A flat opaque band
+            // fills the 24pt host frame exactly, matching the classic
+            // status bar's geometry and keeping the Aurora markup
+            // legible in the limited vertical budget.
+            HStack(spacing: Spacing.large) {
+                LocalBadgeView()
+                separator
+                AgentMatrixView(panes: Self.allPanes(in: workspaces))
+                separator
+                PortListView(ports: ports)
+                separator
+                TimelineScrubberView(
+                    timeline: $timeline,
+                    onReplay: onReplay
+                )
+                Spacer()
+                Text(clockLabel)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(palette.textDim.resolvedColor())
             }
-            // The integration layer mounts the status bar in whatever
-            // frame the classic status bar uses (24pt at the time of
-            // writing), so pinning a hardcoded 32pt height used to
-            // clip the content. Let the host decide the height and
-            // rely on the internal layout + padding to stay inside
-            // whatever rectangle the window provides. Previews that
-            // want the design-reference height can wrap the view in
-            // their own `.frame(height: 32)`.
+            .padding(.horizontal, Spacing.large)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(palette.backgroundSecondary.resolvedColor())
+            .overlay(
+                Rectangle()
+                    .fill(palette.divider.resolvedColor())
+                    .frame(height: 1),
+                alignment: .top
+            )
         }
 
         private var separator: some View {

@@ -40,6 +40,11 @@ extension Design {
         let onTogglePalette: () -> Void
         let onCreateTab: () -> Void
         let onActivateSession: (String) -> Void
+        /// Optional callback for the notification tray button. Stays
+        /// optional so tests and previews that do not care about the
+        /// notification center can omit it; the header renders the
+        /// bell glyph when a handler is provided.
+        var onToggleNotifications: (() -> Void)? = nil
 
         var paletteShortcutLabel: String = "⇧⌘P"
         var newTabShortcutLabel: String = "⌘T"
@@ -89,6 +94,13 @@ extension Design {
                     help: "Command palette (\(paletteShortcutLabel))",
                     action: onTogglePalette
                 )
+                if let onToggleNotifications {
+                    trayButton(
+                        label: "◉",
+                        help: "Notifications",
+                        action: onToggleNotifications
+                    )
+                }
                 trayButton(
                     label: "+",
                     help: "New tab (\(newTabShortcutLabel))",

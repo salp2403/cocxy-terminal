@@ -98,6 +98,12 @@ final class AuroraChromeController: ObservableObject {
     /// an action (escape key, backdrop tap).
     var onDismissPalette: (() -> Void)?
 
+    /// Invoked when the user clicks the bell glyph in the Aurora
+    /// sidebar tray. The host wires this to the existing
+    /// `toggleNotificationPanel()` so the classic and Aurora chromes
+    /// open the same overlay.
+    var onToggleNotifications: (() -> Void)?
+
     // MARK: - Data providers
 
     /// Caller-provided snapshot of the surfaces each tab owns, in the
@@ -115,6 +121,7 @@ final class AuroraChromeController: ObservableObject {
 
     private var cancellables: Set<AnyCancellable> = []
     private var clockTimerCancellable: AnyCancellable?
+    private var portsCancellable: AnyCancellable?
 
     // MARK: - Init
 
@@ -151,6 +158,41 @@ final class AuroraChromeController: ObservableObject {
 
         startClockTimer()
         refreshSources()
+    }
+
+    /// Subscribes to a port scanner and mirrors its active ports onto
+    /// the Aurora status-bar view. Idempotent — calling it again with
+    /// a different scanner drops the previous subscription. Pass `nil`
+    /// to clear the live wiring (e.g. when the Aurora chrome is torn
+    /// down while the scanner continues running for the classic
+    /// status bar).
+    func wirePortScanner(_ scanner: PortScannerImpl?) {
+        portsCancellable?.cancel()
+        portsCancellable = nil
+        guard let scanner else {
+            ports = []
+            return
+        }
+        ports = Self.mapPorts(scanner.activePorts)
+        portsCancellable = scanner.$activePorts
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] latest in
+                self?.ports = AuroraChromeController.mapPorts(latest)
+            }
+    }
+
+    /// Pure mapper from the domain's `DetectedPort` list to the
+    /// presentation-only `AuroraPortBinding` list the status bar
+    /// consumes. Exposed as `static` so tests can exercise the
+    /// translation without touching the @Published pipeline.
+    static func mapPorts(_ detected: [DetectedPort]) -> [Design.AuroraPortBinding] {
+        detected.map { entry in
+            Design.AuroraPortBinding(
+                port: Int(entry.port),
+                name: entry.processName ?? String(entry.port),
+                health: .ok
+            )
+        }
     }
 
     /// Stops observing and cancels the clock timer. Called when the
@@ -317,6 +359,9 @@ struct AuroraSidebarHost: View {
                 if let tabID = controller.tabID(forSessionID: sessionID) {
                     controller.onActivateSession?(tabID)
                 }
+            },
+            onToggleNotifications: controller.onToggleNotifications.map { handler in
+                { handler() }
             },
             paletteShortcutLabel: controller.paletteShortcutLabel,
             newTabShortcutLabel: controller.newTabShortcutLabel

@@ -319,6 +319,14 @@ extension MainWindowController {
 
         // Update toolbar to show panel tabs.
         updateWorkspaceToolbar()
+
+        // Aurora sidebar observes `TabManager.$tabs` and
+        // `AgentStatePerSurfaceStore.$states`, but neither publisher
+        // fires when a new idle surface joins the tree — the tab is
+        // already there and the store has no entry yet. Push a
+        // refresh so the new pane shows up in the Aurora session row
+        // without waiting for the next agent activity.
+        auroraChromeController?.refreshSources()
     }
 
     // MARK: - Close Split
@@ -465,6 +473,13 @@ extension MainWindowController {
 
         // Update toolbar to reflect panel changes.
         updateWorkspaceToolbar()
+
+        // Aurora sidebar: pushing a refresh after the tree has
+        // collapsed keeps the session-row pane list aligned with the
+        // remaining surfaces. The store subscription cannot detect a
+        // split close on its own because the torn-down surface was
+        // already removed from the store by the teardown path.
+        auroraChromeController?.refreshSources()
     }
 
     // MARK: - Split Navigation Actions

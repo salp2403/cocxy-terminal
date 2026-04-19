@@ -177,6 +177,14 @@ extension MainWindowController {
             // while the Aurora chrome is active.
             self?.restoreFirstResponderAfterAuroraPalette()
         }
+        controller.onToggleNotifications = { [weak self] in
+            self?.toggleNotificationPanel()
+        }
+        // Mirror the live port scanner onto the Aurora status bar.
+        // The status bar's `PortListView` renders whatever the
+        // controller publishes, so this single subscription keeps the
+        // new chrome aligned with the classic `activePorts` display.
+        controller.wirePortScanner(portScanner)
 
         auroraChromeController = controller
 
@@ -267,6 +275,16 @@ extension MainWindowController {
     ///     re-show instantly on the next toggle.
     private func applyAuroraChromeVisibility(_ active: Bool) {
         if active {
+            // Symmetric cleanup on the opposite flip: if the classic
+            // palette overlay is open when Aurora turns on, dismiss
+            // it so only one overlay can be visible at a time.
+            // `toggleCommandPalette()` now routes to the Aurora helper
+            // once the sidebar host is visible, so forgetting to
+            // dismiss the classic overlay here would leave it floating
+            // above the new chrome until the user clicked elsewhere.
+            if isCommandPaletteVisible {
+                dismissCommandPalette()
+            }
             auroraChromeController?.sidebarHost?.isHidden = false
             auroraChromeController?.statusBarHost?.isHidden = false
             statusBarHostingView?.isHidden = true
