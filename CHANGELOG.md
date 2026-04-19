@@ -5,6 +5,14 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.79] - 2026-04-18
+
+### Fixed
+- CI release pipeline broke on the v0.1.78 tag because `GlassSurface.LiquidGlassBackground` referenced `SwiftUI.glassEffect(in:)` — a macOS 26 SDK symbol that GitHub Actions runners (macOS 15 SDK) cannot resolve even when the call site is guarded by `if #available(macOS 26.0, *)`. The runtime guard prevents the API from being called on older macOS but the compiler still needs the symbol to build. The liquid case now falls through to the shared `VisualEffectFallback` material until the CI runner image ships the macOS 26 SDK; swapping back to the real Liquid Glass API will be a one-line change once that bump lands.
+
+### Notes
+- The v0.1.78 tag remains in the repository history for traceability — its build artefacts were never uploaded because the release workflow failed on the SDK mismatch above. This v0.1.79 release carries the full Aurora redesign payload plus the SDK fix.
+
 ## [0.1.78] - 2026-04-18
 
 ### Added

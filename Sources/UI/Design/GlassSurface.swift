@@ -301,13 +301,17 @@ private struct GlassBackground: View {
 }
 
 private struct LiquidGlassBackground: View {
+    // macOS 26's `.glassEffect(in:)` requires the macOS 26 SDK to
+    // compile; CI runners still ship with the macOS 15 SDK, which
+    // rejects the symbol even when the call site is wrapped in
+    // `if #available(macOS 26.0, *)`. Until GitHub Actions runners move
+    // to the macOS 26 SDK (expected late-2026), the liquid case is
+    // backed by the same translucent material as `.visualEffect` so
+    // every runtime — including modern macOS 26 machines — renders the
+    // same reliable blurred surface. Promoting to the real Liquid
+    // Glass API is a one-line swap gated behind the SDK bump.
     var body: some View {
-        if #available(macOS 26.0, *) {
-            Rectangle()
-                .glassEffect(in: Rectangle())
-        } else {
-            VisualEffectFallback()
-        }
+        VisualEffectFallback()
     }
 }
 
