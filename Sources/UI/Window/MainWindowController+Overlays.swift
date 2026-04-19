@@ -17,6 +17,14 @@ extension MainWindowController {
     // MARK: - Command Palette (Cmd+Shift+P)
 
     func toggleCommandPalette() {
+        // When the Aurora chrome is active the shortcut must drive the
+        // redesigned palette. Routing here keeps a single entry point
+        // (menu action, sidebar tray button, direct caller) consistent
+        // with whatever chrome the user has mounted.
+        if isAuroraChromeActive {
+            toggleAuroraPalette()
+            return
+        }
         if isCommandPaletteVisible {
             dismissCommandPalette()
         } else {

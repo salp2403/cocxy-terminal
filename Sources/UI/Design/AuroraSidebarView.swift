@@ -26,6 +26,12 @@ extension Design {
 
     /// Redesigned sidebar view. Accepts a list of workspaces plus a
     /// handful of callbacks the host wires to real actions.
+    ///
+    /// `paletteShortcutLabel` / `newTabShortcutLabel` are caller-supplied
+    /// so the header tray reflects the live keybindings. Defaults match
+    /// `KeybindingActionCatalog.windowCommandPalette.defaultShortcut`
+    /// (⌘⇧P) and `.tabNew.defaultShortcut` (⌘T) so previews / tests
+    /// render with the catalog baseline without booting the binder.
     struct AuroraSidebarView: View {
         @Binding var workspaces: [AuroraWorkspace]
         @Binding var activeSessionID: String?
@@ -34,6 +40,9 @@ extension Design {
         let onTogglePalette: () -> Void
         let onCreateTab: () -> Void
         let onActivateSession: (String) -> Void
+
+        var paletteShortcutLabel: String = "⌘⇧P"
+        var newTabShortcutLabel: String = "⌘T"
 
         @Environment(\.designThemePalette) private var palette
 
@@ -70,8 +79,16 @@ extension Design {
 
                 Spacer()
 
-                trayButton(label: "⌘K", help: "Command palette (⌘K)", action: onTogglePalette)
-                trayButton(label: "+", help: "New tab (⌘T)", action: onCreateTab)
+                trayButton(
+                    label: paletteShortcutLabel,
+                    help: "Command palette (\(paletteShortcutLabel))",
+                    action: onTogglePalette
+                )
+                trayButton(
+                    label: "+",
+                    help: "New tab (\(newTabShortcutLabel))",
+                    action: onCreateTab
+                )
             }
             .padding(.horizontal, Spacing.xxSmall)
             .padding(.top, Spacing.hairline)

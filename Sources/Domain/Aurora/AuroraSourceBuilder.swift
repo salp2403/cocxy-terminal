@@ -64,13 +64,18 @@ struct GitAncestorWorkspaceRootResolver: AuroraWorkspaceRootResolver {
         let home = homeDirectory
 
         for _ in 0..<maxDepth {
+            // The home boundary must be evaluated BEFORE the `.git`
+            // probe. Otherwise a user whose `$HOME` itself contains a
+            // `.git` directory (a common layout for dotfiles repos) would
+            // end up with every local tab collapsed into one synthetic
+            // "home" workspace — contradicting the doc-comment above.
+            if current == home { return nil }
             let dotGit = current.appendingPathComponent(".git", isDirectory: true)
             if FileManager.default.fileExists(atPath: dotGit.path) {
                 return current
             }
             let parent = current.deletingLastPathComponent().standardizedFileURL
             if parent == current { return nil } // hit filesystem root
-            if current == home { return nil }   // stop at $HOME boundary
             current = parent
         }
         return nil

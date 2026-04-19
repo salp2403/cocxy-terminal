@@ -202,6 +202,70 @@ struct AuroraChromeControllerSwiftTestingTests {
         #expect(dismissed == true)
     }
 
+    @Test
+    func showPaletteUnhidesTheHostingView() {
+        let harness = makeHarness()
+        // Instantiate the palette host so the visibility contract has
+        // a real view to flip. Mirrors how the integration layer
+        // mounts it on install.
+        let host = harness.controller.makePaletteHost()
+        host.isHidden = true
+
+        harness.controller.showPalette()
+
+        #expect(harness.controller.isPaletteVisible == true)
+        #expect(host.isHidden == false,
+                "showPalette must un-hide the hosting view so hit-testing reaches the SwiftUI overlay")
+    }
+
+    @Test
+    func hidePaletteReHidesTheHostingView() {
+        let harness = makeHarness()
+        let host = harness.controller.makePaletteHost()
+        harness.controller.showPalette()
+        #expect(host.isHidden == false)
+
+        harness.controller.hidePalette()
+
+        #expect(harness.controller.isPaletteVisible == false)
+        #expect(host.isHidden == true,
+                "hidePalette must hide the hosting view so clicks fall through to the terminal underneath")
+    }
+
+    @Test
+    func togglePaletteAlternatesVisibilityAndHostState() {
+        let harness = makeHarness()
+        let host = harness.controller.makePaletteHost()
+
+        harness.controller.togglePalette()
+        #expect(harness.controller.isPaletteVisible == true)
+        #expect(host.isHidden == false)
+
+        harness.controller.togglePalette()
+        #expect(harness.controller.isPaletteVisible == false)
+        #expect(host.isHidden == true)
+    }
+
+    // MARK: - Shortcut label publishing
+
+    @Test
+    func shortcutLabelsDefaultToCatalogPrettyLabels() {
+        let harness = makeHarness()
+        #expect(harness.controller.paletteShortcutLabel == "⌘⇧P",
+                "Default palette label must match KeybindingActionCatalog.windowCommandPalette")
+        #expect(harness.controller.newTabShortcutLabel == "⌘T",
+                "Default new-tab label must match KeybindingActionCatalog.tabNew")
+    }
+
+    @Test
+    func shortcutLabelsArePublishedAndMutable() {
+        let harness = makeHarness()
+        harness.controller.paletteShortcutLabel = "⌃⇧Space"
+        harness.controller.newTabShortcutLabel = "⌘N"
+        #expect(harness.controller.paletteShortcutLabel == "⌃⇧Space")
+        #expect(harness.controller.newTabShortcutLabel == "⌘N")
+    }
+
     // MARK: - Idempotent host factories
 
     @Test

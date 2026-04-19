@@ -40,9 +40,37 @@ extension MainWindowController {
         if appearance.auroraEnabled {
             installAuroraChromeIfNeeded()
             auroraChromeController?.setPaletteActions(buildAuroraPaletteActions())
+            refreshAuroraShortcutLabels()
             applyAuroraChromeVisibility(true)
         } else if auroraChromeController != nil {
             applyAuroraChromeVisibility(false)
+        }
+    }
+
+    /// Resolves the command-palette and new-tab pretty shortcut labels
+    /// from the live `[keybindings]` config so the Aurora sidebar tray
+    /// mirrors the user's current bindings. Safe no-op when the Aurora
+    /// controller is not installed yet.
+    ///
+    /// Invoked both on install and on every `applyConfig(...)` call so
+    /// a rebinding flows to the new chrome without waiting for the next
+    /// toggle-on cycle.
+    func refreshAuroraShortcutLabels() {
+        guard let controller = auroraChromeController else { return }
+        let keybindings = configService?.current.keybindings ?? .defaults
+        let paletteLabel = MenuKeybindingsBinder.prettyShortcut(
+            for: KeybindingActionCatalog.windowCommandPalette.id,
+            in: keybindings
+        ) ?? KeybindingActionCatalog.windowCommandPalette.defaultShortcut.prettyLabel
+        let newTabLabel = MenuKeybindingsBinder.prettyShortcut(
+            for: KeybindingActionCatalog.tabNew.id,
+            in: keybindings
+        ) ?? KeybindingActionCatalog.tabNew.defaultShortcut.prettyLabel
+        if controller.paletteShortcutLabel != paletteLabel {
+            controller.paletteShortcutLabel = paletteLabel
+        }
+        if controller.newTabShortcutLabel != newTabLabel {
+            controller.newTabShortcutLabel = newTabLabel
         }
     }
 
@@ -89,13 +117,19 @@ extension MainWindowController {
             self?.createTab()
         }
         controller.onTogglePalette = { [weak self] in
-            self?.toggleCommandPalette()
+            self?.toggleAuroraPalette()
         }
         controller.onExecutePaletteAction = { [weak self] actionID in
             self?.executeAuroraPaletteAction(withID: actionID)
         }
         controller.onDismissPalette = { [weak self] in
-            self?.dismissCommandPalette()
+            // The Aurora palette closes itself via the host binding; all
+            // the host needs to do here is restore first responder on
+            // whatever surface had keyboard focus. The classic
+            // `dismissCommandPalette` is NOT called — that path operates
+            // on `commandPaletteHostingView`, which is never mounted
+            // while the Aurora chrome is active.
+            self?.restoreFirstResponderAfterAuroraPalette()
         }
 
         auroraChromeController = controller
@@ -181,6 +215,50 @@ extension MainWindowController {
             result[tab.id] = surfaceIDs(for: tab.id)
         }
         return result
+    }
+
+    // MARK: - Palette routing
+
+    /// Returns `true` when the Aurora chrome is currently the active
+    /// chrome — i.e. the feature flag is on and the controller has
+    /// been installed. Routing helpers use this to decide whether to
+    /// forward palette shortcuts to the Aurora overlay or leave them
+    /// for the classic path.
+    var isAuroraChromeActive: Bool {
+        guard let controller = auroraChromeController else { return false }
+        return controller.sidebarHost?.isHidden == false
+    }
+
+    /// Shows or hides the Aurora palette overlay. Refreshes the action
+    /// catalogue from the live engine before presenting so the user
+    /// always sees the current shortcuts (e.g. after a keybindings
+    /// edit that rebuilt the pretty labels).
+    func toggleAuroraPalette() {
+        guard let controller = auroraChromeController else { return }
+        if !controller.isPaletteVisible {
+            controller.setPaletteActions(buildAuroraPaletteActions())
+        }
+        controller.togglePalette()
+        if controller.isPaletteVisible {
+            if let host = controller.paletteHost {
+                window?.makeFirstResponder(host)
+            }
+        } else {
+            restoreFirstResponderAfterAuroraPalette()
+        }
+    }
+
+    /// Restores keyboard focus to the terminal surface after the
+    /// Aurora palette dismisses. Mirrors the behaviour the classic
+    /// palette achieves through `dismissCommandPalette` +
+    /// `window?.makeFirstResponder(tabBarView)` but targets the
+    /// active terminal instead so typing continues where the user
+    /// left off.
+    func restoreFirstResponderAfterAuroraPalette() {
+        guard let window else { return }
+        if let terminalSurface = terminalSurfaceView {
+            window.makeFirstResponder(terminalSurface)
+        }
     }
 
     // MARK: - Palette action translation

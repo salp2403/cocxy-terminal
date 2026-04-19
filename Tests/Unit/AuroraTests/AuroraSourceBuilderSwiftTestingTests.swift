@@ -374,4 +374,44 @@ struct GitAncestorWorkspaceRootResolverTests {
         let root = resolver.workspaceRoot(for: repo.subdir)
         #expect(root == nil)
     }
+
+    @Test
+    func stopsAtHomeBoundaryEvenIfHomeHasDotGit() throws {
+        // Regression guard for the promised home-boundary behavior.
+        // Layout: a dotfiles repo at `$HOME` (so `$HOME/.git` exists),
+        // plus a tab rooted inside `$HOME/projects/demo` that itself
+        // has no `.git` directory. Without the boundary check, the
+        // ancestor walk would hit `$HOME/.git` and collapse every
+        // local tab into one synthetic "home" workspace — the doc
+        // comment explicitly forbids that.
+        let uuid = UUID().uuidString
+        let fakeHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-aurora-fakehome-\(uuid)", isDirectory: true)
+        let workDir = fakeHome.appendingPathComponent("projects/demo", isDirectory: true)
+        let dotfilesGit = fakeHome.appendingPathComponent(".git", isDirectory: true)
+        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dotfilesGit, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+
+        let resolver = GitAncestorWorkspaceRootResolver(homeDirectory: fakeHome)
+        let root = resolver.workspaceRoot(for: workDir)
+        #expect(root == nil,
+                "Resolver must stop at the $HOME boundary before probing `.git`")
+    }
+
+    @Test
+    func queryingHomeDirectoryItselfDoesNotReturnIt() throws {
+        // A tab whose working directory IS `$HOME` must not resolve
+        // to `$HOME` as a workspace root either — this is the edge
+        // case where the boundary is checked on the first iteration.
+        let uuid = UUID().uuidString
+        let fakeHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-aurora-home-as-cwd-\(uuid)", isDirectory: true)
+        let dotfilesGit = fakeHome.appendingPathComponent(".git", isDirectory: true)
+        try FileManager.default.createDirectory(at: dotfilesGit, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+
+        let resolver = GitAncestorWorkspaceRootResolver(homeDirectory: fakeHome)
+        #expect(resolver.workspaceRoot(for: fakeHome) == nil)
+    }
 }

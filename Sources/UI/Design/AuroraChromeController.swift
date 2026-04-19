@@ -56,6 +56,16 @@ final class AuroraChromeController: ObservableObject {
     @Published var paletteQuery: String = ""
     @Published var paletteSelectedIndex: Int = 0
 
+    /// Pretty shortcut labels shown on the Aurora sidebar tray. The
+    /// integration layer refreshes these from the live keybindings so
+    /// edits to `window.commandPalette` / `tab.new` reach the header
+    /// (and stay aligned with the menu bar glyphs rendered by
+    /// `MenuKeybindingsBinder`). Defaults match the catalog baselines
+    /// (`⌘⇧P` for the command palette, `⌘T` for new-tab) so previews
+    /// and tests render without depending on the binder.
+    @Published var paletteShortcutLabel: String = "⌘⇧P"
+    @Published var newTabShortcutLabel: String = "⌘T"
+
     // MARK: - Dependencies (weak)
 
     private weak var tabManager: TabManager?
@@ -183,17 +193,38 @@ final class AuroraChromeController: ObservableObject {
 
     /// Shows the palette overlay and resets selection/query so the user
     /// starts with an empty matcher every time.
+    ///
+    /// The hosting `NSHostingView` is un-hidden alongside the published
+    /// flag so hit-testing reaches the SwiftUI overlay. While the flag
+    /// is off the view renders as empty but the hosting view still
+    /// intercepts hit-tests; keeping it hidden until the palette is
+    /// requested preserves input routing for the surfaces underneath.
     func showPalette() {
         paletteQuery = ""
         paletteSelectedIndex = 0
         isPaletteVisible = true
+        paletteHost?.isHidden = false
     }
 
     /// Hides the palette overlay and notifies the host so it can
-    /// restore first-responder on the terminal surface.
+    /// restore first-responder on the terminal surface. Also hides the
+    /// hosting view so clicks fall through to the terminal again.
     func hidePalette() {
         isPaletteVisible = false
+        paletteHost?.isHidden = true
         onDismissPalette?()
+    }
+
+    /// Toggles between showing and hiding the palette overlay. Used by
+    /// the integration layer when the palette shortcut fires while the
+    /// Aurora chrome is active so the same keyboard binding drives the
+    /// right overlay regardless of which chrome is mounted.
+    func togglePalette() {
+        if isPaletteVisible {
+            hidePalette()
+        } else {
+            showPalette()
+        }
     }
 
     // MARK: - Hosting view factories
@@ -285,7 +316,9 @@ struct AuroraSidebarHost: View {
                 if let tabID = controller.tabID(forSessionID: sessionID) {
                     controller.onActivateSession?(tabID)
                 }
-            }
+            },
+            paletteShortcutLabel: controller.paletteShortcutLabel,
+            newTabShortcutLabel: controller.newTabShortcutLabel
         )
     }
 }
