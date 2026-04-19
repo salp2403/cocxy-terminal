@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.13.3 (Baseline-consistent bearing_y for rasterised glyphs)
+ * Version: 0.13.4 (Primary/Secondary/Tertiary Device Attributes responses)
  */
 
 #ifndef COCXYCORE_H
