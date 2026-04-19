@@ -89,20 +89,20 @@ extension Design {
 
                 Spacer()
 
-                trayButton(
-                    label: paletteShortcutLabel,
+                trayIconButton(
+                    systemImage: "command",
                     help: "Command palette (\(paletteShortcutLabel))",
                     action: onTogglePalette
                 )
                 if let onToggleNotifications {
-                    trayButton(
-                        label: "◉",
+                    trayIconButton(
+                        systemImage: "bell",
                         help: "Notifications",
                         action: onToggleNotifications
                     )
                 }
-                trayButton(
-                    label: "+",
+                trayIconButton(
+                    systemImage: "plus",
                     help: "New tab (\(newTabShortcutLabel))",
                     action: onCreateTab
                 )
@@ -111,17 +111,28 @@ extension Design {
             .padding(.top, Spacing.hairline)
         }
 
-        private func trayButton(label: String, help: String, action: @escaping () -> Void) -> some View {
+        /// Sidebar header tray button backed by an SF Symbol. The
+        /// previous text-glyph buttons (`⇧⌘P`, `◉`, `+`) failed to
+        /// stand out against the glass backdrop at 11pt — users
+        /// reported them as near-invisible. SF Symbols render with
+        /// the system's high-contrast weight and scale with the
+        /// Dynamic Type baseline, which makes them legible over any
+        /// backdrop.
+        private func trayIconButton(
+            systemImage: String,
+            help: String,
+            action: @escaping () -> Void
+        ) -> some View {
             Button(action: action) {
-                Text(label)
-                    .font(.system(size: 11, weight: .regular, design: .monospaced))
-                    .foregroundStyle(palette.textLow.resolvedColor())
-                    .frame(width: 24, height: 24)
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(palette.textHigh.resolvedColor())
+                    .frame(width: 26, height: 26)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.clear)
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(palette.glassHighlight.resolvedColor())
                     )
-                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             .buttonStyle(.plain)
             .help(help)
@@ -336,8 +347,11 @@ extension Design {
 
     // MARK: - Local badge
 
-    /// "100% local" status badge used by both the sidebar footer and
-    /// the Aurora status bar's leftmost chip.
+    /// "100% local" status badge used by the Aurora status bar's
+    /// leftmost chip. Signals that every session in this window runs
+    /// on the current Mac — no SSH relay, no remote execution, no
+    /// cloud sync. The tooltip spells that out because the badge's
+    /// visual alone was opaque to new users.
     struct LocalBadgeView: View {
         @Environment(\.designThemePalette) private var palette
 
@@ -362,6 +376,8 @@ extension Design {
                             .strokeBorder(finished.opacity(0.35), lineWidth: 1)
                     )
             )
+            .help("Every session runs on this Mac — no remote SSH, no cloud sync.")
+            .accessibilityLabel("100% local: every session runs on this Mac")
         }
     }
 }

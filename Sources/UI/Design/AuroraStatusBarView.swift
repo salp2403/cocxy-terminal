@@ -124,13 +124,40 @@ extension Design {
 
         @Environment(\.designThemePalette) private var palette
 
+        /// Tooltip the view exposes on the "ports" label so the user
+        /// understands what the status bar is surfacing. Lists every
+        /// detected port's number + process name when present, which
+        /// is cheaper than introducing a whole popover layer.
+        private var portsTooltip: String {
+            guard !ports.isEmpty else {
+                return "Localhost ports detected by the background scanner. None are listening right now."
+            }
+            let lines = ports.map { ":\($0.port)  \($0.name)" }
+            return "Localhost ports listening right now:\n" + lines.joined(separator: "\n")
+        }
+
         var body: some View {
             HStack(spacing: Spacing.xSmall) {
                 Text("ports")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(palette.textDim.resolvedColor())
-                ForEach(ports) { port in
-                    PortChip(port: port)
+                    .help(portsTooltip)
+                if ports.isEmpty {
+                    Text("none")
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(palette.textDim.resolvedColor())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(palette.glassHighlight.resolvedColor().opacity(0.6))
+                        )
+                        .help(portsTooltip)
+                } else {
+                    ForEach(ports) { port in
+                        PortChip(port: port)
+                            .help(":\(port.port) \(port.name)")
+                    }
                 }
             }
         }

@@ -47,6 +47,15 @@ extension MainWindowController {
         } else if auroraChromeController != nil {
             applyAuroraChromeVisibility(false)
         }
+
+        // Re-apply the tab position so the Aurora override inside
+        // `applyTabPosition` (`.left` while the flag is on) takes
+        // effect even if the user's config persists `.top`/`.hidden`.
+        // On deactivation this same call restores the user's chosen
+        // layout immediately.
+        if let sidebar = tabBarView, let strip = horizontalTabStripView {
+            applyTabPosition(appearance.tabPosition, sidebar: sidebar, strip: strip)
+        }
     }
 
     /// Resolves the command-palette and new-tab pretty shortcut labels
@@ -371,10 +380,18 @@ extension MainWindowController {
     /// `CommandPaletteEngine`. Falls back to an empty list when the
     /// engine has not been initialised yet so the overlay can still
     /// render a quiet "no actions" state without crashing.
+    ///
+    /// When an existing engine is reused we rebuild its built-in
+    /// shortcut labels from the live `[keybindings]` config — the
+    /// classic overlay does this in `showCommandPaletteOverlay()`, so
+    /// Aurora has to replicate the refresh or rows would show stale
+    /// glyphs after the user edited a binding.
     private func buildAuroraPaletteActions() -> [Design.AuroraPaletteAction] {
         let engine: CommandPaletteEngineImpl
         if let existing = commandPaletteEngine {
             engine = existing
+            let keybindings = configService?.current.keybindings ?? .defaults
+            engine.rebuildBuiltInShortcuts(using: keybindings)
         } else {
             engine = createWiredCommandPaletteEngine()
             commandPaletteEngine = engine

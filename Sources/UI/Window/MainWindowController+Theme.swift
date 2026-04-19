@@ -111,6 +111,7 @@ extension MainWindowController {
             old?.appearance.fontFamily != config.appearance.fontFamily ||
             old?.appearance.fontSize != config.appearance.fontSize ||
             old?.appearance.ligatures != config.appearance.ligatures ||
+            old?.appearance.fontThicken != config.appearance.fontThicken ||
             old?.appearance.windowPadding != config.appearance.windowPadding ||
             old?.appearance.windowPaddingX != config.appearance.windowPaddingX ||
             old?.appearance.windowPaddingY != config.appearance.windowPaddingY ||
@@ -145,10 +146,20 @@ extension MainWindowController {
     func applyTabPosition(_ position: TabPosition, sidebar: NSView, strip: NSView) {
         guard let splitView = mainSplitView else { return }
 
+        // The Aurora chrome mounts its sidebar as an overlay inside
+        // `tabBarView`. Hiding that container (`.top` or `.hidden`)
+        // would hide Aurora too, since a hidden parent hides every
+        // child. While the feature flag is on, force the sidebar to
+        // stay visible so Aurora has a canvas to render on.
+        // `auroraEnabled = false` restores the user's preference
+        // immediately on the next config reload.
+        let auroraEnabled = configService?.current.appearance.auroraEnabled == true
+        let effective: TabPosition = auroraEnabled ? .left : position
+
         // The strip is the workspace toolbar (split pane tabs, browser/markdown
         // icons). It is always visible alongside whichever tab navigation mode
         // is active. Only `.hidden` hides everything.
-        switch position {
+        switch effective {
         case .left:
             sidebar.isHidden = false
             strip.isHidden = false

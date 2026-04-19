@@ -436,7 +436,14 @@ final class PreferencesViewModel: ObservableObject {
                 fontThicken: fontThicken,
                 backgroundOpacity: clampedOpacity,
                 backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius,
-                transparencyChromeTheme: transparencyChromeTheme
+                transparencyChromeTheme: transparencyChromeTheme,
+                // Preferences has no dedicated toggle for the
+                // experimental Aurora chrome yet; carry the last
+                // saved value through every save cycle so a user who
+                // enabled Aurora by editing the TOML does not lose
+                // it the moment they hit "Save" on any unrelated
+                // appearance tweak.
+                auroraEnabled: savedConfig.appearance.auroraEnabled
             ),
             terminal: TerminalConfig(
                 scrollbackLines: savedConfig.terminal.scrollbackLines,
@@ -514,6 +521,7 @@ final class PreferencesViewModel: ObservableObject {
         font-thicken = \(fontThicken)
         background-opacity = \(String(format: "%.2f", clampedOpacity))
         transparency-chrome-theme = "\(transparencyChromeTheme.rawValue)"
+        aurora-enabled = \(defaults.appearance.auroraEnabled)
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)

@@ -112,6 +112,7 @@ extension Design {
         let onDismiss: () -> Void
 
         @Environment(\.designThemePalette) private var palette
+        @FocusState private var searchFieldFocused: Bool
 
         private static let maxWidth: CGFloat = 560
         private static let maxHeight: CGFloat = 420
@@ -126,6 +127,43 @@ extension Design {
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Command palette")
+                // Swallow arrow navigation and Escape so keystrokes
+                // never reach the terminal surface while the palette
+                // is up, and so the palette has first-class keyboard
+                // navigation without requiring the host to wire up an
+                // NSEvent monitor.
+                .onKeyPress(.downArrow) {
+                    moveSelection(by: 1)
+                    return .handled
+                }
+                .onKeyPress(.upArrow) {
+                    moveSelection(by: -1)
+                    return .handled
+                }
+                .onKeyPress(.return) {
+                    submitCurrentSelection()
+                    return .handled
+                }
+                .onKeyPress(.escape) {
+                    onDismiss()
+                    return .handled
+                }
+                .onAppear {
+                    // Autofocus the search field so the user can type
+                    // immediately, matching the classic palette.
+                    searchFieldFocused = true
+                }
+                .onChange(of: isVisible) { _, newValue in
+                    if newValue {
+                        searchFieldFocused = true
+                    }
+                }
+                .onChange(of: query) { _, _ in
+                    // Re-clamp the selection when the filter list
+                    // shrinks; keeps the highlight inside the
+                    // currently visible rows.
+                    selectedIndex = clampedSelection(for: filteredActions)
+                }
             }
         }
 
@@ -167,9 +205,34 @@ extension Design {
                     .font(.system(size: 14))
                     .foregroundStyle(palette.textHigh.resolvedColor())
                     .accessibilityLabel("Command palette search")
+                    .focused($searchFieldFocused)
+                    .onSubmit { submitCurrentSelection() }
             }
             .padding(.horizontal, Spacing.xSmall)
             .padding(.vertical, 8)
+        }
+
+        // MARK: - Keyboard navigation helpers
+
+        private func moveSelection(by delta: Int) {
+            let visible = filteredActions
+            guard !visible.isEmpty else { return }
+            let current = clampedSelection(for: visible)
+            let next = current + delta
+            if next < 0 {
+                selectedIndex = visible.count - 1
+            } else if next >= visible.count {
+                selectedIndex = 0
+            } else {
+                selectedIndex = next
+            }
+        }
+
+        private func submitCurrentSelection() {
+            let visible = filteredActions
+            guard !visible.isEmpty else { return }
+            let index = clampedSelection(for: visible)
+            onSelect(visible[index])
         }
 
         private var filteredActions: [AuroraPaletteAction] {

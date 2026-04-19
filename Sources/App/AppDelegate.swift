@@ -1346,6 +1346,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.portScanner = scanner
         for controller in allWindowControllers {
             controller.portScanner = scanner
+            // The Aurora chrome may already be installed by the time
+            // the port scanner comes online (launch order differs
+            // between cold start and reopen). Re-wire the freshly
+            // created scanner onto the Aurora controller so its
+            // status bar mirrors the same port set as the classic
+            // path. No-op when Aurora has never been installed.
+            controller.auroraChromeController?.wirePortScanner(scanner)
         }
         scanner.startScanning(interval: 5.0)
 
