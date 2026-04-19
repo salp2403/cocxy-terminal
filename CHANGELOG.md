@@ -5,7 +5,7 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.76] - 2026-04-18
 
 ### Added
 - Editable **Keybindings** tab in Preferences (replaces the previous read-only list). Lists every rebindable action from a new canonical catalog — 39 actions across Window, Tabs, Splits, Navigation, Editor, Review, Markdown, and Remote categories — with the current shortcut rendered in macOS modifier glyphs. Each row exposes **Edit** and **Reset** buttons; the top of the editor has a **Reset All** button plus a banner that lists any conflicting action groups in red. Saving is blocked until conflicts are resolved.
@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PreferencesViewModel` gained `applyKeybindings(_:)` / `effectiveKeybindings` / a lazy `keybindingsEditor`; the save path now threads pending keybindings through the same TOML writer that handles General, Appearance, Agent Detection, Notifications, and Terminal sections.
 - `KeybindingShortcut` gained `menuKeyEquivalent`, `modifierMask`, and `isAssignableToMenuItem` helpers so the binder can map a parsed shortcut to `NSMenuItem.keyEquivalent` + `NSMenuItem.keyEquivalentModifierMask` in one step, including named keys (arrows, function keys, `plus`, `minus`, `grave`).
 - `editor.zoomIn` default moved from the `"="` token (same physical key as `"+"` on US layouts) to the explicit `"plus"` token so the canonical TOML round-trips through the parser without hitting the ambiguous double-separator case (`"cmd++"`).
+- Split defaults restored to the historical pairing: Split Horizontal = `Cmd+D` and Split Vertical = `Cmd+Shift+D`. The editable-keybindings feature shipped with the pairing reversed, which would have flipped every fresh install's muscle memory; menu setup, doc comments, and user-facing copy already described the historical pairing, so this reconciles the catalog defaults with shipped behaviour.
+
+### Fixed
+- `KeybindingsConfig` now decodes cleanly from legacy `CocxyConfig` JSON snapshots that omit the new `customOverrides` dictionary. A custom `init(from decoder:)` treats `customOverrides` as optional and falls back to an empty map so older session JSONs round-trip through the current decoder without throwing `.keyNotFound`.
 
 ### Notes
 - `AppDelegate+MenuSetup` no longer encodes `keyEquivalent` literals for rebindable items; each rebindable item is declared via `MenuKeybindingsBinder.tag(_:with:)`. The menu tree keeps the hardcoded shortcut characters only for built-in macOS commands that users cannot rebind.
@@ -30,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - +14 Swift Testing cases in a new `MenuKeybindingsBinder` suite: identifier round-trip, apply-from-config, default fallback for missing actions, idempotency on the same config, hot-reload overwrite, invalid-shortcut preservation, untagged-item skip, submenu traversal, complex modifier combos, named-key resolution (arrow keys), and palette pretty-label lookup.
 - Total new coverage across the keybindings feature (editor + runtime): 59 Swift Testing cases across four suites — `KeybindingShortcut` (19), `KeybindingsEditorViewModel` (15), `KeybindingsConfig` TOML round-trip (11), and `MenuKeybindingsBinder` (14).
 - Full suite after runtime wiring: 2514 XCTest + 1368 Swift Testing = **3882 tests**, zero failures, zero warnings, debug + release builds green.
+- Full suite on rebased branch (incl. decoder fix + split-default swap): 2514 XCTest + 1453 Swift Testing = **3967 tests**, zero failures, debug + release builds green.
 
 ## [0.1.75] - 2026-04-18
 
