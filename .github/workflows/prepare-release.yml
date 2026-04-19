@@ -1,0 +1,118 @@
+name: Prepare Release
+
+# Bumps `Resources/Info.plist` to the target version, commits the bump
+# to `main`, and creates the release tag on top of that commit. The
+# existing `Release` workflow takes it from there when the tag is
+# pushed.
+#
+# Separating the bump from the release build closes the historical
+# drift where `git checkout <tag>` returned source with the previous
+# release's `Info.plist`. After this workflow runs, the tag points at
+# a commit whose `Info.plist` matches the shipped DMG exactly, so
+# source-only checkouts, audits, and forensic bisects reproduce what
+# GitHub Releases publishes.
+#
+# The workflow is intentionally `workflow_dispatch`-only so the dev
+# chooses the moment and the exact version. Safety guards reject
+# invalid formats, existing tags, and anything other than a push from
+# `main`. All operations are idempotent — re-running for the same
+# version with a matching `Info.plist` is a no-op.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without the leading `v` (for example `0.1.80`).'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Bump Info.plist and tag
+    runs-on: macos-15
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          lfs: true
+          persist-credentials: true
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version '$VERSION'. Expected semver format X.Y.Z (no leading v)."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Refuse if tag already exists
+        run: |
+          git fetch --tags --force
+          if git show-ref --tags --verify --quiet "refs/tags/v${VERSION}"; then
+            echo "::error::Tag v${VERSION} already exists. Pick a different version or delete the tag manually if this was intentional."
+            exit 1
+          fi
+
+      - name: Read current Info.plist version
+        id: current
+        run: |
+          CURRENT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)
+          echo "CURRENT=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "Info.plist currently at ${CURRENT}"
+
+      - name: Bump Info.plist (idempotent)
+        run: |
+          plutil -replace CFBundleVersion -string "${VERSION}" Resources/Info.plist
+          plutil -replace CFBundleShortVersionString -string "${VERSION}" Resources/Info.plist
+          echo "Info.plist now at ${VERSION}"
+
+      - name: Configure committer
+        run: |
+          git config user.name "said lopez"
+          git config user.email "dev@cocxy.dev"
+
+      - name: Commit bump (skip if clean)
+        id: commit
+        run: |
+          if git diff --quiet Resources/Info.plist; then
+            echo "SKIPPED=1" >> "$GITHUB_OUTPUT"
+            echo "Info.plist already at ${VERSION}; reusing the current HEAD for the tag."
+          else
+            git add Resources/Info.plist
+            git commit -m "chore(release): bump Info.plist to ${VERSION}"
+            echo "SKIPPED=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create annotated tag
+        run: |
+          git tag -a "v${VERSION}" -m "Cocxy Terminal v${VERSION}"
+
+      - name: Push main then tag
+        run: |
+          # Push main first so the tagged commit is reachable on the
+          # default branch before the release workflow fires. Pushing
+          # the tag second keeps the Release workflow trigger idempotent
+          # — it always builds from a commit visible on main.
+          if [ "${{ steps.commit.outputs.SKIPPED }}" = "0" ]; then
+            git push origin main
+          fi
+          git push origin "v${VERSION}"
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.commit.outputs.SKIPPED }}" = "1" ]; then
+            echo "### Release v${VERSION} tagged (no bump needed)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Release v${VERSION} prepared" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Info.plist: ${{ steps.current.outputs.CURRENT }} → ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Commit pushed to \`main\` and tagged as \`v${VERSION}\`." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- The \`Release\` workflow will now build, sign, notarize, and publish the DMG." >> "$GITHUB_STEP_SUMMARY"

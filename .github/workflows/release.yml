@@ -303,7 +303,15 @@ jobs:
             - Apple Silicon or Intel Mac
           generate_release_notes: true
 
-      - name: Update CHANGELOG and base version
+      - name: Update CHANGELOG on main
+        # `Resources/Info.plist` is bumped by the `prepare-release`
+        # workflow before the tag is created, so this step no longer
+        # touches the plist — it only auto-generates the CHANGELOG
+        # entry from commit messages when the release tag does not
+        # already have one (typical for patch releases where the dev
+        # skipped writing a manual entry). The guard in the Python
+        # block below (`if f"## [{version}]" in content: skip`) makes
+        # this a safe no-op when the entry is already present.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -450,16 +458,16 @@ jobs:
 
           PYEOF
 
-          # Sync base Info.plist version so nightlies and local builds stay current
-          plutil -replace CFBundleVersion -string "${VERSION}" Resources/Info.plist
-          plutil -replace CFBundleShortVersionString -string "${VERSION}" Resources/Info.plist
-
-          # Commit updated CHANGELOG and version back to main
+          # Commit the CHANGELOG update back to main. The plist is
+          # already at the shipped version because `prepare-release`
+          # bumped and tagged in a single commit, so this step has
+          # nothing to do for `Resources/Info.plist` — we only push the
+          # CHANGELOG entry that the Python block above generated.
           git config user.name "said lopez"
           git config user.email "dev@cocxy.dev"
-          git add CHANGELOG.md Resources/Info.plist
+          git add CHANGELOG.md
           if git diff --cached --quiet; then
-            echo "No changes to commit"
+            echo "No CHANGELOG changes to commit"
           else
             git commit -m "docs: update CHANGELOG for v${VERSION}"
             git push origin HEAD:main || echo "Push to main failed (non-blocking)"
