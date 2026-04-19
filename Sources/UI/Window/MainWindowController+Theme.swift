@@ -83,6 +83,10 @@ extension MainWindowController {
         // Apply vibrancy/opacity changes to all chrome components.
         applyEffectiveAppearance(config.appearance)
 
+        // Toggle Aurora chrome visibility (no-op while flag is off and
+        // the controller has not been instantiated yet).
+        applyAuroraChromeIfNeeded(for: config.appearance)
+
         // Determine which runtime-facing terminal settings changed. CocxyCore
         // can apply theme, font, ligature and image-transport updates in
         // place, while shell defaults only affect surfaces created after

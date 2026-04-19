@@ -1128,6 +1128,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         controller.timelineDispatcher.navigator = makeTimelineNavigator()
+
+        // The Aurora chrome integration depends on the per-surface store
+        // the block above injected. With every service in place we can
+        // now honour `appearance.aurora-enabled` — a no-op when the flag
+        // is off (default), and a one-shot install when it is on.
+        controller.applyInitialAuroraChromeStateIfNeeded()
     }
 
     @discardableResult

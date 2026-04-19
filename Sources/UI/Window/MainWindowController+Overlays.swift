@@ -118,7 +118,10 @@ extension MainWindowController {
     /// Shortcut labels for catalog-backed actions are resolved live from
     /// `ConfigService.current.keybindings` so the palette glyph always
     /// matches the menu bar glyph, even after a user customization.
-    private func createWiredCommandPaletteEngine() -> CommandPaletteEngineImpl {
+    /// Visibility is `internal` (default) so the Aurora integration in
+    /// `MainWindowController+AuroraIntegration` can reuse the same
+    /// engine factory and keep classic and Aurora palettes aligned.
+    func createWiredCommandPaletteEngine() -> CommandPaletteEngineImpl {
         let engine = CommandPaletteEngineImpl()
 
         // Register actions with direct handlers to the window controller.

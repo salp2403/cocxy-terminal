@@ -42,18 +42,19 @@ protocol AuroraWorkspaceRootResolver: Sendable {
 /// worst-case behavior bounded when the tab lives deep inside a giant
 /// monorepo. Stops at the user's home directory so a stray `~/.git` doesn't
 /// collapse every local tab into a single pseudo-workspace.
+///
+/// Reads `FileManager.default.fileExists(atPath:)` each call — a thread-safe
+/// singleton operation — so the resolver stays `Sendable` without needing
+/// to store a `FileManager` reference (which is not `Sendable` itself).
 struct GitAncestorWorkspaceRootResolver: AuroraWorkspaceRootResolver {
 
-    private let fileManager: FileManager
     private let homeDirectory: URL
     private let maxDepth: Int
 
     init(
-        fileManager: FileManager = .default,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         maxDepth: Int = 12
     ) {
-        self.fileManager = fileManager
         self.homeDirectory = homeDirectory.standardizedFileURL
         self.maxDepth = maxDepth
     }
@@ -64,7 +65,7 @@ struct GitAncestorWorkspaceRootResolver: AuroraWorkspaceRootResolver {
 
         for _ in 0..<maxDepth {
             let dotGit = current.appendingPathComponent(".git", isDirectory: true)
-            if fileManager.fileExists(atPath: dotGit.path) {
+            if FileManager.default.fileExists(atPath: dotGit.path) {
                 return current
             }
             let parent = current.deletingLastPathComponent().standardizedFileURL

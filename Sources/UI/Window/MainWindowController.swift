@@ -335,6 +335,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// teardown paths guard for `nil` and skip the reset.
     var injectedPerSurfaceStore: AgentStatePerSurfaceStore?
 
+    /// Aurora chrome controller instantiated lazily the first time the
+    /// `appearance.aurora-enabled` flag is observed to be true. Stays
+    /// `nil` while the flag is off so the classic chrome path allocates
+    /// zero Aurora state. See `MainWindowController+AuroraIntegration`
+    /// for the install / visibility helpers.
+    var auroraChromeController: AuroraChromeController?
+
     /// Watchdog that guards against surfaces that enter `.launched`
     /// and never transition further because the agent terminated
     /// without emitting a `SessionEnd` hook. Owned by the controller
