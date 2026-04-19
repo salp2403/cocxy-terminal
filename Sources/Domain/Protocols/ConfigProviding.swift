@@ -115,7 +115,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             fontThicken: appearance.fontThicken,
             backgroundOpacity: overrides.backgroundOpacity ?? appearance.backgroundOpacity,
             backgroundBlurRadius: overrides.backgroundBlurRadius ?? appearance.backgroundBlurRadius,
-            transparencyChromeTheme: appearance.transparencyChromeTheme
+            transparencyChromeTheme: appearance.transparencyChromeTheme,
+            auroraEnabled: appearance.auroraEnabled
         )
 
         let mergedKeybindings: KeybindingsConfig
@@ -215,6 +216,22 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     /// because the chrome is not translucent.
     let transparencyChromeTheme: TransparencyChromeTheme
 
+    /// Opt-in switch for the experimental Aurora chrome (reimagined
+    /// sidebar, status bar and command palette inspired by the Liquid
+    /// Glass design system).
+    ///
+    /// Defaults to `false`: the classic chrome (`TabBarView`,
+    /// `StatusBarView`, `CommandPaletteView`) stays mounted unchanged.
+    /// When set to `true`, the integration layer swaps in the Aurora
+    /// views that live in `Sources/UI/Design/`. Hot-reloadable via
+    /// `ConfigService.configChangedPublisher`.
+    ///
+    /// The flag is intentionally conservative. While off, the Aurora
+    /// module is purely additive code — every production code path
+    /// continues to use the existing chrome, so any regression can only
+    /// surface once the user enables the flag explicitly.
+    let auroraEnabled: Bool
+
     /// Effective horizontal padding (prefers windowPaddingX, falls back to windowPadding).
     var effectivePaddingX: Double { windowPaddingX ?? windowPadding }
     /// Effective vertical padding (prefers windowPaddingY, falls back to windowPadding).
@@ -233,7 +250,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         fontThicken: Bool = false,
         backgroundOpacity: Double,
         backgroundBlurRadius: Double,
-        transparencyChromeTheme: TransparencyChromeTheme = .followSystem
+        transparencyChromeTheme: TransparencyChromeTheme = .followSystem,
+        auroraEnabled: Bool = false
     ) {
         self.theme = theme
         self.lightTheme = lightTheme
@@ -248,6 +266,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         self.backgroundOpacity = backgroundOpacity
         self.backgroundBlurRadius = backgroundBlurRadius
         self.transparencyChromeTheme = transparencyChromeTheme
+        self.auroraEnabled = auroraEnabled
     }
 
     static var defaults: AppearanceConfig {
@@ -264,15 +283,16 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             fontThicken: false,
             backgroundOpacity: 1.0,
             backgroundBlurRadius: 0,
-            transparencyChromeTheme: .followSystem
+            transparencyChromeTheme: .followSystem,
+            auroraEnabled: false
         )
     }
 
     // MARK: - Codable
 
     /// Backwards-compatible decoding: configs persisted before the
-    /// `transparencyChromeTheme` key existed decode cleanly with
-    /// `.followSystem`, matching the runtime default.
+    /// `transparencyChromeTheme` or `auroraEnabled` keys existed decode
+    /// cleanly with their runtime defaults.
     private enum CodingKeys: String, CodingKey {
         case theme
         case lightTheme
@@ -287,6 +307,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         case backgroundOpacity
         case backgroundBlurRadius
         case transparencyChromeTheme
+        case auroraEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -307,6 +328,10 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             TransparencyChromeTheme.self,
             forKey: .transparencyChromeTheme
         ) ?? .followSystem
+        self.auroraEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .auroraEnabled
+        ) ?? false
     }
 }
 

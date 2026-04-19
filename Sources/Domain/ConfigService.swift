@@ -192,6 +192,11 @@ final class ConfigService: ConfigProviding {
         # or "dark" to pin sidebar / tab strip / status bar independently
         # of the macOS appearance.
         transparency-chrome-theme = "\(defaults.appearance.transparencyChromeTheme.rawValue)"
+        # Opt-in preview of the experimental Aurora chrome (redesigned
+        # sidebar, status bar and command palette). Off by default so the
+        # classic chrome stays active until the redesign is ready to
+        # promote.
+        aurora-enabled = \(defaults.appearance.auroraEnabled)
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
@@ -331,7 +336,8 @@ final class ConfigService: ConfigProviding {
             fontThicken: boolValue(table["font-thicken"]) ?? defaults.fontThicken,
             backgroundOpacity: clamp(rawOpacity, min: 0.1, max: 1.0),
             backgroundBlurRadius: clamp(rawBlur, min: 0, max: 100),
-            transparencyChromeTheme: chromeTheme
+            transparencyChromeTheme: chromeTheme,
+            auroraEnabled: boolValue(table["aurora-enabled"]) ?? defaults.auroraEnabled
         )
     }
 
