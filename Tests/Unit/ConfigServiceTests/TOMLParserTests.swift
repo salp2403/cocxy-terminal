@@ -314,8 +314,8 @@ final class TOMLParserTests: XCTestCase {
         close-tab = "cmd+w"
         next-tab = "cmd+shift+]"
         prev-tab = "cmd+shift+["
-        split-vertical = "cmd+d"
-        split-horizontal = "cmd+shift+d"
+        split-vertical = "cmd+shift+d"
+        split-horizontal = "cmd+d"
         goto-attention = "cmd+shift+u"
         toggle-quick-terminal = "cmd+grave"
 

@@ -73,8 +73,8 @@ struct KeybindingsConfig: Codable, Sendable, Equatable {
             closeTab: "cmd+w",
             nextTab: "cmd+shift+]",
             prevTab: "cmd+shift+[",
-            splitVertical: "cmd+d",
-            splitHorizontal: "cmd+shift+d",
+            splitVertical: "cmd+shift+d",
+            splitHorizontal: "cmd+d",
             gotoAttention: "cmd+shift+u",
             toggleQuickTerminal: "cmd+grave"
         )

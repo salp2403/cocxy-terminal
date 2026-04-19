@@ -433,8 +433,8 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.keybindingCloseTab, "cmd+w")
         XCTAssertEqual(viewModel.keybindingNextTab, "cmd+shift+]")
         XCTAssertEqual(viewModel.keybindingPrevTab, "cmd+shift+[")
-        XCTAssertEqual(viewModel.keybindingSplitVertical, "cmd+d")
-        XCTAssertEqual(viewModel.keybindingSplitHorizontal, "cmd+shift+d")
+        XCTAssertEqual(viewModel.keybindingSplitVertical, "cmd+shift+d")
+        XCTAssertEqual(viewModel.keybindingSplitHorizontal, "cmd+d")
         XCTAssertEqual(viewModel.keybindingGotoAttention, "cmd+shift+u")
         XCTAssertEqual(viewModel.keybindingQuickTerminal, "cmd+grave")
     }

@@ -25,8 +25,8 @@ struct KeybindingsConfigRoundTripTests {
         close-tab = "cmd+shift+w"
         next-tab = "cmd+shift+]"
         prev-tab = "cmd+shift+["
-        split-vertical = "cmd+d"
-        split-horizontal = "cmd+shift+d"
+        split-vertical = "cmd+shift+d"
+        split-horizontal = "cmd+d"
         goto-attention = "cmd+shift+u"
         toggle-quick-terminal = "cmd+grave"
         """
@@ -103,7 +103,8 @@ struct KeybindingsConfigRoundTripTests {
 
         #expect(section.hasPrefix("[keybindings]"))
         #expect(section.contains("new-tab = \"cmd+t\""))
-        #expect(section.contains("split-horizontal = \"cmd+shift+d\""))
+        #expect(section.contains("split-horizontal = \"cmd+d\""))
+        #expect(section.contains("split-vertical = \"cmd+shift+d\""))
         #expect(section.contains("toggle-quick-terminal = \"cmd+grave\""))
     }
 
@@ -117,8 +118,8 @@ struct KeybindingsConfigRoundTripTests {
             closeTab: "cmd+w",
             nextTab: "cmd+shift+]",
             prevTab: "cmd+shift+[",
-            splitVertical: "cmd+d",
-            splitHorizontal: "cmd+shift+d",
+            splitVertical: "cmd+shift+d",
+            splitHorizontal: "cmd+d",
             gotoAttention: "cmd+shift+u",
             toggleQuickTerminal: "cmd+grave",
             customOverrides: custom
@@ -173,8 +174,8 @@ struct KeybindingsConfigHelperTests {
             closeTab: "cmd+w",
             nextTab: "cmd+shift+]",
             prevTab: "cmd+shift+[",
-            splitVertical: "cmd+d",
-            splitHorizontal: "cmd+shift+d",
+            splitVertical: "cmd+shift+d",
+            splitHorizontal: "cmd+d",
             gotoAttention: "cmd+shift+u",
             toggleQuickTerminal: "cmd+grave",
             customOverrides: ["tab.new": "cmd+alt+t"]
@@ -196,8 +197,8 @@ struct KeybindingsConfigHelperTests {
             closeTab: "cmd+w",
             nextTab: "cmd+shift+]",
             prevTab: "cmd+shift+[",
-            splitVertical: "cmd+d",
-            splitHorizontal: "cmd+shift+d",
+            splitVertical: "cmd+shift+d",
+            splitHorizontal: "cmd+d",
             gotoAttention: "cmd+shift+u",
             toggleQuickTerminal: "cmd+grave"
         )

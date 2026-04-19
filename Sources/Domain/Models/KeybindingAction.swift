@@ -263,18 +263,18 @@ enum KeybindingActionCatalog {
 
     // MARK: - Split
 
-    static let splitVertical = KeybindingAction(
-        id: "split.vertical",
-        displayName: "Split Vertical",
-        summary: "Split the active pane into a new column.",
-        category: .split,
-        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "d")
-    )
-
     static let splitHorizontal = KeybindingAction(
         id: "split.horizontal",
         displayName: "Split Horizontal",
         summary: "Split the active pane into a new row.",
+        category: .split,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "d")
+    )
+
+    static let splitVertical = KeybindingAction(
+        id: "split.vertical",
+        displayName: "Split Vertical",
+        summary: "Split the active pane into a new column.",
         category: .split,
         defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "d")
     )

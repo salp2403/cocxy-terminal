@@ -134,7 +134,7 @@ final class CommandPaletteViewModel: ObservableObject {
 /// |-----------------------------------------------|
 /// | [Tabs]   New Tab                     Cmd+T    |
 /// | [Tabs]   Close Tab                   Cmd+W    |
-/// | [Splits] Split Vertical              Cmd+D    |
+/// | [Splits] Split Horizontal            Cmd+D    |
 /// | [Theme]  Toggle Theme                         |
 /// | ...                                           |
 /// +-----------------------------------------------+
