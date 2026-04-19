@@ -5,6 +5,21 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.78] - 2026-04-18
+
+### Added
+- Aurora redesign foundation + primitives landed as a pure, additive design module under `Sources/UI/Design/`. The module ships the OKLCH token system with three palettes (Aurora / Paper / Nocturne), the `GlassSurface` primitive with its three-way render-mode resolver (Liquid Glass on macOS 26, `NSVisualEffectView` fallback on 14/15, opaque surface for Reduce Transparency / Increase Contrast), the ambient backdrop animation math, the `AgentChipView` component, the sidebar tree, and the status-bar lockup. Every view stays behind a unique `Design.*` namespace, never consumes production domain types, and is covered by unit tests on the data layer so regressions surface without booting AppKit.
+- New `AuroraCommandPaletteView` + presentation-only `AuroraPaletteAction` + pure `AuroraPaletteFilter`. The overlay composes through `GlassSurface` so the same accessibility decision table drives its background, and the host wires action handlers through closures instead of a direct engine dependency. `Design.samplePaletteActions` ships a nine-row canonical catalog spanning Tabs, Splits, Window, and Theme used by previews, the tweaks panel, and the filter tests.
+- New `AuroraTweaksPanel` developer inspector that flips the active theme palette, forces a specific `GlassRenderMode` override, toggles the ambient backdrop animation, and previews the palette row, agent chip, and local badge with the current tokens. `AuroraTweaksState` is a plain Equatable / Sendable value type so hosts can persist or restore the inspector selection without booting SwiftUI. The panel never ships in the production chrome.
+- New `AuroraWorkspaceAdapter` — the pure seam between the production domain (`TabManager`, `AgentStatePerSurfaceStore`, `SplitManager`) and the redesigned sidebar tree. The integration layer feeds `[AuroraSourceTab]` / `[AuroraSourceSurface]` snapshots (manufactured from whatever the app currently exposes) and the adapter groups them into ordered `[AuroraWorkspace]`s with synthetic-pane fallback for surface-less tabs, first-non-idle primary selection, and deterministic stable ordering for identical input.
+
+### Notes
+- This release is entirely additive. No existing chrome, view model, config, or protocol was modified. Wiring the redesigned sidebar / status bar / palette into production will happen in a later release behind an explicit feature flag so the rollout can be staged and reverted without touching the tokenised design layer shipped here.
+
+### Testing
+- +27 Swift Testing cases across three new suites: `AuroraCommandPaletteFilterTests` (9), `AuroraTweaksStateTests` (8), and `AuroraWorkspaceAdapterTests` (10). Combined with the earlier foundation coverage the design module now ships 108 cases guarding every invariant the redesign depends on.
+- Full suite: 2514 XCTest + 1540 Swift Testing = **4054 tests**, zero failures, debug + release builds green.
+
 ## [0.1.77] - 2026-04-18
 
 ### Fixed
