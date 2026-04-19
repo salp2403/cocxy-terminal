@@ -41,7 +41,7 @@ extension Design {
         let onCreateTab: () -> Void
         let onActivateSession: (String) -> Void
 
-        var paletteShortcutLabel: String = "⌘⇧P"
+        var paletteShortcutLabel: String = "⇧⌘P"
         var newTabShortcutLabel: String = "⌘T"
 
         @Environment(\.designThemePalette) private var palette
@@ -65,7 +65,12 @@ extension Design {
                 }
                 .padding(Spacing.large)
             }
-            .frame(width: 280)
+            // The sidebar fills whatever container the host provides so
+            // the NSHostingView frame (matched to the classic sidebar's
+            // bounds when Aurora is mounted as an overlay) controls the
+            // actual width. Previews and tests that want a pinned width
+            // can wrap the view in their own `.frame(width: ...)`.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
 
         // MARK: - Header
@@ -189,11 +194,16 @@ extension Design {
 
         // MARK: - Footer
 
+        /// Footer shown at the bottom of the sidebar. Originally carried
+        /// a second copy of the "100% local" badge that the Aurora
+        /// status bar already renders at the bottom of the window — one
+        /// badge per window is enough. The footer now only surfaces the
+        /// palette shortcut hint (live-resolved from the host so
+        /// rebindings propagate immediately).
         private var sidebarFooter: some View {
             HStack(spacing: Spacing.small) {
-                LocalBadgeView()
                 Spacer()
-                Text("⌘K")
+                Text(paletteShortcutLabel)
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(palette.textLow.resolvedColor())
                     .padding(.horizontal, 6)

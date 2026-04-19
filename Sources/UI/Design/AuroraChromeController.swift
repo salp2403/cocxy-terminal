@@ -61,9 +61,10 @@ final class AuroraChromeController: ObservableObject {
     /// edits to `window.commandPalette` / `tab.new` reach the header
     /// (and stay aligned with the menu bar glyphs rendered by
     /// `MenuKeybindingsBinder`). Defaults match the catalog baselines
-    /// (`⌘⇧P` for the command palette, `⌘T` for new-tab) so previews
-    /// and tests render without depending on the binder.
-    @Published var paletteShortcutLabel: String = "⌘⇧P"
+    /// using the macOS-canonical modifier order
+    /// (`⌃⌥⇧⌘<key>`) that `KeybindingShortcut.prettyLabel` emits, so
+    /// previews and tests render without depending on the binder.
+    @Published var paletteShortcutLabel: String = "⇧⌘P"
     @Published var newTabShortcutLabel: String = "⌘T"
 
     // MARK: - Dependencies (weak)
@@ -106,9 +107,9 @@ final class AuroraChromeController: ObservableObject {
 
     // MARK: - Hosting views
 
-    private(set) var sidebarHost: NSHostingView<AuroraSidebarHost>?
-    private(set) var statusBarHost: NSHostingView<AuroraStatusBarHost>?
-    private(set) var paletteHost: NSHostingView<AuroraPaletteHost>?
+    private(set) var sidebarHost: AuroraHostingView<AuroraSidebarHost>?
+    private(set) var statusBarHost: AuroraHostingView<AuroraStatusBarHost>?
+    private(set) var paletteHost: AuroraHostingView<AuroraPaletteHost>?
 
     // MARK: - Private state
 
@@ -232,18 +233,18 @@ final class AuroraChromeController: ObservableObject {
     /// Builds (or returns the cached) sidebar hosting view. The wrapper
     /// holds a strong reference to `self` so Combine-driven updates on
     /// `workspaces` / `activeSessionID` keep the view in sync.
-    func makeSidebarHost() -> NSHostingView<AuroraSidebarHost> {
+    func makeSidebarHost() -> AuroraHostingView<AuroraSidebarHost> {
         if let cached = sidebarHost { return cached }
-        let host = NSHostingView(rootView: AuroraSidebarHost(controller: self))
+        let host = AuroraHostingView(rootView: AuroraSidebarHost(controller: self))
         host.translatesAutoresizingMaskIntoConstraints = true
         sidebarHost = host
         return host
     }
 
     /// Builds (or returns the cached) status-bar hosting view.
-    func makeStatusBarHost() -> NSHostingView<AuroraStatusBarHost> {
+    func makeStatusBarHost() -> AuroraHostingView<AuroraStatusBarHost> {
         if let cached = statusBarHost { return cached }
-        let host = NSHostingView(rootView: AuroraStatusBarHost(controller: self))
+        let host = AuroraHostingView(rootView: AuroraStatusBarHost(controller: self))
         host.translatesAutoresizingMaskIntoConstraints = true
         statusBarHost = host
         return host
@@ -253,9 +254,9 @@ final class AuroraChromeController: ObservableObject {
     /// The wrapper is always mounted — it decides whether to render via
     /// its own `isPaletteVisible` binding so the host doesn't need to
     /// toggle `isHidden` on every open/close cycle.
-    func makePaletteHost() -> NSHostingView<AuroraPaletteHost> {
+    func makePaletteHost() -> AuroraHostingView<AuroraPaletteHost> {
         if let cached = paletteHost { return cached }
-        let host = NSHostingView(rootView: AuroraPaletteHost(controller: self))
+        let host = AuroraHostingView(rootView: AuroraPaletteHost(controller: self))
         host.translatesAutoresizingMaskIntoConstraints = true
         paletteHost = host
         return host
@@ -376,4 +377,27 @@ struct AuroraPaletteHost: View {
             onDismiss: { controller.hidePalette() }
         )
     }
+}
+
+// MARK: - Hosting view subclass
+
+/// `NSHostingView` subclass used exclusively by the Aurora chrome.
+///
+/// Overrides `mouseDownCanMoveWindow` to return `false`. Without this
+/// override the main window (`isMovableByWindowBackground = true`)
+/// interprets any click that lands on a "non-interactive" area of the
+/// SwiftUI overlay as a window-drag gesture, swallowing taps on
+/// session rows, workspace collapse toggles and tray buttons. Setting
+/// it to `false` matches what `NonDraggableView` and the classic
+/// `MiniAgentPillView` / tab-bar containers already do — the rule is
+/// documented in `feedback_mousedown_movable_window`.
+///
+/// Also accepts first responder so the palette overlay can receive
+/// keyboard input without another wrapper layer.
+final class AuroraHostingView<Content: View>: NSHostingView<Content> {
+    override var mouseDownCanMoveWindow: Bool { false }
+    override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { true }
+
+    override func becomeFirstResponder() -> Bool { true }
 }

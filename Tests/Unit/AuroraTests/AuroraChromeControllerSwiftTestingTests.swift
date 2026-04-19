@@ -251,10 +251,21 @@ struct AuroraChromeControllerSwiftTestingTests {
     @Test
     func shortcutLabelsDefaultToCatalogPrettyLabels() {
         let harness = makeHarness()
-        #expect(harness.controller.paletteShortcutLabel == "⌘⇧P",
-                "Default palette label must match KeybindingActionCatalog.windowCommandPalette")
-        #expect(harness.controller.newTabShortcutLabel == "⌘T",
-                "Default new-tab label must match KeybindingActionCatalog.tabNew")
+        // The catalog emits labels through `KeybindingShortcut.prettyLabel`,
+        // which follows the macOS-canonical modifier order
+        // (`⌃⌥⇧⌘<key>`), so `cmd+shift+p` becomes `⇧⌘P`, not `⌘⇧P`.
+        #expect(
+            harness.controller.paletteShortcutLabel ==
+                KeybindingActionCatalog.windowCommandPalette.defaultShortcut.prettyLabel,
+            "Default palette label must match KeybindingActionCatalog.windowCommandPalette"
+        )
+        #expect(harness.controller.paletteShortcutLabel == "⇧⌘P")
+        #expect(
+            harness.controller.newTabShortcutLabel ==
+                KeybindingActionCatalog.tabNew.defaultShortcut.prettyLabel,
+            "Default new-tab label must match KeybindingActionCatalog.tabNew"
+        )
+        #expect(harness.controller.newTabShortcutLabel == "⌘T")
     }
 
     @Test

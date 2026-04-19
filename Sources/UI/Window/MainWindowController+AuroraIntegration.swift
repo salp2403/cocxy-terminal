@@ -24,11 +24,13 @@ import SwiftUI
 
 extension MainWindowController {
 
-    /// Height budget reserved for the Aurora status bar. Matches the
-    /// `.frame(height: 32)` that the design module pins in
-    /// `AuroraStatusBarView`, plus two points of bottom padding so the
-    /// glass material does not hug the window edge.
-    private static var auroraStatusBarHeight: CGFloat { 34 }
+    /// Fallback height for the Aurora status bar used only when the
+    /// classic `statusBarHostingView` has not been built yet (extremely
+    /// rare — essentially tests without a full window boot). Matches
+    /// the classic `statusBarHeight` so both chromes share the same
+    /// vertical budget and the split view never shifts when the user
+    /// toggles the feature flag at runtime.
+    private static var auroraStatusBarFallbackHeight: CGFloat { 24 }
 
     /// Idempotent entry point invoked by `applyConfig(...)` whenever the
     /// appearance block changes. Instantiates the Aurora controller and
@@ -58,20 +60,64 @@ extension MainWindowController {
     func refreshAuroraShortcutLabels() {
         guard let controller = auroraChromeController else { return }
         let keybindings = configService?.current.keybindings ?? .defaults
-        let paletteLabel = MenuKeybindingsBinder.prettyShortcut(
-            for: KeybindingActionCatalog.windowCommandPalette.id,
+        // `MenuKeybindingsBinder.prettyShortcut` returns nil when the
+        // user has intentionally cleared the binding. The classic
+        // menu-bar glyphs disappear in that case and the palette rows
+        // drop the hint. Mirror that contract here: show the catalog
+        // default only when the user has NOT edited the binding (i.e.
+        // the raw string matches the default). When the user cleared
+        // it explicitly, surface an "unbound" glyph (`—`) so the
+        // Aurora tray never lies about what the shortcut is.
+        let paletteLabel = resolveShortcutLabel(
+            for: KeybindingActionCatalog.windowCommandPalette,
             in: keybindings
-        ) ?? KeybindingActionCatalog.windowCommandPalette.defaultShortcut.prettyLabel
-        let newTabLabel = MenuKeybindingsBinder.prettyShortcut(
-            for: KeybindingActionCatalog.tabNew.id,
+        )
+        let newTabLabel = resolveShortcutLabel(
+            for: KeybindingActionCatalog.tabNew,
             in: keybindings
-        ) ?? KeybindingActionCatalog.tabNew.defaultShortcut.prettyLabel
+        )
         if controller.paletteShortcutLabel != paletteLabel {
             controller.paletteShortcutLabel = paletteLabel
         }
         if controller.newTabShortcutLabel != newTabLabel {
             controller.newTabShortcutLabel = newTabLabel
         }
+    }
+
+    /// Label the Aurora tray should show for `action` given `config`.
+    ///
+    /// - Returns `prettyShortcut` when the user has a live binding.
+    /// - Returns the catalog default's pretty label when the stored
+    ///   string matches the catalog default (legacy configs that
+    ///   never edited the action — preserves the out-of-box look).
+    /// - Returns `"—"` (en-dash) when the user cleared the binding
+    ///   explicitly. The classic palette / menu bar render no glyph
+    ///   in that case; the Aurora tray has a fixed slot so a
+    ///   single-character placeholder is the closest equivalent.
+    /// Internal (not private) so the Aurora unit test suite can pin
+    /// the label-resolution behaviour without booting the window
+    /// controller. The helper has no dependency on the live instance
+    /// and could be free-standing; living on the extension keeps the
+    /// call site readable inside `refreshAuroraShortcutLabels`.
+    static func auroraShortcutLabel(
+        for action: KeybindingAction,
+        in config: KeybindingsConfig
+    ) -> String {
+        if let pretty = MenuKeybindingsBinder.prettyShortcut(for: action.id, in: config) {
+            return pretty
+        }
+        let raw = config.shortcutString(for: action.id)
+        if raw.isEmpty {
+            return "—"
+        }
+        return action.defaultShortcut.prettyLabel
+    }
+
+    private func resolveShortcutLabel(
+        for action: KeybindingAction,
+        in config: KeybindingsConfig
+    ) -> String {
+        Self.auroraShortcutLabel(for: action, in: config)
     }
 
     /// Applies the Aurora chrome state using the current `ConfigService`
@@ -134,33 +180,56 @@ extension MainWindowController {
 
         auroraChromeController = controller
 
-        // Sidebar — sibling of `tabBarView` inside `mainSplitView`. We
-        // mount it as a last subview so the split-view delegate still
-        // treats `tabBarView` as the canonical first subview; Aurora
-        // simply sits on top and renders when visible.
+        // Sidebar — mounted as an overlay **inside** `tabBarView`, not
+        // as a sibling of the split view. Adding a third subview to
+        // `mainSplitView` turned `sidebarHost` into a split pane and
+        // NSSplitView pushed it to the far right of the window. Living
+        // inside `tabBarView` pins Aurora to the same rect as the
+        // classic sidebar (autoresizing handles width+height growth)
+        // and keeps `mainSplitView`'s two-pane topology untouched, so
+        // the autosave frame, the split-view delegate contract and
+        // every classic layout path stay identical.
+        //
+        // The hosting view is given an opaque background layer so the
+        // classic sidebar's vibrancy and subviews, which stay mounted
+        // underneath, do not bleed through Aurora's rounded corners.
         let sidebarHost = controller.makeSidebarHost()
         if let sidebar = tabBarView {
-            sidebarHost.frame = sidebar.frame
-            sidebarHost.autoresizingMask = sidebar.autoresizingMask
+            sidebarHost.frame = sidebar.bounds
+            sidebarHost.autoresizingMask = [.width, .height]
+            sidebarHost.wantsLayer = true
+            sidebarHost.layer?.backgroundColor = CocxyColors.base.cgColor
+            sidebarHost.isHidden = true
+            sidebar.addSubview(sidebarHost)
         } else {
+            // Fallback path for the rare case when `tabBarView` is
+            // unavailable (tab position `.top` skips building it).
+            // Aurora still mounts as a split pane so the feature is
+            // reachable, although the layout will not match the left
+            // sidebar look until the user switches back to `.left`.
             sidebarHost.frame = NSRect(
                 x: 0, y: 0,
                 width: Self.sidebarWidth,
                 height: splitView.bounds.height
             )
             sidebarHost.autoresizingMask = [.height]
+            sidebarHost.isHidden = true
+            splitView.addSubview(sidebarHost)
         }
-        sidebarHost.isHidden = true
-        splitView.addSubview(sidebarHost)
 
         // Status bar — sibling of `statusBarHostingView` inside the
-        // root window view. Aurora overlays the classic one at the same
-        // frame so we simply flip `isHidden` to choose which renders.
+        // root window view. Aurora overlays the classic one at the
+        // exact same rectangle so we only flip `isHidden` to pick the
+        // renderer — no splitView frame adjustment, no layout shift.
+        // `AuroraStatusBarView` no longer pins a hardcoded 32pt
+        // height; it adapts to whatever rectangle the host supplies,
+        // which keeps the window's overall layout identical between
+        // chromes.
         let statusBarHost = controller.makeStatusBarHost()
         let classicStatusFrame = statusBarHostingView?.frame ?? NSRect(
             x: 0, y: 0,
             width: rootView.bounds.width,
-            height: Self.auroraStatusBarHeight
+            height: Self.auroraStatusBarFallbackHeight
         )
         statusBarHost.frame = classicStatusFrame
         statusBarHost.autoresizingMask = statusBarHostingView?.autoresizingMask ?? [.width]
@@ -186,21 +255,34 @@ extension MainWindowController {
     /// never installed — the helper simply shows the classic path.
     ///
     /// Visibility rules:
-    ///   - Aurora on  → classic sidebar, classic status bar, classic
-    ///     palette hosting views hidden. Aurora siblings shown.
-    ///   - Aurora off → reverse. Aurora siblings stay mounted but
-    ///     hidden so they keep receiving source updates in the
-    ///     background and re-show instantly on the next toggle.
+    ///   - Aurora on  → Aurora sidebar (mounted as overlay inside
+    ///     `tabBarView`) and status bar visible; classic status bar
+    ///     hidden. The classic `tabBarView` itself STAYS visible so
+    ///     the split view's pane is preserved — Aurora tapes over it
+    ///     via its opaque background layer. Hiding `tabBarView` would
+    ///     also hide the Aurora overlay because it is a child view.
+    ///   - Aurora off → Aurora hosting views hidden, classic chrome
+    ///     intact. Aurora siblings stay mounted but hidden so they
+    ///     keep receiving source updates in the background and
+    ///     re-show instantly on the next toggle.
     private func applyAuroraChromeVisibility(_ active: Bool) {
         if active {
             auroraChromeController?.sidebarHost?.isHidden = false
             auroraChromeController?.statusBarHost?.isHidden = false
-            tabBarView?.isHidden = true
             statusBarHostingView?.isHidden = true
         } else {
+            // Dismiss the Aurora palette before hiding the chrome so a
+            // user flipping the flag off mid-open does not leave the
+            // overlay floating above the classic chrome. `hidePalette`
+            // clears `isPaletteVisible` and re-hides `paletteHost`, and
+            // `toggleCommandPalette()` routes to the classic path once
+            // `isAuroraChromeActive` flips to false (the sidebar host
+            // is hidden immediately afterwards).
+            if auroraChromeController?.isPaletteVisible == true {
+                auroraChromeController?.hidePalette()
+            }
             auroraChromeController?.sidebarHost?.isHidden = true
             auroraChromeController?.statusBarHost?.isHidden = true
-            tabBarView?.isHidden = false
             statusBarHostingView?.isHidden = false
         }
     }
@@ -251,14 +333,18 @@ extension MainWindowController {
     /// Restores keyboard focus to the terminal surface after the
     /// Aurora palette dismisses. Mirrors the behaviour the classic
     /// palette achieves through `dismissCommandPalette` +
-    /// `window?.makeFirstResponder(tabBarView)` but targets the
-    /// active terminal instead so typing continues where the user
-    /// left off.
+    /// `window?.makeFirstResponder(tabBarView)` but targets whichever
+    /// terminal the user was driving before opening the palette. In
+    /// split layouts the palette may have been invoked from a
+    /// non-primary pane, so focusing `terminalSurfaceView` blindly
+    /// would send keystrokes to the wrong split after dismiss.
+    /// `activeTerminalSurfaceView` already models the right target
+    /// (focused split -> primary surface -> any surviving split), so
+    /// we delegate to it and fall back to `focusActiveTerminalSurface`
+    /// which performs the same `makeFirstResponder` work on our
+    /// behalf.
     func restoreFirstResponderAfterAuroraPalette() {
-        guard let window else { return }
-        if let terminalSurface = terminalSurfaceView {
-            window.makeFirstResponder(terminalSurface)
-        }
+        focusActiveTerminalSurface()
     }
 
     // MARK: - Palette action translation

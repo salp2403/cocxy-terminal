@@ -51,7 +51,15 @@ extension Design {
                 }
                 .padding(.horizontal, Spacing.large)
             }
-            .frame(height: 32)
+            // The integration layer mounts the status bar in whatever
+            // frame the classic status bar uses (24pt at the time of
+            // writing), so pinning a hardcoded 32pt height used to
+            // clip the content. Let the host decide the height and
+            // rely on the internal layout + padding to stay inside
+            // whatever rectangle the window provides. Previews that
+            // want the design-reference height can wrap the view in
+            // their own `.frame(height: 32)`.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
 
         private var separator: some View {
