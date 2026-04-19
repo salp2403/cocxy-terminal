@@ -67,6 +67,42 @@ struct KeybindingsConfig: Codable, Sendable, Equatable {
         self.customOverrides = customOverrides
     }
 
+    // MARK: - Codable
+
+    /// Custom decoder that treats `customOverrides` as optional and falls
+    /// back to an empty map when the payload omits it. This keeps legacy
+    /// `CocxyConfig` JSON snapshots — persisted before the editable
+    /// keybindings feature existed — decoding cleanly instead of throwing
+    /// `.keyNotFound`. The eight typed fields remain required because
+    /// every released config has always carried them.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.newTab = try container.decode(String.self, forKey: .newTab)
+        self.closeTab = try container.decode(String.self, forKey: .closeTab)
+        self.nextTab = try container.decode(String.self, forKey: .nextTab)
+        self.prevTab = try container.decode(String.self, forKey: .prevTab)
+        self.splitVertical = try container.decode(String.self, forKey: .splitVertical)
+        self.splitHorizontal = try container.decode(String.self, forKey: .splitHorizontal)
+        self.gotoAttention = try container.decode(String.self, forKey: .gotoAttention)
+        self.toggleQuickTerminal = try container.decode(String.self, forKey: .toggleQuickTerminal)
+        self.customOverrides = try container.decodeIfPresent(
+            [String: String].self,
+            forKey: .customOverrides
+        ) ?? [:]
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case newTab
+        case closeTab
+        case nextTab
+        case prevTab
+        case splitVertical
+        case splitHorizontal
+        case gotoAttention
+        case toggleQuickTerminal
+        case customOverrides
+    }
+
     static var defaults: KeybindingsConfig {
         KeybindingsConfig(
             newTab: "cmd+t",
