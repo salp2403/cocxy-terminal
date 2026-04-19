@@ -5,6 +5,19 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.77] - 2026-04-18
+
+### Fixed
+- Rust TUI clients built on crossterm (Codex, Aider, tmux, mosh, ratatui-based tools) no longer hang on startup inside Cocxy. CocxyCore's CSI dispatcher was treating the Primary Device Attributes request (`CSI c`) and its secondary (`CSI > c`) / tertiary (`CSI = c`) variants as unknown sequences, silently dropping them while the client blocked waiting for a reply. The engine now answers Primary DA with `CSI ? 62 ; 22 c` (VT220 + ANSI color — the capability set xterm / Ghostty / Terminal.app broadcast), Secondary DA with `CSI > 0 ; Pv ; 0 c` (xterm-compatible shape with firmware = `major*100 + minor + patch`), and Tertiary DA with the VT420 DCS-wrapped zero payload. Responses flow through the existing `response_buf` path so the Swift bridge needed no changes.
+
+### Changed
+- Bundled CocxyCore engine to `0.13.4` (adds Primary/Secondary/Tertiary DA handlers and test coverage).
+
+### Testing
+- +6 Swift Testing cases in `CocxyCoreDeviceAttributesSwiftTestingTests` pinning the bridge-visible responses end-to-end (Primary default, explicit 0 param, ECMA-48 reserved-param short-circuit, Secondary firmware shape, Tertiary DCS payload, and a DSR regression guard).
+- CocxyCore test suite adds 4 dispatch cases plus 6 executor response-byte cases, all green alongside the existing 47 suites.
+- Full suite: 2514 XCTest + 1459 Swift Testing = **3973 tests**, zero failures, debug + release builds green.
+
 ## [0.1.76] - 2026-04-18
 
 ### Added

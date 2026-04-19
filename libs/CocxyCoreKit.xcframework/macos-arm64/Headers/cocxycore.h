@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 13
-#define COCXYCORE_VERSION_PATCH 3
-#define COCXYCORE_VERSION_STRING "0.13.3"
+#define COCXYCORE_VERSION_PATCH 4
+#define COCXYCORE_VERSION_STRING "0.13.4"
 
 /* Platform detection. */
 #if defined(__APPLE__)
