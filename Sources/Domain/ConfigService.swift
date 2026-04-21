@@ -250,6 +250,43 @@ final class ConfigService: ConfigProviding {
         auto-save = \(defaults.sessions.autoSave)
         auto-save-interval = \(defaults.sessions.autoSaveInterval)
         restore-on-launch = \(defaults.sessions.restoreOnLaunch)
+
+        [worktree]
+        # Per-agent git worktree feature (v0.1.81).
+        # When false (default), all `cocxy worktree` CLI verbs and palette
+        # actions refuse with a helpful message instead of mutating state.
+        # Opt in to get per-agent isolated worktrees without leaving Cocxy.
+        enabled = \(defaults.worktree.enabled)
+        # Base directory for worktree storage. Final path is
+        # `<base-path>/<repo-hash>/<worktree-id>/`. Tilde is expanded at
+        # use time.
+        base-path = "\(defaults.worktree.basePath)"
+        # Branch name template. Placeholders: {agent} (detected agent name,
+        # sanitised), {id} (short unique id), {date} (YYYY-MM-DD).
+        branch-template = "\(defaults.worktree.branchTemplate)"
+        # Base ref to branch off when creating a worktree. "HEAD" (default)
+        # checks out from the origin repo's current HEAD. "main" uses the
+        # detected default branch. Any other valid git ref is passed
+        # through unchanged.
+        base-ref = "\(defaults.worktree.baseRef)"
+        # Behaviour when the tab owning the worktree closes. "keep"
+        # (default, never destructive), "prompt" (asks before removing),
+        # or "remove" (auto-remove if clean, keep if dirty).
+        on-close = "\(defaults.worktree.onClose.rawValue)"
+        # When true, `cocxy worktree add` opens a new tab for the
+        # worktree. When false, the current tab switches to the worktree
+        # path instead.
+        open-in-new-tab = \(defaults.worktree.openInNewTab)
+        # Length of the random component of the worktree id. Clamped to
+        # [\(WorktreeConfig.minIDLength), \(WorktreeConfig.maxIDLength)]. Collisions retry with length + 1.
+        id-length = \(defaults.worktree.idLength)
+        # When true, ProjectConfigService also walks the origin repo for
+        # .cocxy.toml when none is found inside the worktree tree. Lets
+        # per-project settings carry over to worktrees without duplication.
+        inherit-project-config = \(defaults.worktree.inheritProjectConfig)
+        # When true, the tab bar and Aurora session row show a worktree
+        # badge on tabs with an active worktree.
+        show-badge = \(defaults.worktree.showBadge)
         """
     }
 
@@ -277,6 +314,7 @@ final class ConfigService: ConfigProviding {
         let quickTerminal = parseQuickTerminalConfig(from: parsed)
         let keybindings = parseKeybindingsConfig(from: parsed)
         let sessions = parseSessionsConfig(from: parsed)
+        let worktree = parseWorktreeConfig(from: parsed)
 
         return CocxyConfig(
             general: general,
@@ -287,7 +325,8 @@ final class ConfigService: ConfigProviding {
             notifications: notifications,
             quickTerminal: quickTerminal,
             keybindings: keybindings,
-            sessions: sessions
+            sessions: sessions,
+            worktree: worktree
         )
     }
 
@@ -574,6 +613,41 @@ final class ConfigService: ConfigProviding {
             autoSave: boolValue(table["auto-save"]) ?? defaults.autoSave,
             autoSaveInterval: validatedInterval,
             restoreOnLaunch: boolValue(table["restore-on-launch"]) ?? defaults.restoreOnLaunch
+        )
+    }
+
+    /// Parses the `[worktree]` section with validation.
+    ///
+    /// Missing keys fall back to defaults. `onClose` accepts only the
+    /// known enum raw values (`keep`, `prompt`, `remove`) — unknown
+    /// strings revert to the default (`keep`) so a typo in the config
+    /// never silently produces destructive behaviour. `idLength` is
+    /// clamped to `[WorktreeConfig.minIDLength, maxIDLength]`.
+    private func parseWorktreeConfig(from parsed: [String: TOMLValue]) -> WorktreeConfig {
+        let table = extractTable("worktree", from: parsed)
+        let defaults = WorktreeConfig.defaults
+
+        let onCloseRaw = stringValue(table["on-close"]) ?? defaults.onClose.rawValue
+        let onClose = WorktreeOnClose(rawValue: onCloseRaw) ?? defaults.onClose
+
+        let rawIDLength = intValue(table["id-length"]) ?? defaults.idLength
+        let clampedIDLength = clamp(
+            rawIDLength,
+            min: WorktreeConfig.minIDLength,
+            max: WorktreeConfig.maxIDLength
+        )
+
+        return WorktreeConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            basePath: stringValue(table["base-path"]) ?? defaults.basePath,
+            branchTemplate: stringValue(table["branch-template"]) ?? defaults.branchTemplate,
+            baseRef: stringValue(table["base-ref"]) ?? defaults.baseRef,
+            onClose: onClose,
+            openInNewTab: boolValue(table["open-in-new-tab"]) ?? defaults.openInNewTab,
+            idLength: clampedIDLength,
+            inheritProjectConfig: boolValue(table["inherit-project-config"])
+                ?? defaults.inheritProjectConfig,
+            showBadge: boolValue(table["show-badge"]) ?? defaults.showBadge
         )
     }
 

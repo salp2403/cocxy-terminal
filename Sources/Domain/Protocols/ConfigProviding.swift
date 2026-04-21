@@ -55,6 +55,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let quickTerminal: QuickTerminalConfig
     let keybindings: KeybindingsConfig
     let sessions: SessionsConfig
+    let worktree: WorktreeConfig
 
     init(
         general: GeneralConfig,
@@ -65,7 +66,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         notifications: NotificationConfig,
         quickTerminal: QuickTerminalConfig,
         keybindings: KeybindingsConfig,
-        sessions: SessionsConfig
+        sessions: SessionsConfig,
+        worktree: WorktreeConfig = .defaults
     ) {
         self.general = general
         self.appearance = appearance
@@ -76,6 +78,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.quickTerminal = quickTerminal
         self.keybindings = keybindings
         self.sessions = sessions
+        self.worktree = worktree
     }
 
     /// Creates a configuration with all default values.
@@ -89,8 +92,39 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             notifications: .defaults,
             quickTerminal: .defaults,
             keybindings: .defaults,
-            sessions: .defaults
+            sessions: .defaults,
+            worktree: .defaults
         )
+    }
+
+    // MARK: - Codable — tolerant decoding for backward compatibility
+
+    /// Explicit `Codable` conformance so legacy config JSONs written
+    /// before v0.1.81 (which do not carry the `worktree` key) decode
+    /// cleanly. Every other field preserves its strict requirement — if
+    /// any of them is missing, the decode fails and we fall back to
+    /// defaults higher up the call chain. `worktree` is the only newly
+    /// introduced field and therefore the only one that uses
+    /// `decodeIfPresent`.
+    private enum CodingKeys: String, CodingKey {
+        case general, appearance, terminal, agentDetection, codeReview
+        case notifications, quickTerminal, keybindings, sessions, worktree
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.general = try container.decode(GeneralConfig.self, forKey: .general)
+        self.appearance = try container.decode(AppearanceConfig.self, forKey: .appearance)
+        self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
+        self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
+        self.codeReview = try container.decodeIfPresent(CodeReviewConfig.self, forKey: .codeReview)
+            ?? .defaults
+        self.notifications = try container.decode(NotificationConfig.self, forKey: .notifications)
+        self.quickTerminal = try container.decode(QuickTerminalConfig.self, forKey: .quickTerminal)
+        self.keybindings = try container.decode(KeybindingsConfig.self, forKey: .keybindings)
+        self.sessions = try container.decode(SessionsConfig.self, forKey: .sessions)
+        self.worktree = try container.decodeIfPresent(WorktreeConfig.self, forKey: .worktree)
+            ?? .defaults
     }
 
     /// Returns a new configuration with per-project overrides applied.
@@ -144,7 +178,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             notifications: notifications,
             quickTerminal: quickTerminal,
             keybindings: mergedKeybindings,
-            sessions: sessions
+            sessions: sessions,
+            worktree: worktree
         )
     }
 }
@@ -593,6 +628,97 @@ struct SessionsConfig: Codable, Sendable, Equatable {
             autoSave: true,
             autoSaveInterval: 30,
             restoreOnLaunch: true
+        )
+    }
+}
+
+// MARK: - Worktree Config
+
+/// Behaviour when the tab owning a cocxy-managed worktree closes.
+///
+/// `keep` is the default so no uncommitted work is ever lost silently;
+/// users must invoke `cocxy worktree remove` or `prune` explicitly. The
+/// remaining values are opt-in conveniences.
+enum WorktreeOnClose: String, Codable, Sendable, Equatable {
+    /// Leave the worktree on disk. Orphaned from the tab but intact.
+    /// Default behaviour.
+    case keep
+    /// Ask the user what to do via a confirmation dialog.
+    case prompt
+    /// Remove the worktree automatically if and only if `git status`
+    /// reports it clean. Dirty worktrees fall back to `keep`.
+    case remove
+}
+
+/// `[worktree]` section of the configuration.
+///
+/// Controls the per-agent git worktree feature introduced in v0.1.81.
+/// Every field has a safe default so existing users see no behavioural
+/// change after the upgrade — in particular, `enabled` defaults to
+/// `false`, which causes every worktree CLI verb to refuse with an
+/// actionable error until the user opts in.
+struct WorktreeConfig: Codable, Sendable, Equatable {
+    /// Master toggle for the worktree feature. When `false`, CLI verbs
+    /// and palette actions refuse with a message pointing the user to
+    /// this setting. All other fields are ignored until this is `true`.
+    let enabled: Bool
+
+    /// Base directory where worktrees are stored. Tilde expansion is
+    /// performed at use time (never persisted expanded). The final
+    /// worktree path is `<basePath>/<repo-hash>/<worktreeID>/`.
+    let basePath: String
+
+    /// Branch name template for new worktrees. Placeholders:
+    ///   - `{agent}` → detected agent name (sanitised) or `"worktree"`.
+    ///   - `{id}`    → short unique identifier (length = `idLength`).
+    ///   - `{date}`  → `YYYY-MM-DD` in system time zone.
+    let branchTemplate: String
+
+    /// Base ref to branch off when creating a worktree. Special values:
+    ///   - `"HEAD"` → current HEAD of the origin repo (default).
+    ///   - `"main"` → the detected default branch (main/master).
+    /// Any other string is passed to `git worktree add -b <branch> <ref>`
+    /// verbatim, so valid refs include tags, SHAs, and remote branches.
+    let baseRef: String
+
+    /// What to do when the tab owning the worktree closes.
+    let onClose: WorktreeOnClose
+
+    /// When `true`, `cocxy worktree add` opens a new tab pointing at the
+    /// new worktree. When `false`, the current tab switches its working
+    /// directory to the worktree path instead.
+    let openInNewTab: Bool
+
+    /// Length of the random component of the worktree ID. Clamped to the
+    /// range `[4, 12]`. Collisions trigger a retry with `idLength + 1`.
+    let idLength: Int
+
+    /// When `true`, `ProjectConfigService` also walks the origin repo for
+    /// `.cocxy.toml` when none is found inside the worktree tree. This
+    /// lets per-project settings carry over to worktrees without
+    /// duplicating the file.
+    let inheritProjectConfig: Bool
+
+    /// When `true`, the tab bar and Aurora session row show a worktree
+    /// badge on tabs with `worktreeID != nil`.
+    let showBadge: Bool
+
+    /// Lower bound enforced on `idLength` when parsing/clamping.
+    static let minIDLength: Int = 4
+    /// Upper bound enforced on `idLength` when parsing/clamping.
+    static let maxIDLength: Int = 12
+
+    static var defaults: WorktreeConfig {
+        WorktreeConfig(
+            enabled: false,
+            basePath: "~/.cocxy/worktrees",
+            branchTemplate: "cocxy/{agent}/{id}",
+            baseRef: "HEAD",
+            onClose: .keep,
+            openInNewTab: true,
+            idLength: 6,
+            inheritProjectConfig: true,
+            showBadge: true
         )
     }
 }

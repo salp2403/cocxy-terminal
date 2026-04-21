@@ -488,7 +488,11 @@ final class PreferencesViewModel: ObservableObject {
             ),
             quickTerminal: savedConfig.quickTerminal,
             keybindings: pendingKeybindings ?? savedConfig.keybindings,
-            sessions: savedConfig.sessions
+            sessions: savedConfig.sessions,
+            // Worktree preferences are not yet surfaced by this view
+            // model. Pass the saved snapshot verbatim so a Save from
+            // Preferences never resets the user's worktree toggles.
+            worktree: savedConfig.worktree
         )
         pendingKeybindings = nil
     }
@@ -590,6 +594,21 @@ final class PreferencesViewModel: ObservableObject {
         auto-save = \(defaults.sessions.autoSave)
         auto-save-interval = \(defaults.sessions.autoSaveInterval)
         restore-on-launch = \(defaults.sessions.restoreOnLaunch)
+
+        [worktree]
+        # Worktree preferences are not yet editable from the Preferences
+        # window; values are emitted verbatim from the saved config so a
+        # Save never resets user-applied toggles. See `~/.config/cocxy/`
+        # documentation in the template for field descriptions.
+        enabled = \(defaults.worktree.enabled)
+        base-path = "\(defaults.worktree.basePath)"
+        branch-template = "\(defaults.worktree.branchTemplate)"
+        base-ref = "\(defaults.worktree.baseRef)"
+        on-close = "\(defaults.worktree.onClose.rawValue)"
+        open-in-new-tab = \(defaults.worktree.openInNewTab)
+        id-length = \(defaults.worktree.idLength)
+        inherit-project-config = \(defaults.worktree.inheritProjectConfig)
+        show-badge = \(defaults.worktree.showBadge)
         """
     }
 
