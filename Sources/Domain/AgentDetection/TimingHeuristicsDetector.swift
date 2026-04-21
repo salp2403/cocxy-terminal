@@ -176,6 +176,21 @@ final class TimingHeuristicsDetector: DetectionLayer, @unchecked Sendable {
         performSynchronizedTeardown()
     }
 
+#if DEBUG
+    /// Drains the detector queue for deterministic unit tests.
+    ///
+    /// Production never calls this. The timing detector intentionally processes
+    /// terminal output asynchronously, but tests that assert timer-reset
+    /// ordering need a way to wait until the previous output event has actually
+    /// armed or rearmed the dispatch source before advancing the clock.
+    internal func _flushForTesting() {
+        if DispatchQueue.getSpecific(key: Self.queueKey) == queueID {
+            return
+        }
+        queue.sync {}
+    }
+#endif
+
     // MARK: - Private
 
     /// Handles new output arriving from the terminal.

@@ -606,15 +606,23 @@ extension MainWindowController {
 
     /// True when the current process is any test runner (XCTest or Swift Testing).
     ///
-    /// Production ships inside a `.app` bundle, so `Bundle.main.bundlePath`
-    /// always ends in `.app`. `xctest`, `swiftpm-testing` and `swift test`
-    /// all load the test bundle from a path without that suffix, so the
-    /// inverse check reliably detects "not production". Fallback checks
-    /// for `XCTestConfigurationFilePath` and the `XCTestCase` class name
-    /// keep the gate robust if a future runner changes bundle layout.
+    /// Kept narrowly scoped to known test runners so raw debug launches
+    /// outside a `.app` bundle still get Aurora's live reconciliation safety
+    /// net. XCTest is covered by its environment/class markers and `.xctest`
+    /// bundle path; Swift Testing is covered by the `swiftpm-testing-helper`
+    /// process/executable name used by SwiftPM.
     private static var isRunningUnderXCTest: Bool {
-        if !Bundle.main.bundlePath.hasSuffix(".app") { return true }
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return true }
+        if Bundle.main.bundlePath.hasSuffix(".xctest") { return true }
+        let names = [
+            ProcessInfo.processInfo.processName,
+            URL(fileURLWithPath: CommandLine.arguments.first ?? "").lastPathComponent,
+        ].map { $0.lowercased() }
+        if names.contains(where: { name in
+            name.contains("xctest")
+                || name.contains("swiftpm-testing")
+                || name.contains("swift-testing")
+        }) { return true }
         return NSClassFromString("XCTestCase") != nil
     }
 

@@ -401,14 +401,21 @@ final class AuroraChromeController: ObservableObject {
     /// True when the current process is any test runner (XCTest or Swift
     /// Testing). Mirrors the gate used by
     /// `MainWindowController+AuroraIntegration` so every Aurora-wired
-    /// `Timer.publish` subscribes only in production. The primary check is
-    /// `Bundle.main.bundlePath.hasSuffix(".app")` — production always runs
-    /// from a `.app` bundle; every test harness loads from a non-`.app`
-    /// bundle. Two fallbacks keep the gate robust against future runner
-    /// layout changes.
+    /// `Timer.publish` subscribes only in production. Keep this narrowly
+    /// scoped to known test runners; raw debug launches outside a `.app`
+    /// bundle should still behave like the app and keep the live clock.
     private static var isRunningUnderXCTest: Bool {
-        if !Bundle.main.bundlePath.hasSuffix(".app") { return true }
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return true }
+        if Bundle.main.bundlePath.hasSuffix(".xctest") { return true }
+        let names = [
+            ProcessInfo.processInfo.processName,
+            URL(fileURLWithPath: CommandLine.arguments.first ?? "").lastPathComponent,
+        ].map { $0.lowercased() }
+        if names.contains(where: { name in
+            name.contains("xctest")
+                || name.contains("swiftpm-testing")
+                || name.contains("swift-testing")
+        }) { return true }
         return NSClassFromString("XCTestCase") != nil
     }
 

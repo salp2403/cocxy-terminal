@@ -26,16 +26,17 @@ jobs:
         run: swift build -c debug
 
       - name: Test
+        env:
+          # Swift Testing can over-parallelize AppKit/Dispatch-heavy suites on
+          # hosted macOS runners. Keep coverage intact but execute deterministically.
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "1"
         run: |
-          set +e
-          swift test --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks 2>&1 | tee test-output.log
-          set -e
-          if grep -q "Test run with .* tests passed" test-output.log; then
-            echo "All Swift Testing tests passed."
-            exit 0
-          fi
-          echo "Tests failed — see output above."
-          exit 1
+          set -euo pipefail
+          echo "Running XCTest suite..."
+          swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks 2>&1 | tee xctest-output.log
+          echo "Running Swift Testing suite..."
+          swift test --disable-xctest --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks 2>&1 | tee swift-testing-output.log
+          echo "All XCTest and Swift Testing tests passed."
 
       - name: Build Release
         run: swift build -c release
