@@ -6,7 +6,8 @@ import SwiftUI
 struct FileListView: View {
     let diffs: [FileDiff]
     let commentCount: (String) -> Int
-    @Binding var selectedPath: String?
+    let selectedPath: String?
+    let onSelect: (String) -> Void
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
@@ -19,7 +20,7 @@ struct FileListView: View {
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 10))
                     .onTapGesture {
-                        selectedPath = diff.filePath
+                        onSelect(diff.filePath)
                     }
                     .accessibilityElement()
                     .accessibilityLabel("\(diff.displayName), \(accessibilityStatus(diff.status)), plus \(diff.additions), minus \(diff.deletions)")

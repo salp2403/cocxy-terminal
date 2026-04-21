@@ -27,12 +27,6 @@ extension CodeReviewPanelViewModel {
     /// - A pending refresh is replaced by the latest event, collapsing a
     ///   burst of edits into a single refresh after the debounce window.
     func handleFileChangedHook(_ event: HookEvent) {
-        guard isVisible else {
-            // Cancel any pending refresh from a previous visible state — we
-            // do not want a stale work item to fire after the panel was hidden.
-            cancelPendingFileChangeRefresh()
-            return
-        }
         guard case .fileChanged(let data) = event.data, !data.filePath.isEmpty else {
             return
         }
@@ -47,6 +41,15 @@ extension CodeReviewPanelViewModel {
         }
         let filePath = HookPathNormalizer.normalize(data.filePath)
         guard filePath == activeCwdPath || filePath.hasPrefix(activeCwdPath + "/") else {
+            return
+        }
+
+        guard isVisible else {
+            // Hidden panels should still be discoverable: a real FileChanged
+            // hook is the strongest signal that the agent is modifying this
+            // workspace, so ask the user whether they want to open review.
+            requestReviewSuggestionIfNeeded(key: "\(event.sessionId):\(filePath)")
+            cancelPendingFileChangeRefresh()
             return
         }
 

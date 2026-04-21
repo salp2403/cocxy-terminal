@@ -8,67 +8,108 @@ struct ReviewToolbarView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                stat(text: "\(viewModel.currentDiffs.count) files", color: CocxyColors.blue)
-                stat(text: "+\(totalAdditions)", color: CocxyColors.green)
-                stat(text: "-\(totalDeletions)", color: CocxyColors.red)
-                if viewModel.pendingCommentCount > 0 {
-                    stat(text: "\(viewModel.pendingCommentCount) comments", color: CocxyColors.yellow)
-                }
-                if !viewModel.reviewRounds.isEmpty {
-                    stat(text: "\(viewModel.reviewRounds.count) rounds", color: CocxyColors.mauve)
-                }
-                Spacer()
-                ReviewKeyboardHintsButton()
-            }
-
-            HStack(spacing: 10) {
-                Picker("Diff Mode", selection: $viewModel.diffMode) {
-                    ForEach(DiffMode.allCases, id: \.self) { mode in
-                        Text(mode.title).tag(mode)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    stat(text: "\(viewModel.currentDiffs.count) files", color: CocxyColors.blue)
+                    stat(text: "+\(totalAdditions)", color: CocxyColors.green)
+                    stat(text: "-\(totalDeletions)", color: CocxyColors.red)
+                    if viewModel.pendingCommentCount > 0 {
+                        stat(text: "\(viewModel.pendingCommentCount) comments", color: CocxyColors.yellow)
                     }
+                    if !viewModel.reviewRounds.isEmpty {
+                        stat(text: "\(viewModel.reviewRounds.count) rounds", color: CocxyColors.mauve)
+                    }
+                    if let gitStatus = viewModel.gitStatus {
+                        stat(text: gitStatus.summary, color: CocxyColors.sky)
+                    }
+                    if !viewModel.reviewAgentSessions.isEmpty {
+                        stat(text: "\(viewModel.reviewAgentSessions.count) agents", color: CocxyColors.blue)
+                    }
+                    if viewModel.reviewSubagentCount > 0 {
+                        stat(text: "\(viewModel.reviewSubagentCount) subagents", color: CocxyColors.mauve)
+                    }
+                    if viewModel.reviewTouchedFileCount > 0 {
+                        stat(text: "\(viewModel.reviewTouchedFileCount) touched", color: CocxyColors.green)
+                    }
+                    if viewModel.reviewConflictCount > 0 {
+                        stat(text: "\(viewModel.reviewConflictCount) conflicts", color: CocxyColors.red)
+                    }
+                    ReviewKeyboardHintsButton()
                 }
-                .pickerStyle(.segmented)
-                .onChange(of: viewModel.diffMode) { _, _ in
-                    viewModel.refreshDiffs()
-                }
-                .accessibilityHint("Switch the review comparison mode")
+            }
+            .frame(height: 24)
 
-                Button {
-                    viewModel.refreshDiffs()
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityHint("Reload the current review diff")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    Picker("Diff Mode", selection: $viewModel.diffMode) {
+                        ForEach(DiffMode.allCases, id: \.self) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: viewModel.diffMode) { _, _ in
+                        viewModel.refreshDiffs()
+                    }
+                    .accessibilityHint("Switch the review comparison mode")
 
-                if viewModel.pendingCommentCount > 0 {
-                    Button(role: .destructive) {
-                        viewModel.discardPendingComments()
+                    Button {
+                        viewModel.refreshDiffs()
                     } label: {
-                        Label("Discard Drafts", systemImage: "trash")
+                        Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.bordered)
-                    .accessibilityHint("Clear all pending inline comments")
-                }
+                    .accessibilityHint("Reload the current review diff")
 
-                Button {
-                    viewModel.submitComments()
-                } label: {
-                    Label(
-                        viewModel.pendingCommentCount == 0
-                            ? "Submit"
-                            : "Submit \(viewModel.pendingCommentCount)",
-                        systemImage: "paperplane.fill"
-                    )
+                    Button {
+                        viewModel.openSelectedFileInEditor()
+                    } label: {
+                        Label("Edit File", systemImage: "curlybraces")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.selectedFileDiff == nil)
+                    .accessibilityHint("Open the selected file in the inline review editor")
+
+                    Button {
+                        viewModel.toggleGitWorkflowVisibility()
+                    } label: {
+                        Label(
+                            viewModel.isGitWorkflowVisible ? "Hide Git" : "Git",
+                            systemImage: "arrow.triangle.branch"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityHint("Show branch, commit, and push controls inside the review panel")
+
+                    if viewModel.pendingCommentCount > 0 {
+                        Button(role: .destructive) {
+                            viewModel.discardPendingComments()
+                        } label: {
+                            Label("Discard Drafts", systemImage: "trash")
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityHint("Clear all pending inline comments")
+                    }
+
+                    Button {
+                        viewModel.submitComments()
+                    } label: {
+                        Label(
+                            viewModel.pendingCommentCount == 0
+                                ? "Submit"
+                                : "Submit \(viewModel.pendingCommentCount)",
+                            systemImage: "paperplane.fill"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.pendingCommentCount == 0)
+                    .accessibilityHint("Send all pending comments back to the originating agent")
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.pendingCommentCount == 0)
-                .accessibilityHint("Send all pending comments back to the originating agent")
             }
+            .frame(height: 36)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+        .background(Color(nsColor: CocxyColors.mantle).opacity(0.98))
     }
 
     private var totalAdditions: Int {

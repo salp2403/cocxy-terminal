@@ -117,14 +117,16 @@ struct CodeReviewPanelViewModelFileChangedSwiftTests {
         #expect(counter.value == 1)
     }
 
-    @Test("Hidden panel skips FileChanged refreshes")
+    @Test("Hidden panel skips FileChanged refreshes and asks before opening review")
     func noRefreshWhenPanelNotVisible() async throws {
         let harness = makeHarness(initiallyVisible: false)
+        harness.viewModel.autoShowEnabledProvider = { true }
         emit(.fileChanged, on: harness.receiver, cwd: Self.activeCwd.path,
              filePath: Self.activeCwd.appendingPathComponent("ignored.swift").path)
 
         try await Task.sleep(nanoseconds: Self.negativeQuietWindowNanoseconds)
         #expect(harness.refreshCount() == 0)
+        #expect(harness.viewModel.shouldAutoShow)
     }
 
     // MARK: - Harness
