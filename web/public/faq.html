@@ -172,17 +172,35 @@
   </header>
 
   <main id="main">
-    <section class="container" style="padding-top:8rem;padding-bottom:4rem;max-width:820px;">
-      <nav aria-label="Breadcrumb" style="margin-bottom:1rem;">
-        <ol style="list-style:none;display:flex;gap:0.5rem;padding:0;margin:0;color:var(--subtext0);font-size:0.85rem;">
-          <li><a href="/" style="color:var(--subtext0);">Home</a></li>
+    <section class="faq-page container">
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="/">Home</a></li>
           <li aria-hidden="true">/</li>
           <li aria-current="page">FAQ</li>
         </ol>
       </nav>
 
-      <h1 style="font-size:2.75rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Frequently asked questions</h1>
-      <p style="color:var(--subtext0);font-size:1.1rem;margin-bottom:3rem;">Everything people ask us about Cocxy Terminal. If your question is not here, open an <a href="https://github.com/salp2403/cocxy-terminal/issues" target="_blank" rel="noopener noreferrer" style="color:var(--lavender);">issue on GitHub</a>.</p>
+      <header class="faq-hero">
+        <p class="eyebrow">Support center</p>
+        <h1>Frequently asked questions</h1>
+        <p>Everything people ask us about Cocxy Terminal: privacy, agents, Markdown, remote workspaces, the CLI, and daily-driver setup. If your question is not here, open an <a href="https://github.com/salp2403/cocxy-terminal/issues" target="_blank" rel="noopener noreferrer">issue on GitHub</a>.</p>
+      </header>
+
+      <div class="faq-quick-grid" aria-label="Popular FAQ topics">
+        <a class="faq-quick-card" href="#privacy">
+          <span>Privacy</span>
+          <strong>Zero telemetry, local-first behavior, and update checks.</strong>
+        </a>
+        <a class="faq-quick-card" href="#agents">
+          <span>Agents</span>
+          <strong>Detection layers, dashboard state, and code review flow.</strong>
+        </a>
+        <a class="faq-quick-card" href="#workflows">
+          <span>Workflows</span>
+          <strong>Markdown, remote sessions, themes, plugins, and CLI control.</strong>
+        </a>
+      </div>
 
       <div class="faq-list">
         <details class="faq-item" open>
@@ -195,12 +213,12 @@
           <p>Yes. Cocxy is completely free under the MIT license. There is no paid tier, no sign-up, no account, no subscription. Every line of code is public at <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">github.com/salp2403/cocxy-terminal</a>.</p>
         </details>
 
-        <details class="faq-item">
+        <details class="faq-item" id="agents">
           <summary><span>Which AI coding agents does Cocxy support?</span></summary>
           <p>Six agents are detected out of the box: <strong>Claude Code</strong>, <strong>Codex CLI</strong>, <strong>Gemini CLI</strong>, <strong>Aider</strong>, <strong>Kiro</strong>, and <strong>OpenCode</strong>. Detection uses four layers: hook events (Claude Code, Codex, Kiro, Gemini), OSC escape sequences, output pattern matching, and timing heuristics. You can add custom agents in <code>~/.config/cocxy/agents.toml</code>.</p>
         </details>
 
-        <details class="faq-item">
+        <details class="faq-item" id="privacy">
           <summary><span>Does Cocxy collect any data?</span></summary>
           <p>No. Cocxy sends zero data to any external server. No analytics, no crash reporting, no tracking of any kind. The app has no network entitlement beyond what Sparkle needs to check the update feed at <a href="https://cocxy.dev/appcast.xml">cocxy.dev/appcast.xml</a>. You can verify with Little Snitch, LuLu, or any network monitor.</p>
         </details>
@@ -235,7 +253,7 @@
           <p>Yes. Cocxy's shell integration is designed to coexist safely with Prezto, Oh My Zsh, YADR, starship, and any custom prompt. It restores your original <code>ZDOTDIR</code>, <code>HOME</code>, and <code>XDG_CONFIG_HOME</code> before loading your framework, so nothing about your shell configuration changes. You do not need to add anything to your dotfiles.</p>
         </details>
 
-        <details class="faq-item">
+        <details class="faq-item" id="workflows">
           <summary><span>Can Cocxy connect to remote servers?</span></summary>
           <p>Yes, with first-class remote support: SSH multiplexing via OpenSSH ControlMaster, persistent tmux-backed sessions that survive disconnects, SOCKS5 and HTTP CONNECT system proxy, multi-channel agent relay with HMAC-SHA256 auth, a POSIX remote daemon, and SFTP file browsing. All from the client — no server installation required.</p>
         </details>
@@ -282,10 +300,11 @@
       </div>
 
       <!-- CTA -->
-      <section style="text-align:center;margin-top:4rem;padding:3rem 2rem;background:var(--surface0);border:1px solid var(--surface1);border-radius:16px;">
-        <h2 style="font-size:1.75rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Still have questions?</h2>
-        <p style="color:var(--subtext0);margin-bottom:2rem;max-width:480px;margin-left:auto;margin-right:auto;">Open an issue on GitHub or email us.</p>
-        <div style="display:inline-flex;gap:0.75rem;flex-wrap:wrap;justify-content:center;">
+      <section class="faq-cta">
+        <p class="eyebrow">Need a human?</p>
+        <h2>Still have questions?</h2>
+        <p>Open an issue on GitHub or email us. Include your Cocxy version, macOS version, chip, and steps to reproduce when reporting a bug.</p>
+        <div>
           <a href="https://github.com/salp2403/cocxy-terminal/issues" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Open an issue</a>
           <a href="/getting-started.html" class="btn btn-secondary">Read the Docs</a>
         </div>

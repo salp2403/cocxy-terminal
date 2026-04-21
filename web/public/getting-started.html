@@ -352,6 +352,47 @@
       box-shadow: 0 1px 0 var(--surface1);
     }
 
+    /* ===== Screenshots ===== */
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0 2rem;
+    }
+
+    .screenshot-card {
+      margin: 0;
+      overflow: hidden;
+      border: 1px solid rgba(69, 71, 90, 0.55);
+      border-radius: 14px;
+      background: rgba(17, 17, 27, 0.72);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24);
+    }
+
+    .screenshot-card.wide { grid-column: 1 / -1; }
+
+    .screenshot-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: var(--crust);
+    }
+
+    .screenshot-card figcaption {
+      padding: 0.85rem 1rem 1rem;
+      color: var(--subtext0);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      border-top: 1px solid rgba(69, 71, 90, 0.35);
+    }
+
+    .screenshot-card figcaption strong {
+      display: block;
+      margin-bottom: 0.15rem;
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+
     /* ===== Back to top ===== */
     .back-to-top {
       position: fixed;
@@ -395,6 +436,9 @@
         margin-left: 0;
         padding: 2.5rem 1.5rem 3rem;
       }
+
+      .screenshot-grid { grid-template-columns: 1fr; }
+      .screenshot-card.wide { grid-column: auto; }
     }
 
     @media (max-width: 480px) {
@@ -447,6 +491,7 @@
   <aside class="docs-sidebar" id="sidebar">
     <div class="sidebar-group">
       <a href="#getting-started" class="sidebar-link active">Getting Started</a>
+      <a href="#visual-tour" class="sidebar-link">Visual Tour</a>
       <a href="#concepts" class="sidebar-link">Concepts</a>
       <a href="#configuration" class="sidebar-link">Configuration</a>
       <a href="#keyboard-shortcuts" class="sidebar-link">Keyboard Shortcuts</a>
@@ -527,6 +572,42 @@
 
     <h3>First Launch</h3>
     <p>On first launch, Cocxy creates its configuration directory at <code>~/.config/cocxy/</code> with sensible defaults. A welcome overlay introduces the key features. You can dismiss it with <kbd>Esc</kbd> and bring it back from the Help menu.</p>
+
+    <!-- Visual Tour -->
+    <h2 id="visual-tour">Visual Tour</h2>
+    <p>These screenshots were captured from Cocxy running against a local demo workspace, with the Aurora sidebar, split panes, dashboard, browser, command palette, and Preferences visible in real app state.</p>
+
+    <div class="screenshot-grid">
+      <figure class="screenshot-card">
+        <img src="/images/getting-started-sidebar.png" alt="Cocxy Aurora workspace sidebar showing project sessions and tab status" loading="lazy" decoding="async">
+        <figcaption><strong>Aurora sidebar</strong> Workspaces group sessions by project and show tab state, pane count, and close controls without leaving the terminal.</figcaption>
+      </figure>
+
+      <figure class="screenshot-card">
+        <img src="/images/getting-started-command-palette.png" alt="Cocxy command palette listing searchable actions and keyboard shortcuts" loading="lazy" decoding="async">
+        <figcaption><strong>Command palette</strong> Search actions, see shortcuts, and jump to browser, split, theme, and dashboard controls from the keyboard.</figcaption>
+      </figure>
+
+      <figure class="screenshot-card wide">
+        <img src="/images/getting-started-dashboard.png" alt="Cocxy agent dashboard tracking an active agent session and touched file" loading="lazy" decoding="async">
+        <figcaption><strong>Agent dashboard</strong> Live hook events summarize active agents, touched files, tool calls, errors, and the current window scope.</figcaption>
+      </figure>
+
+      <figure class="screenshot-card">
+        <img src="/images/getting-started-splits.png" alt="Cocxy split panes showing two terminal sessions in one tab" loading="lazy" decoding="async">
+        <figcaption><strong>Split panes</strong> Run multiple shells or panels side by side inside the same tab, then navigate between focused panes.</figcaption>
+      </figure>
+
+      <figure class="screenshot-card">
+        <img src="/images/getting-started-browser.png" alt="Cocxy browser panel open next to terminal panes with a local demo server" loading="lazy" decoding="async">
+        <figcaption><strong>Browser panel</strong> Preview local development servers next to your terminal and keep port chips visible in the status bar.</figcaption>
+      </figure>
+
+      <figure class="screenshot-card wide">
+        <img src="/images/getting-started-preferences.png" alt="Cocxy Preferences window with shell path, working directory, and sidebar categories" loading="lazy" decoding="async">
+        <figcaption><strong>Preferences</strong> Configure shell, appearance, keybindings, notifications, terminal behavior, and agent detection from the native settings window.</figcaption>
+      </figure>
+    </div>
 
     <!-- Concepts -->
     <h2 id="concepts">Concepts</h2>
