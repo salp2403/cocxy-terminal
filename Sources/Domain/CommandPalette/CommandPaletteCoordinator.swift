@@ -55,6 +55,21 @@ protocol CommandPaletteCoordinating: AnyObject {
 
     /// Open the timeline panel.
     func showTimeline()
+
+    /// Creates a cocxy-managed git worktree for the active tab and
+    /// attaches it to the tab (or opens a new tab when
+    /// `[worktree].open-in-new-tab` is true). Silent no-op when the
+    /// feature is disabled, when there is no active tab, or when the
+    /// origin is not a git repository — the CLI surface reports the
+    /// reason; the palette handler only needs to trigger the flow.
+    func createWorktreeTab()
+
+    /// Removes the cocxy-managed worktree currently attached to the
+    /// active tab. Respects the `on-close = keep` safety stance: the
+    /// underlying CLI refuses to delete a dirty worktree without
+    /// `--force`, so this method is always non-destructive from the
+    /// palette.
+    func removeCurrentWorktree()
 }
 
 // MARK: - Command Palette Coordinator Implementation
@@ -88,6 +103,17 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
     var onQuickSwitch: (() -> Void)?
     var onScrollbackSearch: (() -> Void)?
     var onTimeline: (() -> Void)?
+
+    /// Worktree hook wired by `MainWindowController`. Creates a new
+    /// cocxy-managed worktree for the active tab. Unset in tests and in
+    /// environments that do not install the AppDelegate wiring, in
+    /// which case `createWorktreeTab()` is a silent no-op.
+    var onCreateWorktree: (() -> Void)?
+
+    /// Worktree hook wired by `MainWindowController`. Removes the
+    /// worktree attached to the active tab. Respects the CLI's dirty
+    /// preflight (never destructive).
+    var onRemoveWorktree: (() -> Void)?
 
     // MARK: - Initialization
 
@@ -168,5 +194,13 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
 
     func showTimeline() {
         onTimeline?()
+    }
+
+    func createWorktreeTab() {
+        onCreateWorktree?()
+    }
+
+    func removeCurrentWorktree() {
+        onRemoveWorktree?()
     }
 }

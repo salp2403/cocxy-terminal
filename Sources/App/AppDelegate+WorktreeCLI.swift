@@ -48,7 +48,11 @@ extension AppDelegate {
     /// work to `WorktreeService`, and applies any resulting Tab
     /// mutations back on the main actor. Returns a `(success, data)`
     /// tuple the handler maps to a `SocketResponse`.
-    private func performWorktreeCLIRequest(
+    ///
+    /// Exposed at module visibility so in-process callers (command
+    /// palette, future keybindings) can invoke the same flow without
+    /// going through the socket bridge and its `DispatchSemaphore`.
+    func performWorktreeCLIRequest(
         kind: String,
         params: [String: String]
     ) async -> (Bool, [String: String]) {

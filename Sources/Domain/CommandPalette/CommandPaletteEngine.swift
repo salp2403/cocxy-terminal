@@ -269,6 +269,22 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 category: .navigation,
                 handler: { coordinatorBox.coordinator?.performQuickSwitch() }
             ),
+            CommandAction(
+                id: "worktree.create",
+                name: "Create Agent Worktree Tab",
+                description: "Create a cocxy-managed git worktree off the active tab's origin repo and attach it to the tab",
+                shortcut: nil,
+                category: .worktree,
+                handler: { coordinatorBox.coordinator?.createWorktreeTab() }
+            ),
+            CommandAction(
+                id: "worktree.remove",
+                name: "Remove Current Worktree",
+                description: "Remove the cocxy-managed worktree attached to the active tab (refuses when dirty)",
+                shortcut: nil,
+                category: .worktree,
+                handler: { coordinatorBox.coordinator?.removeCurrentWorktree() }
+            ),
         ]
 
         for action in builtIns {

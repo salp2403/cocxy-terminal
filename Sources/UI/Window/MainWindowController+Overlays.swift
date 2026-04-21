@@ -672,6 +672,43 @@ extension MainWindowController {
                     }
                 }
             ),
+            CommandAction(
+                id: "worktree.create",
+                name: "Create Agent Worktree Tab",
+                description: "Create a cocxy-managed git worktree off the active tab's origin repo",
+                shortcut: paletteShortcutLabel("worktree.create", fallback: nil),
+                category: .worktree,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        guard let delegate = NSApp.delegate as? AppDelegate else { return }
+                        _ = await delegate.performWorktreeCLIRequest(
+                            kind: "add",
+                            params: [:]
+                        )
+                    }
+                }
+            ),
+            CommandAction(
+                id: "worktree.remove",
+                name: "Remove Current Worktree",
+                description: "Remove the cocxy-managed worktree attached to the active tab (refuses when dirty)",
+                shortcut: paletteShortcutLabel("worktree.remove", fallback: nil),
+                category: .worktree,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        guard let delegate = NSApp.delegate as? AppDelegate,
+                              let tabID = self?.tabManager.activeTabID,
+                              let tab = self?.tabManager.tab(for: tabID),
+                              let worktreeID = tab.worktreeID else { return }
+                        _ = await delegate.performWorktreeCLIRequest(
+                            kind: "remove",
+                            params: ["id": worktreeID]
+                        )
+                    }
+                }
+            ),
         ]
 
         engine.registerActions(actions)
