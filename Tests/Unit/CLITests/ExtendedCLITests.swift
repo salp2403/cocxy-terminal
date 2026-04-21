@@ -564,7 +564,8 @@ final class EnumParityTests: XCTestCase {
     // MARK: - 34. CLICommand has all expected cases
 
     func testCLICommandHasExpectedCaseCount() {
-        XCTAssertEqual(CLICommand.allCases.count, 93)
+        // v0.1.81 added four worktree verbs bringing the total to 97.
+        XCTAssertEqual(CLICommand.allCases.count, 97)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription

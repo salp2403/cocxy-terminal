@@ -932,7 +932,9 @@ final class CLICommandDefinitionTests: XCTestCase {
     // MARK: - 43. All commands exist (current catalog size)
 
     func testAllCommandsExist() {
-        XCTAssertEqual(CLICommand.allCases.count, 93)
+        // v0.1.81 added four worktree verbs (worktree-add/list/remove/prune)
+        // bringing the total from 93 to 97.
+        XCTAssertEqual(CLICommand.allCases.count, 97)
     }
 
     // MARK: - 39. Raw values match server protocol

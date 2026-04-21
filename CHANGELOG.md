@@ -5,6 +5,102 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.81] - 2026-04-21
+
+### Added
+- Per-agent git worktrees. A new actor-backed `WorktreeService` drives
+  `git worktree add/remove/list/prune` through the same `git` binary
+  resolver the code-review workflow uses. Every side effect serialises
+  at the actor boundary so concurrent requests cannot race past each
+  other when allocating IDs, picking branch names, or persisting the
+  per-repo manifest. Includes collision retry with increasing id
+  length and a preflight `git status --porcelain` guard that refuses
+  to delete dirty worktrees unless `--force` is passed.
+- `cocxy worktree add/list/remove/prune` CLI verbs. `add` attaches the
+  freshly created worktree to the active tab; `list` returns a JSON
+  payload with every manifest entry; `remove` runs a porcelain
+  preflight unless `--force` is set; `prune` reconciles the manifest
+  against `git worktree list` and drops orphan entries while leaving
+  worktrees created outside of cocxy untouched.
+- Command Palette actions "Create Agent Worktree Tab" and "Remove
+  Current Worktree" under a new `Worktree` category. Both route
+  through `AppDelegate.performWorktreeCLIRequest` so the palette path
+  and the socket path share a single async implementation.
+- Preferences gains a `Worktrees` pane (arrow.triangle.branch icon)
+  that surfaces every `[worktree]` TOML option with explanatory
+  captions: feature toggle, storage base path, branch template,
+  base-ref, random id length (stepper), on-close behaviour (Keep /
+  Prompt / Remove if clean), open-in-new-tab, inherit-project-config,
+  and show-badge. Every field round-trips through the seven-step
+  config pipeline so a Save never resets what the user wrote.
+- Worktree badge (arrow.triangle.branch) in both the classic
+  `TabItemView` sidebar and the Aurora session row. The badge appears
+  only when `Tab.worktreeID` is set and the live
+  `config.worktree.showBadge` flag is on. Tooltip shows the worktree
+  id, origin repo name, and branch.
+- `.cocxy.toml` now accepts a `[worktree]` section with per-project
+  overrides for enabled, base-ref, branch-template, on-close,
+  open-in-new-tab, inherit-project-config, and show-badge. basePath
+  and idLength stay global on purpose — the former is a filesystem
+  layout concern, the latter a collision-avoidance knob.
+- `Tab`, `TabState`, and `RestoredTab` carry four new optional fields
+  — `worktreeID`, `worktreeRoot`, `worktreeOriginRepo`,
+  `worktreeBranch` — so the worktree relationship survives session
+  save / restore. Every field is tolerant of legacy JSON via
+  `decodeIfPresent`; upgrading from v0.1.80 never fails to decode a
+  saved session.
+
+### Changed
+- `ProjectConfigService.loadConfig` / `findConfigPath` accept an
+  optional `originRepo` parameter. When the primary walk from the
+  tab's working directory returns nothing, the service retries from
+  the origin repo so `.cocxy.toml` living in the source repository
+  still applies inside a worktree stored under `~/.cocxy/worktrees/`.
+  The fallback is gated by `config.worktree.inheritProjectConfig`
+  (default `true`) and every in-process caller — SurfaceLifecycle
+  OSC 7 handler, TabLifecycle, MainWindowController watcher restart,
+  SessionManagement restore — passes the gate through correctly.
+- `CocxyConfig` decoder is now explicit and uses `decodeIfPresent`
+  for `worktree` (new in v0.1.81) and `codeReview`, so config files
+  written before either section existed still decode cleanly and
+  fall back to defaults instead of throwing.
+
+### Fixed
+- `GitInfoProvider.isGitRepository` / `readBranchFromDisk` now handle
+  linked worktrees and submodules where `.git` is a file (containing
+  `gitdir: <path>`) instead of a directory. Prior to this, a worktree
+  tab silently reported "not a git repo" and the sidebar branch was
+  missing. Follows the absolute and relative forms of the gitdir
+  pointer.
+
+### Notes
+- The worktree feature defaults to `enabled = false`. Existing
+  installations see zero behavioural change until they opt in via
+  Preferences or set `[worktree].enabled = true` in
+  `~/.config/cocxy/config.toml`. When disabled, every CLI verb and
+  palette action refuses with a hint pointing at the setting.
+- Worktree storage defaults to `~/.cocxy/worktrees/<repo-hash>/<id>/`
+  where the repo hash is a deterministic 16-char FNV-1a digest of
+  the origin repo's absolute path. The digest is **not**
+  cryptographic — it is used only as a short filesystem label; the
+  manifest still records the full origin path and rejects loads that
+  disagree.
+- `on-close = "keep"` (default) leaves the worktree on disk when its
+  tab closes so no uncommitted work is lost silently. Users run
+  `cocxy worktree remove <id>` (refuses when dirty) or
+  `cocxy worktree prune` (drops manifest orphans only) to clean up.
+
+### Testing
+- Swift Testing: 1791 cases across 183 suites (up from 1540 / 168 at
+  v0.1.80). New dedicated worktree module ships ~100 cases covering
+  the data model, manifest, atomic store, drift detection, branch
+  templating, git-ref sanitisation, service actor against a real git
+  repo in a per-test temp directory, CLI argument parsing, command
+  palette wiring, preferences round-trip, and the origin-repo
+  fallback.
+- XCTest: 2550 cases (up from 2548). Four CLI command-count
+  assertions were updated from 93 to 97.
+
 ## [0.1.80] - 2026-04-20
 
 ### Added

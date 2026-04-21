@@ -267,8 +267,8 @@ final class Phase7SocketSecurityTests: XCTestCase {
         defer { server.stop() }
 
         let commands = CLICommandName.allCases.map { $0.rawValue }
-        XCTAssertEqual(commands.count, 93,
-                       "There should be exactly 93 commands in CLICommandName including setup-hooks, review commands, and the expanded core diagnostics contract")
+        XCTAssertEqual(commands.count, 97,
+                       "There should be exactly 97 commands in CLICommandName — the v0.1.80 count of 93 plus the four worktree verbs introduced in v0.1.81 (worktree-add/list/remove/prune)")
 
         for command in commands {
             let request = SocketRequest(id: "all-\(command)", command: command, params: nil)
