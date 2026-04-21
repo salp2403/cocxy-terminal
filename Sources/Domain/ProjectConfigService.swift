@@ -235,12 +235,69 @@ final class ProjectConfigService {
 
     /// Finds and loads a `.cocxy.toml` from the given directory or its parents.
     ///
-    /// Stops searching at the user's home directory. Returns nil if no
-    /// `.cocxy.toml` is found anywhere in the traversal path.
-    func loadConfig(for directory: URL) -> ProjectConfig? {
+    /// When `originRepo` is supplied and the direct walk from `directory`
+    /// finds nothing, the walk is retried starting from `originRepo`.
+    /// This lets a tab running inside a cocxy-managed git worktree
+    /// (stored at e.g. `~/.cocxy/worktrees/<hash>/<id>/`) inherit the
+    /// `.cocxy.toml` that lives inside the source repository. The caller
+    /// is responsible for gating this fallback via
+    /// `CocxyConfig.worktree.inheritProjectConfig` — passing `nil` for
+    /// `originRepo` disables the fallback regardless of the user setting.
+    ///
+    /// Stops searching at the user's home directory on either branch.
+    ///
+    /// - Parameters:
+    ///   - directory: Primary directory to walk (typically the tab's
+    ///     working directory or worktree root).
+    ///   - originRepo: Optional fallback directory walked only when the
+    ///     primary walk returns nil. Defaults to `nil` for backwards
+    ///     compatibility with existing call sites that do not have a
+    ///     worktree origin concept.
+    /// - Returns: The merged-ready overrides, or `nil` when neither walk
+    ///   found a `.cocxy.toml`.
+    func loadConfig(for directory: URL, originRepo: URL? = nil) -> ProjectConfig? {
+        if let direct = loadConfigWalking(from: directory) {
+            return direct
+        }
+        guard let originRepo,
+              originRepo.standardizedFileURL != directory.standardizedFileURL else {
+            return nil
+        }
+        return loadConfigWalking(from: originRepo)
+    }
+
+    /// Returns the path to the nearest `.cocxy.toml`, or nil if not found.
+    ///
+    /// Mirrors the fallback behaviour of `loadConfig(for:originRepo:)` so
+    /// the `ProjectConfigWatcher` attached to the tab can observe the
+    /// file that actually drives the tab's merged config — whether that
+    /// file lives inside the worktree, inside the origin repo, or not
+    /// at all. Callers must gate the fallback behind
+    /// `config.worktree.inheritProjectConfig` exactly like they do for
+    /// `loadConfig`.
+    ///
+    /// - Parameters:
+    ///   - directory: Primary directory to walk.
+    ///   - originRepo: Optional fallback directory (usually
+    ///     `tab.worktreeOriginRepo`).
+    /// - Returns: The path to the nearest `.cocxy.toml`, or `nil`.
+    func findConfigPath(for directory: URL, originRepo: URL? = nil) -> String? {
+        if let direct = findConfigPathWalking(from: directory) {
+            return direct
+        }
+        guard let originRepo,
+              originRepo.standardizedFileURL != directory.standardizedFileURL else {
+            return nil
+        }
+        return findConfigPathWalking(from: originRepo)
+    }
+
+    /// Walks upward from `start` looking for a `.cocxy.toml`. Stops at
+    /// the user's home directory or the filesystem root.
+    private func loadConfigWalking(from start: URL) -> ProjectConfig? {
         let fileManager = FileManager.default
         let homeDir = fileManager.homeDirectoryForCurrentUser.standardizedFileURL
-        var current = directory.standardizedFileURL
+        var current = start.standardizedFileURL
 
         while true {
             let configFile = current.appendingPathComponent(".cocxy.toml")
@@ -252,33 +309,24 @@ final class ProjectConfigService {
                 return parse(content)
             }
 
-            // Stop at home directory (don't traverse above it)
-            if current.path == homeDir.path {
-                return nil
-            }
+            if current.path == homeDir.path { return nil }
 
             let parent = current.deletingLastPathComponent().standardizedFileURL
-
-            // Stop at filesystem root (parent == current)
-            if parent.path == current.path {
-                return nil
-            }
-
+            if parent.path == current.path { return nil }
             current = parent
         }
     }
 
-    /// Returns the path to the nearest `.cocxy.toml`, or nil if not found.
-    ///
-    /// Uses the same directory traversal as `loadConfig(for:)` but returns
-    /// the file path for use by `ProjectConfigWatcher`.
-    func findConfigPath(for directory: URL) -> String? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
-        var current = directory.standardizedFileURL
+    /// Walks upward from `start` looking for the path to the nearest
+    /// `.cocxy.toml`. Returns the path without reading the file.
+    private func findConfigPathWalking(from start: URL) -> String? {
+        let fileManager = FileManager.default
+        let home = fileManager.homeDirectoryForCurrentUser.standardizedFileURL
+        var current = start.standardizedFileURL
 
         while true {
             let configPath = current.appendingPathComponent(".cocxy.toml")
-            if FileManager.default.fileExists(atPath: configPath.path) {
+            if fileManager.fileExists(atPath: configPath.path) {
                 return configPath.path
             }
 
