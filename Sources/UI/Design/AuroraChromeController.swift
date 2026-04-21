@@ -398,11 +398,16 @@ final class AuroraChromeController: ObservableObject {
             .sink { [weak self] _ in self?.updateClockLabel() }
     }
 
-    /// True when the current process is the `xctest` runner. Mirrors the
-    /// gate used by `MainWindowController+AuroraIntegration` so every
-    /// Aurora-wired `Timer.publish` subscribes only in production.
+    /// True when the current process is any test runner (XCTest or Swift
+    /// Testing). Mirrors the gate used by
+    /// `MainWindowController+AuroraIntegration` so every Aurora-wired
+    /// `Timer.publish` subscribes only in production. Swift Testing runs in
+    /// `swiftpm-testing` which does not inherit `XCTestConfigurationFilePath`
+    /// reliably, so we also check for the XCTest runtime class that both
+    /// runners link against but the `.app` bundle does not.
     private static var isRunningUnderXCTest: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return true }
+        return NSClassFromString("XCTestCase") != nil
     }
 
     private func updateClockLabel() {

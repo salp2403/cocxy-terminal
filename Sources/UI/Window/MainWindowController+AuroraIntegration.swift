@@ -604,13 +604,17 @@ extension MainWindowController {
             }
     }
 
-    /// True when the current process is the `xctest` runner.
+    /// True when the current process is any test runner (XCTest or Swift Testing).
     ///
-    /// Detected via the `XCTestConfigurationFilePath` environment variable
-    /// which `xctest` sets before launching a test bundle. Production and
-    /// `swift run` builds never see this value.
+    /// `XCTestConfigurationFilePath` covers `xctest`, but Swift Testing runs
+    /// inside the separate `swiftpm-testing` helper that does not always
+    /// inherit that env var. `NSClassFromString("XCTestCase")` is the
+    /// invariant both runners share: production `.app` bundles do not link
+    /// XCTest, so the lookup returns nil; every test runner links XCTest
+    /// (Swift Testing bridges to it for compatibility), so the lookup hits.
     private static var isRunningUnderXCTest: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return true }
+        return NSClassFromString("XCTestCase") != nil
     }
 
     /// Stops the Aurora visible-buffer reconciliation safety net.

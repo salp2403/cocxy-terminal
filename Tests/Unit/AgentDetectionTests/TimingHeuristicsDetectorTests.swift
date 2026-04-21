@@ -85,7 +85,7 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
         // runners `DispatchQueue.global().asyncAfter` can slip several hundred
         // milliseconds under load. With a 0.6s window and 0.15s spacing the
         // first-output timer sometimes fires before the first reset lands and
-        // the inverted expectation records a spurious failure. Doubling the
+        // the inverted expectation records a spurious failure. Increasing the
         // window (1.5s) plus spacing the resets at 0.3s/0.6s/0.9s keeps every
         // reset safely inside the window even when asyncAfter slips by 100ms.
         let detector = TimingHeuristicsDetector(
@@ -254,9 +254,11 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
 
         // After resume the timer restarts with the default 0.2s idle window.
         // On a quiet machine the signal lands near t=0.3, but GitHub Actions
-        // runners slip `asyncAfter` routinely; keep the outer timeout at 3.0
-        // so the scheduling jitter cannot race the expectation.
-        wait(for: [expectation], timeout: 3.0)
+        // runners slip `asyncAfter` in aggressive bursts (observed ~3s under
+        // load). Keep the outer timeout at 8.0 so the scheduling jitter
+        // cannot race the expectation, while still failing fast on a real
+        // regression.
+        wait(for: [expectation], timeout: 8.0)
     }
 
     // MARK: - Edge Cases
