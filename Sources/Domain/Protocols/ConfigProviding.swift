@@ -169,6 +169,23 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             mergedKeybindings = keybindings
         }
 
+        // Merge the [worktree] section with per-project overrides. Only
+        // non-nil fields replace the corresponding global value —
+        // `basePath` and `idLength` stay global (filesystem layout and
+        // collision-avoidance concerns, not per-repo choices).
+        let mergedWorktree = WorktreeConfig(
+            enabled: overrides.worktreeEnabled ?? worktree.enabled,
+            basePath: worktree.basePath,
+            branchTemplate: overrides.worktreeBranchTemplate ?? worktree.branchTemplate,
+            baseRef: overrides.worktreeBaseRef ?? worktree.baseRef,
+            onClose: overrides.worktreeOnClose ?? worktree.onClose,
+            openInNewTab: overrides.worktreeOpenInNewTab ?? worktree.openInNewTab,
+            idLength: worktree.idLength,
+            inheritProjectConfig: overrides.worktreeInheritProjectConfig
+                ?? worktree.inheritProjectConfig,
+            showBadge: overrides.worktreeShowBadge ?? worktree.showBadge
+        )
+
         return CocxyConfig(
             general: general,
             appearance: mergedAppearance,
@@ -179,7 +196,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             quickTerminal: quickTerminal,
             keybindings: mergedKeybindings,
             sessions: sessions,
-            worktree: worktree
+            worktree: mergedWorktree
         )
     }
 }

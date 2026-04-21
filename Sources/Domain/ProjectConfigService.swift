@@ -53,12 +53,47 @@ struct ProjectConfig: Codable, Equatable, Sendable {
     /// Only specified keys override; unspecified keys keep global values.
     let keybindingOverrides: [String: String]?
 
+    // MARK: - Worktree Overrides
+    //
+    // Introduced in v0.1.81 per feedback ajuste #1: a `.cocxy.toml` must
+    // be able to control the per-agent worktree feature on a repo basis.
+    // `basePath` and `idLength` stay global-only on purpose — the former
+    // is a filesystem layout concern, the latter a collision/safety knob.
+
+    /// Per-project override for the master `enabled` toggle. When set,
+    /// wins over `WorktreeConfig.enabled` for tabs inside this project.
+    let worktreeEnabled: Bool?
+
+    /// Per-project override for `base-ref` (branch to check out from).
+    let worktreeBaseRef: String?
+
+    /// Per-project override for `branch-template`.
+    let worktreeBranchTemplate: String?
+
+    /// Per-project override for `on-close` behaviour.
+    let worktreeOnClose: WorktreeOnClose?
+
+    /// Per-project override for `open-in-new-tab`.
+    let worktreeOpenInNewTab: Bool?
+
+    /// Per-project override for `inherit-project-config` (whether to
+    /// walk the origin repo as a fallback when resolving `.cocxy.toml`
+    /// from inside a worktree).
+    let worktreeInheritProjectConfig: Bool?
+
+    /// Per-project override for `show-badge`.
+    let worktreeShowBadge: Bool?
+
     /// Whether all fields are nil (no overrides).
     var isEmpty: Bool {
         fontSize == nil && windowPadding == nil && windowPaddingX == nil
             && windowPaddingY == nil && backgroundOpacity == nil
             && backgroundBlurRadius == nil && agentDetectionExtraPatterns == nil
             && keybindingOverrides == nil
+            && worktreeEnabled == nil && worktreeBaseRef == nil
+            && worktreeBranchTemplate == nil && worktreeOnClose == nil
+            && worktreeOpenInNewTab == nil && worktreeInheritProjectConfig == nil
+            && worktreeShowBadge == nil
     }
 
     // MARK: - Initialization
@@ -71,7 +106,14 @@ struct ProjectConfig: Codable, Equatable, Sendable {
         backgroundOpacity: Double? = nil,
         backgroundBlurRadius: Double? = nil,
         agentDetectionExtraPatterns: [String]? = nil,
-        keybindingOverrides: [String: String]? = nil
+        keybindingOverrides: [String: String]? = nil,
+        worktreeEnabled: Bool? = nil,
+        worktreeBaseRef: String? = nil,
+        worktreeBranchTemplate: String? = nil,
+        worktreeOnClose: WorktreeOnClose? = nil,
+        worktreeOpenInNewTab: Bool? = nil,
+        worktreeInheritProjectConfig: Bool? = nil,
+        worktreeShowBadge: Bool? = nil
     ) {
         self.fontSize = fontSize
         self.windowPadding = windowPadding
@@ -81,6 +123,13 @@ struct ProjectConfig: Codable, Equatable, Sendable {
         self.backgroundBlurRadius = backgroundBlurRadius
         self.agentDetectionExtraPatterns = agentDetectionExtraPatterns
         self.keybindingOverrides = keybindingOverrides
+        self.worktreeEnabled = worktreeEnabled
+        self.worktreeBaseRef = worktreeBaseRef
+        self.worktreeBranchTemplate = worktreeBranchTemplate
+        self.worktreeOnClose = worktreeOnClose
+        self.worktreeOpenInNewTab = worktreeOpenInNewTab
+        self.worktreeInheritProjectConfig = worktreeInheritProjectConfig
+        self.worktreeShowBadge = worktreeShowBadge
     }
 }
 
@@ -136,6 +185,21 @@ final class ProjectConfigService {
             return result.isEmpty ? nil : result
         }()
 
+        // Extract [worktree] table. Every field is optional on purpose —
+        // a missing key means "inherit the global value", never "reset
+        // to default". Unknown on-close values return nil so the global
+        // value wins (never silently falling back to a hardcoded
+        // destructive default at the project layer).
+        let worktreeTable = extractTable("worktree", from: parsed)
+        let worktreeEnabled = boolValue(worktreeTable["enabled"])
+        let worktreeBaseRef = stringValue(worktreeTable["base-ref"])
+        let worktreeBranchTemplate = stringValue(worktreeTable["branch-template"])
+        let worktreeOnClose = stringValue(worktreeTable["on-close"])
+            .flatMap(WorktreeOnClose.init(rawValue:))
+        let worktreeOpenInNewTab = boolValue(worktreeTable["open-in-new-tab"])
+        let worktreeInheritProjectConfig = boolValue(worktreeTable["inherit-project-config"])
+        let worktreeShowBadge = boolValue(worktreeTable["show-badge"])
+
         // Return nil if every field is nil (nothing to override)
         let config = ProjectConfig(
             fontSize: fontSize,
@@ -145,7 +209,14 @@ final class ProjectConfigService {
             backgroundOpacity: backgroundOpacity,
             backgroundBlurRadius: backgroundBlurRadius,
             agentDetectionExtraPatterns: extraPatterns,
-            keybindingOverrides: keybindingOverrides
+            keybindingOverrides: keybindingOverrides,
+            worktreeEnabled: worktreeEnabled,
+            worktreeBaseRef: worktreeBaseRef,
+            worktreeBranchTemplate: worktreeBranchTemplate,
+            worktreeOnClose: worktreeOnClose,
+            worktreeOpenInNewTab: worktreeOpenInNewTab,
+            worktreeInheritProjectConfig: worktreeInheritProjectConfig,
+            worktreeShowBadge: worktreeShowBadge
         )
 
         if config.isEmpty {
@@ -153,6 +224,13 @@ final class ProjectConfigService {
         }
 
         return config
+    }
+
+    /// Extracts a boolean from a TOML value, returning `nil` for
+    /// non-boolean values.
+    private func boolValue(_ value: TOMLValue?) -> Bool? {
+        guard case .boolean(let boolContent) = value else { return nil }
+        return boolContent
     }
 
     /// Finds and loads a `.cocxy.toml` from the given directory or its parents.
