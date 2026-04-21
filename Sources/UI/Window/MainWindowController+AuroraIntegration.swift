@@ -575,8 +575,21 @@ extension MainWindowController {
     /// It complements, but does not replace, semantic callbacks from
     /// CocxyCore: callbacks remain instant; this loop catches any panes that
     /// were already running or whose callback was missed during a rebuild.
+    ///
+    /// Skipped under `xctest`: `Timer.publish(on: .main, in: .common).autoconnect()`
+    /// keeps the main run loop alive until the subscriber is cancelled. In a
+    /// GUI session ARC retires the window controller as soon as the user closes
+    /// the window, but under `xctest` a `MainWindowController` created by a
+    /// test case is held by the surrounding `NSWindow` delegate cycle until
+    /// the xctest process exits. When every test finishes the runloop still
+    /// has this live timer source, so the process never returns and
+    /// `swift-test` stalls waiting for xctest to terminate — the exact
+    /// stall observed during the v0.1.80 CI on 2026-04-21 (`xctest` pid left
+    /// orphan after 16+ min of no output). Production keeps the safety net;
+    /// `xctest` runners skip it so the process can exit cleanly.
     private func startAuroraAgentReconciliationLoop() {
         guard auroraAgentReconciliationCancellable == nil else { return }
+        guard !Self.isRunningUnderXCTest else { return }
         auroraAgentReconciliationCancellable = Timer
             .publish(
                 every: Self.auroraAgentReconciliationInterval,
@@ -589,6 +602,15 @@ extension MainWindowController {
                 self.reconcileAuroraAgentStateFromVisibleBuffers()
                 self.auroraChromeController?.refreshSources()
             }
+    }
+
+    /// True when the current process is the `xctest` runner.
+    ///
+    /// Detected via the `XCTestConfigurationFilePath` environment variable
+    /// which `xctest` sets before launching a test bundle. Production and
+    /// `swift run` builds never see this value.
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     /// Stops the Aurora visible-buffer reconciliation safety net.
