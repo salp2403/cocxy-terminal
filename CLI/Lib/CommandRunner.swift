@@ -647,6 +647,30 @@ public struct CommandRunner {
 
         case .imageClear:
             return CLISocketRequest(id: requestID, command: "image-clear", params: nil)
+
+        case .worktreeAdd(let agent, let branch, let baseRef):
+            var params: [String: String] = [:]
+            if let agent { params["agent"] = agent }
+            if let branch { params["branch"] = branch }
+            if let baseRef { params["base-ref"] = baseRef }
+            return CLISocketRequest(
+                id: requestID,
+                command: "worktree-add",
+                params: params.isEmpty ? nil : params
+            )
+
+        case .worktreeList:
+            return CLISocketRequest(id: requestID, command: "worktree-list", params: nil)
+
+        case .worktreeRemove(let id, let force):
+            return CLISocketRequest(
+                id: requestID,
+                command: "worktree-remove",
+                params: ["id": id, "force": force ? "true" : "false"]
+            )
+
+        case .worktreePrune:
+            return CLISocketRequest(id: requestID, command: "worktree-prune", params: nil)
         }
     }
 }

@@ -253,6 +253,24 @@ public enum OutputFormatter {
             return "Inline image deleted."
         case .imageClear:
             return "Inline images cleared."
+        case .worktreeAdd:
+            guard let data = response.data,
+                  let id = data["id"],
+                  let branch = data["branch"],
+                  let path = data["path"] else {
+                return response.data?["status"] ?? "Worktree created."
+            }
+            return "Worktree \(id) created: branch \(branch) at \(path)"
+        case .worktreeList:
+            return formatDataOrJSON(response: response)
+        case .worktreeRemove:
+            guard let id = response.data?["id"] else {
+                return "Worktree removed."
+            }
+            return "Worktree \(id) removed."
+        case .worktreePrune:
+            let count = response.data?["count"] ?? "0"
+            return "Pruned \(count) orphan worktree\(count == "1" ? "" : "s")."
         }
     }
 

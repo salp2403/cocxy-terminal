@@ -219,6 +219,20 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Opens an SSH session in a new tab. Params: (destination, port?, identityFile?).
     let sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)?
 
+    /// Handles every `cocxy worktree-*` CLI verb. The closure receives
+    /// the verb kind ("add" / "list" / "remove" / "prune") plus a flat
+    /// params dictionary the handler extracted from the socket
+    /// request, and returns a boolean success flag along with a data
+    /// dictionary. When `success == false`, the `data["error"]` value
+    /// is surfaced as the socket-level error message.
+    ///
+    /// Synchronous by contract so the handler method can remain
+    /// synchronous; the AppDelegate-side implementation bridges the
+    /// async `WorktreeService` via a `DispatchSemaphore`, which is
+    /// acceptable because the handler already runs on a background
+    /// socket queue.
+    let worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
     /// Starts a web terminal on the focused surface and returns status fields.
     let webStartProvider: (@Sendable (String, UInt16, String, UInt16, UInt32) -> [String: String]?)?
 
@@ -372,7 +386,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         coreSemanticProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         imageListProvider: (@Sendable () -> [String: String]?)? = nil,
         imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
-        imageClearProvider: (@Sendable () -> [String: String]?)? = nil
+        imageClearProvider: (@Sendable () -> [String: String]?)? = nil,
+        worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
         self.configProvider = configProvider
         self.statusDetailsProvider = statusDetailsProvider
@@ -434,6 +449,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.imageListProvider = imageListProvider
         self.imageDeleteProvider = imageDeleteProvider
         self.imageClearProvider = imageClearProvider
+        self.worktreeCLIProvider = worktreeCLIProvider
         let tabManagerRef = WeakReference(tabManager)
         let browserViewModelRef = WeakReference(browserViewModel)
 
@@ -825,6 +841,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         // SSH (v4)
         case .ssh:
             return handleSSH(request)
+
+        // Worktree (v0.1.81)
+        case .worktreeAdd:
+            return handleWorktreeAdd(request)
+        case .worktreeList:
+            return handleWorktreeList(request)
+        case .worktreeRemove:
+            return handleWorktreeRemove(request)
+        case .worktreePrune:
+            return handleWorktreePrune(request)
 
         // Web terminal (v5)
         case .webStart:
@@ -2576,5 +2602,58 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Worktree (v0.1.81)
+
+    /// Routes `cocxy worktree-add` to the injected provider. Payload
+    /// keys match the flag names accepted by the CLI so the
+    /// AppDelegate-side implementation can work from a flat dictionary
+    /// without reparsing the socket request.
+    private func handleWorktreeAdd(_ request: SocketRequest) -> SocketResponse {
+        runWorktreeProvider(kind: "add", request: request)
+    }
+
+    /// Routes `cocxy worktree-list`. The provider returns a JSON
+    /// payload under `data["entries"]` so the CLI can pretty-print it
+    /// without the handler having to deserialise anything.
+    private func handleWorktreeList(_ request: SocketRequest) -> SocketResponse {
+        runWorktreeProvider(kind: "list", request: request)
+    }
+
+    /// Routes `cocxy worktree-remove`. The id is required; `force`
+    /// defaults to `false` when absent so a dirty worktree is refused
+    /// by default — matching the `on-close = keep` safety stance.
+    private func handleWorktreeRemove(_ request: SocketRequest) -> SocketResponse {
+        runWorktreeProvider(kind: "remove", request: request)
+    }
+
+    /// Routes `cocxy worktree-prune`. No params; the provider returns
+    /// the list of removed ids under `data["pruned"]`.
+    private func handleWorktreePrune(_ request: SocketRequest) -> SocketResponse {
+        runWorktreeProvider(kind: "prune", request: request)
+    }
+
+    /// Shared dispatch used by every worktree verb. Keeping the four
+    /// handler methods thin makes the CLI-parity test easy to read
+    /// and removes any chance of one verb accidentally calling another
+    /// verb's provider.
+    private func runWorktreeProvider(
+        kind: String,
+        request: SocketRequest
+    ) -> SocketResponse {
+        guard let provider = worktreeCLIProvider else {
+            return .failure(
+                id: request.id,
+                error: "Worktree CLI is not yet wired in this build."
+            )
+        }
+        let result = provider(kind, request.params ?? [:])
+        if result.success {
+            return .ok(id: request.id, data: result.data)
+        }
+        let message = result.data["error"]
+            ?? "Worktree \(kind) failed"
+        return .failure(id: request.id, error: message)
     }
 }

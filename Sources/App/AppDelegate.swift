@@ -2139,6 +2139,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 syncOnMainActor {
                     delegateRef.value?.clearImagesForCLI()
                 }
+            },
+            worktreeCLIProvider: { kind, params in
+                // Socket queue thread → detached task → semaphore wait.
+                // The inner bridge lives in AppDelegate+WorktreeCLI so
+                // this closure stays a one-liner.
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleWorktreeCLIRequest(
+                    kind: kind,
+                    params: params
+                )
             }
         )
 

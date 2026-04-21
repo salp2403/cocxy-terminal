@@ -342,6 +342,18 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy image clear`
     case imageClear
+
+    /// `cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]`
+    case worktreeAdd(agent: String?, branch: String?, baseRef: String?)
+
+    /// `cocxy worktree list`
+    case worktreeList
+
+    /// `cocxy worktree remove <id> [--force]`
+    case worktreeRemove(id: String, force: Bool)
+
+    /// `cocxy worktree prune`
+    case worktreePrune
 }
 
 // MARK: - Split Direction
@@ -483,6 +495,9 @@ public enum CLIArgumentParser {
 
         case "image":
             return try parseImage(arguments: Array(arguments.dropFirst()))
+
+        case "worktree":
+            return try parseWorktree(arguments: Array(arguments.dropFirst()))
 
         default:
             throw CLIError.unknownCommand(firstArg)
@@ -1495,6 +1510,97 @@ public enum CLIArgumentParser {
                 command: "image",
                 argument: subcommand,
                 reason: "Unknown subcommand. Use list, delete, or clear."
+            )
+        }
+    }
+
+    /// Parses `cocxy worktree <subcommand> [...]`.
+    private static func parseWorktree(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(
+                command: "worktree",
+                argument: "add|list|remove|prune"
+            )
+        }
+        let rest = Array(arguments.dropFirst())
+        switch subcommand {
+        case "add":
+            var agent: String?
+            var branch: String?
+            var baseRef: String?
+            var index = 0
+            while index < rest.count {
+                let token = rest[index]
+                switch token {
+                case "--agent":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(
+                            command: "worktree add",
+                            argument: "value for --agent"
+                        )
+                    }
+                    agent = rest[index + 1]
+                    index += 2
+                case "--branch":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(
+                            command: "worktree add",
+                            argument: "value for --branch"
+                        )
+                    }
+                    branch = rest[index + 1]
+                    index += 2
+                case "--base-ref":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(
+                            command: "worktree add",
+                            argument: "value for --base-ref"
+                        )
+                    }
+                    baseRef = rest[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "worktree add",
+                        argument: token,
+                        reason: "Unknown option. Valid flags: --agent, --branch, --base-ref."
+                    )
+                }
+            }
+            return .worktreeAdd(agent: agent, branch: branch, baseRef: baseRef)
+
+        case "list":
+            return .worktreeList
+
+        case "remove":
+            guard let id = rest.first else {
+                throw CLIError.missingArgument(
+                    command: "worktree remove",
+                    argument: "id"
+                )
+            }
+            var force = false
+            for token in rest.dropFirst() {
+                if token == "--force" || token == "-f" {
+                    force = true
+                } else {
+                    throw CLIError.invalidArgument(
+                        command: "worktree remove",
+                        argument: token,
+                        reason: "Unknown option. Only --force / -f is supported."
+                    )
+                }
+            }
+            return .worktreeRemove(id: id, force: force)
+
+        case "prune":
+            return .worktreePrune
+
+        default:
+            throw CLIError.invalidArgument(
+                command: "worktree",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use add, list, remove, or prune."
             )
         }
     }

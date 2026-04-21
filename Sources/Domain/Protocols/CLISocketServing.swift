@@ -313,6 +313,20 @@ enum CLICommandName: String, CaseIterable, Sendable {
 
     /// `cocxy ssh user@host` — open SSH in a new tab.
     case ssh
+
+    // MARK: - Worktree (v0.1.81)
+
+    /// `cocxy worktree-add` — create a cocxy-managed git worktree off
+    /// the active tab's origin repo and attach it to a tab.
+    case worktreeAdd = "worktree-add"
+    /// `cocxy worktree-list` — list every cocxy-managed worktree.
+    case worktreeList = "worktree-list"
+    /// `cocxy worktree-remove <id>` — remove a cocxy-managed worktree
+    /// (preflight on `git status --porcelain` unless `--force`).
+    case worktreeRemove = "worktree-remove"
+    /// `cocxy worktree-prune` — drop manifest entries whose worktrees
+    /// git no longer tracks, leaving untracked git worktrees alone.
+    case worktreePrune = "worktree-prune"
 }
 
 // MARK: - CLI Response

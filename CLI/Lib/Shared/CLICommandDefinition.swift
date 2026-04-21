@@ -168,6 +168,13 @@ public enum CLICommand: String, CaseIterable {
     case imageDelete = "image-delete"
     case imageClear = "image-clear"
 
+    // MARK: - Worktree (v0.1.81)
+
+    case worktreeAdd = "worktree-add"
+    case worktreeList = "worktree-list"
+    case worktreeRemove = "worktree-remove"
+    case worktreePrune = "worktree-prune"
+
     /// Whether this command is internal (hidden from --help).
     public var isInternal: Bool {
         switch self {
@@ -309,6 +316,12 @@ public enum CLICommand: String, CaseIterable {
         case .imageList: return "List inline images stored for the focused surface"
         case .imageDelete: return "Delete a specific inline image from the focused surface"
         case .imageClear: return "Clear inline images from the focused surface"
+
+        // Worktree v0.1.81
+        case .worktreeAdd: return "Create a cocxy-managed git worktree and attach it to the active tab"
+        case .worktreeList: return "List every cocxy-managed git worktree for the active tab's repo as JSON"
+        case .worktreeRemove: return "Remove a cocxy-managed git worktree (refuses when dirty unless --force)"
+        case .worktreePrune: return "Drop manifest entries whose worktree git no longer tracks"
         }
     }
 
@@ -445,6 +458,12 @@ public enum CLICommand: String, CaseIterable {
         case .imageList: return "cocxy image list"
         case .imageDelete: return "cocxy image delete <id>"
         case .imageClear: return "cocxy image clear"
+
+        // Worktree v0.1.81
+        case .worktreeAdd: return "cocxy worktree-add [--agent <name>] [--branch <template>]"
+        case .worktreeList: return "cocxy worktree-list"
+        case .worktreeRemove: return "cocxy worktree-remove <id> [--force]"
+        case .worktreePrune: return "cocxy worktree-prune"
         }
     }
 }
