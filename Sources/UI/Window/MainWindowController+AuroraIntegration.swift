@@ -606,13 +606,14 @@ extension MainWindowController {
 
     /// True when the current process is any test runner (XCTest or Swift Testing).
     ///
-    /// `XCTestConfigurationFilePath` covers `xctest`, but Swift Testing runs
-    /// inside the separate `swiftpm-testing` helper that does not always
-    /// inherit that env var. `NSClassFromString("XCTestCase")` is the
-    /// invariant both runners share: production `.app` bundles do not link
-    /// XCTest, so the lookup returns nil; every test runner links XCTest
-    /// (Swift Testing bridges to it for compatibility), so the lookup hits.
+    /// Production ships inside a `.app` bundle, so `Bundle.main.bundlePath`
+    /// always ends in `.app`. `xctest`, `swiftpm-testing` and `swift test`
+    /// all load the test bundle from a path without that suffix, so the
+    /// inverse check reliably detects "not production". Fallback checks
+    /// for `XCTestConfigurationFilePath` and the `XCTestCase` class name
+    /// keep the gate robust if a future runner changes bundle layout.
     private static var isRunningUnderXCTest: Bool {
+        if !Bundle.main.bundlePath.hasSuffix(".app") { return true }
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return true }
         return NSClassFromString("XCTestCase") != nil
     }
