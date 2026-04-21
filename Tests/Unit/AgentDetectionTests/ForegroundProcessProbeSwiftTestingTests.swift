@@ -141,8 +141,16 @@ struct ForegroundProcessProbeSwiftTestingTests {
         // Regression guard for full-suite contention: if the timeout is
         // claimed only from the main actor, a busy main queue can let the
         // late detector result win even though the deadline elapsed first.
+        //
+        // The gap between detector (1.0s) and timeout (0.05s) must be wide
+        // enough that GitHub Actions jitter cannot flip the ordering. On a
+        // loaded runner both the `Thread.sleep` and the timeout
+        // `DispatchSource` can slip by a few hundred ms, so a 0.15s detector
+        // and 0.05s timeout used to collide and hand the detector the win.
+        // 20x the timeout keeps the contract observable even under heavy
+        // CI contention.
         let probe = ForegroundProcessProbe(detect: { _, _ in
-            Thread.sleep(forTimeInterval: 0.15)
+            Thread.sleep(forTimeInterval: 1.0)
             return ForegroundProcessInfo(name: "late-shell", command: nil, pid: 42)
         })
 
@@ -162,9 +170,9 @@ struct ForegroundProcessProbeSwiftTestingTests {
         // the detector completion. The background timeout must still
         // claim the result first, and delivery should be nil once the
         // main actor is available again.
-        blockCurrentThread(for: 0.25)
+        blockCurrentThread(for: 1.1)
 
-        let deadline = Date().addingTimeInterval(2.0)
+        let deadline = Date().addingTimeInterval(4.0)
         while !completed, Date() < deadline {
             try await Task.sleep(nanoseconds: 20_000_000)
         }

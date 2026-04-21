@@ -254,11 +254,12 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
 
         // After resume the timer restarts with the default 0.2s idle window.
         // On a quiet machine the signal lands near t=0.3, but GitHub Actions
-        // runners slip `asyncAfter` in aggressive bursts (observed ~3s under
-        // load). Keep the outer timeout at 8.0 so the scheduling jitter
+        // runners slip `asyncAfter` in aggressive bursts (observed >8s under
+        // load). Keep the outer timeout at 20.0 so the scheduling jitter
         // cannot race the expectation, while still failing fast on a real
-        // regression.
-        wait(for: [expectation], timeout: 8.0)
+        // regression (the expectation fulfils in a fraction of a second on
+        // any non-pathological machine).
+        wait(for: [expectation], timeout: 20.0)
     }
 
     // MARK: - Edge Cases
