@@ -32,6 +32,17 @@ extension MainWindowController {
     /// toggles the feature flag at runtime.
     private static var auroraStatusBarFallbackHeight: CGFloat { 24 }
 
+    /// How often Aurora audits visible panes while the redesign is active.
+    ///
+    /// Semantic callbacks still update the store immediately. This loop is
+    /// intentionally a slow safety net for launch banners that were already
+    /// visible before the callback wiring existed or for panes whose state
+    /// was reset by shell-prompt recovery while a full-screen TUI remains on
+    /// screen. Scanning 80 visible rows across a handful of panes once per
+    /// second is cheap and avoids the "only one split agent is counted"
+    /// regression the Aurora dogfood builds exposed.
+    private static var auroraAgentReconciliationInterval: TimeInterval { 1.0 }
+
     /// Idempotent entry point invoked by `applyConfig(...)` whenever the
     /// appearance block changes. Instantiates the Aurora controller and
     /// mounts its hosting views the first time the flag is true, then
@@ -41,6 +52,7 @@ extension MainWindowController {
     func applyAuroraChromeIfNeeded(for appearance: AppearanceConfig) {
         if appearance.auroraEnabled {
             installAuroraChromeIfNeeded()
+            reconcileAuroraAgentStateFromVisibleBuffers()
             auroraChromeController?.setPaletteActions(buildAuroraPaletteActions())
             refreshAuroraShortcutLabels()
             applyAuroraChromeVisibility(true)
@@ -160,16 +172,47 @@ extension MainWindowController {
             tabManager: tabManager,
             store: agentStore
         )
+        if let variant = (NSApp.delegate as? AppDelegate)?.themeEngine?.activeTheme.metadata.variant {
+            controller.themeIdentity = Self.auroraThemeIdentity(for: variant)
+        }
 
         controller.surfaceIDsByTabProvider = { [weak self] in
             guard let self = self else { return [:] }
             return self.surfaceIDsByTabSnapshot()
         }
         controller.onActivateSession = { [weak self] tabID in
-            _ = self?.focusTab(id: tabID)
+            guard let self else { return }
+            _ = self.focusTab(id: tabID)
         }
         controller.onCreateTab = { [weak self] in
             self?.createTab()
+        }
+        controller.onCloseSession = { [weak self] tabID in
+            self?.closeTab(tabID)
+        }
+        controller.onTogglePinSession = { [weak self] tabID in
+            guard let self else { return }
+            self.tabManager.togglePin(id: tabID)
+            self.refreshAuroraChromeAfterTabMutation()
+        }
+        controller.onCloseOtherSessions = { [weak self] tabID in
+            guard let self else { return }
+            self.tabBarViewModel?.closeOtherTabs(except: tabID)
+            self.refreshAuroraChromeAfterTabMutation()
+        }
+        controller.onMoveSessionUp = { [weak self] tabID in
+            guard let self,
+                  let index = self.tabManager.tabs.firstIndex(where: { $0.id == tabID }),
+                  index > 0 else { return }
+            self.tabManager.moveTab(from: index, to: index - 1)
+            self.refreshAuroraChromeAfterTabMutation()
+        }
+        controller.onMoveSessionDown = { [weak self] tabID in
+            guard let self,
+                  let index = self.tabManager.tabs.firstIndex(where: { $0.id == tabID }),
+                  index < self.tabManager.tabs.count - 1 else { return }
+            self.tabManager.moveTab(from: index, to: index + 1)
+            self.refreshAuroraChromeAfterTabMutation()
         }
         controller.onTogglePalette = { [weak self] in
             self?.toggleAuroraPalette()
@@ -196,6 +239,7 @@ extension MainWindowController {
         controller.wirePortScanner(portScanner)
 
         auroraChromeController = controller
+        reconcileAuroraAgentStateFromVisibleBuffers()
 
         // Sidebar — mounted as an overlay **inside** `tabBarView`, not
         // as a sibling of the split view. Adding a third subview to
@@ -257,6 +301,11 @@ extension MainWindowController {
         // split, browser, and markdown panel without disturbing the
         // split-view subview budget.
         if let overlayLayer = overlayContainerView {
+            let tooltipHost = controller.makeSidebarTooltipHost()
+            tooltipHost.frame = overlayLayer.bounds
+            tooltipHost.autoresizingMask = [.width, .height]
+            overlayLayer.addSubview(tooltipHost)
+
             let paletteHost = controller.makePaletteHost()
             paletteHost.frame = overlayLayer.bounds
             paletteHost.autoresizingMask = [.width, .height]
@@ -264,7 +313,209 @@ extension MainWindowController {
             overlayLayer.addSubview(paletteHost)
         }
 
+        refreshAuroraSidebarTooltipAnchor()
+
         controller.beginObservingDomain()
+    }
+
+    func syncAuroraDesignTheme(for variant: ThemeVariant) {
+        if let strip = horizontalTabStripView as? HorizontalTabStripView {
+            strip.setThemeMode(isLight: variant == .light)
+        }
+        guard let controller = auroraChromeController else { return }
+        let identity = Self.auroraThemeIdentity(for: variant)
+        controller.themeIdentity = identity
+
+        let appearance = Design.appearance(for: identity)
+        controller.sidebarHost?.appearance = appearance
+        controller.statusBarHost?.appearance = appearance
+        controller.paletteHost?.appearance = appearance
+        controller.sidebarTooltipHost?.appearance = appearance
+    }
+
+    func toggleAuroraThemeMode() {
+        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
+        let currentVariant = appDelegate.themeEngine?.activeTheme.metadata.variant
+            ?? (auroraChromeController?.themeIdentity == .paper ? .light : .dark)
+        let appearance = configService?.current.appearance ?? .defaults
+        let targetThemeName: String = currentVariant == .light
+            ? appearance.theme
+            : appearance.lightTheme
+
+        appDelegate.switchTheme(to: targetThemeName)
+    }
+
+    private static func auroraThemeIdentity(for variant: ThemeVariant) -> Design.ThemeIdentity {
+        variant == .light ? .paper : .aurora
+    }
+
+    /// Reconciles Aurora's per-surface store from the terminal buffers
+    /// that are already on screen.
+    ///
+    /// Most agent launches are handled live through CocxyCore semantic
+    /// callbacks and pattern detection. This recovery path exists for
+    /// the nasty edge case we hit while dogfooding Aurora: the user can
+    /// already have a Claude/Codex TUI visible when the app is rebuilt,
+    /// relaunched, or the feature flag is toggled. That running TUI does
+    /// not necessarily re-emit its launch banner, so the store can carry
+    /// stale identity like "Codex" while the visible pane clearly shows
+    /// "Claude Code".
+    ///
+    /// To avoid reviving old scrollback as a false positive, this path
+    /// seeds idle surfaces only from the visible viewport when the agent
+    /// banner has no later shell prompt below it. A completed Codex
+    /// banner can remain visible above a returned shell prompt, and
+    /// treating that as a fresh launch is exactly the "Codex ghost" bug
+    /// users saw in Aurora tooltips and the dashboard. A full-screen TUI
+    /// like Claude/Codex, however, has the banner plus an agent prompt and
+    /// no shell prompt; that is safe to recover.
+    func reconcileAuroraAgentStateFromVisibleBuffers() {
+        guard let store = injectedPerSurfaceStore,
+              let cocxyBridge = bridge as? CocxyCoreBridge else { return }
+
+        let compiledDefaults = AgentConfigService
+            .defaultAgentConfigs()
+            .map(AgentConfigService.compile)
+        let defaultDisplayNames = Dictionary(
+            uniqueKeysWithValues: AgentConfigService.defaultAgentConfigs()
+                .map { ($0.name, $0.displayName) }
+        )
+
+        for surfaceID in surfaceIDsByTabSnapshot().values.flatMap({ $0 }) {
+            let current = store.state(for: surfaceID)
+            let visibleLines = (0..<80).compactMap { row in
+                cocxyBridge.visibleLineText(
+                    for: surfaceID,
+                    visibleRow: UInt16(row)
+                )
+            }
+            let visibleAgent = Self.visibleAuroraAgentIdentifier(
+                in: visibleLines,
+                compiledConfigs: compiledDefaults
+            )
+            let visibleReturnedShellPrompt = Self.visibleAuroraBufferHasReturnedShellPrompt(visibleLines)
+
+            let historyAgent = Self.auroraHistoryFallbackAgentIdentifier(
+                visibleAgent: visibleAgent,
+                visibleLines: visibleLines,
+                historyLines: Array(cocxyBridge.historyLines(for: surfaceID).suffix(200)),
+                currentCarriesAgent: current.isActive || current.hasAgent,
+                compiledConfigs: compiledDefaults
+            )
+
+            if let identifier = visibleAgent ?? historyAgent {
+                if current.detectedAgent?.name == identifier, current.isActive {
+                    continue
+                }
+
+                store.update(surfaceID: surfaceID) { state in
+                    let previous = state.detectedAgent
+                    state.detectedAgent = DetectedAgent(
+                        name: identifier,
+                        displayName: defaultDisplayNames[identifier] ?? identifier,
+                        launchCommand: identifier,
+                        startedAt: previous?.startedAt ?? Date()
+                    )
+                    if !state.isActive {
+                        state.agentState = .launched
+                    }
+                    if previous?.name != identifier {
+                        state.agentToolCount = 0
+                        state.agentErrorCount = 0
+                        state.agentActivity = nil
+                    }
+                }
+                continue
+            }
+
+            // If a surface still carries an active agent but the visible
+            // viewport has already returned to a real shell prompt, clear the
+            // stale state. This is deliberately narrower than "no launch
+            // marker visible": full-screen TUIs can scroll their banner away,
+            // but they do not show a shell prompt while still running. It
+            // eliminates the ghost Codex case without dropping live Claude.
+            if (current.isActive || current.hasAgent),
+               visibleReturnedShellPrompt {
+                injectedAgentDetectionEngine?.clearSurface(surfaceID)
+                store.reset(surfaceID: surfaceID)
+            }
+        }
+    }
+
+    static func auroraHistoryFallbackAgentIdentifier(
+        visibleAgent: String?,
+        visibleLines: [String],
+        historyLines: [String],
+        currentCarriesAgent: Bool,
+        compiledConfigs: [CompiledAgentConfig]
+    ) -> String? {
+        guard visibleAgent == nil,
+              currentCarriesAgent,
+              !visibleAuroraBufferHasReturnedShellPrompt(visibleLines) else {
+            return nil
+        }
+
+        return mostRecentAuroraAgentIdentifier(
+            in: historyLines,
+            compiledConfigs: compiledConfigs
+        )
+    }
+
+    static func visibleAuroraAgentIdentifier(
+        in lines: [String],
+        compiledConfigs: [CompiledAgentConfig]
+    ) -> String? {
+        var latestAgent: (index: Int, identifier: String)?
+
+        for (index, line) in lines.enumerated() {
+            if let identifier = AgentConfigService.agentIdentifier(
+                matchingLaunchLine: line,
+                compiledConfigs: compiledConfigs
+            ) {
+                latestAgent = (index, identifier)
+            }
+        }
+
+        guard let latestAgent else { return nil }
+
+        let laterLines = lines.dropFirst(latestAgent.index + 1)
+        guard !laterLines.contains(where: isShellPromptLine) else {
+            return nil
+        }
+        return latestAgent.identifier
+    }
+
+    static func visibleAuroraBufferHasReturnedShellPrompt(_ lines: [String]) -> Bool {
+        lines.contains(where: isShellPromptLine)
+    }
+
+    static func mostRecentAuroraAgentIdentifier(
+        in lines: [String],
+        compiledConfigs: [CompiledAgentConfig]
+    ) -> String? {
+        for line in lines.reversed() {
+            if let identifier = AgentConfigService.agentIdentifier(
+                matchingLaunchLine: line,
+                compiledConfigs: compiledConfigs
+            ) {
+                return identifier
+            }
+        }
+        return nil
+    }
+
+    private static func isShellPromptLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        // Typical Cocxy shell prompt:
+        //   Galf@MacBook-Pro ~/repo (main●)$
+        //   user@host ~/repo ❯
+        // Keep this intentionally narrower than agent prompts (`›`, `?`,
+        // plain `>`), otherwise full-screen TUIs would be mistaken for a
+        // returned shell and Aurora would drop live panes again.
+        let promptPattern = #"^[^\s@]+@[^\s]+\s+.+(?:[$#❯])(?:\s|$)"#
+        return trimmed.range(of: promptPattern, options: .regularExpression) != nil
     }
 
     /// Flips visibility between classic and Aurora chrome. Safe to
@@ -297,6 +548,8 @@ extension MainWindowController {
             auroraChromeController?.sidebarHost?.isHidden = false
             auroraChromeController?.statusBarHost?.isHidden = false
             statusBarHostingView?.isHidden = true
+            refreshAuroraSidebarTooltipAnchor()
+            startAuroraAgentReconciliationLoop()
         } else {
             // Dismiss the Aurora palette before hiding the chrome so a
             // user flipping the flag off mid-open does not leave the
@@ -308,10 +561,70 @@ extension MainWindowController {
             if auroraChromeController?.isPaletteVisible == true {
                 auroraChromeController?.hidePalette()
             }
+            auroraChromeController?.sidebarTooltip = nil
             auroraChromeController?.sidebarHost?.isHidden = true
             auroraChromeController?.statusBarHost?.isHidden = true
             statusBarHostingView?.isHidden = false
+            stopAuroraAgentReconciliationLoop()
         }
+    }
+
+    /// Starts Aurora's visible-buffer reconciliation safety net.
+    ///
+    /// The timer is idempotent and only runs while Aurora is visibly active.
+    /// It complements, but does not replace, semantic callbacks from
+    /// CocxyCore: callbacks remain instant; this loop catches any panes that
+    /// were already running or whose callback was missed during a rebuild.
+    private func startAuroraAgentReconciliationLoop() {
+        guard auroraAgentReconciliationCancellable == nil else { return }
+        auroraAgentReconciliationCancellable = Timer
+            .publish(
+                every: Self.auroraAgentReconciliationInterval,
+                on: .main,
+                in: .common
+            )
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, self.isAuroraChromeActive else { return }
+                self.reconcileAuroraAgentStateFromVisibleBuffers()
+                self.auroraChromeController?.refreshSources()
+            }
+    }
+
+    /// Stops the Aurora visible-buffer reconciliation safety net.
+    private func stopAuroraAgentReconciliationLoop() {
+        auroraAgentReconciliationCancellable?.cancel()
+        auroraAgentReconciliationCancellable = nil
+    }
+
+    /// Refreshes every chrome surface that depends on tab ordering,
+    /// pinning, active selection or per-surface metadata after an
+    /// Aurora context-menu action mutates the tab list.
+    ///
+    /// The classic sidebar gets this for free through `TabBarViewModel`.
+    /// Aurora bypasses that AppKit view, so its context menu must fan
+    /// the mutation out explicitly or rows can keep stale pin/active
+    /// affordances until the next incidental Combine event.
+    private func refreshAuroraChromeAfterTabMutation() {
+        tabBarViewModel?.syncWithManager()
+        refreshStatusBar()
+        refreshTabStrip()
+        auroraChromeController?.refreshSources()
+        refreshAuroraSidebarTooltipAnchor()
+    }
+
+    /// Keeps the window-level tooltip overlay aligned with the sidebar's
+    /// AppKit frame. The SwiftUI row frames are local to the sidebar; the
+    /// overlay host needs the sidebar's frame in overlay coordinates so
+    /// it can render the card to the right of the list instead of inside
+    /// the navigable row area.
+    private func refreshAuroraSidebarTooltipAnchor() {
+        guard let controller = auroraChromeController,
+              let sidebarHost = controller.sidebarHost,
+              let overlayLayer = overlayContainerView else { return }
+        controller.updateSidebarTooltipSidebarFrameInOverlay(
+            sidebarHost.convert(sidebarHost.bounds, to: overlayLayer)
+        )
     }
 
     /// Snapshots the surface-IDs-per-tab map the Aurora sidebar needs

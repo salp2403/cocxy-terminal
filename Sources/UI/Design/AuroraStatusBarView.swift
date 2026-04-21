@@ -1,19 +1,23 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // AuroraStatusBarView.swift - Redesigned status bar for the Aurora chrome.
 //
-// Renders the bottom glass bar that the design reference composes
-// from five groups:
+// Renders the bottom glass bar composed from four live groups:
 //
-//   | 100% local ● | agents ■■■ | ports :3000 :4001 :9000 | timeline ▬●▬ | HH:MM |
+//   | no telemetry ● | agents ■■■ | ports :3000 :4001 :9000 | HH:MM |
 //
-// The view consumes `Design.AuroraWorkspace` snapshots (same shape as
-// the sidebar) plus an ambient `AuroraTimelineState` so it can
-// preview and test in isolation. A future integration commit will
-// feed it from the live `AgentStatePerSurfaceStore` + the real
-// `portScanner` + the command-duration timeline store.
+// The design reference also drew a timeline scrubber between the ports
+// and the clock. `TimelineScrubberView` still ships in this file so a
+// future release can re-mount it once there is a real
+// activity-replay feed, but the body deliberately omits it today: the
+// scrubber had no backing data, the "replay" button fired into an
+// intentionally empty closure, and the `Xs ago` label could not
+// advance because nothing was publishing progress. Showing a control
+// that looks interactive but does nothing would mislead the user, so
+// we hide it until the replay subsystem is wired.
 //
-// As with every file under `Sources/UI/Design/`, this is additive:
-// nothing in the currently shipping chrome imports it yet.
+// In production, `AuroraChromeController` feeds the remaining groups
+// from the live per-surface agent store and port scanner while the
+// Aurora feature flag is enabled.
 
 import SwiftUI
 
@@ -28,8 +32,28 @@ extension Design {
         @Binding var timeline: AuroraTimelineState
         let clockLabel: String
         let onReplay: () -> Void
+        let onCopyPort: (AuroraPortBinding) -> Void
+        let onOpenPort: (AuroraPortBinding) -> Void
 
         @Environment(\.designThemePalette) private var palette
+
+        init(
+            workspaces: [AuroraWorkspace],
+            ports: [AuroraPortBinding],
+            timeline: Binding<AuroraTimelineState>,
+            clockLabel: String,
+            onReplay: @escaping () -> Void,
+            onCopyPort: @escaping (AuroraPortBinding) -> Void = { _ in },
+            onOpenPort: @escaping (AuroraPortBinding) -> Void = { _ in }
+        ) {
+            self.workspaces = workspaces
+            self.ports = ports
+            self._timeline = timeline
+            self.clockLabel = clockLabel
+            self.onReplay = onReplay
+            self.onCopyPort = onCopyPort
+            self.onOpenPort = onOpenPort
+        }
 
         var body: some View {
             // The status bar sits at the bottom edge of the window,
@@ -45,14 +69,17 @@ extension Design {
                 separator
                 AgentMatrixView(panes: Self.allPanes(in: workspaces))
                 separator
-                PortListView(ports: ports)
-                separator
-                TimelineScrubberView(
-                    timeline: $timeline,
-                    onReplay: onReplay
+                PortListView(
+                    ports: ports,
+                    onCopyPort: onCopyPort,
+                    onOpenPort: onOpenPort
                 )
+                // Timeline scrubber intentionally omitted. See the file
+                // header: the replay subsystem that would feed it is
+                // not implemented yet, and keeping a non-functional
+                // control in the status bar is worse than hiding it.
                 Spacer()
-                Text(clockLabel)
+                Text(verbatim: clockLabel)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(palette.textDim.resolvedColor())
             }
@@ -86,13 +113,20 @@ extension Design {
 
     // MARK: - Agent matrix
 
-    /// Horizontal matrix of agent state cells. Each pane contributes
-    /// one coloured square; `.idle` panes stay visible but desaturated
-    /// so the matrix preserves positional identity across renders.
+    /// Horizontal matrix of active agent state cells. Idle panes are
+    /// excluded from the matrix so the status bar communicates actual
+    /// running/waiting/finished/error agents instead of every split in
+    /// the window. The text summary mirrors the classic status bar
+    /// counters (`2 working`, `1 waiting`) and the tooltip lists the
+    /// agent names so Aurora does not hide detection detail.
     struct AgentMatrixView: View {
         let panes: [AuroraPane]
 
         @Environment(\.designThemePalette) private var palette
+
+        private var activePanes: [AuroraPane] {
+            panes.filter(\.contributesToMatrix)
+        }
 
         var body: some View {
             HStack(spacing: Spacing.xSmall) {
@@ -100,18 +134,69 @@ extension Design {
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(palette.textDim.resolvedColor())
 
+                Text(Self.summaryText(for: panes))
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(palette.textDim.resolvedColor())
+
                 HStack(spacing: 3) {
-                    ForEach(panes) { pane in
+                    ForEach(activePanes) { pane in
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(pane.state.token.resolvedColor())
+                            .fill(pane.agent.token.resolvedColor())
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .strokeBorder(pane.state.token.resolvedColor(), lineWidth: 1)
+                            )
                             .frame(width: 10, height: 10)
                             .accessibilityLabel("\(pane.name): \(Self.stateLabel(for: pane.state))")
+                            .help(pane.diagnosticLine)
                     }
                 }
             }
+            .help(Self.agentTooltip(for: panes))
         }
 
-        private static func stateLabel(for state: AgentStateRole) -> String {
+        static func summaryText(for panes: [AuroraPane]) -> String {
+            let active = panes.filter(\.contributesToMatrix)
+            guard !active.isEmpty else { return "idle" }
+
+            var working = 0
+            var waiting = 0
+            var errors = 0
+            var finished = 0
+
+            for pane in active {
+                switch pane.state {
+                case .launched, .working:
+                    working += 1
+                case .waiting:
+                    waiting += 1
+                case .error:
+                    errors += 1
+                case .finished:
+                    finished += 1
+                case .idle:
+                    break
+                }
+            }
+
+            var parts: [String] = []
+            if working > 0 { parts.append("\(working) working") }
+            if waiting > 0 { parts.append("\(waiting) waiting") }
+            if errors > 0 { parts.append("\(errors) error\(errors == 1 ? "" : "s")") }
+            if finished > 0 { parts.append("\(finished) done") }
+            return parts.joined(separator: " · ")
+        }
+
+        static func agentTooltip(for panes: [AuroraPane]) -> String {
+            let active = panes.filter(\.contributesToMatrix)
+            guard !active.isEmpty else {
+                return "No active agents detected in the current Aurora workspace snapshot."
+            }
+
+            return "Active agents:\n" + active.map(\.diagnosticLine).joined(separator: "\n")
+        }
+
+        static func stateLabel(for state: AgentStateRole) -> String {
             state.rawValue
         }
     }
@@ -121,13 +206,14 @@ extension Design {
     /// Displays bound local ports as compact chips with a health dot.
     struct PortListView: View {
         let ports: [AuroraPortBinding]
+        let onCopyPort: (AuroraPortBinding) -> Void
+        let onOpenPort: (AuroraPortBinding) -> Void
 
         @Environment(\.designThemePalette) private var palette
+        @State private var isPopoverPresented = false
 
-        /// Tooltip the view exposes on the "ports" label so the user
-        /// understands what the status bar is surfacing. Lists every
-        /// detected port's number + process name when present, which
-        /// is cheaper than introducing a whole popover layer.
+        /// Tooltip exposed on compact chips. The richer click target is
+        /// the popover, but tooltips keep hover discovery lightweight.
         private var portsTooltip: String {
             guard !ports.isEmpty else {
                 return "Localhost ports detected by the background scanner. None are listening right now."
@@ -138,10 +224,22 @@ extension Design {
 
         var body: some View {
             HStack(spacing: Spacing.xSmall) {
-                Text("ports")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(palette.textDim.resolvedColor())
-                    .help(portsTooltip)
+                Button {
+                    isPopoverPresented.toggle()
+                } label: {
+                    Text("ports")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(palette.textDim.resolvedColor())
+                }
+                .buttonStyle(.plain)
+                .help(portsTooltip)
+                .popover(isPresented: $isPopoverPresented, arrowEdge: .top) {
+                    PortsPopoverView(
+                        ports: ports,
+                        onCopyPort: onCopyPort,
+                        onOpenPort: onOpenPort
+                    )
+                }
                 if ports.isEmpty {
                     Text("none")
                         .font(.system(size: 10.5, design: .monospaced))
@@ -155,11 +253,64 @@ extension Design {
                         .help(portsTooltip)
                 } else {
                     ForEach(ports) { port in
-                        PortChip(port: port)
-                            .help(":\(port.port) \(port.name)")
+                        Button {
+                            onOpenPort(port)
+                        } label: {
+                            PortChip(port: port)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open \(port.localhostURLString). Use the ports popover for Copy/Open actions.")
+                        .contextMenu {
+                            Button("Open \(port.localhostURLString)") {
+                                onOpenPort(port)
+                            }
+                            Button("Copy \(port.localhostURLString)") {
+                                onCopyPort(port)
+                            }
+                        }
+                        .accessibilityLabel(
+                            Text(verbatim: "Open local port \(port.port), \(port.name)")
+                        )
                     }
                 }
             }
+        }
+    }
+
+    struct PortsPopoverView: View {
+        let ports: [AuroraPortBinding]
+        let onCopyPort: (AuroraPortBinding) -> Void
+        let onOpenPort: (AuroraPortBinding) -> Void
+
+        @Environment(\.designThemePalette) private var palette
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: Spacing.small) {
+                Text("Local ports")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(palette.textHigh.resolvedColor())
+
+                if ports.isEmpty {
+                    Text("No localhost services are listening right now.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(palette.textDim.resolvedColor())
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(ports) { port in
+                        HStack(spacing: Spacing.small) {
+                            PortChip(port: port)
+                            Spacer(minLength: Spacing.large)
+                            Button("Copy") { onCopyPort(port) }
+                                .buttonStyle(.borderless)
+                            Button("Open") { onOpenPort(port) }
+                                .buttonStyle(.borderless)
+                        }
+                    }
+                }
+            }
+            .padding(Spacing.large)
+            .frame(minWidth: 280, alignment: .leading)
+            .background(palette.backgroundSecondary.resolvedColor())
         }
     }
 
@@ -173,10 +324,17 @@ extension Design {
                 Circle()
                     .fill(port.stateRole.token.resolvedColor())
                     .frame(width: 5, height: 5)
-                Text(":\(port.port)")
+                // SwiftUI `Text` with a plain string literal is treated
+                // as a `LocalizedStringKey`, which runs number
+                // localization over any `Int` interpolated into it. A
+                // port like 8080 ends up rendered as "8,080" in locales
+                // that use a thousands separator. `Text(verbatim:)` opts
+                // out so the chip shows raw digits — the shape every
+                // developer expects for a network port.
+                Text(verbatim: ":\(port.port)")
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(palette.textMedium.resolvedColor())
-                Text(port.name)
+                Text(verbatim: port.name)
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(palette.textDim.resolvedColor())
             }
@@ -190,7 +348,9 @@ extension Design {
                             .strokeBorder(palette.glassBorder.resolvedColor(), lineWidth: 1)
                     )
             )
-            .accessibilityLabel("Port \(port.port) named \(port.name), state \(port.health.rawValue)")
+            .accessibilityLabel(
+                Text(verbatim: "Port \(port.port) named \(port.name), state \(port.health.rawValue)")
+            )
         }
     }
 

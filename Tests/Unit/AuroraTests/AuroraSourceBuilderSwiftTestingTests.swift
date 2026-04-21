@@ -27,12 +27,22 @@ struct AuroraSourceBuilderSwiftTestingTests {
     private func makeTab(
         title: String = "tab",
         cwd: URL = URL(fileURLWithPath: "/Users/user/proj"),
-        branch: String? = nil
+        branch: String? = nil,
+        processName: String? = nil,
+        isPinned: Bool = false,
+        lastCommandStartedAt: Date? = nil,
+        lastCommandDuration: TimeInterval? = nil,
+        lastCommandExitCode: Int? = nil
     ) -> Tab {
         Tab(
             title: title,
             workingDirectory: cwd,
-            gitBranch: branch
+            gitBranch: branch,
+            processName: processName,
+            isPinned: isPinned,
+            lastCommandStartedAt: lastCommandStartedAt,
+            lastCommandDuration: lastCommandDuration,
+            lastCommandExitCode: lastCommandExitCode
         )
     }
 
@@ -108,6 +118,57 @@ struct AuroraSourceBuilderSwiftTestingTests {
     }
 
     @Test
+    func stateSnapshotOverridesStoreReadsDuringPublishedWillSet() {
+        let tab = makeTab()
+        let sid = SurfaceID()
+        let staleStore = makeStore(entries: [
+            (sid, SurfaceAgentState(agentState: .idle)),
+        ])
+        let emittedSnapshot: [SurfaceID: SurfaceAgentState] = [
+            sid: SurfaceAgentState(
+                agentState: .launched,
+                detectedAgent: agent("Claude Code")
+            ),
+        ]
+
+        let result = AuroraSourceBuilder.buildSources(
+            tabs: [tab],
+            surfaceIDsByTab: [tab.id: [sid]],
+            store: staleStore,
+            stateSnapshot: emittedSnapshot,
+            workspaceRootResolver: Self.alwaysNilResolver
+        )
+
+        #expect(result.first?.surfaces.first?.state == .launched)
+        #expect(result.first?.surfaces.first?.agent == .claude)
+    }
+
+    @Test
+    func surfaceMetadataCarriesActivityAndCounters() {
+        let tab = makeTab()
+        let sid = SurfaceID()
+        let state = SurfaceAgentState(
+            agentState: .working,
+            detectedAgent: agent("Claude Code"),
+            agentActivity: "Reading package files",
+            agentToolCount: 4,
+            agentErrorCount: 1
+        )
+
+        let result = AuroraSourceBuilder.buildSources(
+            tabs: [tab],
+            surfaceIDsByTab: [tab.id: [sid]],
+            store: makeStore(entries: [(sid, state)]),
+            workspaceRootResolver: Self.alwaysNilResolver
+        )
+
+        let surface = result.first?.surfaces.first
+        #expect(surface?.activity == "Reading package files")
+        #expect(surface?.toolCount == 4)
+        #expect(surface?.errorCount == 1)
+    }
+
+    @Test
     func missingSurfaceMapEntryProducesZeroSurfaces() {
         let tab = makeTab()
         let result = AuroraSourceBuilder.buildSources(
@@ -178,6 +239,41 @@ struct AuroraSourceBuilderSwiftTestingTests {
             workspaceRootResolver: Self.alwaysNilResolver
         )
         #expect(result.first?.branch == nil)
+    }
+
+    @Test
+    func tabMetadataFeedsAuroraSessionTooltips() {
+        let tab = makeTab(
+            cwd: URL(fileURLWithPath: "/Users/user/proj"),
+            processName: "claude",
+            isPinned: true,
+            lastCommandStartedAt: Date(timeIntervalSince1970: 10),
+            lastCommandDuration: nil,
+            lastCommandExitCode: nil
+        )
+
+        let result = AuroraSourceBuilder.buildSources(
+            tabs: [tab],
+            surfaceIDsByTab: [:],
+            store: makeStore(),
+            workspaceRootResolver: Self.alwaysNilResolver
+        )
+
+        #expect(result.first?.workingDirectory == "/Users/user/proj")
+        #expect(result.first?.foregroundProcessName == "claude")
+        #expect(result.first?.lastCommandSummary == "Command: running")
+        #expect(result.first?.isPinned == true)
+    }
+
+    @Test
+    func commandSummaryFormatsCompletedCommands() {
+        let tab = makeTab(
+            lastCommandStartedAt: nil,
+            lastCommandDuration: 1.234,
+            lastCommandExitCode: 0
+        )
+
+        #expect(AuroraSourceBuilder.commandSummary(for: tab) == "Command: last finished in 1.2s · exit 0")
     }
 
     // MARK: - Invariant 6: surface name

@@ -126,6 +126,11 @@ enum AuroraSourceBuilder {
     ///     ordering the integration layer wants to show in the sidebar.
     ///   - store: Per-surface agent-state store consulted to resolve the
     ///     agent accent and state role of each pane.
+    ///   - stateSnapshot: Optional just-emitted store snapshot. Combine's
+    ///     `@Published` emits during `willSet`, so callers reacting to
+    ///     `store.$states` must pass the emitted dictionary here instead of
+    ///     reading `store.state(for:)`, which would still return the old
+    ///     state inside that callback.
     ///   - workspaceRootResolver: Injectable resolver (defaults to
     ///     ancestor-walk looking for `.git`). Tests pass a stub.
     /// - Returns: One `AuroraSourceTab` per input tab, in order.
@@ -133,17 +138,21 @@ enum AuroraSourceBuilder {
         tabs: [Tab],
         surfaceIDsByTab: [TabID: [SurfaceID]],
         store: AgentStatePerSurfaceStore,
+        stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil,
         workspaceRootResolver: AuroraWorkspaceRootResolver = GitAncestorWorkspaceRootResolver()
     ) -> [Design.AuroraSourceTab] {
         tabs.map { tab in
             let surfaceIDs = surfaceIDsByTab[tab.id] ?? []
             let surfaces = surfaceIDs.enumerated().map { index, surfaceID -> Design.AuroraSourceSurface in
-                let state = store.state(for: surfaceID)
+                let state = stateSnapshot?[surfaceID] ?? store.state(for: surfaceID)
                 return Design.AuroraSourceSurface(
                     id: surfaceID.rawValue.uuidString,
                     name: surfaceName(index: index, state: state),
                     agent: accent(for: state.detectedAgent),
-                    state: role(for: state.agentState)
+                    state: role(for: state.agentState),
+                    activity: state.agentActivity,
+                    toolCount: state.agentToolCount,
+                    errorCount: state.agentErrorCount
                 )
             }
             return Design.AuroraSourceTab(
@@ -151,7 +160,11 @@ enum AuroraSourceBuilder {
                 name: tab.displayTitle,
                 workspaceGroup: workspaceGroup(for: tab, resolver: workspaceRootResolver),
                 branch: tab.gitBranch,
-                surfaces: surfaces
+                isPinned: tab.isPinned,
+                surfaces: surfaces,
+                workingDirectory: tab.workingDirectory.path,
+                foregroundProcessName: tab.processName,
+                lastCommandSummary: commandSummary(for: tab)
             )
         }
     }
@@ -220,5 +233,31 @@ enum AuroraSourceBuilder {
             return name
         }
         return "pane \(index + 1)"
+    }
+
+    /// Human-readable command status shown in Aurora's session tooltip.
+    /// Kept pure so the sidebar can explain tab-level command activity
+    /// without reaching back into `Tab` from the SwiftUI view layer.
+    static func commandSummary(for tab: Tab) -> String? {
+        if tab.isCommandRunning {
+            return "Command: running"
+        }
+        guard let duration = tab.lastCommandDuration else { return nil }
+
+        var parts = ["Command: last finished in \(formatDuration(duration))"]
+        if let exitCode = tab.lastCommandExitCode {
+            parts.append("exit \(exitCode)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func formatDuration(_ duration: TimeInterval) -> String {
+        if duration < 1 {
+            return "\(Int((duration * 1000).rounded()))ms"
+        }
+        if duration < 10 {
+            return String(format: "%.1fs", duration)
+        }
+        return "\(Int(duration.rounded()))s"
     }
 }

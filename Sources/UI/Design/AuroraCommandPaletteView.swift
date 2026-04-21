@@ -4,10 +4,9 @@
 // Floating palette that composes itself on top of `Design.GlassSurface`
 // so the existing Liquid Glass / visual-effect / opaque accessibility
 // pipeline drives its background. The view is decoupled from
-// `CommandPaletteEngine` on purpose: the host wires the Aurora adapter
-// later and passes the resolved `AuroraPaletteAction` list in. That
-// keeps this module self-contained and testable without touching the
-// production engine during the redesign's integration phase.
+// `CommandPaletteEngine` on purpose: the host passes the resolved
+// `AuroraPaletteAction` list in, keeping this module self-contained
+// and testable while the integration layer bridges to production.
 
 import SwiftUI
 
@@ -96,11 +95,9 @@ extension Design {
     ///             ├── results ScrollView
     ///             └── footerHint
     ///
-    /// The scrollable results list is virtualised by SwiftUI's `List`
-    /// behaviour when the action set grows large. Keyboard navigation
-    /// (`↑` / `↓` / `Enter` / `Esc`) is the responsibility of the host
-    /// — the view exposes the `selectedIndex` binding so whatever key
-    /// monitor the host uses stays in one place.
+    /// Keyboard navigation (`↑` / `↓` / `Enter` / `Esc`) is handled in
+    /// the view so the host only has to mount the `NSHostingView` as
+    /// first responder and provide the action/dismiss closures.
     struct AuroraCommandPaletteView: View {
 
         @Binding var isVisible: Bool
@@ -421,7 +418,7 @@ extension Design {
         AuroraPaletteAction(id: "split.horizontal", label: "Split horizontal", category: "Splits", shortcut: "⌘D"),
         AuroraPaletteAction(id: "split.vertical", label: "Split vertical", category: "Splits", shortcut: "⌘⇧D"),
         AuroraPaletteAction(id: "split.close", label: "Close split", category: "Splits", shortcut: "⌘⇧W"),
-        AuroraPaletteAction(id: "window.palette", label: "Toggle command palette", category: "Window", shortcut: "⌘K"),
+        AuroraPaletteAction(id: "window.palette", label: "Toggle command palette", category: "Window", shortcut: "⌘⇧P"),
         AuroraPaletteAction(
             id: "theme.cycle",
             label: "Cycle theme",

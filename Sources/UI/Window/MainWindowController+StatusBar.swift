@@ -18,16 +18,17 @@ extension MainWindowController {
 
     /// Computes agent activity summary across all tabs.
     ///
-    /// Every tab is resolved through `resolveSurfaceAgentState(for:)`
-    /// so splits running independent agents contribute via their most
-    /// relevant surface (focused > primary > any active > `.idle`).
-    /// An idle tab produces no counter increment, so the summary stays
-    /// accurate whether the per-surface store is populated or not.
+    /// Every active surface contributes independently. This is
+    /// intentionally broader than `resolveSurfaceAgentState(for:)`,
+    /// because that resolver chooses the best single surface for the
+    /// primary pill while the status bar summary is an app-wide count.
+    /// A tab with Claude in one split and Codex in another must report
+    /// two active agents, not whichever split won the resolver priority.
     func computeAgentSummary() -> AgentSummary {
         var summary = AgentSummary()
-        for tab in tabManager.tabs {
-            let resolved = resolveSurfaceAgentState(for: tab.id)
-            switch AgentStatusTextFormatter.counterBucket(for: resolved.agentState) {
+
+        func increment(_ state: AgentState) {
+            switch AgentStatusTextFormatter.counterBucket(for: state) {
             case .working?:
                 summary.working += 1
             case .waiting?:
@@ -38,6 +39,15 @@ extension MainWindowController {
                 summary.finished += 1
             case nil:
                 break
+            }
+        }
+
+        for tab in tabManager.tabs {
+            let snapshots = allActiveAgentSnapshots(for: tab.id)
+            if snapshots.isEmpty {
+                increment(resolveSurfaceAgentState(for: tab.id).agentState)
+            } else {
+                snapshots.forEach { increment($0.state.agentState) }
             }
         }
 

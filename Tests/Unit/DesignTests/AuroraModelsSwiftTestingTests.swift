@@ -123,6 +123,78 @@ struct AuroraWorkspaceModelTests {
         #expect(session.matrixPanes.isEmpty)
     }
 
+    @Test("AuroraPane diagnostic line includes activity and counters")
+    func paneDiagnosticLineIncludesActivityAndCounters() {
+        let pane = Design.AuroraPane(
+            id: "claude",
+            name: "Claude Code",
+            agent: .claude,
+            state: .working,
+            activity: "Editing AppDelegate.swift",
+            toolCount: 7,
+            errorCount: 1
+        )
+
+        #expect(pane.diagnosticLine.contains("Claude Code"))
+        #expect(pane.diagnosticLine.contains("working"))
+        #expect(pane.diagnosticLine.contains("Editing AppDelegate.swift"))
+        #expect(pane.diagnosticLine.contains("tools 7"))
+        #expect(pane.diagnosticLine.contains("errors 1"))
+    }
+
+    @Test("AuroraSession diagnostic tooltip summarizes workspace, process, commands, and active panes")
+    func sessionDiagnosticTooltipIncludesUsefulHoverContext() {
+        let session = Design.AuroraSession(
+            id: "s",
+            name: "sisocs-v3 (main)",
+            agent: .claude,
+            state: .working,
+            panes: [
+                Design.AuroraPane(
+                    id: "claude",
+                    name: "Claude Code",
+                    agent: .claude,
+                    state: .working,
+                    activity: "Waiting for approval",
+                    toolCount: 3
+                ),
+                Design.AuroraPane(id: "shell", name: "zsh", agent: .shell, state: .idle),
+            ],
+            workingDirectory: "/Users/Galf/sisocs-v3",
+            foregroundProcessName: "claude",
+            lastCommandSummary: "Command: running"
+        )
+
+        let tooltip = session.diagnosticTooltip(workspaceName: "sisocs-v3", branch: "main")
+
+        #expect(tooltip.contains("Workspace: sisocs-v3 · main"))
+        #expect(tooltip.contains("Foreground process: claude"))
+        #expect(tooltip.contains("Directory: ~/sisocs-v3"))
+        #expect(tooltip.contains("Command: running"))
+        #expect(tooltip.contains("Claude Code"))
+        #expect(tooltip.contains("Waiting for approval"))
+        #expect(!tooltip.contains("zsh — idle"))
+    }
+
+    @Test("AuroraSession aggregates live pane and diagnostic counters")
+    func sessionAggregatesPaneDiagnostics() {
+        let session = Design.AuroraSession(
+            id: "s",
+            name: "mixed",
+            agent: .claude,
+            state: .working,
+            panes: [
+                Design.AuroraPane(id: "idle", name: "zsh", agent: .shell, state: .idle),
+                Design.AuroraPane(id: "claude", name: "Claude", agent: .claude, state: .working, toolCount: 4),
+                Design.AuroraPane(id: "codex", name: "Codex", agent: .codex, state: .waiting, toolCount: 2, errorCount: 1),
+            ]
+        )
+
+        #expect(session.activePaneCount == 2)
+        #expect(session.totalToolCount == 6)
+        #expect(session.totalErrorCount == 1)
+    }
+
     // MARK: - Sample catalogue
 
     @Test("Shipping sample workspaces cover at least three distinct agent accents")
@@ -183,6 +255,12 @@ struct AuroraStatusBarModelTests {
         #expect(error.stateRole == .error)
     }
 
+    @Test("AuroraPortBinding exposes a localhost URL string for status-bar actions")
+    func portLocalhostURLString() {
+        let port = Design.AuroraPortBinding(port: 4321, name: "dev server", health: .ok)
+        #expect(port.localhostURLString == "http://localhost:4321")
+    }
+
     // MARK: - Flatten helper used by the agent matrix
 
     @Test("AuroraStatusBarView.allPanes flattens every pane across workspaces")
@@ -192,6 +270,33 @@ struct AuroraStatusBarModelTests {
             .flatMap { $0.sessions }
             .flatMap { $0.panes }
         #expect(flat == expected)
+    }
+
+    @Test("Agent matrix summary counts every non-idle pane")
+    func agentMatrixSummaryCountsEveryActivePane() {
+        let panes = [
+            Design.AuroraPane(id: "idle", name: "Shell", agent: .shell, state: .idle),
+            Design.AuroraPane(id: "claude", name: "Claude Code", agent: .claude, state: .working),
+            Design.AuroraPane(id: "codex", name: "Codex", agent: .codex, state: .working),
+            Design.AuroraPane(id: "gemini", name: "Gemini", agent: .gemini, state: .waiting),
+        ]
+
+        #expect(Design.AgentMatrixView.summaryText(for: panes) == "2 working · 1 waiting")
+    }
+
+    @Test("Agent matrix tooltip lists active agent names and excludes idle panes")
+    func agentMatrixTooltipListsActiveAgentNames() {
+        let panes = [
+            Design.AuroraPane(id: "idle", name: "Shell", agent: .shell, state: .idle),
+            Design.AuroraPane(id: "claude", name: "Claude Code", agent: .claude, state: .working),
+            Design.AuroraPane(id: "codex", name: "Codex", agent: .codex, state: .waiting),
+        ]
+
+        let tooltip = Design.AgentMatrixView.agentTooltip(for: panes)
+
+        #expect(tooltip.contains("Claude Code — working"))
+        #expect(tooltip.contains("Codex — waiting"))
+        #expect(!tooltip.contains("Shell"))
     }
 
     @Test("Sample port bindings always expose at least one port in the ok state")

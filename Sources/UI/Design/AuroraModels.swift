@@ -3,17 +3,12 @@
 //
 // These structs mirror the state shapes in the design-reference
 // prototype (`src/data.jsx` — `INITIAL_WORKSPACES`, `SESSION_LOGS`).
-// They are used by the standalone `AuroraSidebarView` and
-// `AuroraStatusBarView` so the redesigned chrome can render in
-// isolation (previews, tests, the eventual demo inspector) without
-// touching the production `TabManager` / `SplitManager` / per-surface
-// store.
-//
-// The integration work that follows this commit will add adapters
-// that map the real `TabManager` + `AgentStatePerSurfaceStore` state
-// into these structs, but that plumbing lives in a dedicated commit
-// so this file can stay zero-dependency on AppKit and zero-coupled
-// to the current domain.
+// They are used by `AuroraSidebarView` and `AuroraStatusBarView` so the
+// redesigned chrome can render from either previews/tests or the live
+// adapter layer. Production mapping from `TabManager` +
+// `AgentStatePerSurfaceStore` happens in `AuroraSourceBuilder` and
+// `AuroraWorkspaceAdapter`, keeping these models zero-dependency on
+// AppKit and decoupled from the current domain objects.
 
 import Foundation
 
@@ -27,6 +22,27 @@ extension Design {
         let name: String
         let agent: AgentAccent
         let state: AgentStateRole
+        let activity: String?
+        let toolCount: Int
+        let errorCount: Int
+
+        init(
+            id: String,
+            name: String,
+            agent: AgentAccent,
+            state: AgentStateRole,
+            activity: String? = nil,
+            toolCount: Int = 0,
+            errorCount: Int = 0
+        ) {
+            self.id = id
+            self.name = name
+            self.agent = agent
+            self.state = state
+            self.activity = activity
+            self.toolCount = toolCount
+            self.errorCount = errorCount
+        }
 
         /// Computed hint used by the mini-matrix. Surfaces in the
         /// `.finished` state stay visible because the panel groups
@@ -38,6 +54,23 @@ extension Design {
             case .launched, .working, .waiting, .finished, .error: return true
             }
         }
+
+        /// Compact but information-rich line used by Aurora tooltips.
+        /// It intentionally mirrors live per-surface state instead of
+        /// tab-level fallbacks so split panes running different agents
+        /// remain independently inspectable.
+        var diagnosticLine: String {
+            var parts = ["\(name) — \(state.rawValue)"]
+            if let activity = activity?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !activity.isEmpty {
+                parts.append(activity)
+            }
+            if toolCount > 0 || errorCount > 0 {
+                parts.append("tools \(toolCount)")
+                parts.append("errors \(errorCount)")
+            }
+            return "• " + parts.joined(separator: " · ")
+        }
     }
 
     /// A session groups one or more panes working on the same task.
@@ -48,7 +81,33 @@ extension Design {
         let name: String
         let agent: AgentAccent
         let state: AgentStateRole
+        let isPinned: Bool
         let panes: [AuroraPane]
+        let workingDirectory: String?
+        let foregroundProcessName: String?
+        let lastCommandSummary: String?
+
+        init(
+            id: String,
+            name: String,
+            agent: AgentAccent,
+            state: AgentStateRole,
+            isPinned: Bool = false,
+            panes: [AuroraPane],
+            workingDirectory: String? = nil,
+            foregroundProcessName: String? = nil,
+            lastCommandSummary: String? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.agent = agent
+            self.state = state
+            self.isPinned = isPinned
+            self.panes = panes
+            self.workingDirectory = workingDirectory
+            self.foregroundProcessName = foregroundProcessName
+            self.lastCommandSummary = lastCommandSummary
+        }
 
         /// Human-readable pane count used by the sidebar metadata
         /// line ("3 panes").
@@ -63,6 +122,82 @@ extension Design {
         var matrixPanes: [AuroraPane] {
             panes.filter(\.contributesToMatrix)
         }
+
+        /// Number of panes with visible recent or active agent work.
+        var activePaneCount: Int {
+            matrixPanes.count
+        }
+
+        /// Total tool calls reported by every pane in the session.
+        var totalToolCount: Int {
+            panes.reduce(0) { $0 + $1.toolCount }
+        }
+
+        /// Total agent errors reported by every pane in the session.
+        var totalErrorCount: Int {
+            panes.reduce(0) { $0 + $1.errorCount }
+        }
+
+        /// Multiline tooltip for hovering a sidebar session. This is the
+        /// fast "what is happening in this tab?" surface: workspace,
+        /// foreground process, command state, and every live split pane
+        /// without requiring the user to focus the tab first.
+        func diagnosticTooltip(workspaceName: String, branch: String?) -> String {
+            var lines: [String] = [name]
+
+            var workspace = "Workspace: \(workspaceName)"
+            if let branch, !branch.isEmpty {
+                workspace += " · \(branch)"
+            }
+            lines.append(workspace)
+            lines.append("State: \(state.rawValue) · \(paneCountLabel)")
+
+            if let foregroundProcessName = foregroundProcessName?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !foregroundProcessName.isEmpty {
+                lines.append("Foreground process: \(foregroundProcessName)")
+            }
+
+            if let workingDirectory = workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !workingDirectory.isEmpty {
+                lines.append("Directory: \(Self.prettyDirectory(workingDirectory))")
+            }
+
+            if let lastCommandSummary = lastCommandSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !lastCommandSummary.isEmpty {
+                lines.append(lastCommandSummary)
+            }
+
+            let livePanes = matrixPanes
+            if livePanes.isEmpty {
+                lines.append("Panes: all idle")
+            } else {
+                lines.append("Live panes:")
+                lines.append(contentsOf: livePanes.map(\.diagnosticLine))
+            }
+
+            lines.append("Click to focus. Use the × button to close this tab.")
+            return lines.joined(separator: "\n")
+        }
+
+        private static func prettyDirectory(_ path: String) -> String {
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            if path == home { return "~" }
+            if path.hasPrefix(home + "/") {
+                return "~" + path.dropFirst(home.count)
+            }
+            return path
+        }
+    }
+
+    /// Hover payload emitted by the Aurora sidebar and rendered by the
+    /// window-level tooltip overlay. Keeping the row frame in sidebar
+    /// coordinates lets the AppKit integration place the tooltip outside
+    /// the sidebar without making the design view know about windows.
+    struct AuroraSidebarTooltipSnapshot: Equatable {
+        let session: AuroraSession
+        let workspaceName: String
+        let workspaceBranch: String?
+        let rowFrame: CGRect
     }
 
     /// A workspace is the top-level node in the sidebar tree. It
@@ -135,6 +270,9 @@ extension Design {
         /// (for example adding a PID dimension) does not force every
         /// adopter to follow the rename.
         var port: Int { id }
+
+        /// Localhost URL used by the status-bar popover for Copy/Open.
+        var localhostURLString: String { "http://localhost:\(port)" }
 
         /// State role used for the dot colour. `.ok` maps to
         /// `finished` (green), `.idle` to `idle`, `.error` to `error`.

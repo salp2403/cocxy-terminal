@@ -485,9 +485,9 @@ extension Design {
     }
 
     /// Maps a theme identity to the `NSAppearance` that best matches
-    /// its chrome. The redesign eventually renders its own `.glass`
-    /// layers, but toolbars, sheets and menus still inherit AppKit
-    /// materials so they need the correct system appearance.
+    /// its chrome. Aurora renders its own glass layers, but toolbars,
+    /// sheets and menus still inherit AppKit materials so they need the
+    /// correct system appearance.
     static func appearance(for identity: ThemeIdentity) -> NSAppearance? {
         identity.prefersDarkAppearance ? NSAppearance(named: .darkAqua)
                                        : NSAppearance(named: .aqua)

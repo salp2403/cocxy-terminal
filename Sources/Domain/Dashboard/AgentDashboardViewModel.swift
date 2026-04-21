@@ -108,6 +108,13 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// payload of its own, so it must be anchored to the focused visible tab.
     var activePatternContextProvider: (() -> (tabId: UUID, workingDirectory: String?)?)?
 
+    /// Resolves the tab, surface, and working directory for a pattern-based
+    /// transition emitted by the detection engine. When `surfaceID` is
+    /// non-nil this provider must prefer the owning tab of that concrete
+    /// surface, not merely the focused tab, so split panes running different
+    /// agents in the same tab do not collapse into one dashboard session.
+    var patternContextProvider: ((SurfaceID?) -> (tabId: UUID, surfaceID: SurfaceID?, workingDirectory: String?)?)?
+
     // MARK: - Initialization
 
     /// Creates a dashboard ViewModel and subscribes to event sources.
@@ -233,27 +240,86 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     func processDetectionSignal(
         agentName: String,
         state: AgentStateMachine.State,
-        tabId: UUID
+        tabId: UUID,
+        surfaceID: SurfaceID? = nil,
+        workingDirectory: String? = nil
     ) {
-        let syntheticSessionId = "pattern-\(tabId.uuidString)"
+        guard let agentName = normalizedDashboardAgentName(agentName) else {
+            return
+        }
         let patternContext = activePatternContextProvider?()
-        let workingDirectory = patternContext?.tabId == tabId
-            ? patternContext?.workingDirectory
-            : nil
+        let resolvedWorkingDirectory = workingDirectory
+            ?? (patternContext?.tabId == tabId ? patternContext?.workingDirectory : nil)
 
-        if sessionDataStore[syntheticSessionId] == nil {
-            let projectName = extractProjectName(from: workingDirectory)
-            let data = MutableSessionData(
-                id: syntheticSessionId,
-                projectName: projectName != "Unknown" ? projectName : agentName,
-                tabId: tabId,
-                state: mapStateMachineState(state),
-                agentName: agentName
+        upsertPatternSession(
+            agentName: agentName,
+            state: state,
+            tabId: tabId,
+            surfaceID: surfaceID,
+            workingDirectory: resolvedWorkingDirectory
+        )
+        rebuildSessions()
+    }
+
+    /// Mirrors the per-surface store into dashboard sessions.
+    ///
+    /// After the per-surface migration, `AgentStatePerSurfaceStore` is the
+    /// source of truth for live agent state. The dashboard still needs its
+    /// richer session model (subagents, file impact, priority), so this sync
+    /// updates only the synthetic `pattern-<tab>-<surface>` rows owned by
+    /// pattern/native detection and leaves hook-native rows untouched.
+    func syncSurfaceAgentStates(_ states: [SurfaceID: SurfaceAgentState]) {
+        var liveSurfaceSessionIDs = Set<String>()
+
+        for (surfaceID, surfaceState) in states {
+            guard surfaceState.isActive || surfaceState.hasAgent else {
+                continue
+            }
+            guard let detectedAgent = surfaceState.detectedAgent,
+                  let agentName = dashboardAgentName(for: detectedAgent) else {
+                continue
+            }
+            guard let context = patternContextProvider?(surfaceID) else {
+                continue
+            }
+
+            let sessionID = patternSessionID(
+                tabId: context.tabId,
+                surfaceID: context.surfaceID ?? surfaceID
             )
-            sessionDataStore[syntheticSessionId] = data
-        } else {
-            sessionDataStore[syntheticSessionId]?.state = mapStateMachineState(state)
-            sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
+            liveSurfaceSessionIDs.insert(sessionID)
+
+            let dashboardState = mapAgentState(surfaceState.agentState)
+            let projectName = extractProjectName(from: context.workingDirectory)
+            let activity = surfaceState.agentActivity
+
+            if sessionDataStore[sessionID] == nil {
+                sessionDataStore[sessionID] = MutableSessionData(
+                    id: sessionID,
+                    projectName: projectName != "Unknown" ? projectName : agentName,
+                    tabId: context.tabId,
+                    state: dashboardState,
+                    agentName: agentName,
+                    lastActivity: activity,
+                    lastActivityTime: Date(),
+                    totalToolCalls: surfaceState.agentToolCount,
+                    totalErrors: surfaceState.agentErrorCount
+                )
+            } else {
+                sessionDataStore[sessionID]?.state = dashboardState
+                sessionDataStore[sessionID]?.agentName = agentName
+                sessionDataStore[sessionID]?.lastActivity = activity
+                sessionDataStore[sessionID]?.lastActivityTime = Date()
+                sessionDataStore[sessionID]?.totalToolCalls = surfaceState.agentToolCount
+                sessionDataStore[sessionID]?.totalErrors = surfaceState.agentErrorCount
+            }
+        }
+
+        let staleSurfaceSessionIDs = sessionDataStore.keys.filter {
+            $0.hasPrefix("pattern-") && !liveSurfaceSessionIDs.contains($0)
+        }
+        for sessionID in staleSurfaceSessionIDs {
+            sessionDataStore.removeValue(forKey: sessionID)
         }
 
         rebuildSessions()
@@ -261,31 +327,36 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     /// Processes a detection engine state change using a stable session ID.
     ///
-    /// Pattern detection only watches the focused visible surface. We therefore
-    /// anchor synthetic sessions to that tab instead of reusing the receiver's
-    /// last global CWD, which can belong to an unrelated hook event.
+    /// Pattern detection now emits the originating surface for every
+    /// identified terminal pane. We anchor synthetic sessions to that
+    /// surface whenever available. Without the surface component, two
+    /// splits in the same tab (for example Claude on the left and Codex
+    /// on the right) would both write to `pattern-<tabID>` and the later
+    /// transition would overwrite the earlier dashboard row.
     private func processPatternDetectionSignal(
         agentName: String,
-        state: AgentStateMachine.State
+        state: AgentStateMachine.State,
+        surfaceID: SurfaceID?
     ) {
-        if let context = activePatternContextProvider?() {
-            let syntheticSessionId = "pattern-\(context.tabId.uuidString)"
-
-            if sessionDataStore[syntheticSessionId] == nil {
-                let projectName = extractProjectName(from: context.workingDirectory)
-                let data = MutableSessionData(
-                    id: syntheticSessionId,
-                    projectName: projectName != "Unknown" ? projectName : agentName,
-                    tabId: context.tabId,
-                    state: mapStateMachineState(state),
-                    agentName: agentName
-                )
-                sessionDataStore[syntheticSessionId] = data
-            } else {
-                sessionDataStore[syntheticSessionId]?.state = mapStateMachineState(state)
-                sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
-                sessionDataStore[syntheticSessionId]?.agentName = agentName
-            }
+        guard let agentName = normalizedDashboardAgentName(agentName) else {
+            return
+        }
+        if let context = patternContextProvider?(surfaceID) {
+            upsertPatternSession(
+                agentName: agentName,
+                state: state,
+                tabId: context.tabId,
+                surfaceID: surfaceID ?? context.surfaceID,
+                workingDirectory: context.workingDirectory
+            )
+        } else if let context = activePatternContextProvider?() {
+            upsertPatternSession(
+                agentName: agentName,
+                state: state,
+                tabId: context.tabId,
+                surfaceID: surfaceID,
+                workingDirectory: context.workingDirectory
+            )
         } else {
             // Degrade gracefully when the host has not injected focused-tab
             // context yet (for example isolated tests or early bootstrap).
@@ -308,6 +379,58 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         }
 
         rebuildSessions()
+    }
+
+    private func dashboardAgentName(for detectedAgent: DetectedAgent) -> String? {
+        normalizedDashboardAgentName(detectedAgent.displayName)
+            ?? normalizedDashboardAgentName(detectedAgent.name)
+    }
+
+    /// Dashboard rows should represent a resolved agent identity, not a
+    /// placeholder emitted while detection is still converging. Letting
+    /// "Unknown" through creates the stale ghost row users saw in the
+    /// Agent Dashboard even after Aurora's per-surface store was correct.
+    private func normalizedDashboardAgentName(_ rawName: String?) -> String? {
+        let name = rawName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !name.isEmpty else { return nil }
+        guard name.localizedCaseInsensitiveCompare("unknown") != .orderedSame else {
+            return nil
+        }
+        return name
+    }
+
+    private func upsertPatternSession(
+        agentName: String,
+        state: AgentStateMachine.State,
+        tabId: UUID,
+        surfaceID: SurfaceID?,
+        workingDirectory: String?
+    ) {
+        let syntheticSessionId = patternSessionID(tabId: tabId, surfaceID: surfaceID)
+        let dashboardState = mapStateMachineState(state)
+
+        if sessionDataStore[syntheticSessionId] == nil {
+            let projectName = extractProjectName(from: workingDirectory)
+            let data = MutableSessionData(
+                id: syntheticSessionId,
+                projectName: projectName != "Unknown" ? projectName : agentName,
+                tabId: tabId,
+                state: dashboardState,
+                agentName: agentName
+            )
+            sessionDataStore[syntheticSessionId] = data
+        } else {
+            sessionDataStore[syntheticSessionId]?.state = dashboardState
+            sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
+            sessionDataStore[syntheticSessionId]?.agentName = agentName
+        }
+    }
+
+    private func patternSessionID(tabId: UUID, surfaceID: SurfaceID?) -> String {
+        if let surfaceID {
+            return "pattern-\(tabId.uuidString)-\(surfaceID.rawValue.uuidString)"
+        }
+        return "pattern-\(tabId.uuidString)"
     }
 
     // MARK: - Private: Event Handlers
@@ -623,16 +746,35 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
                 if let agentName = context.agentName {
                     self.processPatternDetectionSignal(
                         agentName: agentName,
-                        state: context.state
+                        state: context.state,
+                        surfaceID: context.surfaceID
                     )
                 } else if context.state == .idle {
                     // Idle without agent name — the state machine cleared it.
-                    // Transition all pattern sessions to idle so they don't
-                    // stay stuck in their last non-idle state.
-                    self.transitionAllPatternSessionsToIdle()
+                    // Transition the originating surface to idle when it can
+                    // be resolved; otherwise fall back to the legacy broad
+                    // cleanup so isolated callers do not get stuck.
+                    if let surfaceID = context.surfaceID,
+                       let resolved = self.patternContextProvider?(surfaceID) {
+                        self.transitionPatternSessionToIdle(
+                            tabId: resolved.tabId,
+                            surfaceID: resolved.surfaceID ?? surfaceID
+                        )
+                    } else {
+                        self.transitionAllPatternSessionsToIdle()
+                    }
                 }
             }
             .store(in: &cancellables)
+    }
+
+    /// Transitions one pattern-detected session to idle.
+    private func transitionPatternSessionToIdle(tabId: UUID, surfaceID: SurfaceID?) {
+        let key = patternSessionID(tabId: tabId, surfaceID: surfaceID)
+        guard sessionDataStore[key]?.state != .idle else { return }
+        sessionDataStore[key]?.state = .idle
+        sessionDataStore[key]?.lastActivityTime = Date()
+        rebuildSessions()
     }
 
     /// Transitions all pattern-detected sessions to idle.
@@ -711,6 +853,23 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         case .idle:
             return .idle
         case .agentLaunched:
+            return .launching
+        case .working:
+            return .working
+        case .waitingInput:
+            return .waitingForInput
+        case .finished:
+            return .finished
+        case .error:
+            return .error
+        }
+    }
+
+    private func mapAgentState(_ state: AgentState) -> AgentDashboardState {
+        switch state {
+        case .idle:
+            return .idle
+        case .launched:
             return .launching
         case .working:
             return .working

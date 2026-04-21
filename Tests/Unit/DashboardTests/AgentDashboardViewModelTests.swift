@@ -660,6 +660,155 @@ final class AgentDashboardViewModelTests: XCTestCase {
         XCTAssertEqual(sut.sessions.first?.id, "pattern-\(tabId.uuidString)")
     }
 
+    func testNonHookAgentSignalsOnDifferentSurfacesInSameTabCreateSeparateSessions() {
+        let tabId = UUID()
+        let claudeSurfaceID = SurfaceID()
+        let codexSurfaceID = SurfaceID()
+
+        sut.processDetectionSignal(
+            agentName: "Claude Code",
+            state: .working,
+            tabId: tabId,
+            surfaceID: claudeSurfaceID,
+            workingDirectory: "/Users/test/sisocs-v3"
+        )
+        sut.processDetectionSignal(
+            agentName: "Codex",
+            state: .working,
+            tabId: tabId,
+            surfaceID: codexSurfaceID,
+            workingDirectory: "/Users/test/sisocs-v3"
+        )
+
+        XCTAssertEqual(sut.sessions.count, 2)
+        XCTAssertEqual(Set(sut.sessions.map(\.agentName)), ["Claude Code", "Codex"])
+        XCTAssertTrue(sut.sessions.allSatisfy { $0.tabId == tabId })
+        XCTAssertTrue(sut.sessions.contains { $0.id.contains(claudeSurfaceID.rawValue.uuidString) })
+        XCTAssertTrue(sut.sessions.contains { $0.id.contains(codexSurfaceID.rawValue.uuidString) })
+    }
+
+    func testSurfaceStoreSyncCreatesOneDashboardSessionPerActiveSurface() {
+        let tabId = UUID()
+        let claudeSurfaceID = SurfaceID()
+        let codexSurfaceID = SurfaceID()
+
+        sut.patternContextProvider = { surfaceID in
+            guard let surfaceID else { return nil }
+            return (
+                tabId: tabId,
+                surfaceID: surfaceID,
+                workingDirectory: "/Users/test/sisocs-v3"
+            )
+        }
+
+        sut.syncSurfaceAgentStates([
+            claudeSurfaceID: SurfaceAgentState(
+                agentState: .working,
+                detectedAgent: DetectedAgent(
+                    name: "claude",
+                    displayName: "Claude Code",
+                    launchCommand: "claude",
+                    startedAt: Date()
+                ),
+                agentActivity: "Reading project",
+                agentToolCount: 3
+            ),
+            codexSurfaceID: SurfaceAgentState(
+                agentState: .waitingInput,
+                detectedAgent: DetectedAgent(
+                    name: "codex",
+                    displayName: "Codex CLI",
+                    launchCommand: "codex",
+                    startedAt: Date()
+                ),
+                agentActivity: "Waiting for review",
+                agentToolCount: 1
+            ),
+        ])
+
+        XCTAssertEqual(sut.sessions.count, 2)
+        XCTAssertEqual(Set(sut.sessions.map(\.agentName)), ["Claude Code", "Codex CLI"])
+        XCTAssertEqual(Set(sut.sessions.map(\.state)), [.working, .waitingForInput])
+        XCTAssertTrue(sut.sessions.contains { $0.id.contains(claudeSurfaceID.rawValue.uuidString) })
+        XCTAssertTrue(sut.sessions.contains { $0.id.contains(codexSurfaceID.rawValue.uuidString) })
+        XCTAssertEqual(sut.sessions.first { $0.agentName == "Claude Code" }?.totalToolCalls, 3)
+        XCTAssertEqual(sut.sessions.first { $0.agentName == "Codex CLI" }?.lastActivity, "Waiting for review")
+
+        sut.syncSurfaceAgentStates([
+            codexSurfaceID: SurfaceAgentState(
+                agentState: .working,
+                detectedAgent: DetectedAgent(
+                    name: "codex",
+                    displayName: "Codex CLI",
+                    launchCommand: "codex",
+                    startedAt: Date()
+                )
+            ),
+        ])
+
+        XCTAssertEqual(sut.sessions.count, 1)
+        XCTAssertEqual(sut.sessions.first?.agentName, "Codex CLI")
+    }
+
+    func testSurfaceStoreSyncSkipsUnresolvedAgentIdentities() {
+        let tabId = UUID()
+        let unresolvedSurfaceID = SurfaceID()
+        let validSurfaceID = SurfaceID()
+
+        sut.patternContextProvider = { surfaceID in
+            guard let surfaceID else { return nil }
+            return (
+                tabId: tabId,
+                surfaceID: surfaceID,
+                workingDirectory: "/Users/test/sisocs-v3"
+            )
+        }
+
+        sut.syncSurfaceAgentStates([
+            unresolvedSurfaceID: SurfaceAgentState(
+                agentState: .working,
+                detectedAgent: nil,
+                agentActivity: "Still resolving"
+            ),
+            validSurfaceID: SurfaceAgentState(
+                agentState: .working,
+                detectedAgent: DetectedAgent(
+                    name: "codex",
+                    displayName: "Codex CLI",
+                    launchCommand: "codex",
+                    startedAt: Date()
+                )
+            ),
+        ])
+
+        XCTAssertEqual(sut.sessions.count, 1)
+        XCTAssertEqual(sut.sessions.first?.agentName, "Codex CLI")
+
+        sut.syncSurfaceAgentStates([
+            unresolvedSurfaceID: SurfaceAgentState(
+                agentState: .working,
+                detectedAgent: DetectedAgent(
+                    name: "Unknown",
+                    displayName: "Unknown",
+                    launchCommand: "unknown",
+                    startedAt: Date()
+                )
+            ),
+        ])
+
+        XCTAssertTrue(sut.sessions.isEmpty)
+    }
+
+    func testUnknownPatternDetectionSignalDoesNotCreateDashboardSession() {
+        sut.processDetectionSignal(
+            agentName: "Unknown",
+            state: .working,
+            tabId: UUID()
+        )
+
+        XCTAssertTrue(sut.sessions.isEmpty)
+    }
+
     // MARK: - ViewModel Tests: Combine Publisher
 
     func testCombinePublisherEmitsOnEveryChange() {

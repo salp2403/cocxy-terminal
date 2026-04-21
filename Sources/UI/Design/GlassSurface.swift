@@ -18,9 +18,9 @@
 // caller decides corner radius and elevation. That keeps every adopter
 // consistent without forcing a specific capsule/rectangle everywhere.
 //
-// This file is additive — no existing view consumes it yet. It ships
-// with tests that pin the resolved-mode decision table so later
-// integration work cannot silently regress the accessibility fallback.
+// This file backs the Aurora feature-flagged chrome and ships with
+// tests that pin the resolved-mode decision table so later integration
+// work cannot silently regress the accessibility fallback.
 
 import AppKit
 import SwiftUI

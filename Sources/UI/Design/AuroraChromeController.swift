@@ -38,8 +38,8 @@ final class AuroraChromeController: ObservableObject {
     /// highlight the active row.
     @Published var activeSessionID: String?
 
-    /// Port bindings surfaced on the Aurora status bar. Kept empty until
-    /// a future release wires the port scanner through.
+    /// Port bindings surfaced on the Aurora status bar. Mirrored from the
+    /// live `PortScannerImpl` whenever the integration layer wires one in.
     @Published var ports: [Design.AuroraPortBinding] = []
 
     /// Timeline scrubber snapshot. Default "live / now" until the
@@ -67,6 +67,18 @@ final class AuroraChromeController: ObservableObject {
     @Published var paletteShortcutLabel: String = "⇧⌘P"
     @Published var newTabShortcutLabel: String = "⌘T"
 
+    /// Live Aurora visual theme. The host keeps this aligned with the
+    /// terminal theme so the sidebar/status/palette do not stay dark when
+    /// the user switches the shell to a light palette.
+    @Published var themeIdentity: Design.ThemeIdentity = .aurora
+
+    /// Sidebar hover inspector rendered by a separate passthrough host
+    /// on the window overlay layer. Keeping it outside the sidebar's
+    /// hosting view prevents the card from covering rows while the user
+    /// navigates or opens context menus.
+    @Published var sidebarTooltip: Design.AuroraSidebarTooltipSnapshot?
+    @Published var sidebarTooltipSidebarFrameInOverlay: CGRect = .zero
+
     // MARK: - Dependencies (weak)
 
     private weak var tabManager: TabManager?
@@ -83,6 +95,22 @@ final class AuroraChromeController: ObservableObject {
     /// header. Wired to the controller's `createTab()` path so the new
     /// tab goes through the standard lifecycle hooks.
     var onCreateTab: (() -> Void)?
+
+    /// Invoked when the user clicks a session-row close affordance in
+    /// the Aurora sidebar. The host routes this through the same
+    /// `closeTab(_:)` lifecycle as the classic tab strip, including
+    /// pinned-tab guards, close confirmation, split teardown and store
+    /// cleanup.
+    var onCloseSession: ((TabID) -> Void)?
+
+    /// Context-menu parity with the classic sidebar. Aurora rows are
+    /// SwiftUI, not `TabItemView`, so pinning / close-others / movement
+    /// are routed through explicit callbacks instead of reusing AppKit's
+    /// `NSMenuItem` target-action handlers.
+    var onTogglePinSession: ((TabID) -> Void)?
+    var onCloseOtherSessions: ((TabID) -> Void)?
+    var onMoveSessionUp: ((TabID) -> Void)?
+    var onMoveSessionDown: ((TabID) -> Void)?
 
     /// Invoked when the user presses the palette hotkey inside an
     /// Aurora view (sidebar header button, palette-trigger keyboard
@@ -116,6 +144,7 @@ final class AuroraChromeController: ObservableObject {
     private(set) var sidebarHost: AuroraHostingView<AuroraSidebarHost>?
     private(set) var statusBarHost: AuroraHostingView<AuroraStatusBarHost>?
     private(set) var paletteHost: AuroraHostingView<AuroraPaletteHost>?
+    private(set) var sidebarTooltipHost: AuroraPassthroughHostingView<AuroraSidebarTooltipHost>?
 
     // MARK: - Private state
 
@@ -145,15 +174,21 @@ final class AuroraChromeController: ObservableObject {
         guard let tabManager, let store else { return }
 
         tabManager.$tabs
-            .sink { [weak self] _ in self?.refreshSources() }
+            .sink { [weak self] tabs in
+                self?.refreshSources(tabsSnapshot: tabs)
+            }
             .store(in: &cancellables)
 
         tabManager.$activeTabID
-            .sink { [weak self] _ in self?.refreshSources() }
+            .sink { [weak self] activeTabID in
+                self?.refreshSources(activeTabID: activeTabID)
+            }
             .store(in: &cancellables)
 
         store.$states
-            .sink { [weak self] _ in self?.refreshSources() }
+            .sink { [weak self] states in
+                self?.refreshSources(stateSnapshot: states)
+            }
             .store(in: &cancellables)
 
         startClockTimer()
@@ -210,16 +245,38 @@ final class AuroraChromeController: ObservableObject {
     /// lifecycle events the subscriptions do not catch (split creation,
     /// session restore, surface teardown).
     func refreshSources() {
+        refreshSources(
+            tabsSnapshot: tabManager?.tabs,
+            activeTabID: tabManager?.activeTabID,
+            stateSnapshot: store?.states
+        )
+    }
+
+    /// Rebuilds the workspace tree while using an explicit active tab
+    /// and domain snapshots. `@Published` emits during `willSet`, so
+    /// sinks must use the value Combine just delivered instead of
+    /// reading the source object again. Otherwise the terminal/agent can
+    /// update correctly while Aurora repaints from the previous tab list,
+    /// previous active tab, or previous per-surface agent state until
+    /// some unrelated refresh happens.
+    private func refreshSources(
+        tabsSnapshot: [Tab]? = nil,
+        activeTabID: TabID? = nil,
+        stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil
+    ) {
         guard let tabManager, let store else { return }
 
+        let tabs = tabsSnapshot ?? tabManager.tabs
         let surfaceMap = surfaceIDsByTabProvider?() ?? [:]
         let sources = AuroraSourceBuilder.buildSources(
-            tabs: tabManager.tabs,
+            tabs: tabs,
             surfaceIDsByTab: surfaceMap,
-            store: store
+            store: store,
+            stateSnapshot: stateSnapshot
         )
+        let resolvedActiveTabID = activeTabID ?? tabManager.activeTabID
+        activeSessionID = resolvedActiveTabID?.rawValue.uuidString
         workspaces = Design.AuroraWorkspaceAdapter.workspaces(from: sources)
-        activeSessionID = tabManager.activeTab?.id.rawValue.uuidString
     }
 
     // MARK: - Palette
@@ -304,6 +361,21 @@ final class AuroraChromeController: ObservableObject {
         return host
     }
 
+    /// Builds (or returns the cached) sidebar tooltip overlay host. This
+    /// host is mounted over the full window overlay layer and is fully
+    /// passthrough at the AppKit hit-test level.
+    func makeSidebarTooltipHost() -> AuroraPassthroughHostingView<AuroraSidebarTooltipHost> {
+        if let cached = sidebarTooltipHost { return cached }
+        let host = AuroraPassthroughHostingView(rootView: AuroraSidebarTooltipHost(controller: self))
+        host.translatesAutoresizingMaskIntoConstraints = true
+        sidebarTooltipHost = host
+        return host
+    }
+
+    func updateSidebarTooltipSidebarFrameInOverlay(_ frame: CGRect) {
+        sidebarTooltipSidebarFrameInOverlay = frame
+    }
+
     // MARK: - Clock
 
     private func startClockTimer() {
@@ -344,15 +416,13 @@ struct AuroraSidebarHost: View {
     @ObservedObject var controller: AuroraChromeController
 
     var body: some View {
+        // The sidebar mutates only workspace collapse state, so keep
+        // `workspaces` as a real projected binding and pass the active
+        // session as a read-only snapshot. The controller owns active
+        // selection because it is derived from `TabManager`.
         Design.AuroraSidebarView(
-            workspaces: Binding(
-                get: { controller.workspaces },
-                set: { controller.workspaces = $0 }
-            ),
-            activeSessionID: Binding(
-                get: { controller.activeSessionID },
-                set: { controller.activeSessionID = $0 }
-            ),
+            workspaces: $controller.workspaces,
+            activeSessionID: controller.activeSessionID,
             onTogglePalette: { controller.onTogglePalette?() },
             onCreateTab: { controller.onCreateTab?() },
             onActivateSession: { sessionID in
@@ -360,12 +430,41 @@ struct AuroraSidebarHost: View {
                     controller.onActivateSession?(tabID)
                 }
             },
+            onCloseSession: { sessionID in
+                if let tabID = controller.tabID(forSessionID: sessionID) {
+                    controller.onCloseSession?(tabID)
+                }
+            },
+            onTogglePinSession: { sessionID in
+                if let tabID = controller.tabID(forSessionID: sessionID) {
+                    controller.onTogglePinSession?(tabID)
+                }
+            },
+            onCloseOtherSessions: { sessionID in
+                if let tabID = controller.tabID(forSessionID: sessionID) {
+                    controller.onCloseOtherSessions?(tabID)
+                }
+            },
+            onMoveSessionUp: { sessionID in
+                if let tabID = controller.tabID(forSessionID: sessionID) {
+                    controller.onMoveSessionUp?(tabID)
+                }
+            },
+            onMoveSessionDown: { sessionID in
+                if let tabID = controller.tabID(forSessionID: sessionID) {
+                    controller.onMoveSessionDown?(tabID)
+                }
+            },
             onToggleNotifications: controller.onToggleNotifications.map { handler in
                 { handler() }
+            },
+            onHoverSession: { snapshot in
+                controller.sidebarTooltip = snapshot
             },
             paletteShortcutLabel: controller.paletteShortcutLabel,
             newTabShortcutLabel: controller.newTabShortcutLabel
         )
+        .designThemePalette(Design.palette(for: controller.themeIdentity))
     }
 }
 
@@ -382,8 +481,17 @@ struct AuroraStatusBarHost: View {
                 set: { controller.timeline = $0 }
             ),
             clockLabel: controller.clockLabel,
-            onReplay: { /* Reserved for a future timeline replay hook. */ }
+            onReplay: { /* Reserved for a future timeline replay hook. */ },
+            onCopyPort: { port in
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(port.localhostURLString, forType: .string)
+            },
+            onOpenPort: { port in
+                guard let url = URL(string: port.localhostURLString) else { return }
+                NSWorkspace.shared.open(url)
+            }
         )
+        .designThemePalette(Design.palette(for: controller.themeIdentity))
     }
 }
 
@@ -421,6 +529,56 @@ struct AuroraPaletteHost: View {
             },
             onDismiss: { controller.hidePalette() }
         )
+        .designThemePalette(Design.palette(for: controller.themeIdentity))
+    }
+}
+
+struct AuroraSidebarTooltipHost: View {
+
+    @ObservedObject var controller: AuroraChromeController
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let tooltip = controller.sidebarTooltip {
+                let placement = placement(
+                    for: tooltip,
+                    sidebarFrame: controller.sidebarTooltipSidebarFrameInOverlay,
+                    containerSize: proxy.size
+                )
+                Design.AuroraSessionTooltipCard(
+                    session: tooltip.session,
+                    workspaceName: tooltip.workspaceName,
+                    workspaceBranch: tooltip.workspaceBranch
+                )
+                .frame(width: placement.width)
+                .allowsHitTesting(false)
+                .position(x: placement.x, y: placement.y)
+                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .leading)))
+            }
+        }
+        .allowsHitTesting(false)
+        .designThemePalette(Design.palette(for: controller.themeIdentity))
+    }
+
+    private func placement(
+        for tooltip: Design.AuroraSidebarTooltipSnapshot,
+        sidebarFrame: CGRect,
+        containerSize: CGSize
+    ) -> (x: CGFloat, y: CGFloat, width: CGFloat) {
+        let rightSpace = max(0, containerSize.width - sidebarFrame.maxX - 18)
+        let width = min(360, max(260, rightSpace - 18))
+        let x = min(
+            containerSize.width - width * 0.5 - 12,
+            sidebarFrame.maxX + 18 + width * 0.5
+        )
+        let sidebarTopY = max(0, containerSize.height - sidebarFrame.maxY)
+        let rawY = sidebarTopY + tooltip.rowFrame.midY
+        let approximateHalfHeight: CGFloat = 158
+        let y = min(
+            max(rawY, approximateHalfHeight + 12),
+            max(approximateHalfHeight + 12, containerSize.height - approximateHalfHeight - 12)
+        )
+        return (x, y, width)
     }
 }
 
@@ -445,4 +603,12 @@ final class AuroraHostingView<Content: View>: NSHostingView<Content> {
     override var canBecomeKeyView: Bool { true }
 
     override func becomeFirstResponder() -> Bool { true }
+}
+
+/// Window-overlay host for hover inspectors. Returning `nil` from
+/// `hitTest` means terminal clicks, sidebar clicks and context menus pass
+/// through exactly as if the tooltip layer did not exist.
+final class AuroraPassthroughHostingView<Content: View>: NSHostingView<Content> {
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

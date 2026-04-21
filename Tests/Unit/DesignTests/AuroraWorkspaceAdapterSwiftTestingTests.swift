@@ -19,9 +19,20 @@ struct AuroraWorkspaceAdapterTests {
         id: String = "s",
         name: String = "pane",
         agent: Design.AgentAccent = .claude,
-        state: Design.AgentStateRole = .working
+        state: Design.AgentStateRole = .working,
+        activity: String? = nil,
+        toolCount: Int = 0,
+        errorCount: Int = 0
     ) -> Design.AuroraSourceSurface {
-        Design.AuroraSourceSurface(id: id, name: name, agent: agent, state: state)
+        Design.AuroraSourceSurface(
+            id: id,
+            name: name,
+            agent: agent,
+            state: state,
+            activity: activity,
+            toolCount: toolCount,
+            errorCount: errorCount
+        )
     }
 
     private func tab(
@@ -29,14 +40,22 @@ struct AuroraWorkspaceAdapterTests {
         name: String = "tab",
         workspaceGroup: String = "cocxy",
         branch: String? = nil,
-        surfaces: [Design.AuroraSourceSurface] = []
+        isPinned: Bool = false,
+        surfaces: [Design.AuroraSourceSurface] = [],
+        workingDirectory: String? = nil,
+        foregroundProcessName: String? = nil,
+        lastCommandSummary: String? = nil
     ) -> Design.AuroraSourceTab {
         Design.AuroraSourceTab(
             id: id,
             name: name,
             workspaceGroup: workspaceGroup,
             branch: branch,
-            surfaces: surfaces
+            isPinned: isPinned,
+            surfaces: surfaces,
+            workingDirectory: workingDirectory,
+            foregroundProcessName: foregroundProcessName,
+            lastCommandSummary: lastCommandSummary
         )
     }
 
@@ -110,6 +129,46 @@ struct AuroraWorkspaceAdapterTests {
         #expect(panes.map(\.name) == ["server", "tests"])
         #expect(panes.map(\.agent) == [.claude, .shell])
         #expect(panes.map(\.state) == [.working, .finished])
+    }
+
+    @Test("Panes preserve activity and counter metadata for tooltips")
+    func panesPreserveDiagnosticMetadata() {
+        let sources = [
+            tab(id: "a", surfaces: [
+                surface(
+                    id: "s1",
+                    name: "Claude Code",
+                    agent: .claude,
+                    state: .working,
+                    activity: "Editing files",
+                    toolCount: 5,
+                    errorCount: 1
+                ),
+            ]),
+        ]
+        let pane = Design.AuroraWorkspaceAdapter.workspaces(from: sources)[0].sessions[0].panes[0]
+        #expect(pane.activity == "Editing files")
+        #expect(pane.toolCount == 5)
+        #expect(pane.errorCount == 1)
+    }
+
+    @Test("Sessions preserve tab-level metadata for sidebar hover diagnostics")
+    func sessionsPreserveTabMetadata() {
+        let sources = [
+            tab(
+                id: "a",
+                isPinned: true,
+                surfaces: [surface()],
+                workingDirectory: "/Users/user/cocxy",
+                foregroundProcessName: "claude",
+                lastCommandSummary: "Command: running"
+            ),
+        ]
+        let session = Design.AuroraWorkspaceAdapter.workspaces(from: sources)[0].sessions[0]
+        #expect(session.workingDirectory == "/Users/user/cocxy")
+        #expect(session.foregroundProcessName == "claude")
+        #expect(session.lastCommandSummary == "Command: running")
+        #expect(session.isPinned == true)
     }
 
     @Test("A surface-less tab gets a synthetic shell pane so the sidebar never empties")

@@ -32,12 +32,26 @@ extension Design {
         let name: String
         let agent: AgentAccent
         let state: AgentStateRole
+        let activity: String?
+        let toolCount: Int
+        let errorCount: Int
 
-        init(id: String, name: String, agent: AgentAccent, state: AgentStateRole) {
+        init(
+            id: String,
+            name: String,
+            agent: AgentAccent,
+            state: AgentStateRole,
+            activity: String? = nil,
+            toolCount: Int = 0,
+            errorCount: Int = 0
+        ) {
             self.id = id
             self.name = name
             self.agent = agent
             self.state = state
+            self.activity = activity
+            self.toolCount = toolCount
+            self.errorCount = errorCount
         }
     }
 
@@ -55,20 +69,32 @@ extension Design {
         let name: String
         let workspaceGroup: String
         let branch: String?
+        let isPinned: Bool
         let surfaces: [AuroraSourceSurface]
+        let workingDirectory: String?
+        let foregroundProcessName: String?
+        let lastCommandSummary: String?
 
         init(
             id: String,
             name: String,
             workspaceGroup: String,
             branch: String? = nil,
-            surfaces: [AuroraSourceSurface]
+            isPinned: Bool = false,
+            surfaces: [AuroraSourceSurface],
+            workingDirectory: String? = nil,
+            foregroundProcessName: String? = nil,
+            lastCommandSummary: String? = nil
         ) {
             self.id = id
             self.name = name
             self.workspaceGroup = workspaceGroup
             self.branch = branch
+            self.isPinned = isPinned
             self.surfaces = surfaces
+            self.workingDirectory = workingDirectory
+            self.foregroundProcessName = foregroundProcessName
+            self.lastCommandSummary = lastCommandSummary
         }
     }
 
@@ -137,7 +163,11 @@ extension Design {
                 name: tab.name,
                 agent: primary.agent,
                 state: primary.state,
-                panes: panes
+                isPinned: tab.isPinned,
+                panes: panes,
+                workingDirectory: tab.workingDirectory,
+                foregroundProcessName: tab.foregroundProcessName,
+                lastCommandSummary: tab.lastCommandSummary
             )
         }
 
@@ -148,22 +178,25 @@ extension Design {
         private static func panes(for tab: AuroraSourceTab) -> [AuroraPane] {
             if tab.surfaces.isEmpty {
                 return [
-                    AuroraPane(
-                        id: tab.id + "-shell",
-                        name: "shell",
-                        agent: .shell,
-                        state: .idle
-                    ),
-                ]
-            }
-            return tab.surfaces.map { surface in
                 AuroraPane(
-                    id: surface.id,
-                    name: surface.name,
-                    agent: surface.agent,
-                    state: surface.state
-                )
-            }
+                    id: tab.id + "-shell",
+                    name: "shell",
+                    agent: .shell,
+                    state: .idle
+                ),
+            ]
+        }
+        return tab.surfaces.map { surface in
+            AuroraPane(
+                id: surface.id,
+                name: surface.name,
+                agent: surface.agent,
+                state: surface.state,
+                activity: surface.activity,
+                toolCount: surface.toolCount,
+                errorCount: surface.errorCount
+            )
+        }
         }
 
         /// Picks the surface that should drive the session's primary

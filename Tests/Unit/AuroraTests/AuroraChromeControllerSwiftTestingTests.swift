@@ -93,6 +93,44 @@ struct AuroraChromeControllerSwiftTestingTests {
     }
 
     @Test
+    func tabsPublisherUsesEmittedTabsWhenAddingNewTab() {
+        let harness = makeHarness()
+
+        let newTab = harness.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/aurora-tabs-willset")
+        )
+
+        let sessionIDs = Set(
+            harness.controller.workspaces
+                .flatMap { $0.sessions }
+                .map(\.id)
+        )
+        #expect(
+            sessionIDs.contains(newTab.id.rawValue.uuidString),
+            "Aurora must consume the tabs array emitted by @Published instead of reading TabManager.tabs during willSet"
+        )
+    }
+
+    @Test
+    func activeTabPublisherUsesEmittedIDWhenSwitchingExistingTabs() {
+        let harness = makeHarness()
+        let firstTab = harness.tabManager.tabs[0]
+        let secondTab = harness.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/aurora-active-switch")
+        )
+        harness.controller.refreshSources()
+        #expect(harness.controller.activeSessionID == secondTab.id.rawValue.uuidString)
+
+        harness.tabManager.setActive(id: firstTab.id)
+
+        #expect(harness.tabManager.activeTabID == firstTab.id)
+        #expect(
+            harness.controller.activeSessionID == firstTab.id.rawValue.uuidString,
+            "Aurora must use the activeTabID emitted by @Published, not a stale read during willSet"
+        )
+    }
+
+    @Test
     func storeUpdatePropagatesAgentAccent() {
         let harness = makeHarness()
         let tab = harness.tabManager.tabs[0]
@@ -116,6 +154,35 @@ struct AuroraChromeControllerSwiftTestingTests {
         let firstSession = harness.controller.workspaces.first?.sessions.first
         #expect(firstSession?.agent == .claude)
         #expect(firstSession?.state == .working)
+    }
+
+    @Test
+    func storePublisherUsesEmittedStatesWhenAgentLaunches() {
+        let harness = makeHarness()
+        let tab = harness.tabManager.tabs[0]
+        let sid = SurfaceID()
+        harness.controller.surfaceIDsByTabProvider = { [tab] in [tab.id: [sid]] }
+        harness.controller.refreshSources()
+
+        harness.store.set(
+            surfaceID: sid,
+            state: SurfaceAgentState(
+                agentState: .launched,
+                detectedAgent: DetectedAgent(
+                    name: "Claude Code",
+                    launchCommand: "claude",
+                    startedAt: Date()
+                )
+            )
+        )
+
+        let firstSession = harness.controller.workspaces.first?.sessions.first
+        #expect(
+            firstSession?.state == .launched,
+            "Aurora must render the just-emitted store state immediately instead of waiting for a later tab switch"
+        )
+        #expect(firstSession?.agent == .claude)
+        #expect(firstSession?.panes.first?.state == .launched)
     }
 
     // MARK: - Callbacks
@@ -146,6 +213,22 @@ struct AuroraChromeControllerSwiftTestingTests {
         harness.controller.onCreateTab?()
         harness.controller.onCreateTab?()
         #expect(invoked == 2)
+    }
+
+    @Test
+    func closeSessionCallbackResolvesTabID() {
+        let harness = makeHarness()
+        let tab = harness.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/aurora-close")
+        )
+        var closed: TabID?
+        harness.controller.onCloseSession = { closed = $0 }
+
+        if let tabID = harness.controller.tabID(forSessionID: tab.id.rawValue.uuidString) {
+            harness.controller.onCloseSession?(tabID)
+        }
+
+        #expect(closed == tab.id)
     }
 
     @Test
@@ -275,6 +358,17 @@ struct AuroraChromeControllerSwiftTestingTests {
         harness.controller.newTabShortcutLabel = "⌘N"
         #expect(harness.controller.paletteShortcutLabel == "⌃⇧Space")
         #expect(harness.controller.newTabShortcutLabel == "⌘N")
+    }
+
+    // MARK: - Theme identity publishing
+
+    @Test
+    func themeIdentityDefaultsToDarkAuroraAndCanSwitchToPaper() {
+        let harness = makeHarness()
+        #expect(harness.controller.themeIdentity == .aurora)
+
+        harness.controller.themeIdentity = .paper
+        #expect(harness.controller.themeIdentity == .paper)
     }
 
     // MARK: - Idempotent host factories
