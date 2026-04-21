@@ -158,7 +158,15 @@ enum SessionRestorer {
             title: tabState.title ?? "Terminal",
             workingDirectory: validatedDirectory,
             splitTreeState: validatedSplitTree,
-            splitNode: splitNode
+            splitNode: splitNode,
+            // Propagate worktree metadata verbatim. The SessionManagement
+            // restore code uses these to reconstruct the Tab with its
+            // original worktree state, and to feed
+            // `loadConfig(for:originRepo:)` with the origin repo fallback.
+            worktreeID: tabState.worktreeID,
+            worktreeRoot: tabState.worktreeRoot,
+            worktreeOriginRepo: tabState.worktreeOriginRepo,
+            worktreeBranch: tabState.worktreeBranch
         )
     }
 
@@ -281,4 +289,13 @@ struct RestoredTab: Sendable {
     let splitTreeState: SplitNodeState
     /// The split tree converted from `SplitNodeState` to `SplitNode`.
     let splitNode: SplitNode
+    /// Cocxy-managed worktree identifier, if the tab was attached to a
+    /// worktree when the session was saved. Added in v0.1.81.
+    let worktreeID: String?
+    /// Immutable on-disk worktree root, if `worktreeID` is set.
+    let worktreeRoot: URL?
+    /// Origin repository the worktree was created from.
+    let worktreeOriginRepo: URL?
+    /// Cached branch name of the worktree at save time.
+    let worktreeBranch: String?
 }

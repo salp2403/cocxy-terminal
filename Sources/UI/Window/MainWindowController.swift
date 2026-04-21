@@ -1933,17 +1933,34 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         projectConfigWatcher = nil
 
         // Find the .cocxy.toml path (same traversal as loadConfig).
+        // Honours the worktree origin-repo fallback so the watcher
+        // observes the file that actually drives this tab's merged
+        // config — for a tab inside a worktree without its own
+        // `.cocxy.toml`, that file lives in the origin repo.
         let service = ProjectConfigService()
-        let configPath = service.findConfigPath(for: tab.workingDirectory)
+        let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
+        let originRepo = inheritProjectConfig ? tab.worktreeOriginRepo : nil
+        let configPath = service.findConfigPath(
+            for: tab.workingDirectory,
+            originRepo: originRepo
+        )
         guard let configPath else { return }
 
         let watcher = ProjectConfigWatcher(configFilePath: configPath)
         watcher.startWatching { [weak self, tabID = tab.id] in
-            // Re-load project config and re-apply.
+            // Re-load project config and re-apply. Re-resolves the
+            // worktree origin at fire time so a tab that gained or
+            // lost a worktree between watcher start and this callback
+            // still picks the correct fallback.
             guard let self else { return }
+            let currentTab = self.tabManager.tab(for: tabID)
+            let workingDirectory = currentTab?.workingDirectory
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            let liveInheritFlag = self.configService?.current.worktree.inheritProjectConfig ?? true
+            let liveOriginRepo = liveInheritFlag ? currentTab?.worktreeOriginRepo : nil
             let newConfig = ProjectConfigService().loadConfig(
-                for: self.tabManager.tab(for: tabID)?.workingDirectory
-                    ?? FileManager.default.homeDirectoryForCurrentUser
+                for: workingDirectory,
+                originRepo: liveOriginRepo
             )
             self.tabManager.updateTab(id: tabID) { tab in
                 tab.projectConfig = newConfig

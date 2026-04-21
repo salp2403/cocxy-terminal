@@ -156,19 +156,37 @@ struct TabState: Codable, Sendable {
     let workingDirectory: URL
     /// Layout of the split panes inside this tab.
     let splitTree: SplitNodeState
+    /// Cocxy-managed worktree identifier, if the tab was attached to a
+    /// worktree when the session was saved. Added in v0.1.81.
+    let worktreeID: String?
+    /// Immutable on-disk worktree root, if `worktreeID` is set.
+    let worktreeRoot: URL?
+    /// Origin repository the worktree was created from. Enables the
+    /// `.cocxy.toml` origin-repo fallback on restore.
+    let worktreeOriginRepo: URL?
+    /// Cached branch name of the worktree at save time.
+    let worktreeBranch: String?
 
     init(
         id: TabID,
         sessionID: SessionID = SessionID(),
         title: String?,
         workingDirectory: URL,
-        splitTree: SplitNodeState
+        splitTree: SplitNodeState,
+        worktreeID: String? = nil,
+        worktreeRoot: URL? = nil,
+        worktreeOriginRepo: URL? = nil,
+        worktreeBranch: String? = nil
     ) {
         self.id = id
         self.sessionID = sessionID
         self.title = title
         self.workingDirectory = workingDirectory
         self.splitTree = splitTree
+        self.worktreeID = worktreeID
+        self.worktreeRoot = worktreeRoot
+        self.worktreeOriginRepo = worktreeOriginRepo
+        self.worktreeBranch = worktreeBranch
     }
 
     init(from decoder: Decoder) throws {
@@ -178,6 +196,14 @@ struct TabState: Codable, Sendable {
         title = try container.decodeIfPresent(String.self, forKey: .title)
         workingDirectory = try container.decode(URL.self, forKey: .workingDirectory)
         splitTree = try container.decode(SplitNodeState.self, forKey: .splitTree)
+        // Worktree fields are all optional and `decodeIfPresent` by
+        // design: sessions persisted before v0.1.81 simply omit them
+        // and every field falls back to nil, which is indistinguishable
+        // from a tab that never had a worktree attached.
+        worktreeID = try container.decodeIfPresent(String.self, forKey: .worktreeID)
+        worktreeRoot = try container.decodeIfPresent(URL.self, forKey: .worktreeRoot)
+        worktreeOriginRepo = try container.decodeIfPresent(URL.self, forKey: .worktreeOriginRepo)
+        worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
     }
 }
 

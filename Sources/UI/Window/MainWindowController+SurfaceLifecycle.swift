@@ -581,8 +581,21 @@ extension MainWindowController {
             )
 
             // Reload project config for the new working directory.
+            //
+            // When the tab belongs to a cocxy-managed worktree and the
+            // user has `inherit-project-config = true` (default), allow
+            // the service to fall back to the origin repo's
+            // `.cocxy.toml` if the walk from the current CWD yields
+            // nothing. Tabs without a worktree hit the legacy single
+            // walk because `worktreeOriginRepo` is nil.
             let projectService = ProjectConfigService()
-            let newProjectConfig = projectService.loadConfig(for: directoryURL)
+            let tabSnapshot = tabManager.tab(for: tabID)
+            let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
+            let originRepo = inheritProjectConfig ? tabSnapshot?.worktreeOriginRepo : nil
+            let newProjectConfig = projectService.loadConfig(
+                for: directoryURL,
+                originRepo: originRepo
+            )
             tabManager.updateTab(id: tabID) { tab in
                 tab.projectConfig = newProjectConfig
             }

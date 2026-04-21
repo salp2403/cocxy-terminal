@@ -172,7 +172,14 @@ extension AppDelegate {
                 sessionID: controller.sessionIDForTab(tab.id),
                 title: tab.title,
                 workingDirectory: tab.workingDirectory,
-                splitTree: splitState
+                splitTree: splitState,
+                // Preserve worktree metadata across app restarts so the
+                // origin-repo fallback, badge, and cleanup plumbing
+                // continue to function after restore.
+                worktreeID: tab.worktreeID,
+                worktreeRoot: tab.worktreeRoot,
+                worktreeOriginRepo: tab.worktreeOriginRepo,
+                worktreeBranch: tab.worktreeBranch
             ))
         }
 
@@ -364,7 +371,15 @@ extension AppDelegate {
                 id: restoredTab.tabID,
                 title: restoredTab.title,
                 workingDirectory: restoredTab.workingDirectory,
-                gitBranch: gitProvider.currentBranch(at: restoredTab.workingDirectory)
+                gitBranch: gitProvider.currentBranch(at: restoredTab.workingDirectory),
+                // Carry worktree metadata forward from the saved session
+                // so the tab keeps pointing at the same worktree on disk
+                // after restore. The `worktreeRoot` anchor survives even
+                // if the shell `cd`'s elsewhere later.
+                worktreeID: restoredTab.worktreeID,
+                worktreeRoot: restoredTab.worktreeRoot,
+                worktreeOriginRepo: restoredTab.worktreeOriginRepo,
+                worktreeBranch: restoredTab.worktreeBranch
             )
             controller.tabManager.insertExternalTab(restoredModel)
             registerSession(
@@ -374,7 +389,16 @@ extension AppDelegate {
                 titleOverride: restoredTab.title
             )
 
-            if let projectConfig = projectConfigService.loadConfig(for: restoredTab.workingDirectory) {
+            // Apply origin-repo fallback when the user opted in and the
+            // tab actually has a worktree origin. For tabs without a
+            // worktree the gate short-circuits to nil, preserving the
+            // legacy single-walk behaviour.
+            let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
+            let originRepo = inheritProjectConfig ? restoredTab.worktreeOriginRepo : nil
+            if let projectConfig = projectConfigService.loadConfig(
+                for: restoredTab.workingDirectory,
+                originRepo: originRepo
+            ) {
                 controller.tabManager.updateTab(id: restoredTab.tabID) { tab in
                     tab.projectConfig = projectConfig
                 }
