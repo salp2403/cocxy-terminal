@@ -81,23 +81,45 @@ extension MainWindowController {
     /// `shortcut` literal (for actions that are not user-rebindable, such as
     /// theme cycling or remote workspace toggling).
     private static let paletteCatalogMapping: [String: String] = [
+        "window.new": KeybindingActionCatalog.windowNewWindow.id,
+        "window.minimize": KeybindingActionCatalog.windowMinimize.id,
+        "window.fullscreen": KeybindingActionCatalog.windowToggleFullScreen.id,
+        "window.commandPalette": KeybindingActionCatalog.windowCommandPalette.id,
         "tabs.new": KeybindingActionCatalog.tabNew.id,
         "tabs.close": KeybindingActionCatalog.tabClose.id,
         "tabs.next": KeybindingActionCatalog.tabNext.id,
         "tabs.previous": KeybindingActionCatalog.tabPrevious.id,
+        "tabs.moveToNewWindow": KeybindingActionCatalog.tabMoveToNewWindow.id,
+        "tabs.goto1": KeybindingActionCatalog.tabGoto1.id,
+        "tabs.goto2": KeybindingActionCatalog.tabGoto2.id,
+        "tabs.goto3": KeybindingActionCatalog.tabGoto3.id,
+        "tabs.goto4": KeybindingActionCatalog.tabGoto4.id,
+        "tabs.goto5": KeybindingActionCatalog.tabGoto5.id,
+        "tabs.goto6": KeybindingActionCatalog.tabGoto6.id,
+        "tabs.goto7": KeybindingActionCatalog.tabGoto7.id,
+        "tabs.goto8": KeybindingActionCatalog.tabGoto8.id,
+        "tabs.goto9": KeybindingActionCatalog.tabGoto9.id,
         "splits.vertical": KeybindingActionCatalog.splitVertical.id,
         "splits.horizontal": KeybindingActionCatalog.splitHorizontal.id,
         "splits.close": KeybindingActionCatalog.splitClose.id,
         "splits.equalize": KeybindingActionCatalog.splitEqualize.id,
         "splits.zoom": KeybindingActionCatalog.splitToggleZoom.id,
+        "navigation.splitLeft": KeybindingActionCatalog.navigateSplitLeft.id,
+        "navigation.splitRight": KeybindingActionCatalog.navigateSplitRight.id,
+        "navigation.splitUp": KeybindingActionCatalog.navigateSplitUp.id,
+        "navigation.splitDown": KeybindingActionCatalog.navigateSplitDown.id,
         "dashboard.toggle": KeybindingActionCatalog.reviewDashboard.id,
         "agent.review": KeybindingActionCatalog.reviewCodeReview.id,
         "timeline.toggle": KeybindingActionCatalog.reviewTimeline.id,
         "search.toggle": KeybindingActionCatalog.editorFind.id,
+        "editor.zoomIn": KeybindingActionCatalog.editorZoomIn.id,
+        "editor.zoomOut": KeybindingActionCatalog.editorZoomOut.id,
+        "editor.resetZoom": KeybindingActionCatalog.editorResetZoom.id,
         "preferences.show": KeybindingActionCatalog.windowPreferences.id,
         "notifications.toggle": KeybindingActionCatalog.reviewNotifications.id,
         "browser.toggle": KeybindingActionCatalog.markdownBrowser.id,
         "navigation.quickterminal": KeybindingActionCatalog.windowQuickTerminal.id,
+        "navigation.quickswitch": KeybindingActionCatalog.remoteGoToAttention.id,
     ]
 
     /// Resolves the Command Palette shortcut label for a palette action id
@@ -137,6 +159,49 @@ extension MainWindowController {
         // on the next run loop tick to avoid SwiftUI state mutation during rendering.
         let actions: [CommandAction] = [
             CommandAction(
+                id: "window.new",
+                name: "New Window",
+                description: "Open a new Cocxy Terminal window",
+                shortcut: paletteShortcutLabel("window.new", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.newWindowAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "window.minimize",
+                name: "Minimize Window",
+                description: "Minimize the active window to the Dock",
+                shortcut: paletteShortcutLabel("window.minimize", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.window?.performMiniaturize(nil) }
+                }
+            ),
+            CommandAction(
+                id: "window.fullscreen",
+                name: "Toggle Full Screen",
+                description: "Enter or leave full-screen mode",
+                shortcut: paletteShortcutLabel("window.fullscreen", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.window?.toggleFullScreen(nil) }
+                }
+            ),
+            CommandAction(
+                id: "window.commandPalette",
+                name: "Close Command Palette",
+                description: "Dismiss the command palette",
+                shortcut: paletteShortcutLabel("window.commandPalette", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                }
+            ),
+            CommandAction(
                 id: "tabs.new",
                 name: "New Tab",
                 description: "Open a new terminal tab",
@@ -162,9 +227,20 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "tabs.moveToNewWindow",
+                name: "Move Tab to New Window",
+                description: "Detach the active tab into its own window",
+                shortcut: paletteShortcutLabel("tabs.moveToNewWindow", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.moveActiveTabToNewWindowAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "splits.vertical",
-                name: "Split Vertical",
-                description: "Split the current pane vertically",
+                name: "Split Stacked",
+                description: "Split the current pane into a top/bottom stack",
                 shortcut: paletteShortcutLabel("splits.vertical", fallback: nil),
                 category: .splits,
                 handler: { [weak self] in
@@ -174,8 +250,8 @@ extension MainWindowController {
             ),
             CommandAction(
                 id: "splits.horizontal",
-                name: "Split Horizontal",
-                description: "Split the current pane horizontally",
+                name: "Split Side by Side",
+                description: "Split the current pane into left/right columns",
                 shortcut: paletteShortcutLabel("splits.horizontal", fallback: nil),
                 category: .splits,
                 handler: { [weak self] in
@@ -236,6 +312,39 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleSearchBar() }
+                }
+            ),
+            CommandAction(
+                id: "editor.zoomIn",
+                name: "Zoom In",
+                description: "Increase the terminal font size",
+                shortcut: paletteShortcutLabel("editor.zoomIn", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.zoomInAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "editor.zoomOut",
+                name: "Zoom Out",
+                description: "Decrease the terminal font size",
+                shortcut: paletteShortcutLabel("editor.zoomOut", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.zoomOutAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "editor.resetZoom",
+                name: "Reset Zoom",
+                description: "Restore the configured terminal font size",
+                shortcut: paletteShortcutLabel("editor.resetZoom", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.resetZoomAction(nil) }
                 }
             ),
             CommandAction(
@@ -400,6 +509,50 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "navigation.splitLeft",
+                name: "Navigate Split Left",
+                description: "Move focus to the split pane on the left",
+                shortcut: paletteShortcutLabel("navigation.splitLeft", fallback: nil),
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.navigateSplitLeftAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "navigation.splitRight",
+                name: "Navigate Split Right",
+                description: "Move focus to the split pane on the right",
+                shortcut: paletteShortcutLabel("navigation.splitRight", fallback: nil),
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.navigateSplitRightAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "navigation.splitUp",
+                name: "Navigate Split Up",
+                description: "Move focus to the split pane above",
+                shortcut: paletteShortcutLabel("navigation.splitUp", fallback: nil),
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.navigateSplitUpAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "navigation.splitDown",
+                name: "Navigate Split Down",
+                description: "Move focus to the split pane below",
+                shortcut: paletteShortcutLabel("navigation.splitDown", fallback: nil),
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.navigateSplitDownAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "tabs.next",
                 name: "Next Tab",
                 description: "Switch to the next tab",
@@ -422,10 +575,82 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "tabs.goto1",
+                name: "Go to Tab 1",
+                description: "Switch to the first tab",
+                shortcut: paletteShortcutLabel("tabs.goto1", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab1(nil) } }
+            ),
+            CommandAction(
+                id: "tabs.goto2",
+                name: "Go to Tab 2",
+                description: "Switch to the second tab",
+                shortcut: paletteShortcutLabel("tabs.goto2", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab2(nil) } }
+            ),
+            CommandAction(
+                id: "tabs.goto3",
+                name: "Go to Tab 3",
+                description: "Switch to the third tab",
+                shortcut: paletteShortcutLabel("tabs.goto3", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab3(nil) } }
+            ),
+            CommandAction(
+                id: "tabs.goto4",
+                name: "Go to Tab 4",
+                description: "Switch to the fourth tab",
+                shortcut: paletteShortcutLabel("tabs.goto4", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab4(nil) } }
+            ),
+            CommandAction(
+                id: "tabs.goto5",
+                name: "Go to Tab 5",
+                description: "Switch to the fifth tab",
+                shortcut: paletteShortcutLabel("tabs.goto5", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab5(nil) } }
+            ),
+            CommandAction(
+                id: "tabs.goto6",
+                name: "Go to Tab 6",
+                description: "Switch to the sixth tab",
+                shortcut: paletteShortcutLabel("tabs.goto6", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab6(nil) } }
+            ),
+            CommandAction(
+                id: "tabs.goto7",
+                name: "Go to Tab 7",
+                description: "Switch to the seventh tab",
+                shortcut: paletteShortcutLabel("tabs.goto7", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab7(nil) } }
+            ),
+            CommandAction(
+                id: "tabs.goto8",
+                name: "Go to Tab 8",
+                description: "Switch to the eighth tab",
+                shortcut: paletteShortcutLabel("tabs.goto8", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab8(nil) } }
+            ),
+            CommandAction(
+                id: "tabs.goto9",
+                name: "Go to Tab 9",
+                description: "Switch to the ninth tab",
+                shortcut: paletteShortcutLabel("tabs.goto9", fallback: nil),
+                category: .tabs,
+                handler: { [weak self] in self?.dismissCommandPalette(); Task { @MainActor in self?.gotoTab9(nil) } }
+            ),
+            CommandAction(
                 id: "navigation.quickswitch",
                 name: "Quick Switch",
                 description: "Open the quick tab switcher",
-                shortcut: nil,
+                shortcut: paletteShortcutLabel("navigation.quickswitch", fallback: nil),
                 category: .navigation,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
@@ -556,6 +781,7 @@ extension MainWindowController {
     func showCodeReviewPanel() {
         guard let overlayContainer = overlayContainerView else { return }
 
+        dismissCodeReviewSuggestion()
         let viewModel = resolveCodeReviewViewModel()
         viewModel.refreshDiffs()
 
@@ -569,11 +795,12 @@ extension MainWindowController {
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
+        let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
             x: overlayContainer.bounds.width - panelWidth,
-            y: 0,
+            y: panelY,
             width: panelWidth,
-            height: overlayContainer.bounds.height
+            height: max(0, overlayContainer.bounds.height - panelY)
         )
         hostingView.autoresizingMask = [.height, .minXMargin]
 
@@ -582,6 +809,43 @@ extension MainWindowController {
         isCodeReviewVisible = true
         viewModel.isVisible = true
         layoutRightDockedAgentPanels()
+    }
+
+    func showCodeReviewSuggestion(for viewModel: CodeReviewPanelViewModel) {
+        guard let overlayContainer = overlayContainerView else { return }
+        guard !isCodeReviewVisible else { return }
+
+        codeReviewSuggestionHostingView?.removeFromSuperview()
+        let swiftUIView = CodeReviewOpenSuggestionView(
+            fileCount: viewModel.currentDiffs.count,
+            agentCount: max(viewModel.reviewAgentSessions.count, 1),
+            onOpen: { [weak self] in
+                self?.dismissCodeReviewSuggestion()
+                self?.showCodeReviewPanel()
+            },
+            onDismiss: { [weak self] in
+                self?.dismissCodeReviewSuggestion()
+            }
+        )
+        let hostingView = NSHostingView(rootView: swiftUIView)
+        hostingView.wantsLayer = true
+        let width: CGFloat = 390
+        let height: CGFloat = 90
+        let bottomInset = (statusBarHostingView?.frame.height ?? 24) + 14
+        hostingView.frame = NSRect(
+            x: max(12, overlayContainer.bounds.width - width - 18),
+            y: bottomInset,
+            width: width,
+            height: height
+        )
+        hostingView.autoresizingMask = [.minXMargin, .maxYMargin]
+        codeReviewSuggestionHostingView = hostingView
+        overlayContainer.addSubview(hostingView)
+    }
+
+    func dismissCodeReviewSuggestion() {
+        codeReviewSuggestionHostingView?.removeFromSuperview()
+        codeReviewSuggestionHostingView = nil
     }
 
     func dismissCodeReview() {
@@ -681,15 +945,21 @@ extension MainWindowController {
         viewModel.autoShowEnabledProvider = { [weak self] in
             self?.configService?.current.codeReview.autoShowOnSessionEnd ?? true
         }
+        let dashboardVM = dashboardViewModel
+            ?? injectedDashboardViewModel
+            ?? (NSApp.delegate as? AppDelegate)?.agentDashboardViewModel
+        if let dashboardVM {
+            viewModel.bindAgentSessionsPublisher(dashboardVM.sessionsPublisher)
+        }
 
         if codeReviewCancellables.isEmpty {
             viewModel.$shouldAutoShow
                 .removeDuplicates()
                 .filter { $0 }
                 .sink { [weak self, weak viewModel] _ in
-                    guard let self else { return }
-                    self.showCodeReviewPanel()
-                    viewModel?.shouldAutoShow = false
+                    guard let self, let viewModel else { return }
+                    self.showCodeReviewSuggestion(for: viewModel)
+                    viewModel.shouldAutoShow = false
                 }
                 .store(in: &codeReviewCancellables)
         }
@@ -1089,6 +1359,7 @@ extension MainWindowController {
         struct DockedPanel {
             let width: CGFloat
             let view: NSView
+            let avoidsStatusBar: Bool
         }
 
         if isCodeReviewVisible {
@@ -1101,19 +1372,32 @@ extension MainWindowController {
         }
 
         let visiblePanels: [DockedPanel] = [
-            isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!) : nil,
-            isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!) : nil,
-            isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!) : nil
+            isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!, avoidsStatusBar: false) : nil,
+            isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!, avoidsStatusBar: false) : nil,
+            isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!, avoidsStatusBar: true) : nil
         ].compactMap { $0 }
 
         var currentX = overlayContainer.bounds.width
         for panel in visiblePanels.reversed() {
             currentX -= panel.width
+            let panelY = panel.avoidsStatusBar ? statusBarHostingView?.frame.height ?? 24 : 0
             panel.view.frame = NSRect(
                 x: currentX,
-                y: 0,
+                y: panelY,
                 width: panel.width,
-                height: overlayContainer.bounds.height
+                height: max(0, overlayContainer.bounds.height - panelY)
+            )
+        }
+
+        if let suggestionView = codeReviewSuggestionHostingView {
+            let width = suggestionView.frame.width
+            let height = suggestionView.frame.height
+            let bottomInset = (statusBarHostingView?.frame.height ?? 24) + 14
+            suggestionView.frame = NSRect(
+                x: max(12, overlayContainer.bounds.width - width - 18),
+                y: bottomInset,
+                width: width,
+                height: height
             )
         }
     }
@@ -1310,6 +1594,8 @@ extension MainWindowController {
         var swiftUIView = BrowserPanelView(
             viewModel: viewModel,
             profileManager: browserProfileManager,
+            onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
+            onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
             onDismiss: { [weak self] in self?.dismissBrowser() }
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
@@ -1550,6 +1836,8 @@ extension MainWindowController {
             dismissBrowser()
         } else if isNotificationPanelVisible {
             dismissNotificationPanel()
+        } else if codeReviewSuggestionHostingView != nil {
+            dismissCodeReviewSuggestion()
         } else if isCodeReviewVisible {
             dismissCodeReview()
         } else if isDashboardVisible {
@@ -1657,6 +1945,8 @@ extension MainWindowController {
         var view = BrowserPanelView(
             viewModel: viewModel,
             profileManager: browserProfileManager,
+            onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
+            onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
             onDismiss: { [weak self] in self?.dismissBrowser() }
         )
         view.vibrancyAppearanceOverride = override

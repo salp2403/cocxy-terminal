@@ -231,4 +231,181 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
             "Window height must be greater than 0 when config is provided"
         )
     }
+
+    func testTopTabPositionUsesTopLevelStripOnlyWhenAuroraDisabled() throws {
+        let toml = """
+        [appearance]
+        tab-position = "top"
+        aurora-enabled = false
+        """
+        let fileProvider = InMemoryConfigFileProvider(content: toml)
+        let configService = ConfigService(fileProvider: fileProvider)
+        try configService.reload()
+
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge, configService: configService)
+
+        XCTAssertTrue(
+            controller.usesTopLevelTabsInHorizontalStrip,
+            "Classic top mode must render top-level tabs, not split panes"
+        )
+    }
+
+    func testTopTabPositionKeepsAuroraSidebarWhenAuroraDefaultsOn() throws {
+        let toml = """
+        [appearance]
+        tab-position = "top"
+        """
+        let fileProvider = InMemoryConfigFileProvider(content: toml)
+        let configService = ConfigService(fileProvider: fileProvider)
+        try configService.reload()
+
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge, configService: configService)
+
+        XCTAssertFalse(
+            controller.usesTopLevelTabsInHorizontalStrip,
+            "Aurora is enabled by default and owns its own sidebar instead of reusing classic top tabs"
+        )
+    }
+
+    func testTopTabStripCloseFocusedPaneCollapsesSplitWithoutClosingWorkspaceTab() throws {
+        let toml = """
+        [general]
+        confirm-close-process = false
+
+        [appearance]
+        tab-position = "top"
+        aurora-enabled = false
+        """
+        let fileProvider = InMemoryConfigFileProvider(content: toml)
+        let configService = ConfigService(fileProvider: fileProvider)
+        try configService.reload()
+
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge, configService: configService)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+        controller.newTabAction(nil)
+
+        guard let strip = controller.horizontalTabStripView as? HorizontalTabStripView,
+              let activeTabID = controller.tabManager.activeTabID else {
+            XCTFail("Expected a visible top strip and active tab")
+            return
+        }
+        let tabCountBefore = controller.tabManager.tabs.count
+
+        strip.onSplitSideBySide?()
+
+        XCTAssertTrue(
+            controller.usesTopLevelTabsInHorizontalStrip,
+            "The regression only applies to classic top-level tab mode"
+        )
+        XCTAssertEqual(
+            controller.activeSplitManager?.rootNode.allLeafIDs().count,
+            2,
+            "The split toolbar action should create a second pane in the active workspace tab"
+        )
+        XCTAssertEqual(
+            strip.tabs.count,
+            tabCountBefore,
+            "In top mode the strip must keep showing workspace tabs, not split leaves"
+        )
+
+        strip.onClosePanel?()
+
+        XCTAssertNil(
+            controller.activeSplitView,
+            "The right-side close action in top mode must collapse the visual split hierarchy"
+        )
+        XCTAssertEqual(
+            controller.activeSplitManager?.rootNode.allLeafIDs().count,
+            1,
+            "Closing the focused pane must also collapse the split model back to one leaf"
+        )
+        XCTAssertEqual(
+            controller.tabManager.tabs.count,
+            tabCountBefore,
+            "Closing the focused pane must not close the workspace tab shown in the top strip"
+        )
+        XCTAssertEqual(
+            controller.tabManager.activeTabID,
+            activeTabID,
+            "The active workspace tab should remain selected after closing its focused split"
+        )
+    }
+
+    func testTopTabStripCloseFocusedPaneWaitsForConfirmation() throws {
+        let toml = """
+        [general]
+        confirm-close-process = true
+
+        [appearance]
+        tab-position = "top"
+        aurora-enabled = false
+        """
+        let fileProvider = InMemoryConfigFileProvider(content: toml)
+        let configService = ConfigService(fileProvider: fileProvider)
+        try configService.reload()
+
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge, configService: configService)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+        controller.newTabAction(nil)
+
+        guard let strip = controller.horizontalTabStripView as? HorizontalTabStripView,
+              let activeTabID = controller.tabManager.activeTabID else {
+            XCTFail("Expected a visible top strip and active tab")
+            return
+        }
+        let tabCountBefore = controller.tabManager.tabs.count
+
+        strip.onSplitSideBySide?()
+
+        var capturedTitle: String?
+        var capturedMessage: String?
+        var pendingDecision: ((Bool) -> Void)?
+        controller.focusedPaneCloseConfirmationPresenter = { title, message, completion in
+            capturedTitle = title
+            capturedMessage = message
+            pendingDecision = completion
+        }
+
+        strip.onClosePanel?()
+
+        XCTAssertEqual(capturedTitle, "Close Focused Pane?")
+        XCTAssertTrue(
+            capturedMessage?.contains("workspace tab stays open") ?? false,
+            "The confirmation should make it clear that this closes only the focused pane"
+        )
+        XCTAssertEqual(
+            controller.activeSplitManager?.rootNode.allLeafIDs().count,
+            2,
+            "Clicking the top-strip close icon must not close the split before confirmation"
+        )
+        XCTAssertEqual(
+            controller.tabManager.tabs.count,
+            tabCountBefore,
+            "Prompting to close a focused pane must not close the workspace tab"
+        )
+
+        pendingDecision?(true)
+
+        XCTAssertNil(
+            controller.activeSplitView,
+            "Confirming should collapse the split hierarchy"
+        )
+        XCTAssertEqual(
+            controller.activeSplitManager?.rootNode.allLeafIDs().count,
+            1,
+            "Confirming should close the focused pane after the prompt"
+        )
+        XCTAssertEqual(controller.tabManager.tabs.count, tabCountBefore)
+        XCTAssertEqual(controller.tabManager.activeTabID, activeTabID)
+    }
 }

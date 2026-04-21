@@ -2,6 +2,7 @@
 // BrowserProfileManager.swift - CRUD and switching for browser profiles.
 
 import Foundation
+import WebKit
 
 // MARK: - Browser Profile Store Protocol
 
@@ -233,6 +234,15 @@ final class JSONBrowserProfileStore: BrowserProfileStore {
         let path = BrowserProfile.profilesBaseDirectory + "/\(id.uuidString)"
         if FileManager.default.fileExists(atPath: path) {
             try FileManager.default.removeItem(atPath: path)
+        }
+        Task { @MainActor in
+            WKWebsiteDataStore.remove(forIdentifier: id) { error in
+                if let error {
+                    NSLog("[BrowserProfileManager] Failed to remove WebKit data store for profile %@: %@",
+                          id.uuidString,
+                          String(describing: error))
+                }
+            }
         }
     }
 }

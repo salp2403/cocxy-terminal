@@ -7,10 +7,11 @@ import Foundation
 
 /// A browser profile that isolates cookies, storage, and cache.
 ///
-/// Each profile maintains its own WebKit data store directory under
-/// `~/.config/cocxy/browser/profiles/<uuid>/`. This ensures that
-/// sessions across profiles never share authentication state, cookies,
-/// or cached resources.
+/// Each profile maps to a WebKit data store identified by the profile UUID
+/// (`WKWebsiteDataStore(forIdentifier:)` on macOS 14+). WebKit owns the
+/// physical storage location; Cocxy keeps this model as the durable user-facing
+/// identity so browser hosts can select the matching cookie/cache/local-storage
+/// container.
 ///
 /// One profile is always marked as default and cannot be deleted.
 ///
@@ -63,12 +64,16 @@ struct BrowserProfile: Identifiable, Codable, Equatable, Sendable {
 
     // MARK: - Paths
 
-    /// Base directory for all browser profile data stores.
+    /// Base directory for auxiliary browser profile metadata owned by Cocxy.
+    ///
+    /// WebKit cookies/cache/local-storage are stored in the system-managed
+    /// `WKWebsiteDataStore` for `id`; this path is retained for Cocxy-owned
+    /// profile sidecar data and best-effort cleanup of older builds.
     static let profilesBaseDirectory: String = {
         NSHomeDirectory() + "/.config/cocxy/browser/profiles"
     }()
 
-    /// Directory path for this profile's isolated WebKit data store.
+    /// Directory path for this profile's Cocxy-owned sidecar data.
     var dataStorePath: String {
         "\(Self.profilesBaseDirectory)/\(id.uuidString)"
     }

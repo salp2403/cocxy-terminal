@@ -49,6 +49,11 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertNil(strip.onClosePanel)
     }
 
+    func testOnToggleThemeModeCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onToggleThemeMode)
+    }
+
     // MARK: - Callback Invocation
 
     func testOnSplitSideBySideCallbackFires() {
@@ -113,6 +118,25 @@ final class HorizontalTabStripActionTests: XCTestCase {
         strip.onClosePanel = { called = true }
         strip.onClosePanel?()
         XCTAssertTrue(called)
+    }
+
+    func testOnToggleThemeModeCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onToggleThemeMode = { called = true }
+        findThemeModeButton(in: strip)?.performClick(nil)
+        XCTAssertTrue(called)
+    }
+
+    func testThemeModeButtonTooltipTracksTargetMode() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        let button = findThemeModeButton(in: strip)
+
+        strip.setThemeMode(isLight: false)
+        XCTAssertEqual(button?.toolTip, "Switch to light theme")
+
+        strip.setThemeMode(isLight: true)
+        XCTAssertEqual(button?.toolTip, "Switch to dark theme")
     }
 
     // MARK: - Action Icons Update
@@ -194,6 +218,27 @@ final class HorizontalTabStripActionTests: XCTestCase {
         }
     }
 
+    func testSplitActionTooltipsMatchVisualOrientation() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(panelType: .terminal, canClose: false)
+
+        let splitButtons = findActionButtons(in: strip).prefix(2)
+
+        XCTAssertEqual(splitButtons.map(\.toolTip), ["Split Side by Side", "Split Stacked"] as [String?])
+        XCTAssertEqual(splitButtons.map { $0.accessibilityLabel() }, ["action:splitSideBySide", "action:splitStacked"])
+    }
+
+    func testCloseFocusedPaneActionUsesPaneSpecificTooltip() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(panelType: .terminal, canClose: true)
+
+        let closeButton = findActionButtons(in: strip).first {
+            $0.accessibilityLabel() == "action:closePanel"
+        }
+
+        XCTAssertEqual(closeButton?.toolTip, "Close Focused Pane")
+    }
+
     func testActionButtonsHaveAccessibilityLabels() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
@@ -212,6 +257,19 @@ final class HorizontalTabStripActionTests: XCTestCase {
         var result: [NSButton] = []
         findActionButtonsRecursive(in: view, result: &result)
         return result
+    }
+
+    private func findThemeModeButton(in view: NSView) -> NSButton? {
+        if let button = view as? NSButton,
+           button.accessibilityLabel() == "Toggle light or dark theme" {
+            return button
+        }
+        for child in view.subviews {
+            if let match = findThemeModeButton(in: child) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func findActionButtonsRecursive(in view: NSView, result: inout [NSButton]) {

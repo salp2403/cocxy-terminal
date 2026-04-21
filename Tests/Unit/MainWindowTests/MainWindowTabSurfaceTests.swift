@@ -446,14 +446,15 @@ final class TabSurfaceMappingTests: XCTestCase {
             XCTAssertLessThan(clampedWidth, 880)
 
             controller.adjustCodeReviewPanelWidth(by: CodeReviewPanelView.panelResizeStep)
-            XCTAssertEqual(controller.preferredCodeReviewPanelWidth, 980, accuracy: 0.5)
+            let expectedPreferredWidth = 880 + CodeReviewPanelView.panelResizeStep
+            XCTAssertEqual(controller.preferredCodeReviewPanelWidth, expectedPreferredWidth, accuracy: 0.5)
 
             controller.window?.setContentSize(NSSize(width: 1400, height: 900))
             controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
 
             XCTAssertEqual(
                 controller.codeReviewHostingView?.frame.width ?? 0,
-                980,
+                expectedPreferredWidth,
                 accuracy: 0.5,
                 "Incrementing while temporarily clamped should preserve the user's wider preferred width"
             )
@@ -1169,6 +1170,156 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             controller.tabID(for: latestRequest.surface),
             firstTabID,
             "The new split surface must stay attached to the visible workspace"
+        )
+    }
+
+    func testTabSwitchPreservesFocusedBrowserPanelSelection() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let firstTabID = controller.tabManager.activeTabID else {
+            XCTFail("Expected bootstrap tab")
+            return
+        }
+
+        controller.splitWithBrowserAction(nil)
+
+        guard let firstManager = controller.activeSplitManager,
+              let browserLeaf = firstManager.rootNode.allLeafIDs().first(where: {
+                  firstManager.panelType(for: $0.terminalID) == .browser
+              }) else {
+            XCTFail("Expected a focused browser panel after opening browser split")
+            return
+        }
+
+        XCTAssertEqual(
+            firstManager.focusedLeafID,
+            browserLeaf.leafID,
+            "Opening a browser panel from the toolbar should focus the browser split tab"
+        )
+
+        controller.newTabAction(nil)
+        guard let secondTabID = controller.tabManager.activeTabID,
+              secondTabID != firstTabID else {
+            XCTFail("Expected a second tab")
+            return
+        }
+
+        controller.tabManager.setActive(id: firstTabID)
+        controller.handleTabSwitch(to: firstTabID)
+
+        let restoredManager = controller.tabSplitCoordinator.splitManager(for: firstTabID)
+        XCTAssertEqual(
+            restoredManager.focusedLeafID,
+            browserLeaf.leafID,
+            "Returning to a tab must not let terminal first-responder fallback overwrite the focused browser leaf"
+        )
+
+        let activeBrowserTab = (controller.horizontalTabStripView as? HorizontalTabStripView)?
+            .tabs
+            .first(where: { $0.title == "Browser" })
+
+        XCTAssertEqual(
+            activeBrowserTab?.isActive,
+            true,
+            "The horizontal split tab strip must still highlight Browser after switching away and back"
+        )
+    }
+
+    func testTabSwitchPreservesFocusedMarkdownPanelSelection() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let firstTabID = controller.tabManager.activeTabID else {
+            XCTFail("Expected bootstrap tab")
+            return
+        }
+
+        controller.splitWithMarkdownAction(nil)
+
+        guard let firstManager = controller.activeSplitManager,
+              let markdownLeaf = firstManager.rootNode.allLeafIDs().first(where: {
+                  firstManager.panelType(for: $0.terminalID) == .markdown
+              }) else {
+            XCTFail("Expected a focused markdown panel after opening markdown split")
+            return
+        }
+
+        XCTAssertEqual(
+            firstManager.focusedLeafID,
+            markdownLeaf.leafID,
+            "Opening a markdown panel from the toolbar or menu should focus the markdown split tab"
+        )
+
+        controller.newTabAction(nil)
+        guard let secondTabID = controller.tabManager.activeTabID,
+              secondTabID != firstTabID else {
+            XCTFail("Expected a second tab")
+            return
+        }
+
+        controller.tabManager.setActive(id: firstTabID)
+        controller.handleTabSwitch(to: firstTabID)
+
+        let restoredManager = controller.tabSplitCoordinator.splitManager(for: firstTabID)
+        XCTAssertEqual(
+            restoredManager.focusedLeafID,
+            markdownLeaf.leafID,
+            "Returning to a tab must preserve the focused markdown leaf instead of falling back to terminal"
+        )
+
+        let activeMarkdownTab = (controller.horizontalTabStripView as? HorizontalTabStripView)?
+            .tabs
+            .first(where: { $0.title == "Markdown" })
+
+        XCTAssertEqual(
+            activeMarkdownTab?.isActive,
+            true,
+            "The horizontal split tab strip must still highlight Markdown after switching away and back"
+        )
+    }
+
+    func testToolbarSplitButtonsMapToVisualOrientation() {
+        let sideBySideController = MainWindowController(bridge: MockTerminalEngine())
+        sideBySideController.showWindow(nil)
+        let sideBySideStrip = sideBySideController.horizontalTabStripView as? HorizontalTabStripView
+
+        sideBySideStrip?.onSplitSideBySide?()
+
+        guard let sideBySideRoot = sideBySideController.activeSplitManager?.rootNode,
+              case .split(_, let sideBySideDirection, _, _, _) = sideBySideRoot else {
+            XCTFail("Split Side by Side should create a split tree")
+            return
+        }
+        XCTAssertEqual(
+            sideBySideDirection,
+            .horizontal,
+            "Split Side by Side must create a horizontal model split, rendered as left/right panes"
+        )
+
+        let stackedController = MainWindowController(bridge: MockTerminalEngine())
+        stackedController.showWindow(nil)
+        let stackedStrip = stackedController.horizontalTabStripView as? HorizontalTabStripView
+
+        stackedStrip?.onSplitStacked?()
+
+        guard let stackedRoot = stackedController.activeSplitManager?.rootNode,
+              case .split(_, let stackedDirection, _, _, _) = stackedRoot else {
+            XCTFail("Split Stacked should create a split tree")
+            return
+        }
+        XCTAssertEqual(
+            stackedDirection,
+            .vertical,
+            "Split Stacked must create a vertical model split, rendered as top/bottom panes"
         )
     }
 

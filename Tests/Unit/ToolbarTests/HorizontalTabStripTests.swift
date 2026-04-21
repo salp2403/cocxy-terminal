@@ -84,4 +84,31 @@ final class HorizontalTabStripTests: XCTestCase {
         XCTAssertEqual(strip.tabs.count, 1)
         XCTAssertEqual(strip.tabs[0].title, "X")
     }
+
+    // MARK: - Classic Top Tab Layout
+
+    func testPanelModeKeepsCompactLeadingInset() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+
+        strip.setItemKind(.panel)
+
+        XCTAssertEqual(strip.tabContentLeadingInsetForTesting, 8)
+    }
+
+    func testWorkspaceTabModeReservesTrafficLightSpace() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+
+        strip.setItemKind(.workspaceTab)
+
+        XCTAssertGreaterThanOrEqual(strip.tabContentLeadingInsetForTesting, 140)
+    }
+
+    func testSwitchingBackToPanelRestoresCompactInset() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+
+        strip.setItemKind(.workspaceTab)
+        strip.setItemKind(.panel)
+
+        XCTAssertEqual(strip.tabContentLeadingInsetForTesting, 8)
+    }
 }

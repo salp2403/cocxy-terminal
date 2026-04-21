@@ -74,7 +74,7 @@ extension MainWindowController {
         let panel: PanelInfo = FileManager.default.fileExists(atPath: readmePath.path)
             ? .markdown(path: readmePath)
             : PanelInfo(type: .markdown)
-        performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
+        performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true, focusNewPanel: true)
     }
 
     // MARK: - Split with Panel
@@ -128,7 +128,12 @@ extension MainWindowController {
             if let url = panel.initialURL {
                 browserVM.urlString = url.absoluteString
             }
-            let browserView = BrowserContentView(viewModel: browserVM)
+            let browserView = BrowserContentView(
+                viewModel: browserVM,
+                profileManager: browserProfileManager,
+                onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
+                onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() }
+            )
             panelView = browserView
         case .markdown:
             let workspaceDir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }

@@ -36,6 +36,15 @@ final class BrowserContentView: NSView {
     /// The view model driving this browser panel.
     let viewModel: BrowserViewModel
 
+    /// Shared browser profile manager injected by the window controller.
+    private let profileManager: BrowserProfileManager?
+
+    /// Called when the user requests the Browser Pro history panel.
+    private let onToggleHistory: (() -> Void)?
+
+    /// Called when the user requests the Browser Pro bookmarks panel.
+    private let onToggleBookmarks: (() -> Void)?
+
     /// The web view rendering page content.
     private var webView: WKWebView?
 
@@ -82,12 +91,20 @@ final class BrowserContentView: NSView {
 
     // MARK: - Initialization
 
-    init(viewModel: BrowserViewModel) {
+    init(
+        viewModel: BrowserViewModel,
+        profileManager: BrowserProfileManager? = nil,
+        onToggleHistory: (() -> Void)? = nil,
+        onToggleBookmarks: (() -> Void)? = nil
+    ) {
         self.viewModel = viewModel
+        self.profileManager = profileManager
+        self.onToggleHistory = onToggleHistory
+        self.onToggleBookmarks = onToggleBookmarks
         super.init(frame: .zero)
+        self.viewModel.activeProfileID = profileManager?.activeProfileID ?? viewModel.activeProfileID
         setupUI()
         bindViewModel()
-        installBrowserInstrumentation()
         // Load after binding so the subscription catches the navigation action.
         DispatchQueue.main.async { [weak viewModel] in
             viewModel?.loadDefaultPage()
@@ -147,7 +164,19 @@ final class BrowserContentView: NSView {
             symbol: "arrow.clockwise",
             action: #selector(reloadAction)
         )
-        toolbar.addSubview(reloadButton)
+        reloadButton.toolTip = "Reload"
+
+        let historyButton = createToolbarButton(
+            symbol: "clock.arrow.circlepath",
+            action: #selector(toggleHistoryAction)
+        )
+        historyButton.toolTip = "History"
+
+        let bookmarksButton = createToolbarButton(
+            symbol: "bookmark",
+            action: #selector(toggleBookmarksAction)
+        )
+        bookmarksButton.toolTip = "Bookmarks"
 
         // Find button.
         let findButton = createToolbarButton(
@@ -163,7 +192,38 @@ final class BrowserContentView: NSView {
             action: #selector(toggleDevToolsAction)
         )
         devToolsButton.toolTip = "Developer Tools"
-        toolbar.addSubview(devToolsButton)
+
+        let rightStack = NSStackView()
+        rightStack.orientation = .horizontal
+        rightStack.alignment = .centerY
+        rightStack.spacing = 2
+        rightStack.translatesAutoresizingMaskIntoConstraints = false
+        toolbar.addSubview(rightStack)
+
+        if let profileManager {
+            let selector = BrowserProfileSelector(
+                profileManager: profileManager,
+                onCreateProfile: {
+                    profileManager.createProfile(
+                        name: "Profile \(profileManager.profiles.count + 1)",
+                        icon: "person.circle",
+                        colorHex: "#89B4FA"
+                    )
+                },
+                onManageProfiles: nil
+            )
+            let profileHost = NSHostingView(rootView: selector)
+            profileHost.translatesAutoresizingMaskIntoConstraints = false
+            rightStack.addArrangedSubview(profileHost)
+            profileHost.widthAnchor.constraint(greaterThanOrEqualToConstant: 88).isActive = true
+            profileHost.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        }
+
+        rightStack.addArrangedSubview(historyButton)
+        rightStack.addArrangedSubview(bookmarksButton)
+        rightStack.addArrangedSubview(findButton)
+        rightStack.addArrangedSubview(devToolsButton)
+        rightStack.addArrangedSubview(reloadButton)
 
         // URL field.
         let field = NSTextField()
@@ -187,6 +247,8 @@ final class BrowserContentView: NSView {
         reloadButton.translatesAutoresizingMaskIntoConstraints = false
         findButton.translatesAutoresizingMaskIntoConstraints = false
         devToolsButton.translatesAutoresizingMaskIntoConstraints = false
+        historyButton.translatesAutoresizingMaskIntoConstraints = false
+        bookmarksButton.translatesAutoresizingMaskIntoConstraints = false
 
         self.toolbarContainer = toolbar
 
@@ -207,67 +269,30 @@ final class BrowserContentView: NSView {
             forwardButton.heightAnchor.constraint(equalToConstant: 24),
 
             field.leadingAnchor.constraint(equalTo: forwardButton.trailingAnchor, constant: 6),
-            field.trailingAnchor.constraint(equalTo: findButton.leadingAnchor, constant: -6),
+            field.trailingAnchor.constraint(equalTo: rightStack.leadingAnchor, constant: -6),
             field.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
             field.heightAnchor.constraint(equalToConstant: 22),
 
-            findButton.trailingAnchor.constraint(equalTo: devToolsButton.leadingAnchor, constant: -2),
-            findButton.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            rightStack.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -4),
+            rightStack.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+
             findButton.widthAnchor.constraint(equalToConstant: 24),
             findButton.heightAnchor.constraint(equalToConstant: 24),
 
-            devToolsButton.trailingAnchor.constraint(equalTo: reloadButton.leadingAnchor, constant: -2),
-            devToolsButton.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
             devToolsButton.widthAnchor.constraint(equalToConstant: 24),
             devToolsButton.heightAnchor.constraint(equalToConstant: 24),
 
-            reloadButton.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -4),
-            reloadButton.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor),
+            historyButton.widthAnchor.constraint(equalToConstant: 24),
+            historyButton.heightAnchor.constraint(equalToConstant: 24),
+
+            bookmarksButton.widthAnchor.constraint(equalToConstant: 24),
+            bookmarksButton.heightAnchor.constraint(equalToConstant: 24),
+
             reloadButton.widthAnchor.constraint(equalToConstant: 24),
             reloadButton.heightAnchor.constraint(equalToConstant: 24),
         ])
 
-        // Web view.
-        let config = WKWebViewConfiguration()
-        config.preferences.isElementFullscreenEnabled = true
-        let wv = WKWebView(frame: .zero, configuration: config)
-        wv.translatesAutoresizingMaskIntoConstraints = false
-        wv.navigationDelegate = self
-        wv.allowsBackForwardNavigationGestures = true
-        addSubview(wv)
-        self.webView = wv
-
-        let bottomConstraint = wv.bottomAnchor.constraint(equalTo: bottomAnchor)
-        self.webViewBottomConstraint = bottomConstraint
-
-        NSLayoutConstraint.activate([
-            wv.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
-            wv.leadingAnchor.constraint(equalTo: leadingAnchor),
-            wv.trailingAnchor.constraint(equalTo: trailingAnchor),
-            bottomConstraint,
-        ])
-
-        // KVO on WKWebView properties.
-        observations.append(wv.observe(\.canGoBack, options: .new) { [weak self] webView, _ in
-            Task { @MainActor in self?.viewModel.canGoBack = webView.canGoBack }
-        })
-        observations.append(wv.observe(\.canGoForward, options: .new) { [weak self] webView, _ in
-            Task { @MainActor in self?.viewModel.canGoForward = webView.canGoForward }
-        })
-        observations.append(wv.observe(\.isLoading, options: .new) { [weak self] webView, _ in
-            Task { @MainActor in self?.viewModel.isLoading = webView.isLoading }
-        })
-        observations.append(wv.observe(\.title, options: .new) { [weak self] webView, _ in
-            Task { @MainActor in self?.viewModel.pageTitle = webView.title ?? "" }
-        })
-        observations.append(wv.observe(\.url, options: .new) { [weak self] webView, _ in
-            Task { @MainActor in
-                self?.viewModel.currentURL = webView.url
-                if let urlStr = webView.url?.absoluteString {
-                    self?.urlField?.stringValue = urlStr
-                }
-            }
-        })
+        installWebViewForActiveProfile(loadCurrentURL: false)
     }
 
     private func createToolbarButton(symbol: String, action: Selector) -> NSButton {
@@ -285,6 +310,70 @@ final class BrowserContentView: NSView {
         return button
     }
 
+    private func installWebViewForActiveProfile(loadCurrentURL: Bool) {
+        let previousWebView = webView
+        if let previousWebView {
+            consoleCapture?.uninstall(from: previousWebView)
+        }
+        networkMonitor?.stopMonitoring()
+        observations.removeAll()
+        previousWebView?.navigationDelegate = nil
+        previousWebView?.removeFromSuperview()
+        webViewBottomConstraint = nil
+
+        let config = WKWebViewConfiguration()
+        config.preferences.isElementFullscreenEnabled = true
+        if let profileID = viewModel.activeProfileID {
+            config.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
+        }
+
+        let wv = WKWebView(frame: .zero, configuration: config)
+        wv.translatesAutoresizingMaskIntoConstraints = false
+        wv.navigationDelegate = self
+        wv.allowsBackForwardNavigationGestures = true
+        addSubview(wv, positioned: .below, relativeTo: toolbarContainer)
+        webView = wv
+
+        let topAnchor = findBarHostingView?.bottomAnchor ?? toolbarContainer?.bottomAnchor ?? self.topAnchor
+        let bottomAnchor = devToolsHostingView?.topAnchor ?? downloadsHostingView?.topAnchor ?? self.bottomAnchor
+        let bottomConstraint = wv.bottomAnchor.constraint(equalTo: bottomAnchor)
+        webViewBottomConstraint = bottomConstraint
+
+        NSLayoutConstraint.activate([
+            wv.topAnchor.constraint(equalTo: topAnchor),
+            wv.leadingAnchor.constraint(equalTo: leadingAnchor),
+            wv.trailingAnchor.constraint(equalTo: trailingAnchor),
+            bottomConstraint,
+        ])
+
+        observations.append(wv.observe(\.canGoBack, options: .new) { [weak self] webView, _ in
+            Task { @MainActor in self?.viewModel.canGoBack = webView.canGoBack }
+        })
+        observations.append(wv.observe(\.canGoForward, options: .new) { [weak self] webView, _ in
+            Task { @MainActor in self?.viewModel.canGoForward = webView.canGoForward }
+        })
+        observations.append(wv.observe(\.isLoading, options: .new) { [weak self] webView, _ in
+            Task { @MainActor in self?.viewModel.isLoading = webView.isLoading }
+        })
+        observations.append(wv.observe(\.title, options: .new) { [weak self] webView, _ in
+            Task { @MainActor in self?.viewModel.updateActiveTabTitle(webView.title ?? "") }
+        })
+        observations.append(wv.observe(\.url, options: .new) { [weak self] webView, _ in
+            Task { @MainActor in
+                self?.viewModel.currentURL = webView.url
+                if let urlStr = webView.url?.absoluteString {
+                    self?.urlField?.stringValue = urlStr
+                }
+            }
+        })
+
+        installBrowserInstrumentation()
+
+        if loadCurrentURL, let url = viewModel.currentURL {
+            wv.load(URLRequest(url: url))
+        }
+    }
+
     // MARK: - ViewModel Binding
 
     private func bindViewModel() {
@@ -292,6 +381,22 @@ final class BrowserContentView: NSView {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] action in
                 self?.handleNavigation(action)
+            }
+            .store(in: &cancellables)
+
+        profileManager?.$activeProfileID
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] profileID in
+                guard let self, self.viewModel.activeProfileID != profileID else { return }
+                self.viewModel.activeProfileID = profileID
+                if self.findBarHostingView != nil {
+                    self.dismissFindBar()
+                }
+                if self.devToolsHostingView != nil {
+                    self.dismissDevTools()
+                }
+                self.installWebViewForActiveProfile(loadCurrentURL: true)
             }
             .store(in: &cancellables)
     }
@@ -332,6 +437,14 @@ final class BrowserContentView: NSView {
 
     @objc private func reloadAction(_ sender: Any?) {
         viewModel.reload()
+    }
+
+    @objc private func toggleHistoryAction(_ sender: Any?) {
+        onToggleHistory?()
+    }
+
+    @objc private func toggleBookmarksAction(_ sender: Any?) {
+        onToggleBookmarks?()
     }
 
     // MARK: - Browser Instrumentation

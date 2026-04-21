@@ -128,6 +128,7 @@ final class MarkdownContentView: NSView {
             loadFile(path)
         } else {
             showEmptyState()
+            configureWorkspaceSidebarForEmptyState()
         }
     }
 
@@ -191,6 +192,7 @@ final class MarkdownContentView: NSView {
     }
 
     internal var sourceViewForTesting: MarkdownSourceView { sourceView }
+    internal var sidebarViewForTesting: MarkdownSidebarView { sidebar }
 
     // MARK: - Loading / Saving
 
@@ -464,7 +466,7 @@ final class MarkdownContentView: NSView {
 
     private func showEmptyState() {
         toolbar.fileName = "No file"
-        let placeholder = "Drop a .md file here or open one from the Command Palette."
+        let placeholder = "Drop a .md file here or choose one from the Files sidebar."
         document = MarkdownDocument(
             source: placeholder,
             frontmatter: MarkdownFrontmatter(),
@@ -473,6 +475,14 @@ final class MarkdownContentView: NSView {
             outline: .empty,
             bodyLineOffset: 0
         )
+    }
+
+    private func configureWorkspaceSidebarForEmptyState() {
+        guard let workspaceDirectory else { return }
+        sidebar.fileExplorer.setRootDirectory(workspaceDirectory)
+        sidebar.searchView.rootDirectory = workspaceDirectory
+        sidebar.fileExplorer.activeFilePath = nil
+        sidebar.selectTab(.files)
     }
 
     private func handleSourceEdited(_ source: String) {

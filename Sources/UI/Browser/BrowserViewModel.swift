@@ -91,8 +91,10 @@ final class BrowserViewModel: ObservableObject {
     /// History store for recording page visits. Injected by the window controller.
     var historyStore: BrowserHistoryStoring?
 
-    /// The active browser profile ID, used to associate visits with a profile.
-    var activeProfileID: UUID?
+    /// The active browser profile ID, used to associate visits and WebKit
+    /// storage with a profile. Published so active browser hosts can rebuild
+    /// their `WKWebView` with the matching `WKWebsiteDataStore`.
+    @Published var activeProfileID: UUID?
 
     /// Records a page visit to the history store.
     ///
@@ -116,6 +118,20 @@ final class BrowserViewModel: ObservableObject {
         } catch {
             NSLog("[BrowserViewModel] Failed to record visit: %@", String(describing: error))
         }
+    }
+
+    /// Switches the active browser profile and reloads the current page inside
+    /// the newly selected WebKit data store.
+    ///
+    /// The UI host owns the actual `WKWebView` lifecycle; publishing this value
+    /// lets the host recreate the web view with `WKWebsiteDataStore` scoped to
+    /// the selected profile. Hosts also perform a direct initial load after
+    /// recreation so the page lands in the correct profile even if this signal
+    /// races ahead of the new subscriber.
+    func activateProfile(_ profileID: UUID?) {
+        guard activeProfileID != profileID else { return }
+        activeProfileID = profileID
+        navigationActionSubject.send(.load(currentURL ?? BrowserTab.defaultURL))
     }
 
     // MARK: - Initialization

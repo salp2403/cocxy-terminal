@@ -113,6 +113,42 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    // MARK: - Discoverable Panels
+
+    func testRemoteWorkspacesHasAction() {
+        let remote = viewMenu.items.first(where: { $0.title == "Remote Workspaces..." })
+        XCTAssertNotNil(
+            remote?.action,
+            "Remote Workspaces must be discoverable from the View menu"
+        )
+    }
+
+    func testRemoteWorkspacesActionPointsToCorrectSelector() {
+        let remote = viewMenu.items.first(where: { $0.title == "Remote Workspaces..." })
+        XCTAssertEqual(
+            remote?.action,
+            #selector(MainWindowController.toggleRemoteWorkspacePanelAction(_:)),
+            "Remote Workspaces must open the real remote workspace panel"
+        )
+    }
+
+    func testOpenMarkdownPanelHasAction() {
+        let markdown = viewMenu.items.first(where: { $0.title == "Open Markdown Panel" })
+        XCTAssertNotNil(
+            markdown?.action,
+            "Open Markdown Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenMarkdownPanelActionPointsToCorrectSelector() {
+        let markdown = viewMenu.items.first(where: { $0.title == "Open Markdown Panel" })
+        XCTAssertEqual(
+            markdown?.action,
+            #selector(MainWindowController.splitWithMarkdownAction(_:)),
+            "Open Markdown Panel must create the real markdown split panel"
+        )
+    }
+
     // MARK: - New Window
 
     func testNewWindowHasAction() {

@@ -201,8 +201,8 @@ struct WelcomeOverlayView: View {
             VStack(alignment: .leading, spacing: 4) {
                 shortcutRow("Cmd+T", "New Tab")
                 shortcutRow("Cmd+W", "Close Tab")
-                shortcutRow("Cmd+D", "Split Horizontal")
-                shortcutRow("Cmd+Shift+D", "Split Vertical")
+                shortcutRow("Cmd+D", "Split Side by Side")
+                shortcutRow("Cmd+Shift+D", "Split Stacked")
                 shortcutRow("Cmd+Shift+P", "Command Palette")
                 shortcutRow("Cmd+Option+A", "Agent Dashboard")
                 shortcutRow("Cmd+Shift+T", "Agent Timeline")

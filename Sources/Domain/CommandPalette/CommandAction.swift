@@ -39,7 +39,7 @@ struct CommandAction: Identifiable, Sendable {
     /// Unique identifier for this action (e.g., "tabs.new", "splits.vertical").
     let id: String
 
-    /// Display name shown in the palette (e.g., "Split Vertical").
+    /// Display name shown in the palette (e.g., "Split Side by Side").
     let name: String
 
     /// Short description of what the action does.

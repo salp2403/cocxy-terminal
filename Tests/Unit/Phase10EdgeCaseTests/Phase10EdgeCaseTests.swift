@@ -70,7 +70,7 @@ final class Phase10EdgeCaseTests: XCTestCase {
             String(repeating: ".", count: 50),
             "\u{200B}\u{FEFF}",  // zero-width space + BOM
         ]
-        let target = "Split Vertical"
+        let target = "Split Stacked"
 
         for query in specialQueries {
             // Solo verificamos que no crashea. El resultado puede ser nil.

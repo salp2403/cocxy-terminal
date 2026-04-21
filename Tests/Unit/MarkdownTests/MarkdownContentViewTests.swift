@@ -18,6 +18,18 @@ struct MarkdownContentViewTests {
         #expect(view.filePath == nil)
     }
 
+    @Test("init without file still primes workspace file browser")
+    func initWithoutFilePrimesWorkspaceFileBrowser() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { cleanup(directory) }
+
+        let view = MarkdownContentView(filePath: nil, workspaceDirectory: directory)
+
+        #expect(view.sidebarViewForTesting.fileExplorer.rootDirectory == directory)
+    }
+
     @Test("init with valid path sets filePath")
     func initWithValidPath() {
         let url = createTempMarkdownFile(content: "# Hello")

@@ -52,6 +52,18 @@ final class RemoteConnectionViewModel: ObservableObject {
             case .sftp: return "folder"
             }
         }
+
+        var detail: String {
+            switch self {
+            case .sessions: return "Persistent shell sessions"
+            case .tunnels: return "Forward local and remote ports"
+            case .proxy: return "System proxy controls"
+            case .relay: return "Relay channels"
+            case .daemon: return "Remote helper daemon"
+            case .keys: return "SSH identities"
+            case .sftp: return "Remote file browser"
+            }
+        }
     }
 
     // MARK: - Published State
@@ -292,7 +304,7 @@ struct RemoteConnectionView: View {
     @State private var keyManagerVM: SSHKeyManagerViewModel?
     @State private var sftpBrowserVM: SFTPBrowserViewModel?
 
-    static let panelWidth: CGFloat = 320
+    static let panelWidth: CGFloat = 380
 
     // MARK: - Body
 
@@ -375,10 +387,24 @@ struct RemoteConnectionView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .onSubmit { viewModel.quickConnect() }
+
+            Button(action: { viewModel.quickConnect() }) {
+                Image(systemName: "arrow.right.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(
+                        viewModel.quickConnectText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? Color(nsColor: CocxyColors.overlay0)
+                            : Color(nsColor: CocxyColors.blue)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.quickConnectText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityLabel("Connect to quick connect host")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color(nsColor: CocxyColors.crust).opacity(0.5))
+        .help("Type user@host:port, then press Return or the arrow to connect.")
     }
 
     // MARK: - Profile List
@@ -462,19 +488,34 @@ struct RemoteConnectionView: View {
     // MARK: - Profile Empty State
 
     private var profileEmptyState: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             Spacer()
             Image(systemName: "network")
                 .font(.system(size: 28))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No saved profiles")
-                .font(.system(size: 12, weight: .medium))
+            Text("No remote profiles yet")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Add a profile or use Quick Connect\nto reach a remote host.")
+            Text("Save SSH hosts for repeat work, or use Quick Connect above for a one-off connection.")
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
+                .padding(.horizontal, 24)
+
+            Button(action: { viewModel.presentNewProfile() }) {
+                Label("Add Profile", systemImage: "plus.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(Color(nsColor: CocxyColors.blue).opacity(0.18))
+                    )
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(Color(nsColor: CocxyColors.blue))
+            .accessibilityLabel("Add remote profile")
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -484,39 +525,53 @@ struct RemoteConnectionView: View {
     // MARK: - Sub-Panel Picker
 
     private var subPanelPicker: some View {
-        HStack(spacing: 0) {
-            ForEach(RemoteConnectionViewModel.SubPanel.allCases) { panel in
-                subPanelTab(panel)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(RemoteConnectionViewModel.SubPanel.allCases) { panel in
+                    subPanelTab(panel)
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .frame(height: 50)
+        .background(Color(nsColor: CocxyColors.crust).opacity(0.35))
     }
 
     private func subPanelTab(_ panel: RemoteConnectionViewModel.SubPanel) -> some View {
         let isSelected = viewModel.selectedSubPanel == panel
         return Button(action: { viewModel.selectedSubPanel = panel }) {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: panel.icon)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11, weight: .semibold))
                 Text(panel.label)
-                    .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(
                 isSelected
                     ? Color(nsColor: CocxyColors.text)
                     : Color(nsColor: CocxyColors.overlay1)
             )
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 11)
+            .frame(height: 32)
             .background(
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(isSelected ? Color(nsColor: CocxyColors.surface0) : Color.clear)
+                Capsule()
+                    .fill(isSelected ? Color(nsColor: CocxyColors.surface0) : Color(nsColor: CocxyColors.base).opacity(0.35))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(
+                        isSelected ? Color(nsColor: CocxyColors.blue).opacity(0.45) : Color(nsColor: CocxyColors.surface1).opacity(0.55),
+                        lineWidth: 1
+                    )
             )
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(panel.label) sub-panel")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .help(panel.detail)
     }
 
     // MARK: - Sub-Panel Content

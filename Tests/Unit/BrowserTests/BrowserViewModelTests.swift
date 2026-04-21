@@ -122,6 +122,39 @@ final class BrowserViewModelTests: XCTestCase {
         cancellable.cancel()
     }
 
+    func testActivateProfilePublishesProfileIDAndReloadsCurrentURL() {
+        let vm = BrowserViewModel()
+        let profileID = UUID()
+        vm.navigate(to: "https://example.com/profile")
+
+        var received: BrowserViewModel.NavigationAction?
+        let cancellable = vm.navigationActionSubject.sink { received = $0 }
+
+        vm.activateProfile(profileID)
+
+        XCTAssertEqual(vm.activeProfileID, profileID)
+        if case .load(let url) = received {
+            XCTAssertEqual(url.absoluteString, "https://example.com/profile")
+        } else {
+            XCTFail("Expected profile activation to reload the current URL")
+        }
+        cancellable.cancel()
+    }
+
+    func testActivateSameProfileDoesNotReload() {
+        let vm = BrowserViewModel()
+        let profileID = UUID()
+        vm.activeProfileID = profileID
+
+        var reloadCount = 0
+        let cancellable = vm.navigationActionSubject.sink { _ in reloadCount += 1 }
+
+        vm.activateProfile(profileID)
+
+        XCTAssertEqual(reloadCount, 0)
+        cancellable.cancel()
+    }
+
     func testAddBrowserTabEmitsLoadForNewTabURL() {
         let vm = BrowserViewModel()
         var received: BrowserViewModel.NavigationAction?

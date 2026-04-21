@@ -134,7 +134,7 @@ final class CommandPaletteViewModel: ObservableObject {
 /// |-----------------------------------------------|
 /// | [Tabs]   New Tab                     Cmd+T    |
 /// | [Tabs]   Close Tab                   Cmd+W    |
-/// | [Splits] Split Horizontal            Cmd+D    |
+/// | [Splits] Split Side by Side          Cmd+D    |
 /// | [Theme]  Toggle Theme                         |
 /// | ...                                           |
 /// +-----------------------------------------------+
@@ -146,7 +146,7 @@ final class CommandPaletteViewModel: ObservableObject {
 /// - Up/Down arrows: navigate results.
 /// - Enter: execute selected action.
 /// - Esc: dismiss.
-/// - Search is fuzzy: "sv" matches "Split Vertical".
+/// - Search is fuzzy: "ss" matches "Split Stacked".
 ///
 /// ## Design
 ///

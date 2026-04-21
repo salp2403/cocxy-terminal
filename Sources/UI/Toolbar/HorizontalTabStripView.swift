@@ -20,6 +20,15 @@ import AppKit
 @MainActor
 final class HorizontalTabStripView: NSView {
 
+    /// The strip can represent either top-level workspace tabs or the
+    /// focused tab's split/panel leaves. Labels and context menus need to
+    /// match the active mode so `tab-position = top` does not look like a
+    /// pane toolbar.
+    enum ItemKind {
+        case workspaceTab
+        case panel
+    }
+
     // MARK: - Properties
 
     /// Callback when "Terminal (Side by Side)" is selected from the add menu.
@@ -64,14 +73,35 @@ final class HorizontalTabStripView: NSView {
     /// Callback when the "Forward" action icon is clicked in a browser panel.
     var onGoForward: (() -> Void)?
 
-    /// Callback when the "Close Panel" action icon is clicked.
+    /// Callback when the "Close Focused Pane" action icon is clicked.
     var onClosePanel: (() -> Void)?
+
+    /// Callback when the one-click light/dark theme toggle is clicked.
+    var onToggleThemeMode: (() -> Void)?
 
     /// Callback when a tab is renamed by double-click. Parameters: (index, newTitle).
     var onRenameTab: ((Int, String) -> Void)?
 
     /// Current tab items.
     private(set) var tabs: [(title: String, icon: String, isActive: Bool)] = []
+
+    /// Current semantic mode for close labels, context menus and rename UI.
+    private var itemKind: ItemKind = .panel
+
+    /// Leading inset used by the split/panel toolbar variant.
+    private static let panelLeadingInset: CGFloat = 8
+
+    /// Leading inset used when the strip becomes the classic top-level tab bar.
+    ///
+    /// In `tab-position = top` the strip spans the full width of the content
+    /// view and sits under the window's traffic-light buttons. Without this
+    /// reserve, the first tab starts at x=0 and is partially hidden by the
+    /// red/yellow/green controls.
+    private static let workspaceTabLeadingInset: CGFloat = 150
+
+    /// Stored so `setItemKind(_:)` can move only the tab content while keeping
+    /// the right-side action buttons anchored to the window edge.
+    private var tabStackLeadingConstraint: NSLayoutConstraint?
 
     /// The stack view holding tab buttons.
     private let tabStack: NSStackView = {
@@ -103,6 +133,19 @@ final class HorizontalTabStripView: NSView {
         stack.spacing = 2
         stack.translatesAutoresizingMaskIntoConstraints = false
         return stack
+    }()
+
+    /// One-click light/dark toggle that lives next to the split/action
+    /// controls instead of crowding the workspace sidebar header.
+    private let themeModeButton: NSButton = {
+        let btn = NSButton()
+        btn.bezelStyle = .accessoryBarAction
+        btn.isBordered = false
+        btn.wantsLayer = true
+        btn.contentTintColor = CocxyColors.overlay1
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.setAccessibilityLabel("Toggle light or dark theme")
+        return btn
     }()
 
     /// Vibrancy background for glass effect when transparency is enabled.
@@ -159,11 +202,21 @@ final class HorizontalTabStripView: NSView {
 
         addSubview(tabStack)
         addSubview(actionStack)
+        addSubview(themeModeButton)
         addSubview(addButton)
         addSubview(borderLine)
 
         addButton.target = self
         addButton.action = #selector(addButtonClicked)
+        themeModeButton.target = self
+        themeModeButton.action = #selector(themeModeButtonClicked)
+        setThemeMode(isLight: false)
+
+        let tabStackLeadingConstraint = tabStack.leadingAnchor.constraint(
+            equalTo: leadingAnchor,
+            constant: Self.panelLeadingInset
+        )
+        self.tabStackLeadingConstraint = tabStackLeadingConstraint
 
         NSLayoutConstraint.activate([
             // Background layers fill the entire view.
@@ -177,12 +230,17 @@ final class HorizontalTabStripView: NSView {
             solidOverlay.topAnchor.constraint(equalTo: topAnchor),
             solidOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            tabStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            tabStackLeadingConstraint,
             tabStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             tabStack.trailingAnchor.constraint(lessThanOrEqualTo: actionStack.leadingAnchor, constant: -8),
 
-            actionStack.trailingAnchor.constraint(equalTo: addButton.leadingAnchor, constant: -6),
+            actionStack.trailingAnchor.constraint(equalTo: themeModeButton.leadingAnchor, constant: -6),
             actionStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            themeModeButton.trailingAnchor.constraint(equalTo: addButton.leadingAnchor, constant: -4),
+            themeModeButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            themeModeButton.widthAnchor.constraint(equalToConstant: 22),
+            themeModeButton.heightAnchor.constraint(equalToConstant: 22),
 
             addButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             addButton.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -220,6 +278,20 @@ final class HorizontalTabStripView: NSView {
         vibrancyView.appearance = appearance
     }
 
+    /// Updates the theme toggle affordance without invoking the action.
+    ///
+    /// - Parameter isLight: `true` when the active theme is light. The
+    ///   icon points at the next action: moon = switch back to dark,
+    ///   sun = switch to light.
+    func setThemeMode(isLight: Bool) {
+        let symbol = isLight ? "moon.fill" : "sun.max.fill"
+        let tooltip = isLight ? "Switch to dark theme" : "Switch to light theme"
+        if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: tooltip) {
+            themeModeButton.image = img.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
+        }
+        themeModeButton.toolTip = tooltip
+    }
+
     /// Updates the tab strip with the given tab items.
     func updateTabs(_ newTabs: [(title: String, icon: String, isActive: Bool)]) {
         self.tabs = newTabs
@@ -241,6 +313,28 @@ final class HorizontalTabStripView: NSView {
         }
     }
 
+    /// Updates the semantic meaning of the strip items.
+    ///
+    /// `workspaceTab` is used when classic tabs live at the top of the
+    /// window. `panel` is used everywhere else, where the strip controls
+    /// panes inside the active tab.
+    func setItemKind(_ itemKind: ItemKind) {
+        let inset = itemKind == .workspaceTab
+            ? Self.workspaceTabLeadingInset
+            : Self.panelLeadingInset
+        tabStackLeadingConstraint?.constant = inset
+
+        guard self.itemKind != itemKind else { return }
+        self.itemKind = itemKind
+        updateTabs(tabs)
+    }
+
+    /// Exposes the active leading reserve to regression tests without making
+    /// the stack view itself part of the public surface area.
+    var tabContentLeadingInsetForTesting: CGFloat {
+        tabStackLeadingConstraint?.constant ?? Self.panelLeadingInset
+    }
+
     // MARK: - Tab Container Creation
 
     private func createTabContainer(
@@ -254,6 +348,7 @@ final class HorizontalTabStripView: NSView {
         container.wantsLayer = true
         container.translatesAutoresizingMaskIntoConstraints = false
         container.tabIndex = index
+        container.itemKind = itemKind
         container.onReorder = { [weak self] fromIndex, toIndex in
             self?.onSwapTabs?(fromIndex, toIndex)
         }
@@ -305,7 +400,7 @@ final class HorizontalTabStripView: NSView {
         return container
     }
 
-    /// Builds a context menu for reordering a horizontal tab.
+    /// Builds a context menu for reordering a horizontal tab or panel.
     private func buildTabContextMenu(index: Int, isFirst: Bool, isLast: Bool) -> NSMenu {
         let menu = NSMenu()
 
@@ -338,7 +433,7 @@ final class HorizontalTabStripView: NSView {
         menu.addItem(NSMenuItem.separator())
 
         let closeItem = NSMenuItem(
-            title: "Close Panel",
+            title: itemKind == .workspaceTab ? "Close Tab" : "Close Panel",
             action: #selector(closeTabClicked(_:)),
             keyEquivalent: ""
         )
@@ -409,8 +504,9 @@ final class HorizontalTabStripView: NSView {
         btn.target = self
         btn.action = #selector(closeTabClicked(_:))
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.setAccessibilityLabel("Close tab")
-        btn.toolTip = "Close panel"
+        let label = itemKind == .workspaceTab ? "Close tab" : "Close panel"
+        btn.setAccessibilityLabel(label)
+        btn.toolTip = label
         return btn
     }
 
@@ -499,7 +595,7 @@ final class HorizontalTabStripView: NSView {
         // Split actions are available for all panel types.
         actionStack.addArrangedSubview(
             createActionButton(
-                icon: "rectangle.split.1x2",
+                icon: "rectangle.split.2x1",
                 tooltip: "Split Side by Side",
                 accessibilityID: "action:splitSideBySide",
                 action: #selector(handleSplitSideBySide)
@@ -507,7 +603,7 @@ final class HorizontalTabStripView: NSView {
         )
         actionStack.addArrangedSubview(
             createActionButton(
-                icon: "rectangle.split.2x1",
+                icon: "rectangle.split.1x2",
                 tooltip: "Split Stacked",
                 accessibilityID: "action:splitStacked",
                 action: #selector(handleSplitStacked)
@@ -564,8 +660,8 @@ final class HorizontalTabStripView: NSView {
         if canClose {
             actionStack.addArrangedSubview(
                 createActionButton(
-                    icon: "xmark",
-                    tooltip: "Close Panel",
+                    icon: "rectangle.badge.xmark",
+                    tooltip: "Close Focused Pane",
                     accessibilityID: "action:closePanel",
                     action: #selector(handleClosePanel)
                 )
@@ -609,6 +705,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleGoBack() { onGoBack?() }
     @objc private func handleGoForward() { onGoForward?() }
     @objc private func handleClosePanel() { onClosePanel?() }
+    @objc private func themeModeButtonClicked() { onToggleThemeMode?() }
 
     // MARK: - Drag-and-Drop Pasteboard Type
 
@@ -649,6 +746,9 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
 
     /// The index of this tab in the strip.
     var tabIndex: Int = 0
+
+    /// Semantic meaning of the item represented by this container.
+    var itemKind: HorizontalTabStripView.ItemKind = .panel
 
     /// Callback invoked when a tab is dropped onto this container.
     /// Parameters: (sourceIndex, destinationIndex).
@@ -834,8 +934,8 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
         RenameSheetController.present(
             on: parentWindow,
             currentName: currentTitle,
-            placeholder: "Panel name",
-            icon: "rectangle.split.2x1"
+            placeholder: itemKind == .workspaceTab ? "Tab name" : "Panel name",
+            icon: itemKind == .workspaceTab ? "terminal.fill" : "rectangle.split.2x1"
         ) { [weak self] newTitle in
             self?.isEditing = false
             if let newTitle {

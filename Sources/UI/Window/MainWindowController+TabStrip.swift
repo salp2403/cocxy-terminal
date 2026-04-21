@@ -10,10 +10,38 @@ import AppKit
 /// and updates the strip view.
 extension MainWindowController {
 
+    /// `tab-position = top` is a classic-chrome navigation mode: the left
+    /// sidebar is collapsed and the horizontal strip must represent the
+    /// window's real tabs. In every other layout the strip keeps its existing
+    /// job as the active tab's split/panel selector.
+    var usesTopLevelTabsInHorizontalStrip: Bool {
+        configService?.current.appearance.auroraEnabled != true &&
+            configService?.current.appearance.tabPosition == .top
+    }
+
     /// Updates the horizontal tab strip to reflect current workspace state.
-    func refreshTabStrip() {
+    func refreshTabStrip(syncFromFirstResponder: Bool = true) {
         guard let strip = horizontalTabStripView as? HorizontalTabStripView else { return }
-        syncFocusedLeafSelectionFromFirstResponder()
+        if syncFromFirstResponder {
+            syncFocusedLeafSelectionFromFirstResponder()
+        }
+
+        if usesTopLevelTabsInHorizontalStrip {
+            strip.setItemKind(.workspaceTab)
+            let activeID = visibleTabID ?? tabManager.activeTabID
+            let tabEntries = tabManager.tabs.map { tab in
+                (
+                    title: tab.displayTitle,
+                    icon: "terminal.fill",
+                    isActive: tab.id == activeID
+                )
+            }
+            strip.updateTabs(tabEntries.isEmpty ? [(title: "Terminal", icon: "terminal.fill", isActive: true)] : tabEntries)
+            updateHorizontalStripActionIcons(strip)
+            return
+        }
+
+        strip.setItemKind(.panel)
 
         // Build tab entries from the visible tab's split panes.
         var tabEntries: [(title: String, icon: String, isActive: Bool)] = []
@@ -73,6 +101,10 @@ extension MainWindowController {
         strip.updateTabs(tabEntries)
 
         // Update contextual action icons based on the focused panel type.
+        updateHorizontalStripActionIcons(strip)
+    }
+
+    private func updateHorizontalStripActionIcons(_ strip: HorizontalTabStripView) {
         if let targetTabID = visibleTabID ?? tabManager.activeTabID {
             let sm = tabSplitCoordinator.splitManager(for: targetTabID)
             let leaves = sm.rootNode.allLeafIDs()

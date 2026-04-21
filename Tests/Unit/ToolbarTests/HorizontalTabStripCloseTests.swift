@@ -53,23 +53,48 @@ final class HorizontalTabStripCloseTests: XCTestCase {
         )
     }
 
+    func testWorkspaceTabModeUsesTabCloseLabel() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.setItemKind(.workspaceTab)
+        strip.updateTabs([
+            (title: "One", icon: "terminal.fill", isActive: true),
+            (title: "Two", icon: "terminal.fill", isActive: false),
+        ])
+
+        let closeButtons = findCloseButtons(in: strip, label: "Close tab")
+        XCTAssertEqual(closeButtons.count, 2)
+    }
+
+    func testPanelModeUsesPanelCloseLabel() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.setItemKind(.panel)
+        strip.updateTabs([
+            (title: "Terminal", icon: "terminal.fill", isActive: true),
+            (title: "Browser", icon: "globe", isActive: false),
+        ])
+
+        let closeButtons = findCloseButtons(in: strip, label: "Close panel")
+        XCTAssertEqual(closeButtons.count, 2)
+    }
+
     // MARK: - Helpers
 
-    private func findCloseButtons(in view: NSView) -> [NSButton] {
+    private func findCloseButtons(in view: NSView, label: String? = nil) -> [NSButton] {
         var result: [NSButton] = []
         for subview in view.subviews {
-            findCloseButtonsRecursive(in: subview, result: &result)
+            findCloseButtonsRecursive(in: subview, label: label, result: &result)
         }
         return result
     }
 
-    private func findCloseButtonsRecursive(in view: NSView, result: inout [NSButton]) {
+    private func findCloseButtonsRecursive(in view: NSView, label: String?, result: inout [NSButton]) {
         if let button = view as? NSButton,
-           button.accessibilityLabel() == "Close tab" {
+           ["Close tab", "Close panel"].contains(button.accessibilityLabel() ?? ""),
+           label == nil || button.accessibilityLabel() == label {
             result.append(button)
         }
         for child in view.subviews {
-            findCloseButtonsRecursive(in: child, result: &result)
+            findCloseButtonsRecursive(in: child, label: label, result: &result)
         }
     }
 }

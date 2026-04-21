@@ -38,6 +38,8 @@ struct BrowserPanelView: View {
 
     @ObservedObject var viewModel: BrowserViewModel
     var profileManager: BrowserProfileManager?
+    var onToggleHistory: (() -> Void)?
+    var onToggleBookmarks: (() -> Void)?
     var onDismiss: () -> Void
 
     /// Forced `NSAppearance` for the translucent panel background.
@@ -144,7 +146,11 @@ struct BrowserPanelView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Browser Panel")
         .onAppear {
+            viewModel.activeProfileID = profileManager?.activeProfileID
             viewModel.loadDefaultPage()
+        }
+        .onChange(of: profileManager?.activeProfileID) { _, profileID in
+            viewModel.activateProfile(profileID)
         }
     }
 
@@ -282,6 +288,30 @@ struct BrowserPanelView: View {
             .accessibilityLabel("Find in page")
             .help("Find in page")
 
+            if let onToggleHistory {
+                Button(action: onToggleHistory) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 22, height: 22)
+                .accessibilityLabel("Open browser history")
+                .help("History")
+            }
+
+            if let onToggleBookmarks {
+                Button(action: onToggleBookmarks) {
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 22, height: 22)
+                .accessibilityLabel("Open browser bookmarks")
+                .help("Bookmarks")
+            }
+
             Button(action: { showDownloads.toggle() }) {
                 Image(systemName: "arrow.down.circle")
                     .font(.system(size: 10, weight: .medium))
@@ -389,6 +419,7 @@ struct BrowserPanelView: View {
                         }
                     }
                 )
+                .id(viewModel.activeProfileID)
             } else {
                 emptyStateView
             }
@@ -550,6 +581,9 @@ struct WebViewRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        if let profileID = viewModel.activeProfileID {
+            configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
+        }
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -580,9 +614,13 @@ struct WebViewRepresentable: NSViewRepresentable {
         context.coordinator.webView = webView
         context.coordinator.subscribeToNavigationActions()
 
-        // Navigation is driven by the onAppear -> loadDefaultPage ->
-        // navigationActionSubject flow. No direct load here to avoid
-        // double-loading the URL.
+        // Load directly on creation as well as through the action publisher.
+        // This is load-bearing for profile switches: SwiftUI recreates the
+        // WKWebView with a new data store, then this initial load lands in
+        // the correct profile even if the publish happened before subscribe.
+        if let url = viewModel.currentURL {
+            webView.load(URLRequest(url: url))
+        }
 
         return webView
     }

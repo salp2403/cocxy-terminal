@@ -56,6 +56,13 @@ final class CocxyCoreView: NSView {
     /// Closure called when the user submits input (Enter key).
     var onUserInputSubmitted: (() -> Void)?
 
+    /// Closure called when the user directly interacts with this
+    /// surface and expects it to become the focused split. The window
+    /// controller uses this to keep split-manager focus, the top tab
+    /// strip, Aurora sidebar/status and agent overlays in sync with
+    /// AppKit first-responder changes.
+    var onFocusRequested: (() -> Void)?
+
     /// Closure called when files are dropped onto the terminal.
     var onFileDrop: (([URL]) -> Bool)?
 
@@ -703,6 +710,8 @@ final class CocxyCoreView: NSView {
     // MARK: - Mouse Input + Selection
 
     override func mouseDown(with event: NSEvent) {
+        onFocusRequested?()
+
         guard let bridge = bridge, let sid = surfaceID,
               let state = bridge.surfaceState(for: sid) else {
             super.mouseDown(with: event)

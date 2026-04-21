@@ -72,7 +72,7 @@ extension MainWindowController {
     /// and the agent-progress overlay may keep showing the previous
     /// split's metrics.
     ///
-    /// This method explicitly fans the change out to five places:
+    /// This method explicitly fans the change out to six places:
     /// 1. The split manager's `focusedLeafID` (so `paneSnapshot()` and
     ///    downstream consumers agree on who owns focus).
     /// 2. The sidebar view model (so per-split mini-pills re-render
@@ -80,7 +80,9 @@ extension MainWindowController {
     /// 3. The status bar (so the per-split mini-matrix re-renders).
     /// 4. The per-terminal agent progress overlay (so its counters
     ///    follow the newly focused split).
-    /// 5. The horizontal tab strip (so the active-leaf highlight
+    /// 5. The Aurora chrome controller (so its sidebar/status snapshots
+    ///    follow the same focused split as the classic chrome).
+    /// 6. The horizontal tab strip (so the active-leaf highlight
     ///    follows the new focused split instead of the previous one).
     @MainActor
     func applyFocusToSurface(surfaceID: SurfaceID) {
@@ -109,6 +111,7 @@ extension MainWindowController {
         tabBarViewModel?.syncWithManager()
         refreshStatusBar()
         updateAgentProgressOverlay()
+        auroraChromeController?.refreshSources()
         refreshTabStrip()
     }
 
