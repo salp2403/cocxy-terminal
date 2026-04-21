@@ -115,16 +115,15 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
         return branch
     }
 
-    /// Returns whether the directory contains a `.git/HEAD` file.
+    /// Returns whether the directory is a git repository — either a
+    /// regular worktree (where `.git` is a directory containing `HEAD`)
+    /// or a linked worktree / submodule (where `.git` is a file whose
+    /// contents are `gitdir: <path>` pointing at the actual git dir).
     ///
     /// - Parameter directory: Path to check.
-    /// - Returns: `true` if `.git/HEAD` exists in the directory.
+    /// - Returns: `true` if the directory's `HEAD` file can be resolved.
     func isGitRepository(at directory: URL) -> Bool {
-        let headPath = directory
-            .appendingPathComponent(".git")
-            .appendingPathComponent("HEAD")
-            .path
-        return FileManager.default.fileExists(atPath: headPath)
+        resolveHeadURL(at: directory) != nil
     }
 
     /// Observes branch changes for a directory.
@@ -148,12 +147,13 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
         storeCacheEntry(branch: currentBranchValue, for: directoryPath)
         handler(currentBranchValue)
 
-        // Set up file watcher on .git/HEAD.
-        let headURL = directory
-            .appendingPathComponent(".git")
-            .appendingPathComponent("HEAD")
-
-        guard FileManager.default.fileExists(atPath: headURL.path) else {
+        // Set up file watcher on HEAD. Linked worktrees store their HEAD
+        // outside `.git`, so the URL must be resolved via `resolveHeadURL`
+        // before opening the fd — watching `<worktree>/.git/HEAD` would
+        // silently fail because the path does not exist for linked
+        // worktrees (their `.git` is a file, not a directory).
+        guard let headURL = resolveHeadURL(at: directory),
+              FileManager.default.fileExists(atPath: headURL.path) else {
             // Not a git repo -- nothing to watch.
             return AnyCancellable {}
         }
@@ -227,14 +227,73 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
 
     // MARK: - Private Helpers
 
-    /// Reads the branch name from `.git/HEAD` on disk.
+    /// Resolves the on-disk `HEAD` file for a given working directory.
     ///
-    /// - Parameter directory: The directory containing the git repository.
-    /// - Returns: The branch name, or `nil` if not a git repo or detached HEAD.
+    /// Handles three cases:
+    /// 1. **Regular repository** — `.git` is a directory and `HEAD`
+    ///    lives at `.git/HEAD`.
+    /// 2. **Linked worktree or submodule** — `.git` is a text file whose
+    ///    contents begin with `gitdir: <path>`. The real git dir lives
+    ///    at `<path>` and HEAD lives at `<path>/HEAD`. `<path>` can be
+    ///    absolute (linked worktrees) or relative to the directory
+    ///    containing the `.git` file (submodules).
+    /// 3. **Not a git repository** — `.git` does not exist at all.
+    ///
+    /// - Parameter directory: A candidate working directory.
+    /// - Returns: URL to the `HEAD` file, or `nil` when neither case 1
+    ///   nor case 2 applies.
+    private func resolveHeadURL(at directory: URL) -> URL? {
+        let dotGitURL = directory.appendingPathComponent(".git")
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: dotGitURL.path,
+            isDirectory: &isDirectory
+        ) else {
+            return nil
+        }
+
+        if isDirectory.boolValue {
+            // Case 1: regular `.git/` directory.
+            return dotGitURL.appendingPathComponent("HEAD")
+        }
+
+        // Case 2: `.git` is a file — follow the `gitdir:` pointer.
+        guard let content = try? String(contentsOf: dotGitURL, encoding: .utf8) else {
+            return nil
+        }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = "gitdir: "
+        guard trimmed.hasPrefix(prefix) else { return nil }
+
+        let rawPath = String(trimmed.dropFirst(prefix.count))
+        guard !rawPath.isEmpty else { return nil }
+
+        let gitdirURL: URL
+        if rawPath.hasPrefix("/") {
+            gitdirURL = URL(fileURLWithPath: rawPath)
+        } else {
+            // Relative paths are resolved against the directory that
+            // contains the `.git` file (i.e., the worktree root).
+            gitdirURL = directory
+                .appendingPathComponent(rawPath)
+                .standardizedFileURL
+        }
+        return gitdirURL.appendingPathComponent("HEAD")
+    }
+
+    /// Reads the branch name from `HEAD` on disk.
+    ///
+    /// Uses `resolveHeadURL` so regular repositories, linked worktrees,
+    /// and submodules all go through the same code path. Returns `nil`
+    /// for detached HEAD (content begins with a SHA instead of a ref).
+    ///
+    /// - Parameter directory: The working directory to query.
+    /// - Returns: The branch name, or `nil` if not a git repo or
+    ///   detached HEAD or malformed HEAD contents.
     private func readBranchFromDisk(at directory: URL) -> String? {
-        let headURL = directory
-            .appendingPathComponent(".git")
-            .appendingPathComponent("HEAD")
+        guard let headURL = resolveHeadURL(at: directory) else {
+            return nil
+        }
 
         guard let headContent = try? String(contentsOf: headURL, encoding: .utf8) else {
             return nil
