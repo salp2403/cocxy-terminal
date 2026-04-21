@@ -76,6 +76,9 @@ final class PreferencesViewModel: ObservableObject {
     /// translucent chrome inherits the active system appearance.
     @Published var transparencyChromeTheme: TransparencyChromeTheme
 
+    /// Whether the experimental Aurora chrome is enabled.
+    @Published var auroraEnabled: Bool
+
     /// Whether the chrome theme picker should be interactive.
     ///
     /// Mirrors the runtime rule: the override only matters while the
@@ -83,6 +86,15 @@ final class PreferencesViewModel: ObservableObject {
     /// so users aren't surprised by an apparently dead control.
     var isTransparencyChromeThemeEditable: Bool {
         backgroundOpacity < 1.0
+    }
+
+    /// Whether the classic tab-position picker should be interactive.
+    ///
+    /// Aurora owns its own workspace sidebar while enabled. The classic
+    /// `left/top/hidden` preference is still preserved on disk, but it is only
+    /// applied when Aurora is off.
+    var isClassicTabPositionEditable: Bool {
+        !auroraEnabled
     }
 
     // MARK: - Agent Detection
@@ -196,7 +208,7 @@ final class PreferencesViewModel: ObservableObject {
         return shell != c.general.shell
             || workingDirectory != c.general.workingDirectory
             || confirmCloseProcess != c.general.confirmCloseProcess
-            || theme != c.appearance.theme
+            || !Self.themeNamesMatch(theme, c.appearance.theme)
             || fontFamily != c.appearance.fontFamily
             || fontSize != c.appearance.fontSize
             || tabPosition != c.appearance.tabPosition.rawValue
@@ -205,6 +217,7 @@ final class PreferencesViewModel: ObservableObject {
             || fontThicken != c.appearance.fontThicken
             || backgroundOpacity != c.appearance.backgroundOpacity
             || transparencyChromeTheme != c.appearance.transparencyChromeTheme
+            || auroraEnabled != c.appearance.auroraEnabled
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -228,7 +241,7 @@ final class PreferencesViewModel: ObservableObject {
         shell = c.general.shell
         workingDirectory = c.general.workingDirectory
         confirmCloseProcess = c.general.confirmCloseProcess
-        theme = c.appearance.theme
+        theme = Self.resolveDisplayName(for: c.appearance.theme, from: availableThemes)
         fontFamily = c.appearance.fontFamily
         fontSize = c.appearance.fontSize
         tabPosition = c.appearance.tabPosition.rawValue
@@ -237,6 +250,7 @@ final class PreferencesViewModel: ObservableObject {
         fontThicken = c.appearance.fontThicken
         backgroundOpacity = c.appearance.backgroundOpacity
         transparencyChromeTheme = c.appearance.transparencyChromeTheme
+        auroraEnabled = c.appearance.auroraEnabled
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -304,6 +318,7 @@ final class PreferencesViewModel: ObservableObject {
         self.fontThicken = config.appearance.fontThicken
         self.backgroundOpacity = config.appearance.backgroundOpacity
         self.transparencyChromeTheme = config.appearance.transparencyChromeTheme
+        self.auroraEnabled = config.appearance.auroraEnabled
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -437,13 +452,7 @@ final class PreferencesViewModel: ObservableObject {
                 backgroundOpacity: clampedOpacity,
                 backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius,
                 transparencyChromeTheme: transparencyChromeTheme,
-                // Preferences has no dedicated toggle for the
-                // experimental Aurora chrome yet; carry the last
-                // saved value through every save cycle so a user who
-                // enabled Aurora by editing the TOML does not lose
-                // it the moment they hit "Save" on any unrelated
-                // appearance tweak.
-                auroraEnabled: savedConfig.appearance.auroraEnabled
+                auroraEnabled: auroraEnabled
             ),
             terminal: TerminalConfig(
                 scrollbackLines: savedConfig.terminal.scrollbackLines,
@@ -466,6 +475,7 @@ final class PreferencesViewModel: ObservableObject {
                 timingHeuristics: timingHeuristics,
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
+            codeReview: savedConfig.codeReview,
             notifications: NotificationConfig(
                 macosNotifications: macosNotifications,
                 sound: sound,
@@ -500,6 +510,12 @@ final class PreferencesViewModel: ObservableObject {
 
         let defaults = savedConfig
         let keybindings = pendingKeybindings ?? defaults.keybindings
+        let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
+            "window-padding-x = \(Self.tomlNumber($0))\n"
+        } ?? ""
+        let windowPaddingYLine = defaults.appearance.windowPaddingY.map {
+            "window-padding-y = \(Self.tomlNumber($0))\n"
+        } ?? ""
 
         return """
         # Cocxy Terminal Configuration
@@ -517,16 +533,20 @@ final class PreferencesViewModel: ObservableObject {
         font-size = \(clampedFontSize)
         tab-position = "\(tabPosition)"
         window-padding = \(clampedPadding)
-        ligatures = \(ligatures)
+        \(windowPaddingXLine)\(windowPaddingYLine)ligatures = \(ligatures)
         font-thicken = \(fontThicken)
-        background-opacity = \(String(format: "%.2f", clampedOpacity))
+        background-opacity = \(Self.tomlNumber(clampedOpacity))
+        background-blur-radius = \(Self.tomlNumber(defaults.appearance.backgroundBlurRadius))
         transparency-chrome-theme = "\(transparencyChromeTheme.rawValue)"
-        aurora-enabled = \(defaults.appearance.auroraEnabled)
+        aurora-enabled = \(auroraEnabled)
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
         cursor-style = "\(defaults.terminal.cursorStyle.rawValue)"
         cursor-blink = \(defaults.terminal.cursorBlink)
+        cursor-opacity = \(Self.tomlNumber(defaults.terminal.cursorOpacity))
+        mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
+        copy-on-select = \(defaults.terminal.copyOnSelect)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
         clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
         image-memory-limit-mb = \(clampedImageMemoryLimitMB)
@@ -541,6 +561,9 @@ final class PreferencesViewModel: ObservableObject {
         timing-heuristics = \(timingHeuristics)
         idle-timeout-seconds = \(clampedTimeout)
 
+        [code-review]
+        auto-show-on-session-end = \(defaults.codeReview.autoShowOnSessionEnd)
+
         [notifications]
         macos-notifications = \(macosNotifications)
         sound = \(sound)
@@ -552,9 +575,14 @@ final class PreferencesViewModel: ObservableObject {
         sound-error = "\(savedConfig.notifications.soundError)"
 
         [quick-terminal]
+        enabled = \(defaults.quickTerminal.enabled)
         hotkey = "\(defaults.quickTerminal.hotkey)"
         position = "\(defaults.quickTerminal.position.rawValue)"
         height-percentage = \(defaults.quickTerminal.heightPercentage)
+        hide-on-deactivate = \(defaults.quickTerminal.hideOnDeactivate)
+        working-directory = "\(defaults.quickTerminal.workingDirectory)"
+        animation-duration = \(Self.tomlNumber(defaults.quickTerminal.animationDuration))
+        screen = "\(defaults.quickTerminal.screen.rawValue)"
 
         \(keybindings.tomlSection())
 
@@ -610,5 +638,28 @@ final class PreferencesViewModel: ObservableObject {
             }
         }
         return configName
+    }
+
+    /// Compares config/raw theme names and picker display names as the same
+    /// semantic value. Without this, opening Preferences on a default config
+    /// (`catppuccin-mocha`) marks the window dirty because the picker displays
+    /// `Catppuccin Mocha`.
+    private static func themeNamesMatch(_ lhs: String, _ rhs: String) -> Bool {
+        normalizeThemeName(lhs) == normalizeThemeName(rhs)
+    }
+
+    private static func normalizeThemeName(_ value: String) -> String {
+        value.lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+    }
+
+    private static func tomlNumber(_ value: Double) -> String {
+        let rounded = value.rounded()
+        if abs(value - rounded) < 0.000_001 {
+            return String(Int(rounded))
+        }
+        return String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
     }
 }

@@ -97,6 +97,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Cancellable for the window event bus subscription.
     private var eventBusCancellable: AnyCancellable?
 
+    /// Periodic Aurora-only safety net that reconciles visible terminal
+    /// buffers back into the per-surface agent store. The live semantic
+    /// callbacks remain the primary path; this timer covers missed launch
+    /// edges after rebuilds, feature-flag toggles, or split focus churn.
+    var auroraAgentReconciliationCancellable: AnyCancellable?
+
     /// Maps tab IDs to their corresponding session IDs in the registry.
     /// Populated when a tab is created and cleaned up when it's closed.
     var tabSessionMap: [TabID: SessionID] = [:]
@@ -210,6 +216,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     var codeReviewViewModel: CodeReviewPanelViewModel?
     var codeReviewHostingView: NSHostingView<CodeReviewPanelView>?
+    var codeReviewSuggestionHostingView: NSHostingView<CodeReviewOpenSuggestionView>?
     var isCodeReviewVisible: Bool = false
     var codeReviewPanelWidth: CGFloat = MainWindowController.loadStoredCodeReviewPanelWidth()
     private(set) var preferredCodeReviewPanelWidth: CGFloat = MainWindowController.loadStoredCodeReviewPanelWidth()
@@ -411,6 +418,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Non-terminal panel views in splits, keyed by content UUID.
     var panelContentViews: [UUID: NSView] = [:]
+
+    /// Optional test seam for the focused-pane close confirmation.
+    ///
+    /// Production leaves this nil and presents a normal `NSAlert` sheet.
+    /// Tests inject a presenter so they can verify the toolbar action does
+    /// not close a split before the user confirms.
+    var focusedPaneCloseConfirmationPresenter: ((String, String, @escaping (Bool) -> Void) -> Void)?
 
     /// Inline image renderers keyed by surface view identity.
     /// Lazily created per surface view in +SurfaceLifecycle.
@@ -702,18 +716,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onAddStackedTerminal = { [weak self] in self?.performVisualSplit(isVertical: false) }
         strip.onAddBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
         strip.onAddMarkdown = { [weak self] in self?.splitWithMarkdownAction(nil) }
-        strip.onSplitSideBySide = { [weak self] in self?.performVisualSplit(isVertical: false) }
-        strip.onSplitStacked = { [weak self] in self?.performVisualSplit(isVertical: true) }
+        strip.onSplitSideBySide = { [weak self] in self?.performVisualSplit(isVertical: true) }
+        strip.onSplitStacked = { [weak self] in self?.performVisualSplit(isVertical: false) }
         strip.onOpenBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
         strip.onOpenMarkdown = { [weak self] in self?.splitWithMarkdownAction(nil) }
         strip.onReload = { [weak self] in self?.reloadFocusedBrowserPanel() }
         strip.onGoBack = { [weak self] in self?.goBackFocusedBrowserPanel() }
         strip.onGoForward = { [weak self] in self?.goForwardFocusedBrowserPanel() }
-        strip.onClosePanel = { [weak self] in self?.closeSplitAction(nil) }
+        strip.onClosePanel = { [weak self] in self?.handleStripCloseFocusedPane() }
+        strip.onToggleThemeMode = { [weak self] in self?.toggleAuroraThemeMode() }
         strip.onSelectTab = { [weak self] index in self?.handleStripSelectTab(at: index) }
         strip.onCloseTab = { [weak self] index in self?.handleStripCloseTab(at: index) }
         strip.onSwapTabs = { [weak self] from, to in self?.handleStripSwapTabs(from: from, to: to) }
         strip.onRenameTab = { [weak self] index, name in self?.handleStripRenameTab(at: index, newTitle: name) }
+        if let variant = (NSApp.delegate as? AppDelegate)?.themeEngine?.activeTheme.metadata.variant {
+            strip.setThemeMode(isLight: variant == .light)
+        }
 
         // Apply initial vibrancy state from config.
         if let appearance = configService?.current.appearance {
@@ -790,6 +808,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     // MARK: - Tab Strip Callbacks
 
     private func handleStripSelectTab(at index: Int) {
+        if usesTopLevelTabsInHorizontalStrip {
+            guard index >= 0, index < tabManager.tabs.count else { return }
+            let tabID = tabManager.tabs[index].id
+            if tabManager.activeTabID != tabID {
+                tabManager.setActive(id: tabID)
+            }
+            handleTabSwitch(to: tabID)
+            tabBarViewModel?.syncWithManager()
+            refreshStatusBar()
+            refreshTabStrip(syncFromFirstResponder: false)
+            return
+        }
+
         guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
         syncFocusedLeafSelectionFromFirstResponder()
         let sm = tabSplitCoordinator.splitManager(for: tabID)
@@ -813,6 +844,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func handleStripCloseTab(at index: Int) {
+        if usesTopLevelTabsInHorizontalStrip {
+            guard index >= 0, index < tabManager.tabs.count else { return }
+            closeTab(tabManager.tabs[index].id)
+            return
+        }
+
         guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
         syncFocusedLeafSelectionFromFirstResponder()
         let sm = tabSplitCoordinator.splitManager(for: tabID)
@@ -833,6 +870,104 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         sm.focusLeaf(id: leaves[index].leafID)
         closeSplitAction(nil)
+    }
+
+    /// Closes the focused pane from the horizontal strip's right-side action
+    /// cluster. In `tab-position = top` the strip items are real workspace
+    /// tabs, so this action must be kept separate from each tab's close button:
+    /// the right-side `x` closes only the focused split/panel, while the `x`
+    /// inside a tab still closes the whole workspace tab.
+    private func handleStripCloseFocusedPane() {
+        let shouldConfirm = configService?.current.general.confirmCloseProcess ?? false
+        guard shouldConfirm, let closePrompt = focusedPaneClosePrompt() else {
+            performStripCloseFocusedPane()
+            return
+        }
+
+        presentFocusedPaneCloseConfirmation(
+            title: closePrompt.title,
+            informativeText: closePrompt.informativeText
+        ) { [weak self] confirmed in
+            guard confirmed else { return }
+            self?.performStripCloseFocusedPane(focusing: closePrompt.leafID)
+        }
+    }
+
+    private func performStripCloseFocusedPane(focusing leafID: UUID? = nil) {
+        if let leafID {
+            activeSplitManager?.focusLeaf(id: leafID)
+        }
+        closeSplitAction(nil)
+        tabBarViewModel?.syncWithManager()
+        refreshStatusBar()
+        refreshTabStrip(syncFromFirstResponder: false)
+        auroraChromeController?.refreshSources()
+    }
+
+    private func focusedPaneClosePrompt() -> (leafID: UUID, title: String, informativeText: String)? {
+        guard activeSplitView != nil, let sm = activeSplitManager else { return nil }
+        syncFocusedLeafSelectionFromFirstResponder()
+
+        let leaves = sm.rootNode.allLeafIDs()
+        guard leaves.count > 1 else { return nil }
+
+        let focusedLeafID = sm.focusedLeafID ?? leaves.first?.leafID
+        guard let focusedLeaf = leaves.first(where: { $0.leafID == focusedLeafID }) else { return nil }
+
+        let focusedType = sm.panelType(for: focusedLeaf.terminalID)
+        if focusedType == .terminal {
+            let terminalLeafCount = leaves.filter { sm.panelType(for: $0.terminalID) == .terminal }.count
+            guard terminalLeafCount > 1 else { return nil }
+        }
+
+        let paneName: String
+        switch focusedType {
+        case .terminal:
+            paneName = "terminal split"
+        case .browser:
+            paneName = "browser panel"
+        case .markdown:
+            paneName = "markdown panel"
+        case .subagent:
+            paneName = "subagent panel"
+        }
+
+        let remainingPaneCount = max(leaves.count - 1, 1)
+        return (
+            leafID: focusedLeaf.leafID,
+            title: "Close Focused Pane?",
+            informativeText: """
+            This will close the focused \(paneName). The workspace tab stays \
+            open with \(remainingPaneCount) pane\(remainingPaneCount == 1 ? "" : "s") remaining.
+            """
+        )
+    }
+
+    private func presentFocusedPaneCloseConfirmation(
+        title: String,
+        informativeText: String,
+        completion: @escaping (Bool) -> Void
+    ) {
+        if let presenter = focusedPaneCloseConfirmationPresenter {
+            presenter(title, informativeText, completion)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = informativeText
+        alert.alertStyle = .warning
+        alert.icon = AppIconGenerator.generatePlaceholderIcon()
+        alert.addButton(withTitle: "Close Pane")
+        alert.addButton(withTitle: "Cancel")
+
+        if let window {
+            alert.beginSheetModal(for: window) { response in
+                completion(response == .alertFirstButtonReturn)
+            }
+        } else {
+            completion(alert.runModal() == .alertFirstButtonReturn)
+        }
     }
 
     /// Closes the last panel/pane in the split tree (LIFO order).
@@ -863,6 +998,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func handleStripSwapTabs(from fromIndex: Int, to toIndex: Int) {
+        if usesTopLevelTabsInHorizontalStrip {
+            tabManager.moveTab(from: fromIndex, to: toIndex)
+            tabBarViewModel?.syncWithManager()
+            refreshStatusBar()
+            refreshTabStrip(syncFromFirstResponder: false)
+            return
+        }
+
         guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
         let sm = tabSplitCoordinator.splitManager(for: tabID)
         let previousLeaves = sm.rootNode.allLeafIDs()
@@ -913,6 +1056,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func handleStripRenameTab(at index: Int, newTitle: String) {
+        if usesTopLevelTabsInHorizontalStrip {
+            guard index >= 0, index < tabManager.tabs.count else { return }
+            let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            tabManager.renameTab(
+                id: tabManager.tabs[index].id,
+                newTitle: trimmed.isEmpty ? nil : trimmed
+            )
+            tabBarViewModel?.syncWithManager()
+            refreshTabStrip(syncFromFirstResponder: false)
+            return
+        }
+
         guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
         let sm = tabSplitCoordinator.splitManager(for: tabID)
         let leaves = sm.rootNode.allLeafIDs()
@@ -1106,6 +1261,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             strip.onGoBack = nil
             strip.onGoForward = nil
             strip.onClosePanel = nil
+            strip.onToggleThemeMode = nil
             strip.onSelectTab = nil
             strip.onCloseTab = nil
             strip.onSwapTabs = nil
@@ -1116,6 +1272,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         searchQueryCancellable = nil
         eventBusCancellable?.cancel()
         eventBusCancellable = nil
+        auroraAgentReconciliationCancellable?.cancel()
+        auroraAgentReconciliationCancellable = nil
         remoteUnreadCancellable?.cancel()
         remoteUnreadCancellable = nil
         removeWorkspaceWakeObservers()
@@ -1592,12 +1750,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // cell sizes we computed here before. Calling resize twice caused a brief
         // flicker when the approximate and actual sizes diverged.
 
-        if let responderSurface = (focusedPaneView() as? TerminalHostView) ?? targetSurfaceView {
-            window?.makeFirstResponder(responderSurface)
-            responderSurface.hideNotificationRing()
-            if let targetSurfaceView, responderSurface !== targetSurfaceView {
-                targetSurfaceView.hideNotificationRing()
+        if let focusedPane = focusedPaneView() {
+            window?.makeFirstResponder(focusedPane)
+            if let responderSurface = focusedPane as? TerminalHostView {
+                responderSurface.hideNotificationRing()
+            } else {
+                targetSurfaceView?.hideNotificationRing()
             }
+        } else if let targetSurfaceView {
+            window?.makeFirstResponder(targetSurfaceView)
+            targetSurfaceView.hideNotificationRing()
         }
         refreshVisibleTerminalInteractionState()
 
@@ -1606,7 +1768,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sessionRegistry?.markRead(sessionIDForTab(tabID))
 
         refreshStatusBar()
-        refreshTabStrip()
+        refreshTabStrip(syncFromFirstResponder: false)
         updateAgentProgressOverlay()
         applyProjectConfig(for: tabID)
     }
@@ -1948,6 +2110,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// restores to the configured sidebar width.
     @objc func toggleTabBarAction(_ sender: Any?) {
         guard let splitView = mainSplitView, let sidebar = tabBarView else { return }
+
+        if isAuroraChromeActive || configService?.current.appearance.auroraEnabled == true {
+            // Aurora is mounted inside `tabBarView`; collapsing the classic
+            // sidebar would also hide the Aurora canvas. Treat Toggle Tab Bar
+            // as a safe reveal while the feature flag is active.
+            splitView.setPosition(Self.sidebarWidth, ofDividerAt: 0)
+            sidebar.isHidden = false
+            auroraChromeController?.sidebarHost?.isHidden = false
+            isTabBarHidden = false
+            return
+        }
 
         if isTabBarHidden {
             // Restore the sidebar by setting its position to the default width.

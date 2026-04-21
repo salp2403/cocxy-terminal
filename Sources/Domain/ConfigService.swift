@@ -185,6 +185,8 @@ final class ConfigService: ConfigProviding {
         font-size = \(defaults.appearance.fontSize)
         tab-position = "\(defaults.appearance.tabPosition.rawValue)"
         window-padding = \(defaults.appearance.windowPadding)
+        background-opacity = \(defaults.appearance.backgroundOpacity)
+        background-blur-radius = \(defaults.appearance.backgroundBlurRadius)
         ligatures = \(defaults.appearance.ligatures)
         font-thicken = \(defaults.appearance.fontThicken)
         # follow-system (default) inherits the active NSAppearance for the
@@ -192,14 +194,19 @@ final class ConfigService: ConfigProviding {
         # or "dark" to pin sidebar / tab strip / status bar independently
         # of the macOS appearance.
         transparency-chrome-theme = "\(defaults.appearance.transparencyChromeTheme.rawValue)"
-        # Opt-in preview of the experimental Aurora chrome (redesigned
-        # sidebar, status bar and command palette). Off by default so the
-        # classic chrome stays active until the redesign is ready to
-        # promote.
+        # Aurora chrome is the default redesigned sidebar, status bar and
+        # command palette. Set this to false to return to the classic
+        # sidebar / status bar while keeping the rest of the terminal
+        # behavior unchanged.
         aurora-enabled = \(defaults.appearance.auroraEnabled)
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
+        cursor-style = "\(defaults.terminal.cursorStyle.rawValue)"
+        cursor-blink = \(defaults.terminal.cursorBlink)
+        cursor-opacity = \(defaults.terminal.cursorOpacity)
+        mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
+        copy-on-select = \(defaults.terminal.copyOnSelect)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
         clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
         image-memory-limit-mb = \(defaults.terminal.imageMemoryLimitMB)
@@ -222,14 +229,20 @@ final class ConfigService: ConfigProviding {
         sound = \(defaults.notifications.sound)
         badge-on-tab = \(defaults.notifications.badgeOnTab)
         flash-tab = \(defaults.notifications.flashTab)
+        show-dock-badge = \(defaults.notifications.showDockBadge)
         sound-finished = "\(defaults.notifications.soundFinished)"
         sound-attention = "\(defaults.notifications.soundAttention)"
         sound-error = "\(defaults.notifications.soundError)"
 
         [quick-terminal]
+        enabled = \(defaults.quickTerminal.enabled)
         hotkey = "\(defaults.quickTerminal.hotkey)"
         position = "\(defaults.quickTerminal.position.rawValue)"
         height-percentage = \(defaults.quickTerminal.heightPercentage)
+        hide-on-deactivate = \(defaults.quickTerminal.hideOnDeactivate)
+        working-directory = "\(defaults.quickTerminal.workingDirectory)"
+        animation-duration = \(defaults.quickTerminal.animationDuration)
+        screen = "\(defaults.quickTerminal.screen.rawValue)"
 
         \(defaults.keybindings.tomlSection())
 

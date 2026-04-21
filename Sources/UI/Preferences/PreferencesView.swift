@@ -158,6 +158,12 @@ struct PreferencesSaveButton: View {
                     }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
+                .disabled(!viewModel.hasUnsavedChanges)
+                .help(
+                    viewModel.hasUnsavedChanges
+                        ? "Save the modified settings to config.toml."
+                        : "No settings have changed."
+                )
 
                 if let status = saveStatus {
                     Text(status)
@@ -315,11 +321,26 @@ struct EditableAppearanceSection: View {
             }
 
             Section("Layout") {
-                Picker("Tab position", selection: $viewModel.tabPosition) {
+                Picker("Classic tab position", selection: $viewModel.tabPosition) {
                     Text("Left").tag("left")
                     Text("Top").tag("top")
                     Text("Hidden").tag("hidden")
                 }
+                .disabled(!viewModel.isClassicTabPositionEditable)
+                .help(
+                    viewModel.isClassicTabPositionEditable
+                        ? "Controls the classic tab navigation: left sidebar, top strip, or hidden tabs."
+                        : "Aurora uses its own workspace sidebar. This classic tab position is preserved and applies again when Aurora is disabled."
+                )
+
+                Text(
+                    viewModel.isClassicTabPositionEditable
+                        ? "Top shows the classic horizontal tab strip and collapses the left tab sidebar. Hidden keeps only terminal chrome controls visible."
+                        : "Aurora is enabled, so Cocxy keeps the workspace sidebar visible and ignores the classic Left/Top/Hidden layout until Aurora is turned off."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
                 VStack(alignment: .leading) {
                     HStack {
@@ -330,6 +351,24 @@ struct EditableAppearanceSection: View {
                             .monospacedDigit()
                     }
                     Slider(value: $viewModel.windowPadding, in: 0...40, step: 1)
+                }
+            }
+
+            Section("Aurora") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Enable Aurora chrome", isOn: $viewModel.auroraEnabled)
+                        .help(
+                            "Switches the window chrome to the experimental Aurora "
+                            + "sidebar, status bar, and command palette. Save to "
+                            + "apply through the normal config hot-reload path."
+                        )
+                    Text(
+                        "Aurora is an opt-in preview of the redesigned chrome. "
+                        + "Turn it off to return to the classic sidebar and status bar."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
 

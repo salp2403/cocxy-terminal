@@ -216,20 +216,14 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     /// because the chrome is not translucent.
     let transparencyChromeTheme: TransparencyChromeTheme
 
-    /// Opt-in switch for the experimental Aurora chrome (reimagined
-    /// sidebar, status bar and command palette inspired by the Liquid
-    /// Glass design system).
+    /// Switch for the Aurora chrome (reimagined sidebar, status bar and
+    /// command palette inspired by the Liquid Glass design system).
     ///
-    /// Defaults to `false`: the classic chrome (`TabBarView`,
-    /// `StatusBarView`, `CommandPaletteView`) stays mounted unchanged.
-    /// When set to `true`, the integration layer swaps in the Aurora
-    /// views that live in `Sources/UI/Design/`. Hot-reloadable via
-    /// `ConfigService.configChangedPublisher`.
+    /// Defaults to `true` for new installs and legacy configs that do not
+    /// yet contain this key. Users can set it to `false` to return to the
+    /// classic chrome (`TabBarView`, `StatusBarView`, `CommandPaletteView`).
     ///
-    /// The flag is intentionally conservative. While off, the Aurora
-    /// module is purely additive code — every production code path
-    /// continues to use the existing chrome, so any regression can only
-    /// surface once the user enables the flag explicitly.
+    /// Hot-reloadable via `ConfigService.configChangedPublisher`.
     let auroraEnabled: Bool
 
     /// Effective horizontal padding (prefers windowPaddingX, falls back to windowPadding).
@@ -251,7 +245,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         backgroundOpacity: Double,
         backgroundBlurRadius: Double,
         transparencyChromeTheme: TransparencyChromeTheme = .followSystem,
-        auroraEnabled: Bool = false
+        auroraEnabled: Bool = true
     ) {
         self.theme = theme
         self.lightTheme = lightTheme
@@ -284,7 +278,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             backgroundOpacity: 1.0,
             backgroundBlurRadius: 0,
             transparencyChromeTheme: .followSystem,
-            auroraEnabled: false
+            auroraEnabled: true
         )
     }
 
@@ -331,7 +325,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         self.auroraEnabled = try container.decodeIfPresent(
             Bool.self,
             forKey: .auroraEnabled
-        ) ?? false
+        ) ?? AppearanceConfig.defaults.auroraEnabled
     }
 }
 

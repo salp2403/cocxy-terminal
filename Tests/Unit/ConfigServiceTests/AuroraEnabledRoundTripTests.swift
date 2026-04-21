@@ -39,15 +39,15 @@ struct AuroraEnabledRoundTripTests {
     // MARK: - Default
 
     @Test
-    func defaultConfigHasAuroraDisabled() {
+    func defaultConfigHasAuroraEnabled() {
         let defaults = CocxyConfig.defaults
-        #expect(defaults.appearance.auroraEnabled == false)
+        #expect(defaults.appearance.auroraEnabled == true)
     }
 
     @Test
-    func defaultTomlTemplateContainsAuroraEnabledFalse() {
+    func defaultTomlTemplateContainsAuroraEnabledTrue() {
         let generated = ConfigService.generateDefaultToml()
-        #expect(generated.contains("aurora-enabled = false"))
+        #expect(generated.contains("aurora-enabled = true"))
     }
 
     // MARK: - Round-trip
@@ -79,20 +79,20 @@ struct AuroraEnabledRoundTripTests {
     // MARK: - Tolerant parsing
 
     @Test
-    func missingKeyProducesFalseDefault() throws {
+    func missingKeyProducesEnabledDefault() throws {
         let toml = """
         [appearance]
         theme = "catppuccin-mocha"
         background-opacity = 0.9
         """
         let config = try loadConfig(from: toml)
-        #expect(config.appearance.auroraEnabled == false)
+        #expect(config.appearance.auroraEnabled == true)
     }
 
     @Test
-    func invalidTypeFallsBackToFalse() throws {
+    func invalidTypeFallsBackToEnabledDefault() throws {
         // Non-boolean values for a Bool key should silently fall back to
-        // the default (false) instead of crashing. Mirrors the tolerant
+        // the default (true) instead of crashing. Mirrors the tolerant
         // contract used by every other parser in ConfigService.
         let toml = """
         [appearance]
@@ -101,16 +101,16 @@ struct AuroraEnabledRoundTripTests {
         aurora-enabled = "yes"
         """
         let config = try loadConfig(from: toml)
-        #expect(config.appearance.auroraEnabled == false)
+        #expect(config.appearance.auroraEnabled == true)
     }
 
     @Test
-    func emptyAppearanceSectionProducesFalse() throws {
+    func emptyAppearanceSectionProducesEnabledDefault() throws {
         let toml = """
         [appearance]
         """
         let config = try loadConfig(from: toml)
-        #expect(config.appearance.auroraEnabled == false)
+        #expect(config.appearance.auroraEnabled == true)
     }
 
     // MARK: - Generated TOML round-trip
@@ -121,17 +121,17 @@ struct AuroraEnabledRoundTripTests {
         // start from the default template, flip the flag, then reload.
         let base = ConfigService.generateDefaultToml()
         let toggled = base.replacingOccurrences(
-            of: "aurora-enabled = false",
-            with: "aurora-enabled = true"
+            of: "aurora-enabled = true",
+            with: "aurora-enabled = false"
         )
         let config = try loadConfig(from: toggled)
-        #expect(config.appearance.auroraEnabled == true)
+        #expect(config.appearance.auroraEnabled == false)
     }
 
     // MARK: - Decoder backwards compatibility
 
     @Test
-    func legacyJsonWithoutKeyDecodesAsFalse() throws {
+    func legacyJsonWithoutKeyDecodesAsEnabledDefault() throws {
         // Simulate a CocxyConfig persisted before the new key existed.
         // The appearance section omits auroraEnabled, mirroring the shape
         // produced by older session JSON snapshots that still round-trip
@@ -220,7 +220,7 @@ struct AuroraEnabledRoundTripTests {
 
         let data = Data(legacyJson.utf8)
         let decoded = try JSONDecoder().decode(CocxyConfig.self, from: data)
-        #expect(decoded.appearance.auroraEnabled == false)
+        #expect(decoded.appearance.auroraEnabled == true)
     }
 
     // MARK: - Project overrides do not drop the flag

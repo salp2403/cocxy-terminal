@@ -25,10 +25,32 @@ final class PreferencesViewModelTests: XCTestCase {
 
         // Theme is resolved from config kebab-case to display name.
         XCTAssertEqual(viewModel.theme, "Catppuccin Mocha")
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
         XCTAssertEqual(viewModel.fontFamily, config.appearance.fontFamily)
         XCTAssertEqual(viewModel.fontSize, config.appearance.fontSize)
         XCTAssertEqual(viewModel.tabPosition, config.appearance.tabPosition.rawValue)
         XCTAssertEqual(viewModel.windowPadding, config.appearance.windowPadding)
+    }
+
+    func testDisplayThemeDoesNotMarkDefaultsDirty() {
+        let config = CocxyConfig.defaults
+        let viewModel = PreferencesViewModel(config: config)
+
+        XCTAssertEqual(config.appearance.theme, "catppuccin-mocha")
+        XCTAssertEqual(viewModel.theme, "Catppuccin Mocha")
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
+    }
+
+    func testDiscardRestoresDisplayThemeWithoutDirtyingSnapshot() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+
+        viewModel.theme = "Dracula"
+        XCTAssertTrue(viewModel.hasUnsavedChanges)
+
+        viewModel.discardChanges()
+
+        XCTAssertEqual(viewModel.theme, "Catppuccin Mocha")
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
 
     func testInitLoadsAgentDetectionConfig() {
@@ -251,6 +273,106 @@ final class PreferencesViewModelTests: XCTestCase {
         let toml = viewModel.generateToml()
 
         XCTAssertTrue(toml.contains("light-theme = \"solarized-light\""))
+    }
+
+    func testGenerateTomlPreservesNonEditableConfigFields() {
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: AppearanceConfig(
+                theme: "catppuccin-mocha",
+                lightTheme: "solarized-light",
+                fontFamily: "JetBrainsMono Nerd Font Mono",
+                fontSize: 14,
+                tabPosition: .left,
+                windowPadding: 8,
+                windowPaddingX: 11,
+                windowPaddingY: 13,
+                ligatures: false,
+                fontThicken: false,
+                backgroundOpacity: 0.82,
+                backgroundBlurRadius: 17,
+                transparencyChromeTheme: .dark,
+                auroraEnabled: true
+            ),
+            terminal: TerminalConfig(
+                scrollbackLines: 1234,
+                cursorStyle: .underline,
+                cursorBlink: false,
+                cursorOpacity: 0.55,
+                mouseHideWhileTyping: false,
+                copyOnSelect: false,
+                clipboardPasteProtection: false,
+                clipboardReadAccess: .deny,
+                imageMemoryLimitMB: 512,
+                imageFileTransfer: true,
+                enableSixelImages: false,
+                enableKittyImages: false
+            ),
+            agentDetection: .defaults,
+            codeReview: CodeReviewConfig(autoShowOnSessionEnd: false),
+            notifications: NotificationConfig(
+                macosNotifications: true,
+                sound: false,
+                badgeOnTab: true,
+                flashTab: false,
+                showDockBadge: false,
+                soundFinished: "finished",
+                soundAttention: "attention",
+                soundError: "error"
+            ),
+            quickTerminal: QuickTerminalConfig(
+                enabled: false,
+                hotkey: "cmd+option+grave",
+                position: .bottom,
+                heightPercentage: 55,
+                hideOnDeactivate: false,
+                workingDirectory: "/tmp",
+                animationDuration: 0.42,
+                screen: .main
+            ),
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let viewModel = PreferencesViewModel(config: config)
+
+        let toml = viewModel.generateToml()
+
+        XCTAssertTrue(toml.contains("window-padding-x = 11"))
+        XCTAssertTrue(toml.contains("window-padding-y = 13"))
+        XCTAssertTrue(toml.contains("background-blur-radius = 17"))
+        XCTAssertTrue(toml.contains("cursor-opacity = 0.55"))
+        XCTAssertTrue(toml.contains("mouse-hide-while-typing = false"))
+        XCTAssertTrue(toml.contains("copy-on-select = false"))
+        XCTAssertTrue(toml.contains("[code-review]"))
+        XCTAssertTrue(toml.contains("auto-show-on-session-end = false"))
+        XCTAssertTrue(toml.contains("show-dock-badge = false"))
+        XCTAssertTrue(toml.contains("enabled = false"))
+        XCTAssertTrue(toml.contains("hide-on-deactivate = false"))
+        XCTAssertTrue(toml.contains("working-directory = \"/tmp\""))
+        XCTAssertTrue(toml.contains("animation-duration = 0.42"))
+        XCTAssertTrue(toml.contains("screen = \"main\""))
+    }
+
+    func testSavePreservesCodeReviewSnapshotAndClearsDirty() throws {
+        let fileProvider = InMemoryConfigFileProvider(content: nil)
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            codeReview: CodeReviewConfig(autoShowOnSessionEnd: false),
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let viewModel = PreferencesViewModel(config: config, fileProvider: fileProvider)
+
+        viewModel.fontSize = 15
+        try viewModel.save()
+
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
+        XCTAssertTrue(fileProvider.writtenContent?.contains("auto-show-on-session-end = false") ?? false)
     }
 
     // MARK: - Save to File Provider

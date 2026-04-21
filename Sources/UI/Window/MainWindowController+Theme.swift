@@ -153,7 +153,7 @@ extension MainWindowController {
         // stay visible so Aurora has a canvas to render on.
         // `auroraEnabled = false` restores the user's preference
         // immediately on the next config reload.
-        let auroraEnabled = configService?.current.appearance.auroraEnabled == true
+        let auroraEnabled = isAuroraChromeActive || configService?.current.appearance.auroraEnabled == true
         let effective: TabPosition = auroraEnabled ? .left : position
 
         // The strip is the workspace toolbar (split pane tabs, browser/markdown
@@ -163,10 +163,14 @@ extension MainWindowController {
         case .left:
             sidebar.isHidden = false
             strip.isHidden = false
-            // Don't call setPosition here — the sidebar already has its correct
-            // frame from configureWindow. Calling setPosition before the window
-            // has its final size (e.g., restored from autosave) causes the
-            // NSSplitView to miscalculate the terminal area width.
+            // Do not force-reset the divider on initial window setup or after
+            // a user resize; that can fight autosave/restoration. Only restore
+            // the default width when a previous `.top` / `.hidden` layout
+            // collapsed the sidebar to zero and the user explicitly returns to
+            // the classic left sidebar.
+            if sidebar.frame.width < 1 {
+                splitView.setPosition(Self.sidebarWidth, ofDividerAt: 0)
+            }
         case .top:
             sidebar.isHidden = true
             strip.isHidden = false
