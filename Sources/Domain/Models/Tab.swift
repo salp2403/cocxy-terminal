@@ -93,6 +93,51 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// When present, these values override the global config for this tab.
     var projectConfig: ProjectConfig?
 
+    /// Short, stable identifier of the cocxy-managed git worktree attached
+    /// to this tab.
+    ///
+    /// Non-nil means the tab is running inside a linked worktree created
+    /// by `WorktreeService`. Matches the final path component at
+    /// `<base-path>/<repo-hash>/<worktreeID>/`.
+    ///
+    /// Kept separate from `worktreeRoot` because consumers frequently need
+    /// a short identifier for lookup in the manifest without parsing the
+    /// full URL.
+    var worktreeID: String?
+
+    /// Immutable anchor pointing to the worktree root on disk.
+    ///
+    /// `workingDirectory` may drift from this when the shell `cd`'s inside
+    /// the worktree (OSC 7 and `CwdChanged` both mutate
+    /// `workingDirectory`). Every consumer that needs the physical
+    /// worktree path — badge, `git worktree remove`, status queries —
+    /// reads `worktreeRoot`, never `workingDirectory`.
+    ///
+    /// Set once when the worktree is created and only cleared when the
+    /// worktree is removed.
+    var worktreeRoot: URL?
+
+    /// Path to the origin repository this worktree was created from.
+    ///
+    /// Required for:
+    ///   - `git worktree remove <path>` invoked from within the origin
+    ///     repo (git requires operating from one of the repo's worktrees).
+    ///   - `ProjectConfigService` fallback when `.cocxy.toml` lives in the
+    ///     origin repo but not inside the worktree tree.
+    ///   - UI tooltips ("worktree of <origin-repo-name>").
+    ///
+    /// Nil when `worktreeID` is nil.
+    var worktreeOriginRepo: URL?
+
+    /// Cached branch name of the worktree.
+    ///
+    /// The foreground shell may `cd` outside the worktree root
+    /// temporarily, so the badge and tooltip read this cache instead of
+    /// shelling out to `git branch --show-current` on each render. Kept
+    /// in sync when the worktree is created and when the branch is
+    /// explicitly switched via the CLI.
+    var worktreeBranch: String?
+
     /// Whether a command is currently executing.
     var isCommandRunning: Bool {
         lastCommandStartedAt != nil && lastCommandDuration == nil
@@ -127,7 +172,11 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         lastCommandStartedAt: Date? = nil,
         lastCommandDuration: TimeInterval? = nil,
         lastCommandExitCode: Int? = nil,
-        projectConfig: ProjectConfig? = nil
+        projectConfig: ProjectConfig? = nil,
+        worktreeID: String? = nil,
+        worktreeRoot: URL? = nil,
+        worktreeOriginRepo: URL? = nil,
+        worktreeBranch: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -144,6 +193,10 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         self.lastCommandDuration = lastCommandDuration
         self.lastCommandExitCode = lastCommandExitCode
         self.projectConfig = projectConfig
+        self.worktreeID = worktreeID
+        self.worktreeRoot = worktreeRoot
+        self.worktreeOriginRepo = worktreeOriginRepo
+        self.worktreeBranch = worktreeBranch
     }
 }
 
