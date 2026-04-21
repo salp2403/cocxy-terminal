@@ -5,6 +5,38 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.80] - 2026-04-20
+
+### Added
+- Aurora chrome toggle in Preferences ("Enable Aurora chrome (experimental)") with subtitle copy and full round-trip persistence so the choice survives every save. The toggle now participates in the seven-step config field pipeline (struct, Codable, parse, defaults, project overrides, snapshot rebuild, TOML emit) and a new round-trip test pins the contract.
+- Aurora sidebar custom glass popover on hover surfaces workspace, branch, directory, foreground process, agent identity, state, tool counts, and error counts so the user can diagnose a session without leaving the chrome.
+- Inline git workflow inside Agent Code Review: branch and worktree state, stage / unstage hunks, commit message composition, and push controls live next to the diff list. New `CodeReviewGitWorkflow` model owns the underlying git invocations and `CodeReviewGitWorkflowPanel` renders the controls.
+- Per-file agent activity panel inside Agent Code Review surfaces which agent worked on each file, with identity colour and tool counts mapped from the per-surface store.
+- Floating "open review" suggestion overlay nudges the user to open the panel when an agent ships a diff while the chrome is collapsed.
+- Syntax-aware text editor (`CodeReviewSyntaxTextEditor`) drives the feedback comment composer and commit message field with the project's monospaced theme.
+
+### Fixed
+- Per-surface agent detection isolation: the engine now keeps state machine, OSC parser, pattern matcher, and timing detector buckets per `SurfaceID`. Two splits running different agents in the same tab (for example Claude Code on the left and Codex on the right) no longer collapse into a single session or borrow each other's identity. Output routing also stops requiring a focused surface, so a background pane keeps feeding detection while the user works elsewhere.
+- Aurora sidebar highlight no longer freezes on the previous tab when the user clicks a session row. `@Published` emits the new value during `willSet`, so the sidebar sinks now consume the value Combine delivered instead of re-reading the source object (which still holds the old value during emission). The sidebar also switched from a custom `Binding(get:set:)` wrapper around a `@Published` to a plain `let activeSessionID`, restoring SwiftUI's value-based diff.
+- Canonical agent naming derived from `AgentConfigService.agentIdentifier(matchingLaunchLine:)` ensures banners such as "Claude Code v2.1.14" map to the configured `claude` identifier instead of leaking marketing text into the dashboard or being confused with Codex.
+- Aurora status bar agent matrix counts every active snapshot per tab instead of capping at one, the summary text reflects the real "N working / M waiting" totals, and the matrix filters idle panes.
+- Ports row in the Aurora status bar opens a Copy / Open popover instead of a tooltip, and chips render via `Text(verbatim:)` so port numbers no longer pick up the locale's thousand separator (`:8080` instead of `:8,080`). The timeline scrubber is hidden until replay work lands.
+- TUIs running inside Cocxy now render their brand palettes correctly: `CocxyCoreBridge` strips `NO_COLOR` from the host process before spawning a shell and advertises `COLORTERM=truecolor`, `TERM_PROGRAM=CocxyTerminal`, and `CLICOLOR=1`.
+- Aurora chrome stays visible when the config requests `tab-position = "top"` or "hidden": `MainWindowController+Theme` forces `.left` whenever Aurora is active, and the Toggle Tab Bar action reveals the sidebar instead of hiding it.
+- Code Review toolbar stays anchored at the bottom with `ZStack(alignment: .bottom)` and `toolbarReservedHeight: 86`. Submit / Reject / Discard controls remain reachable through a horizontal `ScrollView` even when the panel width drops to its minimum.
+- Aurora sidebar footer chip now reads "no telemetry" with an explanatory tooltip rather than the misleading "100% local" copy.
+- `ForegroundProcessProbe` now claims the timeout result off the main actor before the deadline fires so a slow `sysctl` cannot prevent the watchdog from honouring its 50 ms budget.
+
+### Changed
+- `CocxyCoreBridge.deinit` synchronises to the main actor when called off-thread instead of asserting, keeping teardown safe in test harnesses and CLI exits.
+- New `injectProtocolV2Message` helper routes the same in-process semantic pipeline that the wire format uses, so `cocxy protocol send` updates dashboards immediately during smoke tests without requiring a Protocol v2-aware TUI inside the terminal.
+- Hook session bindings keep an optional surface companion (`hookSessionSurfaceBindings`) so signals sourced from native semantics route to the precise surface they came from, even across split tabs sharing a CWD.
+- Aurora workspace adapter accepts an optional `stateSnapshot` parameter so callers can hand the freshest store contents into the source builder, eliminating stale reads when a publisher refresh races with a state mutation.
+- `MainWindowController+AuroraIntegration` runs a periodic Aurora-only safety net that reconciles visible terminal buffers back into the per-surface store, covering missed launch edges after rebuilds, feature-flag toggles, or split focus churn.
+
+### Notes
+- Aurora is shipped behind the `appearance.aurora-enabled` flag (default `false`). Existing users keep the classic chrome by default; opting in via Preferences enables the redesigned sidebar, status bar, and command palette covered above.
+
 ## [0.1.79] - 2026-04-18
 
 ### Fixed
