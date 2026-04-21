@@ -81,13 +81,15 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
     }
 
     func testResetTimerOnNewOutput() {
-        // Local detector with a more generous idleTimeout than the default
-        // 0.2s of `sut`: on busy CI runners `asyncAfter(0.05)` slips past
-        // 0.2s, which lets the first-output timer fire before the reset
-        // arrives. 0.6s idle plus 0.15s spacing keeps the reset safely
-        // inside the window on every realistic runner.
+        // Local detector with a generous idleTimeout: on GitHub Actions macos
+        // runners `DispatchQueue.global().asyncAfter` can slip several hundred
+        // milliseconds under load. With a 0.6s window and 0.15s spacing the
+        // first-output timer sometimes fires before the first reset lands and
+        // the inverted expectation records a spurious failure. Doubling the
+        // window (1.5s) plus spacing the resets at 0.3s/0.6s/0.9s keeps every
+        // reset safely inside the window even when asyncAfter slips by 100ms.
         let detector = TimingHeuristicsDetector(
-            defaultIdleTimeout: 0.6,
+            defaultIdleTimeout: 1.5,
             sustainedOutputThreshold: 0.1
         )
         defer { detector.stop() }
@@ -104,21 +106,21 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
             }
         }
 
-        // Keep sending output well before the 0.6s idle window expires.
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) {
+        // Keep sending output well before the 1.5s idle window expires.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
             let _ = detector.processBytes(Data("second output".utf8))
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.30) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) {
             let _ = detector.processBytes(Data("third output".utf8))
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.45) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.9) {
             let _ = detector.processBytes(Data("fourth output".utf8))
         }
 
-        // Each output resets the 0.6s window; the last output at t=0.45
-        // rearms the timer to t=1.05, so observe up to 0.75s without any
+        // Each output resets the 1.5s window; the last output at t=0.9
+        // rearms the timer to t=2.4, so observe up to 1.4s without any
         // early fire.
-        wait(for: [expectation], timeout: 0.75)
+        wait(for: [expectation], timeout: 1.4)
     }
 
     func testCustomTimeoutPerAgent() {
@@ -250,8 +252,11 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
             self.sut.resume()
         }
 
-        // After resume, the timer should restart and fire after defaultIdleTimeout
-        wait(for: [expectation], timeout: 1.0)
+        // After resume the timer restarts with the default 0.2s idle window.
+        // On a quiet machine the signal lands near t=0.3, but GitHub Actions
+        // runners slip `asyncAfter` routinely; keep the outer timeout at 3.0
+        // so the scheduling jitter cannot race the expectation.
+        wait(for: [expectation], timeout: 3.0)
     }
 
     // MARK: - Edge Cases

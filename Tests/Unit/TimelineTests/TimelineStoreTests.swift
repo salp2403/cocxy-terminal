@@ -268,7 +268,12 @@ final class TimelineStoreTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 5.0)
+        // GitHub Actions runners dispatch 100 concurrent writes with far more
+        // jitter than a local machine. 5s was enough on a developer laptop
+        // but tight on CI; 15s keeps the asymmetry safely bounded without
+        // hiding real bugs (the store must still serve every write before
+        // the deadline, just within a runner-friendly window).
+        waitForExpectations(timeout: 15.0)
 
         // All 100 events should be stored (max is 1000, so no eviction)
         XCTAssertEqual(store.eventCount(for: "sess-concurrent"), totalEvents)
