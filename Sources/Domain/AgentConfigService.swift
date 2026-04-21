@@ -134,7 +134,9 @@ final class AgentConfigService {
             return
         }
 
-        let configs = parseAgentConfigs(rawContent)
+        let configs = AgentConfigService.mergeGeneratedDefaultOverlayIfNeeded(
+            parseAgentConfigs(rawContent)
+        )
         let compiled = configs.map { AgentConfigService.compile($0) }
         configSubject.send(compiled)
     }
@@ -150,7 +152,9 @@ final class AgentConfigService {
             throw ReloadError.missingFile
         }
 
-        let configs = try parseAgentConfigsOrThrow(rawContent)
+        let configs = AgentConfigService.mergeGeneratedDefaultOverlayIfNeeded(
+            try parseAgentConfigsOrThrow(rawContent)
+        )
         let compiled = configs.map { AgentConfigService.compile($0) }
         configSubject.send(compiled)
     }
@@ -176,6 +180,35 @@ final class AgentConfigService {
     /// - Returns: The compiled agent config, or `nil` if not found.
     func compiledAgentConfig(named name: String) -> CompiledAgentConfig? {
         configSubject.value.first { $0.config.name == name }
+    }
+
+    /// Resolves a completed terminal line from CocxyCore's native
+    /// semantic matcher back to the configured agent identifier.
+    ///
+    /// CocxyCore currently emits the matched *line* as event detail, not
+    /// the TOML section name. Mapping through the same compiled launch
+    /// matchers keeps the Swift store/dashboard/status labels canonical
+    /// (`claude`, `codex`, etc.) instead of leaking banner text such as
+    /// "Claude Code v2.1.14" into agent identity.
+    func agentIdentifier(matchingLaunchLine line: String) -> String? {
+        Self.agentIdentifier(
+            matchingLaunchLine: line,
+            compiledConfigs: configSubject.value
+        )
+    }
+
+    static func agentIdentifier(
+        matchingLaunchLine line: String,
+        compiledConfigs: [CompiledAgentConfig]
+    ) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        return compiledConfigs.first { compiled in
+            compiled.launchMatchers.contains { matcher in
+                matcher.matches(trimmed)
+            }
+        }?.config.name
     }
 
     /// Resolves an agent identifier or common alias to the display name used in the UI.
@@ -251,6 +284,7 @@ final class AgentConfigService {
                 displayName: "Codex CLI",
                 launchPatterns: [
                     "^codex\\b",
+                    "OpenAI Codex",
                     "Welcome to Codex",
                     "OpenAI's command-line coding agent",
                 ],
@@ -479,6 +513,76 @@ final class AgentConfigService {
         }
 
         return configs.sorted { $0.name < $1.name }
+    }
+
+    /// Upgrades user files that still look like Cocxy's generated defaults.
+    ///
+    /// `agents.toml` is user-editable, so we cannot blindly replace it with new
+    /// defaults on every release. At the same time, older generated files should
+    /// keep receiving Cocxy's built-in detector improvements (new banner
+    /// patterns, timeout defaults, and bundled agents) or fresh app builds keep
+    /// behaving like old binaries. The legacy six built-in sections are the
+    /// stable signal that a file is an older generated baseline; custom-only
+    /// files remain exact user-controlled configs.
+    private static func mergeGeneratedDefaultOverlayIfNeeded(
+        _ configs: [AgentConfig]
+    ) -> [AgentConfig] {
+        let legacyGeneratedNames: Set<String> = [
+            "claude",
+            "codex",
+            "aider",
+            "gemini-cli",
+            "kiro",
+            "opencode",
+        ]
+        let existingNames = Set(configs.map(\.name))
+        guard legacyGeneratedNames.isSubset(of: existingNames) else {
+            return configs
+        }
+
+        let defaults = defaultAgentConfigs()
+        let defaultNames = Set(defaults.map(\.name))
+        let existingByName = Dictionary(uniqueKeysWithValues: configs.map { ($0.name, $0) })
+
+        var merged: [AgentConfig] = defaults.map { builtIn in
+            guard let existing = existingByName[builtIn.name] else {
+                return builtIn
+            }
+            return mergeGeneratedDefault(existing, with: builtIn)
+        }
+
+        merged.append(contentsOf: configs.filter { !defaultNames.contains($0.name) })
+        return merged.sorted { $0.name < $1.name }
+    }
+
+    private static func mergeGeneratedDefault(
+        _ existing: AgentConfig,
+        with builtIn: AgentConfig
+    ) -> AgentConfig {
+        AgentConfig(
+            name: existing.name,
+            displayName: existing.displayName,
+            launchPatterns: mergedPatterns(existing.launchPatterns, builtIn.launchPatterns),
+            waitingPatterns: mergedPatterns(existing.waitingPatterns, builtIn.waitingPatterns),
+            errorPatterns: mergedPatterns(existing.errorPatterns, builtIn.errorPatterns),
+            finishedIndicators: mergedPatterns(existing.finishedIndicators, builtIn.finishedIndicators),
+            oscSupported: existing.oscSupported,
+            idleTimeoutOverride: existing.idleTimeoutOverride ?? builtIn.idleTimeoutOverride
+        )
+    }
+
+    private static func mergedPatterns(
+        _ existing: [String],
+        _ builtIn: [String]
+    ) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for pattern in existing + builtIn where seen.insert(pattern).inserted {
+            result.append(pattern)
+        }
+
+        return result
     }
 
     /// Compiles an `AgentConfig` into a `CompiledAgentConfig` with cached regex.

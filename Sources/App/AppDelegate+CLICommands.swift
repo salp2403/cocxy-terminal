@@ -452,12 +452,17 @@ extension AppDelegate {
             return nil
         }
 
-        guard cocxyBridge.sendProtocolV2Message(type: type, json: payload, to: surfaceID) else {
+        let outboundSent = cocxyBridge.sendProtocolV2Message(type: type, json: payload, to: surfaceID)
+        let localInjected = cocxyBridge.injectProtocolV2Message(type: type, json: payload, to: surfaceID)
+
+        guard outboundSent || localInjected else {
             return nil
         }
         return [
-            "status": "sent",
-            "type": type
+            "status": outboundSent ? "sent" : "injected",
+            "type": type,
+            "outbound_sent": outboundSent ? "true" : "false",
+            "local_injected": localInjected ? "true" : "false",
         ]
     }
 

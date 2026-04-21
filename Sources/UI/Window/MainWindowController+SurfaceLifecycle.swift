@@ -152,6 +152,13 @@ extension MainWindowController {
             // to be focused when Enter is pressed.
             engine?.notifyUserInput(surfaceID: capturedSurfaceID)
         }
+
+        if let cocxyView = surfaceView as? CocxyCoreView {
+            cocxyView.onFocusRequested = { [weak self] in
+                guard let self else { return }
+                self.applyFocusToSurface(surfaceID: capturedSurfaceID)
+            }
+        }
     }
 
     private func commandTracker(for tabID: TabID) -> CommandDurationTracker {
@@ -503,38 +510,30 @@ extension MainWindowController {
             tabManager.updateTab(id: tabID) { tab in
                 tab.lastActivityAt = Date()
             }
-            // When a shell prompt appears on a surface that was running
-            // an agent, flip the per-surface store entry from `.working`
-            // to `.finished` so the indicator relaxes. Other transitions
-            // stay driven by the detection engine.
-            if let sid = sourceSurfaceID,
-               let store = injectedPerSurfaceStore {
-                let current = store.state(for: sid)
-                if current.agentState == .working {
-                    store.update(surfaceID: sid) { state in
-                        state.agentState = .finished
-                    }
-                }
-            }
-            // Safety net: if the agent exited without emitting a
-            // `SessionEnd` hook (crash, abort, `--skip-permissions` fast
-            // exit), the shell prompt comes back but the per-surface
-            // store keeps the stale `.launched` / `.finished` /
-            // `.waitingInput` state forever. Ask the recovery helper
-            // whether the PTY foreground is now a login shell and, if
-            // so, run the same reset routine used by explicit teardown
-            // paths. The helper is conservative: it only resets when
-            // the foreground matches a known shell binary, so editors,
-            // sub-commands invoked by the agent, and long-running
-            // builds keep their state intact.
+            // A shell prompt on a concrete surface means that surface is
+            // back at the shell. Clear any stale agent state immediately
+            // instead of waiting for the async foreground-process probe:
+            // the probe is still useful as a fallback for unusual
+            // prompt-like events, but OSC 133;A is already the strong
+            // signal we need. This prevents Aurora/status/dashboard from
+            // keeping a dead Codex/Claude entry lit after the shell
+            // visibly returned to `$`.
             if let sid = sourceSurfaceID {
-                recoverAgentStateOnShellPromptIfNeeded(
+                let didReset = resetAgentStateOnShellPromptIfNeeded(
                     surfaceID: sid,
                     tabID: tabID
                 )
+                if !didReset {
+                    recoverAgentStateOnShellPromptIfNeeded(
+                        surfaceID: sid,
+                        tabID: tabID
+                    )
+                }
             }
             tabBarViewModel?.syncWithManager()
             refreshStatusBar()
+            updateAgentProgressOverlay()
+            auroraChromeController?.refreshSources()
 
             // Notify the IDE cursor controller of the real prompt row/col
             // from the backing CocxyCore terminal. Only the active tab's
@@ -665,6 +664,10 @@ extension MainWindowController {
                 cancelInputDropTracking(surfaceID: sid)
             }
             tabBarViewModel?.syncWithManager()
+            refreshStatusBar()
+            updateAgentProgressOverlay()
+            updateNotificationRing(for: tabID, agentState: .idle)
+            auroraChromeController?.refreshSources()
         }
     }
 
@@ -696,22 +699,26 @@ extension MainWindowController {
         }
     }
 
-    /// Pattern/OSC-based detection must only observe the surface the user is
-    /// actually looking at. Hook integration remains responsible for
-    /// background-session updates across windows.
+    /// Pattern/OSC-based detection can safely observe every identified
+    /// terminal surface now that the engine owns detector/state buckets
+    /// per `SurfaceID`. Keeping the old "focused pane only" filter meant
+    /// a split running Claude would stop feeding detection as soon as the
+    /// user focused a sibling Codex pane, so Aurora/status/dashboard could
+    /// only ever show one live agent. Legacy calls that lack a surface ID
+    /// still fall back to the visible-tab guard because there is no safe
+    /// routing key to isolate them.
     private func shouldRouteOutputToDetection(
         fromTabID sourceTabID: TabID?,
         surfaceID sourceSurfaceID: SurfaceID?
     ) -> Bool {
+        if sourceSurfaceID != nil {
+            return true
+        }
+
         guard let visibleTabID else { return false }
         let resolvedTabID = sourceTabID ?? visibleTabID
         guard resolvedTabID == visibleTabID else { return false }
-
-        let focusedSurfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID
-
-        guard let focusedSurfaceID else { return true }
-        guard let sourceSurfaceID else { return true }
-        return focusedSurfaceID == sourceSurfaceID
+        return true
     }
 
     // MARK: - Inline Image Renderer

@@ -31,6 +31,62 @@ struct CocxyCoreSemanticAdapterTests {
         }
     }
 
+    @Test("Agent launch maps native banner detail to canonical agent identifier")
+    func agentLaunchMapsNativeBannerDetailToCanonicalIdentifier() {
+        let adapter = CocxyCoreSemanticAdapter()
+        let capture = SemanticCapture(adapter: adapter)
+        let compiled = AgentConfigService.defaultAgentConfigs().map(AgentConfigService.compile)
+        adapter.agentIdentifierResolver = { detail in
+            AgentConfigService.agentIdentifier(
+                matchingLaunchLine: detail,
+                compiledConfigs: compiled
+            )
+        }
+
+        withSemanticEvent(type: .agentLaunched, detail: "Claude Code v2.1.14") { event in
+            adapter.processSemanticEvent(
+                event,
+                for: makeSurfaceID("00000000-0000-0000-0000-000000000121"),
+                cwd: "/tmp/project"
+            )
+        }
+
+        if case .sessionStart(let data)? = capture.hooks.last?.data {
+            #expect(data.agentType == "claude")
+        } else {
+            Issue.record("Expected SessionStartData payload")
+        }
+        #expect(capture.timeline.last?.summary == "Agent launched: claude")
+    }
+
+    @Test("Agent launch maps native Codex TUI detail to canonical identifier")
+    func agentLaunchMapsNativeCodexDetailToCanonicalIdentifier() {
+        let adapter = CocxyCoreSemanticAdapter()
+        let capture = SemanticCapture(adapter: adapter)
+        let compiled = AgentConfigService.defaultAgentConfigs().map(AgentConfigService.compile)
+        adapter.agentIdentifierResolver = { detail in
+            AgentConfigService.agentIdentifier(
+                matchingLaunchLine: detail,
+                compiledConfigs: compiled
+            )
+        }
+
+        withSemanticEvent(type: .agentLaunched, detail: "OpenAI Codex (v0.121.0)") { event in
+            adapter.processSemanticEvent(
+                event,
+                for: makeSurfaceID("00000000-0000-0000-0000-000000000122"),
+                cwd: "/tmp/project"
+            )
+        }
+
+        if case .sessionStart(let data)? = capture.hooks.last?.data {
+            #expect(data.agentType == "codex")
+        } else {
+            Issue.record("Expected SessionStartData payload")
+        }
+        #expect(capture.timeline.last?.summary == "Agent launched: codex")
+    }
+
     @Test("Agent launch emits a timeline sessionStart event")
     func agentLaunchEmitsTimelineSessionStart() {
         let adapter = CocxyCoreSemanticAdapter()

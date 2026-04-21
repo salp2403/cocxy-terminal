@@ -9,12 +9,16 @@ import Testing
 @Suite("AgentDetectionEngine surfaceID routing")
 struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
 
-    private func makeEngine(debounce: TimeInterval = 0.0) -> AgentDetectionEngineImpl {
+    private func makeEngine(
+        debounce: TimeInterval = 0.0,
+        timingSustainedOutputThreshold: TimeInterval = 2.0
+    ) -> AgentDetectionEngineImpl {
         let configs = AgentConfigService.defaultAgentConfigs()
         let compiled = configs.map { AgentConfigService.compile($0) }
         return AgentDetectionEngineImpl(
             compiledConfigs: compiled,
-            debounceInterval: debounce
+            debounceInterval: debounce,
+            timingSustainedOutputThreshold: timingSustainedOutputThreshold
         )
     }
 
@@ -107,7 +111,12 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
             surfaceID: surfaceA
         )
 
-        // B: agentLaunched -> working (outputReceived)
+        // B walks its own lifecycle. A's launch must not be reused as
+        // B's precondition for outputReceived.
+        engine.injectSignal(
+            launchSignal(agentName: "codex"),
+            surfaceID: surfaceB
+        )
         engine.injectSignal(
             DetectionSignal(
                 event: .outputReceived,
@@ -117,11 +126,339 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
             surfaceID: surfaceB
         )
 
-        #expect(captured.count == 2)
+        #expect(captured.count == 3)
         #expect(captured[0].surfaceID == surfaceA)
         #expect(captured[0].state == .agentLaunched)
         #expect(captured[1].surfaceID == surfaceB)
-        #expect(captured[1].state == .working)
+        #expect(captured[1].state == .agentLaunched)
+        #expect(captured[1].agentName == "codex")
+        #expect(captured[2].surfaceID == surfaceB)
+        #expect(captured[2].state == .working)
+        #expect(captured[2].agentName == "codex")
+    }
+
+    @Test("Distinct surfaces keep independent lifecycle state and agent identity")
+    func distinctSurfacesKeepIndependentLifecycleState() {
+        let engine = makeEngine()
+        let claudeSurface = SurfaceID()
+        let codexSurface = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        engine.injectSignal(
+            launchSignal(agentName: "codex"),
+            surfaceID: codexSurface
+        )
+        engine.injectSignal(
+            DetectionSignal(
+                event: .outputReceived,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: codexSurface
+        )
+
+        engine.injectSignal(
+            launchSignal(agentName: "claude"),
+            surfaceID: claudeSurface
+        )
+
+        #expect(captured.count == 3)
+        #expect(captured[0].surfaceID == codexSurface)
+        #expect(captured[0].agentName == "codex")
+        #expect(captured[1].surfaceID == codexSurface)
+        #expect(captured[1].agentName == "codex")
+        #expect(captured[2].surfaceID == claudeSurface)
+        #expect(captured[2].state == .agentLaunched)
+        #expect(captured[2].agentName == "claude")
+        #expect(engine._stateForTesting(surfaceID: codexSurface) == .working)
+        #expect(engine._agentNameForTesting(surfaceID: codexSurface) == "codex")
+        #expect(engine._stateForTesting(surfaceID: claudeSurface) == .agentLaunched)
+        #expect(engine._agentNameForTesting(surfaceID: claudeSurface) == "claude")
+    }
+
+    @Test("Fresh launch on same surface replaces stale agent name")
+    func freshLaunchOnSameSurfaceReplacesStaleAgentName() {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        engine.injectSignal(launchSignal(agentName: "codex"), surfaceID: surface)
+        engine.injectSignal(
+            DetectionSignal(
+                event: .outputReceived,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: surface
+        )
+        engine.injectSignal(launchSignal(agentName: "claude"), surfaceID: surface)
+
+        #expect(engine._stateForTesting(surfaceID: surface) == .agentLaunched)
+        #expect(engine._agentNameForTesting(surfaceID: surface) == "claude")
+        #expect(captured.last?.previousState == .working)
+        #expect(captured.last?.state == .agentLaunched)
+        #expect(captured.last?.agentName == "claude")
+        #expect(captured.last?.surfaceID == surface)
+    }
+
+    @Test("Debounce suppresses duplicate launch for same agent but not another agent")
+    func debounceIsScopedByAgentIdentityForLaunchEvents() {
+        let engine = makeEngine(debounce: 10.0)
+        let surface = SurfaceID()
+
+        engine.injectSignal(launchSignal(agentName: "codex"), surfaceID: surface)
+        engine.injectSignal(launchSignal(agentName: "codex"), surfaceID: surface)
+
+        #expect(engine._agentNameForTesting(surfaceID: surface) == "codex")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected:codex")
+
+        engine.injectSignal(launchSignal(agentName: "claude"), surfaceID: surface)
+
+        #expect(engine._stateForTesting(surfaceID: surface) == .agentLaunched)
+        #expect(engine._agentNameForTesting(surfaceID: surface) == "claude")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected:claude")
+    }
+
+    @Test("Process exit on one surface does not idle a sibling agent")
+    func processExitDoesNotIdleSiblingSurface() {
+        let engine = makeEngine()
+        let claudeSurface = SurfaceID()
+        let codexSurface = SurfaceID()
+
+        engine.injectSignal(
+            launchSignal(agentName: "claude"),
+            surfaceID: claudeSurface
+        )
+        engine.injectSignal(
+            launchSignal(agentName: "codex"),
+            surfaceID: codexSurface
+        )
+        engine.notifyProcessExited(surfaceID: codexSurface)
+
+        #expect(engine._stateForTesting(surfaceID: codexSurface) == .idle)
+        #expect(engine._agentNameForTesting(surfaceID: codexSurface) == nil)
+        #expect(engine._stateForTesting(surfaceID: claudeSurface) == .agentLaunched)
+        #expect(engine._agentNameForTesting(surfaceID: claudeSurface) == "claude")
+
+        engine.injectSignal(
+            DetectionSignal(
+                event: .outputReceived,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: claudeSurface
+        )
+
+        #expect(engine._stateForTesting(surfaceID: claudeSurface) == .working)
+        #expect(engine._agentNameForTesting(surfaceID: claudeSurface) == "claude")
+    }
+
+    @Test("Real Codex and Claude banners route to their own surfaces")
+    func realBannersRouteToTheirOwnSurfaces() async throws {
+        let engine = makeEngine()
+        let claudeSurface = SurfaceID()
+        let codexSurface = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        let codexBanner = """
+        OpenAI Codex (v0.121.0)
+        OpenAI Codex
+        model: gpt-5.4 xhigh
+
+        """
+        engine.processTerminalOutput(Data(codexBanner.utf8), surfaceID: codexSurface)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        engine.injectSignal(
+            DetectionSignal(
+                event: .outputReceived,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: codexSurface
+        )
+
+        let claudeBanner = """
+        Claude Code v2.1.14
+        Opus 4.7 (1M context) with xhigh effort · Claude Max
+        ~/sisocs-v3
+
+        """
+        engine.processTerminalOutput(Data(claudeBanner.utf8), surfaceID: claudeSurface)
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let claudeLaunch = captured.last {
+            $0.surfaceID == claudeSurface && $0.state == .agentLaunched
+        }
+        let codexWorking = captured.last {
+            $0.surfaceID == codexSurface && $0.state == .working
+        }
+
+        #expect(codexWorking?.agentName == "codex")
+        #expect(claudeLaunch?.agentName == "claude")
+        #expect(engine._agentNameForTesting(surfaceID: codexSurface) == "codex")
+        #expect(engine._agentNameForTesting(surfaceID: claudeSurface) == "claude")
+    }
+
+    @Test("Claude banner replaces stale Codex state on same surface")
+    func claudeBannerReplacesStaleCodexStateOnSameSurface() async throws {
+        let engine = makeEngine()
+        let surface = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        let codexBanner = """
+        OpenAI Codex (v0.121.0)
+        OpenAI Codex
+        model: gpt-5.4 xhigh
+
+        """
+        engine.processTerminalOutput(Data(codexBanner.utf8), surfaceID: surface)
+        try await Task.sleep(nanoseconds: 80_000_000)
+        engine.injectSignal(
+            DetectionSignal(
+                event: .outputReceived,
+                confidence: 1.0,
+                source: .osc(code: 0)
+            ),
+            surfaceID: surface
+        )
+
+        #expect(engine._stateForTesting(surfaceID: surface) == .working)
+        #expect(engine._agentNameForTesting(surfaceID: surface) == "codex")
+
+        let claudeBanner = """
+        Claude Code v2.1.14
+        Opus 4.7 (1M context) with xhigh effort · Claude Max
+        ~/sisocs-v3
+
+        """
+        engine.processTerminalOutput(Data(claudeBanner.utf8), surfaceID: surface)
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        #expect(engine._stateForTesting(surfaceID: surface) == .agentLaunched)
+        #expect(engine._agentNameForTesting(surfaceID: surface) == "claude")
+        #expect(captured.last?.previousState == .working)
+        #expect(captured.last?.agentName == "claude")
+    }
+
+    @Test("Pattern launch windows are isolated per surface")
+    func patternLaunchWindowsAreIsolatedPerSurface() async throws {
+        let engine = makeEngine()
+        let surfaceA = SurfaceID()
+        let surfaceB = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        // Each surface sees only one Claude-specific banner line. With
+        // the old shared PatternMatchingDetector these two lines
+        // combined into a false launch on the second surface. Per-surface
+        // detector windows must keep them separate.
+        engine.processTerminalOutput(Data("Claude Code v2.1.14\n".utf8), surfaceID: surfaceA)
+        engine.processTerminalOutput(Data("Claude Code v2.1.14\n".utf8), surfaceID: surfaceB)
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        #expect(captured.isEmpty)
+        #expect(engine._stateForTesting(surfaceID: surfaceA) == .idle)
+        #expect(engine._stateForTesting(surfaceID: surfaceB) == .idle)
+
+        engine.processTerminalOutput(
+            Data("Opus 4.7 (1M context) with xhigh effort · Claude Max\n".utf8),
+            surfaceID: surfaceA
+        )
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        #expect(captured.count == 1)
+        #expect(captured.last?.surfaceID == surfaceA)
+        #expect(captured.last?.agentName == "claude")
+        #expect(engine._stateForTesting(surfaceID: surfaceA) == .agentLaunched)
+        #expect(engine._stateForTesting(surfaceID: surfaceB) == .idle)
+    }
+
+    @Test("Pattern detectors can launch two different agents in sibling surfaces")
+    func patternDetectorsLaunchTwoSiblingAgents() async throws {
+        let engine = makeEngine()
+        let claudeSurface = SurfaceID()
+        let codexSurface = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        engine.processTerminalOutput(
+            Data("Claude Code v2.1.14\nOpus 4.7 (1M context) with xhigh effort · Claude Max\n".utf8),
+            surfaceID: claudeSurface
+        )
+        engine.processTerminalOutput(
+            Data("OpenAI Codex (v0.121.0)\nOpenAI Codex\n".utf8),
+            surfaceID: codexSurface
+        )
+        try await Task.sleep(nanoseconds: 120_000_000)
+
+        let launches = captured.filter { $0.state == .agentLaunched }
+        #expect(launches.count == 2)
+        #expect(launches.contains { $0.surfaceID == claudeSurface && $0.agentName == "claude" })
+        #expect(launches.contains { $0.surfaceID == codexSurface && $0.agentName == "codex" })
+        #expect(engine._agentNameForTesting(surfaceID: claudeSurface) == "claude")
+        #expect(engine._agentNameForTesting(surfaceID: codexSurface) == "codex")
+    }
+
+    @Test("Timing fallback signals keep the originating surfaceID")
+    func timingFallbackSignalsKeepOriginatingSurfaceID() async throws {
+        let engine = makeEngine(timingSustainedOutputThreshold: 0.05)
+        let surface = SurfaceID()
+
+        var captured: [AgentStateMachine.StateContext] = []
+        let cancellable = engine.stateChanged.sink { ctx in
+            captured.append(ctx)
+        }
+        defer { cancellable.cancel() }
+
+        engine.injectSignal(
+            launchSignal(agentName: "claude"),
+            surfaceID: surface
+        )
+
+        engine.processTerminalOutput(Data("first output chunk\n".utf8), surfaceID: surface)
+        try await Task.sleep(nanoseconds: 80_000_000)
+        engine.processTerminalOutput(Data("second output chunk\n".utf8), surfaceID: surface)
+        try await Task.sleep(nanoseconds: 120_000_000)
+
+        let timingTransition = captured.last {
+            $0.surfaceID == surface && $0.state == .working
+        }
+
+        if case .outputReceived? = timingTransition?.transitionEvent {
+            // Expected timing fallback event.
+        } else {
+            Issue.record("Expected timing fallback to emit outputReceived")
+        }
+        #expect(timingTransition?.agentName == "claude")
+        #expect(engine._stateForTesting(surfaceID: surface) == .working)
     }
 
     @Test("injectSignalBatch propagates surfaceID to the resolved transition")
@@ -179,7 +516,7 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
         engine.injectSignal(launchSignal(), surfaceID: surface)
 
         #expect(engine._debounceBucketCountForTesting == 1)
-        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected:claude")
         #expect(engine._debounceEventKeyForTesting(surfaceID: nil) == nil)
     }
 
@@ -201,7 +538,7 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
         // successful transition.
         #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceA) == "agentExited")
         // B's bucket carries its own event, independent of A.
-        #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceB) == "agentDetected")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceB) == "agentDetected:claude")
     }
 
     @Test("Legacy nil-surfaceID callers share one bucket, not a bucket with a real surface")
@@ -218,7 +555,7 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
 
         #expect(engine._debounceBucketCountForTesting == 2)
         #expect(engine._debounceEventKeyForTesting(surfaceID: nil) == "agentExited")
-        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected:claude")
     }
 
     @Test("reset() clears every per-surface debounce bucket")
@@ -466,7 +803,7 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
 
         engine.injectSignal(launchSignal(), surfaceID: surface)
         #expect(engine._debounceBucketCountForTesting == 1)
-        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected:claude")
 
         engine.clearSurface(surface)
 
@@ -533,7 +870,7 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
 
         #expect(engine._debounceBucketCountForTesting == 1)
         #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceA) == nil)
-        #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceB) == "agentDetected")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceB) == "agentDetected:claude-code")
         #expect(engine._hookSessionsForTesting(surfaceID: surfaceA).isEmpty)
         #expect(engine._hookSessionsForTesting(surfaceID: surfaceB) == ["sess-B"])
     }
@@ -551,27 +888,33 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
         engine.injectSignal(launchSignal(), surfaceID: surface)
 
         #expect(engine._debounceEventKeyForTesting(surfaceID: nil) == "agentExited")
-        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected:claude")
 
         engine.clearSurface(nil)
 
         #expect(engine._debounceEventKeyForTesting(surfaceID: nil) == nil)
-        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected")
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surface) == "agentDetected:claude")
     }
 
-    @Test("clearSurface preserves the global state machine's current state")
-    func clearSurfacePreservesStateMachineState() {
+    @Test("clearSurface releases only the selected surface state machine")
+    func clearSurfaceReleasesOnlySelectedSurfaceStateMachine() {
         let engine = makeEngine()
-        let surface = SurfaceID()
+        let surfaceA = SurfaceID()
+        let surfaceB = SurfaceID()
 
-        engine.injectSignal(launchSignal(), surfaceID: surface)
+        engine.injectSignal(launchSignal(agentName: "claude"), surfaceID: surfaceA)
+        engine.injectSignal(launchSignal(agentName: "codex"), surfaceID: surfaceB)
         #expect(engine.currentState == .agentLaunched)
 
-        engine.clearSurface(surface)
+        engine.clearSurface(surfaceA)
 
-        // The state machine is global and does not own the per-surface
-        // bucket; clearSurface only frees routing state, it must not
-        // reset the agent lifecycle itself.
+        // Reading A after clear creates a fresh idle machine. B's machine
+        // remains live, proving teardown of one split does not idle a
+        // sibling agent.
+        #expect(engine._stateForTesting(surfaceID: surfaceA) == .idle)
+        #expect(engine._agentNameForTesting(surfaceID: surfaceA) == nil)
+        #expect(engine._stateForTesting(surfaceID: surfaceB) == .agentLaunched)
+        #expect(engine._agentNameForTesting(surfaceID: surfaceB) == "codex")
         #expect(engine.currentState == .agentLaunched)
     }
 

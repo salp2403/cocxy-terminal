@@ -11,7 +11,7 @@ import Combine
 /// Priority hierarchy: OSC (layer 1) > Patterns (layer 2) > Timing (layer 3).
 ///
 /// This class:
-/// - Maintains one `AgentStateMachine` instance.
+/// - Maintains one `AgentStateMachine` per terminal surface.
 /// - Routes terminal output to all three detection layers.
 /// - Resolves conflicts between signals using confidence and source priority.
 /// - Applies debounce to suppress rapid duplicate transitions.
@@ -58,11 +58,26 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
 
     // MARK: - Private Properties
 
-    private let stateMachine = AgentStateMachine()
-    private let oscDetector = OSCSequenceDetector()
-    private let patternDetector: PatternMatchingDetector
-    private let timingDetector: TimingHeuristicsDetector
+    /// Backward-compatible state machine for legacy callers that do not
+    /// provide a surfaceID.
+    private let legacyStateMachine = AgentStateMachine()
+
+    /// Per-surface lifecycle state. This is intentionally separate from
+    /// debounce/hook buckets: two panes can run different agents at the
+    /// same time, so a Codex transition on surface B must not block or
+    /// rename a Claude transition on surface A.
+    private var stateMachinesBySurface: [SurfaceID: AgentStateMachine] = [:]
+    private let legacyOSCDetector = OSCSequenceDetector()
+    private var oscDetectorsBySurface: [SurfaceID: OSCSequenceDetector] = [:]
+    private let legacyPatternDetector: PatternMatchingDetector
+    private var patternDetectorsBySurface: [SurfaceID: PatternMatchingDetector] = [:]
+    private var compiledConfigs: [CompiledAgentConfig]
+    private let legacyTimingDetector: TimingHeuristicsDetector
     private let stateChangedSubject = PassthroughSubject<AgentStateMachine.StateContext, Never>()
+    private var timingDetectorsBySurface: [SurfaceID: TimingHeuristicsDetector] = [:]
+    private var agentTimeoutOverrides: [String: TimeInterval] = [:]
+    private let timingIdleTimeout: TimeInterval
+    private let timingSustainedOutputThreshold: TimeInterval
 
     /// The debounce interval in seconds. Duplicate transitions within this
     /// window are suppressed.
@@ -113,6 +128,21 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         hookActiveSurfaces[surfaceID] ?? []
     }
 
+    /// Returns the tracked state for a surface. Exposed as `internal` for
+    /// focused regression tests of per-surface state isolation.
+    internal func _stateForTesting(
+        surfaceID: SurfaceID?
+    ) -> AgentStateMachine.State {
+        stateMachine(for: surfaceID).currentState
+    }
+
+    /// Returns the tracked agent name for a surface. Exposed as `internal`
+    /// so tests can assert that two simultaneously active panes do not
+    /// inherit one another's detected agent identity.
+    internal func _agentNameForTesting(surfaceID: SurfaceID?) -> String? {
+        stateMachine(for: surfaceID).agentName
+    }
+
     /// Cancellables for internal subscriptions.
     private var cancellables = Set<AnyCancellable>()
 
@@ -151,20 +181,28 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     ///   - debounceInterval: Minimum seconds between identical transitions. Default 0.2.
     init(
         compiledConfigs: [CompiledAgentConfig],
-        debounceInterval: TimeInterval = 0.2
+        debounceInterval: TimeInterval = 0.2,
+        timingIdleTimeout: TimeInterval = 5.0,
+        timingSustainedOutputThreshold: TimeInterval = 2.0
     ) {
         self.debounceInterval = debounceInterval
-        self.patternDetector = PatternMatchingDetector(
+        self.timingIdleTimeout = timingIdleTimeout
+        self.timingSustainedOutputThreshold = timingSustainedOutputThreshold
+        self.compiledConfigs = compiledConfigs
+        self.legacyPatternDetector = PatternMatchingDetector(
             configs: compiledConfigs,
             requiredConsecutiveMatches: 2,
             cooldownInterval: 1.0,
             maxLineBuffer: 5
         )
-        self.timingDetector = TimingHeuristicsDetector(
-            defaultIdleTimeout: 5.0,
-            sustainedOutputThreshold: 2.0
+        self.legacyTimingDetector = TimingHeuristicsDetector(
+            defaultIdleTimeout: timingIdleTimeout,
+            sustainedOutputThreshold: timingSustainedOutputThreshold
         )
-        setupTimingDetectorCallback()
+        setupTimingDetectorCallback(
+            for: legacyTimingDetector,
+            surfaceID: nil
+        )
     }
 
     // MARK: - Public API
@@ -184,19 +222,33 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     ///   - data: Raw bytes from the terminal.
     ///   - surfaceID: Surface whose output produced the bytes.
     nonisolated func processTerminalOutput(_ data: Data, surfaceID: SurfaceID?) {
-        let oscSignals = oscDetector.processBytes(data)
-        let patternSignals = patternDetector.processBytes(data)
-        _ = timingDetector.processBytes(data)
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                processTerminalOutputOnMain(data, surfaceID: surfaceID)
+            }
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                self?.processTerminalOutputOnMain(data, surfaceID: surfaceID)
+            }
+        }
+    }
+
+    private func processTerminalOutputOnMain(_ data: Data, surfaceID: SurfaceID?) {
+        let oscSignals = oscDetector(for: surfaceID).processBytes(data)
+        let patternSignals = patternDetector(for: surfaceID).processBytes(data)
 
         let allSignals = oscSignals + patternSignals
+
+        _ = timingDetector(for: surfaceID).processBytes(data)
 
         guard !allSignals.isEmpty else { return }
 
         let resolved = resolveConflictingSignals(allSignals)
 
-        DispatchQueue.main.async { [weak self] in
-            self?.processResolvedSignal(resolved, surfaceID: surfaceID)
-        }
+        processResolvedSignal(resolved, surfaceID: surfaceID)
     }
 
     /// Notifies the engine that the user typed input on a specific
@@ -274,14 +326,14 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     ///
     /// Prevents false idle timeout signals while the user is in another app.
     func pauseTimingDetector() {
-        timingDetector.pause()
+        allTimingDetectors().forEach { $0.pause() }
     }
 
     /// Resumes the timing detector when the terminal window gains focus.
     ///
     /// Restarts idle timers if the agent is in a state that requires them.
     func resumeTimingDetector() {
-        timingDetector.resume()
+        allTimingDetectors().forEach { $0.resume() }
     }
 
     /// Sets a per-agent idle timeout override on the timing detector.
@@ -293,22 +345,31 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     ///   - agentName: The agent identifier (e.g., "aider").
     ///   - timeout: The idle timeout in seconds.
     func setAgentTimeout(agentName: String, timeout: TimeInterval) {
-        timingDetector.setAgentTimeout(agentName: agentName, timeout: timeout)
+        agentTimeoutOverrides[agentName] = timeout
+        allTimingDetectors().forEach {
+            $0.setAgentTimeout(agentName: agentName, timeout: timeout)
+        }
     }
 
     /// Resets the engine to its initial state.
     ///
-    /// Clears the state machine, every per-surface debounce bucket, and
+    /// Clears every state machine, every per-surface debounce bucket, and
     /// the agent name.
     func reset() {
-        stateMachine.reset()
+        legacyStateMachine.reset()
+        stateMachinesBySurface.removeAll()
         currentState = .idle
         detectedAgentName = nil
         debounceBuckets.removeAll()
         hookActiveSurfaces.removeAll()
-        oscDetector.reset()
-        patternDetector.reset()
-        timingDetector.notifyStateChanged(to: .idle)
+        legacyOSCDetector.reset()
+        oscDetectorsBySurface.removeAll()
+        legacyPatternDetector.reset()
+        patternDetectorsBySurface.removeAll()
+        timingDetectorsBySurface.values.forEach { $0.stop() }
+        timingDetectorsBySurface.removeAll()
+        legacyTimingDetector.notifyStateChanged(to: .idle)
+        legacyTimingDetector.notifyAgentChanged(to: nil)
     }
 
     /// Releases all per-surface routing state for a single surface.
@@ -319,16 +380,28 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     /// Idempotent: invoking on a surface that was never tracked (or has
     /// already been cleared) leaves the engine unchanged.
     ///
-    /// Only per-surface routing state is affected — the global state
-    /// machine, detector layers, and other surfaces' buckets are
-    /// preserved. Passing `nil` drops only the legacy shared bucket
-    /// populated by call sites that have not been migrated to the
-    /// per-surface API; other surfaces keep their buckets intact.
+    /// Only the selected surface's routing and lifecycle state is
+    /// affected — detector layers and other surfaces' buckets are
+    /// preserved. Passing `nil` drops the legacy shared bucket and resets
+    /// the legacy state machine populated by call sites that have not
+    /// been migrated to the per-surface API.
     ///
     /// - Parameter id: Surface to clear, or `nil` for the legacy bucket.
     func clearSurface(_ id: SurfaceID?) {
         debounceBuckets.removeValue(forKey: id)
         hookActiveSurfaces.removeValue(forKey: id)
+        if let id {
+            stateMachinesBySurface.removeValue(forKey: id)
+            oscDetectorsBySurface.removeValue(forKey: id)
+            patternDetectorsBySurface.removeValue(forKey: id)
+            timingDetectorsBySurface.removeValue(forKey: id)?.stop()
+        } else {
+            legacyStateMachine.reset()
+            legacyOSCDetector.reset()
+            legacyPatternDetector.reset()
+            legacyTimingDetector.notifyStateChanged(to: .idle)
+            legacyTimingDetector.notifyAgentChanged(to: nil)
+        }
     }
 
     /// Updates the pattern detector with new compiled agent configurations.
@@ -340,10 +413,12 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     ///
     /// - Parameter configs: The newly compiled agent configurations.
     func updateAgentConfigs(_ configs: [CompiledAgentConfig]) {
-        patternDetector.updateConfigs(configs)
+        compiledConfigs = configs
+        legacyPatternDetector.updateConfigs(configs)
+        patternDetectorsBySurface.values.forEach { $0.updateConfigs(configs) }
         for compiled in configs {
             if let timeout = compiled.config.idleTimeoutOverride {
-                timingDetector.setAgentTimeout(
+                setAgentTimeout(
                     agentName: compiled.config.name,
                     timeout: timeout
                 )
@@ -529,11 +604,14 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
             return
         }
 
-        let previousState = stateMachine.currentState
-        stateMachine.processEvent(signal.event)
-        let newState = stateMachine.currentState
+        let machine = stateMachine(for: surfaceID)
+        let previousState = machine.currentState
+        let previousAgentName = machine.agentName
+        machine.processEvent(signal.event)
+        let newState = machine.currentState
+        let newAgentName = machine.agentName
 
-        guard newState != previousState else {
+        guard newState != previousState || newAgentName != previousAgentName else {
             return
         }
 
@@ -542,14 +620,15 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
             eventKey: eventKey
         )
         currentState = newState
-        detectedAgentName = stateMachine.agentName
+        detectedAgentName = machine.agentName
 
+        let timingDetector = timingDetector(for: surfaceID)
         timingDetector.notifyStateChanged(to: newState)
-        if let agentName = stateMachine.agentName {
+        if let agentName = machine.agentName {
             timingDetector.notifyAgentChanged(to: agentName)
         }
 
-        if let lastContext = stateMachine.transitionHistory.last {
+        if let lastContext = machine.transitionHistory.last {
             // Enrich with hook metadata so subscribers can identify the
             // session and tab without reading mutable receiver state. The
             // `surfaceID` passed by the caller replaces the state
@@ -570,6 +649,81 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
             )
             stateChangedSubject.send(enriched)
         }
+    }
+
+    /// Returns the lifecycle state machine for a surface, creating it on
+    /// first use. `nil` uses the legacy machine so old call sites keep the
+    /// exact single-terminal behavior they had before per-surface routing.
+    private func stateMachine(for surfaceID: SurfaceID?) -> AgentStateMachine {
+        guard let surfaceID else {
+            return legacyStateMachine
+        }
+
+        if let existing = stateMachinesBySurface[surfaceID] {
+            return existing
+        }
+
+        let machine = AgentStateMachine()
+        stateMachinesBySurface[surfaceID] = machine
+        return machine
+    }
+
+    private func oscDetector(for surfaceID: SurfaceID?) -> OSCSequenceDetector {
+        guard let surfaceID else {
+            return legacyOSCDetector
+        }
+
+        if let existing = oscDetectorsBySurface[surfaceID] {
+            return existing
+        }
+
+        let detector = OSCSequenceDetector()
+        oscDetectorsBySurface[surfaceID] = detector
+        return detector
+    }
+
+    private func patternDetector(for surfaceID: SurfaceID?) -> PatternMatchingDetector {
+        guard let surfaceID else {
+            return legacyPatternDetector
+        }
+
+        if let existing = patternDetectorsBySurface[surfaceID] {
+            return existing
+        }
+
+        let detector = PatternMatchingDetector(
+            configs: compiledConfigs,
+            requiredConsecutiveMatches: 2,
+            cooldownInterval: 1.0,
+            maxLineBuffer: 5
+        )
+        patternDetectorsBySurface[surfaceID] = detector
+        return detector
+    }
+
+    private func timingDetector(for surfaceID: SurfaceID?) -> TimingHeuristicsDetector {
+        guard let surfaceID else {
+            return legacyTimingDetector
+        }
+
+        if let existing = timingDetectorsBySurface[surfaceID] {
+            return existing
+        }
+
+        let detector = TimingHeuristicsDetector(
+            defaultIdleTimeout: timingIdleTimeout,
+            sustainedOutputThreshold: timingSustainedOutputThreshold
+        )
+        for (agentName, timeout) in agentTimeoutOverrides {
+            detector.setAgentTimeout(agentName: agentName, timeout: timeout)
+        }
+        setupTimingDetectorCallback(for: detector, surfaceID: surfaceID)
+        timingDetectorsBySurface[surfaceID] = detector
+        return detector
+    }
+
+    private func allTimingDetectors() -> [TimingHeuristicsDetector] {
+        [legacyTimingDetector] + Array(timingDetectorsBySurface.values)
     }
 
     // MARK: - Conflict Resolution
@@ -619,8 +773,11 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     /// logically identical events together.
     private static func eventKey(for event: AgentStateMachine.Event) -> String {
         switch event {
-        case .agentDetected:
-            return "agentDetected"
+        case .agentDetected(let name):
+            let normalized = name
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return "agentDetected:\(normalized)"
         case .outputReceived:
             return "outputReceived"
         case .promptDetected:
@@ -642,10 +799,13 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
 
     /// Configures the timing detector's async callback to feed signals
     /// back into the engine on the main thread.
-    private func setupTimingDetectorCallback() {
-        timingDetector.onSignalEmitted = { [weak self] signal in
+    private func setupTimingDetectorCallback(
+        for detector: TimingHeuristicsDetector,
+        surfaceID: SurfaceID?
+    ) {
+        detector.onSignalEmitted = { [weak self] signal in
             DispatchQueue.main.async { [weak self] in
-                self?.processResolvedSignal(signal)
+                self?.processResolvedSignal(signal, surfaceID: surfaceID)
             }
         }
     }

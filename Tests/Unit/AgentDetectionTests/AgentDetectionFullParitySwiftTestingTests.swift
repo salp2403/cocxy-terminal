@@ -42,6 +42,7 @@ struct AgentDetectionFullParitySwiftTestingTests {
         let defaults = AgentConfigService.defaultAgentConfigs()
 
         let codex = try #require(defaults.first(where: { $0.name == "codex" }))
+        #expect(codex.launchPatterns.contains("OpenAI Codex"))
         #expect(codex.launchPatterns.contains("Welcome to Codex"))
         #expect(codex.waitingPatterns.contains("Enter to confirm"))
         #expect(codex.idleTimeoutOverride == 8)

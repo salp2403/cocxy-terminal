@@ -196,7 +196,22 @@ final class AgentStateMachine: ObservableObject {
     /// Invalid transitions are silently ignored.
     /// - Parameter event: The event to process.
     func processEvent(_ event: Event) {
-        guard let newState = Self.nextState(from: currentState, on: event) else {
+        let newState: State
+
+        if case .agentDetected(let name) = event,
+           currentState != .idle {
+            // A terminal pane can legitimately start a new agent after the
+            // previous one returned to the shell but before slower recovery
+            // paths cleared our cached state. Treat a fresh launch banner as
+            // a new session instead of preserving the stale agent identity.
+            if agentName == name,
+               currentState == .agentLaunched || currentState == .working || currentState == .waitingInput {
+                return
+            }
+            newState = .agentLaunched
+        } else if let next = Self.nextState(from: currentState, on: event) {
+            newState = next
+        } else {
             return
         }
 

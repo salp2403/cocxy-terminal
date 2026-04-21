@@ -95,6 +95,77 @@ struct MainWindowControllerAgentLifecycleRecoverySwiftTests {
         )
     }
 
+    @Test("shell prompt reset clears stale launched agent state immediately")
+    func shellPromptResetClearsStaleLaunchedStateImmediately() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let store = AgentStatePerSurfaceStore()
+        let engine = AgentDetectionEngineImpl(compiledConfigs: [])
+        controller.injectedPerSurfaceStore = store
+        controller.injectedAgentDetectionEngine = engine
+
+        let surfaceID = SurfaceID()
+        let tabID = controller.tabManager.tabs.first!.id
+
+        store.update(surfaceID: surfaceID) { state in
+            state.agentState = .launched
+            state.detectedAgent = DetectedAgent(
+                name: "codex",
+                displayName: "Codex CLI",
+                launchCommand: "codex",
+                startedAt: Date()
+            )
+            state.agentActivity = "Booting"
+        }
+        engine.injectSignal(
+            DetectionSignal(
+                event: .agentDetected(name: "codex"),
+                confidence: 1.0,
+                source: .pattern(name: "codex")
+            ),
+            surfaceID: surfaceID
+        )
+
+        let didReset = controller.resetAgentStateOnShellPromptIfNeeded(
+            surfaceID: surfaceID,
+            tabID: tabID
+        )
+
+        #expect(didReset == true)
+        #expect(store.state(for: surfaceID) == .idle)
+        #expect(engine._stateForTesting(surfaceID: surfaceID) == .idle)
+        #expect(engine._debounceEventKeyForTesting(surfaceID: surfaceID) == nil)
+    }
+
+    @Test("shell prompt reset clears finished entries that still carry an agent")
+    func shellPromptResetClearsFinishedAgentMetadata() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let store = AgentStatePerSurfaceStore()
+        controller.injectedPerSurfaceStore = store
+
+        let surfaceID = SurfaceID()
+        let tabID = controller.tabManager.tabs.first!.id
+
+        store.update(surfaceID: surfaceID) { state in
+            state.agentState = .finished
+            state.detectedAgent = DetectedAgent(
+                name: "claude",
+                displayName: "Claude Code",
+                launchCommand: "claude",
+                startedAt: Date()
+            )
+            state.agentActivity = "Task completed"
+        }
+
+        let didReset = controller.resetAgentStateOnShellPromptIfNeeded(
+            surfaceID: surfaceID,
+            tabID: tabID
+        )
+
+        #expect(didReset == true)
+        #expect(store.states[surfaceID] == nil)
+        #expect(store.state(for: surfaceID).hasAgent == false)
+    }
+
     // MARK: - recoverAgentStateOnShellPromptIfNeeded
 
     @Test("recoverAgentStateOnShellPromptIfNeeded is a no-op when bridge returns no registration")

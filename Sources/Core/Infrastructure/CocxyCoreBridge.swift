@@ -316,17 +316,30 @@ final class CocxyCoreBridge: TerminalEngine {
     /// Context extracted around native search matches for UI display.
     private static let searchContextCharacterCount = 20
 
+    /// Environment keys inherited from the host process that should not leak
+    /// into user shells. Codex runs with `NO_COLOR=1`, and if Cocxy passes that
+    /// through to the PTY, TUIs such as Claude Code intentionally disable their
+    /// brand/accent colours even though the terminal supports them.
+    static let terminalEnvironmentKeysToUnset: Set<String> = ["NO_COLOR"]
+
     // MARK: - Initialization
 
     init() {}
 
     deinit {
-        assert(Thread.isMainThread, "CocxyCoreBridge.deinit called off main thread")
-        MainActor.assumeIsolated {
-            let ids = Array(surfaces.keys)
-            for id in ids {
-                destroySurface(id)
+        let cleanup = {
+            MainActor.assumeIsolated {
+                let ids = Array(self.surfaces.keys)
+                for id in ids {
+                    self.destroySurface(id)
+                }
             }
+        }
+
+        if Thread.isMainThread {
+            cleanup()
+        } else {
+            DispatchQueue.main.sync(execute: cleanup)
         }
     }
 
@@ -1526,6 +1539,26 @@ final class CocxyCoreBridge: TerminalEngine {
         } ?? false
     }
 
+    /// Injects a Protocol v2 message into the same in-process semantic pipeline
+    /// used by messages observed from the terminal byte stream.
+    ///
+    /// `sendProtocolV2Message` writes an outbound escape sequence to the PTY.
+    /// That is useful for Protocol v2-aware TUIs, but it cannot exercise the
+    /// dashboard/hooks pipeline when the process inside the terminal does not
+    /// speak Protocol v2 yet. The CLI uses this helper for local smoke tests and
+    /// developer tooling so `cocxy protocol send --type agent.status ...`
+    /// updates agent state immediately while still preserving the outbound send.
+    @discardableResult
+    func injectProtocolV2Message(type: String, json: String, to surface: SurfaceID) -> Bool {
+        guard !type.isEmpty, surfaces[surface] != nil else { return false }
+        guard let data = json.data(using: .utf8),
+              (try? JSONSerialization.jsonObject(with: data)) != nil else {
+            return false
+        }
+        handleProtocolV2Message(type: type, payload: json, for: surface)
+        return true
+    }
+
     @discardableResult
     func clearImages(for surface: SurfaceID) -> UInt32? {
         guard let removed = withTerminalLock(surface, body: { state -> UInt32 in
@@ -2001,12 +2034,17 @@ final class CocxyCoreBridge: TerminalEngine {
         // immediately after spawn so other modules/windows do not observe them.
         let previousCwd = FileManager.default.currentDirectoryPath
         let envVars = buildShellIntegrationEnvVars(forShell: shell)
-        let previousEnv = envVars.reduce(into: [String: String?]()) { result, entry in
+        let envKeysToUnset = Self.terminalEnvironmentKeysToUnset.subtracting(envVars.keys)
+        var previousEnv = envVars.reduce(into: [String: String?]()) { result, entry in
             result[entry.key] = Self.environmentValue(for: entry.key)
+        }
+        for key in envKeysToUnset {
+            previousEnv[key] = Self.environmentValue(for: key)
         }
 
         let cwd = workingDirectory.path
         _ = FileManager.default.changeCurrentDirectoryPath(cwd)
+        for key in envKeysToUnset { unsetenv(key) }
         for (key, value) in envVars { setenv(key, value, 1) }
 
         defer {
@@ -2092,6 +2130,14 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         env["TERM"] = "xterm-256color"
+        // Modern TUIs (including agent UIs) often gate richer palettes
+        // on COLORTERM rather than TERM alone. This advertises truecolor
+        // support without forcing color globally for non-interactive tools.
+        env["COLORTERM"] = "truecolor"
+        // Help Node/Rust terminal capability detectors classify Cocxy as an
+        // interactive terminal instead of inheriting the host app's `TERM=dumb`.
+        env["TERM_PROGRAM"] = "CocxyTerminal"
+        env["CLICOLOR"] = "1"
 
         guard let resourcesPath else {
             return env

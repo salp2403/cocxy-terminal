@@ -9,6 +9,23 @@ import Testing
 @MainActor
 struct AppDelegateCwdChangedHookSwiftTests {
 
+    @Test("bound hook sessions can retain the exact originating surface")
+    func boundHookSessionRetainsSurfaceID() {
+        let delegate = AppDelegate()
+        let tabID = TabID()
+        let surfaceID = SurfaceID()
+
+        delegate.bindHookSession("sess-surface", to: tabID, surfaceID: surfaceID)
+
+        #expect(delegate.hookSessionTabBindings["sess-surface"] == tabID)
+        #expect(delegate.boundSurfaceIDForHookSession("sess-surface") == surfaceID)
+
+        delegate.unbindHookSession("sess-surface")
+
+        #expect(delegate.hookSessionTabBindings["sess-surface"] == nil)
+        #expect(delegate.boundSurfaceIDForHookSession("sess-surface") == nil)
+    }
+
     @Test("bound session wins when multiple tabs share the same previous directory")
     func cwdChangedPrefersBoundSessionWhenMultipleTabsShareTheSameDirectory() {
         let delegate = AppDelegate()

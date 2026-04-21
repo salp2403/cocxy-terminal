@@ -21,6 +21,11 @@ struct AgentNativePatternProjectionSwiftTestingTests {
         }
         #expect(hasCodexBanner)
 
+        let hasCodexTuiBanner = patterns.contains {
+            $0.type == .agentLaunch && $0.mode == .contains && $0.text == "OpenAI Codex"
+        }
+        #expect(hasCodexTuiBanner)
+
         let hasClaudeBanner = patterns.contains {
             $0.type == .agentLaunch && $0.mode == .contains && $0.text == "Claude Code v"
         }

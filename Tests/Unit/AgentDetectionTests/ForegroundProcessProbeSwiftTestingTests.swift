@@ -35,6 +35,14 @@ struct ForegroundProcessProbeSwiftTestingTests {
         ForegroundProcessInfo(name: name, command: nil, pid: pid)
     }
 
+    /// Deliberately blocks the current thread from a synchronous helper.
+    /// Some tests need to model main-actor starvation; keeping the sleep
+    /// out of the async test body avoids Swift 6's async blocking warning
+    /// while preserving the exact production contention shape.
+    private func blockCurrentThread(for duration: TimeInterval) {
+        Thread.sleep(forTimeInterval: duration)
+    }
+
     // MARK: - Fast-path completion
 
     @Test("completion receives the detector result when the background finishes first")
@@ -125,6 +133,44 @@ struct ForegroundProcessProbeSwiftTestingTests {
 
         #expect(completed == true)
         #expect(received == nil, "Timeout should have won; detector was still sleeping")
+        #expect(probe.pendingCount == 0)
+    }
+
+    @Test("timeout still wins when main actor delivery is delayed")
+    func timeoutWinsDespiteMainActorDelay() async throws {
+        // Regression guard for full-suite contention: if the timeout is
+        // claimed only from the main actor, a busy main queue can let the
+        // late detector result win even though the deadline elapsed first.
+        let probe = ForegroundProcessProbe(detect: { _, _ in
+            Thread.sleep(forTimeInterval: 0.15)
+            return ForegroundProcessInfo(name: "late-shell", command: nil, pid: 42)
+        })
+
+        var received: ForegroundProcessInfo?
+        var completed = false
+        probe.probe(
+            surfaceID: SurfaceID(),
+            shellPID: 42,
+            ptyMasterFD: nil,
+            timeout: 0.05
+        ) { info in
+            received = info
+            completed = true
+        }
+
+        // Simulate the main actor being busy past both the timeout and
+        // the detector completion. The background timeout must still
+        // claim the result first, and delivery should be nil once the
+        // main actor is available again.
+        blockCurrentThread(for: 0.25)
+
+        let deadline = Date().addingTimeInterval(2.0)
+        while !completed, Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        #expect(completed == true)
+        #expect(received == nil)
         #expect(probe.pendingCount == 0)
     }
 
@@ -322,4 +368,3 @@ struct ForegroundProcessProbeSwiftTestingTests {
         #expect(probe.pendingCount == 0)
     }
 }
-

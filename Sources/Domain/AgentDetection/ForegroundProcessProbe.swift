@@ -64,6 +64,7 @@ final class ForegroundProcessProbe {
 
     private struct Pending {
         let workItem: DispatchWorkItem
+        let timeoutItem: DispatchWorkItem
         let box: ProbeBox
     }
 
@@ -123,22 +124,34 @@ final class ForegroundProcessProbe {
             box.store(info)
         }
 
-        pending[surfaceID] = Pending(workItem: workItem, box: box)
-        probeQueue.async(execute: workItem)
-
-        // Deadline path. Wins when `sysctl` is slow enough that the
-        // background work item has not yet populated the box.
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+        let timeoutItem = DispatchWorkItem { [weak self] in
+            guard let outcome = box.claim() else { return }
+            workItem.cancel()
             Task { @MainActor [weak self] in
-                self?.deliver(
+                self?.deliverClaimedOutcome(
                     surfaceID: surfaceID,
                     workItem: workItem,
-                    box: box,
-                    cancelWorkItemIfClaimed: true,
+                    outcome: outcome,
                     completion: completion
                 )
             }
         }
+
+        pending[surfaceID] = Pending(
+            workItem: workItem,
+            timeoutItem: timeoutItem,
+            box: box
+        )
+        probeQueue.async(execute: workItem)
+
+        // Deadline path. Wins when `sysctl` is slow enough that the
+        // background work item has not yet populated the box. The claim
+        // happens off the main actor so a busy UI thread cannot let a
+        // late detector result beat the nominal hard deadline.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(
+            deadline: .now() + timeout,
+            execute: timeoutItem
+        )
 
         // Fast path. Wins when the background finishes before the
         // deadline. `notify` queues onto main regardless of whether the
@@ -166,6 +179,7 @@ final class ForegroundProcessProbe {
     func cancel(surfaceID: SurfaceID) {
         guard let entry = pending.removeValue(forKey: surfaceID) else { return }
         entry.workItem.cancel()
+        entry.timeoutItem.cancel()
         // Claim the box so the late `notify` callback (if any) sees a
         // consumed outcome and skips delivery.
         _ = entry.box.claim()
@@ -175,6 +189,7 @@ final class ForegroundProcessProbe {
     func cancelAll() {
         for (_, entry) in pending {
             entry.workItem.cancel()
+            entry.timeoutItem.cancel()
             _ = entry.box.claim()
         }
         pending.removeAll()
@@ -203,16 +218,18 @@ final class ForegroundProcessProbe {
         // A later `probe(...)` or explicit `cancel(surfaceID:)` may have
         // replaced the entry we were called for. Compare by identity so
         // we only deliver when the state still matches what we armed.
-        guard pending[surfaceID]?.workItem === workItem else { return }
+        guard let entry = pending[surfaceID], entry.workItem === workItem else { return }
 
         guard let outcome = box.claim() else {
-            // The other branch (fast/slow) already claimed the outcome.
-            // Drop the entry to keep introspection accurate and return.
-            pending.removeValue(forKey: surfaceID)
+            // The timeout branch may have claimed off-main and queued its
+            // delivery onto the main actor. Leave the pending entry in
+            // place for that delivery path to remove so the completion is
+            // not lost under full-suite main-actor contention.
             return
         }
 
         pending.removeValue(forKey: surfaceID)
+        entry.timeoutItem.cancel()
         if cancelWorkItemIfClaimed {
             // Deadline path: the work item may still be running. Cancel
             // so the `sysctl` descheduled work does not waste cycles
@@ -221,9 +238,25 @@ final class ForegroundProcessProbe {
         }
         completion(outcome.info)
     }
+
+    private func deliverClaimedOutcome(
+        surfaceID: SurfaceID,
+        workItem: DispatchWorkItem,
+        outcome: ProbeOutcome,
+        completion: @MainActor (ForegroundProcessInfo?) -> Void
+    ) {
+        guard let entry = pending[surfaceID], entry.workItem === workItem else { return }
+        pending.removeValue(forKey: surfaceID)
+        entry.timeoutItem.cancel()
+        completion(outcome.info)
+    }
 }
 
 // MARK: - ProbeBox
+
+private struct ProbeOutcome {
+    let info: ForegroundProcessInfo?
+}
 
 /// Race-safe single-shot container for the probe outcome.
 ///
@@ -236,12 +269,8 @@ final class ForegroundProcessProbe {
 /// Sendable and the `NSLock` guards every mutable field.
 private final class ProbeBox: @unchecked Sendable {
 
-    struct Outcome {
-        let info: ForegroundProcessInfo?
-    }
-
     private let lock = NSLock()
-    private var storedOutcome: Outcome?
+    private var storedOutcome: ProbeOutcome?
     private var claimed = false
 
     /// Records the background detector result. No-op if already stored
@@ -250,14 +279,14 @@ private final class ProbeBox: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard !claimed, storedOutcome == nil else { return }
-        storedOutcome = Outcome(info: info)
+        storedOutcome = ProbeOutcome(info: info)
     }
 
     /// Takes ownership of the outcome. Returns `nil` on every call after
     /// the first; the first call returns the stored outcome (which may
     /// wrap a `nil` `ForegroundProcessInfo` when detection failed, or
     /// even an empty outcome when the deadline beat the background).
-    func claim() -> Outcome? {
+    func claim() -> ProbeOutcome? {
         lock.lock()
         defer { lock.unlock() }
         guard !claimed else { return nil }
@@ -265,6 +294,6 @@ private final class ProbeBox: @unchecked Sendable {
         // When the deadline wins before `store` was called, return an
         // explicit empty outcome so the caller still completes with
         // `nil` instead of leaving the completion hanging.
-        return storedOutcome ?? Outcome(info: nil)
+        return storedOutcome ?? ProbeOutcome(info: nil)
     }
 }

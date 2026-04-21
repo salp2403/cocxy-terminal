@@ -222,6 +222,10 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(smartRoutingItem, with: KeybindingActionCatalog.remoteGoToAttention)
         viewMenu.addItem(smartRoutingItem)
 
+        viewMenu.addItem(withTitle: "Remote Workspaces...",
+                         action: #selector(MainWindowController.toggleRemoteWorkspacePanelAction(_:)),
+                         keyEquivalent: "")
+
         let timelineItem = NSMenuItem(
             title: "Agent Timeline",
             action: #selector(MainWindowController.toggleTimelineAction(_:)),
@@ -246,6 +250,10 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(browserItem, with: KeybindingActionCatalog.markdownBrowser)
         viewMenu.addItem(browserItem)
 
+        viewMenu.addItem(withTitle: "Open Markdown Panel",
+                         action: #selector(MainWindowController.splitWithMarkdownAction(_:)),
+                         keyEquivalent: "")
+
         viewMenu.addItem(NSMenuItem.separator())
 
         // Toggle Tab Bar: not rebindable (no catalog entry, no default shortcut).
@@ -254,7 +262,7 @@ extension AppDelegate {
                          keyEquivalent: "")
 
         let splitHorizontalItem = NSMenuItem(
-            title: "Split Horizontal",
+            title: "Split Side by Side",
             action: #selector(MainWindowController.splitHorizontalAction(_:)),
             keyEquivalent: ""
         )
@@ -262,7 +270,7 @@ extension AppDelegate {
         viewMenu.addItem(splitHorizontalItem)
 
         let splitVerticalItem = NSMenuItem(
-            title: "Split Vertical",
+            title: "Split Stacked",
             action: #selector(MainWindowController.splitVerticalAction(_:)),
             keyEquivalent: ""
         )

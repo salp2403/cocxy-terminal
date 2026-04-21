@@ -131,8 +131,9 @@ protocol AgentDetecting: AnyObject {
     /// calling on a surface that was never tracked or has already been
     /// cleared is a safe no-op.
     ///
-    /// The agent state machine itself is not touched; only per-surface
-    /// routing state is released.
+    /// The selected surface's state machine is released too. Other
+    /// surfaces remain untouched so sibling splits can keep their agent
+    /// lifecycle independently.
     ///
     /// - Parameter id: Surface whose per-surface state should be
     ///   dropped. Passing `nil` clears the legacy shared bucket used

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
 import AppKit
+import Combine
 import Testing
 import CocxyCoreKit
 @testable import CocxyTerminal
@@ -388,6 +389,28 @@ struct CocxyCoreBridgeTests {
         #expect(diagnostics.capabilitiesRequested == true)
     }
 
+    @Test("protocol message injection feeds semantic hooks locally")
+    func protocolMessageInjectionFeedsSemanticHooksLocally() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+
+        var hooks: [HookEvent] = []
+        var cancellables = Set<AnyCancellable>()
+        bridge.semanticAdapter.eventPublisher
+            .sink { hooks.append($0) }
+            .store(in: &cancellables)
+
+        let payload = #"{"data":{"state":"working","agent_name":"Claude Code","task":"reviewing changes"}}"#
+        #expect(bridge.injectProtocolV2Message(type: "agent.status", json: payload, to: surfaceID) == true)
+        #expect(bridge.protocolDiagnostics(for: surfaceID)?.observed == true)
+        #expect(hooks.contains { event in
+            guard event.type == .sessionStart,
+                  case .sessionStart(let data) = event.data else { return false }
+            return data.agentType == "Claude Code"
+        })
+    }
+
     @Test("mode diagnostics expose live terminal mode state")
     func modeDiagnosticsExposeTerminalState() throws {
         let bridge = try makeBridge()
@@ -564,6 +587,9 @@ struct CocxyCoreBridgeTests {
         )
 
         #expect(env["TERM"] == "xterm-256color")
+        #expect(env["COLORTERM"] == "truecolor")
+        #expect(env["TERM_PROGRAM"] == "CocxyTerminal")
+        #expect(env["CLICOLOR"] == "1")
         #expect(env["COCXY_RESOURCES_DIR"] == root.path)
         #expect(env["COCXY_SHELL_INTEGRATION_DIR"] == root.appendingPathComponent("shell-integration").path)
         #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
@@ -598,6 +624,9 @@ struct CocxyCoreBridgeTests {
         )
 
         #expect(env["TERM"] == "xterm-256color")
+        #expect(env["COLORTERM"] == "truecolor")
+        #expect(env["TERM_PROGRAM"] == "CocxyTerminal")
+        #expect(env["CLICOLOR"] == "1")
         #expect(env["COCXY_RESOURCES_DIR"] == root.path)
         #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
         #expect(env["HOME"] == bashDir.path)
@@ -637,11 +666,19 @@ struct CocxyCoreBridgeTests {
         )
 
         #expect(env["TERM"] == "xterm-256color")
+        #expect(env["COLORTERM"] == "truecolor")
+        #expect(env["TERM_PROGRAM"] == "CocxyTerminal")
+        #expect(env["CLICOLOR"] == "1")
         #expect(env["COCXY_RESOURCES_DIR"] == root.path)
         #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
         #expect(env["XDG_CONFIG_HOME"] == root.appendingPathComponent("shell-integration").path)
         #expect(env["COCXY_FISH_ORIG_HOME"] == "/Users/test")
         #expect(env["COCXY_FISH_ORIG_XDG_CONFIG_HOME"] == "/Users/test/.config")
+    }
+
+    @Test("terminal PTYs strip host NO_COLOR so agent TUIs can render their brand accents")
+    func terminalPTYsStripHostNoColor() throws {
+        #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("NO_COLOR"))
     }
 }
 

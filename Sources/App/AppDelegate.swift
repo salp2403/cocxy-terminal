@@ -176,6 +176,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// presentation. This avoids repeatedly falling back to CWD matching.
     var hookSessionTabBindings: [String: TabID] = [:]
 
+    /// Best-effort routing cache from hook/native semantic session IDs to
+    /// the exact terminal surface that produced them.
+    ///
+    /// CocxyCore native semantic events are emitted per surface. Keeping
+    /// this companion binding prevents a split tab with duplicate CWDs
+    /// from routing all agent state to the tab's first surface.
+    var hookSessionSurfaceBindings: [String: SurfaceID] = [:]
+
     /// Cancellables for hook-to-engine wiring and agent-to-tab wiring.
     var hookCancellables = Set<AnyCancellable>()
 
@@ -491,9 +499,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let shell = configService?.current.general.shell
             ?? GeneralConfig.defaults.shell
 
-        // Resolve the theme palette to pass to the terminal engine.
+        // Resolve and apply the configured theme before the bridge is
+        // initialized so `ThemeEngine.activeTheme` stays in lockstep
+        // with the terminal palette from the first window frame. The
+        // one-click light/dark toggle reads `activeTheme`; resolving a
+        // palette without applying it leaves that toggle stuck on the
+        // previous variant.
         let resolvedPalette: ThemePalette?
-        if let resolved = try? themeEngine?.themeByName(theme) {
+        if let engine = themeEngine, let resolved = try? engine.themeByName(theme) {
+            try? engine.apply(themeName: resolved.metadata.name)
             resolvedPalette = resolved.palette
         } else {
             // Fall back to Catppuccin Mocha (the default).
@@ -561,8 +575,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func switchTheme(to themeName: String) {
         guard let windowController = windowController else { return }
 
-        guard let theme = try? themeEngine?.themeByName(themeName) else {
-            NSLog("[AppDelegate] Theme not found: %@", themeName)
+        guard let engine = themeEngine else {
+            NSLog("[AppDelegate] Theme switch requested before ThemeEngine was ready")
             return
         }
 
@@ -571,14 +585,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        do {
+            try engine.apply(themeName: themeName)
+        } catch {
+            NSLog("[AppDelegate] Theme not found: %@", themeName)
+            return
+        }
+        let theme = engine.activeTheme
+
         cocxyBridge.updateDefaults(
             themeName: theme.metadata.name,
             themePalette: theme.palette
         )
         applyCocxyCoreTheme(theme.palette, bridge: cocxyBridge)
         applyThemeUI(windowController, palette: theme.palette)
+        windowController.syncAuroraDesignTheme(for: theme.metadata.variant)
         for controller in additionalWindowControllers {
             applyThemeUI(controller, palette: theme.palette)
+            controller.syncAuroraDesignTheme(for: theme.metadata.variant)
         }
         if let config = configService?.current {
             let wasQuickTerminalVisible = quickTerminalController?.isVisible ?? false
@@ -590,9 +614,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Broadcast theme change through the event bus so subscribers
         // (dashboard, plugins, future extensions) can react.
-        windowEventBus?.broadcast(.themeChanged(themeName: themeName))
+        windowEventBus?.broadcast(.themeChanged(themeName: theme.metadata.name))
 
-        NSLog("[AppDelegate] Theme switched to: %@", themeName)
+        NSLog("[AppDelegate] Theme switched to: %@", theme.metadata.name)
     }
 
     func applyBridgeConfigurationChanges(from oldConfig: CocxyConfig?, to newConfig: CocxyConfig) {
@@ -943,12 +967,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return allWindowControllers.first(where: { $0.window?.isMainWindow == true }) ?? windowController
     }
 
-    func bindHookSession(_ sessionID: String, to tabID: TabID) {
+    func bindHookSession(
+        _ sessionID: String,
+        to tabID: TabID,
+        surfaceID: SurfaceID? = nil
+    ) {
         hookSessionTabBindings[sessionID] = tabID
+        if let surfaceID {
+            hookSessionSurfaceBindings[sessionID] = surfaceID
+        }
     }
 
     func unbindHookSession(_ sessionID: String) {
         hookSessionTabBindings.removeValue(forKey: sessionID)
+        hookSessionSurfaceBindings.removeValue(forKey: sessionID)
+    }
+
+    func boundSurfaceIDForHookSession(_ sessionID: String?) -> SurfaceID? {
+        guard let sessionID else { return nil }
+        return hookSessionSurfaceBindings[sessionID]
     }
 
     func resolvedControllerAndTab(

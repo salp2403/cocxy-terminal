@@ -74,6 +74,13 @@ final class CocxyCoreSemanticAdapter {
     /// stable `SessionID` instead of a synthetic per-surface fallback.
     var sessionIdentifierProvider: ((SurfaceID, String?) -> String?)?
 
+    /// Maps CocxyCore pattern-match detail text back to a configured
+    /// agent identifier. Native semantic events currently carry the
+    /// matched terminal line as `detail`, so the host injects this
+    /// resolver to turn banner copy into stable identifiers like
+    /// `claude` or `codex` before the event reaches the shared store.
+    var agentIdentifierResolver: ((String) -> String?)?
+
     /// Synthetic session ID per surface. CocxyCore doesn't have the CLI agent's
     /// session concept, so we create a stable ID per surface for routing.
     private var sessionIDs: [SurfaceID: String] = [:]
@@ -131,7 +138,7 @@ final class CocxyCoreSemanticAdapter {
 
         // Agent-level events (3-7) → synthesize HookEvents for detection engine
         case 3: // AGENT_LAUNCHED
-            let agentName = detail ?? "agent"
+            let agentName = canonicalAgentName(fromNativeDetail: detail)
             agentNames[surfaceID] = agentName
             startedSessions.insert(sessionId)
 
@@ -581,6 +588,15 @@ final class CocxyCoreSemanticAdapter {
             bytes: UnsafeBufferPointer(start: ptr, count: Int(event.detail_len)),
             encoding: .utf8
         )
+    }
+
+    private func canonicalAgentName(fromNativeDetail detail: String?) -> String {
+        guard let detail = detail?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !detail.isEmpty else {
+            return "agent"
+        }
+
+        return agentIdentifierResolver?(detail) ?? detail
     }
 
     /// Emit a synthesized HookEvent through the publisher.

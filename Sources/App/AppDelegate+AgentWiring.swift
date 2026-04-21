@@ -4,6 +4,11 @@
 import AppKit
 import Combine
 
+private enum AgentNotificationRoutingKey: Hashable {
+    case tab(TabID)
+    case surface(SurfaceID)
+}
+
 // MARK: - Agent Detection Wiring
 
 /// Extension that initializes the agent detection engine and wires it
@@ -142,6 +147,23 @@ extension AppDelegate {
                     return
                 }
 
+                let resolvedSurfaceID = resolved.flatMap {
+                    self.surfaceIDForDualWrite(
+                        controller: $0.controller,
+                        tabID: $0.tabID,
+                        preferred: self.boundSurfaceIDForHookSession(event.sessionId),
+                        cwdHint: event.cwd
+                    )
+                }
+                if let resolved,
+                   let resolvedSurfaceID {
+                    self.bindHookSession(
+                        event.sessionId,
+                        to: resolved.tabID,
+                        surfaceID: resolvedSurfaceID
+                    )
+                }
+
                 // Route tool activity into the per-surface store and bump
                 // the tab's last-activity timestamp for sidebar sorting.
                 // The store is the sole source of truth for agent state;
@@ -161,11 +183,7 @@ extension AppDelegate {
                     resolved.controller.tabManager.updateTab(id: resolved.tabID) { tab in
                         tab.lastActivityAt = Date()
                     }
-                    if let targetSurfaceID = self.surfaceIDForDualWrite(
-                        controller: resolved.controller,
-                        tabID: resolved.tabID,
-                        cwdHint: event.cwd
-                    ) {
+                    if let targetSurfaceID = resolvedSurfaceID {
                         self.agentStatePerSurfaceStore?.update(
                             surfaceID: targetSurfaceID
                         ) { state in
@@ -190,7 +208,7 @@ extension AppDelegate {
                     self.handleCwdChangedHook(event)
                 }
 
-                engine?.processHookEvent(event)
+                engine?.processHookEvent(event, surfaceID: resolvedSurfaceID)
 
                 if event.type == .sessionEnd {
                     self.unbindHookSession(event.sessionId)
@@ -215,15 +233,21 @@ extension AppDelegate {
                 let agentState = context.state.toTabAgentState
 
                 let target: (controller: MainWindowController, tabID: TabID)?
-                if let hookSessionId = context.hookSessionId {
+                if let surfaceID = context.surfaceID,
+                   let controller = self.controllerContainingSurface(surfaceID),
+                   let tabID = controller.tabID(for: surfaceID) {
+                    target = (controller, tabID)
+                } else if let hookSessionId = context.hookSessionId {
                     target = self.resolvedControllerAndTab(
                         forHookSessionID: hookSessionId,
                         cwd: context.hookCwd
                     )
                 } else {
                     // No hook context — this is a pattern-based detection.
-                    // Only apply to the active tab (pattern detection reads
-                    // the focused surface's output).
+                    // If the detector emitted a surfaceID we already routed
+                    // above; legacy nil-surface signals still fall back to
+                    // the active tab because that is the only safe context
+                    // available.
                     guard let controller = self.focusedWindowController(),
                           let activeTabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
                         return
@@ -248,16 +272,30 @@ extension AppDelegate {
                 // Resolution priority: explicit context surfaceID (pattern
                 // and timing detectors already supply it) -> bridge CWD
                 // match -> tab primary surface.
+                var resolvedTargetSurfaceID: SurfaceID?
                 if let targetSurfaceID = self.surfaceIDForDualWrite(
                     controller: controller,
                     tabID: tabID,
                     preferred: context.surfaceID,
                     cwdHint: context.hookCwd
                 ) {
+                    resolvedTargetSurfaceID = targetSurfaceID
                     self.agentStatePerSurfaceStore?.update(
                         surfaceID: targetSurfaceID
                     ) { state in
                         state.agentState = agentState
+                        let isFreshLaunch: Bool
+                        if case .agentDetected = context.transitionEvent {
+                            isFreshLaunch = true
+                        } else {
+                            isFreshLaunch = false
+                        }
+
+                        if isFreshLaunch {
+                            state.agentToolCount = 0
+                            state.agentErrorCount = 0
+                            state.agentActivity = nil
+                        }
 
                         if agentState == .idle {
                             state.agentToolCount = 0
@@ -310,15 +348,30 @@ extension AppDelegate {
                             surfaceID: targetSurfaceID
                         )
                     }
+
+                    // The native semantic layer can report a launch before
+                    // slower recovery paths have cleared a previous agent's
+                    // label from the same pane. Re-read the visible buffer
+                    // immediately after the store write so Aurora/sidebar/
+                    // status/dashboard never keep a stale identity such as
+                    // "Codex CLI" when the pane visibly launched Claude.
+                    controller.reconcileAuroraAgentStateFromVisibleBuffers()
+                    controller.auroraChromeController?.refreshSources()
                 }
 
                 // Propagate agent state to the session registry so the
                 // AgentStateAggregator can provide cross-window visibility.
                 let sessionID = controller.sessionIDForTab(tabID)
+                let reconciledState = resolvedTargetSurfaceID
+                    .flatMap { self.agentStatePerSurfaceStore?.state(for: $0) }
+                let registryState = reconciledState?.agentState ?? agentState
+                let registryDisplayName = reconciledState?
+                    .detectedAgent?
+                    .displayName ?? displayName
                 controller.sessionRegistry?.updateAgentState(
                     sessionID,
-                    state: agentState,
-                    agentName: displayName
+                    state: registryState,
+                    agentName: registryDisplayName
                 )
 
                 controller.tabBarViewModel?.syncWithManager()
@@ -327,7 +380,7 @@ extension AppDelegate {
 
                 controller.updateNotificationRing(
                     for: tabID,
-                    agentState: agentState
+                    agentState: registryState
                 )
             }
             .store(in: &hookCancellables)
@@ -392,6 +445,50 @@ extension AppDelegate {
             let tabDirectory = controller.tabManager.tab(for: tabID)?.workingDirectory.path
 
             return (tabId: tabID.rawValue, workingDirectory: surfaceDirectory ?? tabDirectory)
+        }
+
+        dashboardVM.patternContextProvider = { [weak self] surfaceID in
+            guard let self else { return nil }
+
+            if let surfaceID,
+               let controller = self.controllerContainingSurface(surfaceID),
+               let tabID = controller.tabID(for: surfaceID) {
+                let directory = controller.workingDirectory(for: surfaceID)?.path
+                    ?? controller.tabManager.tab(for: tabID)?.workingDirectory.path
+                return (
+                    tabId: tabID.rawValue,
+                    surfaceID: surfaceID,
+                    workingDirectory: directory
+                )
+            }
+
+            guard let controller = self.focusedWindowController(),
+                  let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
+                return nil
+            }
+
+            let focusedSurfaceID = controller.activeTerminalSurfaceView?
+                .terminalViewModel?
+                .surfaceID
+            let surfaceDirectory = focusedSurfaceID
+                .flatMap { controller.workingDirectory(for: $0)?.path }
+            let tabDirectory = controller.tabManager.tab(for: tabID)?.workingDirectory.path
+
+            return (
+                tabId: tabID.rawValue,
+                surfaceID: focusedSurfaceID,
+                workingDirectory: surfaceDirectory ?? tabDirectory
+            )
+        }
+
+        if let store = agentStatePerSurfaceStore {
+            dashboardVM.syncSurfaceAgentStates(store.states)
+            store.$states
+                .receive(on: DispatchQueue.main)
+                .sink { [weak dashboardVM] states in
+                    dashboardVM?.syncSurfaceAgentStates(states)
+                }
+                .store(in: &hookCancellables)
         }
 
         // Inject the dashboard VM into all windows so multi-window
@@ -523,6 +620,20 @@ extension AppDelegate {
             self?.workingDirectoryForSurface(surfaceID)
         }
 
+        cocxyBridge.semanticAdapter.agentIdentifierResolver = { [weak self] detail in
+            if let service = self?.agentConfigService {
+                return service.agentIdentifier(matchingLaunchLine: detail)
+            }
+
+            let compiledDefaults = AgentConfigService
+                .defaultAgentConfigs()
+                .map(AgentConfigService.compile)
+            return AgentConfigService.agentIdentifier(
+                matchingLaunchLine: detail,
+                compiledConfigs: compiledDefaults
+            )
+        }
+
         cocxyBridge.semanticAdapter.windowMetadataProvider = { [weak self] surfaceID, cwd in
             guard let self else { return (nil, nil) }
             if let controller = self.controllerContainingSurface(surfaceID) {
@@ -540,12 +651,20 @@ extension AppDelegate {
 
             if let controller = self.controllerContainingSurface(surfaceID),
                let tabID = controller.tabID(for: surfaceID) {
-                return controller.sessionIDForTab(tabID).rawValue.uuidString
+                let sessionID = [
+                    controller.sessionIDForTab(tabID).rawValue.uuidString,
+                    "surface",
+                    surfaceID.rawValue.uuidString,
+                ].joined(separator: "-")
+                self.bindHookSession(sessionID, to: tabID, surfaceID: surfaceID)
+                return sessionID
             }
 
             if let cwd,
                let resolved = self.resolvedControllerAndTab(forHookSessionID: nil, cwd: cwd) {
-                return resolved.controller.sessionIDForTab(resolved.tabID).rawValue.uuidString
+                let sessionID = resolved.controller.sessionIDForTab(resolved.tabID).rawValue.uuidString
+                self.bindHookSession(sessionID, to: resolved.tabID)
+                return sessionID
             }
 
             return nil
@@ -743,7 +862,7 @@ extension AppDelegate {
         guard let engine = agentDetectionEngine,
               let notificationManager = notificationManager else { return }
 
-        var previousStateByTab: [TabID: AgentState] = [:]
+        var previousStateByTarget: [AgentNotificationRoutingKey: AgentState] = [:]
 
         engine.stateChanged
             .receive(on: DispatchQueue.main)
@@ -753,7 +872,11 @@ extension AppDelegate {
                 let agentState = context.state.toTabAgentState
 
                 let target: (controller: MainWindowController, tabID: TabID)?
-                if let hookSessionId = context.hookSessionId {
+                if let surfaceID = context.surfaceID,
+                   let controller = self.controllerContainingSurface(surfaceID),
+                   let tabID = controller.tabID(for: surfaceID) {
+                    target = (controller, tabID)
+                } else if let hookSessionId = context.hookSessionId {
                     target = self.resolvedControllerAndTab(
                         forHookSessionID: hookSessionId,
                         cwd: context.hookCwd
@@ -769,8 +892,11 @@ extension AppDelegate {
                 guard let target,
                       let tab = target.controller.tabManager.tab(for: target.tabID) else { return }
 
-                let previousState = previousStateByTab[target.tabID] ?? .idle
-                previousStateByTab[target.tabID] = agentState
+                let routingKey = context.surfaceID
+                    .map(AgentNotificationRoutingKey.surface)
+                    ?? .tab(target.tabID)
+                let previousState = previousStateByTarget[routingKey] ?? .idle
+                previousStateByTarget[routingKey] = agentState
 
                 // Only notify on meaningful transitions (skip idle→idle, etc.).
                 guard agentState != previousState else { return }
@@ -790,6 +916,9 @@ extension AppDelegate {
         guard let rawName else { return nil }
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+        guard trimmed.localizedCaseInsensitiveCompare("unknown") != .orderedSame else {
+            return nil
+        }
         return agentConfigService?.displayName(forAgentIdentifier: trimmed) ?? trimmed
     }
 
@@ -839,17 +968,55 @@ extension AppDelegate {
             return preferred
         }
         let tabSurfaces = controller.surfaceIDs(for: tabID)
+        if let focused = controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
+           tabSurfaces.contains(focused),
+           controller.displayedTabID == tabID,
+           surfaceMatchesCwdHint(
+               focused,
+               in: controller,
+               cwdHint: cwdHint
+           ) {
+            return focused
+        }
         if let cwdHint,
            !cwdHint.isEmpty,
-           let cocxyBridge = bridge as? CocxyCoreBridge,
-           !tabSurfaces.isEmpty,
-           let resolved = cocxyBridge.resolveSurfaceID(
-               matchingCwd: cwdHint,
-               within: Set(tabSurfaces)
-           ) {
-            return resolved
+           !tabSurfaces.isEmpty {
+            let matchingSurfaces = tabSurfaces.filter {
+                surfaceMatchesCwdHint($0, in: controller, cwdHint: cwdHint)
+            }
+            if matchingSurfaces.count == 1 {
+                return matchingSurfaces[0]
+            }
+            if matchingSurfaces.count > 1 {
+                if let primary = tabSurfaces.first,
+                   matchingSurfaces.contains(primary) {
+                    return primary
+                }
+                return matchingSurfaces[0]
+            }
+            if let cocxyBridge = bridge as? CocxyCoreBridge,
+               let resolved = cocxyBridge.resolveSurfaceID(
+                   matchingCwd: cwdHint,
+                   within: Set(tabSurfaces)
+               ) {
+                return resolved
+            }
         }
         return tabSurfaces.first
+    }
+
+    private func surfaceMatchesCwdHint(
+        _ surfaceID: SurfaceID,
+        in controller: MainWindowController,
+        cwdHint: String?
+    ) -> Bool {
+        guard let cwdHint, !cwdHint.isEmpty else {
+            return true
+        }
+        guard let surfaceDirectory = controller.workingDirectory(for: surfaceID)?.path else {
+            return false
+        }
+        return HookPathNormalizer.normalize(surfaceDirectory) == HookPathNormalizer.normalize(cwdHint)
     }
 
     // MARK: - Tab CWD Matching

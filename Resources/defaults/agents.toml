@@ -38,7 +38,7 @@ finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^>\\s*$"]
 [codex]
 display-name = "Codex CLI"
 osc-supported = false
-launch-patterns = ["^codex\\b", "Welcome to Codex", "OpenAI's command-line coding agent"]
+launch-patterns = ["^codex\\b", "OpenAI Codex", "Welcome to Codex", "OpenAI's command-line coding agent"]
 waiting-patterns = ["Enter to confirm", "\\? ", "ctrl \\+ c again to quit"]
 error-patterns = ["Error:", "Failed", "rate limit"]
 finished-indicators = ["^\\$\\s*$", "^❯\\s*$", "^>\\s*$"]

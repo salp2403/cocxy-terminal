@@ -29,6 +29,39 @@ extension MainWindowController {
 
     // MARK: - Shell Prompt Recovery
 
+    /// Clears stale per-surface agent state as soon as the shell prompt
+    /// returns on that same surface.
+    ///
+    /// OSC 133;A is emitted by the shell prompt, not by Claude/Codex TUI
+    /// input prompts. Once we receive it for a surface, any agent state
+    /// still attached to that surface is stale. Waiting for the async
+    /// foreground-process probe left a race where the probe could miss
+    /// its 50 ms deadline and Aurora/status/dashboard would keep showing
+    /// a dead Codex/Claude entry until another incidental refresh. This
+    /// deterministic reset keeps the UI aligned with the terminal's own
+    /// semantic state.
+    ///
+    /// - Returns: `true` when a non-idle / agent-bearing store entry was
+    ///   reset, `false` when there was nothing to clear.
+    @discardableResult
+    func resetAgentStateOnShellPromptIfNeeded(
+        surfaceID: SurfaceID,
+        tabID: TabID
+    ) -> Bool {
+        guard let store = injectedPerSurfaceStore else { return false }
+        let current = store.state(for: surfaceID)
+        guard current.agentState != .idle || current.hasAgent else {
+            return false
+        }
+
+        performAgentStateReset(
+            surfaceID: surfaceID,
+            tabID: tabID,
+            reason: .shellPromptWithShellForeground
+        )
+        return true
+    }
+
     /// Recovers the per-surface agent state when a shell prompt returns
     /// on a surface whose agent already terminated but never emitted a
     /// `SessionEnd` hook.

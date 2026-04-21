@@ -294,6 +294,103 @@ final class AgentConfigServiceDefaultsTests: XCTestCase {
         let configs = service.agentConfigs()
         XCTAssertEqual(configs.count, 8, "Malformed TOML must fall back to 8 default agents")
     }
+
+    func testLegacyGeneratedTomlReceivesCurrentBuiltInOverlay() throws {
+        let toml = #"""
+        # Cocxy Terminal - Agent Detection Configuration
+
+        [claude]
+        display-name = "Claude Code"
+        osc-supported = true
+        launch-patterns = ["^claude\b", "^claude-code\b", "npx claude"]
+        waiting-patterns = ["^\? ", "\(Y/n\)", "\(y/N\)", "Do you want to", "Would you like"]
+        error-patterns = ["^Error:", "^error\[", "APIError", "Rate limit"]
+        finished-indicators = ["^\$\s*$", "^❯\s*$", "^>\s*$"]
+
+        [codex]
+        display-name = "Codex CLI"
+        osc-supported = false
+        launch-patterns = ["^codex\b"]
+        waiting-patterns = ["\? ", "Enter to confirm"]
+        error-patterns = ["Error:", "Failed"]
+        finished-indicators = ["^\$\s*$"]
+
+        [aider]
+        display-name = "Aider"
+        osc-supported = false
+        launch-patterns = ["^aider\b", "^python.*aider"]
+        waiting-patterns = ["^>\s*$", "^aider>"]
+        error-patterns = ["Error:", "Exception:", "Traceback"]
+        finished-indicators = ["^\$\s*$"]
+
+        [gemini-cli]
+        display-name = "Gemini CLI"
+        osc-supported = false
+        launch-patterns = ["^gemini\b"]
+        waiting-patterns = ["^>\s*$", "Enter your prompt"]
+        error-patterns = ["Error:", "Failed"]
+        finished-indicators = ["^\$\s*$"]
+
+        [kiro]
+        display-name = "Kiro"
+        osc-supported = false
+        launch-patterns = ["^kiro\b"]
+        waiting-patterns = ["\? "]
+        error-patterns = ["Error:"]
+        finished-indicators = ["^\$\s*$"]
+
+        [opencode]
+        display-name = "OpenCode"
+        osc-supported = false
+        launch-patterns = ["^opencode\b"]
+        waiting-patterns = ["^>\s*$"]
+        error-patterns = ["Error:"]
+        finished-indicators = ["^\$\s*$"]
+        """#
+
+        let fileProvider = InMemoryAgentConfigFileProvider(content: toml)
+        let service = AgentConfigService(fileProvider: fileProvider)
+        try service.reload()
+
+        let names = service.agentConfigs().map(\.name).sorted()
+        XCTAssertEqual(
+            names,
+            ["aider", "claude", "codex", "cursor", "gemini-cli", "kiro", "opencode", "windsurf"],
+            "Old generated files must be upgraded with newly bundled agents at runtime"
+        )
+
+        let claude = try XCTUnwrap(service.agentConfig(named: "claude"))
+        XCTAssertTrue(claude.launchPatterns.contains("Claude Code v[0-9]"))
+        XCTAssertTrue(claude.launchPatterns.contains("Claude (Max|Pro)"))
+        XCTAssertEqual(claude.displayName, "Claude Code")
+        XCTAssertTrue(claude.oscSupported)
+
+        let codex = try XCTUnwrap(service.agentConfig(named: "codex"))
+        XCTAssertTrue(codex.launchPatterns.contains("OpenAI Codex"))
+        XCTAssertTrue(codex.launchPatterns.contains("Welcome to Codex"))
+        XCTAssertEqual(codex.idleTimeoutOverride, 8.0)
+    }
+
+    func testCustomOnlyTomlDoesNotAppendBuiltInDefaults() throws {
+        let toml = #"""
+        [custom-agent]
+        display-name = "Custom Agent"
+        osc-supported = false
+        launch-patterns = ["^custom-agent\b"]
+        waiting-patterns = ["custom>"]
+        error-patterns = ["CustomError:"]
+        finished-indicators = ["done"]
+        """#
+
+        let fileProvider = InMemoryAgentConfigFileProvider(content: toml)
+        let service = AgentConfigService(fileProvider: fileProvider)
+        try service.reload()
+
+        let configs = service.agentConfigs()
+        XCTAssertEqual(configs.map(\.name), ["custom-agent"])
+        XCTAssertNil(service.agentConfig(named: "claude"))
+        XCTAssertNil(service.agentConfig(named: "codex"))
+    }
 }
 
 // MARK: - Agent Config Service: Lookup by Name

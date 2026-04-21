@@ -259,12 +259,13 @@ final class AgentStateMachineTests: XCTestCase {
         XCTAssertEqual(sut.currentState, .agentLaunched)
     }
 
-    func testWorkingIgnoresAgentDetected() {
+    func testWorkingIgnoresDuplicateAgentDetected() {
         sut.processEvent(.agentDetected(name: "claude"))
         sut.processEvent(.outputReceived)
-        sut.processEvent(.agentDetected(name: "codex"))
+        sut.processEvent(.agentDetected(name: "claude"))
 
         XCTAssertEqual(sut.currentState, .working)
+        XCTAssertEqual(sut.agentName, "claude")
     }
 
     func testFinishedIgnoresPromptDetected() {
