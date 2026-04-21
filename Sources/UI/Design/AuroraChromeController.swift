@@ -381,10 +381,28 @@ final class AuroraChromeController: ObservableObject {
     private func startClockTimer() {
         clockTimerCancellable?.cancel()
         updateClockLabel()
+        // `Timer.publish(on: .main, in: .common).autoconnect()` keeps the
+        // main run loop alive until its subscriber is cancelled. In GUI
+        // sessions ARC releases the controller when its host window closes,
+        // so the timer stops. Under `xctest` test cases often create Aurora
+        // controllers and never tear them down, leaving the clock timer
+        // subscribed on the main run loop; the xctest process then never
+        // returns after the last test case. Production keeps the live
+        // clock; tests skip it — the label is already populated by the
+        // `updateClockLabel()` call above, so the first render still shows
+        // the right value.
+        guard !Self.isRunningUnderXCTest else { return }
         clockTimerCancellable = Timer
             .publish(every: 30, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.updateClockLabel() }
+    }
+
+    /// True when the current process is the `xctest` runner. Mirrors the
+    /// gate used by `MainWindowController+AuroraIntegration` so every
+    /// Aurora-wired `Timer.publish` subscribes only in production.
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     private func updateClockLabel() {
