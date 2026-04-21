@@ -89,6 +89,8 @@ struct PreferencesView: View {
             TerminalPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .keybindings:
             KeybindingsEditorView(viewModel: viewModel.keybindingsEditor)
+        case .worktrees:
+            WorktreesPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .about:
             AboutPreferencesSection()
         }
@@ -105,6 +107,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case notifications
     case terminal
     case keybindings
+    case worktrees
     case about
 
     var id: String { rawValue }
@@ -118,6 +121,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .notifications: return "Notifications"
         case .terminal: return "Terminal"
         case .keybindings: return "Keybindings"
+        case .worktrees: return "Worktrees"
         case .about: return "About"
         }
     }
@@ -131,6 +135,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .notifications: return "bell"
         case .terminal: return "terminal"
         case .keybindings: return "keyboard"
+        case .worktrees: return "arrow.triangle.branch"
         case .about: return "info.circle"
         }
     }
@@ -677,6 +682,104 @@ struct TerminalPreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Terminal")
+    }
+}
+
+// MARK: - Worktrees Section
+
+/// Exposes every `[worktree]` option the user can tune safely through
+/// the UI. `base-path` and `branch-template` use text fields so users
+/// can follow the docstring placeholders without memorising them;
+/// `id-length` uses a stepper because it is bounded, and `on-close`
+/// uses a Picker because the three states need explicit naming.
+struct WorktreesPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Feature") {
+                Toggle("Enable worktrees", isOn: $viewModel.worktreeEnabled)
+                Text(
+                    "When off, every `cocxy worktree-*` CLI verb and palette action refuses with a hint pointing here. Off by default."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Storage") {
+                LabeledContent("Base path") {
+                    TextField(
+                        "~/.cocxy/worktrees",
+                        text: $viewModel.worktreeBasePath
+                    )
+                    .textFieldStyle(.roundedBorder)
+                }
+                Text(
+                    "Final worktree path: <base-path>/<repo-hash>/<id>/. ~ is expanded at use time."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Branch") {
+                LabeledContent("Template") {
+                    TextField(
+                        "cocxy/{agent}/{id}",
+                        text: $viewModel.worktreeBranchTemplate
+                    )
+                    .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent("Base ref") {
+                    TextField(
+                        "HEAD",
+                        text: $viewModel.worktreeBaseRef
+                    )
+                    .textFieldStyle(.roundedBorder)
+                }
+                Text(
+                    "Template placeholders: {agent}, {id}, {date}. Base ref accepts HEAD, main, or any git ref."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                Stepper(
+                    "Random id length: \(viewModel.worktreeIDLength)",
+                    value: $viewModel.worktreeIDLength,
+                    in: WorktreeConfig.minIDLength...WorktreeConfig.maxIDLength
+                )
+            }
+
+            Section("Lifecycle") {
+                Picker("On tab close", selection: $viewModel.worktreeOnClose) {
+                    Text("Keep").tag(WorktreeOnClose.keep.rawValue)
+                    Text("Prompt").tag(WorktreeOnClose.prompt.rawValue)
+                    Text("Remove if clean").tag(WorktreeOnClose.remove.rawValue)
+                }
+                Toggle("Open new tab for each worktree", isOn: $viewModel.worktreeOpenInNewTab)
+            }
+
+            Section("Integration") {
+                Toggle(
+                    "Inherit project config from origin repo",
+                    isOn: $viewModel.worktreeInheritProjectConfig
+                )
+                Text(
+                    "When on, .cocxy.toml from the origin repo applies inside the worktree when the worktree tree has none."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("Show worktree badge on tabs", isOn: $viewModel.worktreeShowBadge)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Worktrees")
     }
 }
 

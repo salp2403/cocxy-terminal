@@ -150,6 +150,38 @@ final class PreferencesViewModel: ObservableObject {
     /// Inline image memory limit in MiB.
     @Published var imageMemoryLimitMB: Int
 
+    // MARK: - Worktree (v0.1.81)
+
+    /// Master toggle for the per-agent worktree feature. When `false`,
+    /// every `cocxy worktree-*` verb refuses with a hint pointing here.
+    @Published var worktreeEnabled: Bool
+
+    /// Base directory for worktree storage (supports `~`).
+    @Published var worktreeBasePath: String
+
+    /// Branch template with `{agent}`/`{id}`/`{date}` placeholders.
+    @Published var worktreeBranchTemplate: String
+
+    /// Base ref for `git worktree add` (e.g., `HEAD`, `main`).
+    @Published var worktreeBaseRef: String
+
+    /// Behaviour when the tab owning a worktree closes. Stored as the
+    /// enum's raw value so the Picker binding stays simple.
+    @Published var worktreeOnClose: String
+
+    /// Whether `cocxy worktree-add` opens a new tab for the worktree.
+    @Published var worktreeOpenInNewTab: Bool
+
+    /// Random id length. Clamped to `[minIDLength, maxIDLength]` on save.
+    @Published var worktreeIDLength: Int
+
+    /// Whether `.cocxy.toml` lookup falls back to the origin repo from
+    /// within a worktree.
+    @Published var worktreeInheritProjectConfig: Bool
+
+    /// Whether the tab bar and Aurora sidebar show a worktree badge.
+    @Published var worktreeShowBadge: Bool
+
     // MARK: - Read-Only Keybindings
 
     /// New tab shortcut from the saved config.
@@ -338,6 +370,17 @@ final class PreferencesViewModel: ObservableObject {
         self.enableKittyImages = config.terminal.enableKittyImages
         self.imageMemoryLimitMB = config.terminal.imageMemoryLimitMB
 
+        // Worktree (v0.1.81)
+        self.worktreeEnabled = config.worktree.enabled
+        self.worktreeBasePath = config.worktree.basePath
+        self.worktreeBranchTemplate = config.worktree.branchTemplate
+        self.worktreeBaseRef = config.worktree.baseRef
+        self.worktreeOnClose = config.worktree.onClose.rawValue
+        self.worktreeOpenInNewTab = config.worktree.openInNewTab
+        self.worktreeIDLength = config.worktree.idLength
+        self.worktreeInheritProjectConfig = config.worktree.inheritProjectConfig
+        self.worktreeShowBadge = config.worktree.showBadge
+
         // Available themes from built-in list.
         self.availableThemes = Self.defaultThemeNames()
         self.availableFontFamilies = FontFallbackResolver.availableFixedPitchFamilies()
@@ -489,12 +532,35 @@ final class PreferencesViewModel: ObservableObject {
             quickTerminal: savedConfig.quickTerminal,
             keybindings: pendingKeybindings ?? savedConfig.keybindings,
             sessions: savedConfig.sessions,
-            // Worktree preferences are not yet surfaced by this view
-            // model. Pass the saved snapshot verbatim so a Save from
-            // Preferences never resets the user's worktree toggles.
-            worktree: savedConfig.worktree
+            worktree: buildWorktreeConfigFromViewModel()
         )
         pendingKeybindings = nil
+    }
+
+    /// Builds a `WorktreeConfig` value from the editable view-model
+    /// fields. Clamps `idLength` and falls back to safe defaults for
+    /// empty string fields so a user cannot save an impossible config.
+    private func buildWorktreeConfigFromViewModel() -> WorktreeConfig {
+        let defaults = WorktreeConfig.defaults
+        let clampedLength = min(
+            max(worktreeIDLength, WorktreeConfig.minIDLength),
+            WorktreeConfig.maxIDLength
+        )
+        let trimmedBasePath = worktreeBasePath.trimmingCharacters(in: .whitespaces)
+        let trimmedTemplate = worktreeBranchTemplate.trimmingCharacters(in: .whitespaces)
+        let trimmedBaseRef = worktreeBaseRef.trimmingCharacters(in: .whitespaces)
+
+        return WorktreeConfig(
+            enabled: worktreeEnabled,
+            basePath: trimmedBasePath.isEmpty ? defaults.basePath : trimmedBasePath,
+            branchTemplate: trimmedTemplate.isEmpty ? defaults.branchTemplate : trimmedTemplate,
+            baseRef: trimmedBaseRef.isEmpty ? defaults.baseRef : trimmedBaseRef,
+            onClose: WorktreeOnClose(rawValue: worktreeOnClose) ?? defaults.onClose,
+            openInNewTab: worktreeOpenInNewTab,
+            idLength: clampedLength,
+            inheritProjectConfig: worktreeInheritProjectConfig,
+            showBadge: worktreeShowBadge
+        )
     }
 
     // MARK: - TOML Generation
@@ -596,19 +662,15 @@ final class PreferencesViewModel: ObservableObject {
         restore-on-launch = \(defaults.sessions.restoreOnLaunch)
 
         [worktree]
-        # Worktree preferences are not yet editable from the Preferences
-        # window; values are emitted verbatim from the saved config so a
-        # Save never resets user-applied toggles. See `~/.config/cocxy/`
-        # documentation in the template for field descriptions.
-        enabled = \(defaults.worktree.enabled)
-        base-path = "\(defaults.worktree.basePath)"
-        branch-template = "\(defaults.worktree.branchTemplate)"
-        base-ref = "\(defaults.worktree.baseRef)"
-        on-close = "\(defaults.worktree.onClose.rawValue)"
-        open-in-new-tab = \(defaults.worktree.openInNewTab)
-        id-length = \(defaults.worktree.idLength)
-        inherit-project-config = \(defaults.worktree.inheritProjectConfig)
-        show-badge = \(defaults.worktree.showBadge)
+        enabled = \(worktreeEnabled)
+        base-path = "\(worktreeBasePath.trimmingCharacters(in: .whitespaces).isEmpty ? defaults.worktree.basePath : worktreeBasePath)"
+        branch-template = "\(worktreeBranchTemplate.trimmingCharacters(in: .whitespaces).isEmpty ? defaults.worktree.branchTemplate : worktreeBranchTemplate)"
+        base-ref = "\(worktreeBaseRef.trimmingCharacters(in: .whitespaces).isEmpty ? defaults.worktree.baseRef : worktreeBaseRef)"
+        on-close = "\(WorktreeOnClose(rawValue: worktreeOnClose)?.rawValue ?? defaults.worktree.onClose.rawValue)"
+        open-in-new-tab = \(worktreeOpenInNewTab)
+        id-length = \(min(max(worktreeIDLength, WorktreeConfig.minIDLength), WorktreeConfig.maxIDLength))
+        inherit-project-config = \(worktreeInheritProjectConfig)
+        show-badge = \(worktreeShowBadge)
         """
     }
 

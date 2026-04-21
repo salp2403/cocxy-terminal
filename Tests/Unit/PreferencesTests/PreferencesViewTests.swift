@@ -10,8 +10,30 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasSevenCases() {
-        XCTAssertEqual(PreferencesSection.allCases.count, 7)
+    func test_allSections_hasEightCases() {
+        // v0.1.81 introduced the Worktrees section bringing the total
+        // from 7 to 8. Keeping the test explicit about the number pins
+        // the invariant: adding a section without an accompanying UI
+        // breaks this assertion and forces the author to review every
+        // sidebar list that relies on `allCases`.
+        XCTAssertEqual(PreferencesSection.allCases.count, 8)
+    }
+
+    func test_worktreesSection_hasTitleAndIcon() {
+        let section = PreferencesSection.worktrees
+        XCTAssertEqual(section.title, "Worktrees")
+        XCTAssertEqual(section.iconName, "arrow.triangle.branch")
+    }
+
+    func test_worktreesSection_appearsBeforeAbout() {
+        let allCases = PreferencesSection.allCases
+        guard let worktreesIndex = allCases.firstIndex(of: .worktrees),
+              let aboutIndex = allCases.firstIndex(of: .about) else {
+            XCTFail("worktrees and about sections must exist")
+            return
+        }
+        XCTAssertLessThan(worktreesIndex, aboutIndex,
+                         "Worktrees section must appear before About")
     }
 
     func test_sectionIDs_areUnique() {
