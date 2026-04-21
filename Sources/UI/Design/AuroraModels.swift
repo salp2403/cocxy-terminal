@@ -86,6 +86,11 @@ extension Design {
         let workingDirectory: String?
         let foregroundProcessName: String?
         let lastCommandSummary: String?
+        /// Whether the underlying tab is attached to a cocxy-managed git
+        /// worktree. Drives the sidebar worktree badge in
+        /// `AuroraSidebarView`; wired from
+        /// `config.worktree.showBadge` gating the source tab input.
+        let hasWorktree: Bool
 
         init(
             id: String,
@@ -96,7 +101,8 @@ extension Design {
             panes: [AuroraPane],
             workingDirectory: String? = nil,
             foregroundProcessName: String? = nil,
-            lastCommandSummary: String? = nil
+            lastCommandSummary: String? = nil,
+            hasWorktree: Bool = false
         ) {
             self.id = id
             self.name = name
@@ -107,6 +113,7 @@ extension Design {
             self.workingDirectory = workingDirectory
             self.foregroundProcessName = foregroundProcessName
             self.lastCommandSummary = lastCommandSummary
+            self.hasWorktree = hasWorktree
         }
 
         /// Human-readable pane count used by the sidebar metadata

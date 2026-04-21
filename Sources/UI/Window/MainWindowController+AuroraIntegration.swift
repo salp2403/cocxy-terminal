@@ -180,6 +180,9 @@ extension MainWindowController {
             guard let self = self else { return [:] }
             return self.surfaceIDsByTabSnapshot()
         }
+        controller.worktreeBadgeVisibleProvider = { [weak self] in
+            self?.configService?.current.worktree.showBadge ?? true
+        }
         controller.onActivateSession = { [weak self] tabID in
             guard let self else { return }
             _ = self.focusTab(id: tabID)

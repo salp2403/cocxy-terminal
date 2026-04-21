@@ -88,6 +88,24 @@ final class TabItemView: NSView {
         return iv
     }()
 
+    /// Worktree badge shown when the tab is attached to a cocxy-managed
+    /// git worktree. The SF Symbol `arrow.triangle.branch` matches the
+    /// visual language git hosts use for branch indicators so the user
+    /// immediately understands the badge without a legend.
+    private let worktreeBadge: NSImageView = {
+        let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+        let image = NSImage(
+            systemSymbolName: "arrow.triangle.branch",
+            accessibilityDescription: "Worktree"
+        )?.withSymbolConfiguration(config)
+        let iv = NSImageView(image: image ?? NSImage())
+        iv.contentTintColor = CocxyColors.teal
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.isHidden = true
+        iv.setContentHuggingPriority(.required, for: .horizontal)
+        return iv
+    }()
+
     private let titleLabel: NSTextField = {
         let label = NSTextField(labelWithString: "")
         label.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
@@ -227,6 +245,7 @@ final class TabItemView: NSView {
 
         addSubview(processIcon)
         addSubview(pinIcon)
+        addSubview(worktreeBadge)
         addSubview(titleLabel)
         addSubview(timeLabel)
         addSubview(closeButton)
@@ -258,7 +277,12 @@ final class TabItemView: NSView {
             pinIcon.widthAnchor.constraint(equalToConstant: 10),
             pinIcon.heightAnchor.constraint(equalToConstant: 10),
 
-            titleLabel.leadingAnchor.constraint(equalTo: pinIcon.trailingAnchor, constant: 3),
+            worktreeBadge.leadingAnchor.constraint(equalTo: pinIcon.trailingAnchor, constant: 2),
+            worktreeBadge.centerYAnchor.constraint(equalTo: processIcon.centerYAnchor),
+            worktreeBadge.widthAnchor.constraint(equalToConstant: 10),
+            worktreeBadge.heightAnchor.constraint(equalToConstant: 10),
+
+            titleLabel.leadingAnchor.constraint(equalTo: worktreeBadge.trailingAnchor, constant: 3),
             titleLabel.centerYAnchor.constraint(equalTo: processIcon.centerYAnchor),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: closeButton.leadingAnchor, constant: -4),
 
@@ -312,6 +336,8 @@ final class TabItemView: NSView {
         timeLabel.stringValue = item.timeSinceActivity
 
         pinIcon.isHidden = !item.isPinned
+        worktreeBadge.isHidden = !item.hasWorktree
+        worktreeBadge.toolTip = item.worktreeBadgeTooltip
 
         let statusText: String
         if item.agentStatusText.isEmpty {

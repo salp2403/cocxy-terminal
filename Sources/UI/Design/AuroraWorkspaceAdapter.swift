@@ -74,6 +74,10 @@ extension Design {
         let workingDirectory: String?
         let foregroundProcessName: String?
         let lastCommandSummary: String?
+        /// `true` when the underlying tab has a worktree id and the
+        /// user has kept `[worktree].show-badge = true`. The builder
+        /// applies the config gate so the adapter stays pure.
+        let hasWorktree: Bool
 
         init(
             id: String,
@@ -84,7 +88,8 @@ extension Design {
             surfaces: [AuroraSourceSurface],
             workingDirectory: String? = nil,
             foregroundProcessName: String? = nil,
-            lastCommandSummary: String? = nil
+            lastCommandSummary: String? = nil,
+            hasWorktree: Bool = false
         ) {
             self.id = id
             self.name = name
@@ -95,6 +100,7 @@ extension Design {
             self.workingDirectory = workingDirectory
             self.foregroundProcessName = foregroundProcessName
             self.lastCommandSummary = lastCommandSummary
+            self.hasWorktree = hasWorktree
         }
     }
 
@@ -167,7 +173,8 @@ extension Design {
                 panes: panes,
                 workingDirectory: tab.workingDirectory,
                 foregroundProcessName: tab.foregroundProcessName,
-                lastCommandSummary: tab.lastCommandSummary
+                lastCommandSummary: tab.lastCommandSummary,
+                hasWorktree: tab.hasWorktree
             )
         }
 

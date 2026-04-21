@@ -152,6 +152,14 @@ final class AuroraChromeController: ObservableObject {
     private var clockTimerCancellable: AnyCancellable?
     private var portsCancellable: AnyCancellable?
 
+    /// Live provider for the `[worktree].show-badge` config flag. The
+    /// controller reads it on every refresh so toggling the flag in the
+    /// user's TOML takes effect at the next sidebar update without
+    /// touching persisted tab state. Defaults to `true` so
+    /// environments that never wire the provider (tests, legacy paths)
+    /// keep rendering the badge.
+    var worktreeBadgeVisibleProvider: @MainActor () -> Bool = { true }
+
     // MARK: - Init
 
     init(
@@ -272,7 +280,8 @@ final class AuroraChromeController: ObservableObject {
             tabs: tabs,
             surfaceIDsByTab: surfaceMap,
             store: store,
-            stateSnapshot: stateSnapshot
+            stateSnapshot: stateSnapshot,
+            worktreeBadgeVisible: worktreeBadgeVisibleProvider()
         )
         let resolvedActiveTabID = activeTabID ?? tabManager.activeTabID
         activeSessionID = resolvedActiveTabID?.rawValue.uuidString

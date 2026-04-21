@@ -349,6 +349,13 @@ extension Design {
                             .foregroundStyle(palette.textLow.resolvedColor())
                             .accessibilityLabel("Pinned")
                     }
+                    if session.hasWorktree {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(palette.accent.resolvedColor())
+                            .help("Attached to a cocxy-managed worktree")
+                            .accessibilityLabel("Worktree")
+                    }
                     Spacer()
                     MiniMatrixView(panes: session.matrixPanes)
                     if let onClose, !session.isPinned {

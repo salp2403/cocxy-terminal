@@ -646,6 +646,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             return self.additionalActiveAgentSnapshots(for: tab.id)
         }
 
+        // Worktree badge visibility tracks the live config flag so
+        // toggling `[worktree].show-badge = false` in the user's TOML
+        // hides every badge at the next sidebar refresh without
+        // touching the tab's persisted state.
+        tabBarVM.worktreeBadgeVisibilityProvider = { [weak self] in
+            self?.configService?.current.worktree.showBadge ?? true
+        }
+
         let sidebar = TabBarView(viewModel: tabBarVM)
         sidebar.onCommandPalette = { [weak self] in self?.toggleCommandPalette() }
         sidebar.onNotificationPanel = { [weak self] in self?.toggleNotificationPanel() }

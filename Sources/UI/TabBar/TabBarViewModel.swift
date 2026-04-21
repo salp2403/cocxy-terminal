@@ -64,6 +64,16 @@ struct TabDisplayItem: Identifiable, Equatable {
     /// upstream by `SurfaceID.rawValue.uuidString` for stable ordering
     /// across refreshes.
     var perSurfaceAgents: [SurfaceAgentSnapshot] = []
+
+    /// Whether the tab is attached to a cocxy-managed git worktree.
+    /// Drives the worktree badge on the tab item and mirrors
+    /// `Tab.worktreeID != nil` filtered by `config.worktree.showBadge`.
+    var hasWorktree: Bool = false
+
+    /// Tooltip text shown on the worktree badge. Produced upstream so
+    /// the view layer keeps a single string source for the accessible
+    /// description and the hover tooltip.
+    var worktreeBadgeTooltip: String?
 }
 
 // MARK: - Tab Bar View Model
@@ -150,6 +160,14 @@ final class TabBarViewModel: ObservableObject {
     /// entry. The default returns `[]`, matching the legacy quiescent
     /// behavior when no per-surface store is installed.
     var perSurfaceAgentsProvider: (Tab) -> [SurfaceAgentSnapshot] = { _ in [] }
+
+    /// Returns whether the worktree badge should be visible for tabs
+    /// that have `worktreeID != nil`. Wired to
+    /// `config.worktree.showBadge` by `MainWindowController`; the
+    /// default `true` keeps the badge visible when the config is not
+    /// installed (for example during tests) so the feature does not
+    /// silently disappear.
+    var worktreeBadgeVisibilityProvider: () -> Bool = { true }
 
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
@@ -354,9 +372,26 @@ final class TabBarViewModel: ObservableObject {
                 ),
                 additionalActiveAgentStates: additionalActiveAgentStatesProvider(tab)
                     .map(\.agentState),
-                perSurfaceAgents: perSurfaceAgentsProvider(tab)
+                perSurfaceAgents: perSurfaceAgentsProvider(tab),
+                hasWorktree: tab.worktreeID != nil && worktreeBadgeVisibilityProvider(),
+                worktreeBadgeTooltip: worktreeBadgeTooltip(for: tab)
             )
         }
+    }
+
+    /// Builds the tooltip shown when hovering the worktree badge.
+    /// Returns `nil` when the tab has no worktree so the view skips
+    /// setting a tooltip (empty string would still consume a gesture).
+    private func worktreeBadgeTooltip(for tab: Tab) -> String? {
+        guard let worktreeID = tab.worktreeID else { return nil }
+        var parts: [String] = ["Worktree \(worktreeID)"]
+        if let origin = tab.worktreeOriginRepo {
+            parts.append("of \(origin.lastPathComponent)")
+        }
+        if let branch = tab.worktreeBranch {
+            parts.append("on \(branch)")
+        }
+        return parts.joined(separator: " ")
     }
 
     // MARK: - Private Helpers
