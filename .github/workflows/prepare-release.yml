@@ -96,11 +96,25 @@ jobs:
           git tag -a "v${VERSION}" -m "Cocxy Terminal v${VERSION}"
 
       - name: Push main then tag
+        env:
+          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
         run: |
           # Push main first so the tagged commit is reachable on the
           # default branch before the release workflow fires. Pushing
           # the tag second keeps the Release workflow trigger idempotent
           # — it always builds from a commit visible on main.
+          #
+          # Use RELEASE_PUSH_TOKEN (PAT with `workflow` scope) instead of
+          # the default GITHUB_TOKEN. GitHub strips derived-workflow
+          # triggers from actions performed with GITHUB_TOKEN as an
+          # anti-loop safeguard, so a tag push made with it never fires
+          # the Release workflow. Swapping the remote URL to use the PAT
+          # ensures `on: push: tags: 'v*'` wakes up the Release build.
+          if [ -z "${RELEASE_PUSH_TOKEN}" ]; then
+            echo "::error::RELEASE_PUSH_TOKEN secret is missing. Create a PAT with 'repo' + 'workflow' scope and add it as a repo secret." >&2
+            exit 1
+          fi
+          git remote set-url origin "https://x-access-token:${RELEASE_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           if [ "${{ steps.commit.outputs.SKIPPED }}" = "0" ]; then
             git push origin main
           fi
