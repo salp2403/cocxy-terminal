@@ -27,7 +27,8 @@ import Combine
 /// ## Behavior
 ///
 /// - Toggle with Cmd+Shift+B.
-/// - Fixed width: 480pt.
+/// - Fixed width: 480pt when used as the slide-over panel.
+/// - Flexible width when embedded as a workspace split pane.
 /// - Slides in from the right edge.
 /// - Default URL: `http://localhost:3000`.
 /// - URL bar accepts freeform input; scheme is added automatically.
@@ -35,6 +36,11 @@ import Combine
 /// - SeeAlso: `BrowserViewModel`
 /// - SeeAlso: `WebViewRepresentable`
 struct BrowserPanelView: View {
+
+    enum Layout: Equatable {
+        case sidePanel
+        case splitPane
+    }
 
     @ObservedObject var viewModel: BrowserViewModel
     var profileManager: BrowserProfileManager?
@@ -49,6 +55,12 @@ struct BrowserPanelView: View {
     /// user forces a transparency theme. `nil` preserves the legacy
     /// inherit-from-window behaviour.
     var vibrancyAppearanceOverride: NSAppearance?
+
+    /// Controls whether the browser is the fixed slide-over panel or the
+    /// resizable workspace split. Both modes share the same feature-complete
+    /// chrome so browser tabs, profiles, history, bookmarks, downloads and
+    /// devtools stay consistent regardless of how the user opens Browser.
+    var layout: Layout = .sidePanel
 
     /// Fixed width of the browser panel.
     static let panelWidth: CGFloat = 480
@@ -131,8 +143,8 @@ struct BrowserPanelView: View {
                 .frame(maxHeight: 200)
             }
         }
-        .frame(width: Self.panelWidth)
-        .frame(maxHeight: .infinity)
+        .frame(width: layout == .sidePanel ? Self.panelWidth : nil)
+        .frame(maxWidth: layout == .splitPane ? .infinity : nil, maxHeight: .infinity)
         .background(
             ZStack {
                 Color(nsColor: CocxyColors.mantle)

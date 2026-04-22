@@ -77,6 +77,28 @@ final class HorizontalTabStripCloseTests: XCTestCase {
         XCTAssertEqual(closeButtons.count, 2)
     }
 
+    func testPanelCloseButtonReceivesHitTest() {
+        let container = DraggableTabContainer(frame: NSRect(x: 0, y: 0, width: 120, height: 28))
+        let tabButton = NSButton(frame: NSRect(x: 4, y: 4, width: 88, height: 20))
+        tabButton.setAccessibilityLabel("Browser")
+        let closeButton = NSButton(frame: NSRect(x: 96, y: 4, width: 20, height: 20))
+        closeButton.setAccessibilityLabel("Close panel")
+
+        container.addSubview(tabButton)
+        container.addSubview(closeButton)
+
+        XCTAssertTrue(
+            container.hitTest(NSPoint(x: 104, y: 14)) === closeButton,
+            "The split/panel close button must receive clicks instead of the drag/select container"
+        )
+    }
+
+    func testCloseButtonLabelPredicateCoversTabsAndPanels() {
+        XCTAssertTrue(DraggableTabContainer.isCloseButtonLabel("Close tab"))
+        XCTAssertTrue(DraggableTabContainer.isCloseButtonLabel("Close panel"))
+        XCTAssertFalse(DraggableTabContainer.isCloseButtonLabel("Browser"))
+    }
+
     // MARK: - Helpers
 
     private func findCloseButtons(in view: NSView, label: String? = nil) -> [NSButton] {

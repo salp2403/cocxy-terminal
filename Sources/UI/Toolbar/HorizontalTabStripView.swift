@@ -786,8 +786,8 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
 
     /// Override hitTest so the container receives mouse events instead of
     /// child buttons. Without this, the NSButton captures mouseDown and
-    /// drag detection never fires. The close button (identified by its
-    /// accessibility label) still handles its own clicks.
+    /// drag detection never fires. Close buttons (identified by their
+    /// accessibility label) still handle their own clicks.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let localPoint = convert(point, from: superview)
         guard bounds.contains(localPoint) else { return nil }
@@ -796,7 +796,7 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
         for subview in subviews where subview is NSButton {
             let btnPoint = subview.convert(point, from: superview)
             if subview.bounds.contains(btnPoint),
-               subview.accessibilityLabel() == "Close tab" {
+               Self.isCloseButtonLabel(subview.accessibilityLabel()) {
                 return subview
             }
         }
@@ -813,6 +813,14 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
     /// considered a drag rather than a click. Exposed as a static
     /// constant so tests can verify its value.
     static let dragThreshold: CGFloat = 5
+
+    /// Both semantic modes use a close affordance, but the accessibility label
+    /// changes from "Close tab" to "Close panel". Keeping this predicate shared
+    /// prevents panel close clicks from being swallowed by the drag/select
+    /// container.
+    static func isCloseButtonLabel(_ label: String?) -> Bool {
+        label == "Close tab" || label == "Close panel"
+    }
 
     // MARK: - Click vs Drag Detection
 
@@ -844,7 +852,7 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
                 // Short click — find the tab button and trigger its action.
                 for subview in subviews where subview is NSButton {
                     if let btn = subview as? NSButton,
-                       btn.accessibilityLabel() != "Close tab" {
+                       !Self.isCloseButtonLabel(btn.accessibilityLabel()) {
                         btn.performClick(nil)
                         return
                     }
@@ -948,7 +956,7 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
     private func currentTabButtonTitle() -> String {
         for subview in subviews where subview is NSButton {
             if let btn = subview as? NSButton,
-               btn.accessibilityLabel() != "Close tab" {
+               !Self.isCloseButtonLabel(btn.accessibilityLabel()) {
                 return btn.title.trimmingCharacters(in: .whitespaces)
             }
         }

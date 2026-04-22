@@ -148,8 +148,19 @@ enum SessionRestorer {
     ///
     /// Validates the working directory and converts the split tree.
     private static func restoreTab(from tabState: TabState) -> RestoredTab {
-        let validatedDirectory = validateDirectory(tabState.workingDirectory)
-        let validatedSplitTree = validateSplitTree(tabState.splitTree)
+        let worktreeRootExists = tabState.worktreeRoot.map(directoryExists) ?? false
+        let shouldClearWorktreeMetadata = tabState.worktreeID != nil && !worktreeRootExists
+        let primaryDirectory = shouldClearWorktreeMetadata
+            ? (tabState.worktreeOriginRepo ?? tabState.workingDirectory)
+            : tabState.workingDirectory
+        let splitFallbackDirectory = shouldClearWorktreeMetadata
+            ? tabState.worktreeOriginRepo
+            : nil
+        let validatedDirectory = validateDirectory(primaryDirectory)
+        let validatedSplitTree = validateSplitTree(
+            tabState.splitTree,
+            fallbackDirectory: splitFallbackDirectory
+        )
         let splitNode = validatedSplitTree.toSplitNode()
 
         return RestoredTab(
@@ -159,43 +170,48 @@ enum SessionRestorer {
             workingDirectory: validatedDirectory,
             splitTreeState: validatedSplitTree,
             splitNode: splitNode,
-            // Propagate worktree metadata verbatim. The SessionManagement
-            // restore code uses these to reconstruct the Tab with its
-            // original worktree state, and to feed
-            // `loadConfig(for:originRepo:)` with the origin repo fallback.
-            worktreeID: tabState.worktreeID,
-            worktreeRoot: tabState.worktreeRoot,
-            worktreeOriginRepo: tabState.worktreeOriginRepo,
-            worktreeBranch: tabState.worktreeBranch
+            // Propagate worktree metadata only while the root still
+            // exists. If the user deleted the worktree between launches,
+            // restore a plain tab in the origin repo (or home) instead of
+            // showing a stale badge pointing at a missing directory.
+            worktreeID: shouldClearWorktreeMetadata ? nil : tabState.worktreeID,
+            worktreeRoot: shouldClearWorktreeMetadata ? nil : tabState.worktreeRoot,
+            worktreeOriginRepo: shouldClearWorktreeMetadata ? nil : tabState.worktreeOriginRepo,
+            worktreeBranch: shouldClearWorktreeMetadata ? nil : tabState.worktreeBranch
         )
     }
 
-    private static func validateSplitTree(_ state: SplitNodeState) -> SplitNodeState {
+    private static func validateSplitTree(
+        _ state: SplitNodeState,
+        fallbackDirectory: URL? = nil
+    ) -> SplitNodeState {
         switch state {
         case .leaf(let workingDirectory, let command):
             return .leaf(
-                workingDirectory: validateDirectory(workingDirectory),
+                workingDirectory: validateDirectory(workingDirectory, fallback: fallbackDirectory),
                 command: command
             )
 
         case .split(let direction, let first, let second, let ratio):
             return .split(
                 direction: direction,
-                first: validateSplitTree(first),
-                second: validateSplitTree(second),
+                first: validateSplitTree(first, fallbackDirectory: fallbackDirectory),
+                second: validateSplitTree(second, fallbackDirectory: fallbackDirectory),
                 ratio: ratio
             )
         }
     }
 
     /// Validates that a directory exists. Falls back to home if it does not.
-    private static func validateDirectory(_ directory: URL) -> URL {
+    private static func validateDirectory(_ directory: URL, fallback: URL? = nil) -> URL {
         let fileManager = FileManager.default
-        var isDirectory: ObjCBool = false
 
-        if fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-           isDirectory.boolValue {
+        if directoryExists(directory) {
             return directory
+        }
+
+        if let fallback, directoryExists(fallback) {
+            return fallback
         }
 
         #if DEBUG
@@ -203,6 +219,14 @@ enum SessionRestorer {
         #endif
 
         return fileManager.homeDirectoryForCurrentUser
+    }
+
+    private static func directoryExists(_ directory: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(
+            atPath: directory.path,
+            isDirectory: &isDirectory
+        ) && isDirectory.boolValue
     }
 
     /// Validates that a window frame is reasonably visible on the current screen.

@@ -2,6 +2,7 @@
 // MainWindowController+SplitActions.swift - Split pane creation, navigation, and management.
 
 import AppKit
+import SwiftUI
 
 // MARK: - Split Pane Actions
 
@@ -128,13 +129,18 @@ extension MainWindowController {
             if let url = panel.initialURL {
                 browserVM.urlString = url.absoluteString
             }
-            let browserView = BrowserContentView(
+            var browserView = BrowserPanelView(
                 viewModel: browserVM,
                 profileManager: browserProfileManager,
                 onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
-                onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() }
+                onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
+                onDismiss: { [weak self] in self?.closePanel(contentID: contentID) },
+                layout: .splitPane
             )
-            panelView = browserView
+            browserView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
+            let hostingView = NSHostingView(rootView: browserView)
+            hostingView.wantsLayer = true
+            panelView = hostingView
         case .markdown:
             let workspaceDir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
                 ?? tabManager.activeTab?.workingDirectory
@@ -628,8 +634,9 @@ extension MainWindowController {
         let leaves = sm.rootNode.allLeafIDs()
         guard let leaf = leaves.first(where: { $0.leafID == focusedID }) else { return }
 
-        if let panelView = panelContentViews[leaf.terminalID] as? BrowserContentView {
-            panelView.viewModel.reload()
+        if let panelView = panelContentViews[leaf.terminalID],
+           let viewModel = browserViewModel(containedIn: panelView) {
+            viewModel.reload()
         }
     }
 
@@ -845,6 +852,16 @@ extension MainWindowController {
 
     /// Closes a subagent panel by its content ID, with an optional exit animation.
     func closeSubagentPanel(contentID: UUID) {
+        closePanel(contentID: contentID, animated: true)
+    }
+
+    /// Closes a non-terminal panel by its content ID.
+    ///
+    /// Used by SwiftUI-hosted panels whose close button lives inside the panel
+    /// itself. The method focuses the corresponding split leaf first so the
+    /// existing `closeSplitAction` path performs the same model, view and
+    /// cleanup work as keyboard and tab-strip closes.
+    func closePanel(contentID: UUID, animated: Bool = false) {
         guard let sm = activeSplitManager else { return }
         let leaves = sm.rootNode.allLeafIDs()
         guard let targetLeaf = leaves.first(where: { $0.terminalID == contentID }) else { return }
@@ -852,7 +869,7 @@ extension MainWindowController {
         let panelView = panelContentViews[contentID]
         let duration = AnimationConfig.duration(AnimationConfig.splitTransitionDuration)
 
-        if duration > 0, let panelView {
+        if animated, duration > 0, let panelView {
             // Animate fade-out before removing.
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = duration

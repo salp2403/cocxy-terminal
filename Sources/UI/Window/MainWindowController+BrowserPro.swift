@@ -20,8 +20,8 @@ extension MainWindowController {
     ///
     /// Resolution order:
     /// 1. The overlay browser's ViewModel (`browserViewModel`), if the overlay is open.
-    /// 2. The focused split leaf's BrowserContentView ViewModel, if it's a browser panel.
-    /// 3. The first BrowserContentView found in `panelContentViews`, as a fallback.
+    /// 2. The focused split leaf's browser ViewModel, if it's a browser panel.
+    /// 3. The first browser split ViewModel found in `panelContentViews`, as a fallback.
     ///
     /// Returns nil when no browser panel is open in any form.
     func activeBrowserViewModel() -> BrowserViewModel? {
@@ -40,8 +40,8 @@ extension MainWindowController {
         }
 
         while let view = currentView {
-            if let browserView = view as? BrowserContentView {
-                return browserView.viewModel
+            if let viewModel = browserViewModel(containedIn: view) {
+                return viewModel
             }
             currentView = view.superview
         }
@@ -51,21 +51,32 @@ extension MainWindowController {
         if let sm = activeSplitManager, let focusedID = sm.focusedLeafID {
             let leaves = sm.rootNode.allLeafIDs()
             if let focusedLeaf = leaves.first(where: { $0.leafID == focusedID }),
-               let browserView = panelContentViews[focusedLeaf.terminalID] as? BrowserContentView {
-                return browserView.viewModel
+               let panelView = panelContentViews[focusedLeaf.terminalID],
+               let viewModel = browserViewModel(containedIn: panelView) {
+                return viewModel
             }
         }
 
         // Fallback: return any open browser split panel.
         for (_, view) in panelContentViews {
-            if let browserView = view as? BrowserContentView {
-                return browserView.viewModel
+            if let viewModel = browserViewModel(containedIn: view) {
+                return viewModel
             }
         }
 
         // Last resort: the overlay ViewModel even if overlay is not visible
         // (it may have been set from a previous session).
         return browserViewModel
+    }
+
+    func browserViewModel(containedIn view: NSView) -> BrowserViewModel? {
+        if let browserView = view as? BrowserContentView {
+            return browserView.viewModel
+        }
+        if let hostingView = view as? NSHostingView<BrowserPanelView> {
+            return hostingView.rootView.viewModel
+        }
+        return nil
     }
 
     func goBackFocusedBrowserPanel() {

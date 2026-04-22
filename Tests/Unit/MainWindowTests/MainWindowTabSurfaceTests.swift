@@ -3,6 +3,7 @@
 
 import XCTest
 import AppKit
+import SwiftUI
 @testable import CocxyTerminal
 
 @MainActor
@@ -1227,6 +1228,36 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             activeBrowserTab?.isActive,
             true,
             "The horizontal split tab strip must still highlight Browser after switching away and back"
+        )
+    }
+
+    func testBrowserSplitUsesFullBrowserPanelChrome() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithBrowserAction(nil)
+
+        guard let splitManager = controller.activeSplitManager,
+              let browserLeaf = splitManager.rootNode.allLeafIDs().first(where: {
+                  splitManager.panelType(for: $0.terminalID) == .browser
+              }),
+              let hostingView = controller.panelContentViews[browserLeaf.terminalID] as? NSHostingView<BrowserPanelView> else {
+            XCTFail("Browser split should embed the same full BrowserPanelView used by the overlay")
+            return
+        }
+
+        XCTAssertEqual(
+            hostingView.rootView.layout,
+            .splitPane,
+            "Browser splits need the full browser chrome with a flexible split-pane layout"
+        )
+        XCTAssertTrue(
+            controller.activeBrowserViewModel() === hostingView.rootView.viewModel,
+            "Browser toolbar actions must resolve the SwiftUI-hosted browser ViewModel"
         )
     }
 

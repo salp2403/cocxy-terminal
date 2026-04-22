@@ -1506,18 +1506,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let controller = delegateRef.value?.controllerContainingTab(tabID) else {
                         return .notFound
                     }
-                    guard let index = controller.tabManager.tabs.firstIndex(where: { $0.id == tabID }) else {
-                        return .notFound
-                    }
-                    guard controller.tabManager.tabs.count > 1 else {
-                        return .lastTabBlocked
-                    }
-                    guard !controller.tabManager.tabs[index].isPinned else {
-                        return .pinnedBlocked
-                    }
-
-                    controller.closeTab(tabID)
-                    return controller.tabManager.tabs.contains(where: { $0.id == tabID }) ? .unavailable : .closed
+                    return delegateRef.value?.closeTabNonInteractive(tabID, in: controller) ?? .notFound
                 }
             },
             tabCreateProviderOverride: { directoryPath in
@@ -2242,6 +2231,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             .store(in: &hookCancellables)
+    }
+
+    /// Closes a tab for explicit CLI/socket requests without presenting UI.
+    ///
+    /// User-facing close actions must continue to call `closeTab(_:)`, which
+    /// can show confirmation sheets. Socket commands have already been
+    /// confirmed by the caller, so they need the synchronous cleanup path that
+    /// releases surfaces, split state, sessions, and worktree bindings before
+    /// returning a status to the CLI.
+    private func closeTabNonInteractive(
+        _ tabID: TabID,
+        in controller: MainWindowController
+    ) -> TabCloseOutcome {
+        guard let index = controller.tabManager.tabs.firstIndex(where: { $0.id == tabID }) else {
+            return .notFound
+        }
+        guard controller.tabManager.tabs.count > 1 else {
+            return .lastTabBlocked
+        }
+        guard !controller.tabManager.tabs[index].isPinned else {
+            return .pinnedBlocked
+        }
+
+        controller.performCloseTab(tabID)
+        return controller.tabManager.tabs.contains(where: { $0.id == tabID })
+            ? .unavailable
+            : .closed
     }
 
     // MARK: - App Icon

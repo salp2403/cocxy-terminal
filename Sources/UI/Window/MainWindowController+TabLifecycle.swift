@@ -16,7 +16,8 @@ extension MainWindowController {
     ///
     /// - Parameter workingDirectory: Directory for the new terminal.
     ///   Defaults to the active tab's directory or home.
-    func createTab(workingDirectory: URL? = nil) {
+    @discardableResult
+    func createTab(workingDirectory: URL? = nil) -> TabID {
         let dir = workingDirectory
             ?? tabManager.activeTab?.workingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
@@ -59,6 +60,52 @@ extension MainWindowController {
         }
 
         handleTabSwitch(to: newTab.id)
+        return newTab.id
+    }
+
+    /// Attaches worktree metadata to a tab and points tab-level consumers
+    /// at the worktree root. When `sendShellDirectoryChange` is true the
+    /// primary PTY also receives a `cd` command so the live shell follows
+    /// the metadata instead of leaving the user in the origin repo.
+    func attachWorktree(
+        _ entry: WorktreeManifest.WorktreeEntry,
+        originRepo: URL,
+        to tabID: TabID,
+        sendShellDirectoryChange: Bool = false
+    ) {
+        let worktreeRoot = entry.path
+        let gitProvider = GitInfoProviderImpl()
+        let branch = gitProvider.currentBranch(at: worktreeRoot)
+
+        tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = worktreeRoot
+            tab.gitBranch = branch
+            tab.worktreeID = entry.id
+            tab.worktreeRoot = worktreeRoot
+            tab.worktreeOriginRepo = originRepo
+            tab.worktreeBranch = entry.branch
+            let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
+            let projectOrigin = inheritProjectConfig ? originRepo : nil
+            tab.projectConfig = ProjectConfigService().loadConfig(
+                for: worktreeRoot,
+                originRepo: projectOrigin
+            )
+        }
+
+        sessionRegistry?.updateWorkingDirectory(
+            sessionIDForTab(tabID),
+            directory: worktreeRoot
+        )
+        tabBarViewModel?.syncWithManager()
+        refreshStatusBar()
+        refreshTabStrip()
+        applyProjectConfig(for: tabID)
+
+        guard sendShellDirectoryChange,
+              let surfaceID = tabSurfaceMap[tabID] else {
+            return
+        }
+        bridge.sendText(Self.changeDirectoryCommand(for: worktreeRoot), to: surfaceID)
     }
 
     /// Closes the tab with the given ID, showing a confirmation alert
@@ -83,12 +130,12 @@ extension MainWindowController {
             guard let window else { return }
             alert.beginSheetModal(for: window) { [weak self] response in
                 if response == .alertFirstButtonReturn {
-                    self?.performCloseTab(tabID)
+                    self?.confirmWorktreeCloseThenPerform(tabID)
                 }
             }
             return
         }
-        performCloseTab(tabID)
+        confirmWorktreeCloseThenPerform(tabID)
     }
 
     /// Performs the actual tab cleanup: destroys surfaces, removes state,
@@ -99,7 +146,15 @@ extension MainWindowController {
     ///
     /// - Parameter tabID: The tab to close.
     func performCloseTab(_ tabID: TabID) {
+        performCloseTab(tabID, worktreeClosePolicyOverride: nil)
+    }
+
+    private func performCloseTab(
+        _ tabID: TabID,
+        worktreeClosePolicyOverride: WorktreeOnClose?
+    ) {
         let isClosingActiveTab = (tabID == tabManager.activeTabID)
+        let closingTab = tabManager.tab(for: tabID)
 
         // Remove this session from the multi-window registry before
         // destroying surfaces, so other windows receive the removal
@@ -175,10 +230,96 @@ extension MainWindowController {
 
         // Remove from TabManager (activates next tab).
         tabManager.removeTab(id: tabID)
+        handleWorktreeLifecycleAfterTabClose(
+            closingTab,
+            overridePolicy: worktreeClosePolicyOverride
+        )
 
         if let newActiveID = tabManager.activeTabID {
             handleTabSwitch(to: newActiveID)
         }
+    }
+
+    private func confirmWorktreeCloseThenPerform(_ tabID: TabID) {
+        guard let tab = tabManager.tab(for: tabID),
+              tab.worktreeID != nil,
+              (configService?.current.worktree.onClose ?? .keep) == .prompt,
+              let window else {
+            performCloseTab(tabID)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Close Worktree Tab?"
+        alert.informativeText = """
+        This tab is attached to a cocxy-managed git worktree. Keep the worktree on disk, or remove it only if it has no uncommitted changes.
+        """
+        alert.alertStyle = .warning
+        alert.icon = AppIconGenerator.generatePlaceholderIcon()
+        alert.addButton(withTitle: "Keep Worktree")
+        alert.addButton(withTitle: "Remove if Clean")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            switch response {
+            case .alertFirstButtonReturn:
+                self?.performCloseTab(tabID, worktreeClosePolicyOverride: .keep)
+            case .alertSecondButtonReturn:
+                self?.performCloseTab(tabID, worktreeClosePolicyOverride: .remove)
+            default:
+                break
+            }
+        }
+    }
+
+    private func handleWorktreeLifecycleAfterTabClose(
+        _ tab: Tab?,
+        overridePolicy: WorktreeOnClose?
+    ) {
+        guard let tab,
+              let worktreeID = tab.worktreeID,
+              let originRepo = tab.worktreeOriginRepo else {
+            return
+        }
+
+        let config = configService?.current.worktree ?? WorktreeConfig.defaults
+        let policy = overridePolicy ?? config.onClose
+        let store = WorktreeManifestStore.forRepo(
+            basePath: config.basePath,
+            originRepoPath: originRepo
+        )
+
+        switch policy {
+        case .keep, .prompt:
+            Task.detached {
+                try? await store.clearTabBinding(id: worktreeID)
+            }
+
+        case .remove:
+            Task.detached {
+                do {
+                    _ = try await AppDelegate.sharedWorktreeService.remove(
+                        id: worktreeID,
+                        force: false,
+                        originRepoPath: originRepo,
+                        store: store
+                    )
+                } catch {
+                    // Dirty or missing worktrees must never block tab
+                    // closure. The tab is gone, so clear only the manifest
+                    // binding and leave the worktree on disk for the user
+                    // to inspect/remove explicitly.
+                    try? await store.clearTabBinding(id: worktreeID)
+                }
+            }
+        }
+    }
+
+    private static func changeDirectoryCommand(for directory: URL) -> String {
+        "cd -- \(shellQuotedPath(directory.path))\n"
+    }
+
+    private static func shellQuotedPath(_ path: String) -> String {
+        "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     // MARK: - Surface Wiring

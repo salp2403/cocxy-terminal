@@ -107,6 +107,16 @@ struct WorktreeBranchExpandTests {
         #expect(result == "claude/abc123")
     }
 
+    @Test("branch components ending in .lock are stripped")
+    func lockSuffixIsStripped() {
+        let result = WorktreeBranch.expand(
+            template: "cocxy/{agent}.lock/{id}.lock",
+            agent: "claude",
+            id: "abc123"
+        )
+        #expect(result == "cocxy/claude/abc123")
+    }
+
     @Test("date is rendered deterministically in yyyy-MM-dd POSIX format")
     func dateIsRenderedDeterministically() {
         // Even if the system locale is es_ES, the output stays
@@ -157,6 +167,12 @@ struct WorktreeBranchSanitiseTests {
         #expect(WorktreeBranch.sanitizeGitRefComponent(".foo.") == "foo")
         #expect(WorktreeBranch.sanitizeGitRefComponent("-foo-") == "foo")
         #expect(WorktreeBranch.sanitizeGitRefComponent("_foo_") == "foo")
+    }
+
+    @Test(".lock suffix is removed at the component level")
+    func stripsLockSuffix() {
+        #expect(WorktreeBranch.sanitizeGitRefComponent("foo.lock") == "foo")
+        #expect(WorktreeBranch.sanitizeGitRefComponent("foo.LOCK") == "foo")
     }
 
     @Test("empty and fully-invalid inputs return empty")

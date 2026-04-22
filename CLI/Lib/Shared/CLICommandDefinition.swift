@@ -460,10 +460,10 @@ public enum CLICommand: String, CaseIterable {
         case .imageClear: return "cocxy image clear"
 
         // Worktree v0.1.81
-        case .worktreeAdd: return "cocxy worktree-add [--agent <name>] [--branch <template>]"
-        case .worktreeList: return "cocxy worktree-list"
-        case .worktreeRemove: return "cocxy worktree-remove <id> [--force]"
-        case .worktreePrune: return "cocxy worktree-prune"
+        case .worktreeAdd: return "cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]"
+        case .worktreeList: return "cocxy worktree list"
+        case .worktreeRemove: return "cocxy worktree remove <id> [--force]"
+        case .worktreePrune: return "cocxy worktree prune"
         }
     }
 }

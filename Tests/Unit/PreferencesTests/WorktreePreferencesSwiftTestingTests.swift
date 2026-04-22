@@ -65,6 +65,68 @@ struct WorktreePreferencesSwiftTestingTests {
         #expect(vm.worktreeShowBadge == false)
     }
 
+    @Test("changing only a worktree field marks Preferences dirty")
+    func worktreeOnlyChangeMarksUnsaved() {
+        let (vm, _) = makeViewModel()
+        #expect(vm.hasUnsavedChanges == false)
+
+        vm.worktreeEnabled.toggle()
+
+        #expect(vm.hasUnsavedChanges == true)
+    }
+
+    @Test("discard restores every worktree field")
+    func discardRestoresWorktreeFields() {
+        let custom = WorktreeConfig(
+            enabled: true,
+            basePath: "/custom",
+            branchTemplate: "task/{agent}/{id}",
+            baseRef: "develop",
+            onClose: .prompt,
+            openInNewTab: false,
+            idLength: 9,
+            inheritProjectConfig: false,
+            showBadge: false
+        )
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            codeReview: .defaults,
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults,
+            worktree: custom
+        )
+        let (vm, _) = makeViewModel(config: config)
+
+        vm.worktreeEnabled = false
+        vm.worktreeBasePath = "/tmp/changed"
+        vm.worktreeBranchTemplate = "changed/{id}"
+        vm.worktreeBaseRef = "main"
+        vm.worktreeOnClose = WorktreeOnClose.remove.rawValue
+        vm.worktreeOpenInNewTab = true
+        vm.worktreeIDLength = 4
+        vm.worktreeInheritProjectConfig = true
+        vm.worktreeShowBadge = true
+        #expect(vm.hasUnsavedChanges == true)
+
+        vm.discardChanges()
+
+        #expect(vm.hasUnsavedChanges == false)
+        #expect(vm.worktreeEnabled == true)
+        #expect(vm.worktreeBasePath == "/custom")
+        #expect(vm.worktreeBranchTemplate == "task/{agent}/{id}")
+        #expect(vm.worktreeBaseRef == "develop")
+        #expect(vm.worktreeOnClose == WorktreeOnClose.prompt.rawValue)
+        #expect(vm.worktreeOpenInNewTab == false)
+        #expect(vm.worktreeIDLength == 9)
+        #expect(vm.worktreeInheritProjectConfig == false)
+        #expect(vm.worktreeShowBadge == false)
+    }
+
     // MARK: - Save → reload preserves every field
 
     @Test("save then reload preserves every worktree field")

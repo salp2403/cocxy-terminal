@@ -110,7 +110,7 @@ enum WorktreeBranch {
             buffer.removeLast()
         }
 
-        return buffer
+        return removingForbiddenLockSuffix(from: buffer)
     }
 
     // MARK: - Private helpers
@@ -150,7 +150,12 @@ enum WorktreeBranch {
             buffer.removeLast()
         }
 
-        return buffer.isEmpty ? fallbackAgentName : buffer
+        let components = buffer
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map { sanitizeGitRefComponent(String($0)) }
+            .filter { !$0.isEmpty }
+        let sanitized = components.joined(separator: "/")
+        return sanitized.isEmpty ? fallbackAgentName : sanitized
     }
 
     private static func normalisedAgentName(_ agent: String?) -> String {
@@ -165,5 +170,17 @@ enum WorktreeBranch {
         formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    private static func removingForbiddenLockSuffix(from component: String) -> String {
+        var value = component
+        while value.lowercased().hasSuffix(".lock") {
+            value.removeLast(".lock".count)
+            while let last = value.unicodeScalars.last,
+                  !CharacterSet.alphanumerics.contains(last) {
+                value.removeLast()
+            }
+        }
+        return value
     }
 }

@@ -89,6 +89,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tab closes so no uncommitted work is lost silently. Users run
   `cocxy worktree remove <id>` (refuses when dirty) or
   `cocxy worktree prune` (drops manifest orphans only) to clean up.
+- Non-interactive tab closes from the CLI/socket bridge cannot show the
+  `on-close = "prompt"` sheet. In that path, `prompt` is treated like
+  `keep`: the tab binding is cleared from the manifest, and the worktree
+  stays on disk for explicit `remove` / `prune` cleanup.
 
 ### Testing
 - Swift Testing: 1791 cases across 183 suites (up from 1540 / 168 at

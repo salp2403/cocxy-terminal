@@ -4,15 +4,21 @@
 
 import AppKit
 import Foundation
+import os.log
 
 extension AppDelegate {
 
     // MARK: - Service singleton
 
+    nonisolated private static let worktreeLogger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "WorktreeCLI"
+    )
+
     /// Process-wide worktree service. A single actor is enough —
     /// concurrent CLI calls serialise at the actor boundary and the
     /// per-repo state lives inside the manifest store, not here.
-    static let sharedWorktreeService = WorktreeService()
+    nonisolated static let sharedWorktreeService = WorktreeService()
 
     // MARK: - CLI entry point (called from the socket queue)
 
@@ -52,14 +58,14 @@ extension AppDelegate {
     /// Exposed at module visibility so in-process callers (command
     /// palette, future keybindings) can invoke the same flow without
     /// going through the socket bridge and its `DispatchSemaphore`.
-    func performWorktreeCLIRequest(
+    nonisolated func performWorktreeCLIRequest(
         kind: String,
         params: [String: String]
     ) async -> (Bool, [String: String]) {
-        let context = await MainActor.run { () -> WorktreeCLIContext? in
+        let contextSnapshot = await MainActor.run { () -> WorktreeCLIContext? in
             self.buildWorktreeCLIContext()
         }
-        guard let context else {
+        guard var context = contextSnapshot else {
             return (
                 false,
                 ["error": "No active tab; open a tab before using `cocxy worktree-*`."]
@@ -72,6 +78,10 @@ extension AppDelegate {
                 ["error": "[worktree].enabled = true must be set in ~/.config/cocxy/config.toml"]
             )
         }
+
+        context.originRepoPath = Self.resolveOriginRepoRoot(
+            from: context.originRepoPath
+        )
 
         let store = WorktreeManifestStore.forRepo(
             basePath: context.config.worktree.basePath,
@@ -119,48 +129,88 @@ extension AppDelegate {
 
     // MARK: - Per-verb handlers
 
-    private func runAdd(
+    nonisolated private func runAdd(
         params: [String: String],
         context: WorktreeCLIContext,
         store: WorktreeManifestStore,
         service: WorktreeService
     ) async throws -> (Bool, [String: String]) {
         let agent = params["agent"]?.nilIfEmpty ?? context.detectedAgent
+        let effectiveConfig = Self.worktreeConfig(
+            context.config.worktree,
+            applyingAddParams: params
+        )
+        let initialTabID = effectiveConfig.openInNewTab ? nil : context.activeTabID
         let entry = try await service.add(
             originRepoPath: context.originRepoPath,
             agent: agent,
-            tabID: context.activeTabID,
-            config: context.config.worktree,
+            tabID: initialTabID,
+            config: effectiveConfig,
             store: store
         )
 
-        // Attach the worktree to the active tab so the badge, the
-        // project-config fallback, and session restore all see the
-        // relationship immediately.
-        if let tabID = context.activeTabID {
-            await MainActor.run {
-                if let controller = self.controllerContainingTab(tabID) {
-                    controller.tabManager.updateTab(id: tabID) { tab in
-                        tab.worktreeID = entry.id
-                        tab.worktreeRoot = entry.path
-                        tab.worktreeOriginRepo = context.originRepoPath
-                        tab.worktreeBranch = entry.branch
-                    }
-                    controller.tabBarViewModel?.syncWithManager()
+        let attachedTabID: TabID? = await MainActor.run {
+            if effectiveConfig.openInNewTab {
+                let controller = self.focusedWindowController()
+                    ?? context.activeTabID.flatMap { self.controllerContainingTab($0) }
+                guard let controller else { return nil }
+                let newTabID = controller.createTab(workingDirectory: entry.path)
+                controller.attachWorktree(
+                    entry,
+                    originRepo: context.originRepoPath,
+                    to: newTabID
+                )
+                return newTabID
+            }
+
+            guard let tabID = context.activeTabID,
+                  let controller = self.controllerContainingTab(tabID) else {
+                return nil
+            }
+            controller.attachWorktree(
+                entry,
+                originRepo: context.originRepoPath,
+                to: tabID,
+                sendShellDirectoryChange: true
+            )
+            return tabID
+        }
+
+        var finalEntry = entry
+        if let attachedTabID, finalEntry.tabID != attachedTabID {
+            finalEntry.tabID = attachedTabID
+            try await store.upsert(finalEntry)
+
+            let tabStillExists = await MainActor.run {
+                self.controllerContainingTab(attachedTabID)?.tabManager.tab(for: attachedTabID) != nil
+            }
+            if !tabStillExists {
+                do {
+                    try await store.clearTabBinding(id: finalEntry.id)
+                } catch {
+                    Self.worktreeLogger.error(
+                        """
+                        Failed to clear stale worktree tab binding after the attached tab closed: \
+                        worktreeID=\(finalEntry.id, privacy: .public) \
+                        tabID=\(attachedTabID.rawValue.uuidString, privacy: .public) \
+                        error=\(String(describing: error), privacy: .private)
+                        """
+                    )
                 }
             }
         }
 
         return (true, [
-            "id": entry.id,
-            "branch": entry.branch,
-            "path": entry.path.path,
+            "id": finalEntry.id,
+            "branch": finalEntry.branch,
+            "path": finalEntry.path.path,
             "origin": context.originRepoPath.path,
-            "agent": entry.agent ?? ""
+            "agent": finalEntry.agent ?? "",
+            "tab-id": attachedTabID?.rawValue.uuidString ?? ""
         ])
     }
 
-    private func runList(
+    nonisolated private func runList(
         context: WorktreeCLIContext,
         store: WorktreeManifestStore,
         service: WorktreeService
@@ -177,7 +227,7 @@ extension AppDelegate {
         ])
     }
 
-    private func runRemove(
+    nonisolated private func runRemove(
         params: [String: String],
         context: WorktreeCLIContext,
         store: WorktreeManifestStore,
@@ -219,7 +269,7 @@ extension AppDelegate {
         ])
     }
 
-    private func runPrune(
+    nonisolated private func runPrune(
         context: WorktreeCLIContext,
         store: WorktreeManifestStore,
         service: WorktreeService
@@ -246,7 +296,7 @@ extension AppDelegate {
         /// active tab is already inside a cocxy-managed worktree, this
         /// stays pointed at the original repo so commands like `list`
         /// and `prune` operate on the repo-wide manifest.
-        let originRepoPath: URL
+        var originRepoPath: URL
         /// Agent name inferred from the active tab's surface state,
         /// used as the `--agent` fallback when the caller does not
         /// supply one.
@@ -285,9 +335,40 @@ extension AppDelegate {
         )
     }
 
+    nonisolated static func worktreeConfig(
+        _ config: WorktreeConfig,
+        applyingAddParams params: [String: String]
+    ) -> WorktreeConfig {
+        WorktreeConfig(
+            enabled: config.enabled,
+            basePath: config.basePath,
+            branchTemplate: params["branch"]?.nilIfEmpty ?? config.branchTemplate,
+            baseRef: params["base-ref"]?.nilIfEmpty ?? config.baseRef,
+            onClose: config.onClose,
+            openInNewTab: config.openInNewTab,
+            idLength: config.idLength,
+            inheritProjectConfig: config.inheritProjectConfig,
+            showBadge: config.showBadge
+        )
+    }
+
+    nonisolated static func resolveOriginRepoRoot(from directory: URL) -> URL {
+        guard let result = try? CodeReviewGit.run(
+            workingDirectory: directory,
+            arguments: ["rev-parse", "--show-toplevel"]
+        ),
+        result.terminationStatus == 0 else {
+            return directory.standardizedFileURL
+        }
+
+        let path = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return directory.standardizedFileURL }
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+    }
+
     // MARK: - Error rendering
 
-    private static func describe(_ error: WorktreeServiceError) -> String {
+    nonisolated private static func describe(_ error: WorktreeServiceError) -> String {
         switch error {
         case .featureDisabled:
             return "[worktree].enabled = true must be set to use worktrees."
@@ -312,7 +393,7 @@ extension AppDelegate {
 
     // MARK: - Param parsing helpers
 
-    private static func parseBool(_ raw: String?) -> Bool? {
+    nonisolated private static func parseBool(_ raw: String?) -> Bool? {
         guard let value = raw?.lowercased() else { return nil }
         switch value {
         case "1", "true", "yes", "y": return true

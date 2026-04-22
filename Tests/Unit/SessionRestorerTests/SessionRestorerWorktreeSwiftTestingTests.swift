@@ -150,4 +150,58 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         #expect(restored.worktreeOriginRepo == originRepo)
         #expect(restored.worktreeBranch == "cocxy/claude/wt-xyz")
     }
+
+    @Test("SessionRestorer clears worktree metadata when the worktree root is missing")
+    func missingWorktreeRootRestoresPlainOriginTab() throws {
+        let originRepo = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "cocxy-session-origin-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: originRepo,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: originRepo) }
+
+        let missingWorktreeRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "cocxy-missing-worktree-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let tabState = TabState(
+            id: TabID(),
+            title: "Deleted Worktree",
+            workingDirectory: missingWorktreeRoot,
+            splitTree: .leaf(
+                workingDirectory: missingWorktreeRoot,
+                command: nil
+            ),
+            worktreeID: "gone",
+            worktreeRoot: missingWorktreeRoot,
+            worktreeOriginRepo: originRepo,
+            worktreeBranch: "cocxy/claude/gone"
+        )
+        let windowState = WindowState(
+            frame: CodableRect(x: 100, y: 100, width: 800, height: 600),
+            isFullScreen: false,
+            tabs: [tabState],
+            activeTabIndex: 0,
+            windowID: nil,
+            displayIndex: nil
+        )
+
+        let result = SessionRestorer.restoreWindow(
+            from: windowState,
+            screenBounds: CodableRect(x: 0, y: 0, width: 2560, height: 1440)
+        )
+        let restored = try #require(result.restoredTabs.first)
+
+        #expect(restored.workingDirectory == originRepo)
+        #expect(restored.splitTreeState == .leaf(workingDirectory: originRepo, command: nil))
+        #expect(restored.worktreeID == nil)
+        #expect(restored.worktreeRoot == nil)
+        #expect(restored.worktreeOriginRepo == nil)
+        #expect(restored.worktreeBranch == nil)
+    }
 }

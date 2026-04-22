@@ -264,6 +264,7 @@ final class PreferencesViewModel: ObservableObject {
             || badgeOnTab != c.notifications.badgeOnTab
             || flashTab != c.notifications.flashTab
             || showDockBadge != c.notifications.showDockBadge
+            || worktreeHasUnsavedChanges(comparedTo: c.worktree)
             || (pendingKeybindings != nil && pendingKeybindings != c.keybindings)
     }
 
@@ -297,6 +298,15 @@ final class PreferencesViewModel: ObservableObject {
         badgeOnTab = c.notifications.badgeOnTab
         flashTab = c.notifications.flashTab
         showDockBadge = c.notifications.showDockBadge
+        worktreeEnabled = c.worktree.enabled
+        worktreeBasePath = c.worktree.basePath
+        worktreeBranchTemplate = c.worktree.branchTemplate
+        worktreeBaseRef = c.worktree.baseRef
+        worktreeOnClose = c.worktree.onClose.rawValue
+        worktreeOpenInNewTab = c.worktree.openInNewTab
+        worktreeIDLength = c.worktree.idLength
+        worktreeInheritProjectConfig = c.worktree.inheritProjectConfig
+        worktreeShowBadge = c.worktree.showBadge
         pendingKeybindings = nil
     }
 
@@ -561,6 +571,22 @@ final class PreferencesViewModel: ObservableObject {
             inheritProjectConfig: worktreeInheritProjectConfig,
             showBadge: worktreeShowBadge
         )
+    }
+
+    /// Compares every editable `[worktree]` field against the saved
+    /// snapshot. This intentionally compares the raw UI values instead
+    /// of the clamped save output so the Save/Discard controls become
+    /// available as soon as the user changes a Worktrees preference.
+    private func worktreeHasUnsavedChanges(comparedTo config: WorktreeConfig) -> Bool {
+        worktreeEnabled != config.enabled
+            || worktreeBasePath != config.basePath
+            || worktreeBranchTemplate != config.branchTemplate
+            || worktreeBaseRef != config.baseRef
+            || worktreeOnClose != config.onClose.rawValue
+            || worktreeOpenInNewTab != config.openInNewTab
+            || worktreeIDLength != config.idLength
+            || worktreeInheritProjectConfig != config.inheritProjectConfig
+            || worktreeShowBadge != config.showBadge
     }
 
     // MARK: - TOML Generation
