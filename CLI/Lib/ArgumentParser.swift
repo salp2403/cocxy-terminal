@@ -373,7 +373,50 @@ public enum SplitDirection: String, Equatable {
 public enum CLIArgumentParser {
 
     /// The current CLI version string.
-    public static let version = "0.1.47"
+    ///
+    /// Resolved dynamically when the CLI runs from inside the
+    /// `Cocxy Terminal.app` bundle by reading
+    /// `CFBundleShortVersionString` from `Contents/Info.plist`. This keeps
+    /// the CLI's `--version` in sync with the GUI version shipped in the
+    /// same release without manual bumping.
+    ///
+    /// Falls back to `fallbackVersion` for standalone dev builds, tests,
+    /// and any context where the enclosing `.app` cannot be resolved.
+    public static let version: String = resolveVersion()
+
+    /// Hardcoded fallback. Must be kept in sync with `Resources/Info.plist`
+    /// at release time. Only used when the enclosing `.app` Info.plist
+    /// cannot be read (standalone CLI builds, tests, homebrew direct
+    /// invocation without the GUI app installed).
+    internal static let fallbackVersion = "0.1.82"
+
+    /// Resolves the CLI version by preferring the enclosing app bundle's
+    /// `Info.plist`, with a hardcoded fallback for standalone execution.
+    ///
+    /// Expected bundled layout:
+    /// `Cocxy Terminal.app/Contents/Resources/cocxy` →
+    /// `Cocxy Terminal.app/Contents/Info.plist` (two levels up).
+    private static func resolveVersion() -> String {
+        guard let exePath = Bundle.main.executablePath else {
+            return fallbackVersion
+        }
+        let resourcesDir = (exePath as NSString).deletingLastPathComponent
+        let contentsDir = (resourcesDir as NSString).deletingLastPathComponent
+        let plistPath = (contentsDir as NSString).appendingPathComponent("Info.plist")
+
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: plistPath)),
+              let plist = try? PropertyListSerialization.propertyList(
+                from: data,
+                options: [],
+                format: nil
+              ) as? [String: Any],
+              let shortVersion = plist["CFBundleShortVersionString"] as? String,
+              !shortVersion.isEmpty
+        else {
+            return fallbackVersion
+        }
+        return shortVersion
+    }
 
     /// Parses command-line arguments into a `ParsedCommand`.
     ///

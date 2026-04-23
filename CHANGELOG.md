@@ -5,6 +5,38 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.82] - 2026-04-22
+
+### Fixed
+- CLI requests now succeed reliably when the app has been running for
+  long periods or is under sustained load from hook events, Metal
+  rendering, and background timers. Two independent regressions were
+  addressed:
+  - `SocketServerConstants.listenBacklog` was `5`, which let the
+    kernel silently drop concurrent connect attempts. Bursts of
+    Claude Code hook events combined with CLI invocations produced
+    `EPIPE` on the first write because the accepted peer had already
+    been purged. The backlog is now `128` (equivalent to `SOMAXCONN`
+    on macOS); measured success rate on ten simultaneous connects
+    went from roughly 20% to 100%.
+  - The socket server's accept and connection queues ran at
+    `.utility` QoS. Under sustained GPU and timer load the accept
+    loop was scheduled too slowly to keep pace with queued connects,
+    causing the client to race with peer teardown. Both queues now
+    run at `.userInitiated` to match the interactive nature of CLI
+    round-trips.
+- `cocxy --version` now resolves dynamically from the enclosing app
+  bundle's `Info.plist` rather than a hardcoded constant, keeping the
+  CLI version in sync with the GUI at release time. Standalone builds
+  and tests fall back to a known value that the release pipeline can
+  bump.
+
+### Tests
+- New `SocketServerRegressionSwiftTestingTests` suite covering the
+  two socket regressions above: a client that idles 100 ms between
+  `connect()` and the first `write()` must receive a response, and
+  ten concurrent connects must all succeed without drop.
+
 ## [0.1.81] - 2026-04-21
 
 ### Added

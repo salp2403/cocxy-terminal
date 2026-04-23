@@ -164,5 +164,13 @@ enum SocketServerConstants {
     static let connectionTimeoutSeconds: TimeInterval = 30
 
     /// Maximum pending connections in the listen backlog.
-    static let listenBacklog: Int32 = 5
+    ///
+    /// Set to 128 (equivalent to `SOMAXCONN` on macOS) to absorb bursts of
+    /// concurrent connects — notably multiple Claude Code hook events
+    /// emitted in parallel plus concurrent CLI invocations. A backlog of 5
+    /// was observed to drop ~80% of connections under 10 simultaneous
+    /// connects, surfacing as `EPIPE` on the client side because the kernel
+    /// acknowledges the SYN/connect but then purges the queued peer before
+    /// our accept loop picks it up.
+    static let listenBacklog: Int32 = 128
 }

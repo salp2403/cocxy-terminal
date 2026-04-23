@@ -61,9 +61,16 @@ final class SocketServerImpl: CLISocketServing {
     private let shouldAcceptConnectionsFlag = LockedValue<Bool>(false)
 
     /// Background queue for the accept loop.
+    ///
+    /// Uses `.userInitiated` because the CLI companion is an interactive
+    /// surface — every command is blocking the user waiting for a response.
+    /// `.utility` was observed to starve under sustained load from Aurora
+    /// timers, Metal rendering, and PTY reads, causing the accept loop to
+    /// pick up queued connections too slowly and leaving clients to race
+    /// with peer shutdown from the kernel.
     private let acceptQueue = DispatchQueue(
         label: "com.cocxy.socket.accept",
-        qos: .utility
+        qos: .userInitiated
     )
 
     /// Tracks the number of active connections. Accessed from multiple threads.
@@ -369,9 +376,12 @@ enum SocketConnectionHandler {
         activeConnectionCount: LockedValue<Int>,
         shouldContinue: @escaping () -> Bool
     ) {
+        // `.userInitiated` matches the accept queue — CLI round-trips are
+        // synchronous from the user's perspective, so per-connection work
+        // must not be deprioritised relative to UI/render workloads.
         let connectionQueue = DispatchQueue(
             label: "com.cocxy.socket.connections",
-            qos: .utility,
+            qos: .userInitiated,
             attributes: .concurrent
         )
 

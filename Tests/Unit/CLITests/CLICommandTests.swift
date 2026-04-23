@@ -261,7 +261,11 @@ final class CLIArgumentParserTests: XCTestCase {
 
     func testVersionTextContainsVersionNumber() {
         let versionText = CLIArgumentParser.versionText()
-        XCTAssertEqual(versionText, "cocxy 0.1.47")
+        // `CLIArgumentParser.version` resolves dynamically from the
+        // enclosing app bundle's Info.plist when present, with a
+        // hardcoded fallback in tests and standalone builds. Assert
+        // against the resolved value rather than a pinned literal.
+        XCTAssertEqual(versionText, "cocxy \(CLIArgumentParser.version)")
     }
     // MARK: - SSH Parsing
 
@@ -845,7 +849,11 @@ final class CommandRunnerTests: XCTestCase {
         let result = runner.run(arguments: ["--version"])
 
         XCTAssertEqual(result.exitCode, 0)
-        XCTAssertEqual(result.stdout, "cocxy 0.1.47")
+        // Version is resolved dynamically from the app bundle Info.plist
+        // when bundled; falls back to a hardcoded value otherwise. Match
+        // whatever the parser actually exposes so the assertion does not
+        // drift on release bumps.
+        XCTAssertEqual(result.stdout, "cocxy \(CLIArgumentParser.version)")
         XCTAssertTrue(result.stderr.isEmpty)
     }
 
