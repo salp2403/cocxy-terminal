@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/opt/homebrew/bin/cocxy`) land on the real `.app/Contents/Info.plist`
   instead of falling back. Standalone builds and tests fall back to a
   known value that the release pipeline can bump.
+- `cocxy worktree` commands (CLI and Command Palette) now apply the
+  active tab's per-project `.cocxy.toml` overrides before consulting
+  the `[worktree]` config. A project that enabled worktrees locally
+  would otherwise fail with the global default, even though
+  Preferences and the UI layer already merged project overrides
+  correctly. `basePath` and `idLength` stay global-only to preserve
+  the existing storage-layout and collision-avoidance contracts.
 
 ### Tests
 - `SocketServerRegressionSwiftTestingTests` now covers three socket
@@ -56,6 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `CLIArgumentParserVersionSwiftTestingTests` suite covering the
   version resolver: direct bundled path, symlink-to-bundled path
   (regression), non-bundle fallback, and fallback shape.
+- `WorktreeCLIIntegrationHelperTests` gains two regressions for the
+  project-override merge: a non-nil `ProjectConfig` must flow through
+  all worktree CLI fields except `basePath` and `idLength`, and a nil
+  `ProjectConfig` must leave the global config untouched.
 
 ## [0.1.81] - 2026-04-21
 

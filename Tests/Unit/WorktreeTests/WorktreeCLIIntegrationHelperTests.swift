@@ -49,6 +49,48 @@ struct WorktreeCLIIntegrationHelperTests {
         #expect(effective == base)
     }
 
+    @Test("tab project config overrides enable worktree CLI for the active project")
+    func projectConfigOverridesEnableWorktreeCLI() {
+        let global = CocxyConfig.defaults
+        let project = ProjectConfig(
+            worktreeEnabled: true,
+            worktreeBaseRef: "main",
+            worktreeBranchTemplate: "project/{agent}/{id}",
+            worktreeOnClose: .prompt,
+            worktreeOpenInNewTab: false,
+            worktreeInheritProjectConfig: false,
+            worktreeShowBadge: false
+        )
+
+        let effective = AppDelegate.effectiveWorktreeCLIConfig(
+            globalConfig: global,
+            projectConfig: project
+        )
+
+        #expect(effective.worktree.enabled == true)
+        #expect(effective.worktree.baseRef == "main")
+        #expect(effective.worktree.branchTemplate == "project/{agent}/{id}")
+        #expect(effective.worktree.onClose == .prompt)
+        #expect(effective.worktree.openInNewTab == false)
+        #expect(effective.worktree.inheritProjectConfig == false)
+        #expect(effective.worktree.showBadge == false)
+        // Global-only storage controls must not be project-overridable.
+        #expect(effective.worktree.basePath == global.worktree.basePath)
+        #expect(effective.worktree.idLength == global.worktree.idLength)
+    }
+
+    @Test("missing project config leaves worktree CLI on the global config")
+    func nilProjectConfigKeepsGlobalConfig() {
+        let global = CocxyConfig.defaults
+
+        let effective = AppDelegate.effectiveWorktreeCLIConfig(
+            globalConfig: global,
+            projectConfig: nil
+        )
+
+        #expect(effective == global)
+    }
+
     @Test("origin resolver walks from repo subdirectory to repository root")
     func originResolverFindsRepositoryRootFromSubdirectory() throws {
         let repo = FileManager.default.temporaryDirectory

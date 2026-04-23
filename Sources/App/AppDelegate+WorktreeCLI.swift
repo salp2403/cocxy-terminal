@@ -311,6 +311,10 @@ extension AppDelegate {
         // target the tab the user is looking at.
         let controller = focusedWindowController()
         let tab = controller?.tabManager.activeTab
+        let effectiveConfig = Self.effectiveWorktreeCLIConfig(
+            globalConfig: config,
+            projectConfig: tab?.projectConfig
+        )
 
         let origin: URL
         if let worktreeOrigin = tab?.worktreeOriginRepo {
@@ -328,11 +332,19 @@ extension AppDelegate {
         }()
 
         return WorktreeCLIContext(
-            config: config,
+            config: effectiveConfig,
             activeTabID: tab?.id,
             originRepoPath: origin,
             detectedAgent: detectedAgent
         )
+    }
+
+    nonisolated static func effectiveWorktreeCLIConfig(
+        globalConfig: CocxyConfig,
+        projectConfig: ProjectConfig?
+    ) -> CocxyConfig {
+        guard let projectConfig else { return globalConfig }
+        return globalConfig.applying(projectOverrides: projectConfig)
     }
 
     nonisolated static func worktreeConfig(
