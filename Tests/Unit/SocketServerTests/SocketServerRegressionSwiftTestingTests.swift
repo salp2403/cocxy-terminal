@@ -257,8 +257,13 @@ struct SocketServerRegressionSwiftTestingTests {
     @Test("kernel backlog absorbs 10 concurrent connects (Bug A)")
     func backlogAbsorbsConcurrentConnects() async throws {
         // Ignore SIGPIPE so a broken write returns errno=EPIPE rather
-        // than terminating the xctest process (signal 13).
-        signal(SIGPIPE, SIG_IGN)
+        // than terminating the xctest process (signal 13). Signal
+        // handlers are process-global, so we save the previous handler
+        // and restore it on exit to keep test isolation — without this,
+        // later tests that rely on the default SIGPIPE behaviour would
+        // silently observe our override.
+        let previousSIGPIPE = signal(SIGPIPE, SIG_IGN)
+        defer { _ = signal(SIGPIPE, previousSIGPIPE) }
 
         let tempPaths = uniqueSocketPath()
         defer {

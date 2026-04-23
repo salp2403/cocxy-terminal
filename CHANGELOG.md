@@ -27,15 +27,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     round-trips.
 - `cocxy --version` now resolves dynamically from the enclosing app
   bundle's `Info.plist` rather than a hardcoded constant, keeping the
-  CLI version in sync with the GUI at release time. Standalone builds
-  and tests fall back to a known value that the release pipeline can
-  bump.
+  CLI version in sync with the GUI at release time. The resolver
+  follows symlinks before walking upward to the bundle, so
+  invocations through `PATH` symlinks (for example Homebrew's
+  `/opt/homebrew/bin/cocxy`) land on the real `.app/Contents/Info.plist`
+  instead of falling back. Standalone builds and tests fall back to a
+  known value that the release pipeline can bump.
 
 ### Tests
 - New `SocketServerRegressionSwiftTestingTests` suite covering the
   two socket regressions above: a client that idles 100 ms between
   `connect()` and the first `write()` must receive a response, and
-  ten concurrent connects must all succeed without drop.
+  ten concurrent connects must all succeed without drop. The test
+  that ignores `SIGPIPE` now saves and restores the previous handler
+  so process-global signal state stays isolated between tests.
+- New `CLIArgumentParserVersionSwiftTestingTests` suite covering the
+  version resolver: direct bundled path, symlink-to-bundled path
+  (regression), non-bundle fallback, and fallback shape.
 
 ## [0.1.81] - 2026-04-21
 

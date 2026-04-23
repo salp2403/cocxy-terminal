@@ -396,11 +396,30 @@ public enum CLIArgumentParser {
     /// Expected bundled layout:
     /// `Cocxy Terminal.app/Contents/Resources/cocxy` →
     /// `Cocxy Terminal.app/Contents/Info.plist` (two levels up).
-    private static func resolveVersion() -> String {
-        guard let exePath = Bundle.main.executablePath else {
+    ///
+    /// `Bundle.main.executablePath` does not resolve symlinks. When the
+    /// CLI is invoked through a PATH symlink (for example Homebrew's
+    /// `/opt/homebrew/bin/cocxy` pointing at the app-bundled binary),
+    /// that path would otherwise walk up from the symlink's directory
+    /// and miss the enclosing `.app`. We resolve the symlink first so
+    /// the walk lands on the real `Contents/Info.plist`.
+    ///
+    /// - Returns: the bundled version when reachable, or `fallbackVersion`
+    ///   for standalone, test, or unresolvable layouts.
+    internal static func resolveVersion(executablePath: String? = nil) -> String {
+        let rawPath = executablePath ?? Bundle.main.executablePath
+        guard let exePath = rawPath else {
             return fallbackVersion
         }
-        let resourcesDir = (exePath as NSString).deletingLastPathComponent
+        // Resolve any symlinks so `/opt/homebrew/bin/cocxy` → the real
+        // `Cocxy Terminal.app/Contents/Resources/cocxy`. `standardizedFileURL`
+        // resolves symlinks, collapses `..`/`.`, and returns the canonical
+        // path that walk-up logic can rely on.
+        let realPath = URL(fileURLWithPath: exePath)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+        let resourcesDir = (realPath as NSString).deletingLastPathComponent
         let contentsDir = (resourcesDir as NSString).deletingLastPathComponent
         let plistPath = (contentsDir as NSString).appendingPathComponent("Info.plist")
 
