@@ -17,6 +17,12 @@
 //      queues to `.userInitiated` aligns scheduling with the interactive
 //      nature of CLI requests.
 //
+//   3. The accept loop still accepted and immediately closed connections once
+//      `maxConcurrentConnections` was reached. That bypassed the enlarged
+//      listen backlog and surfaced as EPIPE for bursts larger than the active
+//      worker cap. The server now waits for an active slot before accepting
+//      another client, leaving excess peers queued in the kernel backlog.
+//
 // Both scenarios previously were invisible to the test suite because
 // every existing test writes immediately after connect and uses a single
 // connection at a time.
@@ -47,11 +53,20 @@ private final class AtomicInt: @unchecked Sendable {
 private final class SpyCommandHandler: SocketCommandHandling, @unchecked Sendable {
     private let lock = NSLock()
     private var _count: Int = 0
+    private let responseDelay: TimeInterval
+
+    init(responseDelay: TimeInterval = 0) {
+        self.responseDelay = responseDelay
+    }
+
     var count: Int {
         lock.lock(); defer { lock.unlock() }
         return _count
     }
     func handleCommand(_ request: SocketRequest) -> SocketResponse {
+        if responseDelay > 0 {
+            Thread.sleep(forTimeInterval: responseDelay)
+        }
         lock.lock()
         _count += 1
         lock.unlock()
@@ -249,12 +264,11 @@ struct SocketServerRegressionSwiftTestingTests {
 
     // MARK: - Bug A regression: listen backlog absorbs concurrent connects.
 
-    /// Reproduces the production symptom where bursts of Claude Code
-    /// hook events combined with CLI invocations overflow the kernel
-    /// listen backlog. With the pre-fix backlog of 5, 10 concurrent
-    /// connects would drop ~80% with `EPIPE`. With 128 this comfortably
-    /// absorbs the burst.
-    @Test("kernel backlog absorbs 10 concurrent connects (Bug A)")
+    /// Reproduces the production symptom where bursts of hook events combined
+    /// with CLI invocations exceed the active worker cap. The server must let
+    /// the kernel backlog absorb the excess instead of accepting and closing
+    /// connections once 10 workers are busy.
+    @Test("kernel backlog absorbs bursts larger than the active worker cap (Bug A/C)")
     func backlogAbsorbsConcurrentConnects() async throws {
         // Ignore SIGPIPE so a broken write returns errno=EPIPE rather
         // than terminating the xctest process (signal 13). Signal
@@ -270,7 +284,7 @@ struct SocketServerRegressionSwiftTestingTests {
             removeTempDirectory(tempPaths.directory, socketPath: tempPaths.path)
         }
 
-        let handler = SpyCommandHandler()
+        let handler = SpyCommandHandler(responseDelay: 0.05)
         let server = SocketServerImpl(
             socketPath: tempPaths.path,
             commandHandler: handler
@@ -279,9 +293,9 @@ struct SocketServerRegressionSwiftTestingTests {
         defer { server.stop() }
         try waitUntilReady(socketPath: tempPaths.path)
 
-        // 10 is the `maxConcurrentConnections` limit; we should be able
-        // to serve all 10 without a single drop.
-        let concurrency = 10
+        // Deliberately exceed `maxConcurrentConnections` (10). The extra
+        // clients should wait in listenBacklog and all complete successfully.
+        let concurrency = 30
         let successes = AtomicInt()
         let failures = AtomicInt()
 
@@ -318,7 +332,7 @@ struct SocketServerRegressionSwiftTestingTests {
 
         #expect(
             successes.current == concurrency,
-            "Expected \(concurrency) concurrent successes, got \(successes.current) (failures=\(failures.current)). This test fails if listenBacklog drops below what the concurrency demands."
+            "Expected \(concurrency) concurrent successes, got \(successes.current) (failures=\(failures.current)). This test fails if the accept loop closes excess clients instead of letting listenBacklog queue them."
         )
         #expect(failures.current == 0)
     }

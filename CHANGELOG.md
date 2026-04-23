@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - CLI requests now succeed reliably when the app has been running for
   long periods or is under sustained load from hook events, Metal
-  rendering, and background timers. Two independent regressions were
+  rendering, and background timers. Three independent regressions were
   addressed:
   - `SocketServerConstants.listenBacklog` was `5`, which let the
     kernel silently drop concurrent connect attempts. Bursts of
@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     causing the client to race with peer teardown. Both queues now
     run at `.userInitiated` to match the interactive nature of CLI
     round-trips.
+  - Even with the larger backlog, the accept loop still accepted and
+    immediately closed connections once `maxConcurrentConnections`
+    (10) active workers were busy. Any burst larger than the active
+    cap surfaced as `EPIPE` on the excess clients. The loop now waits
+    on a `DispatchSemaphore` sized to the worker cap before accepting
+    another peer, so excess clients stay queued in the kernel backlog
+    until a worker slot frees. Measured behaviour: 30 and 60
+    concurrent CLI round-trips now complete with zero drops.
 - `cocxy --version` now resolves dynamically from the enclosing app
   bundle's `Info.plist` rather than a hardcoded constant, keeping the
   CLI version in sync with the GUI at release time. The resolver
@@ -35,11 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   known value that the release pipeline can bump.
 
 ### Tests
-- New `SocketServerRegressionSwiftTestingTests` suite covering the
-  two socket regressions above: a client that idles 100 ms between
-  `connect()` and the first `write()` must receive a response, and
-  ten concurrent connects must all succeed without drop. The test
-  that ignores `SIGPIPE` now saves and restores the previous handler
+- `SocketServerRegressionSwiftTestingTests` now covers three socket
+  regressions: a client that idles 100 ms between `connect()` and the
+  first `write()` must receive a response, and a burst of 30
+  concurrent clients (well above the 10-worker cap) must all succeed
+  without drop. The burst test uses a deliberately slow command
+  handler so the worker pool stays saturated while the remaining
+  clients wait on the kernel backlog; before the accept-gate fix it
+  would reproducibly return 10 successes and 20 `EPIPE` failures. The
+  test that ignores `SIGPIPE` saves and restores the previous handler
   so process-global signal state stays isolated between tests.
 - New `CLIArgumentParserVersionSwiftTestingTests` suite covering the
   version resolver: direct bundled path, symlink-to-bundled path

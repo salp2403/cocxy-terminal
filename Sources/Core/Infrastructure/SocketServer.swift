@@ -13,7 +13,8 @@ import Foundation
 /// - Closed command enum — no eval, no arbitrary execution.
 /// - Stale socket cleanup on startup.
 /// - Maximum 64 KB message size to prevent DoS.
-/// - Maximum 10 concurrent connections.
+/// - Maximum 10 active connections; additional clients wait in the kernel
+///   backlog instead of being accepted and closed.
 /// - 30-second connection timeout.
 ///
 /// ## Wire protocol
@@ -384,8 +385,22 @@ enum SocketConnectionHandler {
             qos: .userInitiated,
             attributes: .concurrent
         )
+        let connectionSlots = DispatchSemaphore(value: SocketServerConstants.maxConcurrentConnections)
 
         while true {
+            // Preserve the active-connection cap without rejecting bursty
+            // clients. Waiting before accept lets the kernel listen backlog
+            // hold pending peers until a worker finishes; accepting first and
+            // closing when the cap is full causes clients to see EPIPE on the
+            // first write even though listenBacklog has room.
+            while connectionSlots.wait(timeout: .now() + .milliseconds(100)) == .timedOut {
+                guard shouldContinue() else { return }
+            }
+            guard shouldContinue() else {
+                connectionSlots.signal()
+                return
+            }
+
             // Accept a new connection.
             var clientAddr = sockaddr_un()
             var clientAddrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
@@ -397,25 +412,22 @@ enum SocketConnectionHandler {
             }
 
             // Check if we should stop.
-            guard shouldContinue() else { return }
+            guard shouldContinue() else {
+                if clientFD >= 0 {
+                    Darwin.close(clientFD)
+                }
+                connectionSlots.signal()
+                return
+            }
 
             guard clientFD >= 0 else {
                 // accept() failed -- server shutting down or transient error.
+                connectionSlots.signal()
                 continue
             }
 
-            // Check connection limit.
-            let canAccept = activeConnectionCount.withLock { count -> Bool in
-                guard count < SocketServerConstants.maxConcurrentConnections else {
-                    return false
-                }
+            activeConnectionCount.withLock { count in
                 count += 1
-                return true
-            }
-
-            guard canAccept else {
-                Darwin.close(clientFD)
-                continue
             }
 
             // Handle the connection on a background queue.
@@ -427,6 +439,7 @@ enum SocketConnectionHandler {
                 activeConnectionCount.withLock { count in
                     count -= 1
                 }
+                connectionSlots.signal()
             }
         }
     }
