@@ -94,7 +94,9 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(GitHubPaneViewModel.banner(for: .rateLimited(resetAt: nil)).contains("rate limit"))
         #expect(GitHubPaneViewModel.banner(for: .timeout(seconds: 5)).contains("timed out"))
         #expect(GitHubPaneViewModel.banner(for: .invalidJSON(reason: "bad")).contains("bad"))
-        #expect(GitHubPaneViewModel.banner(for: .unsupportedVersion(stderr: "")).contains("brew upgrade gh"))
+        let unsupportedVersionBanner = GitHubPaneViewModel.banner(for: .unsupportedVersion(stderr: ""))
+        #expect(unsupportedVersionBanner.contains("Update the GitHub CLI"))
+        #expect(unsupportedVersionBanner.contains("brew upgrade gh"))
 
         let failure = GitHubPaneViewModel.banner(for: .commandFailed(
             command: "gh repo view",

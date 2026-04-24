@@ -445,7 +445,7 @@ final class GitHubPaneViewModel: ObservableObject {
         case .invalidJSON(let reason):
             return "Unexpected gh output: \(reason)"
         case .unsupportedVersion:
-            return "Update the GitHub CLI: brew upgrade gh"
+            return "Update the GitHub CLI (`gh`). Homebrew users can run: brew upgrade gh"
         case .commandFailed(_, let stderr, _):
             let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "The gh command failed." : trimmed
