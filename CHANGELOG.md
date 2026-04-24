@@ -5,6 +5,11 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.83] - 2026-04-24
+
+### Fixed
+- chore(release): bump Info.plist to 0.1.83
+
 ## [0.1.82] - 2026-04-22
 
 ### Fixed
@@ -1150,6 +1155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero telemetry — no PostHog, no Sentry, no analytics
 - MIT License
 
+[0.1.83]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.82...v0.1.83
 [0.1.63]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.62...v0.1.63
 [0.1.62]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.61...v0.1.62
 [0.1.61]: https://github.com/salp2403/cocxy-terminal/compare/v0.1.60...v0.1.61
