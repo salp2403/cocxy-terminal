@@ -117,10 +117,41 @@ enum GitHubCLI {
 
         var seen = Set<String>()
         for candidate in candidates where seen.insert(candidate).inserted {
-            guard fileManager.isExecutableFile(atPath: candidate) else { continue }
+            guard isSupportedGHExecutable(atPath: candidate, fileManager: fileManager) else { continue }
             return URL(fileURLWithPath: candidate)
         }
         return nil
+    }
+
+    /// Filters out obsolete npm packages named `gh`. Those packages are
+    /// unrelated to GitHub CLI, can appear earlier in GUI-app PATHs, and fail
+    /// with Node runtime errors such as "primordials is not defined".
+    private static func isSupportedGHExecutable(
+        atPath path: String,
+        fileManager: FileManager
+    ) -> Bool {
+        guard fileManager.isExecutableFile(atPath: path) else { return false }
+
+        let resolvedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        if resolvedPath.contains("/node_modules/gh/") {
+            return false
+        }
+
+        guard let handle = FileHandle(forReadingAtPath: path) else {
+            return true
+        }
+        defer { try? handle.close() }
+
+        guard let data = try? handle.read(upToCount: 512),
+              let text = String(data: data, encoding: .utf8) else {
+            return true
+        }
+
+        let lower = text.lowercased()
+        if lower.contains("#!/usr/bin/env node") || lower.contains("#!/usr/bin/node") {
+            return false
+        }
+        return true
     }
 
     // MARK: Run

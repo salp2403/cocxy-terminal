@@ -50,6 +50,26 @@ struct GitHubCLISwiftTestingTests {
         #expect(resolved?.path == dir.appendingPathComponent("gh").path)
     }
 
+    @Test("resolveGHExecutableURL skips obsolete npm gh wrappers")
+    func resolveGHExecutableURL_skipsNodeGHWrapper() throws {
+        let (badDir, _, badCleanup) = try Self.makeFakeGhBinary(
+            script: "#!/usr/bin/env node\nrequire('gh')\n"
+        )
+        let (goodDir, _, goodCleanup) = try Self.makeFakeGhBinary(
+            script: "#!/bin/sh\necho 'gh version 2.88.1'\n"
+        )
+        defer {
+            badCleanup()
+            goodCleanup()
+        }
+
+        let resolved = GitHubCLI.resolveGHExecutableURL(
+            environment: ["PATH": "\(badDir.path):\(goodDir.path)"]
+        )
+
+        #expect(resolved?.path == goodDir.appendingPathComponent("gh").path)
+    }
+
     @Test("resolveGHExecutableURL returns nil when no candidate is executable")
     func resolveGHExecutableURL_returnsNilWhenNoCandidateExecutable() throws {
         // Craft a PATH that definitely has no `gh`. The tempdir is brand new
