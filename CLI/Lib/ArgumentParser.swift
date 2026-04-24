@@ -354,6 +354,23 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy worktree prune`
     case worktreePrune
+
+    /// `cocxy github status` — auth + repository summary JSON.
+    case githubStatus
+
+    /// `cocxy github prs [--state open|closed|merged|all] [--limit N]`
+    /// — list pull requests for the active tab's repository.
+    case githubPRs(state: String?, limit: Int?)
+
+    /// `cocxy github issues [--state open|closed|all] [--limit N]`
+    /// — list issues for the active tab's repository.
+    case githubIssues(state: String?, limit: Int?)
+
+    /// `cocxy github open` — toggle the GitHub pane overlay.
+    case githubOpen
+
+    /// `cocxy github refresh` — refresh the GitHub pane data.
+    case githubRefresh
 }
 
 // MARK: - Split Direction
@@ -560,6 +577,9 @@ public enum CLIArgumentParser {
 
         case "worktree":
             return try parseWorktree(arguments: Array(arguments.dropFirst()))
+
+        case "github":
+            return try parseGitHub(arguments: Array(arguments.dropFirst()))
 
         default:
             throw CLIError.unknownCommand(firstArg)
@@ -1665,6 +1685,112 @@ public enum CLIArgumentParser {
                 reason: "Unknown subcommand. Use add, list, remove, or prune."
             )
         }
+    }
+
+    /// Parses `cocxy github <subcommand> [...]`.
+    private static func parseGitHub(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(
+                command: "github",
+                argument: "status|prs|issues|open|refresh"
+            )
+        }
+        let rest = Array(arguments.dropFirst())
+        switch subcommand {
+        case "status":
+            guard rest.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "github status",
+                    argument: rest.first ?? "",
+                    reason: "`github status` takes no arguments."
+                )
+            }
+            return .githubStatus
+
+        case "prs":
+            let parsed = try parseGitHubListOptions(rest: rest, subcommand: "github prs")
+            return .githubPRs(state: parsed.state, limit: parsed.limit)
+
+        case "issues":
+            let parsed = try parseGitHubListOptions(rest: rest, subcommand: "github issues")
+            return .githubIssues(state: parsed.state, limit: parsed.limit)
+
+        case "open":
+            guard rest.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "github open",
+                    argument: rest.first ?? "",
+                    reason: "`github open` takes no arguments."
+                )
+            }
+            return .githubOpen
+
+        case "refresh":
+            guard rest.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "github refresh",
+                    argument: rest.first ?? "",
+                    reason: "`github refresh` takes no arguments."
+                )
+            }
+            return .githubRefresh
+
+        default:
+            throw CLIError.invalidArgument(
+                command: "github",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use status, prs, issues, open, or refresh."
+            )
+        }
+    }
+
+    /// Shared `--state` / `--limit` parser for `github prs` and
+    /// `github issues`. Returns raw values so the caller can thread
+    /// them into the matching `ParsedCommand` case verbatim.
+    private static func parseGitHubListOptions(
+        rest: [String],
+        subcommand: String
+    ) throws -> (state: String?, limit: Int?) {
+        var state: String?
+        var limit: Int?
+        var index = 0
+        while index < rest.count {
+            let token = rest[index]
+            switch token {
+            case "--state":
+                guard index + 1 < rest.count else {
+                    throw CLIError.missingArgument(
+                        command: subcommand,
+                        argument: "value for --state"
+                    )
+                }
+                state = rest[index + 1]
+                index += 2
+            case "--limit":
+                guard index + 1 < rest.count else {
+                    throw CLIError.missingArgument(
+                        command: subcommand,
+                        argument: "value for --limit"
+                    )
+                }
+                guard let value = Int(rest[index + 1]) else {
+                    throw CLIError.invalidArgument(
+                        command: subcommand,
+                        argument: rest[index + 1],
+                        reason: "--limit must be a positive integer."
+                    )
+                }
+                limit = value
+                index += 2
+            default:
+                throw CLIError.invalidArgument(
+                    command: subcommand,
+                    argument: token,
+                    reason: "Unknown option. Valid flags: --state, --limit."
+                )
+            }
+        }
+        return (state, limit)
     }
 
     // MARK: - Help Text

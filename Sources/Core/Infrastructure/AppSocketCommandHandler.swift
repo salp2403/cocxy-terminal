@@ -233,6 +233,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// socket queue.
     let worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
+    /// Routes `cocxy github-*` verbs through the AppDelegate-side
+    /// bridge. Same sync `kind` + `params` shape as the worktree
+    /// provider so both CLI surfaces share one mental model.
+    let githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
     /// Starts a web terminal on the focused surface and returns status fields.
     let webStartProvider: (@Sendable (String, UInt16, String, UInt16, UInt32) -> [String: String]?)?
 
@@ -387,7 +392,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         imageListProvider: (@Sendable () -> [String: String]?)? = nil,
         imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         imageClearProvider: (@Sendable () -> [String: String]?)? = nil,
-        worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
+        worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
         self.configProvider = configProvider
         self.statusDetailsProvider = statusDetailsProvider
@@ -450,6 +456,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.imageDeleteProvider = imageDeleteProvider
         self.imageClearProvider = imageClearProvider
         self.worktreeCLIProvider = worktreeCLIProvider
+        self.githubCLIProvider = githubCLIProvider
         let tabManagerRef = WeakReference(tabManager)
         let browserViewModelRef = WeakReference(browserViewModel)
 
@@ -851,6 +858,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleWorktreeRemove(request)
         case .worktreePrune:
             return handleWorktreePrune(request)
+
+        // GitHub pane (v0.1.84)
+        case .githubStatus:
+            return handleGitHubCLI(kind: "status", request: request)
+        case .githubPRs:
+            return handleGitHubCLI(kind: "prs", request: request)
+        case .githubIssues:
+            return handleGitHubCLI(kind: "issues", request: request)
+        case .githubOpen:
+            return handleGitHubCLI(kind: "open", request: request)
+        case .githubRefresh:
+            return handleGitHubCLI(kind: "refresh", request: request)
 
         // Web terminal (v5)
         case .webStart:
@@ -2654,6 +2673,26 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
         let message = result.data["error"]
             ?? "Worktree \(kind) failed"
+        return .failure(id: request.id, error: message)
+    }
+
+    /// Shared dispatch used by every `github-*` verb. Mirrors the
+    /// worktree handler so both CLI surfaces share a single audit
+    /// trail. The AppDelegate-side bridge is responsible for routing
+    /// `kind` into the matching `GitHubService` call.
+    func handleGitHubCLI(kind: String, request: SocketRequest) -> SocketResponse {
+        guard let provider = githubCLIProvider else {
+            return .failure(
+                id: request.id,
+                error: "GitHub CLI is not yet wired in this build."
+            )
+        }
+        let result = provider(kind, request.params ?? [:])
+        if result.success {
+            return .ok(id: request.id, data: result.data)
+        }
+        let message = result.data["error"]
+            ?? "GitHub \(kind) failed"
         return .failure(id: request.id, error: message)
     }
 }

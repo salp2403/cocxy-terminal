@@ -671,6 +671,35 @@ public struct CommandRunner {
 
         case .worktreePrune:
             return CLISocketRequest(id: requestID, command: "worktree-prune", params: nil)
+
+        case .githubStatus:
+            return CLISocketRequest(id: requestID, command: "github-status", params: nil)
+
+        case .githubPRs(let state, let limit):
+            var params: [String: String] = [:]
+            if let state { params["state"] = state }
+            if let limit { params["limit"] = "\(limit)" }
+            return CLISocketRequest(
+                id: requestID,
+                command: "github-prs",
+                params: params.isEmpty ? nil : params
+            )
+
+        case .githubIssues(let state, let limit):
+            var params: [String: String] = [:]
+            if let state { params["state"] = state }
+            if let limit { params["limit"] = "\(limit)" }
+            return CLISocketRequest(
+                id: requestID,
+                command: "github-issues",
+                params: params.isEmpty ? nil : params
+            )
+
+        case .githubOpen:
+            return CLISocketRequest(id: requestID, command: "github-open", params: nil)
+
+        case .githubRefresh:
+            return CLISocketRequest(id: requestID, command: "github-refresh", params: nil)
         }
     }
 }

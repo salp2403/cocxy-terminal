@@ -2145,6 +2145,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     kind: kind,
                     params: params
                 )
+            },
+            githubCLIProvider: { kind, params in
+                // Mirror of the worktree provider: route every
+                // `github-*` verb through the AppDelegate-side
+                // GitHub bridge which wraps the `GitHubService`
+                // actor in the same semaphore idiom.
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleGitHubCLIRequest(
+                    kind: kind,
+                    params: params
+                )
             }
         )
 

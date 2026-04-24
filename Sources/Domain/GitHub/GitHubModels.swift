@@ -324,10 +324,10 @@ enum GitHubIssueState: String, Codable, Equatable, Sendable, CaseIterable {
 ///
 /// `gh` returns `comments` as an array of comment objects; we only need
 /// the count for the UI so the decoder folds it to an integer up front.
-/// Conformance is intentionally limited to `Decodable` — the app only
-/// consumes issues, never writes them back — so the synthesized encoder
-/// does not have to mirror the custom `comments → commentCount` fold.
-struct GitHubIssue: Decodable, Equatable, Sendable, Identifiable {
+/// Encodable too because the `cocxy github-issues` CLI verb emits the
+/// list as JSON; `encode(to:)` is implemented manually so the
+/// `commentCount` fold round-trips correctly.
+struct GitHubIssue: Codable, Equatable, Sendable, Identifiable {
     let number: Int
     let title: String
     let state: GitHubIssueState
@@ -384,6 +384,22 @@ struct GitHubIssue: Decodable, Equatable, Sendable, Identifiable {
 
         self.url = try container.decode(URL.self, forKey: .url)
         self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    /// Manual encoder keeps the `comments → commentCount` contract
+    /// stable across round trips. We emit the count as an integer
+    /// under the `comments` key so the encoded output is symmetric
+    /// with the older `gh` shape the decoder also accepts.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(number, forKey: .number)
+        try container.encode(title, forKey: .title)
+        try container.encode(state, forKey: .state)
+        try container.encode(author, forKey: .author)
+        try container.encode(labels, forKey: .labels)
+        try container.encode(commentCount, forKey: .comments)
+        try container.encode(url, forKey: .url)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 }
 

@@ -271,6 +271,12 @@ public enum OutputFormatter {
         case .worktreePrune:
             let count = response.data?["count"] ?? "0"
             return "Pruned \(count) orphan worktree\(count == "1" ? "" : "s")."
+        case .githubStatus, .githubPRs, .githubIssues:
+            return formatDataOrJSON(response: response)
+        case .githubOpen:
+            return response.data?["state"] ?? "GitHub pane toggled."
+        case .githubRefresh:
+            return "GitHub pane refreshed."
         }
     }
 

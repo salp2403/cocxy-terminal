@@ -327,6 +327,22 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// `cocxy worktree-prune` — drop manifest entries whose worktrees
     /// git no longer tracks, leaving untracked git worktrees alone.
     case worktreePrune = "worktree-prune"
+
+    // MARK: - GitHub pane (v0.1.84)
+
+    /// `cocxy github-status` — summary of `gh auth status` plus the
+    /// repository resolved from the active tab's worktree root.
+    case githubStatus = "github-status"
+    /// `cocxy github-prs` — JSON array of pull requests for the active
+    /// tab's repository.
+    case githubPRs = "github-prs"
+    /// `cocxy github-issues` — JSON array of issues for the active
+    /// tab's repository.
+    case githubIssues = "github-issues"
+    /// `cocxy github-open` — toggle the inline GitHub pane overlay.
+    case githubOpen = "github-open"
+    /// `cocxy github-refresh` — force a refresh of the pane data.
+    case githubRefresh = "github-refresh"
 }
 
 // MARK: - CLI Response

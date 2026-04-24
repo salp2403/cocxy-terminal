@@ -395,14 +395,16 @@ final class GitHubPaneViewModel: ObservableObject {
     /// accepts. Falls back to the first allowed value when the user
     /// picked something the verb does not understand (e.g. `merged`
     /// for the issue list).
-    static func clampedState(_ raw: String, allowed: [String]) -> String {
+    nonisolated static func clampedState(_ raw: String, allowed: [String]) -> String {
         let lower = raw.lowercased()
         return allowed.contains(lower) ? lower : (allowed.first ?? "open")
     }
 
     /// Maps a `GitHubCLIError` to user-facing banner copy. Public so
-    /// the code-review integration can reuse the same strings.
-    static func banner(for error: GitHubCLIError) -> String {
+    /// the code-review integration and the CLI bridge can reuse the
+    /// same strings. Marked `nonisolated` because it is a pure
+    /// function over the enum and has no dependency on actor state.
+    nonisolated static func banner(for error: GitHubCLIError) -> String {
         switch error {
         case .notInstalled:
             return "Install the GitHub CLI: brew install gh"
