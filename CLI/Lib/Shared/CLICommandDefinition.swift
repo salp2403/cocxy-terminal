@@ -175,6 +175,14 @@ public enum CLICommand: String, CaseIterable {
     case worktreeRemove = "worktree-remove"
     case worktreePrune = "worktree-prune"
 
+    // MARK: - GitHub pane (v0.1.84)
+
+    case githubStatus = "github-status"
+    case githubPRs = "github-prs"
+    case githubIssues = "github-issues"
+    case githubOpen = "github-open"
+    case githubRefresh = "github-refresh"
+
     /// Whether this command is internal (hidden from --help).
     public var isInternal: Bool {
         switch self {
@@ -322,6 +330,13 @@ public enum CLICommand: String, CaseIterable {
         case .worktreeList: return "List every cocxy-managed git worktree for the active tab's repo as JSON"
         case .worktreeRemove: return "Remove a cocxy-managed git worktree (refuses when dirty unless --force)"
         case .worktreePrune: return "Drop manifest entries whose worktree git no longer tracks"
+
+        // GitHub pane v0.1.84
+        case .githubStatus: return "Return gh auth + repository summary for the active tab as JSON"
+        case .githubPRs: return "List pull requests for the active tab's repository as JSON"
+        case .githubIssues: return "List issues for the active tab's repository as JSON"
+        case .githubOpen: return "Toggle the inline GitHub pane overlay on the focused window"
+        case .githubRefresh: return "Refresh the GitHub pane data on the focused window"
         }
     }
 
@@ -464,6 +479,13 @@ public enum CLICommand: String, CaseIterable {
         case .worktreeList: return "cocxy worktree list"
         case .worktreeRemove: return "cocxy worktree remove <id> [--force]"
         case .worktreePrune: return "cocxy worktree prune"
+
+        // GitHub pane v0.1.84
+        case .githubStatus: return "cocxy github status"
+        case .githubPRs: return "cocxy github prs [--state <state>] [--limit <n>]"
+        case .githubIssues: return "cocxy github issues [--state <state>] [--limit <n>]"
+        case .githubOpen: return "cocxy github open"
+        case .githubRefresh: return "cocxy github refresh"
         }
     }
 }
