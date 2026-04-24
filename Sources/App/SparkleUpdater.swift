@@ -23,10 +23,12 @@ final class SparkleUpdater: NSObject, ObservableObject {
 
     // MARK: - Properties
 
-    private static let automaticProbeInterval: TimeInterval = 6 * 60 * 60
+    private static let automaticProbeInterval: TimeInterval = 15 * 60
+    private static let activeProbeMinimumInterval: TimeInterval = 10 * 60
 
     private var updaterController: SPUStandardUpdaterController?
     private var automaticProbeTimer: Timer?
+    private var lastProbeStartedAt: Date?
     private var hasStarted = false
     private var hasStartedAutomaticDetection = false
 
@@ -74,13 +76,27 @@ final class SparkleUpdater: NSObject, ObservableObject {
     }
 
     /// Performs a silent availability refresh without presenting Sparkle UI.
-    func probeForUpdateInformation() {
+    func probeForUpdateInformation(now: Date = Date()) {
         startUpdaterIfNeeded()
         guard let updater = updaterController?.updater,
               !updater.sessionInProgress else {
             return
         }
+        lastProbeStartedAt = now
         updater.checkForUpdateInformation()
+    }
+
+    /// Refreshes availability when the app becomes active, without hammering
+    /// the appcast if the user is switching between apps frequently.
+    func probeForUpdateInformationIfStale(now: Date = Date()) {
+        guard Self.shouldProbeForUpdateInformation(
+            lastProbeStartedAt: lastProbeStartedAt,
+            now: now,
+            minimumInterval: Self.activeProbeMinimumInterval
+        ) else {
+            return
+        }
+        probeForUpdateInformation(now: now)
     }
 
     /// Triggers a user-initiated update check.
@@ -135,6 +151,15 @@ final class SparkleUpdater: NSObject, ObservableObject {
             title: metadata.title,
             isCritical: metadata.isCriticalUpdate
         )
+    }
+
+    static func shouldProbeForUpdateInformation(
+        lastProbeStartedAt: Date?,
+        now: Date,
+        minimumInterval: TimeInterval
+    ) -> Bool {
+        guard let lastProbeStartedAt else { return true }
+        return now.timeIntervalSince(lastProbeStartedAt) >= minimumInterval
     }
 
     private func updateAvailability(from item: SUAppcastItem) {

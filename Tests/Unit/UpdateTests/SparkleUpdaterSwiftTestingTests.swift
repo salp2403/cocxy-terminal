@@ -2,6 +2,7 @@
 // SparkleUpdaterSwiftTestingTests.swift - Sparkle update metadata bridge tests.
 
 import Testing
+import Foundation
 @testable import CocxyTerminal
 
 @Suite("Sparkle updater availability bridge")
@@ -44,6 +45,33 @@ struct SparkleUpdaterSwiftTestingTests {
         #expect(!availability.isCritical)
         #expect(availability.sidebarTitle == "Update available")
         #expect(availability.sidebarVersionLabel == "v0.1.84-build.2")
+    }
+
+    @Test("Stale activation probe respects the minimum refresh interval")
+    func staleActivationProbeRespectsMinimumRefreshInterval() {
+        let firstProbe = Date(timeIntervalSince1970: 1_000)
+
+        #expect(
+            SparkleUpdater.shouldProbeForUpdateInformation(
+                lastProbeStartedAt: nil,
+                now: firstProbe,
+                minimumInterval: 600
+            )
+        )
+        #expect(
+            !SparkleUpdater.shouldProbeForUpdateInformation(
+                lastProbeStartedAt: firstProbe,
+                now: firstProbe.addingTimeInterval(599),
+                minimumInterval: 600
+            )
+        )
+        #expect(
+            SparkleUpdater.shouldProbeForUpdateInformation(
+                lastProbeStartedAt: firstProbe,
+                now: firstProbe.addingTimeInterval(600),
+                minimumInterval: 600
+            )
+        )
     }
 }
 

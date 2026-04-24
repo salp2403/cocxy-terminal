@@ -378,6 +378,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for controller in allControllers {
             controller.recoverTerminalRenderingAfterWake()
         }
+        sparkleUpdater?.probeForUpdateInformationIfStale()
     }
 
     func applicationShouldHandleReopen(
