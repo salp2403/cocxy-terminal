@@ -295,6 +295,63 @@ struct GitHubModelsSwiftTestingTests {
         #expect(check.conclusion == .failure)
     }
 
+    @Test("GitHubCheck decodes current gh pr checks state and bucket payload")
+    func gitHubCheck_decodesCurrentGhChecksPayload() throws {
+        let success = try GitHubJSONDecoder.decode(GitHubCheck.self, from: #"""
+        {
+          "bucket": "pass",
+          "completedAt": "2026-04-23T10:05:12Z",
+          "link": "https://github.com/u/x/actions/runs/1/job/1",
+          "name": "ci / build",
+          "startedAt": "2026-04-23T10:00:00Z",
+          "state": "SUCCESS"
+        }
+        """#)
+        let pending = try GitHubJSONDecoder.decode(GitHubCheck.self, from: #"""
+        {
+          "bucket": "pending",
+          "link": "https://github.com/u/x/actions/runs/1/job/2",
+          "name": "ci / tests",
+          "state": "PENDING"
+        }
+        """#)
+        let skipped = try GitHubJSONDecoder.decode(GitHubCheck.self, from: #"""
+        {
+          "bucket": "skipping",
+          "name": "ci / optional",
+          "state": "SKIPPED"
+        }
+        """#)
+
+        #expect(success.status == .completed)
+        #expect(success.conclusion == .success)
+        #expect(success.detailsUrl?.absoluteString == "https://github.com/u/x/actions/runs/1/job/1")
+        #expect(success.startedAt != nil)
+        #expect(success.completedAt != nil)
+        #expect(pending.status == .pending)
+        #expect(pending.conclusion == .none)
+        #expect(skipped.status == .completed)
+        #expect(skipped.conclusion == .skipped)
+    }
+
+    @Test("GitHubCheck id distinguishes duplicated job names")
+    func gitHubCheck_idDistinguishesDuplicatedNames() {
+        let first = GitHubCheck(
+            name: "build",
+            status: .completed,
+            conclusion: .success,
+            detailsUrl: URL(string: "https://github.com/u/r/actions/runs/1")
+        )
+        let second = GitHubCheck(
+            name: "build",
+            status: .completed,
+            conclusion: .success,
+            detailsUrl: URL(string: "https://github.com/u/r/actions/runs/2")
+        )
+
+        #expect(first.id != second.id)
+    }
+
     // MARK: - Auth status parser
 
     @Test("GitHubAuthStatusParser parses the modern 'account' wording")

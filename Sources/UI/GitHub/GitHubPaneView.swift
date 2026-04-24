@@ -305,11 +305,6 @@ struct GitHubPaneView: View {
     // MARK: Actions
 
     private func didActivate(_ pullRequest: GitHubPullRequest) {
-        viewModel.selectedPullRequestNumber = pullRequest.number
-        if viewModel.selectedTab == .pullRequests {
-            viewModel.open(pullRequest.url)
-        } else {
-            viewModel.selectedTab = .checks
-        }
+        viewModel.selectPullRequestForChecks(pullRequest)
     }
 }

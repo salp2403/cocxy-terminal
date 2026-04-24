@@ -256,6 +256,148 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.lastInfoMessage?.contains("git repository") == true)
     }
 
+    @Test("missing working directory clears stale GitHub data")
+    func refresh_missingWorkingDirectoryClearsStaleData() async throws {
+        let service = makeService { spy in
+            spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+                stdout: "",
+                stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "defaultBranchRef": {"name": "main"},
+                  "description": "",
+                  "hasIssuesEnabled": true,
+                  "isEmpty": false,
+                  "isPrivate": false,
+                  "name": "r",
+                  "owner": {"login": "u"},
+                  "url": "https://github.com/u/r"
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: #"""
+                [
+                  {"number": 1, "title": "first", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/1", "updatedAt": "2026-04-23T15:47:21Z"}
+                ]
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("issue") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: #"""
+                [
+                  {"number": 10, "title": "bug", "state": "OPEN", "author": {"login": "r"}, "labels": [], "comments": 2, "url": "https://github.com/u/r/issues/10", "updatedAt": "2026-04-23T15:47:21Z"}
+                ]
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("checks") }, result: GitHubCLIResult(
+                stdout: #"[{"name":"build","state":"SUCCESS","bucket":"pass","link":"https://github.com/u/r/actions/runs/1"}]"#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        var directory: URL? = URL(fileURLWithPath: "/tmp")
+        viewModel.workingDirectoryProvider = { directory }
+        viewModel.refresh()
+        await flush()
+
+        #expect(viewModel.repo?.fullName == "u/r")
+        #expect(viewModel.pullRequests.count == 1)
+        #expect(viewModel.issues.count == 1)
+        #expect(viewModel.checks.count == 1)
+        #expect(viewModel.selectedPullRequestNumber == 1)
+
+        directory = nil
+        viewModel.refresh()
+        await flush()
+
+        #expect(viewModel.repo == nil)
+        #expect(viewModel.authStatus == nil)
+        #expect(viewModel.pullRequests.isEmpty)
+        #expect(viewModel.issues.isEmpty)
+        #expect(viewModel.checks.isEmpty)
+        #expect(viewModel.selectedPullRequestNumber == nil)
+        #expect(viewModel.lastInfoMessage?.contains("git repository") == true)
+    }
+
+    @Test("selectPullRequestForChecks targets the selected PR checks")
+    func selectPullRequestForChecks_refreshesSelectedPRChecks() async throws {
+        let service = makeService { spy in
+            spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+                stdout: "",
+                stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "defaultBranchRef": {"name": "main"},
+                  "description": "",
+                  "hasIssuesEnabled": true,
+                  "isEmpty": false,
+                  "isPrivate": false,
+                  "name": "r",
+                  "owner": {"login": "u"},
+                  "url": "https://github.com/u/r"
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: #"""
+                [
+                  {"number": 1, "title": "first", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/1", "updatedAt": "2026-04-23T15:47:21Z"},
+                  {"number": 2, "title": "second", "state": "OPEN", "author": {"login": "u"}, "headRefName": "b", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/2", "updatedAt": "2026-04-23T15:47:21Z"}
+                ]
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("issue") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("checks") && $0.contains("1") }, result: GitHubCLIResult(
+                stdout: #"[{"name":"first-check","state":"SUCCESS","bucket":"pass","link":"https://github.com/u/r/actions/runs/1"}]"#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("checks") && $0.contains("2") }, result: GitHubCLIResult(
+                stdout: #"[{"name":"second-check","state":"PENDING","bucket":"pending","link":"https://github.com/u/r/actions/runs/2"}]"#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp") }
+        viewModel.refresh()
+        await flush()
+        #expect(viewModel.selectedPullRequestNumber == 1)
+        #expect(viewModel.checks.first?.name == "first-check")
+
+        let second = try #require(viewModel.pullRequests.first(where: { $0.number == 2 }))
+        viewModel.selectPullRequestForChecks(second)
+        await flush()
+
+        #expect(viewModel.selectedTab == .checks)
+        #expect(viewModel.selectedPullRequestNumber == 2)
+        #expect(viewModel.checks.first?.name == "second-check")
+        #expect(viewModel.checks.first?.status == .pending)
+    }
+
     @Test("isVisible toggle starts and stops auto-refresh without crashing")
     func isVisible_togglesAutoRefreshLifecycle() {
         let service = makeService { _ in }

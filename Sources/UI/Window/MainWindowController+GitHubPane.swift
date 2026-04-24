@@ -170,7 +170,7 @@ extension MainWindowController {
             self?.currentGitHubPaneWorkingDirectory()
         }
         viewModel.configProvider = { [weak self] in
-            self?.configService?.current.github ?? .defaults
+            self?.currentGitHubPaneConfig() ?? .defaults
         }
         viewModel.onOpenURL = { url in
             NSWorkspace.shared.open(url)
@@ -239,6 +239,29 @@ extension MainWindowController {
             return tab.workingDirectory
         }
         return nil
+    }
+
+    /// Returns the `[github]` config the pane should use for the
+    /// currently visible tab. This keeps project `.cocxy.toml`
+    /// overrides aligned with the rest of Cocxy's effective-config
+    /// path instead of silently falling back to the global settings.
+    func currentGitHubPaneConfig() -> GitHubConfig {
+        let globalConfig = configService?.current ?? .defaults
+        guard let tabID = visibleTabID ?? tabManager.activeTabID,
+              let tab = tabManager.tab(for: tabID) else {
+            return globalConfig.github
+        }
+        return Self.effectiveGitHubConfig(for: tab, globalConfig: globalConfig)
+    }
+
+    nonisolated static func effectiveGitHubConfig(
+        for tab: Tab,
+        globalConfig: CocxyConfig
+    ) -> GitHubConfig {
+        guard let projectConfig = tab.projectConfig else {
+            return globalConfig.github
+        }
+        return globalConfig.applying(projectOverrides: projectConfig).github
     }
 
     // MARK: - Code Review bridge (Fase 10)

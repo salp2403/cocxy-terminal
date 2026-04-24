@@ -163,6 +163,16 @@ final class GitHubPaneViewModel: ObservableObject {
         onOpenURL?(url)
     }
 
+    /// Selects a pull request as the current checks target and moves
+    /// the pane to Checks. The row's context menu still owns the
+    /// browser-open affordance, keeping primary click inside Cocxy.
+    func selectPullRequestForChecks(_ pullRequest: GitHubPullRequest) {
+        selectedPullRequestNumber = pullRequest.number
+        selectedTab = .checks
+        checks = []
+        refresh()
+    }
+
     /// Forwards a "Create PR" request to the code-review integration.
     /// Validation happens in `GitHubService.createPullRequest`; here we
     /// just decorate the pane state so the user gets loading feedback.
@@ -234,9 +244,11 @@ final class GitHubPaneViewModel: ObservableObject {
             applyState {
                 lastInfoMessage = "GitHub pane is disabled. Enable it in Preferences > GitHub."
                 repo = nil
+                authStatus = nil
                 pullRequests = []
                 issues = []
                 checks = []
+                selectedPullRequestNumber = nil
                 isLoading = false
             }
             return
@@ -245,6 +257,12 @@ final class GitHubPaneViewModel: ObservableObject {
         guard let workingDirectory = workingDirectoryProvider?() else {
             applyState {
                 lastInfoMessage = "Open a git repository to see pull requests and issues."
+                repo = nil
+                authStatus = nil
+                pullRequests = []
+                issues = []
+                checks = []
+                selectedPullRequestNumber = nil
                 isLoading = false
             }
             return
@@ -287,6 +305,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 pullRequests = []
                 issues = []
                 checks = []
+                selectedPullRequestNumber = nil
                 isLoading = false
             }
             return
@@ -304,6 +323,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 pullRequests = []
                 issues = []
                 checks = []
+                selectedPullRequestNumber = nil
                 switch error {
                 case .noRemote, .notAGitRepository:
                     lastInfoMessage = Self.banner(for: error)
@@ -347,7 +367,13 @@ final class GitHubPaneViewModel: ObservableObject {
             // Stage 4: checks for whichever PR is currently selected
             // (or the first one if no explicit selection). Failure here
             // is non-fatal — the view still renders PRs and issues.
-            let targetNumber = selectedPullRequestNumber ?? fetchedPRs.first?.number
+            let targetNumber: Int?
+            if let selectedPullRequestNumber,
+               fetchedPRs.contains(where: { $0.number == selectedPullRequestNumber }) {
+                targetNumber = selectedPullRequestNumber
+            } else {
+                targetNumber = fetchedPRs.first?.number
+            }
             var fetchedChecks: [GitHubCheck] = []
             if let number = targetNumber {
                 fetchedChecks = (try? await service.checksForPullRequest(
@@ -361,9 +387,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 pullRequests = fetchedPRs
                 issues = fetchedIssues
                 checks = fetchedChecks
-                if selectedPullRequestNumber == nil, let first = fetchedPRs.first {
-                    selectedPullRequestNumber = first.number
-                }
+                selectedPullRequestNumber = targetNumber
                 isLoading = false
             }
         } catch let error as GitHubCLIError {

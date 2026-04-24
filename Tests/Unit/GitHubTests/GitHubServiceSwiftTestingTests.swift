@@ -322,14 +322,14 @@ struct GitHubServiceSwiftTestingTests {
         #expect(checks.isEmpty)
     }
 
-    @Test("checksForPullRequest decodes status/conclusion payload")
+    @Test("checksForPullRequest decodes current gh state/bucket payload")
     func checksForPullRequest_decodesPayload() async throws {
         let spy = RunnerSpy()
         spy.stub(matching: { $0.contains("checks") }, result: GitHubCLIResult(
             stdout: #"""
             [
-              {"name": "build", "status": "COMPLETED", "conclusion": "SUCCESS", "detailsUrl": "https://github.com/u/r/runs/1"},
-              {"name": "tests", "status": "IN_PROGRESS"}
+              {"name": "build", "state": "SUCCESS", "bucket": "pass", "link": "https://github.com/u/r/runs/1"},
+              {"name": "tests", "state": "PENDING", "bucket": "pending"}
             ]
             """#,
             stderr: "",
@@ -344,7 +344,15 @@ struct GitHubServiceSwiftTestingTests {
 
         #expect(checks.count == 2)
         #expect(checks[0].conclusion == .success)
-        #expect(checks[1].status == .inProgress)
+        #expect(checks[0].detailsUrl?.absoluteString == "https://github.com/u/r/runs/1")
+        #expect(checks[1].status == .pending)
+
+        let args = spy.allInvocations.first?.args ?? []
+        guard let jsonIndex = args.firstIndex(of: "--json") else {
+            Issue.record("Expected --json arg in \(args)")
+            return
+        }
+        #expect(args[jsonIndex + 1] == "name,state,bucket,link,startedAt,completedAt")
     }
 
     // MARK: - createPullRequest

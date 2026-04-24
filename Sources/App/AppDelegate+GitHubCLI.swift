@@ -59,10 +59,10 @@ extension AppDelegate {
     ) async -> (Bool, [String: String]) {
         // Gate: honour the master toggle so `cocxy github-*` never
         // invokes `gh` when the user disabled the pane.
-        let enabled = await MainActor.run { () -> Bool in
-            self.configService?.current.github.enabled ?? true
+        let githubConfig = await MainActor.run { () -> GitHubConfig in
+            self.currentGitHubCLIConfig()
         }
-        guard enabled else {
+        guard githubConfig.enabled else {
             return (
                 false,
                 [
@@ -75,9 +75,9 @@ extension AppDelegate {
         case "status":
             return await runGitHubStatus()
         case "prs":
-            return await runGitHubPRs(params: params)
+            return await runGitHubPRs(params: params, config: githubConfig)
         case "issues":
-            return await runGitHubIssues(params: params)
+            return await runGitHubIssues(params: params, config: githubConfig)
         case "open":
             return await runGitHubOpen()
         case "refresh":
@@ -124,22 +124,24 @@ extension AppDelegate {
     /// `cocxy github-prs` — array of pull requests. Accepts optional
     /// `--state` and `--limit`. Returns JSON under `data["prs"]`.
     nonisolated private func runGitHubPRs(
-        params: [String: String]
+        params: [String: String],
+        config: GitHubConfig
     ) async -> (Bool, [String: String]) {
         guard let directory = await MainActor.run(body: { self.currentGitHubCLIWorkingDirectory() }) else {
             return (false, ["error": "Open a git repository before listing pull requests."])
         }
-        let state = params["state"] ?? "open"
-        let limit = params["limit"].flatMap(Int.init) ?? 30
-        let includeDrafts = await MainActor.run { () -> Bool in
-            self.configService?.current.github.includeDrafts ?? true
-        }
+        let options = Self.githubListOptions(
+            params: params,
+            config: config,
+            allowedStates: ["open", "closed", "merged", "all"]
+        )
+        let includeDrafts = config.includeDrafts
         let service = Self.sharedGitHubService
         do {
             let prs = try await service.listPullRequests(
                 at: directory,
-                state: state,
-                limit: limit,
+                state: options.state,
+                limit: options.limit,
                 includeDrafts: includeDrafts
             )
             return (true, ["prs": encodeJSONArray(prs)])
@@ -153,19 +155,23 @@ extension AppDelegate {
     /// `cocxy github-issues` — array of issues. Returns JSON under
     /// `data["issues"]`.
     nonisolated private func runGitHubIssues(
-        params: [String: String]
+        params: [String: String],
+        config: GitHubConfig
     ) async -> (Bool, [String: String]) {
         guard let directory = await MainActor.run(body: { self.currentGitHubCLIWorkingDirectory() }) else {
             return (false, ["error": "Open a git repository before listing issues."])
         }
-        let state = params["state"] ?? "open"
-        let limit = params["limit"].flatMap(Int.init) ?? 30
+        let options = Self.githubListOptions(
+            params: params,
+            config: config,
+            allowedStates: ["open", "closed", "all"]
+        )
         let service = Self.sharedGitHubService
         do {
             let issues = try await service.listIssues(
                 at: directory,
-                state: state,
-                limit: limit
+                state: options.state,
+                limit: options.limit
             )
             return (true, ["issues": encodeJSONArray(issues)])
         } catch let error as GitHubCLIError {
@@ -220,6 +226,43 @@ extension AppDelegate {
             return nil
         }
         return tab.worktreeRoot ?? tab.workingDirectory
+    }
+
+    /// Resolves the effective GitHub config for the focused tab.
+    /// Project-level `.cocxy.toml` overrides should affect the CLI
+    /// exactly the same way they affect the side pane, while global-only
+    /// controls such as refresh interval and max rows remain global.
+    @MainActor
+    func currentGitHubCLIConfig() -> GitHubConfig {
+        let globalConfig = configService?.current ?? .defaults
+        guard let controller = focusedWindowController(),
+              let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID,
+              let projectConfig = controller.tabManager.tab(for: tabID)?.projectConfig else {
+            return globalConfig.github
+        }
+        return Self.effectiveGitHubCLIConfig(
+            globalConfig: globalConfig,
+            projectConfig: projectConfig
+        ).github
+    }
+
+    nonisolated static func effectiveGitHubCLIConfig(
+        globalConfig: CocxyConfig,
+        projectConfig: ProjectConfig?
+    ) -> CocxyConfig {
+        guard let projectConfig else { return globalConfig }
+        return globalConfig.applying(projectOverrides: projectConfig)
+    }
+
+    nonisolated static func githubListOptions(
+        params: [String: String],
+        config: GitHubConfig,
+        allowedStates: [String]
+    ) -> (state: String, limit: Int) {
+        let rawState = params["state"] ?? config.defaultState
+        let state = GitHubPaneViewModel.clampedState(rawState, allowed: allowedStates)
+        let limit = params["limit"].flatMap(Int.init) ?? config.maxItems
+        return (state, limit)
     }
 
     // MARK: - JSON encoding helper

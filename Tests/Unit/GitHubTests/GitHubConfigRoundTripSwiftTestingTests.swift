@@ -193,6 +193,88 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         #expect(merged.github == global.github)
     }
 
+    @Test("Pane and CLI effective config use project GitHub overrides")
+    func effectiveGithubConfig_appliesProjectOverrides() {
+        let global = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults,
+            github: GitHubConfig(
+                enabled: true,
+                autoRefreshInterval: 120,
+                maxItems: 80,
+                includeDrafts: true,
+                defaultState: "open"
+            )
+        )
+        let project = ProjectConfig(
+            githubEnabled: false,
+            githubIncludeDrafts: false,
+            githubDefaultState: "merged"
+        )
+        let tab = Tab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/repo"),
+            projectConfig: project
+        )
+
+        let paneConfig = MainWindowController.effectiveGitHubConfig(
+            for: tab,
+            globalConfig: global
+        )
+        let cliConfig = AppDelegate.effectiveGitHubCLIConfig(
+            globalConfig: global,
+            projectConfig: project
+        ).github
+
+        for effective in [paneConfig, cliConfig] {
+            #expect(effective.enabled == false)
+            #expect(effective.includeDrafts == false)
+            #expect(effective.defaultState == "merged")
+            #expect(effective.autoRefreshInterval == global.github.autoRefreshInterval)
+            #expect(effective.maxItems == global.github.maxItems)
+        }
+    }
+
+    @Test("CLI GitHub list options prefer flags over config defaults")
+    func githubListOptions_prefersParamsOverConfigDefaults() {
+        let config = GitHubConfig(
+            enabled: true,
+            autoRefreshInterval: 60,
+            maxItems: 80,
+            includeDrafts: false,
+            defaultState: "merged"
+        )
+
+        let defaults = AppDelegate.githubListOptions(
+            params: [:],
+            config: config,
+            allowedStates: ["open", "closed", "merged", "all"]
+        )
+        #expect(defaults.state == "merged")
+        #expect(defaults.limit == 80)
+
+        let explicit = AppDelegate.githubListOptions(
+            params: ["state": "closed", "limit": "12"],
+            config: config,
+            allowedStates: ["open", "closed", "merged", "all"]
+        )
+        #expect(explicit.state == "closed")
+        #expect(explicit.limit == 12)
+
+        let issueDefaults = AppDelegate.githubListOptions(
+            params: [:],
+            config: config,
+            allowedStates: ["open", "closed", "all"]
+        )
+        #expect(issueDefaults.state == "open")
+        #expect(issueDefaults.limit == 80)
+    }
+
     // MARK: - Preferences roundtrip
 
     @Test("PreferencesViewModel persists GitHub fields via save -> reload")

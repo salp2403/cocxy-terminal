@@ -180,7 +180,7 @@ struct GitHubCheckRow: View {
         case .cancelled, .skipped, .stale: return "minus.circle"
         case .neutral, .actionRequired: return "exclamationmark.circle"
         case .none:
-            return check.status == .inProgress ? "arrow.triangle.2.circlepath" : "circle"
+            return isActiveCheck ? "arrow.triangle.2.circlepath" : "circle"
         }
     }
 
@@ -191,7 +191,16 @@ struct GitHubCheckRow: View {
         case .cancelled, .skipped, .stale: return .secondary
         case .neutral, .actionRequired: return .orange
         case .none:
-            return check.status == .inProgress ? .blue : .secondary
+            return isActiveCheck ? .blue : .secondary
+        }
+    }
+
+    private var isActiveCheck: Bool {
+        switch check.status {
+        case .queued, .pending, .inProgress:
+            return true
+        case .completed, .unknown:
+            return false
         }
     }
 }

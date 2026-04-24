@@ -405,8 +405,12 @@ struct GitHubIssue: Codable, Equatable, Sendable, Identifiable {
 
 // MARK: - Check
 
-/// Raw status of a check run, matching the strings `gh` emits in
-/// `--json status` for `gh pr checks`.
+/// Normalized progress status for a check run.
+///
+/// Older tests and some API surfaces expose this as `status`
+/// (`COMPLETED`, `IN_PROGRESS`, etc.). Current `gh pr checks --json`
+/// exposes `state` plus a `bucket`; `GitHubCheck` folds both shapes into
+/// this enum so the UI does not depend on a specific `gh` release.
 enum GitHubCheckStatus: String, Codable, Equatable, Sendable {
     case queued = "QUEUED"
     case inProgress = "IN_PROGRESS"
@@ -477,9 +481,10 @@ enum GitHubCheckConclusion: String, Codable, Equatable, Sendable {
 
 /// Check run summary as returned by `gh pr checks <number> --json`.
 ///
-/// `Decodable` only because the CodingKeys include `link` as an alias for
-/// `detailsUrl`, which would confuse the synthesized encoder. We never
-/// serialize checks back to JSON, so encoder synthesis is unnecessary.
+/// gh 2.88 emits `name,state,bucket,link,startedAt,completedAt`, while older
+/// test fixtures and adjacent GitHub APIs may use `status`, `conclusion`, and
+/// `detailsUrl`. The decoder accepts both contracts and normalizes them into
+/// `status` + `conclusion` for the UI.
 struct GitHubCheck: Decodable, Equatable, Sendable, Identifiable {
     let name: String
     let status: GitHubCheckStatus
@@ -488,7 +493,15 @@ struct GitHubCheck: Decodable, Equatable, Sendable, Identifiable {
     let startedAt: Date?
     let completedAt: Date?
 
-    var id: String { name }
+    var id: String {
+        if let detailsUrl {
+            return "\(name)|\(detailsUrl.absoluteString)"
+        }
+        if let startedAt {
+            return "\(name)|\(startedAt.timeIntervalSince1970)"
+        }
+        return name
+    }
 
     init(
         name: String,
@@ -507,14 +520,21 @@ struct GitHubCheck: Decodable, Equatable, Sendable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, status, conclusion, detailsUrl, link, startedAt, completedAt
+        case name, status, state, bucket, conclusion, detailsUrl, link, startedAt, completedAt
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.name = try container.decode(String.self, forKey: .name)
-        self.status = try container.decodeIfPresent(GitHubCheckStatus.self, forKey: .status) ?? .unknown
-        self.conclusion = try container.decodeIfPresent(GitHubCheckConclusion.self, forKey: .conclusion) ?? .none
+        let rawState = try container.decodeIfPresent(String.self, forKey: .state)
+        let rawBucket = try container.decodeIfPresent(String.self, forKey: .bucket)
+        let decodedConclusion = try container.decodeIfPresent(
+            GitHubCheckConclusion.self,
+            forKey: .conclusion
+        )
+        self.conclusion = decodedConclusion ?? Self.conclusion(fromState: rawState, bucket: rawBucket)
+        self.status = try container.decodeIfPresent(GitHubCheckStatus.self, forKey: .status)
+            ?? Self.status(fromState: rawState, bucket: rawBucket, conclusion: conclusion)
         // `gh pr checks` exposes the URL under `link`; `gh run list --json`
         // exposes it under `detailsUrl`. Accept either.
         self.detailsUrl = (try? container.decodeIfPresent(URL.self, forKey: .detailsUrl))
@@ -522,6 +542,75 @@ struct GitHubCheck: Decodable, Equatable, Sendable, Identifiable {
             ?? nil
         self.startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
         self.completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+    }
+
+    private static func status(
+        fromState state: String?,
+        bucket: String?,
+        conclusion: GitHubCheckConclusion
+    ) -> GitHubCheckStatus {
+        let state = state?.uppercased()
+        switch state {
+        case "QUEUED":
+            return .queued
+        case "IN_PROGRESS":
+            return .inProgress
+        case "PENDING", "EXPECTED", "WAITING":
+            return .pending
+        case "COMPLETED":
+            return .completed
+        case "SUCCESS", "FAILURE", "ERROR", "CANCELLED", "SKIPPED", "TIMED_OUT", "ACTION_REQUIRED", "NEUTRAL", "STALE", "STARTUP_FAILURE":
+            return .completed
+        default:
+            break
+        }
+
+        switch bucket?.lowercased() {
+        case "pending":
+            return .pending
+        case "pass", "fail", "cancel", "skipping":
+            return .completed
+        default:
+            return conclusion == .none ? .unknown : .completed
+        }
+    }
+
+    private static func conclusion(fromState state: String?, bucket: String?) -> GitHubCheckConclusion {
+        switch state?.uppercased() {
+        case "SUCCESS":
+            return .success
+        case "FAILURE", "ERROR":
+            return .failure
+        case "NEUTRAL":
+            return .neutral
+        case "CANCELLED":
+            return .cancelled
+        case "SKIPPED":
+            return .skipped
+        case "TIMED_OUT":
+            return .timedOut
+        case "ACTION_REQUIRED":
+            return .actionRequired
+        case "STALE":
+            return .stale
+        case "STARTUP_FAILURE":
+            return .startupFailure
+        default:
+            break
+        }
+
+        switch bucket?.lowercased() {
+        case "pass":
+            return .success
+        case "fail":
+            return .failure
+        case "cancel":
+            return .cancelled
+        case "skipping":
+            return .skipped
+        default:
+            return .none
+        }
     }
 }
 

@@ -199,7 +199,7 @@ actor GitHubService {
     ) async throws -> [GitHubCheck] {
         let args = [
             "pr", "checks", "\(number)",
-            "--json", "name,status,conclusion,detailsUrl,link,startedAt,completedAt",
+            "--json", "name,state,bucket,link,startedAt,completedAt",
         ]
         let result = try runner(directory, args, timeoutSeconds)
         if result.terminationStatus != 0 {

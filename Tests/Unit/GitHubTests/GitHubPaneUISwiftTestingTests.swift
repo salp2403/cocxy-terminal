@@ -120,7 +120,13 @@ struct GitHubPaneUISwiftTestingTests {
             status: .completed,
             conclusion: .success
         )
+        let pending = GitHubCheck(
+            name: "deploy",
+            status: .pending,
+            conclusion: .none
+        )
         _ = GitHubCheckRow(check: failed).body
         _ = GitHubCheckRow(check: passed).body
+        _ = GitHubCheckRow(check: pending).body
     }
 }
