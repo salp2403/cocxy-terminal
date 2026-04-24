@@ -161,13 +161,12 @@ final class TabBarViewModel: ObservableObject {
     /// behavior when no per-surface store is installed.
     var perSurfaceAgentsProvider: (Tab) -> [SurfaceAgentSnapshot] = { _ in [] }
 
-    /// Returns whether the worktree badge should be visible for tabs
-    /// that have `worktreeID != nil`. Wired to
-    /// `config.worktree.showBadge` by `MainWindowController`; the
-    /// default `true` keeps the badge visible when the config is not
-    /// installed (for example during tests) so the feature does not
-    /// silently disappear.
-    var worktreeBadgeVisibilityProvider: () -> Bool = { true }
+    /// Returns whether the worktree badge should be visible for a tab
+    /// that has `worktreeID != nil`. Wired to the tab's effective
+    /// worktree config by `MainWindowController`; the default `true`
+    /// keeps the badge visible when config is not installed (for example
+    /// during tests) so the feature does not silently disappear.
+    var worktreeBadgeVisibilityProvider: (Tab) -> Bool = { _ in true }
 
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
@@ -373,7 +372,7 @@ final class TabBarViewModel: ObservableObject {
                 additionalActiveAgentStates: additionalActiveAgentStatesProvider(tab)
                     .map(\.agentState),
                 perSurfaceAgents: perSurfaceAgentsProvider(tab),
-                hasWorktree: tab.worktreeID != nil && worktreeBadgeVisibilityProvider(),
+                hasWorktree: tab.worktreeID != nil && worktreeBadgeVisibilityProvider(tab),
                 worktreeBadgeTooltip: worktreeBadgeTooltip(for: tab)
             )
         }

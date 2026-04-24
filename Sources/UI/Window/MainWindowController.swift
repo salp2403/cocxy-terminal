@@ -269,7 +269,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var browserBookmarkStore: BrowserBookmarkStoring?
 
     /// The Sparkle auto-update manager. Injected by AppDelegate.
-    var sparkleUpdater: SparkleUpdater?
+    var sparkleUpdater: SparkleUpdater? {
+        didSet { subscribeToSparkleUpdater() }
+    }
+
+    /// Cancellable for Sparkle availability changes mirrored into the sidebar.
+    private var sparkleUpdaterCancellable: AnyCancellable?
 
     // MARK: - Browser Pro Overlay State
 
@@ -646,17 +651,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             return self.additionalActiveAgentSnapshots(for: tab.id)
         }
 
-        // Worktree badge visibility tracks the live config flag so
-        // toggling `[worktree].show-badge = false` in the user's TOML
-        // hides every badge at the next sidebar refresh without
-        // touching the tab's persisted state.
-        tabBarVM.worktreeBadgeVisibilityProvider = { [weak self] in
-            self?.configService?.current.worktree.showBadge ?? true
+        // Worktree badge visibility tracks each tab's effective config
+        // so project `.cocxy.toml` overrides can hide a badge without
+        // mutating the tab's persisted worktree metadata.
+        tabBarVM.worktreeBadgeVisibilityProvider = { [weak self] tab in
+            guard let self else { return true }
+            return Self.effectiveWorktreeConfig(
+                for: tab,
+                globalConfig: self.configService?.current ?? .defaults
+            ).showBadge
         }
 
         let sidebar = TabBarView(viewModel: tabBarVM)
         sidebar.onCommandPalette = { [weak self] in self?.toggleCommandPalette() }
         sidebar.onNotificationPanel = { [weak self] in self?.toggleNotificationPanel() }
+        sidebar.onInstallUpdate = { [weak self] in self?.sparkleUpdater?.checkForUpdates() }
         sidebar.onAcceptTabDrop = { [weak self] dragData in
             self?.handleTabDrop(dragData) ?? false
         }
@@ -669,6 +678,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sidebar.confirmCloseProcess = configService?.current.general.confirmCloseProcess ?? false
         sidebar.flashTabEnabled = configService?.current.notifications.flashTab ?? true
         sidebar.badgeOnTabEnabled = configService?.current.notifications.badgeOnTab ?? true
+        sidebar.setAvailableUpdate(sparkleUpdater?.availableUpdate)
         self.tabBarViewModel = tabBarVM
         self.tabBarView = sidebar
         return sidebar
@@ -1120,6 +1130,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // Set initial value.
         let remote = aggregator.remoteUnreadCount(excluding: windowID)
         tabBarView?.updateRemoteUnreadCount(remote)
+    }
+
+    /// Mirrors Sparkle's silent update probe into whichever sidebar chrome
+    /// is currently mounted. The update button is presentation-only; clicking
+    /// it still routes back into Sparkle's standard user-initiated flow.
+    private func subscribeToSparkleUpdater() {
+        sparkleUpdaterCancellable?.cancel()
+        guard let sparkleUpdater else {
+            applyAvailableUpdate(nil)
+            return
+        }
+
+        sparkleUpdaterCancellable = sparkleUpdater.$availableUpdate
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] update in
+                self?.applyAvailableUpdate(update)
+            }
+
+        applyAvailableUpdate(sparkleUpdater.availableUpdate)
+    }
+
+    private func applyAvailableUpdate(_ update: CocxyUpdateAvailability?) {
+        tabBarView?.setAvailableUpdate(update)
+        auroraChromeController?.availableUpdate = update
     }
 
     /// Subscribes to cross-window events from the event bus.

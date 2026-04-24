@@ -22,7 +22,28 @@ struct GroupedHooksSettingsManager {
         var settings = try readOrCreateSettings()
         var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
 
-        if areCocxyHooksInstalled(in: hooks) {
+        var modified = false
+
+        for eventType in hookEvents {
+            var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
+            let desiredEntry: [String: Any] = [
+                "matcher": "",
+                "hooks": [
+                    ["type": "command", "command": hookCommand]
+                ]
+            ]
+
+            let reconciliation = ClaudeSettingsManager.reconciledHookEntries(
+                eventHooks,
+                desiredEntry: desiredEntry,
+                expectedCommand: hookCommand
+            )
+            eventHooks = reconciliation.entries
+            modified = modified || reconciliation.modified
+            hooks[eventType] = eventHooks
+        }
+
+        guard modified else {
             return HooksInstallResult(
                 installed: false,
                 alreadyInstalled: true,
@@ -31,22 +52,6 @@ struct GroupedHooksSettingsManager {
         }
 
         try createBackupIfNeeded()
-
-        for eventType in hookEvents {
-            var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
-            let alreadyHasHook = eventHooks.contains { containsCocxyCommand(in: $0) }
-            guard !alreadyHasHook else { continue }
-
-            let cocxyEntry: [String: Any] = [
-                "matcher": "",
-                "hooks": [
-                    ["type": "command", "command": hookCommand]
-                ]
-            ]
-            eventHooks.append(cocxyEntry)
-            hooks[eventType] = eventHooks
-        }
-
         settings["hooks"] = hooks
         try writeSettings(settings)
 
@@ -83,7 +88,7 @@ struct GroupedHooksSettingsManager {
             }
 
             let originalCount = eventHooks.count
-            eventHooks.removeAll { containsCocxyCommand(in: $0) }
+            eventHooks.removeAll { ClaudeSettingsManager.hookEntryContainsCocxyCommand($0) }
 
             if eventHooks.count < originalCount {
                 removedEvents.append(eventType)
@@ -129,7 +134,7 @@ struct GroupedHooksSettingsManager {
             guard let eventHooks = hooks[eventType] as? [[String: Any]] else {
                 return false
             }
-            return eventHooks.contains(where: containsCocxyCommand)
+            return eventHooks.contains(where: ClaudeSettingsManager.hookEntryContainsCocxyCommand)
         }
 
         return HooksStatusResult(
@@ -222,25 +227,4 @@ struct GroupedHooksSettingsManager {
         }
     }
 
-    private func areCocxyHooksInstalled(in hooks: [String: Any]) -> Bool {
-        hookEvents.allSatisfy { eventType in
-            guard let eventHooks = hooks[eventType] as? [[String: Any]] else {
-                return false
-            }
-            return eventHooks.contains(where: containsCocxyCommand)
-        }
-    }
-
-    private func containsCocxyCommand(in entry: [String: Any]) -> Bool {
-        guard let hooks = entry["hooks"] as? [[String: Any]] else {
-            return false
-        }
-
-        return hooks.contains { hook in
-            guard let commandString = hook["command"] as? String else {
-                return false
-            }
-            return commandString.contains("cocxy") && commandString.contains("hook-handler")
-        }
-    }
 }

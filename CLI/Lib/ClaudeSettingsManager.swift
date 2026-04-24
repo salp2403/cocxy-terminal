@@ -32,21 +32,79 @@ public struct ClaudeSettingsManager {
         let executablePath = ProcessInfo.processInfo.arguments[0]
         let resolved = (try? FileManager.default.destinationOfSymbolicLink(atPath: executablePath))
             ?? executablePath
-        let absolutePath = URL(fileURLWithPath: resolved).standardized.path
-
-        // Use full path only when the binary lives inside an .app bundle.
-        // Wrap in single quotes because the path contains spaces (e.g., "Cocxy Terminal.app").
-        if absolutePath.contains(".app/Contents/Resources/") {
-            return "'\(absolutePath)' hook-handler"
-        }
-        return "cocxy hook-handler"
+        return hookCommand(forExecutablePath: resolved)
     }()
+
+    static let installedAppCLIPath = "/Applications/Cocxy Terminal.app/Contents/Resources/cocxy"
+    private static let ephemeralPathPrefixes = ["/private/tmp/", "/tmp/"]
+    private static let ephemeralPathSubstrings = ["/TemporaryItems/", "/AppTranslocation/", "/build/"]
+
+    static func hookCommand(
+        forExecutablePath executablePath: String,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> String {
+        let absolutePath = URL(fileURLWithPath: executablePath).standardized.path
+
+        guard absolutePath.contains(".app/Contents/Resources/") else {
+            return "cocxy hook-handler"
+        }
+
+        let persistentPath: String?
+        if isEphemeralOrDevelopmentCLIPath(absolutePath) {
+            persistentPath = fileExists(installedAppCLIPath) ? installedAppCLIPath : nil
+        } else {
+            persistentPath = absolutePath
+        }
+
+        guard let persistentPath else {
+            return "cocxy hook-handler"
+        }
+        return "\(shellSingleQuoted(persistentPath)) hook-handler"
+    }
+
+    static func isEphemeralOrDevelopmentCLIPath(_ path: String) -> Bool {
+        ephemeralPathPrefixes.contains { path.hasPrefix($0) }
+            || containsEphemeralOrDevelopmentPath(in: path)
+    }
+
+    static func containsEphemeralOrDevelopmentPath(in value: String) -> Bool {
+        ephemeralPathSubstrings.contains { value.contains($0) }
+            || ephemeralPathPrefixes.contains { value.contains($0) }
+    }
+
+    static func shellSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
 
     static func hookCommand(for source: AgentSource?) -> String {
         guard let source, source != .claudeCode else {
             return cocxyHookCommand
         }
         return "COCXY_HOOK_AGENT=\(source.cliArgumentName) \(cocxyHookCommand)"
+    }
+
+    static func isAcceptableInstalledHookCommand(_ commandString: String, expectedCommand: String) -> Bool {
+        if commandString == expectedCommand {
+            return true
+        }
+
+        guard commandString.contains("cocxy"),
+              commandString.contains("hook-handler") else {
+            return false
+        }
+
+        let expectedAgentMarker = expectedCommand
+            .split(separator: " ")
+            .first { $0.hasPrefix("COCXY_HOOK_AGENT=") }
+        if let expectedAgentMarker,
+           !commandString.contains(expectedAgentMarker) {
+            return false
+        }
+
+        guard commandString.contains(".app/Contents/Resources/cocxy") else {
+            return true
+        }
+        return !containsEphemeralOrDevelopmentPath(in: commandString)
     }
 
     /// The hook event types that cocxy registers for.
@@ -112,7 +170,9 @@ public struct ClaudeSettingsManager {
     /// Installs cocxy hooks into the Claude Code settings file.
     ///
     /// If the file does not exist, creates it with the hooks.
-    /// If hooks are already installed, returns without modifying the file.
+    /// If hooks are already installed with an acceptable persistent command,
+    /// returns without modifying the file. Stale temporary/build-bundle paths
+    /// are rewritten to the current safe command.
     /// Preserves all existing user hooks and non-hook settings.
     ///
     /// - Returns: The install result indicating what happened.
@@ -122,31 +182,33 @@ public struct ClaudeSettingsManager {
 
         var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
 
-        // Check if already installed
-        if areCocxyHooksInstalled(in: hooks) {
-            return HooksInstallResult(
-                installed: false,
-                alreadyInstalled: true,
-                hookEvents: Self.hookedEventTypes
-            )
-        }
+        var modified = false
 
-        // Add cocxy hooks for each event type (skip if already present per-event)
         for eventType in Self.hookedEventTypes {
             var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
-
-            // Check if this specific event type already has the cocxy hook
-            let alreadyHasHook = eventHooks.contains { containsCocxyCommand(in: $0) }
-            guard !alreadyHasHook else { continue }
-
-            let cocxyEntry: [String: Any] = [
+            let desiredEntry: [String: Any] = [
                 "matcher": "",
                 "hooks": [
                     ["type": "command", "command": Self.cocxyHookCommand]
                 ]
             ]
-            eventHooks.append(cocxyEntry)
+
+            let reconciliation = Self.reconciledHookEntries(
+                eventHooks,
+                desiredEntry: desiredEntry,
+                expectedCommand: Self.cocxyHookCommand
+            )
+            eventHooks = reconciliation.entries
+            modified = modified || reconciliation.modified
             hooks[eventType] = eventHooks
+        }
+
+        guard modified else {
+            return HooksInstallResult(
+                installed: false,
+                alreadyInstalled: true,
+                hookEvents: Self.hookedEventTypes
+            )
         }
 
         settings["hooks"] = hooks
@@ -198,7 +260,7 @@ public struct ClaudeSettingsManager {
 
             let originalCount = eventHooks.count
             eventHooks.removeAll { entry in
-                containsCocxyCommand(in: entry)
+                Self.hookEntryContainsCocxyCommand(entry)
             }
 
             if eventHooks.count < originalCount {
@@ -253,7 +315,7 @@ public struct ClaudeSettingsManager {
             guard let eventHooks = hooks[eventType] as? [[String: Any]] else {
                 continue
             }
-            if eventHooks.contains(where: { containsCocxyCommand(in: $0) }) {
+            if eventHooks.contains(where: { Self.hookEntryContainsCocxyCommand($0) }) {
                 installedEvents.append(eventType)
             }
         }
@@ -337,27 +399,51 @@ public struct ClaudeSettingsManager {
 
     // MARK: - Private: Hook Detection
 
-    /// Checks if any cocxy hooks are already installed.
-    private func areCocxyHooksInstalled(in hooks: [String: Any]) -> Bool {
-        for eventType in Self.hookedEventTypes {
-            guard let eventHooks = hooks[eventType] as? [[String: Any]] else {
-                return false
-            }
-            if !eventHooks.contains(where: { containsCocxyCommand(in: $0) }) {
-                return false
-            }
-        }
-        // Only return true if ALL event types have cocxy hooks
-        return true
-    }
-
     /// Checks if a hook entry contains the cocxy hook-handler command.
     ///
     /// Uses separate substring checks for "cocxy" and "hook-handler" to handle
     /// both quoted (`'/path/cocxy' hook-handler`) and unquoted (`/path/cocxy hook-handler`)
     /// command formats. The quoted format is needed because the app bundle path
     /// contains spaces ("Cocxy Terminal.app").
-    private func containsCocxyCommand(in hookEntry: [String: Any]) -> Bool {
+    static func reconciledHookEntries(
+        _ eventHooks: [[String: Any]],
+        desiredEntry: [String: Any],
+        expectedCommand: String
+    ) -> (entries: [[String: Any]], modified: Bool) {
+        let cocxyIndices = eventHooks.indices.filter {
+            hookEntryContainsCocxyCommand(eventHooks[$0])
+        }
+
+        guard !cocxyIndices.isEmpty else {
+            return (eventHooks + [desiredEntry], true)
+        }
+
+        if let keeperIndex = cocxyIndices.first(where: {
+            hookEntryContainsAcceptableCocxyCommand(
+                eventHooks[$0],
+                expectedCommand: expectedCommand
+            )
+        }) {
+            guard cocxyIndices.count > 1 else {
+                return (eventHooks, false)
+            }
+
+            var deduplicated = eventHooks
+            for idx in cocxyIndices.reversed() where idx != keeperIndex {
+                deduplicated.remove(at: idx)
+            }
+            return (deduplicated, true)
+        }
+
+        var rewritten = eventHooks
+        for idx in cocxyIndices.reversed() {
+            rewritten.remove(at: idx)
+        }
+        rewritten.append(desiredEntry)
+        return (rewritten, true)
+    }
+
+    static func hookEntryContainsCocxyCommand(_ hookEntry: [String: Any]) -> Bool {
         guard let hookCommands = hookEntry["hooks"] as? [[String: Any]] else {
             return false
         }
@@ -366,6 +452,24 @@ public struct ClaudeSettingsManager {
                 return false
             }
             return commandString.contains("cocxy") && commandString.contains("hook-handler")
+        }
+    }
+
+    static func hookEntryContainsAcceptableCocxyCommand(
+        _ hookEntry: [String: Any],
+        expectedCommand: String
+    ) -> Bool {
+        guard let hookCommands = hookEntry["hooks"] as? [[String: Any]] else {
+            return false
+        }
+        return hookCommands.contains { command in
+            guard let commandString = command["command"] as? String else {
+                return false
+            }
+            return Self.isAcceptableInstalledHookCommand(
+                commandString,
+                expectedCommand: expectedCommand
+            )
         }
     }
 }

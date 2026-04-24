@@ -159,6 +159,283 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(FileManager.default.fileExists(atPath: settingsPath + ".cocxy-backup"))
     }
 
+    @Test("ClaudeSettingsManager rewrites stale bundle hook paths instead of treating them as installed")
+    func claudeManagerRewritesStaleBundleHookPaths() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("settings.json").path
+        let staleCommand = "'/private/tmp/CocxyTerminalSmoke.app/Contents/Resources/cocxy' hook-handler"
+        let initialSettings: [String: Any] = [
+            "hooks": ClaudeSettingsManager.hookedEventTypes.reduce(into: [String: Any]()) { dict, event in
+                dict[event] = [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            ["type": "command", "command": staleCommand]
+                        ]
+                    ]
+                ]
+            }
+        ]
+        let initialData = try JSONSerialization.data(withJSONObject: initialSettings, options: .prettyPrinted)
+        try initialData.write(to: URL(fileURLWithPath: settingsPath))
+
+        let manager = ClaudeSettingsManager(settingsFilePath: settingsPath)
+        let result = try manager.installHooks()
+
+        #expect(result.installed)
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        for event in ClaudeSettingsManager.hookedEventTypes {
+            let entries = try #require(hooks[event] as? [[String: Any]])
+            #expect(entries.count == 1)
+            let commands = try #require(entries[0]["hooks"] as? [[String: Any]])
+            #expect(commands.first?["command"] as? String == ClaudeSettingsManager.cocxyHookCommand)
+            #expect(commands.first?["command"] as? String != staleCommand)
+        }
+    }
+
+    @Test("ClaudeSettingsManager preserves user hook wrappers that are not stale app bundle paths")
+    func claudeManagerPreservesCustomHookWrapper() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("settings.json").path
+        let wrapperCommand = "/usr/local/bin/cocxy-wrapper hook-handler"
+        let initialSettings: [String: Any] = [
+            "hooks": ClaudeSettingsManager.hookedEventTypes.reduce(into: [String: Any]()) { dict, event in
+                dict[event] = [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            ["type": "command", "command": wrapperCommand]
+                        ]
+                    ]
+                ]
+            }
+        ]
+        let initialData = try JSONSerialization.data(withJSONObject: initialSettings, options: .prettyPrinted)
+        try initialData.write(to: URL(fileURLWithPath: settingsPath))
+
+        let manager = ClaudeSettingsManager(settingsFilePath: settingsPath)
+        let result = try manager.installHooks()
+
+        #expect(result.alreadyInstalled)
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let stopEntries = try #require(hooks["Stop"] as? [[String: Any]])
+        let commands = try #require(stopEntries[0]["hooks"] as? [[String: Any]])
+        #expect(commands.first?["command"] as? String == wrapperCommand)
+    }
+
+    @Test("ClaudeSettingsManager preserves custom wrappers while repairing other events")
+    func claudeManagerPreservesCustomWrapperDuringPartialRepair() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("settings.json").path
+        let wrapperCommand = "/usr/local/bin/cocxy-wrapper hook-handler"
+        let initialSettings: [String: Any] = [
+            "hooks": [
+                "Stop": [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            ["type": "command", "command": wrapperCommand]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let initialData = try JSONSerialization.data(withJSONObject: initialSettings, options: .prettyPrinted)
+        try initialData.write(to: URL(fileURLWithPath: settingsPath))
+
+        let manager = ClaudeSettingsManager(settingsFilePath: settingsPath)
+        let result = try manager.installHooks()
+
+        #expect(result.installed)
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let stopEntries = try #require(hooks["Stop"] as? [[String: Any]])
+        let stopCommands = try #require(stopEntries[0]["hooks"] as? [[String: Any]])
+        #expect(stopCommands.first?["command"] as? String == wrapperCommand)
+
+        let sessionStartEntries = try #require(hooks["SessionStart"] as? [[String: Any]])
+        let sessionStartCommands = try #require(sessionStartEntries[0]["hooks"] as? [[String: Any]])
+        #expect(sessionStartCommands.first?["command"] as? String == ClaudeSettingsManager.cocxyHookCommand)
+    }
+
+    @Test("Grouped hooks require the expected forced agent marker")
+    func groupedHooksRewriteWrappersMissingForcedAgentMarker() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("hooks.json").path
+        let initialJSON = """
+        {
+          "hooks": {
+            "SessionStart": [
+              {
+                "matcher": "",
+                "hooks": [
+                  { "type": "command", "command": "/usr/local/bin/cocxy-wrapper hook-handler" }
+                ]
+              }
+            ]
+          }
+        }
+        """
+        try initialJSON.write(toFile: settingsPath, atomically: true, encoding: .utf8)
+
+        let manager = GroupedHooksSettingsManager(
+            settingsFilePath: settingsPath,
+            hookEvents: ["SessionStart"],
+            hookCommand: ClaudeSettingsManager.hookCommand(for: .codex)
+        )
+
+        let result = try manager.installHooks()
+
+        #expect(result.installed)
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let entries = try #require(hooks["SessionStart"] as? [[String: Any]])
+        let commands = try #require(entries[0]["hooks"] as? [[String: Any]])
+        #expect((commands.first?["command"] as? String)?.contains("COCXY_HOOK_AGENT=codex") == true)
+    }
+
+    @Test("Grouped hooks preserve custom wrappers when the forced agent marker is present")
+    func groupedHooksPreserveWrappersWithForcedAgentMarker() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("hooks.json").path
+        let wrapperCommand = "COCXY_HOOK_AGENT=codex /usr/local/bin/cocxy-wrapper hook-handler"
+        let initialJSON = """
+        {
+          "hooks": {
+            "SessionStart": [
+              {
+                "matcher": "",
+                "hooks": [
+                  { "type": "command", "command": "\(wrapperCommand)" }
+                ]
+              }
+            ]
+          }
+        }
+        """
+        try initialJSON.write(toFile: settingsPath, atomically: true, encoding: .utf8)
+
+        let manager = GroupedHooksSettingsManager(
+            settingsFilePath: settingsPath,
+            hookEvents: ["SessionStart"],
+            hookCommand: ClaudeSettingsManager.hookCommand(for: .codex)
+        )
+
+        let result = try manager.installHooks()
+
+        #expect(result.alreadyInstalled)
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let entries = try #require(hooks["SessionStart"] as? [[String: Any]])
+        let commands = try #require(entries[0]["hooks"] as? [[String: Any]])
+        #expect(commands.first?["command"] as? String == wrapperCommand)
+    }
+
+    @Test("Grouped hooks preserve custom wrappers while repairing other events")
+    func groupedHooksPreserveWrapperDuringPartialRepair() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("hooks.json").path
+        let wrapperCommand = "COCXY_HOOK_AGENT=codex /usr/local/bin/cocxy-wrapper hook-handler"
+        let initialJSON = """
+        {
+          "hooks": {
+            "SessionStart": [
+              {
+                "matcher": "",
+                "hooks": [
+                  { "type": "command", "command": "\(wrapperCommand)" }
+                ]
+              }
+            ]
+          }
+        }
+        """
+        try initialJSON.write(toFile: settingsPath, atomically: true, encoding: .utf8)
+
+        let manager = GroupedHooksSettingsManager(
+            settingsFilePath: settingsPath,
+            hookEvents: ["SessionStart", "Stop"],
+            hookCommand: ClaudeSettingsManager.hookCommand(for: .codex)
+        )
+
+        let result = try manager.installHooks()
+
+        #expect(result.installed)
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let sessionStartEntries = try #require(hooks["SessionStart"] as? [[String: Any]])
+        let sessionStartCommands = try #require(sessionStartEntries[0]["hooks"] as? [[String: Any]])
+        #expect(sessionStartCommands.first?["command"] as? String == wrapperCommand)
+
+        let stopEntries = try #require(hooks["Stop"] as? [[String: Any]])
+        let stopCommands = try #require(stopEntries[0]["hooks"] as? [[String: Any]])
+        #expect((stopCommands.first?["command"] as? String)?.contains("COCXY_HOOK_AGENT=codex") == true)
+    }
+
+    @Test("Hook command avoids temporary app bundle paths when an installed app is available")
+    func hookCommandPrefersInstalledAppOverTemporaryBundle() {
+        let command = ClaudeSettingsManager.hookCommand(
+            forExecutablePath: "/private/tmp/CocxyTerminalSmoke.app/Contents/Resources/cocxy",
+            fileExists: { $0 == ClaudeSettingsManager.installedAppCLIPath }
+        )
+
+        #expect(command == "'/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler")
+    }
+
+    @Test("Hook command falls back to PATH when only a temporary app bundle is available")
+    func hookCommandFallsBackForTemporaryBundleWithoutInstalledApp() {
+        let command = ClaudeSettingsManager.hookCommand(
+            forExecutablePath: "/private/tmp/CocxyTerminalSmoke.app/Contents/Resources/cocxy",
+            fileExists: { _ in false }
+        )
+
+        #expect(command == "cocxy hook-handler")
+    }
+
     @Test("GroupedHooksSettingsManager merges idempotently and preserves user hooks")
     func groupedManagerMergeAndBackup() throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

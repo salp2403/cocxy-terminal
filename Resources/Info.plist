@@ -43,5 +43,9 @@
 	<string>https://cocxy.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>gMWhWC+AqrUZqRg1RbTr32MDdkk7H3DhLfnEqtQnWQU=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
 </dict>
 </plist>

@@ -177,6 +177,26 @@ final class TabBarView: NSView {
         return label
     }()
 
+    private let updateButton: NSButton = {
+        let button = NSButton()
+        button.bezelStyle = .inline
+        button.isBordered = false
+        if let image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Update") {
+            let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+            button.image = image.withSymbolConfiguration(config)
+            button.imagePosition = .imageLeading
+        }
+        button.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        button.contentTintColor = CocxyColors.crust
+        button.wantsLayer = true
+        button.layer?.backgroundColor = CocxyColors.blue.cgColor
+        button.layer?.cornerRadius = 7
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isHidden = true
+        button.setAccessibilityLabel("Update Cocxy Terminal")
+        return button
+    }()
+
     private let newTabButton: NSButton = {
         let button = NSButton()
         button.bezelStyle = .inline
@@ -221,6 +241,7 @@ final class TabBarView: NSView {
     /// Invoked when the command palette button is clicked.
     var onCommandPalette: (() -> Void)?
     var onNotificationPanel: (() -> Void)?
+    var onInstallUpdate: (() -> Void)?
 
     /// Invoked when a tab is dropped from another window.
     /// The closure receives the drag data and returns true if accepted.
@@ -249,6 +270,8 @@ final class TabBarView: NSView {
     private let viewModel: TabBarViewModel
     private var cancellables = Set<AnyCancellable>()
     private var tabItemViews: [TabID: TabItemView] = [:]
+    private var updateButtonHeightConstraint: NSLayoutConstraint?
+    private var updateButtonBottomConstraint: NSLayoutConstraint?
 
     // MARK: - Initialization
 
@@ -292,6 +315,7 @@ final class TabBarView: NSView {
         // Scroll area
         addSubview(scrollView)
         addSubview(remoteUnreadLabel)
+        addSubview(updateButton)
         addSubview(newTabButton)
 
         // Use flipped clip view so content starts from the top.
@@ -300,6 +324,11 @@ final class TabBarView: NSView {
         documentView.addSubview(tabStackView)
         clipView.documentView = documentView
         scrollView.contentView = clipView
+
+        let updateButtonHeightConstraint = updateButton.heightAnchor.constraint(equalToConstant: 0)
+        let updateButtonBottomConstraint = updateButton.bottomAnchor.constraint(equalTo: newTabButton.topAnchor)
+        self.updateButtonHeightConstraint = updateButtonHeightConstraint
+        self.updateButtonBottomConstraint = updateButtonBottomConstraint
 
         NSLayoutConstraint.activate([
             backgroundView.topAnchor.constraint(equalTo: topAnchor),
@@ -348,7 +377,12 @@ final class TabBarView: NSView {
             // Remote unread indicator (above the new tab button)
             remoteUnreadLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
             remoteUnreadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            remoteUnreadLabel.bottomAnchor.constraint(equalTo: newTabButton.topAnchor, constant: -4),
+            remoteUnreadLabel.bottomAnchor.constraint(equalTo: updateButton.topAnchor, constant: -4),
+
+            updateButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            updateButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            updateButtonBottomConstraint,
+            updateButtonHeightConstraint,
 
             // Tab stack inside the flipped document view.
             tabStackView.topAnchor.constraint(equalTo: documentView.topAnchor),
@@ -407,6 +441,28 @@ final class TabBarView: NSView {
         }
     }
 
+    // MARK: - Update Badge
+
+    func setAvailableUpdate(_ update: CocxyUpdateAvailability?) {
+        guard let update else {
+            updateButton.isHidden = true
+            updateButtonHeightConstraint?.constant = 0
+            updateButtonBottomConstraint?.constant = 0
+            updateButton.title = ""
+            updateButton.toolTip = nil
+            needsLayout = true
+            return
+        }
+
+        updateButton.isHidden = false
+        updateButtonHeightConstraint?.constant = 30
+        updateButtonBottomConstraint?.constant = -6
+        updateButton.title = "  Update \(update.sidebarVersionLabel)"
+        updateButton.toolTip = "Update Cocxy Terminal to \(update.sidebarVersionLabel)"
+        updateButton.setAccessibilityHelp(update.sidebarAccessibilityLabel)
+        needsLayout = true
+    }
+
     // MARK: - Actions
 
     private func setupActions() {
@@ -416,6 +472,8 @@ final class TabBarView: NSView {
         commandPaletteButton.action = #selector(handleCommandPaletteButton)
         notificationBellButton.target = self
         notificationBellButton.action = #selector(bellClicked)
+        updateButton.target = self
+        updateButton.action = #selector(handleUpdateButton)
     }
 
     @objc private func handleNewTabButton() {
@@ -428,6 +486,10 @@ final class TabBarView: NSView {
 
     @objc private func bellClicked() {
         onNotificationPanel?()
+    }
+
+    @objc private func handleUpdateButton() {
+        onInstallUpdate?()
     }
 
     // MARK: - Context Menu
@@ -674,4 +736,3 @@ final class ClickableImageView: NSImageView {
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
-

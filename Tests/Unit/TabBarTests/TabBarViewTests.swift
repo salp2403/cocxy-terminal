@@ -82,6 +82,44 @@ final class TabBarViewTests: XCTestCase {
         XCTAssertNotNil(newTabButton, "TabBarView should have a new tab button")
     }
 
+    // MARK: - Update Button
+
+    func testUpdateButtonIsHiddenUntilUpdateIsAvailable() {
+        let updateButton = findButton(accessibilityLabel: "Update Cocxy Terminal", in: tabBarView)
+        XCTAssertNotNil(updateButton, "TabBarView should contain the update button")
+        XCTAssertTrue(updateButton?.isHidden ?? false)
+
+        tabBarView.setAvailableUpdate(
+            CocxyUpdateAvailability(
+                displayVersion: "0.1.83",
+                buildVersion: "0.1.83"
+            )
+        )
+
+        XCTAssertFalse(updateButton?.isHidden ?? true)
+        XCTAssertEqual(updateButton?.title, "  Update v0.1.83")
+
+        tabBarView.setAvailableUpdate(nil)
+
+        XCTAssertTrue(updateButton?.isHidden ?? false)
+    }
+
+    func testUpdateButtonInvokesInstallCallback() {
+        let updateButton = findButton(accessibilityLabel: "Update Cocxy Terminal", in: tabBarView)
+        var invoked = 0
+        tabBarView.onInstallUpdate = { invoked += 1 }
+        tabBarView.setAvailableUpdate(
+            CocxyUpdateAvailability(
+                displayVersion: "0.1.83",
+                buildVersion: "0.1.83"
+            )
+        )
+
+        updateButton?.performClick(nil)
+
+        XCTAssertEqual(invoked, 1)
+    }
+
     // MARK: - Context Menu
 
     func testContextMenuForTabHasCloseItem() {
@@ -123,6 +161,19 @@ final class TabBarViewTests: XCTestCase {
                 return found
             }
             if let found = findSubview(of: type, in: subview) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    private func findButton(accessibilityLabel: String, in view: NSView) -> NSButton? {
+        for subview in view.subviews {
+            if let button = subview as? NSButton,
+               button.accessibilityLabel() == accessibilityLabel {
+                return button
+            }
+            if let found = findButton(accessibilityLabel: accessibilityLabel, in: subview) {
                 return found
             }
         }

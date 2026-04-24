@@ -180,8 +180,12 @@ extension MainWindowController {
             guard let self = self else { return [:] }
             return self.surfaceIDsByTabSnapshot()
         }
-        controller.worktreeBadgeVisibleProvider = { [weak self] in
-            self?.configService?.current.worktree.showBadge ?? true
+        controller.worktreeBadgeVisibleProvider = { [weak self] tab in
+            guard let self else { return true }
+            return Self.effectiveWorktreeConfig(
+                for: tab,
+                globalConfig: self.configService?.current ?? .defaults
+            ).showBadge
         }
         controller.onActivateSession = { [weak self] tabID in
             guard let self else { return }
@@ -235,6 +239,10 @@ extension MainWindowController {
         controller.onToggleNotifications = { [weak self] in
             self?.toggleNotificationPanel()
         }
+        controller.onInstallUpdate = { [weak self] in
+            self?.sparkleUpdater?.checkForUpdates()
+        }
+        controller.availableUpdate = sparkleUpdater?.availableUpdate
         // Mirror the live port scanner onto the Aurora status bar.
         // The status bar's `PortListView` renders whatever the
         // controller publishes, so this single subscription keeps the

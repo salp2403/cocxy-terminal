@@ -313,6 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browserProfileManager = nil
         browserHistoryStore = nil
         browserBookmarkStore = nil
+        sparkleUpdater?.stopAutomaticUpdateDetection()
         sparkleUpdater = nil
 
         // Stop config watchers before services are torn down.

@@ -67,6 +67,10 @@ final class AuroraChromeController: ObservableObject {
     @Published var paletteShortcutLabel: String = "⇧⌘P"
     @Published var newTabShortcutLabel: String = "⌘T"
 
+    /// Available Cocxy update detected by the Sparkle bridge. Nil hides
+    /// the sidebar update affordance.
+    @Published var availableUpdate: CocxyUpdateAvailability?
+
     /// Live Aurora visual theme. The host keeps this aligned with the
     /// terminal theme so the sidebar/status/palette do not stay dark when
     /// the user switches the shell to a light palette.
@@ -132,6 +136,10 @@ final class AuroraChromeController: ObservableObject {
     /// open the same overlay.
     var onToggleNotifications: (() -> Void)?
 
+    /// Invoked when the user clicks the update button shown after a
+    /// silent Sparkle availability probe finds a new Cocxy version.
+    var onInstallUpdate: (() -> Void)?
+
     // MARK: - Data providers
 
     /// Caller-provided snapshot of the surfaces each tab owns, in the
@@ -152,13 +160,13 @@ final class AuroraChromeController: ObservableObject {
     private var clockTimerCancellable: AnyCancellable?
     private var portsCancellable: AnyCancellable?
 
-    /// Live provider for the `[worktree].show-badge` config flag. The
-    /// controller reads it on every refresh so toggling the flag in the
-    /// user's TOML takes effect at the next sidebar update without
-    /// touching persisted tab state. Defaults to `true` so
+    /// Live provider for each tab's effective `[worktree].show-badge`
+    /// config flag. The controller reads it on every refresh so
+    /// project-level overrides take effect at the next sidebar update
+    /// without touching persisted tab state. Defaults to `true` so
     /// environments that never wire the provider (tests, legacy paths)
     /// keep rendering the badge.
-    var worktreeBadgeVisibleProvider: @MainActor () -> Bool = { true }
+    var worktreeBadgeVisibleProvider: @MainActor (Tab) -> Bool = { _ in true }
 
     // MARK: - Init
 
@@ -281,7 +289,7 @@ final class AuroraChromeController: ObservableObject {
             surfaceIDsByTab: surfaceMap,
             store: store,
             stateSnapshot: stateSnapshot,
-            worktreeBadgeVisible: worktreeBadgeVisibleProvider()
+            worktreeBadgeVisibleProvider: worktreeBadgeVisibleProvider
         )
         let resolvedActiveTabID = activeTabID ?? tabManager.activeTabID
         activeSessionID = resolvedActiveTabID?.rawValue.uuidString
@@ -457,12 +465,11 @@ struct AuroraSidebarHost: View {
     @ObservedObject var controller: AuroraChromeController
 
     var body: some View {
-        // The sidebar mutates only workspace collapse state, so keep
-        // `workspaces` as a real projected binding and pass the active
-        // session as a read-only snapshot. The controller owns active
-        // selection because it is derived from `TabManager`.
+        // Workspace disclosure is presentation state owned by the
+        // sidebar. The controller owns active selection because it is
+        // derived from `TabManager`.
         Design.AuroraSidebarView(
-            workspaces: $controller.workspaces,
+            workspaces: controller.workspaces,
             activeSessionID: controller.activeSessionID,
             onTogglePalette: { controller.onTogglePalette?() },
             onCreateTab: { controller.onCreateTab?() },
@@ -499,9 +506,13 @@ struct AuroraSidebarHost: View {
             onToggleNotifications: controller.onToggleNotifications.map { handler in
                 { handler() }
             },
+            onInstallUpdate: controller.availableUpdate.map { _ in
+                { controller.onInstallUpdate?() }
+            },
             onHoverSession: { snapshot in
                 controller.sidebarTooltip = snapshot
             },
+            availableUpdate: controller.availableUpdate,
             paletteShortcutLabel: controller.paletteShortcutLabel,
             newTabShortcutLabel: controller.newTabShortcutLabel
         )

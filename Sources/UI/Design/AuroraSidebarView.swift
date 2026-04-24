@@ -33,7 +33,7 @@ extension Design {
     /// (⌘⇧P) and `.tabNew.defaultShortcut` (⌘T) so previews / tests
     /// render with the catalog baseline without booting the binder.
     struct AuroraSidebarView: View {
-        @Binding var workspaces: [AuroraWorkspace]
+        let workspaces: [AuroraWorkspace]
         /// Session id of the currently active tab. This is a plain
         /// snapshot value instead of a child-owned binding because the
         /// sidebar never mutates selection directly; it only renders the
@@ -43,6 +43,7 @@ extension Design {
         @State private var query: String = ""
         @State private var hoveredSession: HoveredSessionContext?
         @State private var sessionFrames: [String: CGRect] = [:]
+        @State private var workspaceDisclosure = AuroraWorkspaceDisclosureOverrides()
 
         let onTogglePalette: () -> Void
         let onCreateTab: () -> Void
@@ -57,11 +58,15 @@ extension Design {
         /// notification center can omit it; the header renders the
         /// bell glyph when a handler is provided.
         var onToggleNotifications: (() -> Void)? = nil
+        /// Optional callback shown only when `availableUpdate` exists.
+        /// The host routes this to Sparkle's user-initiated update check.
+        var onInstallUpdate: (() -> Void)? = nil
         /// Emits hover state to the window-level overlay. The tooltip is
         /// intentionally rendered outside this sidebar view so it never
         /// covers rows or steals navigation/context-menu interactions.
         var onHoverSession: ((AuroraSidebarTooltipSnapshot?) -> Void)? = nil
 
+        var availableUpdate: CocxyUpdateAvailability? = nil
         var paletteShortcutLabel: String = "⇧⌘P"
         var newTabShortcutLabel: String = "⌘T"
 
@@ -72,6 +77,9 @@ extension Design {
                 VStack(alignment: .leading, spacing: Spacing.small) {
                     sidebarHeader
                     searchField
+                    if let availableUpdate, let onInstallUpdate {
+                        updateCallout(availableUpdate, action: onInstallUpdate)
+                    }
 
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: Spacing.hairline) {
@@ -96,6 +104,9 @@ extension Design {
             .onPreferenceChange(SessionFramePreferenceKey.self) { frames in
                 sessionFrames = frames
                 publishHoveredSessionIfPossible()
+            }
+            .onChange(of: workspaces.map(\.id)) { _, workspaceIDs in
+                workspaceDisclosure.prune(validWorkspaceIDs: workspaceIDs)
             }
         }
 
@@ -185,14 +196,65 @@ extension Design {
             )
         }
 
+        private func updateCallout(
+            _ update: CocxyUpdateAvailability,
+            action: @escaping () -> Void
+        ) -> some View {
+            HStack(spacing: Spacing.xSmall) {
+                Image(systemName: update.isCritical ? "exclamationmark.arrow.triangle.2.circlepath" : "arrow.down.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(palette.accent.resolvedColor())
+                    .frame(width: 18, height: 18)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(update.sidebarTitle)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(palette.textHigh.resolvedColor())
+                        .lineLimit(1)
+                    Text(update.sidebarVersionLabel)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(palette.textLow.resolvedColor())
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: Spacing.xSmall)
+
+                Button(action: action) {
+                    Text("Update")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(palette.backgroundPrimary.resolvedColor())
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(palette.accent.resolvedColor())
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(update.sidebarAccessibilityLabel)
+                .help("Update Cocxy Terminal to \(update.sidebarVersionLabel)")
+            }
+            .padding(.horizontal, Spacing.small)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(palette.glassHighlight.resolvedColor())
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(palette.accent.resolvedColor().opacity(0.45), lineWidth: 1)
+                    )
+            )
+        }
+
         // MARK: - Workspace tree
 
         @ViewBuilder
         private func workspaceBlock(for workspace: AuroraWorkspace) -> some View {
             let filtered = workspace.filteringSessions(by: query)
+            let isCollapsed = workspaceDisclosure.isCollapsed(workspace)
             VStack(alignment: .leading, spacing: Spacing.hairline) {
-                workspaceRow(workspace)
-                if !workspace.isCollapsed {
+                workspaceRow(workspace, isCollapsed: isCollapsed)
+                if !isCollapsed {
                     VStack(alignment: .leading, spacing: 3) {
                         ForEach(filtered.sessions) { session in
                             SessionNodeView(
@@ -238,14 +300,14 @@ extension Design {
             }
         }
 
-        private func workspaceRow(_ workspace: AuroraWorkspace) -> some View {
-            Button(action: { toggleCollapsed(workspace.id) }) {
+        private func workspaceRow(_ workspace: AuroraWorkspace, isCollapsed: Bool) -> some View {
+            Button(action: { toggleCollapsed(workspace) }) {
                 HStack(spacing: Spacing.xSmall) {
                     Text("▾")
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(palette.textLow.resolvedColor())
-                        .rotationEffect(.degrees(workspace.isCollapsed ? -90 : 0))
-                        .animation(.easeInOut(duration: 0.18), value: workspace.isCollapsed)
+                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                        .animation(.easeInOut(duration: 0.18), value: isCollapsed)
                     Text(workspace.name)
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(palette.textHigh.resolvedColor())
@@ -263,9 +325,8 @@ extension Design {
             .buttonStyle(.plain)
         }
 
-        private func toggleCollapsed(_ workspaceID: String) {
-            guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
-            workspaces[index].isCollapsed.toggle()
+        private func toggleCollapsed(_ workspace: AuroraWorkspace) {
+            workspaceDisclosure.toggle(workspace)
         }
 
         // MARK: - Footer

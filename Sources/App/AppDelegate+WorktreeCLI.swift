@@ -15,6 +15,9 @@ extension AppDelegate {
         category: "WorktreeCLI"
     )
 
+    nonisolated static let worktreeEnablementErrorMessage =
+        "Set [worktree].enabled = true in ~/.config/cocxy/config.toml or the active repository's .cocxy.toml."
+
     /// Process-wide worktree service. A single actor is enough —
     /// concurrent CLI calls serialise at the actor boundary and the
     /// per-repo state lives inside the manifest store, not here.
@@ -75,7 +78,7 @@ extension AppDelegate {
         guard context.config.worktree.enabled else {
             return (
                 false,
-                ["error": "[worktree].enabled = true must be set in ~/.config/cocxy/config.toml"]
+                ["error": Self.worktreeEnablementErrorMessage]
             )
         }
 
@@ -383,7 +386,7 @@ extension AppDelegate {
     nonisolated private static func describe(_ error: WorktreeServiceError) -> String {
         switch error {
         case .featureDisabled:
-            return "[worktree].enabled = true must be set to use worktrees."
+            return Self.worktreeEnablementErrorMessage
         case .gitUnavailable:
             return "git binary not found on PATH or in the known fallbacks."
         case .notAGitRepository(let path):

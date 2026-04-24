@@ -180,6 +180,37 @@ struct AuroraSourceBuilderSwiftTestingTests {
         #expect(result.first?.surfaces.isEmpty == true)
     }
 
+    @Test
+    func worktreeBadgeVisibilityIsResolvedPerTab() {
+        let hidden = Tab(
+            title: "hidden",
+            workingDirectory: URL(fileURLWithPath: "/Users/user/hidden"),
+            projectConfig: ProjectConfig(worktreeShowBadge: false),
+            worktreeID: "hidden"
+        )
+        let visible = Tab(
+            title: "visible",
+            workingDirectory: URL(fileURLWithPath: "/Users/user/visible"),
+            projectConfig: ProjectConfig(worktreeShowBadge: true),
+            worktreeID: "visible"
+        )
+        var seenIDs: [TabID] = []
+
+        let result = AuroraSourceBuilder.buildSources(
+            tabs: [hidden, visible],
+            surfaceIDsByTab: [:],
+            store: makeStore(),
+            workspaceRootResolver: Self.alwaysNilResolver,
+            worktreeBadgeVisibleProvider: { tab in
+                seenIDs.append(tab.id)
+                return tab.projectConfig?.worktreeShowBadge ?? true
+            }
+        )
+
+        #expect(result.map(\.hasWorktree) == [false, true])
+        #expect(seenIDs == [hidden.id, visible.id])
+    }
+
     // MARK: - Invariant 4: workspaceGroup resolution
 
     @Test

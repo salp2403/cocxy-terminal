@@ -14,22 +14,26 @@ extension AppDelegate {
     /// - Hooks may be removed by Claude Code updates.
     /// - Both operations are idempotent and fast.
     func performFirstLaunchSetup() {
-        installCLISymlink()
-        installClaudeCodeHooks()
+        guard let bundleCLIPath = cliPathInBundle(),
+              let persistentCLIPath = Self.persistentCLIPathForFirstLaunchSetup(bundleCLIPath: bundleCLIPath) else {
+            return
+        }
+
+        installCLISymlink(target: persistentCLIPath)
+        installClaudeCodeHooks(cliPath: persistentCLIPath)
     }
 
     // MARK: - CLI Symlink
 
-    /// Creates a symlink at `/usr/local/bin/cocxy` pointing to the CLI binary
-    /// inside the app bundle.
+    /// Creates a symlink at `/usr/local/bin/cocxy` pointing to a persistent
+    /// CLI binary path.
     ///
     /// If `/usr/local/bin/` is not writable (no sudo), falls back to
     /// `~/.local/bin/cocxy`. Both locations are standard on macOS.
     ///
     /// Skips silently if the symlink already exists and points to the correct target.
-    private func installCLISymlink() {
-        let cliBinaryPath = cliPathInBundle()
-        guard let cliBinaryPath, FileManager.default.fileExists(atPath: cliBinaryPath) else {
+    private func installCLISymlink(target cliBinaryPath: String) {
+        guard FileManager.default.fileExists(atPath: cliBinaryPath) else {
             return
         }
 
@@ -51,6 +55,128 @@ extension AppDelegate {
     private func cliPathInBundle() -> String? {
         guard let resourcePath = Bundle.main.resourcePath else { return nil }
         return "\(resourcePath)/cocxy"
+    }
+
+    nonisolated static let installedAppCLIPath = "/Applications/Cocxy Terminal.app/Contents/Resources/cocxy"
+    private nonisolated static let ephemeralPathPrefixes = ["/private/tmp/", "/tmp/"]
+    private nonisolated static let ephemeralPathSubstrings = ["/TemporaryItems/", "/AppTranslocation/", "/build/"]
+
+    /// Returns a CLI path that is safe to persist in global shell integration.
+    ///
+    /// Smoke-test, build, and translocated app bundles should not rewrite
+    /// `/usr/local/bin/cocxy` or Claude Code hooks to their own bundle-local
+    /// CLI path: those bundles are short-lived and leave other terminals with
+    /// broken hook commands after cleanup. When a stable `/Applications`
+    /// install exists, use it instead; otherwise skip persistent setup for the
+    /// ephemeral launch.
+    nonisolated static func persistentCLIPathForFirstLaunchSetup(
+        bundleCLIPath: String,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> String? {
+        let standardized = URL(fileURLWithPath: bundleCLIPath).standardized.path
+        guard !isEphemeralOrDevelopmentCLIPath(standardized) else {
+            return fileExists(installedAppCLIPath) ? installedAppCLIPath : nil
+        }
+        return fileExists(standardized) ? standardized : nil
+    }
+
+    nonisolated static func isEphemeralOrDevelopmentCLIPath(_ path: String) -> Bool {
+        ephemeralPathPrefixes.contains { path.hasPrefix($0) }
+            || containsEphemeralOrDevelopmentPath(in: path)
+    }
+
+    nonisolated static func containsEphemeralOrDevelopmentPath(in value: String) -> Bool {
+        ephemeralPathSubstrings.contains { value.contains($0) }
+            || ephemeralPathPrefixes.contains { value.contains($0) }
+    }
+
+    nonisolated static func shellSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    nonisolated static func isAcceptableInstalledHookCommand(
+        _ commandString: String,
+        expectedCommand: String
+    ) -> Bool {
+        if commandString == expectedCommand {
+            return true
+        }
+
+        guard commandString.contains("cocxy"),
+              commandString.contains("hook-handler") else {
+            return false
+        }
+
+        guard commandString.contains(".app/Contents/Resources/cocxy") else {
+            return true
+        }
+        return !containsEphemeralOrDevelopmentPath(in: commandString)
+    }
+
+    static func reconciledHookEntries(
+        _ eventHooks: [[String: Any]],
+        desiredEntry: [String: Any],
+        expectedCommand: String
+    ) -> (entries: [[String: Any]], modified: Bool) {
+        let cocxyIndices = eventHooks.indices.filter {
+            hookEntryContainsCocxyCommand(eventHooks[$0])
+        }
+
+        guard !cocxyIndices.isEmpty else {
+            return (eventHooks + [desiredEntry], true)
+        }
+
+        if let keeperIndex = cocxyIndices.first(where: {
+            hookEntryContainsAcceptableCocxyCommand(
+                eventHooks[$0],
+                expectedCommand: expectedCommand
+            )
+        }) {
+            guard cocxyIndices.count > 1 else {
+                return (eventHooks, false)
+            }
+
+            var deduplicated = eventHooks
+            for idx in cocxyIndices.reversed() where idx != keeperIndex {
+                deduplicated.remove(at: idx)
+            }
+            return (deduplicated, true)
+        }
+
+        var rewritten = eventHooks
+        for idx in cocxyIndices.reversed() {
+            rewritten.remove(at: idx)
+        }
+        rewritten.append(desiredEntry)
+        return (rewritten, true)
+    }
+
+    static func hookEntryContainsCocxyCommand(_ hookEntry: [String: Any]) -> Bool {
+        guard let commands = hookEntry["hooks"] as? [[String: Any]] else {
+            return false
+        }
+
+        return commands.contains {
+            guard let commandString = $0["command"] as? String else { return false }
+            return commandString.contains("cocxy") && commandString.contains("hook-handler")
+        }
+    }
+
+    static func hookEntryContainsAcceptableCocxyCommand(
+        _ hookEntry: [String: Any],
+        expectedCommand: String
+    ) -> Bool {
+        guard let commands = hookEntry["hooks"] as? [[String: Any]] else {
+            return false
+        }
+
+        return commands.contains {
+            guard let commandString = $0["command"] as? String else { return false }
+            return isAcceptableInstalledHookCommand(
+                commandString,
+                expectedCommand: expectedCommand
+            )
+        }
     }
 
     /// Creates or updates a symlink. Returns true on success.
@@ -124,20 +250,19 @@ extension AppDelegate {
 
     // MARK: - Claude Code Hook Installation
 
-    /// Installs Cocxy hooks into `~/.claude/settings.json` using the full path
-    /// to the CLI binary inside the app bundle.
+    /// Installs Cocxy hooks into `~/.claude/settings.json` using a persistent
+    /// full path to the CLI binary.
     ///
     /// Uses the absolute path (e.g., `/Applications/Cocxy Terminal.app/Contents/Resources/cocxy`)
     /// instead of bare `cocxy` so hooks work even when the CLI is not in PATH.
     ///
     /// Preserves existing user hooks. Idempotent: skips if already installed.
-    private func installClaudeCodeHooks() {
-        guard let cliPath = cliPathInBundle(),
-              FileManager.default.fileExists(atPath: cliPath) else {
+    private func installClaudeCodeHooks(cliPath: String) {
+        guard FileManager.default.fileExists(atPath: cliPath) else {
             return
         }
 
-        let hookCommand = "'\(cliPath)' hook-handler"
+        let hookCommand = "\(Self.shellSingleQuoted(cliPath)) hook-handler"
         let settingsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/settings.json").path
 
@@ -162,62 +287,20 @@ extension AppDelegate {
 
         for eventType in eventTypes {
             var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
-
-            // Find ALL cocxy hook entries (not just the first).
-            // Previous versions could create duplicates that were never
-            // cleaned up, causing each event to be processed N times.
-            let cocxyIndices = eventHooks.indices.filter { idx in
-                guard let commands = eventHooks[idx]["hooks"] as? [[String: Any]] else {
-                    return false
-                }
-                return commands.contains {
-                    guard let cmd = $0["command"] as? String else { return false }
-                    return cmd.contains("cocxy") && cmd.contains("hook-handler")
-                }
-            }
-
-            if cocxyIndices.isEmpty {
-                // No cocxy hook exists — install exactly one.
-                let entry: [String: Any] = [
-                    "matcher": "",
-                    "hooks": [
-                        ["type": "command", "command": hookCommand]
-                    ]
+            let correctEntry: [String: Any] = [
+                "matcher": "",
+                "hooks": [
+                    ["type": "command", "command": hookCommand]
                 ]
-                eventHooks.append(entry)
-                hooks[eventType] = eventHooks
-                modified = true
-            } else {
-                // Cocxy hook(s) exist. Keep exactly ONE with the correct
-                // path; remove all duplicates.
-                let correctEntry: [String: Any] = [
-                    "matcher": "",
-                    "hooks": [
-                        ["type": "command", "command": hookCommand]
-                    ]
-                ]
-
-                // Check if the first entry already has the correct command.
-                let firstIdx = cocxyIndices[0]
-                let firstCommands = eventHooks[firstIdx]["hooks"] as? [[String: Any]]
-                let isCorrect = firstCommands?.contains {
-                    ($0["command"] as? String) == hookCommand
-                } == true
-
-                // Remove all cocxy entries (in reverse to preserve indices).
-                for idx in cocxyIndices.reversed() {
-                    eventHooks.remove(at: idx)
-                }
-
-                // Re-add exactly one correct entry.
-                eventHooks.append(correctEntry)
-                hooks[eventType] = eventHooks
-
-                // Mark modified if we removed duplicates or updated the path.
-                if cocxyIndices.count > 1 || !isCorrect {
-                    modified = true
-                }
-            }
+            ]
+            let reconciliation = Self.reconciledHookEntries(
+                eventHooks,
+                desiredEntry: correctEntry,
+                expectedCommand: hookCommand
+            )
+            eventHooks = reconciliation.entries
+            modified = modified || reconciliation.modified
+            hooks[eventType] = eventHooks
         }
 
         guard modified else { return }

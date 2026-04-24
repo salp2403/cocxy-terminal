@@ -140,7 +140,7 @@ enum AuroraSourceBuilder {
         store: AgentStatePerSurfaceStore,
         stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil,
         workspaceRootResolver: AuroraWorkspaceRootResolver = GitAncestorWorkspaceRootResolver(),
-        worktreeBadgeVisible: Bool = true
+        worktreeBadgeVisibleProvider: (Tab) -> Bool = { _ in true }
     ) -> [Design.AuroraSourceTab] {
         tabs.map { tab in
             let surfaceIDs = surfaceIDsByTab[tab.id] ?? []
@@ -158,7 +158,7 @@ enum AuroraSourceBuilder {
             }
             // Apply the config gate at source-build time so the adapter
             // can stay pure and the view layer does not read config.
-            let hasWorktree = tab.worktreeID != nil && worktreeBadgeVisible
+            let hasWorktree = tab.worktreeID != nil && worktreeBadgeVisibleProvider(tab)
             return Design.AuroraSourceTab(
                 id: tab.id.rawValue.uuidString,
                 name: tab.displayTitle,

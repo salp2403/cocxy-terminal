@@ -241,9 +241,17 @@ extension MainWindowController {
     }
 
     private func confirmWorktreeCloseThenPerform(_ tabID: TabID) {
-        guard let tab = tabManager.tab(for: tabID),
-              tab.worktreeID != nil,
-              (configService?.current.worktree.onClose ?? .keep) == .prompt,
+        guard let tab = tabManager.tab(for: tabID) else {
+            performCloseTab(tabID)
+            return
+        }
+
+        let worktreeConfig = Self.effectiveWorktreeConfig(
+            for: tab,
+            globalConfig: configService?.current ?? .defaults
+        )
+        guard tab.worktreeID != nil,
+              worktreeConfig.onClose == .prompt,
               let window else {
             performCloseTab(tabID)
             return
@@ -281,7 +289,10 @@ extension MainWindowController {
             return
         }
 
-        let config = configService?.current.worktree ?? WorktreeConfig.defaults
+        let config = Self.effectiveWorktreeConfig(
+            for: tab,
+            globalConfig: configService?.current ?? .defaults
+        )
         let policy = overridePolicy ?? config.onClose
         let store = WorktreeManifestStore.forRepo(
             basePath: config.basePath,
@@ -312,6 +323,16 @@ extension MainWindowController {
                 }
             }
         }
+    }
+
+    nonisolated static func effectiveWorktreeConfig(
+        for tab: Tab,
+        globalConfig: CocxyConfig
+    ) -> WorktreeConfig {
+        guard let projectConfig = tab.projectConfig else {
+            return globalConfig.worktree
+        }
+        return globalConfig.applying(projectOverrides: projectConfig).worktree
     }
 
     private static func changeDirectoryCommand(for directory: URL) -> String {

@@ -79,6 +79,72 @@ struct WorktreeCLIIntegrationHelperTests {
         #expect(effective.worktree.idLength == global.worktree.idLength)
     }
 
+    @Test("worktree enablement error mentions global and project config")
+    func enablementErrorMentionsBothConfigSources() {
+        let message = AppDelegate.worktreeEnablementErrorMessage
+        #expect(message.contains("~/.config/cocxy/config.toml"))
+        #expect(message.contains(".cocxy.toml"))
+    }
+
+    @Test("worktree tab close policy uses the owning tab project config")
+    func projectConfigOverridesWorktreeClosePolicy() {
+        let globalWorktree = WorktreeConfig(
+            enabled: false,
+            basePath: "/tmp/global-cocxy-worktrees",
+            branchTemplate: "global/{agent}/{id}",
+            baseRef: "HEAD",
+            onClose: .keep,
+            openInNewTab: true,
+            idLength: 10,
+            inheritProjectConfig: true,
+            showBadge: true
+        )
+        let global = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults,
+            worktree: globalWorktree
+        )
+        let project = ProjectConfig(
+            worktreeEnabled: true,
+            worktreeBaseRef: "main",
+            worktreeBranchTemplate: "project/{agent}/{id}",
+            worktreeOnClose: .prompt,
+            worktreeOpenInNewTab: false,
+            worktreeInheritProjectConfig: false,
+            worktreeShowBadge: false
+        )
+        let tab = Tab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/worktree"),
+            projectConfig: project,
+            worktreeID: "abc123",
+            worktreeRoot: URL(fileURLWithPath: "/tmp/worktree"),
+            worktreeOriginRepo: URL(fileURLWithPath: "/tmp/repo"),
+            worktreeBranch: "project/claude/abc123"
+        )
+
+        let effective = MainWindowController.effectiveWorktreeConfig(
+            for: tab,
+            globalConfig: global
+        )
+
+        #expect(effective.enabled == true)
+        #expect(effective.baseRef == "main")
+        #expect(effective.branchTemplate == "project/{agent}/{id}")
+        #expect(effective.onClose == .prompt)
+        #expect(effective.openInNewTab == false)
+        #expect(effective.inheritProjectConfig == false)
+        #expect(effective.showBadge == false)
+        // Storage layout remains global-only even for close-time decisions.
+        #expect(effective.basePath == globalWorktree.basePath)
+        #expect(effective.idLength == globalWorktree.idLength)
+    }
+
     @Test("missing project config leaves worktree CLI on the global config")
     func nilProjectConfigKeepsGlobalConfig() {
         let global = CocxyConfig.defaults

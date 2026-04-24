@@ -2,24 +2,42 @@
 // SparkleUpdater.swift - Auto-update integration via Sparkle framework.
 
 import AppKit
-import Sparkle
+import Combine
+@preconcurrency import Sparkle
+
+protocol SparkleUpdateMetadataProviding {
+    var displayVersionString: String { get }
+    var versionString: String { get }
+    var title: String? { get }
+    var isCriticalUpdate: Bool { get }
+}
+
+extension SUAppcastItem: SparkleUpdateMetadataProviding {}
 
 /// Manages update checks using the Sparkle framework.
-/// Sparkle is NOT started automatically to avoid error dialogs on launch.
-/// Updates are triggered only by user action (menu or preferences button).
+/// Sparkle owns installation and release-note UI; Cocxy only performs a
+/// silent availability probe so the sidebar can surface a focused Update
+/// button when a valid appcast item exists.
 @MainActor
-final class SparkleUpdater: ObservableObject {
+final class SparkleUpdater: NSObject, ObservableObject {
 
     // MARK: - Properties
 
+    private static let automaticProbeInterval: TimeInterval = 6 * 60 * 60
+
     private var updaterController: SPUStandardUpdaterController?
+    private var automaticProbeTimer: Timer?
     private var hasStarted = false
+    private var hasStartedAutomaticDetection = false
 
     @Published var automaticallyChecksForUpdates: Bool = true {
         didSet {
             updaterController?.updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         }
     }
+
+    @Published private(set) var availableUpdate: CocxyUpdateAvailability?
+    @Published private(set) var lastProbeErrorDescription: String?
 
     var canCheckForUpdates: Bool {
         updaterController?.updater.canCheckForUpdates ?? true
@@ -41,27 +59,122 @@ final class SparkleUpdater: ObservableObject {
 
     // MARK: - Actions
 
+    /// Starts Sparkle and performs a silent update-information check.
+    ///
+    /// `checkForUpdateInformation()` does not offer the update by itself;
+    /// it only drives the delegate callbacks Cocxy needs to update sidebar
+    /// state. Users still install through Sparkle's standard UI after
+    /// clicking the sidebar/menu/preferences button.
+    func startAutomaticUpdateDetection() {
+        guard !hasStartedAutomaticDetection else { return }
+        hasStartedAutomaticDetection = true
+        startUpdaterIfNeeded()
+        probeForUpdateInformation()
+        scheduleAutomaticProbeTimer()
+    }
+
+    /// Performs a silent availability refresh without presenting Sparkle UI.
+    func probeForUpdateInformation() {
+        startUpdaterIfNeeded()
+        guard let updater = updaterController?.updater,
+              !updater.sessionInProgress else {
+            return
+        }
+        updater.checkForUpdateInformation()
+    }
+
     /// Triggers a user-initiated update check.
     /// Initializes Sparkle on first call. If initialization fails,
     /// shows a simple alert instead of Sparkle's cryptic error.
     func checkForUpdates() {
-        if !hasStarted {
-            hasStarted = true
-            let controller = SPUStandardUpdaterController(
-                startingUpdater: true,
-                updaterDelegate: nil,
-                userDriverDelegate: nil
-            )
-            controller.updater.sendsSystemProfile = false
-            controller.updater.automaticallyDownloadsUpdates = false
-            self.updaterController = controller
+        startUpdaterIfNeeded()
+        updaterController?.checkForUpdates(nil)
+    }
 
-            // Give Sparkle a moment to initialize before checking.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.updaterController?.checkForUpdates(nil)
+    func stopAutomaticUpdateDetection() {
+        automaticProbeTimer?.invalidate()
+        automaticProbeTimer = nil
+        hasStartedAutomaticDetection = false
+    }
+
+    // MARK: - Private
+
+    private func startUpdaterIfNeeded() {
+        guard !hasStarted else { return }
+        hasStarted = true
+
+        let controller = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: self,
+            userDriverDelegate: self
+        )
+        controller.updater.sendsSystemProfile = false
+        controller.updater.automaticallyDownloadsUpdates = false
+        updaterController = controller
+    }
+
+    private func scheduleAutomaticProbeTimer() {
+        automaticProbeTimer?.invalidate()
+        let timer = Timer(timeInterval: Self.automaticProbeInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.probeForUpdateInformation()
             }
-        } else {
-            updaterController?.checkForUpdates(nil)
         }
+        automaticProbeTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    static func availability(from item: SUAppcastItem) -> CocxyUpdateAvailability {
+        availability(from: item as SparkleUpdateMetadataProviding)
+    }
+
+    static func availability(from metadata: SparkleUpdateMetadataProviding) -> CocxyUpdateAvailability {
+        CocxyUpdateAvailability(
+            displayVersion: metadata.displayVersionString,
+            buildVersion: metadata.versionString,
+            title: metadata.title,
+            isCritical: metadata.isCriticalUpdate
+        )
+    }
+
+    private func updateAvailability(from item: SUAppcastItem) {
+        availableUpdate = Self.availability(from: item)
+        lastProbeErrorDescription = nil
+    }
+}
+
+// MARK: - Sparkle Delegates
+
+@MainActor
+extension SparkleUpdater: SPUUpdaterDelegate, @preconcurrency SPUStandardUserDriverDelegate {
+
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        updateAvailability(from: item)
+    }
+
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        availableUpdate = nil
+        lastProbeErrorDescription = nil
+    }
+
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        lastProbeErrorDescription = error.localizedDescription
+    }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem,
+        andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        return false
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate update: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        updateAvailability(from: update)
     }
 }

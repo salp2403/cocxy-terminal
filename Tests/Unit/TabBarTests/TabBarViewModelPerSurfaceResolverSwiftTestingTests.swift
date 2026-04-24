@@ -29,6 +29,37 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         #expect(item?.additionalActiveAgentStates.isEmpty == true)
     }
 
+    @Test("worktree badge visibility provider receives the owning tab")
+    func worktreeBadgeVisibilityProviderReceivesOwningTab() {
+        let manager = TabManager()
+        let hiddenID = manager.tabs[0].id
+        manager.updateTab(id: hiddenID) { tab in
+            tab.worktreeID = "hidden"
+            tab.projectConfig = ProjectConfig(worktreeShowBadge: false)
+        }
+
+        let visible = manager.addTab()
+        manager.updateTab(id: visible.id) { tab in
+            tab.worktreeID = "visible"
+            tab.projectConfig = ProjectConfig(worktreeShowBadge: true)
+        }
+
+        let viewModel = TabBarViewModel(tabManager: manager)
+        var seenIDs: [TabID] = []
+        viewModel.worktreeBadgeVisibilityProvider = { tab in
+            seenIDs.append(tab.id)
+            return tab.projectConfig?.worktreeShowBadge ?? true
+        }
+
+        viewModel.syncWithManager()
+
+        let hiddenItem = viewModel.tabItems.first { $0.id == hiddenID }
+        let visibleItem = viewModel.tabItems.first { $0.id == visible.id }
+        #expect(hiddenItem?.hasWorktree == false)
+        #expect(visibleItem?.hasWorktree == true)
+        #expect(seenIDs == [hiddenID, visible.id])
+    }
+
     // MARK: - Overridden resolver drives the display item
 
     @Test("custom resolver drives the display item fields")

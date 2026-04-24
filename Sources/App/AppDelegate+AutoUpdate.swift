@@ -15,6 +15,7 @@ extension AppDelegate {
         for controller in allWindowControllers {
             controller.sparkleUpdater = updater
         }
+        updater.startAutomaticUpdateDetection()
     }
 
     /// Menu action: triggers a user-initiated update check.
