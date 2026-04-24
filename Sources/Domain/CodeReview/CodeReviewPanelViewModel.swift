@@ -84,6 +84,13 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     var referenceProvider: (() -> String?)?
     var ptyWriteHandler: ((String, String?, URL?, TabID?) -> Bool)?
     var autoShowEnabledProvider: (() -> Bool)?
+
+    /// Handler invoked when the user taps "Create PR" in the git
+    /// workflow panel. The MainWindowController wires this to the
+    /// shared `GitHubService.createPullRequest` flow. Kept as a
+    /// closure so the view model does not depend on GitHubService.
+    var createPullRequestHandler: ((_ title: String, _ body: String?, _ baseBranch: String?, _ draft: Bool) async throws -> URL)?
+
     var refreshDelay: TimeInterval = 2.0
     var onDiffsUpdated: (([FileDiff]) -> Void)?
 
@@ -382,6 +389,75 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     func pushCurrentBranch() {
         performGitAction(successMessage: "Branch pushed.") { workflow, workingDirectory in
             try workflow.pushCurrentBranch(workingDirectory: workingDirectory)
+        }
+    }
+
+    /// Creates a pull request on GitHub for the current branch.
+    ///
+    /// Delegates to `createPullRequestHandler` (wired by
+    /// `MainWindowController` to the shared `GitHubService`) so the
+    /// view model stays free of AppKit and actor dependencies. Title
+    /// defaults to the first line of `commitMessageDraft` when the
+    /// caller passes an empty string; body is the remainder. The
+    /// resulting PR URL is surfaced in `lastInfoMessage` so the user
+    /// can copy it from the panel without hopping to the CLI.
+    func requestCreatePullRequest(
+        title: String? = nil,
+        body: String? = nil,
+        baseBranch: String? = nil,
+        draft: Bool = false
+    ) {
+        guard let handler = createPullRequestHandler else {
+            lastErrorMessage = "GitHub integration is not ready yet. Open the GitHub pane once to initialise it."
+            return
+        }
+
+        let draftLines = commitMessageDraft.split(separator: "\n", omittingEmptySubsequences: false)
+        let firstLine = draftLines.first.map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolvedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveTitle = (resolvedTitle?.isEmpty == false ? resolvedTitle : nil) ?? firstLine
+
+        guard !effectiveTitle.isEmpty else {
+            lastErrorMessage = "Add a commit message (or pass a title) before creating a pull request."
+            return
+        }
+
+        let effectiveBody: String?
+        if let body, !body.isEmpty {
+            effectiveBody = body
+        } else if draftLines.count > 1 {
+            let remainder = draftLines.dropFirst().joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            effectiveBody = remainder.isEmpty ? nil : remainder
+        } else {
+            effectiveBody = nil
+        }
+
+        gitActionTask?.cancel()
+        isGitActionRunning = true
+        lastErrorMessage = nil
+        lastInfoMessage = nil
+
+        gitActionTask = Task { [weak self] in
+            let result: Result<URL, Error>
+            do {
+                let url = try await handler(effectiveTitle, effectiveBody, baseBranch, draft)
+                result = .success(url)
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.isGitActionRunning = false
+                switch result {
+                case .success(let url):
+                    self.lastInfoMessage = "Pull request created: \(url.absoluteString)"
+                    self.refreshGitStatus()
+                case .failure(let error):
+                    self.lastErrorMessage = Self.userFacingErrorMessage(for: error)
+                }
+            }
         }
     }
 

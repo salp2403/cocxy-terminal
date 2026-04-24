@@ -214,11 +214,39 @@ struct CodeReviewGitWorkflowPanel: View {
                     .disabled(viewModel.isGitActionRunning)
                 }
 
-                Text("Commit All stages current review changes, then Push sends the active branch to origin.")
+                Button {
+                    viewModel.requestCreatePullRequest()
+                } label: {
+                    Label("Create Pull Request", systemImage: "arrow.triangle.pull")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!isCreatePRAvailable)
+                .help(
+                    viewModel.createPullRequestHandler == nil
+                        ? "Open the GitHub pane (Cmd+Option+G) once to enable this action."
+                        : "Creates a PR on GitHub via gh using the commit message as title and body."
+                )
+
+                Text("Commit All stages current review changes, Push sends the branch to origin, Create Pull Request opens a PR on GitHub via gh.")
                     .font(.system(size: 9))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
             }
         }
+    }
+
+    /// Whether the Create PR button should be tappable. Requires a
+    /// non-empty commit draft (so the PR has a title), no other git
+    /// action running, and that `MainWindowController` has wired the
+    /// GitHub handler (which happens automatically the first time the
+    /// GitHub pane is opened).
+    private var isCreatePRAvailable: Bool {
+        let hasDraft = !viewModel.commitMessageDraft
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        return hasDraft
+            && !viewModel.isGitActionRunning
+            && viewModel.createPullRequestHandler != nil
     }
 
     private func miniStat(_ text: String, color: NSColor) -> some View {

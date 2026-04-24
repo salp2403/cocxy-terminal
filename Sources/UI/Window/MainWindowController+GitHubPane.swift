@@ -230,7 +230,7 @@ extension MainWindowController {
     /// the worktree root so when the user opens a cocxy-managed
     /// worktree, `gh repo view` resolves to the origin repo through
     /// the worktree's `.git` file (handled by `gh` internally).
-    private func currentGitHubPaneWorkingDirectory() -> URL? {
+    func currentGitHubPaneWorkingDirectory() -> URL? {
         if let tabID = visibleTabID ?? tabManager.activeTabID,
            let tab = tabManager.tab(for: tabID) {
             if let worktreeRoot = tab.worktreeRoot {
@@ -239,5 +239,38 @@ extension MainWindowController {
             return tab.workingDirectory
         }
         return nil
+    }
+
+    // MARK: - Code Review bridge (Fase 10)
+
+    /// Entry point wired from
+    /// `CodeReviewPanelViewModel.createPullRequestHandler`. Resolves
+    /// the working directory the same way the GitHub pane does, hands
+    /// the request off to the shared `GitHubService`, and returns the
+    /// created PR's URL so the review panel can surface it as an
+    /// info banner.
+    func performCodeReviewCreatePullRequest(
+        title: String,
+        body: String?,
+        baseBranch: String?,
+        draft: Bool
+    ) async throws -> URL {
+        guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
+            throw GitHubCLIError.notAGitRepository(path: "")
+        }
+        let service: GitHubService
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            service = type(of: appDelegate).sharedGitHubService
+        } else {
+            service = GitHubService()
+        }
+        let pr = try await service.createPullRequest(
+            title: title,
+            body: body,
+            baseBranch: baseBranch,
+            draft: draft,
+            at: workingDirectory
+        )
+        return pr.url
     }
 }

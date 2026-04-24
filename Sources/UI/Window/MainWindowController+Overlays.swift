@@ -994,6 +994,14 @@ extension MainWindowController {
         viewModel.autoShowEnabledProvider = { [weak self] in
             self?.configService?.current.codeReview.autoShowOnSessionEnd ?? true
         }
+        viewModel.createPullRequestHandler = { [weak self] title, body, baseBranch, draft in
+            try await self?.performCodeReviewCreatePullRequest(
+                title: title,
+                body: body,
+                baseBranch: baseBranch,
+                draft: draft
+            ) ?? URL(string: "about:blank")!
+        }
         let dashboardVM = dashboardViewModel
             ?? injectedDashboardViewModel
             ?? (NSApp.delegate as? AppDelegate)?.agentDashboardViewModel
