@@ -5,6 +5,25 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.85] - 2026-04-24
+
+### Fixed
+- Release and nightly workflows now fail when notarization is rejected
+  by Apple instead of publishing an unsigned DMG. The notarization
+  step captures the exit status of `xcrun notarytool submit`, gates
+  the run on a `status: Accepted` response, and validates the
+  attached ticket with `xcrun stapler validate` after stapling. A
+  prior `|| true` was masking transient and permanent failures
+  (including HTTP 403 responses for missing or expired Developer
+  Account agreements) and shipping DMGs without a notary ticket.
+- Sidebar update button now reflects newly published releases
+  promptly. The silent appcast probe runs every 15 minutes (down
+  from 6 hours) while the app is in the foreground, and the app
+  also re-checks on activation if at least 10 minutes have passed
+  since the last probe. Previously, users could remain on the
+  prior version for hours after a new release was published until
+  Sparkle's next scheduled probe fired.
+
 ## [0.1.84] - 2026-04-24
 
 ### Added
