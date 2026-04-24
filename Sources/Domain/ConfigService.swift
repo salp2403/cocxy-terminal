@@ -287,6 +287,26 @@ final class ConfigService: ConfigProviding {
         # When true, the tab bar and Aurora session row show a worktree
         # badge on tabs with an active worktree.
         show-badge = \(defaults.worktree.showBadge)
+
+        [github]
+        # GitHub pane (Cmd+Option+G) plus the `cocxy github` CLI verbs
+        # (v0.1.84). Authentication is delegated to `gh auth status` —
+        # Cocxy never stores GitHub tokens of its own. Set `enabled`
+        # to false to stop every `gh` invocation dead.
+        enabled = \(defaults.github.enabled)
+        # Seconds between silent background refreshes while the pane is
+        # visible. 0 disables auto-refresh entirely. Clamped to
+        # [\(GitHubConfig.minAutoRefreshInterval), \(GitHubConfig.maxAutoRefreshInterval)].
+        auto-refresh-interval = \(defaults.github.autoRefreshInterval)
+        # Maximum rows pulled from `gh pr list` / `gh issue list` per
+        # refresh. Clamped to [\(GitHubConfig.minMaxItems), \(GitHubConfig.maxMaxItems)] to match gh's own cap.
+        max-items = \(defaults.github.maxItems)
+        # When true, draft pull requests show in the list. When false,
+        # they are filtered out client-side.
+        include-drafts = \(defaults.github.includeDrafts)
+        # Default --state value used on first load. Allowed: open,
+        # closed, merged (pull requests only), all.
+        default-state = "\(defaults.github.defaultState)"
         """
     }
 
@@ -315,6 +335,7 @@ final class ConfigService: ConfigProviding {
         let keybindings = parseKeybindingsConfig(from: parsed)
         let sessions = parseSessionsConfig(from: parsed)
         let worktree = parseWorktreeConfig(from: parsed)
+        let github = parseGitHubConfig(from: parsed)
 
         return CocxyConfig(
             general: general,
@@ -326,7 +347,8 @@ final class ConfigService: ConfigProviding {
             quickTerminal: quickTerminal,
             keybindings: keybindings,
             sessions: sessions,
-            worktree: worktree
+            worktree: worktree,
+            github: github
         )
     }
 
@@ -648,6 +670,48 @@ final class ConfigService: ConfigProviding {
             inheritProjectConfig: boolValue(table["inherit-project-config"])
                 ?? defaults.inheritProjectConfig,
             showBadge: boolValue(table["show-badge"]) ?? defaults.showBadge
+        )
+    }
+
+    /// Parses the `[github]` section with validation.
+    ///
+    /// `autoRefreshInterval` is clamped to
+    /// `[GitHubConfig.minAutoRefreshInterval, maxAutoRefreshInterval]` so
+    /// a negative value never disables the timer in a way the UI
+    /// cannot describe, and a very large value never starves the refresh
+    /// loop. `maxItems` is clamped to `[1, 200]` to match the upstream
+    /// `gh` CLI hard cap. `defaultState` falls back to the default when
+    /// the user supplies a value outside the allowed set so a typo never
+    /// silently picks a surprising initial view.
+    private func parseGitHubConfig(from parsed: [String: TOMLValue]) -> GitHubConfig {
+        let table = extractTable("github", from: parsed)
+        let defaults = GitHubConfig.defaults
+
+        let rawRefresh = intValue(table["auto-refresh-interval"]) ?? defaults.autoRefreshInterval
+        let clampedRefresh = clamp(
+            rawRefresh,
+            min: GitHubConfig.minAutoRefreshInterval,
+            max: GitHubConfig.maxAutoRefreshInterval
+        )
+
+        let rawMaxItems = intValue(table["max-items"]) ?? defaults.maxItems
+        let clampedMaxItems = clamp(
+            rawMaxItems,
+            min: GitHubConfig.minMaxItems,
+            max: GitHubConfig.maxMaxItems
+        )
+
+        let rawState = stringValue(table["default-state"])?.lowercased() ?? defaults.defaultState
+        let validatedState = GitHubConfig.allowedDefaultStates.contains(rawState)
+            ? rawState
+            : defaults.defaultState
+
+        return GitHubConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            autoRefreshInterval: clampedRefresh,
+            maxItems: clampedMaxItems,
+            includeDrafts: boolValue(table["include-drafts"]) ?? defaults.includeDrafts,
+            defaultState: validatedState
         )
     }
 

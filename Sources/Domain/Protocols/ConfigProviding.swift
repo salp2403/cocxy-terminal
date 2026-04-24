@@ -56,6 +56,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let keybindings: KeybindingsConfig
     let sessions: SessionsConfig
     let worktree: WorktreeConfig
+    let github: GitHubConfig
 
     init(
         general: GeneralConfig,
@@ -67,7 +68,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         quickTerminal: QuickTerminalConfig,
         keybindings: KeybindingsConfig,
         sessions: SessionsConfig,
-        worktree: WorktreeConfig = .defaults
+        worktree: WorktreeConfig = .defaults,
+        github: GitHubConfig = .defaults
     ) {
         self.general = general
         self.appearance = appearance
@@ -79,6 +81,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.keybindings = keybindings
         self.sessions = sessions
         self.worktree = worktree
+        self.github = github
     }
 
     /// Creates a configuration with all default values.
@@ -93,7 +96,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             quickTerminal: .defaults,
             keybindings: .defaults,
             sessions: .defaults,
-            worktree: .defaults
+            worktree: .defaults,
+            github: .defaults
         )
     }
 
@@ -103,12 +107,13 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// before v0.1.81 (which do not carry the `worktree` key) decode
     /// cleanly. Every other field preserves its strict requirement — if
     /// any of them is missing, the decode fails and we fall back to
-    /// defaults higher up the call chain. `worktree` is the only newly
-    /// introduced field and therefore the only one that uses
-    /// `decodeIfPresent`.
+    /// defaults higher up the call chain. `worktree` and `github` are
+    /// the only newly introduced fields and therefore use
+    /// `decodeIfPresent` so users upgrading from older releases never
+    /// hit a decode failure.
     private enum CodingKeys: String, CodingKey {
         case general, appearance, terminal, agentDetection, codeReview
-        case notifications, quickTerminal, keybindings, sessions, worktree
+        case notifications, quickTerminal, keybindings, sessions, worktree, github
     }
 
     init(from decoder: Decoder) throws {
@@ -124,6 +129,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.keybindings = try container.decode(KeybindingsConfig.self, forKey: .keybindings)
         self.sessions = try container.decode(SessionsConfig.self, forKey: .sessions)
         self.worktree = try container.decodeIfPresent(WorktreeConfig.self, forKey: .worktree)
+            ?? .defaults
+        self.github = try container.decodeIfPresent(GitHubConfig.self, forKey: .github)
             ?? .defaults
     }
 
@@ -186,6 +193,20 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             showBadge: overrides.worktreeShowBadge ?? worktree.showBadge
         )
 
+        // Merge the [github] section. `autoRefreshInterval` and
+        // `maxItems` stay global — they are client-tuning knobs whose
+        // per-project override would only introduce confusion without
+        // adding a real workflow. `enabled`, `includeDrafts` and
+        // `defaultState` do make sense per-repo (e.g. a closed-source
+        // repo might want `enabled = false`).
+        let mergedGitHub = GitHubConfig(
+            enabled: overrides.githubEnabled ?? github.enabled,
+            autoRefreshInterval: github.autoRefreshInterval,
+            maxItems: github.maxItems,
+            includeDrafts: overrides.githubIncludeDrafts ?? github.includeDrafts,
+            defaultState: overrides.githubDefaultState ?? github.defaultState
+        )
+
         return CocxyConfig(
             general: general,
             appearance: mergedAppearance,
@@ -196,7 +217,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             quickTerminal: quickTerminal,
             keybindings: mergedKeybindings,
             sessions: sessions,
-            worktree: mergedWorktree
+            worktree: mergedWorktree,
+            github: mergedGitHub
         )
     }
 }
@@ -737,6 +759,103 @@ struct WorktreeConfig: Codable, Sendable, Equatable {
             inheritProjectConfig: true,
             showBadge: true
         )
+    }
+}
+
+// MARK: - GitHub Config
+
+/// `[github]` section of the configuration.
+///
+/// Controls the inline GitHub pane (Cmd+Option+G) introduced in
+/// v0.1.84 plus the `cocxy github` CLI verbs. Every field has a safe
+/// default so a fresh install sees the pane enabled with sensible
+/// auto-refresh, but `gh` itself is never invoked until the user
+/// explicitly opens the pane or calls a CLI verb.
+///
+/// Authentication is delegated to `gh auth status` — Cocxy never
+/// stores a GitHub token of its own, and toggling `enabled = false`
+/// here is enough to stop every subprocess invocation dead.
+struct GitHubConfig: Codable, Sendable, Equatable {
+
+    /// Master switch for the GitHub pane and CLI verbs. When `false`,
+    /// the overlay refuses to open and every `cocxy github ...` verb
+    /// returns an actionable error pointing here.
+    let enabled: Bool
+
+    /// Seconds between silent background refreshes while the pane is
+    /// visible. `0` disables auto-refresh entirely (the pane still
+    /// refreshes on manual toggle or worktree change). Clamped to
+    /// `[0, 3600]` by the parser.
+    let autoRefreshInterval: Int
+
+    /// Maximum number of rows requested from `gh pr list` /
+    /// `gh issue list`. Clamped to `[1, 200]` by the parser to match
+    /// the upstream hard limit.
+    let maxItems: Int
+
+    /// When `true`, draft pull requests show in the list. When
+    /// `false`, the service filters them out post-decode because
+    /// `gh` does not expose a `--hide-drafts` flag.
+    let includeDrafts: Bool
+
+    /// Default `--state` value used on first load. Valid values are
+    /// `open`, `closed`, `merged` (PR list only) and `all`. Unknown
+    /// values fall back to `open` in the parser.
+    let defaultState: String
+
+    /// Lower bound enforced on `autoRefreshInterval` by the parser.
+    static let minAutoRefreshInterval: Int = 0
+    /// Upper bound enforced on `autoRefreshInterval`. One hour keeps
+    /// the ceiling friendly for long-running sessions while still
+    /// guaranteeing at least one refresh per hour.
+    static let maxAutoRefreshInterval: Int = 3600
+    /// Lower bound enforced on `maxItems`.
+    static let minMaxItems: Int = 1
+    /// Upper bound enforced on `maxItems`. Matches the `gh` CLI hard
+    /// cap documented in `gh pr list --help`.
+    static let maxMaxItems: Int = 200
+    /// Valid `defaultState` values. Kept here so the parser and the
+    /// Preferences UI share a single source of truth.
+    static let allowedDefaultStates: [String] = ["open", "closed", "merged", "all"]
+
+    init(
+        enabled: Bool = true,
+        autoRefreshInterval: Int = 60,
+        maxItems: Int = 30,
+        includeDrafts: Bool = true,
+        defaultState: String = "open"
+    ) {
+        self.enabled = enabled
+        self.autoRefreshInterval = autoRefreshInterval
+        self.maxItems = maxItems
+        self.includeDrafts = includeDrafts
+        self.defaultState = defaultState
+    }
+
+    static var defaults: GitHubConfig {
+        GitHubConfig(
+            enabled: true,
+            autoRefreshInterval: 60,
+            maxItems: 30,
+            includeDrafts: true,
+            defaultState: "open"
+        )
+    }
+
+    // MARK: - Codable — tolerant decoding
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled, autoRefreshInterval, maxItems, includeDrafts, defaultState
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = GitHubConfig.defaults
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
+        self.autoRefreshInterval = try container.decodeIfPresent(Int.self, forKey: .autoRefreshInterval) ?? defaults.autoRefreshInterval
+        self.maxItems = try container.decodeIfPresent(Int.self, forKey: .maxItems) ?? defaults.maxItems
+        self.includeDrafts = try container.decodeIfPresent(Bool.self, forKey: .includeDrafts) ?? defaults.includeDrafts
+        self.defaultState = try container.decodeIfPresent(String.self, forKey: .defaultState) ?? defaults.defaultState
     }
 }
 

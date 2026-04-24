@@ -91,6 +91,8 @@ struct PreferencesView: View {
             KeybindingsEditorView(viewModel: viewModel.keybindingsEditor)
         case .worktrees:
             WorktreesPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .github:
+            GitHubPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .about:
             AboutPreferencesSection()
         }
@@ -108,6 +110,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case terminal
     case keybindings
     case worktrees
+    case github
     case about
 
     var id: String { rawValue }
@@ -122,6 +125,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .terminal: return "Terminal"
         case .keybindings: return "Keybindings"
         case .worktrees: return "Worktrees"
+        case .github: return "GitHub"
         case .about: return "About"
         }
     }
@@ -136,6 +140,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .terminal: return "terminal"
         case .keybindings: return "keyboard"
         case .worktrees: return "arrow.triangle.branch"
+        case .github: return "arrow.triangle.pull"
         case .about: return "info.circle"
         }
     }
@@ -780,6 +785,82 @@ struct WorktreesPreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Worktrees")
+    }
+}
+
+// MARK: - GitHub Section (v0.1.84)
+
+/// Editable settings for the inline GitHub pane and `cocxy github`
+/// CLI verbs.
+///
+/// Authentication is handled by the user's `gh auth status`; Cocxy
+/// never stores tokens of its own, so the UI surfaces only the knobs
+/// that affect request shape and auto-refresh cadence.
+struct GitHubPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Feature") {
+                Toggle("Enable GitHub pane", isOn: $viewModel.githubEnabled)
+                Text(
+                    "Powers Cmd+Option+G and the `cocxy github` CLI verbs. Turning this off stops every `gh` subprocess invocation and hides the pane. Authentication is delegated to `gh auth status`; Cocxy never stores GitHub tokens of its own."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Refresh") {
+                Stepper(
+                    "Auto-refresh every \(viewModel.githubAutoRefreshInterval) s",
+                    value: $viewModel.githubAutoRefreshInterval,
+                    in: GitHubConfig.minAutoRefreshInterval...GitHubConfig.maxAutoRefreshInterval,
+                    step: 15
+                )
+                Text(
+                    "Seconds between silent background refreshes while the pane is visible. Set to 0 to disable auto-refresh entirely (the pane still reloads on manual toggle)."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Stepper(
+                    "Max rows per list: \(viewModel.githubMaxItems)",
+                    value: $viewModel.githubMaxItems,
+                    in: GitHubConfig.minMaxItems...GitHubConfig.maxMaxItems,
+                    step: 5
+                )
+                Text(
+                    "Maximum rows requested from `gh pr list` / `gh issue list` on each refresh. Clamped to the upstream gh CLI hard cap."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Filters") {
+                Toggle("Include draft pull requests", isOn: $viewModel.githubIncludeDrafts)
+                Text(
+                    "When off, drafts are filtered out client-side because `gh` does not expose a --hide-drafts flag."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Picker("Default state", selection: $viewModel.githubDefaultState) {
+                    Text("Open").tag("open")
+                    Text("Closed").tag("closed")
+                    Text("Merged (PRs only)").tag("merged")
+                    Text("All").tag("all")
+                }
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("GitHub")
     }
 }
 

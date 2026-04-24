@@ -84,6 +84,25 @@ struct ProjectConfig: Codable, Equatable, Sendable {
     /// Per-project override for `show-badge`.
     let worktreeShowBadge: Bool?
 
+    // MARK: - GitHub Overrides (v0.1.84)
+    //
+    // Per-project controls for the GitHub pane. Only the toggles that
+    // make sense per-repo are exposed — `autoRefreshInterval` and
+    // `maxItems` stay global to avoid surprise swings when the user
+    // changes projects.
+
+    /// Per-project override for `[github].enabled`. Lets a repo opt
+    /// out of the pane (e.g. monorepos without a GitHub remote).
+    let githubEnabled: Bool?
+
+    /// Per-project override for `[github].include-drafts`.
+    let githubIncludeDrafts: Bool?
+
+    /// Per-project override for `[github].default-state`. Validated
+    /// against `GitHubConfig.allowedDefaultStates`; invalid values are
+    /// ignored so the global setting wins.
+    let githubDefaultState: String?
+
     /// Whether all fields are nil (no overrides).
     var isEmpty: Bool {
         fontSize == nil && windowPadding == nil && windowPaddingX == nil
@@ -94,6 +113,8 @@ struct ProjectConfig: Codable, Equatable, Sendable {
             && worktreeBranchTemplate == nil && worktreeOnClose == nil
             && worktreeOpenInNewTab == nil && worktreeInheritProjectConfig == nil
             && worktreeShowBadge == nil
+            && githubEnabled == nil && githubIncludeDrafts == nil
+            && githubDefaultState == nil
     }
 
     // MARK: - Initialization
@@ -113,7 +134,10 @@ struct ProjectConfig: Codable, Equatable, Sendable {
         worktreeOnClose: WorktreeOnClose? = nil,
         worktreeOpenInNewTab: Bool? = nil,
         worktreeInheritProjectConfig: Bool? = nil,
-        worktreeShowBadge: Bool? = nil
+        worktreeShowBadge: Bool? = nil,
+        githubEnabled: Bool? = nil,
+        githubIncludeDrafts: Bool? = nil,
+        githubDefaultState: String? = nil
     ) {
         self.fontSize = fontSize
         self.windowPadding = windowPadding
@@ -130,6 +154,9 @@ struct ProjectConfig: Codable, Equatable, Sendable {
         self.worktreeOpenInNewTab = worktreeOpenInNewTab
         self.worktreeInheritProjectConfig = worktreeInheritProjectConfig
         self.worktreeShowBadge = worktreeShowBadge
+        self.githubEnabled = githubEnabled
+        self.githubIncludeDrafts = githubIncludeDrafts
+        self.githubDefaultState = githubDefaultState
     }
 }
 
@@ -200,6 +227,17 @@ final class ProjectConfigService {
         let worktreeInheritProjectConfig = boolValue(worktreeTable["inherit-project-config"])
         let worktreeShowBadge = boolValue(worktreeTable["show-badge"])
 
+        // Extract [github] table. Mirrors the worktree pattern —
+        // missing keys mean "inherit the global", unknown enum values
+        // decode to nil so the global setting wins without surfacing
+        // invalid user input as a silent override.
+        let githubTable = extractTable("github", from: parsed)
+        let githubEnabled = boolValue(githubTable["enabled"])
+        let githubIncludeDrafts = boolValue(githubTable["include-drafts"])
+        let githubDefaultState = stringValue(githubTable["default-state"])
+            .map { $0.lowercased() }
+            .flatMap { GitHubConfig.allowedDefaultStates.contains($0) ? $0 : nil }
+
         // Return nil if every field is nil (nothing to override)
         let config = ProjectConfig(
             fontSize: fontSize,
@@ -216,7 +254,10 @@ final class ProjectConfigService {
             worktreeOnClose: worktreeOnClose,
             worktreeOpenInNewTab: worktreeOpenInNewTab,
             worktreeInheritProjectConfig: worktreeInheritProjectConfig,
-            worktreeShowBadge: worktreeShowBadge
+            worktreeShowBadge: worktreeShowBadge,
+            githubEnabled: githubEnabled,
+            githubIncludeDrafts: githubIncludeDrafts,
+            githubDefaultState: githubDefaultState
         )
 
         if config.isEmpty {

@@ -182,6 +182,28 @@ final class PreferencesViewModel: ObservableObject {
     /// Whether the tab bar and Aurora sidebar show a worktree badge.
     @Published var worktreeShowBadge: Bool
 
+    // MARK: - GitHub (v0.1.84)
+
+    /// Master toggle for the GitHub pane and `cocxy github` CLI verbs.
+    @Published var githubEnabled: Bool
+
+    /// Seconds between silent pane refreshes while the pane is visible.
+    /// `0` disables auto-refresh entirely. Clamped to
+    /// `[GitHubConfig.minAutoRefreshInterval, GitHubConfig.maxAutoRefreshInterval]` on save.
+    @Published var githubAutoRefreshInterval: Int
+
+    /// Maximum rows requested from `gh pr list` / `gh issue list`.
+    /// Clamped to `[GitHubConfig.minMaxItems, GitHubConfig.maxMaxItems]` on save.
+    @Published var githubMaxItems: Int
+
+    /// Whether draft pull requests show in the list.
+    @Published var githubIncludeDrafts: Bool
+
+    /// Default `--state` value on first load (`open`, `closed`,
+    /// `merged` or `all`). Falls back to `"open"` on save if the user
+    /// enters an unknown value.
+    @Published var githubDefaultState: String
+
     // MARK: - Read-Only Keybindings
 
     /// New tab shortcut from the saved config.
@@ -265,6 +287,7 @@ final class PreferencesViewModel: ObservableObject {
             || flashTab != c.notifications.flashTab
             || showDockBadge != c.notifications.showDockBadge
             || worktreeHasUnsavedChanges(comparedTo: c.worktree)
+            || githubHasUnsavedChanges(comparedTo: c.github)
             || (pendingKeybindings != nil && pendingKeybindings != c.keybindings)
     }
 
@@ -307,6 +330,11 @@ final class PreferencesViewModel: ObservableObject {
         worktreeIDLength = c.worktree.idLength
         worktreeInheritProjectConfig = c.worktree.inheritProjectConfig
         worktreeShowBadge = c.worktree.showBadge
+        githubEnabled = c.github.enabled
+        githubAutoRefreshInterval = c.github.autoRefreshInterval
+        githubMaxItems = c.github.maxItems
+        githubIncludeDrafts = c.github.includeDrafts
+        githubDefaultState = c.github.defaultState
         pendingKeybindings = nil
     }
 
@@ -390,6 +418,13 @@ final class PreferencesViewModel: ObservableObject {
         self.worktreeIDLength = config.worktree.idLength
         self.worktreeInheritProjectConfig = config.worktree.inheritProjectConfig
         self.worktreeShowBadge = config.worktree.showBadge
+
+        // GitHub (v0.1.84)
+        self.githubEnabled = config.github.enabled
+        self.githubAutoRefreshInterval = config.github.autoRefreshInterval
+        self.githubMaxItems = config.github.maxItems
+        self.githubIncludeDrafts = config.github.includeDrafts
+        self.githubDefaultState = config.github.defaultState
 
         // Available themes from built-in list.
         self.availableThemes = Self.defaultThemeNames()
@@ -542,7 +577,8 @@ final class PreferencesViewModel: ObservableObject {
             quickTerminal: savedConfig.quickTerminal,
             keybindings: pendingKeybindings ?? savedConfig.keybindings,
             sessions: savedConfig.sessions,
-            worktree: buildWorktreeConfigFromViewModel()
+            worktree: buildWorktreeConfigFromViewModel(),
+            github: buildGitHubConfigFromViewModel()
         )
         pendingKeybindings = nil
     }
@@ -587,6 +623,46 @@ final class PreferencesViewModel: ObservableObject {
             || worktreeIDLength != config.idLength
             || worktreeInheritProjectConfig != config.inheritProjectConfig
             || worktreeShowBadge != config.showBadge
+    }
+
+    /// Builds a `GitHubConfig` value from the editable view-model
+    /// fields. Clamps numeric ranges and coerces an invalid default
+    /// state back to `"open"` so the user cannot accidentally save a
+    /// value `gh` will reject.
+    private func buildGitHubConfigFromViewModel() -> GitHubConfig {
+        let defaults = GitHubConfig.defaults
+        let clampedRefresh = min(
+            max(githubAutoRefreshInterval, GitHubConfig.minAutoRefreshInterval),
+            GitHubConfig.maxAutoRefreshInterval
+        )
+        let clampedMaxItems = min(
+            max(githubMaxItems, GitHubConfig.minMaxItems),
+            GitHubConfig.maxMaxItems
+        )
+        let normalisedState = githubDefaultState.lowercased()
+        let validatedState = GitHubConfig.allowedDefaultStates.contains(normalisedState)
+            ? normalisedState
+            : defaults.defaultState
+
+        return GitHubConfig(
+            enabled: githubEnabled,
+            autoRefreshInterval: clampedRefresh,
+            maxItems: clampedMaxItems,
+            includeDrafts: githubIncludeDrafts,
+            defaultState: validatedState
+        )
+    }
+
+    /// Compares every editable `[github]` field against the saved
+    /// snapshot. Mirrors `worktreeHasUnsavedChanges` — raw UI values,
+    /// not the clamped save output — so Save/Discard light up the
+    /// instant the user changes anything.
+    private func githubHasUnsavedChanges(comparedTo config: GitHubConfig) -> Bool {
+        githubEnabled != config.enabled
+            || githubAutoRefreshInterval != config.autoRefreshInterval
+            || githubMaxItems != config.maxItems
+            || githubIncludeDrafts != config.includeDrafts
+            || githubDefaultState != config.defaultState
     }
 
     // MARK: - TOML Generation
@@ -697,6 +773,13 @@ final class PreferencesViewModel: ObservableObject {
         id-length = \(min(max(worktreeIDLength, WorktreeConfig.minIDLength), WorktreeConfig.maxIDLength))
         inherit-project-config = \(worktreeInheritProjectConfig)
         show-badge = \(worktreeShowBadge)
+
+        [github]
+        enabled = \(githubEnabled)
+        auto-refresh-interval = \(min(max(githubAutoRefreshInterval, GitHubConfig.minAutoRefreshInterval), GitHubConfig.maxAutoRefreshInterval))
+        max-items = \(min(max(githubMaxItems, GitHubConfig.minMaxItems), GitHubConfig.maxMaxItems))
+        include-drafts = \(githubIncludeDrafts)
+        default-state = "\(GitHubConfig.allowedDefaultStates.contains(githubDefaultState.lowercased()) ? githubDefaultState.lowercased() : defaults.github.defaultState)"
         """
     }
 
