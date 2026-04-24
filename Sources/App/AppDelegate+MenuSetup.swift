@@ -214,6 +214,14 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(codeReviewItem, with: KeybindingActionCatalog.reviewCodeReview)
         viewMenu.addItem(codeReviewItem)
 
+        let githubPaneItem = NSMenuItem(
+            title: "GitHub Pane",
+            action: #selector(MainWindowController.toggleGitHubPaneAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(githubPaneItem, with: KeybindingActionCatalog.windowGitHubPane)
+        viewMenu.addItem(githubPaneItem)
+
         let smartRoutingItem = NSMenuItem(
             title: "Smart Routing",
             action: #selector(MainWindowController.showSmartRoutingAction(_:)),

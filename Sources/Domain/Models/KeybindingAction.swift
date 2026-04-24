@@ -142,6 +142,18 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "grave")
     )
 
+    static let windowGitHubPane = KeybindingAction(
+        id: "window.githubPane",
+        displayName: "Toggle GitHub Pane",
+        summary: "Show or hide the GitHub pane with pull requests, issues and checks.",
+        category: .window,
+        defaultShortcut: KeybindingShortcut(
+            requiresCommand: true,
+            requiresOption: true,
+            baseKey: "g"
+        )
+    )
+
     // MARK: - Tab
 
     static let tabNew = KeybindingAction(
@@ -436,6 +448,7 @@ enum KeybindingActionCatalog {
         windowCommandPalette,
         windowPreferences,
         windowQuickTerminal,
+        windowGitHubPane,
         // Tab
         tabNew,
         tabClose,

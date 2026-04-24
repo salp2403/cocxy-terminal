@@ -110,6 +110,7 @@ extension MainWindowController {
         "navigation.splitDown": KeybindingActionCatalog.navigateSplitDown.id,
         "dashboard.toggle": KeybindingActionCatalog.reviewDashboard.id,
         "agent.review": KeybindingActionCatalog.reviewCodeReview.id,
+        "github.toggle": KeybindingActionCatalog.windowGitHubPane.id,
         "timeline.toggle": KeybindingActionCatalog.reviewTimeline.id,
         "search.toggle": KeybindingActionCatalog.editorFind.id,
         "editor.zoomIn": KeybindingActionCatalog.editorZoomIn.id,
@@ -290,6 +291,17 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleCodeReview() }
+                }
+            ),
+            CommandAction(
+                id: "github.toggle",
+                name: "Toggle GitHub Pane",
+                description: "Show pull requests, issues and checks from gh",
+                shortcut: paletteShortcutLabel("github.toggle", fallback: nil),
+                category: .agent,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.toggleGitHubPane() }
                 }
             ),
             CommandAction(
