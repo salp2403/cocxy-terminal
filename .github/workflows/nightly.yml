@@ -189,20 +189,30 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           DMG="build/CocxyTerminal-Nightly-${VERSION}.dmg"
 
+          set +e
           SUBMISSION=$(xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_PASSWORD" \
-            --wait --timeout 600 2>&1) || true
+            --wait --timeout 600 2>&1)
+          NOTARY_STATUS=$?
+          set -e
 
           echo "$SUBMISSION"
 
-          if echo "$SUBMISSION" | grep -q "status: Accepted"; then
-            xcrun stapler staple "$DMG"
-            echo "Notarization complete."
-          else
-            echo "WARNING: Notarization not accepted."
+          if [ "$NOTARY_STATUS" -ne 0 ]; then
+            echo "::error::Notarization command failed. The nightly DMG will not be published without a valid notary ticket."
+            exit "$NOTARY_STATUS"
           fi
+
+          if ! echo "$SUBMISSION" | grep -q "status: Accepted"; then
+            echo "::error::Notarization was not accepted. The nightly DMG will not be published without a valid notary ticket."
+            exit 1
+          fi
+
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          echo "Notarization complete."
 
       - name: Generate nightly appcast
         env:

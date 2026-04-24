@@ -208,11 +208,14 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           DMG="build/CocxyTerminal-${VERSION}.dmg"
 
+          set +e
           SUBMISSION=$(xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_PASSWORD" \
-            --wait --timeout 600 2>&1) || true
+            --wait --timeout 600 2>&1)
+          NOTARY_STATUS=$?
+          set -e
 
           echo "$SUBMISSION"
 
@@ -226,13 +229,19 @@ jobs:
               --password "$APPLE_APP_PASSWORD" 2>&1 || true
           fi
 
-          # Staple if successful
-          if echo "$SUBMISSION" | grep -q "status: Accepted"; then
-            xcrun stapler staple "$DMG"
-            echo "Notarization and stapling complete."
-          else
-            echo "WARNING: Notarization not accepted. DMG will still work but may show Gatekeeper warning on first launch."
+          if [ "$NOTARY_STATUS" -ne 0 ]; then
+            echo "::error::Notarization command failed. The DMG will not be published without a valid notary ticket."
+            exit "$NOTARY_STATUS"
           fi
+
+          if ! echo "$SUBMISSION" | grep -q "status: Accepted"; then
+            echo "::error::Notarization was not accepted. The DMG will not be published without a valid notary ticket."
+            exit 1
+          fi
+
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          echo "Notarization and stapling complete."
 
       - name: Generate Sparkle signature and appcast
         env:
