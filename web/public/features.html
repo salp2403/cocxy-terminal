@@ -110,6 +110,7 @@
         <ul style="list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.4rem;font-size:0.9rem;">
           <li><a href="#agent-detection" style="color:var(--lavender);">Multi-Layer Agent Detection</a></li>
           <li><a href="#code-review" style="color:var(--lavender);">Agent Code Review Panel</a></li>
+          <li><a href="#github-pane" style="color:var(--lavender);">Inline GitHub Pane</a></li>
           <li><a href="#markdown" style="color:var(--lavender);">Markdown Workspace</a></li>
           <li><a href="#quicklook" style="color:var(--lavender);">QuickLook Extension</a></li>
           <li><a href="#gpu" style="color:var(--lavender);">GPU Terminal Engine</a></li>
@@ -142,6 +143,15 @@
         <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Inline comments</strong> — Click any line in the gutter to attach a comment. Submit all pending comments via the PTY; the agent formats the feedback as context and re-runs.</p>
         <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Accept or reject hunks</strong> — Granular control via <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">git apply --cached</code> to accept and <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">git apply --reverse</code> to reject. Queued serially so hunks never race.</p>
         <p style="color:var(--subtext1);line-height:1.75;"><strong style="color:var(--text);">Keyboard-first</strong> — j, k, n, p, c, a, r, d shortcuts for navigation and actions. Cross-tab-safe: feedback always reaches the agent in the originating tab.</p>
+      </section>
+
+      <section id="github-pane" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;letter-spacing:-0.02em;">Inline GitHub Pane</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">Pull requests, issues and check runs for the repository resolved from the active tab, rendered inline next to your terminal. Press <kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">Cmd</kbd>+<kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">Option</kbd>+<kbd style="font-family:var(--font-mono);background:var(--surface1);border:1px solid var(--surface2);border-bottom-width:2px;padding:0.1em 0.45em;border-radius:4px;font-size:0.85em;">G</kbd> to open.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Delegated auth</strong> — Authentication is handled by your own <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">gh auth status</code>. Cocxy never stores GitHub tokens of its own and every network round-trip goes through <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">gh</code> — zero new credentials on disk.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Per-worktree aware</strong> — Tabs standing inside a cocxy-managed worktree see the origin repo's PRs automatically. Switching tabs refreshes the pane with the new repository.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;"><strong style="color:var(--text);">Create Pull Request from review</strong> — The Agent Code Review panel's Git Workflow section grows a Create Pull Request button. Takes the commit draft's first line as the PR title, folds the rest into the body, and reports the new PR URL as an info banner inside the panel.</p>
+        <p style="color:var(--subtext1);line-height:1.75;"><strong style="color:var(--text);">Scriptable from the CLI</strong> — Five new verbs (<code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy github status / prs / issues / open / refresh</code>) emit JSON for <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">jq</code> pipelines and let you toggle the overlay without leaving the terminal.</p>
       </section>
 
       <section id="markdown" style="margin-bottom:3.5rem;">

@@ -5,6 +5,42 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.84] - 2026-04-24
+
+### Added
+- Inline GitHub pane (Cmd+Option+G) renders pull requests, issues and
+  check runs for the repository resolved from the active tab. The pane
+  docks on the right edge alongside the Dashboard and Code Review
+  panels, supports per-worktree resolution (a tab standing in a
+  cocxy-managed worktree sees the origin repo's PRs automatically),
+  and surfaces informational banners for recoverable states such as
+  "install gh", "sign in with gh auth login", and "no GitHub remote".
+  Authentication is delegated to `gh auth status` — Cocxy never stores
+  tokens of its own.
+- Five new CLI verbs (`cocxy github status`, `cocxy github prs`,
+  `cocxy github issues`, `cocxy github open`, `cocxy github refresh`).
+  The read verbs accept `--state` and `--limit`, emit JSON under the
+  same keys the pane uses, and honour the `[github].enabled` master
+  toggle. `open` / `refresh` drive the overlay on the focused window.
+- `Create Pull Request` action in the Code Review Git Workflow panel.
+  Takes the commit draft's first line as the PR title, folds the
+  remainder into the body, routes through the shared GitHub service,
+  and reports the created PR URL as an info banner inside the panel.
+- New `[github]` section in the TOML config: `enabled`,
+  `auto-refresh-interval` (seconds, 0 disables), `max-items` (clamped
+  to 200), `include-drafts`, `default-state`. A matching Preferences
+  section exposes every field. Per-project overrides for `enabled`,
+  `include-drafts` and `default-state` are honoured when a repository
+  ships a `.cocxy.toml`.
+- `window.githubPane` keybinding action (default Cmd+Option+G), a new
+  `View > GitHub Pane` menu entry, and a matching Command Palette
+  action so the overlay can be opened from every surface.
+
+### Changed
+- Code Review now shares the `AppDelegate` shared GitHub service
+  singleton the GitHub pane uses. Opening the pane once primes the
+  "Create Pull Request" button in the review panel.
+
 ## [0.1.83] - 2026-04-24
 
 ### Fixed
