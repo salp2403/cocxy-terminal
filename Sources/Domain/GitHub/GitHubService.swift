@@ -190,8 +190,8 @@ actor GitHubService {
 
     /// Lists the check runs attached to a pull request. `gh pr checks`
     /// returns one row per check; the `Identifiable` contract on
-    /// `GitHubCheck` is keyed on the check name so the UI dedups rows
-    /// across refreshes.
+    /// `GitHubCheck` includes the check link or start timestamp so
+    /// duplicate job names from re-runs stay distinct across refreshes.
     func checksForPullRequest(
         number: Int,
         at directory: URL,

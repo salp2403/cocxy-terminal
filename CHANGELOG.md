@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code Review now shares the `AppDelegate` shared GitHub service
   singleton the GitHub pane uses. Opening the pane once primes the
   "Create Pull Request" button in the review panel.
+- Primary click on a pull-request row opens Checks inside the GitHub
+  pane; use the row context menu to open the PR in a browser.
+- GitHub CLI JSON-field failures now prompt users to update `gh`
+  instead of surfacing raw field-list output from older builds.
 
 ## [0.1.83] - 2026-04-24
 

@@ -28,8 +28,8 @@ struct GitHubCLIResult: Equatable, Sendable {
 ///
 /// Callers are expected to pattern-match `.notInstalled`, `.notAuthenticated`,
 /// `.noRemote` and `.notAGitRepository` into informational banners (these are
-/// user-recoverable, not bugs). `.commandFailed` and `.invalidJSON` map to the
-/// error banner so the user can act on them.
+/// user-recoverable, not bugs). `.unsupportedVersion`, `.commandFailed` and
+/// `.invalidJSON` map to the error banner so the user can act on them.
 enum GitHubCLIError: Error, Equatable, Sendable {
     /// `gh` binary could not be resolved on PATH nor in any known fallback.
     case notInstalled
@@ -39,6 +39,8 @@ enum GitHubCLIError: Error, Equatable, Sendable {
     case commandFailed(command: String, stderr: String, exitCode: Int32)
     /// `gh` output could not be decoded. Carries a short reason for the UI.
     case invalidJSON(reason: String)
+    /// Installed `gh` is too old for the JSON fields Cocxy requests.
+    case unsupportedVersion(stderr: String)
     /// GitHub rate-limit window reached (unauthenticated = 60/h).
     /// `resetAt` is populated when the CLI surfaces a parseable reset header.
     case rateLimited(resetAt: Date?)
@@ -324,6 +326,15 @@ enum GitHubCLI {
         // `.notAGitRepository`.
         if lower.contains("not a git repository") {
             return .notAGitRepository(path: "")
+        }
+
+        // Older `gh` builds may not support the JSON fields Cocxy requests
+        // from newer commands such as `gh pr checks --json state,bucket`.
+        // Keep the raw stderr for diagnostics but surface an actionable
+        // update prompt instead of a confusing field-list dump.
+        if (lower.contains("unknown json field") || lower.contains("invalid field")) &&
+           lower.contains("available fields") {
+            return .unsupportedVersion(stderr: stderr)
         }
 
         return .commandFailed(command: command, stderr: stderr, exitCode: exitCode)

@@ -268,6 +268,26 @@ struct GitHubCLISwiftTestingTests {
         }
     }
 
+    @Test("classifyError maps unsupported JSON fields to .unsupportedVersion")
+    func classifyError_mapsUnsupportedJSONFieldsTo_unsupportedVersion() {
+        let stderr = """
+        Unknown JSON field: "bucket"
+        Available fields:
+          completedAt
+          name
+        """
+        let err = GitHubCLI.classifyError(
+            command: "gh pr checks 1",
+            stderr: stderr,
+            exitCode: 1
+        )
+        guard case .unsupportedVersion(let captured) = err else {
+            Issue.record("Expected .unsupportedVersion, got: \(err)")
+            return
+        }
+        #expect(captured == stderr)
+    }
+
     @Test("classifyError maps no-remote stderr to .noRemote")
     func classifyError_mapsNoRemoteTo_noRemote() {
         let cases = [
