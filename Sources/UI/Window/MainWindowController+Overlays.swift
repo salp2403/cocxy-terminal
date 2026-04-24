@@ -1408,10 +1408,20 @@ extension MainWindowController {
             syncCodeReviewPanelRootView(panelWidth: reviewWidth)
         }
 
+        if isGitHubPaneVisible {
+            let ghWidth = clampedGitHubPanePanelWidth(
+                preferredGitHubPanePanelWidth,
+                containerWidth: overlayContainer.bounds.width
+            )
+            gitHubPanePanelWidth = ghWidth
+            syncGitHubPaneRootView(panelWidth: ghWidth)
+        }
+
         let visiblePanels: [DockedPanel] = [
             isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!, avoidsStatusBar: false) : nil,
             isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!, avoidsStatusBar: false) : nil,
-            isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!, avoidsStatusBar: true) : nil
+            isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!, avoidsStatusBar: true) : nil,
+            isGitHubPaneVisible ? DockedPanel(width: gitHubPanePanelWidth, view: gitHubPaneHostingView!, avoidsStatusBar: true) : nil
         ].compactMap { $0 }
 
         var currentX = overlayContainer.bounds.width

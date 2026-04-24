@@ -62,6 +62,35 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         UserDefaults.standard.set(Double(width), forKey: codeReviewPanelWidthDefaultsKey)
     }
 
+    // MARK: - GitHub pane width persistence
+
+    static let gitHubPanePanelWidthDefaultsKey = "githubPanePanelWidth"
+
+    /// Clamps a width into the pane's documented range. Mirrors the
+    /// code-review equivalent so the two docked panels share a single
+    /// persistence idiom.
+    static func clampStoredGitHubPanePanelWidth(_ width: CGFloat) -> CGFloat {
+        min(
+            max(width, GitHubPaneView.minimumPanelWidth),
+            GitHubPaneView.maximumPanelWidth
+        )
+    }
+
+    /// Reads the last persisted pane width from `UserDefaults` and
+    /// clamps it into the supported range. Zero or missing values
+    /// resolve to the documented default.
+    static func loadStoredGitHubPanePanelWidth() -> CGFloat {
+        let stored = UserDefaults.standard.double(forKey: gitHubPanePanelWidthDefaultsKey)
+        let candidate = stored > 0 ? CGFloat(stored) : GitHubPaneView.defaultPanelWidth
+        return clampStoredGitHubPanePanelWidth(candidate)
+    }
+
+    /// Persists the given width. Called from
+    /// `updatePreferredGitHubPanePanelWidth` after clamping.
+    static func storeGitHubPanePanelWidth(_ width: CGFloat) {
+        UserDefaults.standard.set(Double(width), forKey: gitHubPanePanelWidthDefaultsKey)
+    }
+
     // MARK: - Properties
 
     /// Unique identifier for this window. Stable for the window's lifetime.
@@ -222,6 +251,40 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     private(set) var preferredCodeReviewPanelWidth: CGFloat = MainWindowController.loadStoredCodeReviewPanelWidth()
     var codeReviewCancellables = Set<AnyCancellable>()
     var injectedCodeReviewViewModel: CodeReviewPanelViewModel?
+
+    // MARK: - GitHub Pane Overlay State (v0.1.84)
+
+    /// View model powering the GitHub pane overlay (Cmd+Option+G).
+    /// Lazily created by `resolveGitHubPaneViewModel()` so windows that
+    /// never open the pane never instantiate the actor.
+    var gitHubPaneViewModel: GitHubPaneViewModel?
+
+    /// Hosting view containing the SwiftUI pane. Replaced on every
+    /// show so the panelWidth parameter stays consistent with the
+    /// layout cache.
+    var gitHubPaneHostingView: NSHostingView<GitHubPaneView>?
+
+    /// Whether the pane is currently attached to `overlayContainerView`.
+    var isGitHubPaneVisible: Bool = false
+
+    /// Effective panel width applied to the hosting view on every
+    /// layout pass. Clamped to the container so the pane never exceeds
+    /// the window even if the user stored a very wide preference.
+    var gitHubPanePanelWidth: CGFloat = MainWindowController.loadStoredGitHubPanePanelWidth()
+
+    /// User-intent panel width. Persisted across relaunches and only
+    /// mutated through `updatePreferredGitHubPanePanelWidth(_:)` so
+    /// the clamp-by-container never overwrites the user's preference.
+    private(set) var preferredGitHubPanePanelWidth: CGFloat = MainWindowController.loadStoredGitHubPanePanelWidth()
+
+    /// Combine cancellables tied to the GitHub pane view model (sinks
+    /// for autoRefreshEnabled, providers reassignment on config
+    /// reload, etc.). Cleared on every window teardown.
+    var gitHubPaneCancellables = Set<AnyCancellable>()
+
+    /// Optional injection point for test scenarios that want to
+    /// preload a pane view model with a stubbed service.
+    var injectedGitHubPaneViewModel: GitHubPaneViewModel?
 
     /// Forced `NSAppearance` applied to every translucent vibrancy view.
     ///
@@ -1485,7 +1548,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             toggleTabBarAction(nil)
         }
 
-        if isTimelineVisible || isDashboardVisible || isCodeReviewVisible {
+        if isTimelineVisible || isDashboardVisible || isCodeReviewVisible || isGitHubPaneVisible {
             layoutRightDockedAgentPanels()
         }
     }
@@ -1501,6 +1564,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         guard clampedWidth != preferredCodeReviewPanelWidth else { return }
         preferredCodeReviewPanelWidth = clampedWidth
         MainWindowController.storeCodeReviewPanelWidth(clampedWidth)
+    }
+
+    /// Updates the persisted GitHub pane panel width. Mirrors
+    /// `updatePreferredCodeReviewPanelWidth` so the two right-docked
+    /// panels share the same persistence idiom.
+    func updatePreferredGitHubPanePanelWidth(_ width: CGFloat) {
+        let clampedWidth = MainWindowController.clampStoredGitHubPanePanelWidth(width)
+        guard clampedWidth != preferredGitHubPanePanelWidth else { return }
+        preferredGitHubPanePanelWidth = clampedWidth
+        MainWindowController.storeGitHubPanePanelWidth(clampedWidth)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
