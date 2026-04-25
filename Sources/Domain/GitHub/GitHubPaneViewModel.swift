@@ -95,6 +95,20 @@ final class GitHubPaneViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Merge state (v0.1.86)
+
+    /// PR numbers currently in flight for `gh pr merge`. The PR row
+    /// disables its context-menu Merge action while its number lives
+    /// here. Stored as a Set so we can check membership in O(1) and
+    /// support multiple in-flight merges across tabs (rare, but cheap
+    /// to allow).
+    @Published private(set) var pullRequestsBeingMerged: Set<Int> = []
+
+    /// Last successful merge banner. Lives in its own channel so it
+    /// does not collide with the discovery info banner that the pane
+    /// already uses for "no remote", "install gh", etc.
+    @Published private(set) var lastMergeInfoMessage: String?
+
     // MARK: - Providers (injected by the MainWindowController)
 
     /// Returns the working directory the pane should use for `gh`
@@ -116,6 +130,13 @@ final class GitHubPaneViewModel: ObservableObject {
     /// code-review integration (Fase 10). The closure receives title,
     /// optional body and optional base branch.
     var onCreatePullRequest: ((_ title: String, _ body: String?, _ baseBranch: String?) async -> Void)?
+
+    /// Handler invoked when the user picks Merge from a PR row's
+    /// context menu. The MainWindowController wires this to
+    /// `GitHubService.mergePullRequest`. Returning the post-merge PR
+    /// lets the pane refresh the list and surface a confirmation
+    /// banner without an extra round trip.
+    var mergePullRequestHandler: ((_ request: GitHubMergeRequest) async throws -> GitHubPullRequest)?
 
     // MARK: - Dependencies
 
@@ -185,6 +206,94 @@ final class GitHubPaneViewModel: ObservableObject {
         await onCreatePullRequest?(title, body, baseBranch)
         await MainActor.run { self.isLoading = false }
         refresh()
+    }
+
+    // MARK: - Merge (v0.1.86)
+
+    /// Drives a merge of `pullRequest` using the injected handler. No-op
+    /// when no handler is wired, when the PR number is already being
+    /// merged, or when `[github].merge-enabled` is false. Refreshes the
+    /// pane after a success so the merged PR drops out of the open list.
+    func requestMergePullRequest(
+        number: Int,
+        method: GitHubMergeMethod,
+        deleteBranch: Bool,
+        subject: String? = nil,
+        body: String? = nil
+    ) {
+        guard configProvider().mergeEnabled else {
+            lastErrorMessage = "Pull request merge is disabled in [github].merge-enabled."
+            return
+        }
+        guard let handler = mergePullRequestHandler else {
+            lastErrorMessage = "GitHub integration is not ready yet. Reload the pane to retry."
+            return
+        }
+        guard !pullRequestsBeingMerged.contains(number) else { return }
+
+        let request = GitHubMergeRequest(
+            pullRequestNumber: number,
+            method: method,
+            deleteBranch: deleteBranch,
+            subject: subject,
+            body: body
+        )
+
+        pullRequestsBeingMerged.insert(number)
+        lastErrorMessage = nil
+        lastMergeInfoMessage = nil
+
+        Task { [weak self] in
+            do {
+                let merged = try await handler(request)
+                await MainActor.run {
+                    guard let self else { return }
+                    self.pullRequestsBeingMerged.remove(number)
+                    self.lastMergeInfoMessage = "Merged PR #\(merged.number) via \(method.displayName)."
+                    self.refresh()
+                }
+            } catch {
+                await MainActor.run {
+                    guard let self else { return }
+                    self.pullRequestsBeingMerged.remove(number)
+                    self.lastErrorMessage = Self.userFacingMergeErrorMessage(for: error)
+                    // Refresh anyway so a transient state (auto-merge
+                    // enabled, race with another client) lands in the
+                    // visible list.
+                    self.refresh()
+                }
+            }
+        }
+    }
+
+    /// Whether a Merge context-menu item should be enabled for a PR
+    /// row. Hides the action when the master flag is off, the PR is
+    /// not in `OPEN` state, or the user has a draft selected.
+    func canOfferMerge(for pullRequest: GitHubPullRequest) -> Bool {
+        guard configProvider().mergeEnabled else { return false }
+        guard pullRequest.state == .open else { return false }
+        guard !pullRequest.isDraft else { return false }
+        return mergePullRequestHandler != nil
+    }
+
+    /// Whether a specific PR row is currently in flight for merge.
+    /// Used by the view to show a spinner / disable the menu item.
+    func isMerging(_ number: Int) -> Bool {
+        pullRequestsBeingMerged.contains(number)
+    }
+
+    /// Maps an `Error` into a user-facing string for the error
+    /// banner. Recognises `GitHubMergeError` for typed copy and falls
+    /// back to `localizedDescription`.
+    nonisolated static func userFacingMergeErrorMessage(for error: Error) -> String {
+        if let mergeError = error as? GitHubMergeError {
+            return mergeError.errorDescription ?? "Pull request could not be merged."
+        }
+        if let cliError = error as? GitHubCLIError {
+            return banner(for: cliError)
+        }
+        let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty ? "Pull request action failed." : description
     }
 
     // MARK: - Auto refresh

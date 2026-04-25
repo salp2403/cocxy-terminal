@@ -131,12 +131,17 @@ struct GitHubPaneView: View {
 
     @ViewBuilder
     private var bannerStack: some View {
-        if viewModel.lastErrorMessage == nil && viewModel.lastInfoMessage == nil {
+        if viewModel.lastErrorMessage == nil
+            && viewModel.lastInfoMessage == nil
+            && viewModel.lastMergeInfoMessage == nil {
             EmptyView()
         } else {
             VStack(spacing: 6) {
                 if let error = viewModel.lastErrorMessage {
                     GitHubPaneBanner(message: error, kind: .error)
+                }
+                if let mergeInfo = viewModel.lastMergeInfoMessage {
+                    GitHubPaneBanner(message: mergeInfo, kind: .info)
                 }
                 if let info = viewModel.lastInfoMessage {
                     GitHubPaneBanner(message: info, kind: .info)
@@ -184,6 +189,22 @@ struct GitHubPaneView: View {
                                         pr.url.absoluteString,
                                         forType: .string
                                     )
+                                }
+                                if viewModel.canOfferMerge(for: pr) {
+                                    Divider()
+                                    Button {
+                                        presentMergeActionSheet(for: pr)
+                                    } label: {
+                                        if viewModel.isMerging(pr.number) {
+                                            Label("Merging…", systemImage: "hourglass")
+                                        } else {
+                                            Label(
+                                                "Merge Pull Request…",
+                                                systemImage: "arrow.triangle.merge"
+                                            )
+                                        }
+                                    }
+                                    .disabled(viewModel.isMerging(pr.number))
                                 }
                             }
                         }
@@ -306,5 +327,16 @@ struct GitHubPaneView: View {
 
     private func didActivate(_ pullRequest: GitHubPullRequest) {
         viewModel.selectPullRequestForChecks(pullRequest)
+    }
+
+    private func presentMergeActionSheet(for pullRequest: GitHubPullRequest) {
+        guard let decision = MergePullRequestActionSheet.present(
+            pullRequestNumber: pullRequest.number
+        ) else { return }
+        viewModel.requestMergePullRequest(
+            number: pullRequest.number,
+            method: decision.method,
+            deleteBranch: decision.deleteBranch
+        )
     }
 }
