@@ -283,6 +283,109 @@ actor GitHubService {
         )
     }
 
+    // MARK: - Mergeability
+
+    /// Fetches a typed snapshot describing whether a pull request can
+    /// be merged right now. The view layer uses the snapshot to enable
+    /// or disable the merge button and to render an explanatory chip
+    /// before the user clicks. Network round-trip is one `gh pr view`
+    /// invocation; cost is comparable to `viewPullRequest` and we use
+    /// the same default timeout.
+    ///
+    /// The decoder is tolerant of missing fields — older `gh` releases
+    /// occasionally drop `mergeStateStatus` or `statusCheckRollup`,
+    /// and the missing values collapse to `.unknown` / "no checks
+    /// configured" which keeps the UI useful instead of failing the
+    /// whole query.
+    func pullRequestMergeability(
+        number: Int,
+        at directory: URL,
+        timeoutSeconds: TimeInterval = 10.0
+    ) async throws -> GitHubMergeability {
+        let args = [
+            "pr", "view", "\(number)",
+            "--json", "number,state,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup",
+        ]
+        let result = try runner(directory, args, timeoutSeconds)
+        if result.terminationStatus != 0 {
+            throw GitHubCLI.classifyError(
+                command: "gh pr view \(number) --json mergeable,mergeStateStatus",
+                stderr: result.stderr,
+                exitCode: result.terminationStatus
+            )
+        }
+        return try GitHubJSONDecoder.decode(GitHubMergeability.self, from: result.stdout)
+    }
+
+    // MARK: - Merge
+
+    /// Merges a pull request using one of the three documented
+    /// strategies. The follow-up `viewPullRequest` returns the fully
+    /// hydrated model so the caller can refresh its UI without an
+    /// extra round trip — `gh pr merge` itself only prints a short
+    /// status line.
+    ///
+    /// Failure modes are classified into `GitHubMergeError` cases via
+    /// `GitHubMergeError.classify` so the view layer can render a
+    /// banner with concrete guidance (resolve conflicts, wait for
+    /// checks, request review) instead of dumping raw stderr.
+    ///
+    /// Timeout defaults to 60s — `gh pr merge` can block for tens of
+    /// seconds when the upstream is rerunning required checks during
+    /// the merge attempt. The timeout is generous on purpose so the
+    /// user does not get a "timeout" banner on a flow that would have
+    /// succeeded a heartbeat later.
+    @discardableResult
+    func mergePullRequest(
+        request: GitHubMergeRequest,
+        at directory: URL,
+        timeoutSeconds: TimeInterval = 60.0
+    ) async throws -> GitHubPullRequest {
+        var args: [String] = [
+            "pr", "merge", "\(request.pullRequestNumber)",
+            request.method.ghFlag,
+        ]
+        if request.deleteBranch {
+            args.append("--delete-branch")
+        }
+        if let subject = request.subject?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !subject.isEmpty {
+            args.append(contentsOf: ["--subject", subject])
+        }
+        if let body = request.body, !body.isEmpty {
+            args.append(contentsOf: ["--body", body])
+        }
+
+        let result = try runner(directory, args, timeoutSeconds)
+
+        // `gh pr merge` sometimes exits 0 while printing "will be
+        // automatically merged" when the queue requires it. Treat that
+        // as a typed outcome so the UI can banner it correctly instead
+        // of pretending the merge already happened.
+        let combined = result.stderr + "\n" + result.stdout
+        let lower = combined.lowercased()
+        if result.terminationStatus == 0 {
+            if lower.contains("will be automatically merged") ||
+               lower.contains("auto-merge has been enabled") {
+                throw GitHubMergeError.autoMergeEnabled
+            }
+        } else {
+            throw GitHubMergeError.classify(
+                stderr: combined,
+                exitCode: result.terminationStatus,
+                pullRequestNumber: request.pullRequestNumber
+            )
+        }
+
+        // Hydrate the post-merge state so the caller can refresh UI
+        // without a second user-visible spinner.
+        return try await viewPullRequest(
+            number: request.pullRequestNumber,
+            at: directory,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
     // MARK: - Helpers
 
     /// Pulls the numeric PR id out of the URL `gh pr create` prints.
