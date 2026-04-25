@@ -1468,6 +1468,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     delegateRef.value?.activeBrowserViewModelForCLI()
                 }
             },
+            browserNavigationViewModelProviderOverride: {
+                syncOnMainActor {
+                    delegateRef.value?.browserViewModelForExternalNavigationCLI()
+                }
+            },
             tabCountProviderOverride: {
                 syncOnMainActor {
                     delegateRef.value?.allWindowControllers.reduce(0) { partial, controller in

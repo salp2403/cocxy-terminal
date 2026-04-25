@@ -240,6 +240,28 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertEqual(viewModel.urlString, "https://cocxy.dev")
     }
 
+    func test_browserNavigate_usesNavigationProviderWhenPanelMustBeOpened() {
+        let providedViewModel: BrowserViewModel? = viewModel
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: nil,
+            browserNavigationViewModelProviderOverride: {
+                return providedViewModel
+            }
+        )
+        let request = SocketRequest(
+            id: "bn-5",
+            command: "browser-navigate",
+            params: ["url": "https://github.com/login/device"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(viewModel.urlString, "https://github.com/login/device")
+    }
+
     func test_browserBack_returnsSuccess() {
         let handler = AppSocketCommandHandler(
             tabManager: nil,

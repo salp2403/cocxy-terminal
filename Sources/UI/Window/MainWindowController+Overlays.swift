@@ -1729,6 +1729,17 @@ extension MainWindowController {
         isBrowserVisible = true
     }
 
+    @discardableResult
+    func openInternalBrowser(to rawURL: String) -> Bool {
+        if !isBrowserVisible || browserViewModel == nil {
+            showBrowserPanel()
+        }
+        guard let viewModel = browserViewModel else { return false }
+        viewModel.navigate(to: rawURL)
+        window?.makeKeyAndOrderFront(nil)
+        return true
+    }
+
     func dismissBrowser() {
         guard let hostingView = browserHostingView,
               let overlayContainer = overlayContainerView else {
@@ -1781,9 +1792,8 @@ extension MainWindowController {
                     ?? FileManager.default.homeDirectoryForCurrentUser
                 self.startGitHubAuthentication(in: directory)
             },
-            onOpenGitHubCLIInstallGuide: {
-                guard let url = URL(string: "https://cli.github.com/") else { return }
-                NSWorkspace.shared.open(url)
+            onOpenGitHubCLIInstallGuide: { [weak self] in
+                self?.openInternalBrowser(to: "https://cli.github.com/")
             }
         )
         let hostingController = NSHostingController(rootView: prefsView)

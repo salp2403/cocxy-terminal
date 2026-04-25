@@ -549,6 +549,15 @@ final class CocxyCoreView: NSView {
         surfaceID sid: SurfaceID,
         modifiers: KeyModifiers
     ) {
+        if let literalText = Self.literalTextForOptionGeneratedCharacter(
+            characters: event.characters,
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+            modifiers: modifiers
+        ) {
+            bridge.sendText(literalText, to: sid)
+            return
+        }
+
         // Ctrl+letter → compute ASCII control character directly.
         if modifiers.contains(.control),
            !modifiers.contains(.command),
@@ -977,6 +986,23 @@ final class CocxyCoreView: NSView {
             isKeyDown: isKeyDown,
             isRepeat: event.isARepeat
         )
+    }
+
+    static func literalTextForOptionGeneratedCharacter(
+        characters: String?,
+        charactersIgnoringModifiers: String?,
+        modifiers: KeyModifiers
+    ) -> String? {
+        guard modifiers.contains(.option),
+              !modifiers.contains(.command),
+              !modifiers.contains(.control),
+              let characters,
+              !characters.isEmpty,
+              characters != charactersIgnoringModifiers,
+              characters.rangeOfCharacter(from: .controlCharacters) == nil else {
+            return nil
+        }
+        return characters
     }
 }
 

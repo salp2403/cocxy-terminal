@@ -2152,6 +2152,12 @@ final class CocxyCoreBridge: TerminalEngine {
         env["COCXY_SHELL_INTEGRATION_DIR"] = shellIntegrationRoot.path
         env["COCXY_SHELL_FEATURES"] = "marks,cwd,title"
         env["COCXY_CLAUDE_HOOKS"] = "1"
+        if let browserOpener = ensureBrowserOpenerScript(resourcesPath: resourcesPath) {
+            if let originalBrowser = environment["BROWSER"], !originalBrowser.isEmpty {
+                env["COCXY_ORIG_BROWSER"] = originalBrowser
+            }
+            env["BROWSER"] = browserOpener
+        }
 
         switch shellName {
         case "zsh":
@@ -2208,6 +2214,38 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         return env
+    }
+
+    static func browserOpenerScript(cliPath: String) -> String {
+        """
+        #!/bin/sh
+        exec \(shellQuoted(cliPath)) browser navigate "$@"
+        """
+    }
+
+    private static func ensureBrowserOpenerScript(resourcesPath: String) -> String? {
+        let cliPath = URL(fileURLWithPath: resourcesPath, isDirectory: true)
+            .appendingPathComponent("cocxy", isDirectory: false)
+            .path
+        guard FileManager.default.fileExists(atPath: cliPath) else { return nil }
+
+        let scriptURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("cocxy-browser-open-\(getpid()).sh", isDirectory: false)
+        do {
+            try browserOpenerScript(cliPath: cliPath).write(
+                to: scriptURL,
+                atomically: true,
+                encoding: .utf8
+            )
+            chmod(scriptURL.path, 0o700)
+            return scriptURL.path
+        } catch {
+            return nil
+        }
+    }
+
+    private static func shellQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     // MARK: - Private: PTY Read Loop

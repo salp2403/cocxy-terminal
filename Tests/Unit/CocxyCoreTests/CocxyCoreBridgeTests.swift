@@ -597,6 +597,31 @@ struct CocxyCoreBridgeTests {
         #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == "/Users/test/.config/zsh")
     }
 
+    @Test("shell integration env routes browser opens through bundled CLI")
+    func shellIntegrationEnvRoutesBrowserOpensThroughBundledCLI() throws {
+        let bridge = try makeBridge()
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let cliPath = root.appendingPathComponent("cocxy", isDirectory: false).path
+        FileManager.default.createFile(atPath: cliPath, contents: Data())
+
+        let env = bridge.buildShellIntegrationEnvVars(
+            forShell: "/bin/zsh",
+            environment: ["BROWSER": "/usr/bin/open"],
+            resourcesPath: root.path
+        )
+
+        let browserPath = try #require(env["BROWSER"])
+        let script = try String(contentsOfFile: browserPath, encoding: .utf8)
+        #expect(env["COCXY_ORIG_BROWSER"] == "/usr/bin/open")
+        #expect(script.contains("browser navigate \"$@\""))
+        #expect(script.contains(CocxyCoreBridge.browserOpenerScript(cliPath: cliPath)))
+
+        try? FileManager.default.removeItem(atPath: browserPath)
+        try? FileManager.default.removeItem(at: root)
+    }
+
     @Test("shell integration env injects bash bootstrap when resources are available")
     func shellIntegrationEnvInjectsBashBootstrap() throws {
         let bridge = try makeBridge()

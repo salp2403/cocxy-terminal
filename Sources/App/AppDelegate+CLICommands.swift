@@ -594,6 +594,11 @@ extension AppDelegate {
     }
 
     @MainActor
+    func browserViewModelForExternalNavigationCLI() -> BrowserViewModel? {
+        (focusedWindowController() ?? windowController)?.browserViewModelForExternalNavigation()
+    }
+
+    @MainActor
     func duplicateFocusedTabForCLI() -> (id: String, title: String)? {
         guard let controller = focusedWindowController() ?? windowController else { return nil }
 

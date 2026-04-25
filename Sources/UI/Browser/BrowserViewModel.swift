@@ -151,7 +151,7 @@ final class BrowserViewModel: ObservableObject {
     ///
     /// - Parameter rawInput: The URL string to navigate to.
     func navigate(to rawInput: String) {
-        let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = Self.repairedEditableURLInput(rawInput)
         guard !trimmed.isEmpty else { return }
 
         let normalized = normalizeURLString(trimmed)
@@ -418,5 +418,37 @@ final class BrowserViewModel: ObservableObject {
             return "http://\(input)"
         }
         return "https://\(input)"
+    }
+
+    /// Repairs common address-bar editing mistakes before URL normalization.
+    ///
+    /// URL fields keep the current page URL visible. If the user clicks into
+    /// the field and types a new full URL without fully clearing the old one,
+    /// AppKit can leave a malformed value such as
+    /// `http://localhost:3000/http://cocxy.dev/`. In that case, the most
+    /// recently typed explicit URL is the user's intent.
+    static func repairedEditableURLInput(_ input: String) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let nsRange = NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
+        guard let regex = try? NSRegularExpression(
+            pattern: #"https?://"#,
+            options: [.caseInsensitive]
+        ) else {
+            return trimmed
+        }
+
+        let matches = regex.matches(in: trimmed, range: nsRange)
+        guard matches.count > 1,
+              let last = matches.last,
+              let range = Range(last.range, in: trimmed) else {
+            return trimmed
+        }
+        if let delimiter = trimmed.firstIndex(where: { $0 == "?" || $0 == "#" }),
+           range.lowerBound > delimiter {
+            return trimmed
+        }
+        return String(trimmed[range.lowerBound...])
     }
 }

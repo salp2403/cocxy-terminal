@@ -226,7 +226,7 @@ final class BrowserContentView: NSView {
         rightStack.addArrangedSubview(reloadButton)
 
         // URL field.
-        let field = NSTextField()
+        let field = BrowserURLTextField()
         field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         field.textColor = CocxyColors.text
         field.backgroundColor = CocxyColors.surface0.withAlphaComponent(0.6)

@@ -96,6 +96,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Closure that provides the browser view model for scriptable browser commands.
     /// Returns nil when no browser panel is open.
     private let browserViewModelProvider: @Sendable () -> BrowserViewModel?
+    /// Closure that provides or opens a browser view model for external navigation.
+    /// Unlike the read-only provider above, this may create UI for `browser navigate`.
+    private let browserNavigationViewModelProvider: @Sendable () -> BrowserViewModel?
 
     /// Closure that returns the current live configuration snapshot.
     /// Falls back to defaults when ConfigService is unavailable.
@@ -323,6 +326,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         hookEventReceiver: HookEventReceiverImpl?,
         browserViewModel: BrowserViewModel? = nil,
         browserViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
+        browserNavigationViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
         tabCountProviderOverride: (@Sendable () -> Int)? = nil,
         tabInfoProviderOverride: (@Sendable () -> [(id: String, title: String, isActive: Bool)])? = nil,
         tabFocusProviderOverride: (@Sendable (String) -> Bool)? = nil,
@@ -461,10 +465,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         let browserViewModelRef = WeakReference(browserViewModel)
 
         // -- Browser view model provider --
+        let resolvedBrowserViewModelProvider: @Sendable () -> BrowserViewModel?
         if let browserViewModelProviderOverride {
-            self.browserViewModelProvider = browserViewModelProviderOverride
+            resolvedBrowserViewModelProvider = browserViewModelProviderOverride
         } else {
-            self.browserViewModelProvider = {
+            resolvedBrowserViewModelProvider = {
                 if Thread.isMainThread {
                     return MainActor.assumeIsolated {
                         browserViewModelRef.value
@@ -477,6 +482,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 }
             }
         }
+        self.browserViewModelProvider = resolvedBrowserViewModelProvider
+        self.browserNavigationViewModelProvider = browserNavigationViewModelProviderOverride
+            ?? resolvedBrowserViewModelProvider
 
         // -- Tab count provider (read-only) --
         if let tabCountProviderOverride {
@@ -1427,7 +1435,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let urlString = request.params?["url"] else {
             return .failure(id: request.id, error: "Missing required param: url")
         }
-        guard let viewModel = browserViewModelProvider() else {
+        guard let viewModel = browserNavigationViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
 

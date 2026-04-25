@@ -207,6 +207,52 @@ struct CocxyCoreViewTests {
         #expect(harness.view.performKeyEquivalent(with: event) == true)
         #expect(target.didInvoke == true)
     }
+
+    @Test("Option-generated printable characters are sent as literal text")
+    func optionGeneratedPrintableCharactersAreLiteralText() {
+        #expect(
+            CocxyCoreView.literalTextForOptionGeneratedCharacter(
+                characters: "@",
+                charactersIgnoringModifiers: "2",
+                modifiers: .option
+            ) == "@"
+        )
+        #expect(
+            CocxyCoreView.literalTextForOptionGeneratedCharacter(
+                characters: "€",
+                charactersIgnoringModifiers: "e",
+                modifiers: .option
+            ) == "€"
+        )
+        #expect(
+            CocxyCoreView.literalTextForOptionGeneratedCharacter(
+                characters: "|",
+                charactersIgnoringModifiers: "1",
+                modifiers: .option
+            ) == "|"
+        )
+        #expect(
+            CocxyCoreView.literalTextForOptionGeneratedCharacter(
+                characters: "\\",
+                charactersIgnoringModifiers: "ç",
+                modifiers: .option
+            ) == "\\"
+        )
+        #expect(
+            CocxyCoreView.literalTextForOptionGeneratedCharacter(
+                characters: "b",
+                charactersIgnoringModifiers: "b",
+                modifiers: .option
+            ) == nil
+        )
+        #expect(
+            CocxyCoreView.literalTextForOptionGeneratedCharacter(
+                characters: "@",
+                charactersIgnoringModifiers: "2",
+                modifiers: [.option, .command]
+            ) == nil
+        )
+    }
 }
 
 @MainActor

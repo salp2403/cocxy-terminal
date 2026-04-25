@@ -13,6 +13,7 @@
 
 import AppKit
 import Combine
+import Darwin
 import Foundation
 import SwiftUI
 
@@ -279,6 +280,23 @@ extension MainWindowController {
         return globalConfig.applying(projectOverrides: projectConfig).github
     }
 
+    nonisolated static let gitHubDeviceLoginURLString = "https://github.com/login/device"
+
+    nonisolated static func gitHubAuthenticationCommand(browserOpenerPath: String?) -> String {
+        guard let browserOpenerPath, !browserOpenerPath.isEmpty else {
+            return "gh auth login\r"
+        }
+        return "BROWSER=\(shellQuoted(browserOpenerPath)) gh auth login\r"
+    }
+
+    nonisolated static func browserOpenerScript(cliPath: String) -> String {
+        "#!/bin/sh\nexec \(shellQuoted(cliPath)) browser navigate \"$@\"\n"
+    }
+
+    nonisolated private static func shellQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
     /// Starts `gh auth login` in a real terminal tab. The GitHub CLI
     /// login flow is interactive and may open a browser/device-code
     /// prompt, so Cocxy must not run it through the background
@@ -287,10 +305,45 @@ extension MainWindowController {
     func startGitHubAuthentication(in workingDirectory: URL) -> Bool {
         let tabID = createTab(workingDirectory: workingDirectory)
         guard let surfaceID = tabSurfaceMap[tabID] else { return false }
-        bridge.sendText("gh auth login\r", to: surfaceID)
+
+        openInternalBrowser(to: Self.gitHubDeviceLoginURLString)
+        let browserOpenerPath = installGitHubAuthBrowserOpenerScript()
+        bridge.sendText(
+            Self.gitHubAuthenticationCommand(browserOpenerPath: browserOpenerPath),
+            to: surfaceID
+        )
         window?.makeKeyAndOrderFront(nil)
         focusActiveTerminalSurface()
         return true
+    }
+
+    private func installGitHubAuthBrowserOpenerScript() -> String? {
+        guard let cliPath = bundledCLIPath() else { return nil }
+
+        let scriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-browser-open-\(getpid()).sh")
+        do {
+            try Self.browserOpenerScript(cliPath: cliPath).write(
+                to: scriptURL,
+                atomically: true,
+                encoding: .utf8
+            )
+            chmod(scriptURL.path, S_IRUSR | S_IWUSR | S_IXUSR)
+            return scriptURL.path
+        } catch {
+            NSLog("[Cocxy] Failed to install internal browser opener: %@", String(describing: error))
+            return nil
+        }
+    }
+
+    private func bundledCLIPath() -> String? {
+        let candidates = [
+            Bundle.main.url(forResource: "cocxy", withExtension: nil)?.path,
+            "/usr/local/bin/cocxy",
+            "/opt/homebrew/bin/cocxy"
+        ].compactMap { $0 }
+
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     // MARK: - Code Review bridge (Fase 10)

@@ -60,6 +60,26 @@ final class BrowserViewModelTests: XCTestCase {
         XCTAssertEqual(vm.urlString, "https://example.com")
     }
 
+    func testNavigateUsesLastExplicitURLWhenAddressBarContainsStaleURL() {
+        let vm = BrowserViewModel()
+        vm.navigate(to: "http://localhost:3000/http://cocxy.dev/")
+        XCTAssertEqual(vm.urlString, "http://cocxy.dev/")
+    }
+
+    func testRepairedEditableURLInputPreservesSingleExplicitURL() {
+        XCTAssertEqual(
+            BrowserViewModel.repairedEditableURLInput(" http://localhost:3000/ "),
+            "http://localhost:3000/"
+        )
+    }
+
+    func testRepairedEditableURLInputPreservesRedirectParameters() {
+        XCTAssertEqual(
+            BrowserViewModel.repairedEditableURLInput("https://example.com/?next=http://cocxy.dev/"),
+            "https://example.com/?next=http://cocxy.dev/"
+        )
+    }
+
     func testNavigateSetsCurrentURL() {
         let vm = BrowserViewModel()
         vm.navigate(to: "https://example.com/path")

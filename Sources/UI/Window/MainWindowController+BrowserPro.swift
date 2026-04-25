@@ -69,6 +69,19 @@ extension MainWindowController {
         return browserViewModel
     }
 
+    /// Returns a browser model for external URL opens, showing the overlay when
+    /// there is no visible browser surface to receive the navigation.
+    func browserViewModelForExternalNavigation() -> BrowserViewModel? {
+        if let active = activeBrowserViewModel(),
+           active !== browserViewModel || isBrowserVisible {
+            return active
+        }
+
+        showBrowserPanel()
+        window?.makeKeyAndOrderFront(nil)
+        return browserViewModel
+    }
+
     func browserViewModel(containedIn view: NSView) -> BrowserViewModel? {
         if let browserView = view as? BrowserContentView {
             return browserView.viewModel

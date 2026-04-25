@@ -507,7 +507,7 @@ struct URLBarField: NSViewRepresentable {
     var onSubmit: () -> Void
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+        let field = BrowserURLTextField()
         field.delegate = context.coordinator
         field.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         field.textColor = CocxyColors.text
@@ -528,7 +528,7 @@ struct URLBarField: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSTextField, context: Context) {
-        if nsView.stringValue != text {
+        if nsView.currentEditor() == nil, nsView.stringValue != text {
             nsView.stringValue = text
         }
     }
@@ -561,6 +561,34 @@ struct URLBarField: NSViewRepresentable {
                 return true
             }
             return false
+        }
+    }
+}
+
+/// Address-bar text field that behaves like browser chrome: the first click
+/// into the field selects the current URL so typing a new address replaces it.
+final class BrowserURLTextField: NSTextField {
+    private var didSelectAllForFocus = false
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became {
+            didSelectAllForFocus = false
+            selectAllForCurrentFocus()
+        }
+        return became
+    }
+
+    override func textDidEndEditing(_ notification: Notification) {
+        super.textDidEndEditing(notification)
+        didSelectAllForFocus = false
+    }
+
+    private func selectAllForCurrentFocus() {
+        guard !didSelectAllForFocus else { return }
+        didSelectAllForFocus = true
+        DispatchQueue.main.async { [weak self] in
+            self?.currentEditor()?.selectAll(nil)
         }
     }
 }
