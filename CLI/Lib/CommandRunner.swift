@@ -700,6 +700,20 @@ public struct CommandRunner {
 
         case .githubRefresh:
             return CLISocketRequest(id: requestID, command: "github-refresh", params: nil)
+
+        case .githubPRMerge(let method, let prNumber, let deleteBranch, let subject, let body):
+            var params: [String: String] = ["method": method.rawValue]
+            if let prNumber { params["pr"] = "\(prNumber)" }
+            // Emit the explicit string so behaviour is unambiguous on
+            // both ends regardless of future server defaults.
+            params["delete-branch"] = deleteBranch ? "true" : "false"
+            if let subject, !subject.isEmpty { params["subject"] = subject }
+            if let body, !body.isEmpty { params["body"] = body }
+            return CLISocketRequest(
+                id: requestID,
+                command: "github-pr-merge",
+                params: params
+            )
         }
     }
 }

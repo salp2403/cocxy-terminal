@@ -82,6 +82,8 @@ extension AppDelegate {
             return await runGitHubOpen()
         case "refresh":
             return await runGitHubRefresh()
+        case "pr-merge":
+            return await runGitHubPRMerge(params: params, config: githubConfig)
         default:
             return (false, ["error": "Unknown github subcommand: \(kind)"])
         }
@@ -263,6 +265,159 @@ extension AppDelegate {
         let state = GitHubPaneViewModel.clampedState(rawState, allowed: allowedStates)
         let limit = params["limit"].flatMap(Int.init) ?? config.maxItems
         return (state, limit)
+    }
+
+    // MARK: - PR Merge (v0.1.86)
+
+    /// `cocxy github-pr-merge` — merges a pull request via gh. Honours
+    /// the `[github].merge-enabled` master flag so a single config
+    /// toggle disables every surface (pane row, review panel, CLI).
+    ///
+    /// Required parameter: `method` ∈ {squash, merge, rebase}.
+    /// Optional parameters:
+    ///   - `pr` (Int)           — PR number; without it gh resolves the
+    ///                            PR for the current branch.
+    ///   - `delete-branch`(Bool) — defaults to true; set false to keep
+    ///                            the branch alive after merge.
+    ///   - `subject` (String)   — overrides the merge commit subject.
+    ///   - `body` (String)      — overrides the merge commit body.
+    nonisolated private func runGitHubPRMerge(
+        params: [String: String],
+        config: GitHubConfig
+    ) async -> (Bool, [String: String]) {
+        guard config.mergeEnabled else {
+            return (false, [
+                "error": "Pull request merge is disabled. Set [github].merge-enabled = true in config.toml.",
+            ])
+        }
+        guard let methodRaw = params["method"]?.lowercased(),
+              let method = GitHubMergeMethod(rawValue: methodRaw) else {
+            return (false, [
+                "error": "Pass exactly one strategy: --squash, --merge, or --rebase.",
+            ])
+        }
+        guard let directory = await MainActor.run(body: { self.currentGitHubCLIWorkingDirectory() }) else {
+            return (false, [
+                "error": "Open a git repository before merging a pull request.",
+            ])
+        }
+
+        // PR number resolution: explicit --pr wins; otherwise gh's
+        // own "current branch" default takes over via
+        // pullRequestNumber(forBranch:). When no PR matches the
+        // current branch, surface a friendly error rather than letting
+        // gh fail with a less-actionable stderr.
+        let resolvedNumber: Int
+        if let raw = params["pr"], let number = Int(raw), number > 0 {
+            resolvedNumber = number
+        } else {
+            // Resolve the branch via git so we can query gh by branch.
+            // We piggy-back on `gh pr view` (no branch arg = current
+            // branch) by falling through to `gh pr merge` directly,
+            // but that path returns less actionable errors. Better to
+            // surface the resolution failure here.
+            do {
+                let branch = (try? await currentBranchForCLIMerge(directory: directory)) ?? ""
+                guard !branch.isEmpty else {
+                    return (false, [
+                        "error": "Could not determine the current branch. Pass --pr <number> explicitly.",
+                    ])
+                }
+                guard let number = try await Self.sharedGitHubService.pullRequestNumber(
+                    forBranch: branch,
+                    at: directory
+                ) else {
+                    return (false, [
+                        "error": "No open pull request found for branch \(branch). Pass --pr <number> explicitly.",
+                    ])
+                }
+                resolvedNumber = number
+            } catch let error as GitHubCLIError {
+                return (false, ["error": GitHubPaneViewModel.banner(for: error)])
+            } catch {
+                return (false, ["error": error.localizedDescription])
+            }
+        }
+
+        let deleteBranch: Bool
+        if let raw = params["delete-branch"]?.lowercased(),
+           raw == "false" || raw == "0" || raw == "no" {
+            deleteBranch = false
+        } else {
+            deleteBranch = true
+        }
+
+        let request = GitHubMergeRequest(
+            pullRequestNumber: resolvedNumber,
+            method: method,
+            deleteBranch: deleteBranch,
+            subject: params["subject"],
+            body: params["body"]
+        )
+
+        do {
+            let merged = try await Self.sharedGitHubService.mergePullRequest(
+                request: request,
+                at: directory
+            )
+            return (true, [
+                "merged": encodeJSON(merged),
+                "summary": "Merged PR #\(merged.number) via \(method.displayName).",
+            ])
+        } catch let error as GitHubMergeError {
+            return (false, ["error": error.errorDescription ?? "Pull request could not be merged."])
+        } catch let error as GitHubCLIError {
+            return (false, ["error": GitHubPaneViewModel.banner(for: error)])
+        } catch {
+            return (false, ["error": error.localizedDescription])
+        }
+    }
+
+    /// Returns the current branch of `directory` by shelling out to
+    /// `git rev-parse --abbrev-ref HEAD`. Used by the CLI merge verb
+    /// when the caller did not pass `--pr`.
+    nonisolated private func currentBranchForCLIMerge(
+        directory: URL
+    ) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                process.arguments = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+                process.currentDirectoryURL = directory
+                let stdout = Pipe()
+                process.standardOutput = stdout
+                process.standardError = Pipe()
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    let data = stdout.fileHandleForReading.readDataToEndOfFile()
+                    let branch = String(decoding: data, as: UTF8.self)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    continuation.resume(returning: branch)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Encodes a single `Encodable` value into a UTF-8 JSON string.
+    /// Returns `"{}"` on any encoder failure so the socket response
+    /// stays valid JSON.
+    nonisolated private func encodeJSON<T: Encodable>(_ value: T) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        do {
+            let data = try encoder.encode(value)
+            return String(decoding: data, as: UTF8.self)
+        } catch {
+            Self.githubCLILogger.error(
+                "Failed to encode merged PR payload: \(String(describing: error), privacy: .private)"
+            )
+            return "{}"
+        }
     }
 
     // MARK: - JSON encoding helper

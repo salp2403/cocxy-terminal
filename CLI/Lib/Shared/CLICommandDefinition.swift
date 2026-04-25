@@ -183,6 +183,10 @@ public enum CLICommand: String, CaseIterable {
     case githubOpen = "github-open"
     case githubRefresh = "github-refresh"
 
+    // MARK: - GitHub PR merge (v0.1.86)
+
+    case githubPRMerge = "github-pr-merge"
+
     /// Whether this command is internal (hidden from --help).
     public var isInternal: Bool {
         switch self {
@@ -337,6 +341,9 @@ public enum CLICommand: String, CaseIterable {
         case .githubIssues: return "List issues for the active tab's repository as JSON"
         case .githubOpen: return "Toggle the inline GitHub pane overlay on the focused window"
         case .githubRefresh: return "Refresh the GitHub pane data on the focused window"
+
+        // GitHub PR merge v0.1.86
+        case .githubPRMerge: return "Merge a pull request via gh (squash, merge, or rebase)"
         }
     }
 
@@ -486,6 +493,9 @@ public enum CLICommand: String, CaseIterable {
         case .githubIssues: return "cocxy github issues [--state <state>] [--limit <n>]"
         case .githubOpen: return "cocxy github open"
         case .githubRefresh: return "cocxy github refresh"
+
+        // GitHub PR merge v0.1.86
+        case .githubPRMerge: return "cocxy github pr-merge --squash|--merge|--rebase [--pr <n>] [--no-delete-branch] [--subject <text>] [--body <text>]"
         }
     }
 }

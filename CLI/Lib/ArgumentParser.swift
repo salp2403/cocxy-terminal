@@ -371,6 +371,26 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy github refresh` — refresh the GitHub pane data.
     case githubRefresh
+
+    /// `cocxy github pr-merge --squash|--merge|--rebase
+    /// [--pr <n>] [--no-delete-branch] [--subject <s>] [--body <b>]`
+    /// — merges a pull request via gh.
+    case githubPRMerge(
+        method: GitHubMergeMethodCLI,
+        prNumber: Int?,
+        deleteBranch: Bool,
+        subject: String?,
+        body: String?
+    )
+}
+
+/// Mirror of `GitHubMergeMethod` exposed at the CLI client. Lives in
+/// the parser layer so the client target does not have to import the
+/// CocxyTerminal target where the typed enum lives.
+public enum GitHubMergeMethodCLI: String, Equatable, Sendable {
+    case squash
+    case merge
+    case rebase
 }
 
 // MARK: - Split Direction
@@ -1735,13 +1755,120 @@ public enum CLIArgumentParser {
             }
             return .githubRefresh
 
+        case "pr-merge":
+            return try parseGitHubPRMergeArgs(rest: rest)
+
         default:
             throw CLIError.invalidArgument(
                 command: "github",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use status, prs, issues, open, or refresh."
+                reason: "Unknown subcommand. Use status, prs, issues, open, refresh, or pr-merge."
             )
         }
+    }
+
+    /// Parses the `github pr-merge` argument list. Exactly one of
+    /// `--squash`, `--merge`, or `--rebase` is required; the other
+    /// flags are optional. Mirrors `gh pr merge --help` so users
+    /// familiar with the upstream tool find the same surface.
+    private static func parseGitHubPRMergeArgs(rest: [String]) throws -> ParsedCommand {
+        var method: GitHubMergeMethodCLI?
+        var prNumber: Int?
+        var deleteBranch: Bool = true
+        var subject: String?
+        var body: String?
+        var index = 0
+        while index < rest.count {
+            let arg = rest[index]
+            switch arg {
+            case "--squash", "-s":
+                if method != nil {
+                    throw CLIError.invalidArgument(
+                        command: "github pr-merge",
+                        argument: arg,
+                        reason: "Pass exactly one of --squash, --merge, --rebase."
+                    )
+                }
+                method = .squash
+                index += 1
+            case "--merge", "-m":
+                if method != nil {
+                    throw CLIError.invalidArgument(
+                        command: "github pr-merge",
+                        argument: arg,
+                        reason: "Pass exactly one of --squash, --merge, --rebase."
+                    )
+                }
+                method = .merge
+                index += 1
+            case "--rebase", "-r":
+                if method != nil {
+                    throw CLIError.invalidArgument(
+                        command: "github pr-merge",
+                        argument: arg,
+                        reason: "Pass exactly one of --squash, --merge, --rebase."
+                    )
+                }
+                method = .rebase
+                index += 1
+            case "--pr":
+                guard index + 1 < rest.count, let parsed = Int(rest[index + 1]), parsed > 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "github pr-merge",
+                        argument: arg,
+                        reason: "--pr expects a positive integer."
+                    )
+                }
+                prNumber = parsed
+                index += 2
+            case "--no-delete-branch":
+                deleteBranch = false
+                index += 1
+            case "--delete-branch":
+                deleteBranch = true
+                index += 1
+            case "--subject":
+                guard index + 1 < rest.count else {
+                    throw CLIError.invalidArgument(
+                        command: "github pr-merge",
+                        argument: arg,
+                        reason: "--subject expects a value."
+                    )
+                }
+                subject = rest[index + 1]
+                index += 2
+            case "--body":
+                guard index + 1 < rest.count else {
+                    throw CLIError.invalidArgument(
+                        command: "github pr-merge",
+                        argument: arg,
+                        reason: "--body expects a value."
+                    )
+                }
+                body = rest[index + 1]
+                index += 2
+            default:
+                throw CLIError.invalidArgument(
+                    command: "github pr-merge",
+                    argument: arg,
+                    reason: "Unknown flag. See `cocxy github pr-merge --help`."
+                )
+            }
+        }
+        guard let resolvedMethod = method else {
+            throw CLIError.invalidArgument(
+                command: "github pr-merge",
+                argument: "",
+                reason: "Pass exactly one of --squash, --merge, --rebase."
+            )
+        }
+        return .githubPRMerge(
+            method: resolvedMethod,
+            prNumber: prNumber,
+            deleteBranch: deleteBranch,
+            subject: subject,
+            body: body
+        )
     }
 
     /// Shared `--state` / `--limit` parser for `github prs` and

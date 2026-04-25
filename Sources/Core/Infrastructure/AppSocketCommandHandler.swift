@@ -870,6 +870,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleGitHubCLI(kind: "open", request: request)
         case .githubRefresh:
             return handleGitHubCLI(kind: "refresh", request: request)
+        case .githubPRMerge:
+            return handleGitHubCLI(kind: "pr-merge", request: request)
 
         // Web terminal (v5)
         case .webStart:

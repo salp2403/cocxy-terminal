@@ -343,6 +343,14 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case githubOpen = "github-open"
     /// `cocxy github-refresh` — force a refresh of the pane data.
     case githubRefresh = "github-refresh"
+
+    // MARK: - GitHub PR merge (v0.1.86)
+
+    /// `cocxy github-pr-merge --squash|--merge|--rebase [--pr <n>]` —
+    /// merges a pull request through `gh pr merge`. Without `--pr` the
+    /// verb resolves the PR from the current branch (same default as
+    /// `gh pr merge` itself). Returns the merged PR JSON.
+    case githubPRMerge = "github-pr-merge"
 }
 
 // MARK: - CLI Response

@@ -277,6 +277,18 @@ public enum OutputFormatter {
             return response.data?["state"] ?? "GitHub pane toggled."
         case .githubRefresh:
             return "GitHub pane refreshed."
+        case .githubPRMerge:
+            // Prefer the human-readable summary we emit in the success
+            // payload; fall back to the merged PR JSON if it is the
+            // only field present, and finally to a generic string when
+            // the response shape is unexpected.
+            if let summary = response.data?["summary"], !summary.isEmpty {
+                return summary
+            }
+            if let merged = response.data?["merged"], !merged.isEmpty {
+                return merged
+            }
+            return "Pull request merged."
         }
     }
 

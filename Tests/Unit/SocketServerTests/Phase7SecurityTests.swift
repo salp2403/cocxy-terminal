@@ -267,8 +267,8 @@ final class Phase7SocketSecurityTests: XCTestCase {
         defer { server.stop() }
 
         let commands = CLICommandName.allCases.map { $0.rawValue }
-        XCTAssertEqual(commands.count, 102,
-                       "There should be exactly 102 commands in CLICommandName — the v0.1.81 count of 97 plus the five GitHub verbs introduced in v0.1.84 (github-status/prs/issues/open/refresh)")
+        XCTAssertEqual(commands.count, 103,
+                       "There should be exactly 103 commands in CLICommandName — the v0.1.84 count of 102 plus the v0.1.86 github-pr-merge verb")
 
         for command in commands {
             let request = SocketRequest(id: "all-\(command)", command: command, params: nil)

@@ -943,7 +943,7 @@ final class CLICommandDefinitionTests: XCTestCase {
         // v0.1.81 added four worktree verbs (worktree-add/list/remove/prune)
         // bringing the total from 93 to 97. v0.1.84 added five GitHub
         // verbs (github-status/prs/issues/open/refresh) bringing it to 102.
-        XCTAssertEqual(CLICommand.allCases.count, 102)
+        XCTAssertEqual(CLICommand.allCases.count, 103)
     }
 
     // MARK: - 39. Raw values match server protocol

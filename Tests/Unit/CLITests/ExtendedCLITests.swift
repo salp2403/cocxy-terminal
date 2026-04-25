@@ -566,8 +566,9 @@ final class EnumParityTests: XCTestCase {
     func testCLICommandHasExpectedCaseCount() {
         // v0.1.81 added four worktree verbs bringing the total to 97.
         // v0.1.84 added five GitHub verbs (status/prs/issues/open/refresh)
-        // bringing it to 102.
-        XCTAssertEqual(CLICommand.allCases.count, 102)
+        // bringing it to 102. v0.1.86 added github-pr-merge bringing
+        // the total to 103.
+        XCTAssertEqual(CLICommand.allCases.count, 103)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription
