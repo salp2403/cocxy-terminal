@@ -457,6 +457,8 @@ enum SocketConnectionHandler {
     ) {
         defer { Darwin.close(clientFD) }
 
+        disableSigPipe(for: clientFD)
+
         // CRITICAL SECURITY: Verify peer UID.
         guard authenticatePeer(clientFD: clientFD) else {
             return
@@ -538,6 +540,21 @@ enum SocketConnectionHandler {
         return true
     }
 
+    /// Prevents a disconnected CLI client from delivering SIGPIPE to
+    /// the app process when the server writes a late response.
+    private static func disableSigPipe(for fd: Int32) {
+        #if os(macOS)
+        var enabled: Int32 = 1
+        _ = setsockopt(
+            fd,
+            SOL_SOCKET,
+            SO_NOSIGPIPE,
+            &enabled,
+            socklen_t(MemoryLayout<Int32>.size)
+        )
+        #endif
+    }
+
     /// Reads exactly `count` bytes from a file descriptor.
     ///
     /// Handles partial reads by looping until all bytes are received.
@@ -605,9 +622,13 @@ enum SocketConnectionHandler {
         var totalWritten = 0
         let count = data.count
         while totalWritten < count {
-            let written = data.withUnsafeBytes { bufferPtr in
+            let written = data.withUnsafeBytes { bufferPtr -> Int in
                 let ptr = bufferPtr.baseAddress!.advanced(by: totalWritten)
-                return Darwin.write(fd, ptr, count - totalWritten)
+                return writeSocketChunk(
+                    fd: fd,
+                    pointer: ptr,
+                    count: count - totalWritten
+                )
             }
             if written <= 0 {
                 return false  // Error or connection closed
@@ -615,5 +636,13 @@ enum SocketConnectionHandler {
             totalWritten += written
         }
         return true
+    }
+
+    private static func writeSocketChunk(fd: Int32, pointer: UnsafeRawPointer, count: Int) -> Int {
+        #if os(macOS)
+        return Darwin.send(fd, pointer, count, MSG_NOSIGNAL)
+        #else
+        return Darwin.write(fd, pointer, count)
+        #endif
     }
 }

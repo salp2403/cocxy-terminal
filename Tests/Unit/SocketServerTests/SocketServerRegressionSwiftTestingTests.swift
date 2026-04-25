@@ -23,6 +23,12 @@
 //      worker cap. The server now waits for an active slot before accepting
 //      another client, leaving excess peers queued in the kernel backlog.
 //
+//   4. A CLI client can time out and close its socket before a long-running
+//      command writes its response. Plain `write()` to that closed peer raises
+//      SIGPIPE by default, which previously terminated the whole app process.
+//      Accepted sockets now opt into `SO_NOSIGPIPE` so the write fails locally
+//      with EPIPE and the server keeps running.
+//
 // Both scenarios previously were invisible to the test suite because
 // every existing test writes immediately after connect and uses a single
 // connection at a time.
@@ -181,6 +187,31 @@ private func sendFramedRequest(
     return try JSONDecoder().decode(SocketResponse.self, from: Data(payload))
 }
 
+/// Sends a complete framed request, then lets the caller close the socket
+/// without waiting for the server's response. Used to verify late server
+/// writes cannot SIGPIPE the process.
+private func sendFramedRequestWithoutReading(
+    _ request: SocketRequest,
+    on fd: Int32
+) throws {
+    let framedRequest = try SocketMessageFraming.frame(request)
+
+    var totalWritten = 0
+    let count = framedRequest.count
+    while totalWritten < count {
+        let written = framedRequest.withUnsafeBytes { bufferPtr -> Int in
+            let ptr = bufferPtr.baseAddress!.advanced(by: totalWritten)
+            return Darwin.write(fd, ptr, count - totalWritten)
+        }
+        guard written > 0 else {
+            throw NSError(domain: "test", code: Int(errno), userInfo: [
+                NSLocalizedDescriptionKey: "write() returned \(written) errno=\(errno)"
+            ])
+        }
+        totalWritten += written
+    }
+}
+
 /// Waits for the socket file to exist and accept a test connect.
 private func waitUntilReady(socketPath: String, timeout: TimeInterval = 2.0) throws {
     let deadline = Date().addingTimeInterval(timeout)
@@ -260,6 +291,73 @@ struct SocketServerRegressionSwiftTestingTests {
 
         #expect(response.id == "delayed-1")
         #expect(response.success == true)
+    }
+
+    // MARK: - SIGPIPE regression: late responses to closed clients.
+
+    /// Reproduces the live-smoke failure where `cocxy github status`
+    /// timed out, closed its client socket, and the app process then died
+    /// when the delayed response attempted to write back to that closed fd.
+    @Test("client disconnect before response does not terminate socket server")
+    func clientDisconnectBeforeResponseDoesNotTerminateServer() async throws {
+        let tempPaths = uniqueSocketPath()
+        defer {
+            removeTempDirectory(tempPaths.directory, socketPath: tempPaths.path)
+        }
+
+        let handler = SpyCommandHandler(responseDelay: 0.10)
+        let server = SocketServerImpl(
+            socketPath: tempPaths.path,
+            commandHandler: handler
+        )
+        try server.start()
+        defer { server.stop() }
+        try waitUntilReady(socketPath: tempPaths.path)
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let path = tempPaths.path
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let fd = try connectClient(to: path)
+                    let request = SocketRequest(
+                        id: "closed-before-response",
+                        command: "status",
+                        params: nil
+                    )
+                    try sendFramedRequestWithoutReading(request, on: fd)
+                    Darwin.shutdown(fd, SHUT_RDWR)
+                    Darwin.close(fd)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+
+        try await Task.sleep(nanoseconds: 250_000_000)
+
+        let response = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<SocketResponse, Error>) in
+            let path = tempPaths.path
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let fd = try connectClient(to: path)
+                    defer { Darwin.close(fd) }
+                    let request = SocketRequest(
+                        id: "after-closed-client",
+                        command: "status",
+                        params: nil
+                    )
+                    let resp = try sendFramedRequest(request, on: fd)
+                    continuation.resume(returning: resp)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+
+        #expect(response.id == "after-closed-client")
+        #expect(response.success == true)
+        #expect(handler.count >= 2)
     }
 
     // MARK: - Bug A regression: listen backlog absorbs concurrent connects.

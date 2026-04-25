@@ -4,6 +4,7 @@
 # Usage:
 #   ./scripts/build-app.sh                   # Debug build
 #   ./scripts/build-app.sh release           # Release build (optimized)
+#   ./scripts/build-app.sh release --version 0.1.86
 #   ./scripts/build-app.sh release --install # Build, install, and register Quick Look
 #
 # Output: build/CocxyTerminal.app
@@ -15,26 +16,43 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_MODE="debug"
 INSTALL_AFTER_BUILD=0
+VERSION_OVERRIDE=""
 APP_NAME="CocxyTerminal"
 BUNDLE_NAME="Cocxy Terminal"
 APP_ENTITLEMENTS="${PROJECT_ROOT}/Resources/CocxyTerminal.entitlements"
 QL_ENTITLEMENTS="${PROJECT_ROOT}/QuickLook/CocxyQuickLook.entitlements"
 
-for arg in "$@"; do
-    case "$arg" in
+while [ $# -gt 0 ]; do
+    case "$1" in
         debug|release)
-            BUILD_MODE="$arg"
+            BUILD_MODE="$1"
+            shift
             ;;
         --install|install)
             INSTALL_AFTER_BUILD=1
+            shift
+            ;;
+        --version)
+            if [ $# -lt 2 ]; then
+                echo "ERROR: --version requires a value"
+                echo "Usage: ./scripts/build-app.sh [debug|release] [--version X.Y.Z] [--install]"
+                exit 1
+            fi
+            VERSION_OVERRIDE="${2#v}"
+            shift 2
             ;;
         *)
-            echo "ERROR: Unknown argument: $arg"
-            echo "Usage: ./scripts/build-app.sh [debug|release] [--install]"
+            echo "ERROR: Unknown argument: $1"
+            echo "Usage: ./scripts/build-app.sh [debug|release] [--version X.Y.Z] [--install]"
             exit 1
             ;;
     esac
 done
+
+if [ -n "${VERSION_OVERRIDE}" ] && ! [[ "${VERSION_OVERRIDE}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "ERROR: Invalid --version '${VERSION_OVERRIDE}' (expected semver X.Y.Z)"
+    exit 1
+fi
 
 # Determine build configuration.
 if [ "$BUILD_MODE" = "release" ]; then
@@ -90,11 +108,17 @@ fi
 install_name_tool -add_rpath @executable_path/../Frameworks "${MACOS}/${APP_NAME}" 2>/dev/null || true
 
 # Step 4: Generate Info.plist from the shared base template.
-"${PROJECT_ROOT}/scripts/generate-app-info-plist.sh" "${CONTENTS}/Info.plist" \
-    --bundle-name "${BUNDLE_NAME}" \
-    --display-name "${BUNDLE_NAME}" \
-    --bundle-id "dev.cocxy.terminal" \
+PLIST_ARGS=(
+    "${CONTENTS}/Info.plist"
+    --bundle-name "${BUNDLE_NAME}"
+    --display-name "${BUNDLE_NAME}"
+    --bundle-id "dev.cocxy.terminal"
     --executable "${APP_NAME}"
+)
+if [ -n "${VERSION_OVERRIDE}" ]; then
+    PLIST_ARGS+=(--version "${VERSION_OVERRIDE}" --short-version "${VERSION_OVERRIDE}")
+fi
+"${PROJECT_ROOT}/scripts/generate-app-info-plist.sh" "${PLIST_ARGS[@]}"
 
 # Step 4b: Copy app icon assets.
 for icon_file in AppIcon.png; do

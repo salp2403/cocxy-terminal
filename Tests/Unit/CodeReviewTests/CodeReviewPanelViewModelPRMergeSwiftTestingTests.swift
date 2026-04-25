@@ -259,6 +259,28 @@ struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
         #expect(viewModel.activePullRequestNumber == nil)
     }
 
+    @Test("review action working directory stays bound to the loaded review context")
+    func reviewActionWorkingDirectoryUsesLoadedReviewContext() async throws {
+        let cwdA = URL(fileURLWithPath: "/tmp/review-pr-merge-a", isDirectory: true)
+        let cwdB = URL(fileURLWithPath: "/tmp/review-pr-merge-b", isDirectory: true)
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: SessionDiffTrackerImpl(),
+            hookEventReceiver: nil,
+            directDiffLoader: { _, _, _ in [] }
+        )
+        viewModel.activeTabCwdProvider = { cwdA }
+
+        viewModel.refreshDiffs()
+
+        try await waitForReviewCondition {
+            viewModel.activeWorkingDirectory == cwdA && viewModel.isLoading == false
+        }
+
+        viewModel.activeTabCwdProvider = { cwdB }
+
+        #expect(viewModel.reviewActionWorkingDirectory == cwdA)
+    }
+
     // MARK: - userFacingMergeErrorMessage
 
     // MARK: - Regression: Create PR captures number

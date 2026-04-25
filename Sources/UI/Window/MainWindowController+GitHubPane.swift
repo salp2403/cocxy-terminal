@@ -184,9 +184,12 @@ extension MainWindowController {
         // routes through here so multi-window workflows share the
         // same actor (GitHubService) and never run two `gh pr merge`
         // invocations against the same checkout in parallel.
-        viewModel.mergePullRequestHandler = { [weak self] request in
+        viewModel.mergePullRequestHandler = { [weak self] request, workingDirectory in
             guard let self else { throw GitHubCLIError.notAGitRepository(path: "") }
-            return try await self.performCodeReviewMergePullRequest(request: request)
+            return try await self.performCodeReviewMergePullRequest(
+                request: request,
+                workingDirectory: workingDirectory
+            )
         }
     }
 
@@ -285,9 +288,10 @@ extension MainWindowController {
         title: String,
         body: String?,
         baseBranch: String?,
-        draft: Bool
+        draft: Bool,
+        workingDirectory explicitWorkingDirectory: URL? = nil
     ) async throws -> URL {
-        guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
+        guard let workingDirectory = explicitWorkingDirectory ?? currentGitHubPaneWorkingDirectory() else {
             throw GitHubCLIError.notAGitRepository(path: "")
         }
         let pr = try await sharedGitHubService().createPullRequest(
@@ -310,9 +314,10 @@ extension MainWindowController {
     /// has no resolvable working directory; the view layer maps that
     /// to a banner pointing the user at opening a git repo first.
     func performCodeReviewMergePullRequest(
-        request: GitHubMergeRequest
+        request: GitHubMergeRequest,
+        workingDirectory explicitWorkingDirectory: URL? = nil
     ) async throws -> GitHubPullRequest {
-        guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
+        guard let workingDirectory = explicitWorkingDirectory ?? currentGitHubPaneWorkingDirectory() else {
             throw GitHubCLIError.notAGitRepository(path: "")
         }
         return try await sharedGitHubService().mergePullRequest(
@@ -326,9 +331,10 @@ extension MainWindowController {
     /// should be enabled and what reason to surface in the chip
     /// tooltip when it is not.
     func performCodeReviewPullRequestMergeability(
-        number: Int
+        number: Int,
+        workingDirectory explicitWorkingDirectory: URL? = nil
     ) async throws -> GitHubMergeability {
-        guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
+        guard let workingDirectory = explicitWorkingDirectory ?? currentGitHubPaneWorkingDirectory() else {
             throw GitHubCLIError.notAGitRepository(path: "")
         }
         return try await sharedGitHubService().pullRequestMergeability(
@@ -343,9 +349,10 @@ extension MainWindowController {
     /// user lands on a worktree whose branch already has a PR — no
     /// need to run `Create PR` first.
     func performCodeReviewPullRequestNumberLookup(
-        forBranch branch: String
+        forBranch branch: String,
+        workingDirectory explicitWorkingDirectory: URL? = nil
     ) async throws -> Int? {
-        guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
+        guard let workingDirectory = explicitWorkingDirectory ?? currentGitHubPaneWorkingDirectory() else {
             return nil
         }
         return try await sharedGitHubService().pullRequestNumber(

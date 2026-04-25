@@ -860,6 +860,14 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         return activeTabCwdProvider?()
     }
 
+    /// Working directory that GitHub-side review actions should use.
+    /// Unlike the GitHub pane, review actions are scoped to the review
+    /// session/tab that produced the diff, so they must not drift when
+    /// the user changes the visible tab before creating or merging a PR.
+    var reviewActionWorkingDirectory: URL? {
+        activeWorkingDirectory ?? resolvedWorkingDirectory
+    }
+
     private func applyAgentSessionsSnapshot(_ sessions: [AgentSessionInfo]) {
         allAgentSessionsSnapshot = sessions
         rebuildReviewAgentSessions()

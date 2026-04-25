@@ -994,30 +994,53 @@ extension MainWindowController {
         viewModel.autoShowEnabledProvider = { [weak self] in
             self?.configService?.current.codeReview.autoShowOnSessionEnd ?? true
         }
-        viewModel.createPullRequestHandler = { [weak self] title, body, baseBranch, draft in
-            try await self?.performCodeReviewCreatePullRequest(
+        viewModel.createPullRequestHandler = { [weak self, weak viewModel] title, body, baseBranch, draft in
+            guard let self, let viewModel else { throw GitHubCLIError.notAGitRepository(path: "") }
+            guard let workingDirectory = await MainActor.run(body: { viewModel.reviewActionWorkingDirectory }) else {
+                throw GitHubCLIError.notAGitRepository(path: "")
+            }
+            return try await self.performCodeReviewCreatePullRequest(
                 title: title,
                 body: body,
                 baseBranch: baseBranch,
-                draft: draft
-            ) ?? URL(string: "about:blank")!
+                draft: draft,
+                workingDirectory: workingDirectory
+            )
         }
         // Merge integration (v0.1.86). Routed through the same shared
         // GitHubService used by the GitHub pane so the actor serialises
         // every gh subprocess across both surfaces.
-        viewModel.mergePullRequestHandler = { [weak self] request in
-            guard let self else { throw GitHubCLIError.notAGitRepository(path: "") }
-            return try await self.performCodeReviewMergePullRequest(request: request)
-        }
-        viewModel.pullRequestMergeabilityHandler = { [weak self] number in
-            guard let self else {
+        viewModel.mergePullRequestHandler = { [weak self, weak viewModel] request in
+            guard let self, let viewModel else { throw GitHubCLIError.notAGitRepository(path: "") }
+            guard let workingDirectory = await MainActor.run(body: { viewModel.reviewActionWorkingDirectory }) else {
                 throw GitHubCLIError.notAGitRepository(path: "")
             }
-            return try await self.performCodeReviewPullRequestMergeability(number: number)
+            return try await self.performCodeReviewMergePullRequest(
+                request: request,
+                workingDirectory: workingDirectory
+            )
         }
-        viewModel.activePullRequestDetectionHandler = { [weak self] branch in
-            guard let self else { return nil }
-            return try await self.performCodeReviewPullRequestNumberLookup(forBranch: branch)
+        viewModel.pullRequestMergeabilityHandler = { [weak self, weak viewModel] number in
+            guard let self, let viewModel else {
+                throw GitHubCLIError.notAGitRepository(path: "")
+            }
+            guard let workingDirectory = await MainActor.run(body: { viewModel.reviewActionWorkingDirectory }) else {
+                throw GitHubCLIError.notAGitRepository(path: "")
+            }
+            return try await self.performCodeReviewPullRequestMergeability(
+                number: number,
+                workingDirectory: workingDirectory
+            )
+        }
+        viewModel.activePullRequestDetectionHandler = { [weak self, weak viewModel] branch in
+            guard let self, let viewModel else { return nil }
+            guard let workingDirectory = await MainActor.run(body: { viewModel.reviewActionWorkingDirectory }) else {
+                return nil
+            }
+            return try await self.performCodeReviewPullRequestNumberLookup(
+                forBranch: branch,
+                workingDirectory: workingDirectory
+            )
         }
         viewModel.activeBranchProvider = { [weak viewModel] in
             viewModel?.gitStatus?.branch

@@ -44,6 +44,18 @@ struct GitHubPaneViewModelSwiftTestingTests {
         }
     }
 
+    final class LockedCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+
+        func incrementAndGet() -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            value += 1
+            return value
+        }
+    }
+
     private func makeService(configure: (RunnerSpy) -> Void) -> GitHubService {
         let spy = RunnerSpy()
         configure(spy)
@@ -331,6 +343,85 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.checks.isEmpty)
         #expect(viewModel.selectedPullRequestNumber == nil)
         #expect(viewModel.lastInfoMessage?.contains("git repository") == true)
+    }
+
+    @Test("repo discovery timeout preserves loaded data for the same working directory")
+    func refresh_repoTimeoutPreservesLoadedDataForSameWorkingDirectory() async throws {
+        let repoViewCalls = LockedCounter()
+        let service = GitHubService { _, args, _ in
+            if args.first == "auth", args.dropFirst().first == "status" {
+                return GitHubCLIResult(
+                    stdout: "",
+                    stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                    terminationStatus: 0
+                )
+            }
+            if args.contains("repo"), args.contains("view") {
+                if repoViewCalls.incrementAndGet() > 1 {
+                    throw GitHubCLIError.timeout(seconds: 10)
+                }
+                return GitHubCLIResult(
+                    stdout: #"""
+                    {
+                      "defaultBranchRef": {"name": "main"},
+                      "description": "",
+                      "hasIssuesEnabled": true,
+                      "isEmpty": false,
+                      "isPrivate": false,
+                      "name": "r",
+                      "owner": {"login": "u"},
+                      "url": "https://github.com/u/r"
+                    }
+                    """#,
+                    stderr: "",
+                    terminationStatus: 0
+                )
+            }
+            if args.contains("pr"), args.contains("list") {
+                return GitHubCLIResult(
+                    stdout: #"""
+                    [
+                      {"number": 1, "title": "first", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/1", "updatedAt": "2026-04-23T15:47:21Z"}
+                    ]
+                    """#,
+                    stderr: "",
+                    terminationStatus: 0
+                )
+            }
+            if args.contains("issue"), args.contains("list") {
+                return GitHubCLIResult(
+                    stdout: #"""
+                    [
+                      {"number": 10, "title": "bug", "state": "OPEN", "author": {"login": "r"}, "labels": [], "comments": 2, "url": "https://github.com/u/r/issues/10", "updatedAt": "2026-04-23T15:47:21Z"}
+                    ]
+                    """#,
+                    stderr: "",
+                    terminationStatus: 0
+                )
+            }
+            if args.contains("pr"), args.contains("checks") {
+                return GitHubCLIResult(stdout: "[]", stderr: "", terminationStatus: 0)
+            }
+            return GitHubCLIResult(stdout: "", stderr: "unexpected gh invocation: \(args.joined(separator: " "))", terminationStatus: 1)
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp/github-pane") }
+        viewModel.refresh()
+        await flush()
+
+        #expect(viewModel.repo?.fullName == "u/r")
+        #expect(viewModel.pullRequests.count == 1)
+        #expect(viewModel.issues.count == 1)
+
+        viewModel.refresh()
+        await flush()
+
+        #expect(viewModel.repo?.fullName == "u/r")
+        #expect(viewModel.pullRequests.count == 1)
+        #expect(viewModel.issues.count == 1)
+        #expect(viewModel.lastErrorMessage?.contains("timed out") == true)
+        #expect(viewModel.isLoading == false)
     }
 
     @Test("selectPullRequestForChecks targets the selected PR checks")

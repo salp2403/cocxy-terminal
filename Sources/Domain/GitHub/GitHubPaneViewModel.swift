@@ -136,7 +136,7 @@ final class GitHubPaneViewModel: ObservableObject {
     /// `GitHubService.mergePullRequest`. Returning the post-merge PR
     /// lets the pane refresh the list and surface a confirmation
     /// banner without an extra round trip.
-    var mergePullRequestHandler: ((_ request: GitHubMergeRequest) async throws -> GitHubPullRequest)?
+    var mergePullRequestHandler: ((_ request: GitHubMergeRequest, _ workingDirectory: URL) async throws -> GitHubPullRequest)?
 
     // MARK: - Dependencies
 
@@ -146,6 +146,11 @@ final class GitHubPaneViewModel: ObservableObject {
 
     private var autoRefreshCancellable: AnyCancellable?
     private var refreshTask: Task<Void, Never>?
+
+    /// Directory that produced the currently rendered PR rows. Merge
+    /// actions use this captured value instead of whatever tab happens
+    /// to be visible when the user opens the context menu.
+    private var pullRequestsWorkingDirectory: URL?
 
     /// Monotonic counter bumped before every `refresh()` so in-flight
     /// results can be discarded when the user triggers a new refresh
@@ -229,6 +234,10 @@ final class GitHubPaneViewModel: ObservableObject {
             lastErrorMessage = "GitHub integration is not ready yet. Reload the pane to retry."
             return
         }
+        guard let workingDirectory = pullRequestsWorkingDirectory else {
+            lastErrorMessage = "Reload the GitHub pane before merging this pull request."
+            return
+        }
         guard !pullRequestsBeingMerged.contains(number) else { return }
 
         let request = GitHubMergeRequest(
@@ -245,7 +254,7 @@ final class GitHubPaneViewModel: ObservableObject {
 
         Task { [weak self] in
             do {
-                let merged = try await handler(request)
+                let merged = try await handler(request, workingDirectory)
                 await MainActor.run {
                     guard let self else { return }
                     self.pullRequestsBeingMerged.remove(number)
@@ -257,10 +266,6 @@ final class GitHubPaneViewModel: ObservableObject {
                     guard let self else { return }
                     self.pullRequestsBeingMerged.remove(number)
                     self.lastErrorMessage = Self.userFacingMergeErrorMessage(for: error)
-                    // Refresh anyway so a transient state (auto-merge
-                    // enabled, race with another client) lands in the
-                    // visible list.
-                    self.refresh()
                 }
             }
         }
@@ -273,6 +278,7 @@ final class GitHubPaneViewModel: ObservableObject {
         guard configProvider().mergeEnabled else { return false }
         guard pullRequest.state == .open else { return false }
         guard !pullRequest.isDraft else { return false }
+        guard pullRequestsWorkingDirectory != nil else { return false }
         return mergePullRequestHandler != nil
     }
 
@@ -358,6 +364,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 issues = []
                 checks = []
                 selectedPullRequestNumber = nil
+                pullRequestsWorkingDirectory = nil
                 isLoading = false
             }
             return
@@ -372,6 +379,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 issues = []
                 checks = []
                 selectedPullRequestNumber = nil
+                pullRequestsWorkingDirectory = nil
                 isLoading = false
             }
             return
@@ -392,6 +400,7 @@ final class GitHubPaneViewModel: ObservableObject {
         } catch let error as GitHubCLIError {
             guard generation == refreshGeneration else { return }
             applyState {
+                clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
                 lastErrorMessage = Self.banner(for: error)
                 isLoading = false
             }
@@ -399,6 +408,7 @@ final class GitHubPaneViewModel: ObservableObject {
         } catch {
             guard generation == refreshGeneration else { return }
             applyState {
+                clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
                 lastErrorMessage = error.localizedDescription
                 isLoading = false
             }
@@ -415,6 +425,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 issues = []
                 checks = []
                 selectedPullRequestNumber = nil
+                pullRequestsWorkingDirectory = nil
                 isLoading = false
             }
             return
@@ -428,15 +439,17 @@ final class GitHubPaneViewModel: ObservableObject {
         } catch let error as GitHubCLIError {
             guard generation == refreshGeneration else { return }
             applyState {
-                repo = nil
-                pullRequests = []
-                issues = []
-                checks = []
-                selectedPullRequestNumber = nil
                 switch error {
                 case .noRemote, .notAGitRepository:
+                    repo = nil
+                    pullRequests = []
+                    issues = []
+                    checks = []
+                    selectedPullRequestNumber = nil
+                    pullRequestsWorkingDirectory = nil
                     lastInfoMessage = Self.banner(for: error)
                 default:
+                    clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
                     lastErrorMessage = Self.banner(for: error)
                 }
                 isLoading = false
@@ -445,6 +458,7 @@ final class GitHubPaneViewModel: ObservableObject {
         } catch {
             guard generation == refreshGeneration else { return }
             applyState {
+                clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
                 lastErrorMessage = error.localizedDescription
                 isLoading = false
             }
@@ -497,17 +511,20 @@ final class GitHubPaneViewModel: ObservableObject {
                 issues = fetchedIssues
                 checks = fetchedChecks
                 selectedPullRequestNumber = targetNumber
+                pullRequestsWorkingDirectory = workingDirectory
                 isLoading = false
             }
         } catch let error as GitHubCLIError {
             guard generation == refreshGeneration else { return }
             applyState {
+                clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
                 lastErrorMessage = Self.banner(for: error)
                 isLoading = false
             }
         } catch {
             guard generation == refreshGeneration else { return }
             applyState {
+                clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
                 lastErrorMessage = error.localizedDescription
                 isLoading = false
             }
@@ -520,6 +537,15 @@ final class GitHubPaneViewModel: ObservableObject {
     /// without touching every call site.
     private func applyState(_ mutate: () -> Void) {
         mutate()
+    }
+
+    private func clearLoadedDataIfNeeded(currentWorkingDirectory: URL) {
+        guard pullRequestsWorkingDirectory != currentWorkingDirectory else { return }
+        pullRequests = []
+        issues = []
+        checks = []
+        selectedPullRequestNumber = nil
+        pullRequestsWorkingDirectory = nil
     }
 
     // MARK: - Static helpers

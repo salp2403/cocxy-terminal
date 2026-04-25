@@ -52,39 +52,83 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
         return GitHubCLIResult(stdout: "", stderr: "", terminationStatus: 0)
     }
 
+    private static func loadedRunner(pullRequestNumber: Int = 42) -> GitHubService.Runner {
+        { _, args, _ in
+            if args.contains("auth") && args.contains("status") {
+                return GitHubCLIResult(
+                    stdout: "",
+                    stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                    terminationStatus: 0
+                )
+            }
+            if args.contains("repo") && args.contains("view") {
+                return GitHubCLIResult(
+                    stdout: #"""
+                    {
+                      "name": "repo",
+                      "nameWithOwner": "owner/repo",
+                      "owner": {"login": "owner"},
+                      "url": "https://github.com/owner/repo"
+                    }
+                    """#,
+                    stderr: "",
+                    terminationStatus: 0
+                )
+            }
+            if args.contains("pr") && args.contains("checks") {
+                return GitHubCLIResult(stdout: "[]", stderr: "", terminationStatus: 0)
+            }
+            if args.contains("pr") && args.contains("list") {
+                return GitHubCLIResult(
+                    stdout: #"""
+                    [
+                      {"number": \#(pullRequestNumber), "title": "Test PR", "state": "OPEN", "author": {"login": "octocat"}, "headRefName": "feature/test", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/owner/repo/pull/\#(pullRequestNumber)", "updatedAt": "2026-04-23T15:47:21Z"}
+                    ]
+                    """#,
+                    stderr: "",
+                    terminationStatus: 0
+                )
+            }
+            if args.contains("issue") && args.contains("list") {
+                return GitHubCLIResult(stdout: "[]", stderr: "", terminationStatus: 0)
+            }
+            return GitHubCLIResult(stdout: "", stderr: "unexpected gh invocation: \(args.joined(separator: " "))", terminationStatus: 1)
+        }
+    }
+
     // MARK: - canOfferMerge
 
     @Test("canOfferMerge is true for an open PR with a wired handler")
-    func canOfferMergeIsTrueForOpenPRWithHandler() {
-        let viewModel = makeViewModel()
-        viewModel.mergePullRequestHandler = { _ in Self.mergedPullRequest() }
+    func canOfferMergeIsTrueForOpenPRWithHandler() async throws {
+        let viewModel = try await makeLoadedViewModel()
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
         #expect(viewModel.canOfferMerge(for: Self.openPullRequest()))
     }
 
     @Test("canOfferMerge is false for a draft PR")
-    func canOfferMergeIsFalseForDraftPR() {
-        let viewModel = makeViewModel()
-        viewModel.mergePullRequestHandler = { _ in Self.mergedPullRequest() }
+    func canOfferMergeIsFalseForDraftPR() async throws {
+        let viewModel = try await makeLoadedViewModel()
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
         #expect(!viewModel.canOfferMerge(for: Self.openPullRequest(isDraft: true)))
     }
 
     @Test("canOfferMerge is false for a merged PR")
-    func canOfferMergeIsFalseForMergedPR() {
-        let viewModel = makeViewModel()
-        viewModel.mergePullRequestHandler = { _ in Self.mergedPullRequest() }
+    func canOfferMergeIsFalseForMergedPR() async throws {
+        let viewModel = try await makeLoadedViewModel()
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
         #expect(!viewModel.canOfferMerge(for: Self.mergedPullRequest()))
     }
 
     @Test("canOfferMerge is false without a handler")
-    func canOfferMergeIsFalseWithoutHandler() {
-        let viewModel = makeViewModel()
+    func canOfferMergeIsFalseWithoutHandler() async throws {
+        let viewModel = try await makeLoadedViewModel()
         #expect(!viewModel.canOfferMerge(for: Self.openPullRequest()))
     }
 
     @Test("canOfferMerge respects [github].merge-enabled flag")
-    func canOfferMergeRespectsFeatureFlag() {
-        let viewModel = makeViewModel()
-        viewModel.mergePullRequestHandler = { _ in Self.mergedPullRequest() }
+    func canOfferMergeRespectsFeatureFlag() async throws {
+        let viewModel = try await makeLoadedViewModel()
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
         viewModel.configProvider = {
             GitHubConfig(mergeEnabled: false)
         }
@@ -95,8 +139,8 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
 
     @Test("requestMergePullRequest sets merge info banner on success")
     func requestMergePullRequestSetsMergeInfoBannerOnSuccess() async throws {
-        let viewModel = makeViewModel()
-        viewModel.mergePullRequestHandler = { _ in Self.mergedPullRequest(number: 42) }
+        let viewModel = try await makeLoadedViewModel()
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest(number: 42) }
 
         viewModel.requestMergePullRequest(
             number: 42,
@@ -115,10 +159,13 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
 
     @Test("requestMergePullRequest forwards parameters to the handler")
     func requestMergePullRequestForwardsParameters() async throws {
-        let viewModel = makeViewModel()
+        let workingDirectory = URL(fileURLWithPath: "/tmp/github-pane-merge-a", isDirectory: true)
+        let viewModel = try await makeLoadedViewModel(workingDirectory: workingDirectory, pullRequestNumber: 7)
         let captured = Box<GitHubMergeRequest?>(nil)
-        viewModel.mergePullRequestHandler = { request in
+        let capturedWorkingDirectory = Box<URL?>(nil)
+        viewModel.mergePullRequestHandler = { request, handlerWorkingDirectory in
             captured.value = request
+            capturedWorkingDirectory.value = handlerWorkingDirectory
             return Self.mergedPullRequest(number: request.pullRequestNumber)
         }
 
@@ -137,14 +184,15 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
         #expect(request.deleteBranch == false)
         #expect(request.subject == "Custom")
         #expect(request.body == "Body")
+        #expect(capturedWorkingDirectory.value == workingDirectory)
     }
 
     @Test("requestMergePullRequest tracks isMerging during flight")
     func requestMergePullRequestTracksIsMerging() async throws {
-        let viewModel = makeViewModel()
+        let viewModel = try await makeLoadedViewModel()
         let started = Box<Bool>(false)
         let release = Box<Bool>(false)
-        viewModel.mergePullRequestHandler = { _ in
+        viewModel.mergePullRequestHandler = { _, _ in
             started.value = true
             // Spin until the test releases — keeps the merge "in flight"
             // long enough for the assertion below to read isMerging.
@@ -170,10 +218,10 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
 
     @Test("requestMergePullRequest deduplicates concurrent merges of the same PR")
     func requestMergePullRequestDeduplicatesConcurrentMerges() async throws {
-        let viewModel = makeViewModel()
+        let viewModel = try await makeLoadedViewModel()
         let invocationCount = Box<Int>(0)
         let release = Box<Bool>(false)
-        viewModel.mergePullRequestHandler = { _ in
+        viewModel.mergePullRequestHandler = { _, _ in
             invocationCount.value += 1
             while !release.value {
                 try await Task.sleep(nanoseconds: 5_000_000)
@@ -198,8 +246,8 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
 
     @Test("requestMergePullRequest sets error banner on merge conflict")
     func requestMergePullRequestSetsErrorBannerOnConflict() async throws {
-        let viewModel = makeViewModel()
-        viewModel.mergePullRequestHandler = { _ in
+        let viewModel = try await makeLoadedViewModel()
+        viewModel.mergePullRequestHandler = { _, _ in
             throw GitHubMergeError.mergeConflict
         }
 
@@ -216,13 +264,25 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
     @Test("requestMergePullRequest with merge feature disabled sets error banner immediately")
     func requestMergePullRequestRespectsFeatureFlag() {
         let viewModel = makeViewModel()
-        viewModel.mergePullRequestHandler = { _ in Self.mergedPullRequest() }
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
         viewModel.configProvider = { GitHubConfig(mergeEnabled: false) }
 
         viewModel.requestMergePullRequest(number: 42, method: .squash, deleteBranch: true)
 
         let message = viewModel.lastErrorMessage ?? ""
         #expect(message.contains("merge-enabled") || message.lowercased().contains("disabled"))
+        #expect(viewModel.pullRequestsBeingMerged.isEmpty)
+    }
+
+    @Test("requestMergePullRequest without a loaded PR directory sets actionable error")
+    func requestMergePullRequestWithoutLoadedDirectorySetsError() {
+        let viewModel = makeViewModel()
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
+
+        viewModel.requestMergePullRequest(number: 42, method: .squash, deleteBranch: true)
+
+        let message = viewModel.lastErrorMessage ?? ""
+        #expect(message.lowercased().contains("reload"))
         #expect(viewModel.pullRequestsBeingMerged.isEmpty)
     }
 
@@ -264,6 +324,21 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
     private func makeViewModel() -> GitHubPaneViewModel {
         let service = GitHubService(runner: Self.neverInvokedRunner)
         return GitHubPaneViewModel(service: service)
+    }
+
+    private func makeLoadedViewModel(
+        workingDirectory: URL = URL(fileURLWithPath: "/tmp/github-pane-merge", isDirectory: true),
+        pullRequestNumber: Int = 42
+    ) async throws -> GitHubPaneViewModel {
+        let service = GitHubService(runner: Self.loadedRunner(pullRequestNumber: pullRequestNumber))
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { workingDirectory }
+        viewModel.refresh()
+        try await waitForGitHubPaneCondition {
+            viewModel.pullRequests.contains(where: { $0.number == pullRequestNumber })
+                && viewModel.isLoading == false
+        }
+        return viewModel
     }
 }
 
