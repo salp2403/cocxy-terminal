@@ -5,6 +5,47 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.86] - 2026-04-25
+
+### Added
+- Pull request merging is now available without leaving Cocxy. The
+  Code Review panel surfaces a `Merge PR #N` button next to the
+  existing Submit Comments action whenever the active branch has an
+  open PR, and the GitHub pane (`Cmd+Option+G`) gains a
+  `Merge Pull Request…` entry in each open PR row's context menu.
+  Both surfaces present a confirmation alert with three strategies
+  (Squash & Merge, Merge Commit, Rebase & Merge) plus a
+  `Delete branch after merge` checkbox whose last value is
+  remembered between sessions.
+- A pre-merge mergeability snapshot drives a status chip
+  (`Ready` / `Pending` / `Blocked` / `Conflicts` / `Merged` / `Closed`)
+  so the user knows ahead of time why a merge would fail without
+  having to open the PR in a browser. Tooltip on the disabled merge
+  button explains the specific blocker (merge conflicts, branch is
+  behind base, review required, failing checks).
+- Auto-detection of an upstream PR for the active branch: opening the
+  Code Review panel inside a worktree whose branch already has a PR
+  (created from any tool) surfaces the merge button automatically —
+  no need to run Create PR through Cocxy first.
+- New CLI verb `cocxy github pr-merge --squash|--merge|--rebase
+  [--pr <n>] [--no-delete-branch] [--subject <text>] [--body <text>]`
+  shells out to `gh pr merge` through the same shared service so
+  scripted merges and GUI merges never race against each other on
+  the same checkout. When `--pr` is omitted, the verb resolves the
+  PR for the current branch and surfaces a friendly error if no PR
+  matches.
+- New `[github].merge-enabled` config flag (default `true`) acts as
+  a defensive master switch: setting it to `false` hides every
+  Merge button in the UI and makes the CLI verb return an actionable
+  error pointing at the flag, allowing the feature to be disabled
+  without a hot-fix release if a regression ever ships. The flag
+  honours per-project overrides via `.cocxy.toml` so individual
+  repositories can require GUI-only merges (e.g. when a custom
+  GitHub Actions pipeline must drive the merge).
+
+### Changed
+- CLI command count: 102 → 103.
+
 ## [0.1.85] - 2026-04-24
 
 ### Fixed
