@@ -103,6 +103,12 @@ struct ProjectConfig: Codable, Equatable, Sendable {
     /// ignored so the global setting wins.
     let githubDefaultState: String?
 
+    /// Per-project override for `[github].merge-enabled` (v0.1.86).
+    /// Lets a repo force the in-panel PR merge feature off (e.g. a
+    /// repo that requires merges to happen via a custom GitHub Action
+    /// pipeline) without changing the global preference.
+    let githubMergeEnabled: Bool?
+
     /// Whether all fields are nil (no overrides).
     var isEmpty: Bool {
         fontSize == nil && windowPadding == nil && windowPaddingX == nil
@@ -115,6 +121,7 @@ struct ProjectConfig: Codable, Equatable, Sendable {
             && worktreeShowBadge == nil
             && githubEnabled == nil && githubIncludeDrafts == nil
             && githubDefaultState == nil
+            && githubMergeEnabled == nil
     }
 
     // MARK: - Initialization
@@ -137,7 +144,8 @@ struct ProjectConfig: Codable, Equatable, Sendable {
         worktreeShowBadge: Bool? = nil,
         githubEnabled: Bool? = nil,
         githubIncludeDrafts: Bool? = nil,
-        githubDefaultState: String? = nil
+        githubDefaultState: String? = nil,
+        githubMergeEnabled: Bool? = nil
     ) {
         self.fontSize = fontSize
         self.windowPadding = windowPadding
@@ -157,6 +165,7 @@ struct ProjectConfig: Codable, Equatable, Sendable {
         self.githubEnabled = githubEnabled
         self.githubIncludeDrafts = githubIncludeDrafts
         self.githubDefaultState = githubDefaultState
+        self.githubMergeEnabled = githubMergeEnabled
     }
 }
 
@@ -237,6 +246,7 @@ final class ProjectConfigService {
         let githubDefaultState = stringValue(githubTable["default-state"])
             .map { $0.lowercased() }
             .flatMap { GitHubConfig.allowedDefaultStates.contains($0) ? $0 : nil }
+        let githubMergeEnabled = boolValue(githubTable["merge-enabled"])
 
         // Return nil if every field is nil (nothing to override)
         let config = ProjectConfig(
@@ -257,7 +267,8 @@ final class ProjectConfigService {
             worktreeShowBadge: worktreeShowBadge,
             githubEnabled: githubEnabled,
             githubIncludeDrafts: githubIncludeDrafts,
-            githubDefaultState: githubDefaultState
+            githubDefaultState: githubDefaultState,
+            githubMergeEnabled: githubMergeEnabled
         )
 
         if config.isEmpty {

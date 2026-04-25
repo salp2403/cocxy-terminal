@@ -196,15 +196,18 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         // Merge the [github] section. `autoRefreshInterval` and
         // `maxItems` stay global — they are client-tuning knobs whose
         // per-project override would only introduce confusion without
-        // adding a real workflow. `enabled`, `includeDrafts` and
-        // `defaultState` do make sense per-repo (e.g. a closed-source
-        // repo might want `enabled = false`).
+        // adding a real workflow. `enabled`, `includeDrafts`,
+        // `defaultState` and `mergeEnabled` do make sense per-repo
+        // (e.g. a closed-source repo might want `enabled = false`, or
+        // a repo that requires GUI-only merges might disable the
+        // in-panel merge for everyone working there).
         let mergedGitHub = GitHubConfig(
             enabled: overrides.githubEnabled ?? github.enabled,
             autoRefreshInterval: github.autoRefreshInterval,
             maxItems: github.maxItems,
             includeDrafts: overrides.githubIncludeDrafts ?? github.includeDrafts,
-            defaultState: overrides.githubDefaultState ?? github.defaultState
+            defaultState: overrides.githubDefaultState ?? github.defaultState,
+            mergeEnabled: overrides.githubMergeEnabled ?? github.mergeEnabled
         )
 
         return CocxyConfig(
@@ -803,6 +806,15 @@ struct GitHubConfig: Codable, Sendable, Equatable {
     /// values fall back to `open` in the parser.
     let defaultState: String
 
+    /// Master switch for the in-panel PR merge feature (v0.1.86).
+    /// When `false`, the Code Review panel and the GitHub pane hide
+    /// every "Merge PR" affordance and the `cocxy github pr-merge`
+    /// CLI verb returns an actionable error pointing here. The flag
+    /// is a defensive safety net so a future regression in the merge
+    /// flow can be neutralised by a config tweak instead of a hot-fix
+    /// release.
+    let mergeEnabled: Bool
+
     /// Lower bound enforced on `autoRefreshInterval` by the parser.
     static let minAutoRefreshInterval: Int = 0
     /// Upper bound enforced on `autoRefreshInterval`. One hour keeps
@@ -823,13 +835,15 @@ struct GitHubConfig: Codable, Sendable, Equatable {
         autoRefreshInterval: Int = 60,
         maxItems: Int = 30,
         includeDrafts: Bool = true,
-        defaultState: String = "open"
+        defaultState: String = "open",
+        mergeEnabled: Bool = true
     ) {
         self.enabled = enabled
         self.autoRefreshInterval = autoRefreshInterval
         self.maxItems = maxItems
         self.includeDrafts = includeDrafts
         self.defaultState = defaultState
+        self.mergeEnabled = mergeEnabled
     }
 
     static var defaults: GitHubConfig {
@@ -838,7 +852,8 @@ struct GitHubConfig: Codable, Sendable, Equatable {
             autoRefreshInterval: 60,
             maxItems: 30,
             includeDrafts: true,
-            defaultState: "open"
+            defaultState: "open",
+            mergeEnabled: true
         )
     }
 
@@ -846,6 +861,7 @@ struct GitHubConfig: Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case enabled, autoRefreshInterval, maxItems, includeDrafts, defaultState
+        case mergeEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -856,6 +872,7 @@ struct GitHubConfig: Codable, Sendable, Equatable {
         self.maxItems = try container.decodeIfPresent(Int.self, forKey: .maxItems) ?? defaults.maxItems
         self.includeDrafts = try container.decodeIfPresent(Bool.self, forKey: .includeDrafts) ?? defaults.includeDrafts
         self.defaultState = try container.decodeIfPresent(String.self, forKey: .defaultState) ?? defaults.defaultState
+        self.mergeEnabled = try container.decodeIfPresent(Bool.self, forKey: .mergeEnabled) ?? defaults.mergeEnabled
     }
 }
 

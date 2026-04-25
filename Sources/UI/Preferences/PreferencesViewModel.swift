@@ -204,6 +204,12 @@ final class PreferencesViewModel: ObservableObject {
     /// enters an unknown value.
     @Published var githubDefaultState: String
 
+    /// Master toggle for the in-panel PR merge feature (v0.1.86).
+    /// When `false`, the Code Review panel and the GitHub pane hide
+    /// every "Merge PR" affordance and the `cocxy github pr-merge`
+    /// CLI verb returns an actionable error pointing here.
+    @Published var githubMergeEnabled: Bool
+
     // MARK: - Read-Only Keybindings
 
     /// New tab shortcut from the saved config.
@@ -335,6 +341,7 @@ final class PreferencesViewModel: ObservableObject {
         githubMaxItems = c.github.maxItems
         githubIncludeDrafts = c.github.includeDrafts
         githubDefaultState = c.github.defaultState
+        githubMergeEnabled = c.github.mergeEnabled
         pendingKeybindings = nil
     }
 
@@ -419,12 +426,13 @@ final class PreferencesViewModel: ObservableObject {
         self.worktreeInheritProjectConfig = config.worktree.inheritProjectConfig
         self.worktreeShowBadge = config.worktree.showBadge
 
-        // GitHub (v0.1.84)
+        // GitHub (v0.1.84 — base) and v0.1.86 (mergeEnabled)
         self.githubEnabled = config.github.enabled
         self.githubAutoRefreshInterval = config.github.autoRefreshInterval
         self.githubMaxItems = config.github.maxItems
         self.githubIncludeDrafts = config.github.includeDrafts
         self.githubDefaultState = config.github.defaultState
+        self.githubMergeEnabled = config.github.mergeEnabled
 
         // Available themes from built-in list.
         self.availableThemes = Self.defaultThemeNames()
@@ -663,6 +671,7 @@ final class PreferencesViewModel: ObservableObject {
             || githubMaxItems != config.maxItems
             || githubIncludeDrafts != config.includeDrafts
             || githubDefaultState != config.defaultState
+            || githubMergeEnabled != config.mergeEnabled
     }
 
     // MARK: - TOML Generation
@@ -780,6 +789,7 @@ final class PreferencesViewModel: ObservableObject {
         max-items = \(min(max(githubMaxItems, GitHubConfig.minMaxItems), GitHubConfig.maxMaxItems))
         include-drafts = \(githubIncludeDrafts)
         default-state = "\(GitHubConfig.allowedDefaultStates.contains(githubDefaultState.lowercased()) ? githubDefaultState.lowercased() : defaults.github.defaultState)"
+        merge-enabled = \(githubMergeEnabled)
         """
     }
 

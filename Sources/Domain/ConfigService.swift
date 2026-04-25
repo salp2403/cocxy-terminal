@@ -307,6 +307,12 @@ final class ConfigService: ConfigProviding {
         # Default --state value used on first load. Allowed: open,
         # closed, merged (pull requests only), all.
         default-state = "\(defaults.github.defaultState)"
+        # Master switch for the in-panel PR merge feature (v0.1.86).
+        # Set to false to hide every "Merge PR" button in the Code
+        # Review panel and the GitHub pane, and to disable the
+        # `cocxy github pr-merge` CLI verb. The flag is a defensive
+        # safety net; leave it on for normal operation.
+        merge-enabled = \(defaults.github.mergeEnabled)
         """
     }
 
@@ -711,7 +717,8 @@ final class ConfigService: ConfigProviding {
             autoRefreshInterval: clampedRefresh,
             maxItems: clampedMaxItems,
             includeDrafts: boolValue(table["include-drafts"]) ?? defaults.includeDrafts,
-            defaultState: validatedState
+            defaultState: validatedState,
+            mergeEnabled: boolValue(table["merge-enabled"]) ?? defaults.mergeEnabled
         )
     }
 

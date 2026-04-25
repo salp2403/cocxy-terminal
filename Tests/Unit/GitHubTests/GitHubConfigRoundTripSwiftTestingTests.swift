@@ -50,6 +50,7 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         #expect(defaults.maxItems == 30)
         #expect(defaults.includeDrafts == true)
         #expect(defaults.defaultState == "open")
+        #expect(defaults.mergeEnabled == true)
     }
 
     @Test("GitHubConfig falls back on missing keys")
@@ -61,6 +62,14 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         #expect(decoded.autoRefreshInterval == 60) // default
         #expect(decoded.maxItems == 30) // default
         #expect(decoded.defaultState == "open") // default
+        #expect(decoded.mergeEnabled == true) // default — feature on by default
+    }
+
+    @Test("GitHubConfig decodes explicit mergeEnabled = false from JSON")
+    func githubConfig_decodesExplicitMergeEnabledFalse() throws {
+        let json = #"{"mergeEnabled": false}"#
+        let decoded = try JSONDecoder().decode(GitHubConfig.self, from: Data(json.utf8))
+        #expect(decoded.mergeEnabled == false)
     }
 
     // MARK: - generateDefaultToml
@@ -74,6 +83,7 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         #expect(toml.contains("max-items = 30"))
         #expect(toml.contains("include-drafts = true"))
         #expect(toml.contains("default-state = \"open\""))
+        #expect(toml.contains("merge-enabled = true"))
     }
 
     // MARK: - ConfigService parsing
@@ -87,6 +97,7 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         max-items = 50
         include-drafts = false
         default-state = "closed"
+        merge-enabled = false
         """
         let provider = MemoryFileProvider(initialContent: toml)
         let service = ConfigService(fileProvider: provider)
@@ -98,6 +109,19 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         #expect(gh.maxItems == 50)
         #expect(gh.includeDrafts == false)
         #expect(gh.defaultState == "closed")
+        #expect(gh.mergeEnabled == false)
+    }
+
+    @Test("ConfigService keeps mergeEnabled default when key is absent")
+    func configService_mergeEnabledDefaultsToTrueWhenAbsent() throws {
+        let toml = """
+        [github]
+        enabled = true
+        """
+        let provider = MemoryFileProvider(initialContent: toml)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        #expect(service.current.github.mergeEnabled == true)
     }
 
     @Test("ConfigService clamps out-of-range values")
@@ -143,6 +167,7 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         enabled = false
         include-drafts = false
         default-state = "closed"
+        merge-enabled = false
         """
         let config = ProjectConfigService().parse(toml)
         try? #require(config != nil)
@@ -150,6 +175,19 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         #expect(config.githubEnabled == false)
         #expect(config.githubIncludeDrafts == false)
         #expect(config.githubDefaultState == "closed")
+        #expect(config.githubMergeEnabled == false)
+    }
+
+    @Test("ProjectConfig surfaces merge-enabled override on its own")
+    func projectConfig_surfacesMergeEnabledOverrideAlone() {
+        let toml = """
+        [github]
+        merge-enabled = false
+        """
+        let config = ProjectConfigService().parse(toml)
+        #expect(config?.githubMergeEnabled == false)
+        #expect(config?.githubEnabled == nil)
+        #expect(config?.githubIncludeDrafts == nil)
     }
 
     @Test("ProjectConfig rejects invalid default-state values silently")
@@ -172,16 +210,39 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         let overrides = ProjectConfig(
             githubEnabled: false,
             githubIncludeDrafts: false,
-            githubDefaultState: "all"
+            githubDefaultState: "all",
+            githubMergeEnabled: false
         )
         let merged = global.applying(projectOverrides: overrides)
 
         #expect(merged.github.enabled == false)
         #expect(merged.github.includeDrafts == false)
         #expect(merged.github.defaultState == "all")
+        #expect(merged.github.mergeEnabled == false)
         // Global-only fields stay global.
         #expect(merged.github.autoRefreshInterval == global.github.autoRefreshInterval)
         #expect(merged.github.maxItems == global.github.maxItems)
+    }
+
+    @Test("CocxyConfig.applying preserves global mergeEnabled when override is nil")
+    func cocxyConfig_applyingPreservesMergeEnabledWhenOverrideIsNil() {
+        let global = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults,
+            github: GitHubConfig(mergeEnabled: false)
+        )
+        let overrides = ProjectConfig(githubEnabled: true)
+        let merged = global.applying(projectOverrides: overrides)
+        // Global mergeEnabled wins because the project did not override it.
+        #expect(merged.github.mergeEnabled == false)
+        // Project enabled override took effect.
+        #expect(merged.github.enabled == true)
     }
 
     @Test("CocxyConfig.applying leaves GitHub untouched when no overrides")
@@ -295,6 +356,7 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         viewModel.githubMaxItems = 75
         viewModel.githubIncludeDrafts = false
         viewModel.githubDefaultState = "merged"
+        viewModel.githubMergeEnabled = false
 
         try viewModel.save()
 
@@ -309,6 +371,28 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         #expect(gh.maxItems == 75)
         #expect(gh.includeDrafts == false)
         #expect(gh.defaultState == "merged")
+        #expect(gh.mergeEnabled == false)
+    }
+
+    @Test("PreferencesViewModel hasUnsavedChanges flips when mergeEnabled changes")
+    @MainActor
+    func preferencesViewModel_hasUnsavedChangesTracksMergeEnabled() throws {
+        let provider = MemoryFileProvider()
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+
+        let viewModel = PreferencesViewModel(
+            config: service.current,
+            fileProvider: provider
+        )
+        #expect(viewModel.hasUnsavedChanges == false)
+
+        viewModel.githubMergeEnabled = false
+        #expect(viewModel.hasUnsavedChanges == true)
+
+        viewModel.discardChanges()
+        #expect(viewModel.hasUnsavedChanges == false)
+        #expect(viewModel.githubMergeEnabled == true)
     }
 
     @Test("PreferencesViewModel clamps out-of-range values on save")
