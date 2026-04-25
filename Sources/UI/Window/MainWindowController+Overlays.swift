@@ -1002,6 +1002,26 @@ extension MainWindowController {
                 draft: draft
             ) ?? URL(string: "about:blank")!
         }
+        // Merge integration (v0.1.86). Routed through the same shared
+        // GitHubService used by the GitHub pane so the actor serialises
+        // every gh subprocess across both surfaces.
+        viewModel.mergePullRequestHandler = { [weak self] request in
+            guard let self else { throw GitHubCLIError.notAGitRepository(path: "") }
+            return try await self.performCodeReviewMergePullRequest(request: request)
+        }
+        viewModel.pullRequestMergeabilityHandler = { [weak self] number in
+            guard let self else {
+                throw GitHubCLIError.notAGitRepository(path: "")
+            }
+            return try await self.performCodeReviewPullRequestMergeability(number: number)
+        }
+        viewModel.activePullRequestDetectionHandler = { [weak self] branch in
+            guard let self else { return nil }
+            return try await self.performCodeReviewPullRequestNumberLookup(forBranch: branch)
+        }
+        viewModel.activeBranchProvider = { [weak viewModel] in
+            viewModel?.gitStatus?.branch
+        }
         let dashboardVM = dashboardViewModel
             ?? injectedDashboardViewModel
             ?? (NSApp.delegate as? AppDelegate)?.agentDashboardViewModel

@@ -179,6 +179,15 @@ extension MainWindowController {
         // (Fase 10). Leaving it nil means the PR list works, but the
         // "Create PR" button in the review workflow panel is inert
         // until Fase 10 lands.
+
+        // Merge handler (v0.1.86): the pane's PR row context menu
+        // routes through here so multi-window workflows share the
+        // same actor (GitHubService) and never run two `gh pr merge`
+        // invocations against the same checkout in parallel.
+        viewModel.mergePullRequestHandler = { [weak self] request in
+            guard let self else { throw GitHubCLIError.notAGitRepository(path: "") }
+            return try await self.performCodeReviewMergePullRequest(request: request)
+        }
     }
 
     // MARK: Clamp + sync helpers (called from layoutRightDockedAgentPanels)
@@ -281,13 +290,7 @@ extension MainWindowController {
         guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
             throw GitHubCLIError.notAGitRepository(path: "")
         }
-        let service: GitHubService
-        if let appDelegate = NSApp.delegate as? AppDelegate {
-            service = type(of: appDelegate).sharedGitHubService
-        } else {
-            service = GitHubService()
-        }
-        let pr = try await service.createPullRequest(
+        let pr = try await sharedGitHubService().createPullRequest(
             title: title,
             body: body,
             baseBranch: baseBranch,
@@ -295,5 +298,72 @@ extension MainWindowController {
             at: workingDirectory
         )
         return pr.url
+    }
+
+    // MARK: - Merge bridge (v0.1.86)
+
+    /// Routes a merge request from any surface (Code Review panel or
+    /// GitHub pane) through the shared `GitHubService` so concurrent
+    /// merges across windows serialise via the actor.
+    ///
+    /// Throws `GitHubCLIError.notAGitRepository` when the active tab
+    /// has no resolvable working directory; the view layer maps that
+    /// to a banner pointing the user at opening a git repo first.
+    func performCodeReviewMergePullRequest(
+        request: GitHubMergeRequest
+    ) async throws -> GitHubPullRequest {
+        guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
+            throw GitHubCLIError.notAGitRepository(path: "")
+        }
+        return try await sharedGitHubService().mergePullRequest(
+            request: request,
+            at: workingDirectory
+        )
+    }
+
+    /// Resolves a typed `GitHubMergeability` snapshot for `number`. Used
+    /// by the Code Review panel to decide whether the merge button
+    /// should be enabled and what reason to surface in the chip
+    /// tooltip when it is not.
+    func performCodeReviewPullRequestMergeability(
+        number: Int
+    ) async throws -> GitHubMergeability {
+        guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
+            throw GitHubCLIError.notAGitRepository(path: "")
+        }
+        return try await sharedGitHubService().pullRequestMergeability(
+            number: number,
+            at: workingDirectory
+        )
+    }
+
+    /// Looks up the open PR that matches `branch`, returning `nil` when
+    /// the branch has no associated PR upstream. The Code Review panel
+    /// uses this to surface the merge button automatically when the
+    /// user lands on a worktree whose branch already has a PR — no
+    /// need to run `Create PR` first.
+    func performCodeReviewPullRequestNumberLookup(
+        forBranch branch: String
+    ) async throws -> Int? {
+        guard let workingDirectory = currentGitHubPaneWorkingDirectory() else {
+            return nil
+        }
+        return try await sharedGitHubService().pullRequestNumber(
+            forBranch: branch,
+            at: workingDirectory
+        )
+    }
+
+    /// Returns the process-wide shared GitHubService, falling back to a
+    /// fresh instance only when the AppDelegate has not been wired
+    /// (test contexts where we synthesise a controller directly). Both
+    /// the Code Review panel and the GitHub pane go through this so
+    /// `gh` subprocess invocations serialise across surfaces and
+    /// windows.
+    private func sharedGitHubService() -> GitHubService {
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            return type(of: appDelegate).sharedGitHubService
+        }
+        return GitHubService()
     }
 }
