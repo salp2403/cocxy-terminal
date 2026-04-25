@@ -283,6 +283,51 @@ actor GitHubService {
         )
     }
 
+    // MARK: - PR detection by branch
+
+    /// Looks up the open pull request whose head branch matches
+    /// `branch` and returns its number, or `nil` when no PR exists for
+    /// that branch. Used by the Code Review panel so opening a worktree
+    /// that already has a PR upstream surfaces the merge button without
+    /// the user having to create the PR through Cocxy first.
+    ///
+    /// `gh pr view <branch>` resolves the PR for the given head ref.
+    /// When the branch has no PR, `gh` exits non-zero with a stderr
+    /// containing "no pull requests found" — we map that path to `nil`
+    /// instead of throwing so the caller can treat "no PR" as a
+    /// neutral state rather than an error.
+    func pullRequestNumber(
+        forBranch branch: String,
+        at directory: URL,
+        timeoutSeconds: TimeInterval = 10.0
+    ) async throws -> Int? {
+        let trimmed = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let args = ["pr", "view", trimmed, "--json", "number"]
+        let result = try runner(directory, args, timeoutSeconds)
+        if result.terminationStatus != 0 {
+            // "no pull requests found for branch foo" is the canonical
+            // stderr when nothing matches. Treat anything containing
+            // "no pull request" as the absence of a PR.
+            let lower = result.stderr.lowercased()
+            if lower.contains("no pull request") || lower.contains("not found") {
+                return nil
+            }
+            throw GitHubCLI.classifyError(
+                command: "gh pr view \(trimmed)",
+                stderr: result.stderr,
+                exitCode: result.terminationStatus
+            )
+        }
+
+        struct NumberResponse: Decodable { let number: Int }
+        let payload = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !payload.isEmpty else { return nil }
+        let response = try GitHubJSONDecoder.decode(NumberResponse.self, from: payload)
+        return response.number
+    }
+
     // MARK: - Mergeability
 
     /// Fetches a typed snapshot describing whether a pull request can

@@ -379,6 +379,76 @@ struct GitHubServiceMergeSwiftTestingTests {
         #expect(argsString.contains("statusCheckRollup"))
     }
 
+    // MARK: - pullRequestNumber(forBranch:)
+
+    @Test("pullRequestNumber(forBranch:) returns the PR number for a branch with an open PR")
+    func pullRequestNumberForBranchReturnsTheNumber() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesView, result: GitHubCLIResult(
+            stdout: "{\"number\": 42}",
+            stderr: "",
+            terminationStatus: 0
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        let number = try await service.pullRequestNumber(
+            forBranch: "feature/test",
+            at: Self.workingDirectory
+        )
+        #expect(number == 42)
+        let invocation = try #require(spy.allInvocations.first)
+        #expect(invocation.args.contains("feature/test"))
+        #expect(invocation.args.contains("number"))
+    }
+
+    @Test("pullRequestNumber(forBranch:) returns nil when no PR matches the branch")
+    func pullRequestNumberForBranchReturnsNilWhenNoPR() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesView, result: GitHubCLIResult(
+            stdout: "",
+            stderr: "no pull requests found for branch feature/orphan",
+            terminationStatus: 1
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        let number = try await service.pullRequestNumber(
+            forBranch: "feature/orphan",
+            at: Self.workingDirectory
+        )
+        #expect(number == nil)
+    }
+
+    @Test("pullRequestNumber(forBranch:) returns nil for empty branch input")
+    func pullRequestNumberForBranchReturnsNilForEmptyInput() async throws {
+        let spy = RunnerSpy()
+        let service = GitHubService(runner: spy.runner)
+        let number = try await service.pullRequestNumber(
+            forBranch: "   ",
+            at: Self.workingDirectory
+        )
+        #expect(number == nil)
+        // Empty input must short-circuit before invoking gh.
+        #expect(spy.allInvocations.isEmpty)
+    }
+
+    @Test("pullRequestNumber(forBranch:) propagates non-not-found gh errors")
+    func pullRequestNumberForBranchPropagatesOtherErrors() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesView, result: GitHubCLIResult(
+            stdout: "",
+            stderr: "no GitHub remote",
+            terminationStatus: 1
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        await #expect(throws: GitHubCLIError.noRemote) {
+            _ = try await service.pullRequestNumber(
+                forBranch: "feature/test",
+                at: Self.workingDirectory
+            )
+        }
+    }
+
     @Test("pullRequestMergeability surfaces gh failures via classifyError")
     func pullRequestMergeabilitySurfacesGhFailures() async throws {
         let spy = RunnerSpy()

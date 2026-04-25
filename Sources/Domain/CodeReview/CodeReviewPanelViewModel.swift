@@ -78,6 +78,40 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     @Published private(set) var editorOriginalContent = ""
     @Published private(set) var reviewAgentSessions: [AgentSessionInfo] = []
 
+    // MARK: - PR merge state (v0.1.86)
+    //
+    // The four properties below are intentionally declared without
+    // `private(set)` so the `+PRMerge.swift` extension (same module,
+    // separate file) can mutate them. Discipline keeps writes inside
+    // the extension; nothing outside the type should mutate these
+    // directly.
+
+    /// Pull request number associated with the active branch, if any.
+    /// Set by the auto-detection routine in the `+PRMerge` extension or
+    /// the post-`requestCreatePullRequest` capture path. The view layer
+    /// reads it to decide whether the merge button should be visible.
+    @Published var activePullRequestNumber: Int?
+
+    /// Latest mergeability snapshot for the active PR. The toolbar
+    /// renders the chip kind from this; `nil` means "we have not asked
+    /// gh yet" which the UI shows as a neutral pending state.
+    @Published var activePullRequestMergeability: GitHubMergeability?
+
+    /// Last error reported by the merge or mergeability flow. Lives
+    /// alongside `lastErrorMessage` so the view can render a localised
+    /// banner without colliding with the diff-fetching error channel.
+    @Published var pullRequestMergeErrorMessage: String?
+
+    /// Last info banner from a successful merge. Separate from
+    /// `lastInfoMessage` so the merge confirmation has its own channel
+    /// (per `feedback_info_vs_error_banners`) and is not overwritten
+    /// by the next git workflow notice.
+    @Published var pullRequestMergeInfoMessage: String?
+
+    /// `true` while a merge is in flight. The toolbar disables both
+    /// merge and submit-comments buttons during this window.
+    @Published var isMergingPullRequest: Bool = false
+
     var activeTabCwdProvider: (() -> URL?)?
     var activeTabIDProvider: (() -> TabID?)?
     var activeSessionIdProvider: (() -> String?)?
@@ -90,6 +124,35 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     /// shared `GitHubService.createPullRequest` flow. Kept as a
     /// closure so the view model does not depend on GitHubService.
     var createPullRequestHandler: ((_ title: String, _ body: String?, _ baseBranch: String?, _ draft: Bool) async throws -> URL)?
+
+    // MARK: - Merge handlers (v0.1.86)
+
+    /// Handler invoked when the user confirms an in-panel merge. The
+    /// MainWindowController wires this to `GitHubService.mergePullRequest`.
+    /// Returns the hydrated post-merge `GitHubPullRequest` so the view
+    /// model can update banners and clear the active PR state without
+    /// a second round trip.
+    var mergePullRequestHandler: ((_ request: GitHubMergeRequest) async throws -> GitHubPullRequest)?
+
+    /// Handler invoked when the panel needs a fresh mergeability
+    /// snapshot — typically right after attaching a PR and after the
+    /// user resolves a transient blocker (rebased branch, finished
+    /// checks). The MainWindowController wires this to
+    /// `GitHubService.pullRequestMergeability`.
+    var pullRequestMergeabilityHandler: ((_ number: Int) async throws -> GitHubMergeability)?
+
+    /// Handler invoked to discover whether the active branch already
+    /// has an upstream pull request. Returns the PR number when found,
+    /// `nil` when the branch has no PR. The MainWindowController wires
+    /// this to `GitHubService.pullRequestNumber(forBranch:at:)`.
+    var activePullRequestDetectionHandler: ((_ branch: String) async throws -> Int?)?
+
+    /// Returns the branch name the merge integration should consult
+    /// when asking gh "is there a PR for this branch?". When `nil` or
+    /// returning `nil`, the extension falls back to the current
+    /// `gitStatus.branch`. Kept as a closure so unit tests can drive
+    /// the detection flow without instantiating a real git workflow.
+    var activeBranchProvider: (() -> String?)?
 
     var refreshDelay: TimeInterval = 2.0
     var onDiffsUpdated: (([FileDiff]) -> Void)?
@@ -454,6 +517,12 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                 case .success(let url):
                     self.lastInfoMessage = "Pull request created: \(url.absoluteString)"
                     self.refreshGitStatus()
+                    // Capture the PR number from the URL so the merge
+                    // integration (v0.1.86) can immediately surface the
+                    // merge button without waiting for a branch sweep.
+                    if let number = GitHubService.extractPullRequestNumber(from: url.absoluteString) {
+                        self.attachActivePullRequestNumber(number)
+                    }
                 case .failure(let error):
                     self.lastErrorMessage = Self.userFacingErrorMessage(for: error)
                 }
