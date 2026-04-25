@@ -1773,7 +1773,19 @@ extension MainWindowController {
             // toggles, and bridge restart when needed.
             try? self?.configService?.reload()
         }
-        let prefsView = PreferencesView(viewModel: viewModel)
+        let prefsView = PreferencesView(
+            viewModel: viewModel,
+            onGitHubSignIn: { [weak self] in
+                guard let self else { return }
+                let directory = self.currentGitHubPaneWorkingDirectory()
+                    ?? FileManager.default.homeDirectoryForCurrentUser
+                self.startGitHubAuthentication(in: directory)
+            },
+            onOpenGitHubCLIInstallGuide: {
+                guard let url = URL(string: "https://cli.github.com/") else { return }
+                NSWorkspace.shared.open(url)
+            }
+        )
         let hostingController = NSHostingController(rootView: prefsView)
         let prefsWindow = NSWindow(contentViewController: hostingController)
         prefsWindow.title = "Cocxy Terminal Settings"

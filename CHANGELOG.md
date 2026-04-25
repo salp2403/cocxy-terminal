@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   honours per-project overrides via `.cocxy.toml` so individual
   repositories can require GUI-only merges (e.g. when a custom
   GitHub Actions pipeline must drive the merge).
+- GitHub setup is now discoverable in the product: the pane shows
+  action buttons for missing `gh` and signed-out states, and
+  Preferences > GitHub includes Authentication actions to install the
+  GitHub CLI or start `gh auth login` in an interactive Cocxy tab.
+  Cocxy still never stores GitHub tokens; authentication remains owned
+  by the official `gh` keychain/browser flow.
 
 ### Changed
 - CLI command count: 102 → 103.

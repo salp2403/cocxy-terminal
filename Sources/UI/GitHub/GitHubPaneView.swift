@@ -144,12 +144,22 @@ struct GitHubPaneView: View {
                     GitHubPaneBanner(message: mergeInfo, kind: .info)
                 }
                 if let info = viewModel.lastInfoMessage {
-                    GitHubPaneBanner(message: info, kind: .info)
+                    GitHubPaneBanner(
+                        message: info,
+                        kind: .info,
+                        actionTitle: viewModel.setupAction?.buttonTitle,
+                        onAction: setupActionHandler
+                    )
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
         }
+    }
+
+    private var setupActionHandler: (() -> Void)? {
+        guard let action = viewModel.setupAction else { return nil }
+        return { viewModel.performSetupAction(action) }
     }
 
     // MARK: Content

@@ -175,6 +175,9 @@ extension MainWindowController {
         viewModel.onOpenURL = { url in
             NSWorkspace.shared.open(url)
         }
+        viewModel.onStartAuthentication = { [weak self] workingDirectory in
+            self?.startGitHubAuthentication(in: workingDirectory) ?? false
+        }
         // `onCreatePullRequest` is wired by the Code Review integration
         // (Fase 10). Leaving it nil means the PR list works, but the
         // "Create PR" button in the review workflow panel is inert
@@ -274,6 +277,20 @@ extension MainWindowController {
             return globalConfig.github
         }
         return globalConfig.applying(projectOverrides: projectConfig).github
+    }
+
+    /// Starts `gh auth login` in a real terminal tab. The GitHub CLI
+    /// login flow is interactive and may open a browser/device-code
+    /// prompt, so Cocxy must not run it through the background
+    /// subprocess helper used by read-only pane refreshes.
+    @discardableResult
+    func startGitHubAuthentication(in workingDirectory: URL) -> Bool {
+        let tabID = createTab(workingDirectory: workingDirectory)
+        guard let surfaceID = tabSurfaceMap[tabID] else { return false }
+        bridge.sendText("gh auth login\r", to: surfaceID)
+        window?.makeKeyAndOrderFront(nil)
+        focusActiveTerminalSurface()
+        return true
     }
 
     // MARK: - Code Review bridge (Fase 10)

@@ -186,6 +186,7 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.isLoading == false)
         #expect(viewModel.lastErrorMessage == nil)
         #expect(viewModel.lastInfoMessage == nil)
+        #expect(viewModel.setupAction == nil)
     }
 
     @Test("refresh surfaces .noRemote as an informational banner")
@@ -231,6 +232,54 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.issues.isEmpty)
         #expect(viewModel.lastInfoMessage?.contains("gh auth login") == true)
         #expect(viewModel.lastErrorMessage == nil)
+        #expect(viewModel.setupAction == .signIn)
+    }
+
+    @Test("missing gh surfaces install setup action as info")
+    func refresh_missingGHSurfacesInstallSetupAction() async throws {
+        let service = GitHubService { _, _, _ in
+            throw GitHubCLIError.notInstalled
+        }
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp") }
+
+        viewModel.refresh()
+        await flush()
+
+        #expect(viewModel.lastInfoMessage?.contains("Install the GitHub CLI") == true)
+        #expect(viewModel.lastErrorMessage == nil)
+        #expect(viewModel.setupAction == .installCLI)
+    }
+
+    @Test("sign-in setup action starts gh auth login in the provided directory")
+    func setupAction_signInStartsAuthenticationInProvidedDirectory() {
+        let viewModel = GitHubPaneViewModel(service: makeService { _ in })
+        let directory = URL(fileURLWithPath: "/tmp/github-auth")
+        var launchedDirectory: URL?
+        viewModel.workingDirectoryProvider = { directory }
+        viewModel.onStartAuthentication = { workingDirectory in
+            launchedDirectory = workingDirectory
+            return true
+        }
+
+        viewModel.performSetupAction(.signIn)
+
+        #expect(launchedDirectory == directory)
+        #expect(viewModel.lastErrorMessage == nil)
+        #expect(viewModel.lastInfoMessage?.contains("new tab") == true)
+        #expect(viewModel.setupAction == nil)
+    }
+
+    @Test("install setup action opens the GitHub CLI guide")
+    func setupAction_installOpensCLIWebsite() {
+        let viewModel = GitHubPaneViewModel(service: makeService { _ in })
+        var openedURL: URL?
+        viewModel.onOpenURL = { openedURL = $0 }
+
+        viewModel.performSetupAction(.installCLI)
+
+        #expect(openedURL?.host == "cli.github.com")
+        #expect(viewModel.lastInfoMessage?.contains("install guide") == true)
     }
 
     @Test("refresh with disabled config short-circuits before any gh call")

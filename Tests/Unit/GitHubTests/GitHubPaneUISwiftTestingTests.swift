@@ -68,6 +68,30 @@ struct GitHubPaneUISwiftTestingTests {
         #expect(clicks == 0)
     }
 
+    @Test("GitHub setup actions expose stable button titles")
+    func setupActions_exposeStableButtonTitles() {
+        #expect(GitHubPaneSetupAction.installCLI.buttonTitle == "Install GitHub CLI")
+        #expect(GitHubPaneSetupAction.signIn.buttonTitle == "Sign In with GitHub")
+    }
+
+    @Test("GitHub preferences section renders authentication actions")
+    func preferencesSection_rendersAuthenticationActions() {
+        var signInClicks = 0
+        var installClicks = 0
+        let viewModel = PreferencesViewModel(config: .defaults)
+        let section = GitHubPreferencesSection(
+            viewModel: viewModel,
+            saveStatus: .constant(nil),
+            onGitHubSignIn: { signInClicks += 1 },
+            onOpenGitHubCLIInstallGuide: { installClicks += 1 }
+        )
+
+        _ = section.body
+
+        #expect(signInClicks == 0)
+        #expect(installClicks == 0)
+    }
+
     // MARK: - Row factories
 
     @Test("GitHubPullRequestRow renders selected state without crashing")

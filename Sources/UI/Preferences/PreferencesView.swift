@@ -32,6 +32,16 @@ struct PreferencesView: View {
     /// The view model holding editable state for all preferences.
     @ObservedObject var viewModel: PreferencesViewModel
 
+    /// Starts the interactive `gh auth login` flow from the owning
+    /// window controller. Nil when the view is constructed in tests or
+    /// previews without a live terminal window.
+    private let onGitHubSignIn: (() -> Void)?
+
+    /// Opens the GitHub CLI install guide. Kept injectable so tests and
+    /// future windows can swap the side effect without touching the
+    /// preference section.
+    private let onOpenGitHubCLIInstallGuide: (() -> Void)?
+
     /// Currently selected section in the sidebar.
     @State private var selectedSection: PreferencesSection = .general
 
@@ -41,13 +51,25 @@ struct PreferencesView: View {
     // MARK: - Legacy Init
 
     /// Backwards-compatible initializer that wraps a read-only config in a view model.
-    init(config: CocxyConfig) {
+    init(
+        config: CocxyConfig,
+        onGitHubSignIn: (() -> Void)? = nil,
+        onOpenGitHubCLIInstallGuide: (() -> Void)? = nil
+    ) {
         self.viewModel = PreferencesViewModel(config: config)
+        self.onGitHubSignIn = onGitHubSignIn
+        self.onOpenGitHubCLIInstallGuide = onOpenGitHubCLIInstallGuide
     }
 
     /// Primary initializer with an editable view model.
-    init(viewModel: PreferencesViewModel) {
+    init(
+        viewModel: PreferencesViewModel,
+        onGitHubSignIn: (() -> Void)? = nil,
+        onOpenGitHubCLIInstallGuide: (() -> Void)? = nil
+    ) {
         self.viewModel = viewModel
+        self.onGitHubSignIn = onGitHubSignIn
+        self.onOpenGitHubCLIInstallGuide = onOpenGitHubCLIInstallGuide
     }
 
     // MARK: - Body
@@ -92,7 +114,12 @@ struct PreferencesView: View {
         case .worktrees:
             WorktreesPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .github:
-            GitHubPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+            GitHubPreferencesSection(
+                viewModel: viewModel,
+                saveStatus: $saveStatus,
+                onGitHubSignIn: onGitHubSignIn,
+                onOpenGitHubCLIInstallGuide: onOpenGitHubCLIInstallGuide
+            )
         case .about:
             AboutPreferencesSection()
         }
@@ -799,6 +826,8 @@ struct WorktreesPreferencesSection: View {
 struct GitHubPreferencesSection: View {
     @ObservedObject var viewModel: PreferencesViewModel
     @Binding var saveStatus: String?
+    var onGitHubSignIn: (() -> Void)?
+    var onOpenGitHubCLIInstallGuide: (() -> Void)?
 
     var body: some View {
         Form {
@@ -806,6 +835,30 @@ struct GitHubPreferencesSection: View {
                 Toggle("Enable GitHub pane", isOn: $viewModel.githubEnabled)
                 Text(
                     "Powers Cmd+Option+G and the `cocxy github` CLI verbs. Turning this off stops every `gh` subprocess invocation and hides the pane. Authentication is delegated to `gh auth status`; Cocxy never stores GitHub tokens of its own."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Authentication") {
+                Button {
+                    onGitHubSignIn?()
+                } label: {
+                    Label("Sign In with GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                }
+                .disabled(onGitHubSignIn == nil)
+                .help("Open a Cocxy tab and run gh auth login.")
+
+                Button {
+                    openGitHubCLIInstallGuide()
+                } label: {
+                    Label("Install GitHub CLI", systemImage: "arrow.down.circle")
+                }
+                .help("Open the official GitHub CLI install guide.")
+
+                Text(
+                    "Cocxy uses the official GitHub CLI login. Tokens stay in gh/keychain storage; Cocxy only reads `gh auth status`."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -861,6 +914,15 @@ struct GitHubPreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("GitHub")
+    }
+
+    private func openGitHubCLIInstallGuide() {
+        if let onOpenGitHubCLIInstallGuide {
+            onOpenGitHubCLIInstallGuide()
+            return
+        }
+        guard let url = URL(string: "https://cli.github.com/") else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 

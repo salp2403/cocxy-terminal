@@ -15,6 +15,24 @@ import Foundation
 import AppKit
 #endif
 
+// MARK: - Setup actions
+
+/// User-facing recovery actions the pane can surface when the local
+/// GitHub CLI is missing or not authenticated.
+enum GitHubPaneSetupAction: Equatable, Sendable {
+    case installCLI
+    case signIn
+
+    var buttonTitle: String {
+        switch self {
+        case .installCLI:
+            return "Install GitHub CLI"
+        case .signIn:
+            return "Sign In with GitHub"
+        }
+    }
+}
+
 // MARK: - GitHubPaneViewModel
 
 @MainActor
@@ -109,6 +127,11 @@ final class GitHubPaneViewModel: ObservableObject {
     /// already uses for "no remote", "install gh", etc.
     @Published private(set) var lastMergeInfoMessage: String?
 
+    /// Optional recovery action rendered beside install/sign-in
+    /// banners. The action is nil for regular data and error states so
+    /// the UI never shows an irrelevant button.
+    @Published private(set) var setupAction: GitHubPaneSetupAction?
+
     // MARK: - Providers (injected by the MainWindowController)
 
     /// Returns the working directory the pane should use for `gh`
@@ -130,6 +153,11 @@ final class GitHubPaneViewModel: ObservableObject {
     /// code-review integration (Fase 10). The closure receives title,
     /// optional body and optional base branch.
     var onCreatePullRequest: ((_ title: String, _ body: String?, _ baseBranch: String?) async -> Void)?
+
+    /// Opens an interactive terminal flow for `gh auth login`. `gh`
+    /// owns token storage and browser/device auth; Cocxy only starts a
+    /// shell command inside a real PTY so the user stays in control.
+    var onStartAuthentication: ((_ workingDirectory: URL) -> Bool)?
 
     /// Handler invoked when the user picks Merge from a PR row's
     /// context menu. The MainWindowController wires this to
@@ -187,6 +215,29 @@ final class GitHubPaneViewModel: ObservableObject {
     /// the injected callback without reaching for `NSWorkspace`.
     func open(_ url: URL) {
         onOpenURL?(url)
+    }
+
+    /// Runs a visible recovery action from a setup banner. Install
+    /// opens the official GitHub CLI site; sign-in opens an interactive
+    /// Cocxy tab and runs `gh auth login` in that PTY.
+    func performSetupAction(_ action: GitHubPaneSetupAction) {
+        switch action {
+        case .installCLI:
+            guard let url = URL(string: "https://cli.github.com/") else { return }
+            open(url)
+            lastErrorMessage = nil
+            lastInfoMessage = "Opened the GitHub CLI install guide. After installing `gh`, press Refresh."
+        case .signIn:
+            let workingDirectory = workingDirectoryProvider?()
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            guard onStartAuthentication?(workingDirectory) == true else {
+                lastErrorMessage = "Could not open a Cocxy tab for `gh auth login`."
+                return
+            }
+            setupAction = nil
+            lastErrorMessage = nil
+            lastInfoMessage = "Complete `gh auth login` in the new tab, then press Refresh."
+        }
     }
 
     /// Selects a pull request as the current checks target and moves
@@ -365,6 +416,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 checks = []
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
+                setupAction = nil
                 isLoading = false
             }
             return
@@ -380,6 +432,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 checks = []
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
+                setupAction = nil
                 isLoading = false
             }
             return
@@ -389,6 +442,7 @@ final class GitHubPaneViewModel: ObservableObject {
             isLoading = true
             lastErrorMessage = nil
             lastInfoMessage = nil
+            setupAction = nil
         }
 
         // Stage 1: authentication status. We fetch it every refresh so
@@ -401,7 +455,31 @@ final class GitHubPaneViewModel: ObservableObject {
             guard generation == refreshGeneration else { return }
             applyState {
                 clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
-                lastErrorMessage = Self.banner(for: error)
+                switch error {
+                case .notInstalled:
+                    repo = nil
+                    authStatus = nil
+                    pullRequests = []
+                    issues = []
+                    checks = []
+                    selectedPullRequestNumber = nil
+                    pullRequestsWorkingDirectory = nil
+                    lastInfoMessage = Self.banner(for: error)
+                    setupAction = .installCLI
+                case .notAuthenticated:
+                    repo = nil
+                    authStatus = nil
+                    pullRequests = []
+                    issues = []
+                    checks = []
+                    selectedPullRequestNumber = nil
+                    pullRequestsWorkingDirectory = nil
+                    lastInfoMessage = Self.banner(for: error)
+                    setupAction = .signIn
+                default:
+                    lastErrorMessage = Self.banner(for: error)
+                    setupAction = nil
+                }
                 isLoading = false
             }
             return
@@ -420,6 +498,7 @@ final class GitHubPaneViewModel: ObservableObject {
         guard auth.isAuthenticated else {
             applyState {
                 lastInfoMessage = "Sign in with `gh auth login` to load GitHub data."
+                setupAction = .signIn
                 repo = nil
                 pullRequests = []
                 issues = []
@@ -448,9 +527,11 @@ final class GitHubPaneViewModel: ObservableObject {
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
                     lastInfoMessage = Self.banner(for: error)
+                    setupAction = nil
                 default:
                     clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
                     lastErrorMessage = Self.banner(for: error)
+                    setupAction = nil
                 }
                 isLoading = false
             }
