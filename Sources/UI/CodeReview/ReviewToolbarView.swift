@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // ReviewToolbarView.swift - Bottom toolbar for the review panel.
 
+import AppKit
 import SwiftUI
 
 struct ReviewToolbarView: View {
@@ -8,6 +9,7 @@ struct ReviewToolbarView: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            mergeBannerStack
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     stat(text: "\(viewModel.currentDiffs.count) files", color: CocxyColors.blue)
@@ -90,6 +92,10 @@ struct ReviewToolbarView: View {
                         .accessibilityHint("Clear all pending inline comments")
                     }
 
+                    if let prNumber = viewModel.activePullRequestNumber {
+                        mergeButton(prNumber: prNumber)
+                    }
+
                     Button {
                         viewModel.submitComments()
                     } label: {
@@ -101,7 +107,7 @@ struct ReviewToolbarView: View {
                         )
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(viewModel.pendingCommentCount == 0)
+                    .disabled(viewModel.pendingCommentCount == 0 || viewModel.isMergingPullRequest)
                     .accessibilityHint("Send all pending comments back to the originating agent")
                 }
             }
@@ -130,6 +136,167 @@ struct ReviewToolbarView: View {
                 Capsule()
                     .fill(Color(nsColor: color).opacity(0.10))
             )
+    }
+
+    // MARK: - Merge banners (v0.1.86)
+
+    /// Stacks the dedicated merge info/error banners above the stats
+    /// row. Kept in their own channel — separate from
+    /// `lastErrorMessage` / `lastInfoMessage` — so the merge feedback
+    /// does not get overwritten by the next git workflow notice.
+    /// Hidden entirely when both messages are nil so the toolbar
+    /// stays compact during regular review work.
+    @ViewBuilder
+    private var mergeBannerStack: some View {
+        if viewModel.pullRequestMergeErrorMessage != nil
+            || viewModel.pullRequestMergeInfoMessage != nil {
+            VStack(alignment: .leading, spacing: 4) {
+                if let info = viewModel.pullRequestMergeInfoMessage {
+                    mergeBanner(text: info, kind: .info)
+                }
+                if let error = viewModel.pullRequestMergeErrorMessage {
+                    mergeBanner(text: error, kind: .error)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private enum MergeBannerKind {
+        case info
+        case error
+
+        var iconName: String {
+            switch self {
+            case .info: return "checkmark.circle.fill"
+            case .error: return "exclamationmark.triangle.fill"
+            }
+        }
+
+        var tint: NSColor {
+            switch self {
+            case .info: return CocxyColors.green
+            case .error: return CocxyColors.red
+            }
+        }
+
+        var accessibilityPrefix: String {
+            switch self {
+            case .info: return "Merge information"
+            case .error: return "Merge error"
+            }
+        }
+    }
+
+    private func mergeBanner(text: String, kind: MergeBannerKind) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: kind.iconName)
+                .foregroundColor(Color(nsColor: kind.tint))
+                .font(.system(size: 11, weight: .semibold))
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: kind.tint).opacity(0.10))
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(kind.accessibilityPrefix): \(text)")
+    }
+
+    // MARK: - Merge button (v0.1.86)
+
+    /// Renders the "Merge PR #N" button with a status chip describing
+    /// the current mergeability state. The button is disabled when
+    /// the cached snapshot says we cannot merge or while another
+    /// merge is in flight; tooltip carries the explicit reason.
+    private func mergeButton(prNumber: Int) -> some View {
+        let mergeability = viewModel.activePullRequestMergeability
+        let canMerge = mergeability?.canMerge ?? false
+        let isMerging = viewModel.isMergingPullRequest
+        let chipKind = mergeability?.chipKind ?? .pending
+        let tooltip = mergeButtonTooltip(
+            canMerge: canMerge,
+            mergeability: mergeability,
+            isMerging: isMerging
+        )
+        return HStack(spacing: 6) {
+            mergeStatusChip(kind: chipKind)
+            Button {
+                presentMergeActionSheet(prNumber: prNumber)
+            } label: {
+                Label {
+                    Text("Merge PR #\(prNumber)")
+                } icon: {
+                    if isMerging {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.triangle.merge")
+                    }
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(nsColor: CocxyColors.green))
+            .disabled(!canMerge || isMerging)
+            .help(tooltip)
+            .accessibilityHint(tooltip)
+        }
+    }
+
+    private func mergeStatusChip(kind: GitHubMergeability.ChipKind) -> some View {
+        let (label, color): (String, NSColor) = {
+            switch kind {
+            case .ready: return ("Ready", CocxyColors.green)
+            case .pending: return ("Pending", CocxyColors.yellow)
+            case .blocked: return ("Blocked", CocxyColors.red)
+            case .conflicting: return ("Conflicts", CocxyColors.red)
+            case .merged: return ("Merged", CocxyColors.mauve)
+            case .closed: return ("Closed", CocxyColors.overlay1)
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .foregroundColor(Color(nsColor: color))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(Color(nsColor: color).opacity(0.14))
+            )
+            .accessibilityLabel("Merge status: \(label)")
+    }
+
+    private func mergeButtonTooltip(
+        canMerge: Bool,
+        mergeability: GitHubMergeability?,
+        isMerging: Bool
+    ) -> String {
+        if isMerging { return "Merging in progress…" }
+        if canMerge {
+            return "Merge this pull request via gh."
+        }
+        if let mergeability,
+           let reason = mergeability.reasonIfBlocked,
+           !reason.isEmpty {
+            return reason
+        }
+        return "Mergeability is being computed."
+    }
+
+    private func presentMergeActionSheet(prNumber: Int) {
+        guard let decision = MergePullRequestActionSheet.present(
+            pullRequestNumber: prNumber
+        ) else { return }
+        viewModel.requestMergePullRequest(
+            method: decision.method,
+            deleteBranch: decision.deleteBranch
+        )
     }
 }
 
