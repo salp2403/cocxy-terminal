@@ -724,24 +724,30 @@ final class GitHubPaneViewModel: ObservableObject {
         guard generation == refreshGeneration else { return }
         applyState { repo = resolvedRepo }
 
-        // Stage 3: bulk fetch PRs and issues in parallel. The actor
-        // serialises the subprocess calls internally, so `async let`
-        // just fires them back-to-back without blocking MainActor.
+        // Stage 3: fetch PRs and issues. Repositories can have Issues
+        // disabled while PRs remain enabled, so the issue list is
+        // conditional on `gh repo view`'s `hasIssuesEnabled` field. The
+        // actor serialises subprocess calls internally; keeping this
+        // stage explicit prevents an optional Issues failure from
+        // blanking the PR list.
         let ghConfig = configProvider()
         do {
-            async let prsTask = service.listPullRequests(
+            let fetchedPRs = try await service.listPullRequests(
                 at: workingDirectory,
                 state: Self.clampedState(ghConfig.defaultState, allowed: ["open", "closed", "merged", "all"]),
                 limit: ghConfig.maxItems,
                 includeDrafts: ghConfig.includeDrafts
             )
-            async let issuesTask = service.listIssues(
-                at: workingDirectory,
-                state: Self.clampedState(ghConfig.defaultState, allowed: ["open", "closed", "all"]),
-                limit: ghConfig.maxItems
-            )
-            let fetchedPRs = try await prsTask
-            let fetchedIssues = try await issuesTask
+            let fetchedIssues: [GitHubIssue]
+            if resolvedRepo.hasIssuesEnabled {
+                fetchedIssues = try await service.listIssues(
+                    at: workingDirectory,
+                    state: Self.clampedState(ghConfig.defaultState, allowed: ["open", "closed", "all"]),
+                    limit: ghConfig.maxItems
+                )
+            } else {
+                fetchedIssues = []
+            }
             guard generation == refreshGeneration else { return }
 
             // Stage 4: checks for whichever PR is currently selected

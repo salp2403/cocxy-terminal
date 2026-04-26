@@ -189,6 +189,58 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.setupAction == nil)
     }
 
+    @Test("refresh loads PRs when repository issues are disabled")
+    func refresh_loadsPRsWhenIssuesAreDisabled() async throws {
+        let service = makeService { spy in
+            spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+                stdout: "",
+                stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "defaultBranchRef": {"name": "main"},
+                  "description": "",
+                  "hasIssuesEnabled": false,
+                  "isEmpty": false,
+                  "isPrivate": true,
+                  "name": "r",
+                  "owner": {"login": "u"},
+                  "url": "https://github.com/u/r"
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: #"""
+                [
+                  {"number": 1, "title": "first", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/1", "updatedAt": "2026-04-23T15:47:21Z"}
+                ]
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("checks") && $0.contains("1") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp") }
+        viewModel.refresh()
+        await flush()
+
+        #expect(viewModel.repo?.fullName == "u/r")
+        #expect(viewModel.repo?.hasIssuesEnabled == false)
+        #expect(viewModel.pullRequests.count == 1)
+        #expect(viewModel.issues.isEmpty)
+        #expect(viewModel.lastErrorMessage == nil)
+    }
+
     @Test("refresh surfaces .noRemote as an informational banner")
     func refresh_surfacesNoRemoteAsInfo() async throws {
         let service = makeService { spy in
