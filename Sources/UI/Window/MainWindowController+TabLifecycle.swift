@@ -149,7 +149,14 @@ extension MainWindowController {
         performCloseTab(tabID, worktreeClosePolicyOverride: nil)
     }
 
-    private func performCloseTab(
+    /// Variant that lets the caller override the worktree close policy
+    /// resolved from `WorktreeConfig.onClose`. Used by the post-merge
+    /// cleanup flow (v0.1.88) so a "Close Worktree" decision in the
+    /// optional alert removes the worktree directory on disk in addition
+    /// to closing the tab. Pass `nil` to fall back to the configured
+    /// policy — that is the canonical Cmd+W behaviour and remains the
+    /// default for `performCloseTab(_:)`.
+    func performCloseTab(
         _ tabID: TabID,
         worktreeClosePolicyOverride: WorktreeOnClose?
     ) {

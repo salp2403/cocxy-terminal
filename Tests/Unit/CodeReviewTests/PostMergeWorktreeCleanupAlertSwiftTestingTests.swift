@@ -154,4 +154,29 @@ struct PostMergeWorktreeCleanupAlertSwiftTestingTests {
         #expect(lower.contains("manual"))
         #expect(lower.contains("cmd+w") || lower.contains("close"))
     }
+
+    // MARK: - closePolicyOverride (v0.1.88)
+
+    @Test("closePolicyOverride returns .remove when the tab owns a cocxy worktree")
+    func closePolicyOverrideForWorktreeTab() {
+        let tab = Tab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/wt-feat-x", isDirectory: true),
+            worktreeID: "abc123",
+            worktreeRoot: URL(fileURLWithPath: "/tmp/wt-feat-x", isDirectory: true),
+            worktreeOriginRepo: URL(fileURLWithPath: "/tmp/origin-repo", isDirectory: true),
+            worktreeBranch: "feat/x"
+        )
+        #expect(PostMergeWorktreeCleanupAlert.closePolicyOverride(for: tab) == .remove)
+    }
+
+    @Test("closePolicyOverride returns nil when the tab has no worktree id")
+    func closePolicyOverrideForPlainTab() {
+        let tab = Tab(workingDirectory: URL(fileURLWithPath: "/tmp/plain", isDirectory: true))
+        #expect(PostMergeWorktreeCleanupAlert.closePolicyOverride(for: tab) == nil)
+    }
+
+    @Test("closePolicyOverride returns nil for nil tab input")
+    func closePolicyOverrideForNilTab() {
+        #expect(PostMergeWorktreeCleanupAlert.closePolicyOverride(for: nil) == nil)
+    }
 }

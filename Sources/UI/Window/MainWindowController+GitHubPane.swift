@@ -209,10 +209,16 @@ extension MainWindowController {
                 baseBranch: baseBranch
             )
         }
-        // Optional cleanup alert + programmatic close (v0.1.87). Same
-        // wiring shape as the Code Review panel; the view model passes
-        // the tab that produced the PR rows so a delayed alert cannot
-        // close a different tab after the user switches context.
+        // Optional cleanup alert + programmatic close (v0.1.87 / v0.1.88).
+        // Same wiring shape as the Code Review panel; the view model
+        // passes the tab that produced the PR rows so a delayed alert
+        // cannot close a different tab after the user switches context.
+        //
+        // v0.1.88: when the merge tab owns a cocxy-managed worktree we
+        // pass `WorktreeOnClose.remove` so the close also deletes the
+        // worktree directory on disk. Tabs without a worktree id keep
+        // the default policy so plain feature branches behave exactly
+        // as before.
         viewModel.postMergeCleanupAlertHandler = { headRefName in
             await MainActor.run {
                 PostMergeWorktreeCleanupAlert.present(headRefName: headRefName)
@@ -221,8 +227,9 @@ extension MainWindowController {
         viewModel.closeWorktreeTabHandler = { [weak self] tabID in
             await MainActor.run {
                 guard let self else { return false }
-                guard self.tabManager.tabs.contains(where: { $0.id == tabID }) else { return false }
-                self.performCloseTab(tabID)
+                guard let tab = self.tabManager.tab(for: tabID) else { return false }
+                let policyOverride = PostMergeWorktreeCleanupAlert.closePolicyOverride(for: tab)
+                self.performCloseTab(tabID, worktreeClosePolicyOverride: policyOverride)
                 return self.tabManager.tabs.contains(where: { $0.id == tabID }) == false
             }
         }

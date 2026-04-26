@@ -4,10 +4,16 @@
 // `--delete-branch`, and the local checkout is still parked on the
 // (now-deleted) feature branch.
 //
-// v0.1.87 ships only the "close the tab" outcome — the worktree
-// directory and `.git/worktrees/<id>` entry stay on disk so the user
-// can still inspect the remnants if they want. The physical removal
-// (`git worktree remove`) is a v0.1.88 follow-up.
+// v0.1.87 shipped the "close the tab" outcome only; the worktree
+// directory and `.git/worktrees/<id>` entry stayed on disk so the user
+// could inspect the remnants.
+//
+// v0.1.88 closes the loop: when the merged tab owns a cocxy-managed
+// worktree (`tab.worktreeID != nil`), picking "Close Worktree" also
+// removes the worktree directory and the manifest entry on disk via
+// `WorktreeService.remove(force: false)`. Dirty trees fall back to the
+// existing `clearTabBinding` path so no uncommitted work is ever lost.
+// Tabs without a worktree id keep the v0.1.87 behaviour and only close.
 //
 // The decision logic is split into pure helpers so the test suite can
 // exercise every branch without driving an `NSAlert`. The presenter is
@@ -97,6 +103,35 @@ enum PostMergeWorktreeCleanupAlert {
         }
     }
 
+    // MARK: - Close policy resolution (v0.1.88)
+
+    /// Resolves the `WorktreeOnClose` override the post-merge cleanup
+    /// path should pass to `MainWindowController.performCloseTab` when
+    /// the user picks "Close Worktree".
+    ///
+    /// The cleanup alert closes the merge tab unconditionally, but only
+    /// tabs that own a cocxy-managed worktree (`tab.worktreeID != nil`)
+    /// should also delete the worktree directory on disk. A tab whose
+    /// branch was created without `cocxy worktree add` carries no
+    /// worktree to remove — passing `.remove` for those would still be
+    /// safe (the manifest does not know the id, so the lifecycle helper
+    /// short-circuits) but `nil` keeps the call site honest about
+    /// intent: "default behaviour, the tab is just a regular feature
+    /// branch".
+    ///
+    /// Returns `nil` for tabs without a worktree id and for `nil` tab
+    /// inputs (the lookup may fail if the tab was closed before the
+    /// alert resolves).
+    ///
+    /// Pure helper so the call sites can be exercised without driving
+    /// `MainWindowController`. The actual side effect runs through
+    /// `WorktreeService.remove(force: false)` which gracefully falls
+    /// back to `clearTabBinding` if the worktree is dirty.
+    static func closePolicyOverride(for tab: Tab?) -> WorktreeOnClose? {
+        guard let tab, tab.worktreeID != nil else { return nil }
+        return .remove
+    }
+
     // MARK: - Banner copy helpers
 
     /// Confirmation fragment appended to the merge banner when the
@@ -132,7 +167,7 @@ enum PostMergeWorktreeCleanupAlert {
         alert.informativeText = """
         The branch `\(headRefName)` was deleted on origin after the merge. \
         You can close this worktree's tab now or keep it open to inspect the result. \
-        Closing the tab does not yet remove the worktree directory on disk.
+        Closing also removes the worktree directory on disk if it has no uncommitted changes.
         """
 
         // Order: Close → Keep → Cancel. Close is the default (first
