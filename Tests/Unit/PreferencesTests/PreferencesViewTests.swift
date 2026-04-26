@@ -10,15 +10,16 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasNineCases() {
+    func test_allSections_hasTenCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
-        // inline pane, bringing it to 9. Keeping the test explicit
-        // about the number pins the invariant: adding a section
-        // without an accompanying UI breaks this assertion and forces
+        // inline pane, bringing it to 9; v0.1.87 surfaces the existing
+        // Code Review config as an editable section, bringing it to 10.
+        // Keeping the test explicit about the number pins the invariant:
+        // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 9)
+        XCTAssertEqual(PreferencesSection.allCases.count, 10)
     }
 
     func test_worktreesSection_hasTitleAndIcon() {
@@ -61,6 +62,12 @@ final class PreferencesSectionTests: XCTestCase {
         let section = PreferencesSection.agentDetection
         XCTAssertEqual(section.title, "Agent Detection")
         XCTAssertEqual(section.iconName, "brain.head.profile")
+    }
+
+    func test_codeReviewSection_hasTitleAndIcon() {
+        let section = PreferencesSection.codeReview
+        XCTAssertEqual(section.title, "Code Review")
+        XCTAssertEqual(section.iconName, "doc.text.magnifyingglass")
     }
 
     func test_notificationsSection_hasTitleAndIcon() {
@@ -113,6 +120,18 @@ final class PreferencesSectionTests: XCTestCase {
         }
         XCTAssertLessThan(keybindingsIndex, aboutIndex,
                          "Keybindings section must appear before About")
+    }
+
+    func test_codeReviewSection_appearsBetweenAgentDetectionAndNotifications() {
+        let allCases = PreferencesSection.allCases
+        guard let agentIndex = allCases.firstIndex(of: .agentDetection),
+              let codeReviewIndex = allCases.firstIndex(of: .codeReview),
+              let notificationsIndex = allCases.firstIndex(of: .notifications) else {
+            XCTFail("agent detection, code review, and notifications sections must exist")
+            return
+        }
+        XCTAssertLessThan(agentIndex, codeReviewIndex)
+        XCTAssertLessThan(codeReviewIndex, notificationsIndex)
     }
 }
 

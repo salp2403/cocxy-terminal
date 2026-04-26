@@ -12,6 +12,7 @@ import AppKit
 /// - General: shell path, working directory, confirm close
 /// - Appearance: theme picker, font family, ligatures, font size slider, padding
 /// - Agent Detection: toggles for each detection layer, idle timeout
+/// - Code Review: review panel visibility behaviour
 /// - Notifications: toggles for each notification type
 /// - Terminal: runtime protocol settings such as inline images
 /// - Keybindings: read-only display of keyboard shortcuts
@@ -105,6 +106,8 @@ struct PreferencesView: View {
             EditableAppearanceSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .agentDetection:
             EditableAgentDetectionSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .codeReview:
+            CodeReviewPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .notifications:
             EditableNotificationsSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .terminal:
@@ -133,6 +136,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case general
     case appearance
     case agentDetection
+    case codeReview
     case notifications
     case terminal
     case keybindings
@@ -148,6 +152,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .appearance: return "Appearance"
         case .agentDetection: return "Agent Detection"
+        case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
         case .terminal: return "Terminal"
         case .keybindings: return "Keybindings"
@@ -163,6 +168,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .general: return "gear"
         case .appearance: return "paintbrush"
         case .agentDetection: return "brain.head.profile"
+        case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
         case .terminal: return "terminal"
         case .keybindings: return "keyboard"
@@ -646,6 +652,35 @@ struct EditableAgentDetectionSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Agent Detection")
+    }
+}
+
+// MARK: - Code Review Section
+
+/// Editable Code Review panel preferences.
+struct CodeReviewPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Panel") {
+                Toggle(
+                    "Auto-show review panel when an agent session ends",
+                    isOn: $viewModel.codeReviewAutoShowOnSessionEnd
+                )
+                Text(
+                    "When on, Cocxy opens the Code Review panel automatically after a tracked agent session produces changes. Turn it off if you prefer opening the panel manually with Cmd+Option+R."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Code Review")
     }
 }
 

@@ -64,6 +64,24 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.idleTimeoutSeconds, config.agentDetection.idleTimeoutSeconds)
     }
 
+    func testInitLoadsCodeReviewConfig() {
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            codeReview: CodeReviewConfig(autoShowOnSessionEnd: false),
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let viewModel = PreferencesViewModel(config: config)
+
+        XCTAssertFalse(viewModel.codeReviewAutoShowOnSessionEnd)
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
+    }
+
     func testInitLoadsNotificationConfig() {
         let config = CocxyConfig.defaults
         let viewModel = PreferencesViewModel(config: config)
@@ -235,6 +253,16 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertTrue(toml.contains("enable-kitty-images = true"))
     }
 
+    func testGenerateTomlUsesEditableCodeReviewAutoShowSetting() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+        viewModel.codeReviewAutoShowOnSessionEnd = false
+
+        let toml = viewModel.generateToml()
+
+        XCTAssertTrue(toml.contains("[code-review]"))
+        XCTAssertTrue(toml.contains("auto-show-on-session-end = false"))
+    }
+
     func testGenerateTomlPreservesTerminalDefaults() {
         let viewModel = PreferencesViewModel(config: .defaults)
         let toml = viewModel.generateToml()
@@ -373,6 +401,31 @@ final class PreferencesViewModelTests: XCTestCase {
 
         XCTAssertFalse(viewModel.hasUnsavedChanges)
         XCTAssertTrue(fileProvider.writtenContent?.contains("auto-show-on-session-end = false") ?? false)
+    }
+
+    func testSavePersistsEditedCodeReviewAutoShowAndClearsDirty() throws {
+        let fileProvider = InMemoryConfigFileProvider(content: nil)
+        let viewModel = PreferencesViewModel(config: .defaults, fileProvider: fileProvider)
+
+        viewModel.codeReviewAutoShowOnSessionEnd = false
+        XCTAssertTrue(viewModel.hasUnsavedChanges)
+
+        try viewModel.save()
+
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
+        XCTAssertTrue(fileProvider.writtenContent?.contains("auto-show-on-session-end = false") ?? false)
+    }
+
+    func testDiscardRestoresCodeReviewAutoShowSetting() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+
+        viewModel.codeReviewAutoShowOnSessionEnd = false
+        XCTAssertTrue(viewModel.hasUnsavedChanges)
+
+        viewModel.discardChanges()
+
+        XCTAssertTrue(viewModel.codeReviewAutoShowOnSessionEnd)
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
 
     // MARK: - Save to File Provider

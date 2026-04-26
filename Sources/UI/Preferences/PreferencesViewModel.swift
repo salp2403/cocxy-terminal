@@ -114,6 +114,12 @@ final class PreferencesViewModel: ObservableObject {
     /// Idle timeout in seconds. Clamped to 1...300 on save.
     @Published var idleTimeoutSeconds: Int
 
+    // MARK: - Code Review
+
+    /// Whether Cocxy opens the Code Review panel automatically when an
+    /// agent session finishes with changes.
+    @Published var codeReviewAutoShowOnSessionEnd: Bool
+
     // MARK: - Notifications
 
     /// Whether to send macOS system notifications.
@@ -287,6 +293,7 @@ final class PreferencesViewModel: ObservableObject {
             || patternMatching != c.agentDetection.patternMatching
             || timingHeuristics != c.agentDetection.timingHeuristics
             || idleTimeoutSeconds != c.agentDetection.idleTimeoutSeconds
+            || codeReviewAutoShowOnSessionEnd != c.codeReview.autoShowOnSessionEnd
             || macosNotifications != c.notifications.macosNotifications
             || sound != c.notifications.sound
             || badgeOnTab != c.notifications.badgeOnTab
@@ -322,6 +329,7 @@ final class PreferencesViewModel: ObservableObject {
         patternMatching = c.agentDetection.patternMatching
         timingHeuristics = c.agentDetection.timingHeuristics
         idleTimeoutSeconds = c.agentDetection.idleTimeoutSeconds
+        codeReviewAutoShowOnSessionEnd = c.codeReview.autoShowOnSessionEnd
         macosNotifications = c.notifications.macosNotifications
         sound = c.notifications.sound
         badgeOnTab = c.notifications.badgeOnTab
@@ -403,6 +411,9 @@ final class PreferencesViewModel: ObservableObject {
         self.patternMatching = config.agentDetection.patternMatching
         self.timingHeuristics = config.agentDetection.timingHeuristics
         self.idleTimeoutSeconds = config.agentDetection.idleTimeoutSeconds
+
+        // Code Review
+        self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
 
         // Notifications
         self.macosNotifications = config.notifications.macosNotifications
@@ -571,7 +582,7 @@ final class PreferencesViewModel: ObservableObject {
                 timingHeuristics: timingHeuristics,
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
-            codeReview: savedConfig.codeReview,
+            codeReview: buildCodeReviewConfigFromViewModel(),
             notifications: NotificationConfig(
                 macosNotifications: macosNotifications,
                 sound: sound,
@@ -589,6 +600,11 @@ final class PreferencesViewModel: ObservableObject {
             github: buildGitHubConfigFromViewModel()
         )
         pendingKeybindings = nil
+    }
+
+    /// Builds the `[code-review]` section from editable preferences.
+    private func buildCodeReviewConfigFromViewModel() -> CodeReviewConfig {
+        CodeReviewConfig(autoShowOnSessionEnd: codeReviewAutoShowOnSessionEnd)
     }
 
     /// Builds a `WorktreeConfig` value from the editable view-model
@@ -744,7 +760,7 @@ final class PreferencesViewModel: ObservableObject {
         idle-timeout-seconds = \(clampedTimeout)
 
         [code-review]
-        auto-show-on-session-end = \(defaults.codeReview.autoShowOnSessionEnd)
+        auto-show-on-session-end = \(codeReviewAutoShowOnSessionEnd)
 
         [notifications]
         macos-notifications = \(macosNotifications)
