@@ -5,6 +5,43 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.87] - 2026-04-25
+
+### Added
+- Auto-pull after a successful in-panel pull request merge. When the
+  Code Review panel or the GitHub pane (`Cmd+Option+G`) reports a
+  merge as completed, Cocxy now runs `git fetch origin <base>` and
+  (when the local checkout is parked on the base branch with a clean
+  working tree) `git pull --ff-only` so the local copy stays in sync
+  without leaving the app. The result lands as a single line on the
+  existing merge banner — for example
+  `Merged PR #42 via Squash & Merge. \`main\` synced with origin
+  (3 commits pulled).` Failures surface through the dedicated error
+  banner with the captured stderr so the user can act on the actual
+  cause.
+- Conservative skips for the auto-pull: the sync declines to act and
+  reports the reason in the info banner when the working tree is
+  dirty (`uncommitted changes`), HEAD is detached, the directory is
+  not a git repository, or the local branch has diverged from origin
+  (would not fast-forward). The merge itself is never affected — the
+  aftermath is best-effort and routes everything safe through the
+  informational channel rather than the error channel.
+- Optional 3-button cleanup alert (`Close Worktree` / `Keep Worktree`
+  / `Cancel`) that appears after a merge with `--delete-branch` when
+  the local checkout is still parked on the now-deleted feature
+  branch. Picking `Close Worktree` triggers the programmatic tab
+  close (no confirmation sheet collision) and appends a confirmation
+  fragment to the banner; picking `Keep Worktree` annotates the
+  banner so the user knows the choice was recorded; `Cancel` is a
+  silent no-op. The worktree directory itself stays on disk in
+  v0.1.87 — the physical removal will arrive in a future release.
+
+### Changed
+- The post-merge state refresh on both surfaces (Code Review panel
+  and GitHub pane) now waits for the auto-pull outcome before
+  finalising the banner copy, replacing the previous static
+  `Merged PR #N…` line with the richer "merged + synced" sentence.
+
 ## [0.1.86] - 2026-04-25
 
 ### Added

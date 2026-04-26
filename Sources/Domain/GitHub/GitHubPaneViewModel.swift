@@ -166,6 +166,30 @@ final class GitHubPaneViewModel: ObservableObject {
     /// banner without an extra round trip.
     var mergePullRequestHandler: ((_ request: GitHubMergeRequest, _ workingDirectory: URL) async throws -> GitHubPullRequest)?
 
+    /// Handler invoked after a successful merge to drive the optional
+    /// `git fetch` + `git pull --ff-only` sync of the local checkout
+    /// (v0.1.87). Wired by the MainWindowController to a singleton
+    /// `GitMergeAftermathService` shared with the Code Review panel
+    /// so concurrent merges across surfaces serialise via the actor.
+    /// Receives the same `workingDirectory` we passed to the merge
+    /// handler so the sync runs on the exact checkout that was
+    /// merged from, even after a tab switch.
+    var postMergeAftermathHandler: ((_ workingDirectory: URL, _ baseBranch: String) async throws -> GitMergeAftermathOutcome)?
+
+    /// Handler that presents the optional `PostMergeWorktreeCleanupAlert`
+    /// when the post-aftermath state qualifies (delete-branch + local
+    /// checkout still on the merged feature branch). Routed through
+    /// the MainWindowController so it can present `NSAlert` on the
+    /// main thread; returns the user's choice asynchronously.
+    var postMergeCleanupAlertHandler: ((_ headRefName: String) async -> PostMergeWorktreeCleanupAlert.Resolution)?
+
+    /// Handler that performs the programmatic tab close when the user
+    /// picks "Close Worktree". Returns `true` on success, `false` when
+    /// the close was blocked or the handler is nil — the caller maps
+    /// the boolean to a banner fragment so the user knows what
+    /// happened.
+    var closeWorktreeTabHandler: (() async -> Bool)?
+
     // MARK: - Dependencies
 
     private let service: GitHubService
@@ -311,6 +335,19 @@ final class GitHubPaneViewModel: ObservableObject {
                     self.pullRequestsBeingMerged.remove(number)
                     self.lastMergeInfoMessage = "Merged PR #\(merged.number) via \(method.displayName)."
                     self.refresh()
+                    // v0.1.87: post-merge auto-pull. We capture the
+                    // working directory used for the merge so the
+                    // sync targets exactly the checkout we just
+                    // merged from, even if the user switches tabs
+                    // before the aftermath completes.
+                    self.runPostMergeAftermathIfWired(
+                        workingDirectory: workingDirectory,
+                        baseBranch: merged.baseRefName,
+                        headRefName: merged.headRefName,
+                        deleteBranchUsed: request.deleteBranch,
+                        mergedNumber: merged.number,
+                        method: method
+                    )
                 }
             } catch {
                 await MainActor.run {
@@ -351,6 +388,122 @@ final class GitHubPaneViewModel: ObservableObject {
         }
         let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         return description.isEmpty ? "Pull request action failed." : description
+    }
+
+    // MARK: - Post-merge aftermath (v0.1.87)
+
+    /// Builds the merge confirmation banner combining the merge head
+    /// with an optional aftermath outcome. Pure helper exposed for
+    /// tests so the contract can be pinned without driving an async
+    /// merge through the actor.
+    nonisolated static func mergeBannerMessage(
+        mergedNumber: Int,
+        method: GitHubMergeMethod,
+        outcome: GitMergeAftermathOutcome?
+    ) -> String {
+        let head = "Merged PR #\(mergedNumber) via \(method.displayName)."
+        guard let outcome else { return head }
+        return head + " " + outcome.displayMessage
+    }
+
+    /// Maps an aftermath error to user-facing copy. `GitMergeAftermathError`
+    /// already carries actionable phrasing; anything else falls back
+    /// to `localizedDescription`.
+    nonisolated static func userFacingAftermathErrorMessage(for error: Error) -> String {
+        if let typed = error as? GitMergeAftermathError {
+            return typed.errorDescription ?? "Post-merge auto-pull failed."
+        }
+        let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty ? "Post-merge auto-pull failed." : description
+    }
+
+    /// Drives the aftermath sync if a handler is wired. Always runs in
+    /// a detached `Task` so the merge success path returns immediately
+    /// and the user sees the merge banner as soon as gh confirms.
+    func runPostMergeAftermathIfWired(
+        workingDirectory: URL,
+        baseBranch: String,
+        headRefName: String,
+        deleteBranchUsed: Bool,
+        mergedNumber: Int,
+        method: GitHubMergeMethod
+    ) {
+        guard let aftermathHandler = postMergeAftermathHandler else { return }
+
+        let trimmedBase = baseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBase.isEmpty else { return }
+
+        Task { [weak self] in
+            do {
+                let outcome = try await aftermathHandler(workingDirectory, trimmedBase)
+                let baseBanner = Self.mergeBannerMessage(
+                    mergedNumber: mergedNumber,
+                    method: method,
+                    outcome: outcome
+                )
+                await MainActor.run {
+                    guard let self else { return }
+                    self.lastMergeInfoMessage = baseBanner
+                }
+                // v0.1.87: optional 3-button cleanup alert. Mirrors the
+                // helper of the same name on `CodeReviewPanelViewModel`
+                // — duplicated for now because the two view models have
+                // separate banner channels.
+                await self?.maybePromptWorktreeCleanup(
+                    deleteBranchUsed: deleteBranchUsed,
+                    headRefName: headRefName,
+                    outcome: outcome,
+                    baseBanner: baseBanner
+                )
+            } catch {
+                await MainActor.run {
+                    guard let self else { return }
+                    self.lastErrorMessage = Self.userFacingAftermathErrorMessage(for: error)
+                }
+            }
+        }
+    }
+
+    /// Presents the cleanup alert if the outcome qualifies and routes
+    /// the user's choice into a programmatic close + banner update.
+    func maybePromptWorktreeCleanup(
+        deleteBranchUsed: Bool,
+        headRefName: String,
+        outcome: GitMergeAftermathOutcome,
+        baseBanner: String
+    ) async {
+        guard PostMergeWorktreeCleanupAlert.shouldOffer(
+            deleteBranchUsed: deleteBranchUsed,
+            headRefName: headRefName,
+            outcome: outcome
+        ) else { return }
+        guard let alertHandler = postMergeCleanupAlertHandler else { return }
+
+        let resolution = await alertHandler(headRefName)
+        switch resolution {
+        case .closeWorktree:
+            let closed: Bool
+            if let closeHandler = closeWorktreeTabHandler {
+                closed = await closeHandler()
+            } else {
+                closed = false
+            }
+            let fragment = closed
+                ? PostMergeWorktreeCleanupAlert.closedBannerFragment(headRefName: headRefName)
+                : PostMergeWorktreeCleanupAlert.closeFailedBannerFragment(headRefName: headRefName)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.lastMergeInfoMessage = baseBanner + " " + fragment
+            }
+        case .keep:
+            let fragment = PostMergeWorktreeCleanupAlert.keepBannerFragment(headRefName: headRefName)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.lastMergeInfoMessage = baseBanner + " " + fragment
+            }
+        case .cancel:
+            return
+        }
     }
 
     // MARK: - Auto refresh

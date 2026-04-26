@@ -22,6 +22,13 @@ extension AppDelegate {
     /// race past each other into the `gh` binary.
     nonisolated static let sharedGitHubService = GitHubService()
 
+    /// Process-wide post-merge aftermath service (v0.1.87). Drives the
+    /// optional `git fetch` + `git pull --ff-only` sync after a
+    /// successful in-panel PR merge. Shared with both surfaces (Code
+    /// Review panel + GitHub pane) so concurrent merges never run two
+    /// `git pull` invocations against the same checkout.
+    nonisolated static let sharedGitMergeAftermathService = GitMergeAftermathService()
+
     // MARK: - Sync bridge called from the socket queue
 
     /// Entry point the socket handler uses for every `github-*` verb.

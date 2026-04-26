@@ -195,6 +195,36 @@ extension MainWindowController {
                 workingDirectory: workingDirectory
             )
         }
+        // Post-merge aftermath (v0.1.87): runs `git fetch` + (optionally)
+        // `git pull --ff-only` on the checkout so the user does not
+        // have to do it manually after merging from the pane. Routed
+        // through the singleton actor shared with the Code Review
+        // panel so concurrent merges serialise.
+        viewModel.postMergeAftermathHandler = { workingDirectory, baseBranch in
+            return try await AppDelegate.sharedGitMergeAftermathService.sync(
+                at: workingDirectory,
+                baseBranch: baseBranch
+            )
+        }
+        // Optional cleanup alert + programmatic close (v0.1.87). Same
+        // wiring shape as the Code Review panel; the close handler
+        // resolves the active tab through `visibleTabID ?? activeTabID`
+        // so the merge-then-close flow targets the tab the user was
+        // looking at when they triggered the merge from the pane.
+        viewModel.postMergeCleanupAlertHandler = { headRefName in
+            await MainActor.run {
+                PostMergeWorktreeCleanupAlert.present(headRefName: headRefName)
+            }
+        }
+        viewModel.closeWorktreeTabHandler = { [weak self] in
+            await MainActor.run {
+                guard let self else { return false }
+                guard let tabID = self.visibleTabID ?? self.tabManager.activeTabID else { return false }
+                guard self.tabManager.tabs.contains(where: { $0.id == tabID }) else { return false }
+                self.performCloseTab(tabID)
+                return self.tabManager.tabs.contains(where: { $0.id == tabID }) == false
+            }
+        }
     }
 
     // MARK: Clamp + sync helpers (called from layoutRightDockedAgentPanels)

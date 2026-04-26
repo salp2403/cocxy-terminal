@@ -147,6 +147,38 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     /// this to `GitHubService.pullRequestNumber(forBranch:at:)`.
     var activePullRequestDetectionHandler: ((_ branch: String) async throws -> Int?)?
 
+    /// Handler invoked after a successful `mergePullRequestHandler`
+    /// completion. Drives the optional `git fetch` + `git pull --ff-only`
+    /// sync of the local checkout so the user does not have to run those
+    /// commands manually after merging from the panel. The
+    /// MainWindowController wires this to a singleton
+    /// `GitMergeAftermathService` shared with the GitHub pane so
+    /// concurrent merges across surfaces serialise via the actor.
+    ///
+    /// Failures bubble up as `GitMergeAftermathError`; benign skips
+    /// (dirty tree, detached HEAD, etc.) come back as
+    /// `GitMergeAftermathOutcome` and route through the **info** banner
+    /// channel (per `feedback_info_vs_error_banners`).
+    var postMergeAftermathHandler: ((_ workingDirectory: URL, _ baseBranch: String) async throws -> GitMergeAftermathOutcome)?
+
+    /// Handler invoked after the aftermath when the panel should ask
+    /// the user whether to close the worktree-backed tab (because the
+    /// PR was merged with `--delete-branch` and the local checkout is
+    /// still parked on the now-deleted feature branch). Routed through
+    /// the MainWindowController so it can present an `NSAlert` on the
+    /// main thread; the closure returns the user's choice synchronously
+    /// from the model's perspective. Receives the merged PR's
+    /// `headRefName` so the alert copy can mention the branch by name.
+    var postMergeCleanupAlertHandler: ((_ headRefName: String) async -> PostMergeWorktreeCleanupAlert.Resolution)?
+
+    /// Handler that performs the programmatic tab close when the user
+    /// picks "Close Worktree" in the cleanup alert. Returns `true` when
+    /// the close succeeded; `false` when the close was blocked (last
+    /// terminal guard, pinned tab, missing handler) so the view model
+    /// can append a "close manually" hint to the banner instead of
+    /// pretending the close happened.
+    var closeWorktreeTabHandler: (() async -> Bool)?
+
     /// Returns the branch name the merge integration should consult
     /// when asking gh "is there a PR for this branch?". When `nil` or
     /// returning `nil`, the extension falls back to the current

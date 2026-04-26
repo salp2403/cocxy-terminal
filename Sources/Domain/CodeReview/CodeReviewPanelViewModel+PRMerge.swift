@@ -219,6 +219,16 @@ extension CodeReviewPanelViewModel {
                     // Refresh git status so the workflow panel reflects
                     // the post-merge state (deleted branch, etc.).
                     self.refreshGitStatus()
+                    // v0.1.87: post-merge auto-pull. Captured locally
+                    // so the aftermath task is independent of any
+                    // future mutation of `activePullRequestNumber`.
+                    self.runPostMergeAftermathIfWired(
+                        baseBranch: merged.baseRefName,
+                        headRefName: merged.headRefName,
+                        deleteBranchUsed: request.deleteBranch,
+                        mergedNumber: merged.number,
+                        method: method
+                    )
                 }
             } catch {
                 await MainActor.run {
@@ -271,5 +281,138 @@ extension CodeReviewPanelViewModel {
         }
         let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         return description.isEmpty ? "Pull request action failed." : description
+    }
+
+    // MARK: - Post-merge aftermath (v0.1.87)
+
+    /// Builds the merge confirmation banner string from the merged PR
+    /// number, strategy, and (optional) aftermath outcome. Pure helper
+    /// so the test suite can pin exactly what banner copy lands in
+    /// `pullRequestMergeInfoMessage` without instantiating the view
+    /// model.
+    static func mergeBannerMessage(
+        mergedNumber: Int,
+        method: GitHubMergeMethod,
+        outcome: GitMergeAftermathOutcome?
+    ) -> String {
+        let head = "Merged PR #\(mergedNumber) via \(method.displayName)."
+        guard let outcome else { return head }
+        return head + " " + outcome.displayMessage
+    }
+
+    /// Drives the aftermath sync if a handler is wired and the panel
+    /// has an active working directory. Always runs in a detached
+    /// `Task` so the caller (the merge success path) returns
+    /// immediately and the UI stays responsive while `git fetch`
+    /// finishes.
+    ///
+    /// Captures the working directory at call time so a tab switch
+    /// between the merge and the aftermath does not redirect the sync
+    /// to the wrong checkout.
+    func runPostMergeAftermathIfWired(
+        baseBranch: String,
+        headRefName: String,
+        deleteBranchUsed: Bool,
+        mergedNumber: Int,
+        method: GitHubMergeMethod
+    ) {
+        guard let aftermathHandler = postMergeAftermathHandler else { return }
+        guard let workingDirectory = activeTabCwdProvider?() else { return }
+
+        let trimmedBase = baseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBase.isEmpty else { return }
+
+        Task { [weak self] in
+            do {
+                let outcome = try await aftermathHandler(workingDirectory, trimmedBase)
+                let baseBanner = Self.mergeBannerMessage(
+                    mergedNumber: mergedNumber,
+                    method: method,
+                    outcome: outcome
+                )
+                await MainActor.run {
+                    guard let self else { return }
+                    self.pullRequestMergeInfoMessage = baseBanner
+                }
+                // v0.1.87: optional 3-button cleanup alert when the
+                // user opted into --delete-branch and the local
+                // checkout is still parked on the feature branch.
+                await self?.maybePromptWorktreeCleanup(
+                    deleteBranchUsed: deleteBranchUsed,
+                    headRefName: headRefName,
+                    outcome: outcome,
+                    baseBanner: baseBanner
+                )
+            } catch {
+                await MainActor.run {
+                    guard let self else { return }
+                    Self.mergeLogger.error(
+                        """
+                        Post-merge aftermath failed: pr=\(mergedNumber, privacy: .public) \
+                        baseBranch=\(trimmedBase, privacy: .public) \
+                        error=\(String(describing: error), privacy: .private)
+                        """
+                    )
+                    self.pullRequestMergeErrorMessage = Self.userFacingAftermathErrorMessage(for: error)
+                }
+            }
+        }
+    }
+
+    /// Presents the optional `PostMergeWorktreeCleanupAlert` if the
+    /// outcome qualifies, then routes the user's choice into a
+    /// programmatic tab close (or a banner-only confirmation). The
+    /// helper is intentionally fire-and-forget — it appends to the
+    /// merge banner; never overrides the success copy entirely.
+    func maybePromptWorktreeCleanup(
+        deleteBranchUsed: Bool,
+        headRefName: String,
+        outcome: GitMergeAftermathOutcome,
+        baseBanner: String
+    ) async {
+        guard PostMergeWorktreeCleanupAlert.shouldOffer(
+            deleteBranchUsed: deleteBranchUsed,
+            headRefName: headRefName,
+            outcome: outcome
+        ) else { return }
+        guard let alertHandler = postMergeCleanupAlertHandler else { return }
+
+        let resolution = await alertHandler(headRefName)
+        switch resolution {
+        case .closeWorktree:
+            let closed: Bool
+            if let closeHandler = closeWorktreeTabHandler {
+                closed = await closeHandler()
+            } else {
+                closed = false
+            }
+            let fragment = closed
+                ? PostMergeWorktreeCleanupAlert.closedBannerFragment(headRefName: headRefName)
+                : PostMergeWorktreeCleanupAlert.closeFailedBannerFragment(headRefName: headRefName)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.pullRequestMergeInfoMessage = baseBanner + " " + fragment
+            }
+        case .keep:
+            let fragment = PostMergeWorktreeCleanupAlert.keepBannerFragment(headRefName: headRefName)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.pullRequestMergeInfoMessage = baseBanner + " " + fragment
+            }
+        case .cancel:
+            // No banner change — the user just dismissed.
+            return
+        }
+    }
+
+    /// Maps an aftermath error to user-facing copy. `GitMergeAftermathError`
+    /// already carries actionable phrasing; anything else (e.g. an
+    /// unexpected runtime error) falls back to `localizedDescription`.
+    static func userFacingAftermathErrorMessage(for error: Error) -> String {
+        if let typed = error as? GitMergeAftermathError {
+            return typed.errorDescription ?? "Post-merge auto-pull failed."
+        }
+        let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty ? "Post-merge auto-pull failed." : description
     }
 }

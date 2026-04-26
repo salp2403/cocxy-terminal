@@ -1042,6 +1042,40 @@ extension MainWindowController {
                 workingDirectory: workingDirectory
             )
         }
+        // Post-merge aftermath (v0.1.87). Drives the auto-pull through
+        // the singleton actor shared with the GitHub pane so concurrent
+        // merges across surfaces never run two `git pull` invocations
+        // against the same checkout. Errors propagate as
+        // `GitMergeAftermathError`; benign skip outcomes return as
+        // `GitMergeAftermathOutcome` values folded into the info banner.
+        viewModel.postMergeAftermathHandler = { workingDirectory, baseBranch in
+            return try await AppDelegate.sharedGitMergeAftermathService.sync(
+                at: workingDirectory,
+                baseBranch: baseBranch
+            )
+        }
+        // Optional cleanup alert + programmatic close (v0.1.87).
+        // Presents the 3-button NSAlert on the main thread when the
+        // aftermath qualifies (delete-branch + still on feature
+        // branch). The close handler resolves the active tab from
+        // the view model's provider closures and calls the public
+        // `performCloseTab` so we never collide with the close
+        // confirmation sheet
+        // (regla `feedback_non_interactive_close_separation`).
+        viewModel.postMergeCleanupAlertHandler = { headRefName in
+            await MainActor.run {
+                PostMergeWorktreeCleanupAlert.present(headRefName: headRefName)
+            }
+        }
+        viewModel.closeWorktreeTabHandler = { [weak self, weak viewModel] in
+            await MainActor.run {
+                guard let self, let viewModel else { return false }
+                guard let tabID = viewModel.activeTabIDProvider?() else { return false }
+                guard self.tabManager.tabs.contains(where: { $0.id == tabID }) else { return false }
+                self.performCloseTab(tabID)
+                return self.tabManager.tabs.contains(where: { $0.id == tabID }) == false
+            }
+        }
         viewModel.activeBranchProvider = { [weak viewModel] in
             viewModel?.gitStatus?.branch
         }
