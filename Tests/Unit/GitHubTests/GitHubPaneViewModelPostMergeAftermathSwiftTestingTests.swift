@@ -300,6 +300,41 @@ struct GitHubPaneViewModelPostMergeAftermathSwiftTestingTests {
         #expect(banner == "Merged PR #42 via Squash & Merge.")
     }
 
+    @Test("cleanup close uses tab captured with loaded pull request rows")
+    func cleanupCloseUsesLoadedTabID() async throws {
+        let loadedTabID = TabID()
+        let otherTabID = TabID()
+        let visibleTabID = Box<TabID?>(loadedTabID)
+        let viewModel = try await makeLoadedViewModel(tabIDProvider: { visibleTabID.value })
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
+        viewModel.postMergeAftermathHandler = { _, _ in
+            .fetchedOnly(currentBranch: "feature/test", baseBranch: "main")
+        }
+        viewModel.postMergeCleanupAlertHandler = { _ in
+            visibleTabID.value = otherTabID
+            return .closeWorktree
+        }
+
+        let closedTabID = Box<TabID?>(nil)
+        viewModel.closeWorktreeTabHandler = { tabID in
+            closedTabID.value = tabID
+            return true
+        }
+
+        viewModel.requestMergePullRequest(
+            number: 42,
+            method: .squash,
+            deleteBranch: true
+        )
+
+        try await waitForCondition {
+            closedTabID.value != nil &&
+            viewModel.lastMergeInfoMessage?.contains("closed") == true
+        }
+        #expect(closedTabID.value == loadedTabID)
+        #expect(closedTabID.value != otherTabID)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModel() -> GitHubPaneViewModel {
@@ -311,11 +346,13 @@ struct GitHubPaneViewModelPostMergeAftermathSwiftTestingTests {
 
     private func makeLoadedViewModel(
         workingDirectory: URL = URL(fileURLWithPath: "/tmp/github-pane-aftermath", isDirectory: true),
-        pullRequestNumber: Int = 42
+        pullRequestNumber: Int = 42,
+        tabIDProvider: (() -> TabID?)? = nil
     ) async throws -> GitHubPaneViewModel {
         let service = GitHubService(runner: Self.loadedRunner(pullRequestNumber: pullRequestNumber))
         let viewModel = GitHubPaneViewModel(service: service)
         viewModel.workingDirectoryProvider = { workingDirectory }
+        viewModel.tabIDProvider = tabIDProvider
         viewModel.refresh()
         try await waitForCondition {
             viewModel.pullRequests.contains(where: { $0.number == pullRequestNumber })

@@ -606,6 +606,14 @@ public enum CLIArgumentParser {
         }
     }
 
+    private static func isHelpToken(_ token: String) -> Bool {
+        token == "--help" || token == "-h" || token == "help"
+    }
+
+    private static func isOnlyHelpRequest(_ arguments: [String]) -> Bool {
+        arguments.count == 1 && isHelpToken(arguments[0])
+    }
+
     // MARK: - Private: Original Subcommand Parsers
 
     /// Parses `cocxy notify <message>`.
@@ -1715,7 +1723,13 @@ public enum CLIArgumentParser {
                 argument: "status|prs|issues|open|refresh"
             )
         }
+        if isHelpToken(subcommand) {
+            return .help
+        }
         let rest = Array(arguments.dropFirst())
+        if isOnlyHelpRequest(rest) {
+            return .help
+        }
         switch subcommand {
         case "status":
             guard rest.isEmpty else {

@@ -172,12 +172,14 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     var postMergeCleanupAlertHandler: ((_ headRefName: String) async -> PostMergeWorktreeCleanupAlert.Resolution)?
 
     /// Handler that performs the programmatic tab close when the user
-    /// picks "Close Worktree" in the cleanup alert. Returns `true` when
-    /// the close succeeded; `false` when the close was blocked (last
-    /// terminal guard, pinned tab, missing handler) so the view model
-    /// can append a "close manually" hint to the banner instead of
-    /// pretending the close happened.
-    var closeWorktreeTabHandler: (() async -> Bool)?
+    /// picks "Close Worktree" in the cleanup alert. The view model
+    /// passes the tab captured from the merge context, avoiding drift
+    /// if the user switches tabs before the alert resolves. Returns
+    /// `true` when the close succeeded; `false` when the close was
+    /// blocked (last terminal guard, pinned tab, missing handler) so
+    /// the view model can append a "close manually" hint to the banner
+    /// instead of pretending the close happened.
+    var closeWorktreeTabHandler: ((_ tabID: TabID) async -> Bool)?
 
     /// Returns the branch name the merge integration should consult
     /// when asking gh "is there a PR for this branch?". When `nil` or

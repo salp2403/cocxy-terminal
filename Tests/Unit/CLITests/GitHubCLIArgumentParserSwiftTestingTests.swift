@@ -72,6 +72,18 @@ struct GitHubCLIArgumentParserSwiftTestingTests {
         }
     }
 
+    @Test("`cocxy github pr-merge --help` prints help instead of hitting the socket")
+    func githubPRMerge_helpReturnsHelp() throws {
+        #expect(try CLIArgumentParser.parse(["github", "pr-merge", "--help"]) == .help)
+
+        let runner = CommandRunner(socketClient: SocketClient(socketPath: "/tmp/nonexistent.sock"))
+        let result = runner.run(arguments: ["github", "pr-merge", "--help"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.contains("cocxy github pr-merge"))
+        #expect(result.stderr.isEmpty)
+    }
+
     @Test("`cocxy github bogus` throws invalidArgument")
     func github_unknownSubcommandThrows() {
         #expect(throws: CLIError.self) {

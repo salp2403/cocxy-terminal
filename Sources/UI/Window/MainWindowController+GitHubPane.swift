@@ -170,6 +170,9 @@ extension MainWindowController {
         viewModel.workingDirectoryProvider = { [weak self] in
             self?.currentGitHubPaneWorkingDirectory()
         }
+        viewModel.tabIDProvider = { [weak self] in
+            self?.visibleTabID ?? self?.tabManager.activeTabID
+        }
         viewModel.configProvider = { [weak self] in
             self?.currentGitHubPaneConfig() ?? .defaults
         }
@@ -207,19 +210,17 @@ extension MainWindowController {
             )
         }
         // Optional cleanup alert + programmatic close (v0.1.87). Same
-        // wiring shape as the Code Review panel; the close handler
-        // resolves the active tab through `visibleTabID ?? activeTabID`
-        // so the merge-then-close flow targets the tab the user was
-        // looking at when they triggered the merge from the pane.
+        // wiring shape as the Code Review panel; the view model passes
+        // the tab that produced the PR rows so a delayed alert cannot
+        // close a different tab after the user switches context.
         viewModel.postMergeCleanupAlertHandler = { headRefName in
             await MainActor.run {
                 PostMergeWorktreeCleanupAlert.present(headRefName: headRefName)
             }
         }
-        viewModel.closeWorktreeTabHandler = { [weak self] in
+        viewModel.closeWorktreeTabHandler = { [weak self] tabID in
             await MainActor.run {
                 guard let self else { return false }
-                guard let tabID = self.visibleTabID ?? self.tabManager.activeTabID else { return false }
                 guard self.tabManager.tabs.contains(where: { $0.id == tabID }) else { return false }
                 self.performCloseTab(tabID)
                 return self.tabManager.tabs.contains(where: { $0.id == tabID }) == false

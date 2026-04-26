@@ -139,6 +139,11 @@ final class GitHubPaneViewModel: ObservableObject {
     /// plain working directory so per-worktree PR resolution works.
     var workingDirectoryProvider: (() -> URL?)?
 
+    /// Returns the tab that produced the currently visible pane data.
+    /// Merge cleanup uses the captured value so a delayed alert cannot
+    /// close a different tab after the user switches context.
+    var tabIDProvider: (() -> TabID?)?
+
     /// Returns the current `[github]` config snapshot. Called once
     /// per refresh so hot-reloaded config changes are honoured without
     /// restarting the pane.
@@ -184,11 +189,13 @@ final class GitHubPaneViewModel: ObservableObject {
     var postMergeCleanupAlertHandler: ((_ headRefName: String) async -> PostMergeWorktreeCleanupAlert.Resolution)?
 
     /// Handler that performs the programmatic tab close when the user
-    /// picks "Close Worktree". Returns `true` on success, `false` when
-    /// the close was blocked or the handler is nil — the caller maps
-    /// the boolean to a banner fragment so the user knows what
-    /// happened.
-    var closeWorktreeTabHandler: (() async -> Bool)?
+    /// picks "Close Worktree". The view model passes the tab captured
+    /// from the pane refresh that produced the PR row, avoiding drift
+    /// if the user switches tabs before the alert resolves. Returns
+    /// `true` on success, `false` when the close was blocked or the
+    /// handler is nil — the caller maps the boolean to a banner
+    /// fragment so the user knows what happened.
+    var closeWorktreeTabHandler: ((_ tabID: TabID) async -> Bool)?
 
     // MARK: - Dependencies
 
@@ -203,6 +210,11 @@ final class GitHubPaneViewModel: ObservableObject {
     /// actions use this captured value instead of whatever tab happens
     /// to be visible when the user opens the context menu.
     private var pullRequestsWorkingDirectory: URL?
+
+    /// Tab that produced the currently rendered PR rows. Cleanup close
+    /// actions use this captured value instead of the active tab at
+    /// alert-response time.
+    private var pullRequestsTabID: TabID?
 
     /// Monotonic counter bumped before every `refresh()` so in-flight
     /// results can be discarded when the user triggers a new refresh
@@ -313,6 +325,7 @@ final class GitHubPaneViewModel: ObservableObject {
             lastErrorMessage = "Reload the GitHub pane before merging this pull request."
             return
         }
+        let mergeTabID = pullRequestsTabID
         guard !pullRequestsBeingMerged.contains(number) else { return }
 
         let request = GitHubMergeRequest(
@@ -346,7 +359,8 @@ final class GitHubPaneViewModel: ObservableObject {
                         headRefName: merged.headRefName,
                         deleteBranchUsed: request.deleteBranch,
                         mergedNumber: merged.number,
-                        method: method
+                        method: method,
+                        tabID: mergeTabID
                     )
                 }
             } catch {
@@ -426,7 +440,8 @@ final class GitHubPaneViewModel: ObservableObject {
         headRefName: String,
         deleteBranchUsed: Bool,
         mergedNumber: Int,
-        method: GitHubMergeMethod
+        method: GitHubMergeMethod,
+        tabID: TabID? = nil
     ) {
         guard let aftermathHandler = postMergeAftermathHandler else { return }
 
@@ -453,7 +468,8 @@ final class GitHubPaneViewModel: ObservableObject {
                     deleteBranchUsed: deleteBranchUsed,
                     headRefName: headRefName,
                     outcome: outcome,
-                    baseBanner: baseBanner
+                    baseBanner: baseBanner,
+                    tabID: tabID
                 )
             } catch {
                 await MainActor.run {
@@ -470,7 +486,8 @@ final class GitHubPaneViewModel: ObservableObject {
         deleteBranchUsed: Bool,
         headRefName: String,
         outcome: GitMergeAftermathOutcome,
-        baseBanner: String
+        baseBanner: String,
+        tabID: TabID?
     ) async {
         guard PostMergeWorktreeCleanupAlert.shouldOffer(
             deleteBranchUsed: deleteBranchUsed,
@@ -483,8 +500,8 @@ final class GitHubPaneViewModel: ObservableObject {
         switch resolution {
         case .closeWorktree:
             let closed: Bool
-            if let closeHandler = closeWorktreeTabHandler {
-                closed = await closeHandler()
+            if let closeHandler = closeWorktreeTabHandler, let tabID {
+                closed = await closeHandler(tabID)
             } else {
                 closed = false
             }
@@ -569,6 +586,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 checks = []
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
+                pullRequestsTabID = nil
                 setupAction = nil
                 isLoading = false
             }
@@ -585,6 +603,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 checks = []
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
+                pullRequestsTabID = nil
                 setupAction = nil
                 isLoading = false
             }
@@ -617,6 +636,7 @@ final class GitHubPaneViewModel: ObservableObject {
                     checks = []
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
+                    pullRequestsTabID = nil
                     lastInfoMessage = Self.banner(for: error)
                     setupAction = .installCLI
                 case .notAuthenticated:
@@ -627,6 +647,7 @@ final class GitHubPaneViewModel: ObservableObject {
                     checks = []
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
+                    pullRequestsTabID = nil
                     lastInfoMessage = Self.banner(for: error)
                     setupAction = .signIn
                 default:
@@ -658,6 +679,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 checks = []
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
+                pullRequestsTabID = nil
                 isLoading = false
             }
             return
@@ -679,6 +701,7 @@ final class GitHubPaneViewModel: ObservableObject {
                     checks = []
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
+                    pullRequestsTabID = nil
                     lastInfoMessage = Self.banner(for: error)
                     setupAction = nil
                 default:
@@ -746,6 +769,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 checks = fetchedChecks
                 selectedPullRequestNumber = targetNumber
                 pullRequestsWorkingDirectory = workingDirectory
+                pullRequestsTabID = tabIDProvider?()
                 isLoading = false
             }
         } catch let error as GitHubCLIError {
@@ -780,6 +804,7 @@ final class GitHubPaneViewModel: ObservableObject {
         checks = []
         selectedPullRequestNumber = nil
         pullRequestsWorkingDirectory = nil
+        pullRequestsTabID = nil
     }
 
     // MARK: - Static helpers

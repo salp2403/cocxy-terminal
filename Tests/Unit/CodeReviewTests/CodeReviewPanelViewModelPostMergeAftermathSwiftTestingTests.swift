@@ -290,6 +290,44 @@ struct CodeReviewPanelViewModelPostMergeAftermathSwiftTestingTests {
         #expect(viewModel.pullRequestMergeInfoMessage?.contains("`develop`") == true)
     }
 
+    @Test("aftermath uses loaded review working directory after tab switch")
+    func aftermathUsesLoadedReviewWorkingDirectoryAfterTabSwitch() async throws {
+        let loadedDirectory = URL(fileURLWithPath: "/tmp/review-aftermath-loaded", isDirectory: true)
+        let laterDirectory = URL(fileURLWithPath: "/tmp/review-aftermath-later", isDirectory: true)
+        let activeDirectory = Box<URL?>(loadedDirectory)
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: SessionDiffTrackerImpl(),
+            hookEventReceiver: nil,
+            directDiffLoader: { _, _, _ in [] }
+        )
+        viewModel.activeTabCwdProvider = { activeDirectory.value }
+
+        viewModel.refreshDiffs()
+        try await waitForCondition {
+            viewModel.activeWorkingDirectory == loadedDirectory &&
+            viewModel.isLoading == false
+        }
+
+        activeDirectory.value = laterDirectory
+        let receivedDirectory = Box<URL?>(nil)
+        viewModel.postMergeAftermathHandler = { directory, baseBranch in
+            receivedDirectory.value = directory
+            return .synced(branch: baseBranch, ahead: 0, behind: 1)
+        }
+
+        viewModel.runPostMergeAftermathIfWired(
+            baseBranch: "main",
+            headRefName: "feature/test",
+            deleteBranchUsed: false,
+            mergedNumber: 42,
+            method: .squash
+        )
+
+        try await waitForCondition { receivedDirectory.value != nil }
+        #expect(receivedDirectory.value == loadedDirectory)
+        #expect(receivedDirectory.value != laterDirectory)
+    }
+
     @Test("requestMergePullRequest without aftermath wired still surfaces merge banner")
     func requestMergePullRequestNoAftermathStillBanner() async throws {
         let viewModel = makeViewModel()
@@ -307,6 +345,44 @@ struct CodeReviewPanelViewModelPostMergeAftermathSwiftTestingTests {
         // The banner shows the merge head only — no aftermath append.
         let message = viewModel.pullRequestMergeInfoMessage ?? ""
         #expect(message == "Merged PR #42 via Squash & Merge.")
+    }
+
+    @Test("cleanup close uses tab captured before alert resolves")
+    func cleanupCloseUsesCapturedTabID() async throws {
+        let viewModel = makeViewModel()
+        viewModel.activeTabCwdProvider = { Self.workingDirectory }
+        let mergeTabID = TabID()
+        let laterTabID = TabID()
+        let activeTabID = Box<TabID?>(mergeTabID)
+        viewModel.activeTabIDProvider = { activeTabID.value }
+        viewModel.postMergeAftermathHandler = { _, _ in
+            .fetchedOnly(currentBranch: "feature/test", baseBranch: "main")
+        }
+        viewModel.postMergeCleanupAlertHandler = { _ in
+            activeTabID.value = laterTabID
+            return .closeWorktree
+        }
+
+        let closedTabID = Box<TabID?>(nil)
+        viewModel.closeWorktreeTabHandler = { tabID in
+            closedTabID.value = tabID
+            return true
+        }
+
+        viewModel.runPostMergeAftermathIfWired(
+            baseBranch: "main",
+            headRefName: "feature/test",
+            deleteBranchUsed: true,
+            mergedNumber: 42,
+            method: .squash
+        )
+
+        try await waitForCondition {
+            closedTabID.value != nil &&
+            viewModel.pullRequestMergeInfoMessage?.contains("closed") == true
+        }
+        #expect(closedTabID.value == mergeTabID)
+        #expect(closedTabID.value != laterTabID)
     }
 
     // MARK: - Helpers

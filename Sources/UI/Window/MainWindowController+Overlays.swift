@@ -1057,8 +1057,9 @@ extension MainWindowController {
         // Optional cleanup alert + programmatic close (v0.1.87).
         // Presents the 3-button NSAlert on the main thread when the
         // aftermath qualifies (delete-branch + still on feature
-        // branch). The close handler resolves the active tab from
-        // the view model's provider closures and calls the public
+        // branch). The view model passes the captured merge tab ID to
+        // the close handler so we never close whichever tab happens to
+        // be active when the alert resolves, and we call the public
         // `performCloseTab` so we never collide with the close
         // confirmation sheet
         // (regla `feedback_non_interactive_close_separation`).
@@ -1067,10 +1068,9 @@ extension MainWindowController {
                 PostMergeWorktreeCleanupAlert.present(headRefName: headRefName)
             }
         }
-        viewModel.closeWorktreeTabHandler = { [weak self, weak viewModel] in
+        viewModel.closeWorktreeTabHandler = { [weak self] tabID in
             await MainActor.run {
-                guard let self, let viewModel else { return false }
-                guard let tabID = viewModel.activeTabIDProvider?() else { return false }
+                guard let self else { return false }
                 guard self.tabManager.tabs.contains(where: { $0.id == tabID }) else { return false }
                 self.performCloseTab(tabID)
                 return self.tabManager.tabs.contains(where: { $0.id == tabID }) == false

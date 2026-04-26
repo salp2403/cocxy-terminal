@@ -317,7 +317,8 @@ extension CodeReviewPanelViewModel {
         method: GitHubMergeMethod
     ) {
         guard let aftermathHandler = postMergeAftermathHandler else { return }
-        guard let workingDirectory = activeTabCwdProvider?() else { return }
+        guard let workingDirectory = reviewActionWorkingDirectory else { return }
+        let mergeTabID = activeTabID ?? activeTabIDProvider?()
 
         let trimmedBase = baseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedBase.isEmpty else { return }
@@ -341,7 +342,8 @@ extension CodeReviewPanelViewModel {
                     deleteBranchUsed: deleteBranchUsed,
                     headRefName: headRefName,
                     outcome: outcome,
-                    baseBanner: baseBanner
+                    baseBanner: baseBanner,
+                    tabID: mergeTabID
                 )
             } catch {
                 await MainActor.run {
@@ -368,7 +370,8 @@ extension CodeReviewPanelViewModel {
         deleteBranchUsed: Bool,
         headRefName: String,
         outcome: GitMergeAftermathOutcome,
-        baseBanner: String
+        baseBanner: String,
+        tabID: TabID?
     ) async {
         guard PostMergeWorktreeCleanupAlert.shouldOffer(
             deleteBranchUsed: deleteBranchUsed,
@@ -381,8 +384,8 @@ extension CodeReviewPanelViewModel {
         switch resolution {
         case .closeWorktree:
             let closed: Bool
-            if let closeHandler = closeWorktreeTabHandler {
-                closed = await closeHandler()
+            if let closeHandler = closeWorktreeTabHandler, let tabID {
+                closed = await closeHandler(tabID)
             } else {
                 closed = false
             }
