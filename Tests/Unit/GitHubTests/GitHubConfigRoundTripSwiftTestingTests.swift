@@ -359,6 +359,8 @@ struct GitHubConfigRoundTripSwiftTestingTests {
         viewModel.githubMergeEnabled = false
 
         try viewModel.save()
+        #expect(viewModel.hasUnsavedChanges == false)
+        #expect(viewModel.githubMergeEnabled == false)
 
         // Reload from disk through a fresh ConfigService pointing at the
         // same in-memory provider to prove the written TOML is valid.

@@ -657,7 +657,8 @@ final class PreferencesViewModel: ObservableObject {
             autoRefreshInterval: clampedRefresh,
             maxItems: clampedMaxItems,
             includeDrafts: githubIncludeDrafts,
-            defaultState: validatedState
+            defaultState: validatedState,
+            mergeEnabled: githubMergeEnabled
         )
     }
 
