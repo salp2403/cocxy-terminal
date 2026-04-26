@@ -5,6 +5,43 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.88] - 2026-04-26
+
+### Added
+- A `Code Review` section in `Preferences > General` exposing the
+  existing `[code-review].auto-show-on-session-end` toggle. Turn it
+  off to keep the Code Review panel from auto-opening when an agent
+  session ends; reach the panel manually with `Cmd+Option+R`. The
+  toggle round-trips through `~/.config/cocxy/config.toml` and the
+  Save/Discard controls reflect the unsaved state immediately.
+
+### Changed
+- The optional post-merge cleanup alert ("Close Worktree" / "Keep
+  Worktree" / "Cancel") shipped in v0.1.87 now also removes the
+  worktree directory on disk when the merged tab owns a cocxy-managed
+  worktree (`cocxy worktree add`). Picking `Close Worktree` runs
+  `git worktree remove` against the worktree path and clears the
+  manifest entry, so the post-merge state matches what `--delete-branch`
+  did on origin. Worktrees with uncommitted changes fall back
+  gracefully to "keep on disk, drop tab binding" — no work is ever
+  lost. Tabs whose feature branch was created without
+  `cocxy worktree add` keep the v0.1.87 behaviour and only close.
+- The cleanup alert copy now reads "Closing also removes the worktree
+  directory on disk if it has no uncommitted changes." so the
+  outcome of the action is explicit before the user picks.
+
+### Fixed
+- The `[github].merge-enabled` preference now persists correctly when
+  toggled off in Preferences. Earlier builds dropped the value during
+  save so `Save` stayed dirty forever and the toggle reverted on
+  reload; the preference is now part of the TOML write path and
+  round-trips through disk in a single save.
+- The GitHub pane no longer surfaces a spurious "issues failed to
+  load" banner on repositories that have GitHub Issues disabled. The
+  pull-request list still refreshes; the issue list is skipped
+  silently when `gh repo view --json hasIssuesEnabled` reports
+  `false`.
+
 ## [0.1.87] - 2026-04-25
 
 ### Added
