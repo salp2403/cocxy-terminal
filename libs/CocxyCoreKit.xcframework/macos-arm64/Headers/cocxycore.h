@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.13.4 (Primary/Secondary/Tertiary Device Attributes responses)
+ * Version: 0.13.5 (glyph-id overflow guards in Metal pipeline raster paths)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 13
-#define COCXYCORE_VERSION_PATCH 4
-#define COCXYCORE_VERSION_STRING "0.13.4"
+#define COCXYCORE_VERSION_PATCH 5
+#define COCXYCORE_VERSION_STRING "0.13.5"
 
 /* Platform detection. */
 #if defined(__APPLE__)

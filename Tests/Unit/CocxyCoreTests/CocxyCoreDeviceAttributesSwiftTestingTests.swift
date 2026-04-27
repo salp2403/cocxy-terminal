@@ -78,9 +78,9 @@ struct CocxyCoreDeviceAttributesSwiftTestingTests {
     func secondaryDARespondsWithFirmware() {
         // Format: `CSI > Pp ; Pv ; Pc c`
         //   Pp = 0    (xterm-compatible terminal type)
-        //   Pv = 1304 (CocxyCore 0.13.4 encoded as major*100 + minor + patch)
+        //   Pv = 1305 (CocxyCore 0.13.5 encoded as minor * 100 + patch)
         //   Pc = 0    (ROM cartridge — always 0)
-        #expect(response(for: "\u{001B}[>c") == "\u{001B}[>0;1304;0c")
+        #expect(response(for: "\u{001B}[>c") == "\u{001B}[>0;1305;0c")
     }
 
     // MARK: - Tertiary DA
