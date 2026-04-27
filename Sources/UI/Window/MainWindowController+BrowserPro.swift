@@ -2,6 +2,7 @@
 // MainWindowController+BrowserPro.swift - Browser Pro overlay panels.
 
 import AppKit
+import CocxyCoreKit
 import SwiftUI
 
 // MARK: - Browser Pro Panels
@@ -103,21 +104,35 @@ extension MainWindowController {
 
     /// Writes a formatted DOM grab into the active terminal pane.
     ///
-    /// The text goes through the shared `TerminalEngine.sendText` path used
-    /// by paste and programmatic input. Bracketed paste guards multiline
-    /// payloads from being interpreted as separate shell commands when the
-    /// user captures from a browser while a shell prompt is focused instead
-    /// of an agent prompt.
+    /// The text goes through the shared `TerminalEngine.sendText` path
+    /// used by paste and programmatic input. The bracketed-paste markers
+    /// are only added when the receiving terminal has the mode active —
+    /// the same check `CocxyCoreView.handlePaste` runs — so a recently
+    /// launched shell or a TUI that opted out never sees the marker
+    /// bytes leak as visible `[200~` / `[201~` characters in the prompt.
     @discardableResult
     func injectBrowserDOMGrabPayload(_ payload: BrowserDOMGrabPayload) -> Bool {
-        guard let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
+        // Mode probing requires the concrete bridge — `TerminalEngine`
+        // does not expose `surfaceState(for:)` because mocks do not
+        // model the C-side terminal handle. The downcast keeps the
+        // production path identical to `CocxyCoreView.handlePaste` and
+        // makes the inject a no-op (with a UI beep) in the rare cases
+        // where a non-Cocxy bridge is wired in — exactly what would
+        // already happen if any of the optional chain entries above
+        // were missing.
+        guard let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
+              let cocxyBridge = bridge as? CocxyCoreBridge,
+              let state = cocxyBridge.surfaceState(for: surfaceID) else {
             NSSound.beep()
             return false
         }
 
         let formatted = BrowserDOMGrabPayloadFormatter.format(payload)
-        let bracketedPaste = "\u{1B}[200~\(formatted)\u{1B}[201~"
-        bridge.sendText(bracketedPaste, to: surfaceID)
+        let payloadText = BrowserDOMGrabPayloadInjection.wrap(
+            formatted,
+            bracketedPasteActive: cocxycore_terminal_mode_bracketed_paste(state.terminal)
+        )
+        cocxyBridge.sendText(payloadText, to: surfaceID)
 
         focusActiveTerminalSurface()
         return true
