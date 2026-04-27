@@ -115,36 +115,27 @@ extension MainWindowController {
         let outputDispatcher = outputDispatcher(
             for: surfaceID,
             commandTracker: commandTracker,
-            imageDetector: imageDetector
+            imageDetector: imageDetector,
+            engine: engine
         )
 
         bridge.setOutputHandler(
             for: surfaceID
-        ) { [weak self, weak buffer, weak engine, weak outputDispatcher] data in
+        ) { [weak buffer, weak outputDispatcher] data in
             // Fan the chunk to the thread-safe detectors on the per-
-            // surface background queue. Both detectors are NSLock-
-            // protected and ordering is preserved by the dispatcher's
-            // serial queue, so partial-OSC parsers stay correct while
-            // the main thread is freed to render the terminal under
-            // sustained agent output.
+            // surface background queue. The dispatcher runs the
+            // command-duration tracker, the inline-image OSC detector,
+            // and (when an engine is wired) the three agent-detection
+            // layers — all `NSLock`-protected and ordered by the
+            // dispatcher's serial queue. Signal resolution and the
+            // state-machine bookkeeping hop back to the main actor
+            // through `engine.processBackgroundSignals`, so the main
+            // thread keeps rendering even under sustained agent output.
             outputDispatcher?.dispatch(data)
 
+            // Buffer.append is `@MainActor`-bound for SwiftUI scrollback
+            // search. Keep it on main exactly as before.
             Task { @MainActor in
-                if self?.shouldRouteOutputToDetection(
-                    fromTabID: capturedTabID,
-                    surfaceID: capturedSurfaceID
-                ) == true {
-                    // Thread the surface ID into the detection engine so
-                    // the emitted StateContext carries the split that
-                    // produced the output. Subscribers can then target
-                    // per-surface state without falling back to the
-                    // focused tab (regresar a ese fallback contaminaría
-                    // los splits hermanos del mismo tab).
-                    engine?.processTerminalOutput(
-                        data,
-                        surfaceID: capturedSurfaceID
-                    )
-                }
                 buffer?.append(data)
             }
         }
@@ -213,10 +204,19 @@ extension MainWindowController {
     /// inline image detector is per-surface and a split layout would
     /// otherwise share a single dispatcher across panes — defeating the
     /// independent ordering each parser relies on.
+    ///
+    /// When `engine` is non-nil, the dispatcher also runs the three
+    /// agent-detection layers (OSC, pattern, timing) on its background
+    /// queue and forwards the resulting signals to the engine through
+    /// `processBackgroundSignals(_:_:surfaceID:)`. The engine takes care
+    /// of hopping back to the main actor for resolution and state-machine
+    /// work, so everything that does not need `@MainActor` ends up off
+    /// the main thread.
     private func outputDispatcher(
         for surfaceID: SurfaceID,
         commandTracker: CommandDurationTracker,
-        imageDetector: InlineImageOSCDetector
+        imageDetector: InlineImageOSCDetector,
+        engine: AgentDetectionEngineImpl?
     ) -> SurfaceOutputBackgroundDispatcher {
         if let existing = surfaceOutputDispatchers[surfaceID] {
             return existing
@@ -227,16 +227,44 @@ extension MainWindowController {
         // the queue after the surface was torn down both closures collapse
         // to no-ops and the data is dropped, exactly as it would be if
         // the bridge had detached the output handler in the same moment.
+        var processors: [SurfaceOutputBackgroundDispatcher.Processor] = [
+            { [weak commandTracker] data in
+                commandTracker?.processBytes(data)
+            },
+            { [weak imageDetector] data in
+                imageDetector?.processBytes(data)
+            },
+        ]
+
+        if let engine {
+            // Capture the per-surface detection layers at registration
+            // time so the dispatcher's serial queue keeps each parser's
+            // partial-OSC state coherent across chunks. Held weakly so
+            // a chunk that lands after `engine.clearSurface(_:)` runs
+            // collapses to a no-op instead of resurrecting torn-down
+            // detection state.
+            let bundle = engine.detectorsForSurface(surfaceID)
+            let osc = bundle.osc
+            let pattern = bundle.pattern
+            let timing = bundle.timing
+
+            processors.append({
+                [weak engine, weak osc, weak pattern, weak timing] data in
+                guard let osc, let pattern, let timing else { return }
+                let oscSignals = osc.processBytes(data)
+                let patternSignals = pattern.processBytes(data)
+                _ = timing.processBytes(data)
+                engine?.processBackgroundSignals(
+                    osc: oscSignals,
+                    pattern: patternSignals,
+                    surfaceID: surfaceID
+                )
+            })
+        }
+
         let dispatcher = SurfaceOutputBackgroundDispatcher(
             label: "dev.cocxy.terminal.output-processing.\(surfaceID.rawValue.uuidString)",
-            processors: [
-                { [weak commandTracker] data in
-                    commandTracker?.processBytes(data)
-                },
-                { [weak imageDetector] data in
-                    imageDetector?.processBytes(data)
-                },
-            ]
+            processors: processors
         )
         surfaceOutputDispatchers[surfaceID] = dispatcher
         return dispatcher

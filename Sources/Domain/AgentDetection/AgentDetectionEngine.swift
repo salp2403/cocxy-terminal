@@ -251,6 +251,80 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
         processResolvedSignal(resolved, surfaceID: surfaceID)
     }
 
+    // MARK: - Background-aware entry points (Bug 4 phase 2)
+
+    /// Returns the per-surface detection layer instances so a background
+    /// dispatcher can run `processBytes` off the main thread.
+    ///
+    /// The three detectors are documented thread-safe (each uses an
+    /// internal `NSLock`), so calling `processBytes` on them from any
+    /// thread is allowed. What the dispatcher cannot do is read these
+    /// references from outside the main actor — that is what this getter
+    /// exists for. Surface lifecycles capture the tuple at registration
+    /// time and pass it into the dispatcher's processor closures, where
+    /// it stays alive as long as the dispatcher itself.
+    ///
+    /// Successive calls for the same surface return the same instances
+    /// so the parser state machines stay coherent across chunks. Distinct
+    /// surfaces get distinct detectors so a Codex transition on surface
+    /// B never bleeds into a Claude transition on surface A.
+    ///
+    /// - Parameter surfaceID: Surface whose detectors are requested.
+    ///   `nil` returns the legacy single-instance trio for callers that
+    ///   have not been migrated to per-surface routing.
+    /// - Returns: Tuple of `(osc, pattern, timing)` detector references.
+    func detectorsForSurface(
+        _ surfaceID: SurfaceID?
+    ) -> (
+        osc: OSCSequenceDetector,
+        pattern: PatternMatchingDetector,
+        timing: TimingHeuristicsDetector
+    ) {
+        (
+            osc: oscDetector(for: surfaceID),
+            pattern: patternDetector(for: surfaceID),
+            timing: timingDetector(for: surfaceID)
+        )
+    }
+
+    /// Hands signals already produced on a background queue back to the
+    /// engine for resolution and state-machine processing on the main
+    /// actor.
+    ///
+    /// The surface lifecycle's per-surface dispatcher runs the OSC and
+    /// pattern detectors on its own serial background queue and then
+    /// calls this method with the resulting signals. The engine's main-
+    /// thread bookkeeping (debounce buckets, state machines, Combine
+    /// publishers) is preserved exactly: the only change is that the
+    /// expensive parser work no longer runs on the main thread.
+    ///
+    /// Safe to call from any thread. The method is `nonisolated` so the
+    /// dispatcher does not pay an extra hop on the way in; the resolution
+    /// and `processResolvedSignal` work itself runs on the main actor
+    /// inside the dispatched task.
+    ///
+    /// - Parameters:
+    ///   - osc: Signals returned by `OSCSequenceDetector.processBytes`.
+    ///   - pattern: Signals returned by `PatternMatchingDetector.processBytes`.
+    ///   - surfaceID: Surface whose chunk produced the signals. Carried
+    ///     through to the emitted `StateContext` so subscribers can
+    ///     route the transition to the originating split. `nil` follows
+    ///     the legacy global-bucket behaviour.
+    nonisolated func processBackgroundSignals(
+        osc: [DetectionSignal],
+        pattern: [DetectionSignal],
+        surfaceID: SurfaceID?
+    ) {
+        let allSignals = osc + pattern
+        guard !allSignals.isEmpty else { return }
+
+        let resolved = resolveConflictingSignals(allSignals)
+
+        Task { @MainActor [weak self] in
+            self?.processResolvedSignal(resolved, surfaceID: surfaceID)
+        }
+    }
+
     /// Notifies the engine that the user typed input on a specific
     /// surface.
     ///
