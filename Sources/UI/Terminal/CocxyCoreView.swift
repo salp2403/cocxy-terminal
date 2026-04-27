@@ -874,8 +874,13 @@ final class CocxyCoreView: NSView {
 
         if let handler = onFileDrop, handler(urls) { return true }
 
-        // Default: paste file paths as text
-        let paths = urls.map { $0.path }.joined(separator: " ")
+        // Default: paste each file path as shell-escaped text so AI-agent
+        // CLIs (claude-code, codex, gemini, aider) treat the drop as a
+        // single argument and trigger their image / file detection. The
+        // payload follows the canonical macOS shell-escape convention so
+        // the CLIs see the same bytes they receive from any other native
+        // terminal on the platform.
+        let paths = FileDropPathFormatter.format(urls)
         guard let bridge = bridge, let sid = surfaceID else { return false }
         bridge.sendText(paths, to: sid)
         return true
