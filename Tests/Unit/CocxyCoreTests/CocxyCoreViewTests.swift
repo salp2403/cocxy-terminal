@@ -164,6 +164,28 @@ struct CocxyCoreViewTests {
         #expect(harness.view.needsRender == false)
     }
 
+    @Test("backing CAMetalLayer is opaque so translucent windows do not bleed through the terminal")
+    func backingMetalLayerIsOpaque() {
+        // Regression for the "transparent shell on agent launch" bug: when
+        // background-opacity < 1.0 the hosting NSWindow is non-opaque, and
+        // AppKit propagates that flag to backing layers unless the view
+        // anchors it explicitly. Without anchoring, any transient render
+        // failure during a heavy burst of agent output or a full repaint
+        // composed the layer against the desktop
+        // and the user saw straight through the terminal.
+        //
+        // The clear color used by MetalTerminalRenderer always carries
+        // alpha 1.0, so locking the layer to opaque keeps the chrome
+        // transparency feature intact while preventing the terminal area
+        // itself from ever going see-through.
+        let view = CocxyCoreView(viewModel: TerminalViewModel())
+        view.frame = NSRect(x: 0, y: 0, width: 200, height: 120)
+        let metalLayer = view.layer as? CAMetalLayer
+
+        #expect(metalLayer != nil)
+        #expect(metalLayer?.isOpaque == true)
+    }
+
     @Test("surface state carries a usable terminal lock for render serialization")
     func surfaceStateExposesTerminalLock() throws {
         let harness = try makeViewHarness()

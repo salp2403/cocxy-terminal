@@ -188,6 +188,16 @@ final class CocxyCoreView: NSView {
         metalLayer.framebufferOnly = true
         metalLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
         metalLayer.displaySyncEnabled = true
+        // The terminal surface always paints an opaque background colour
+        // (clearColor.alpha == 1.0 in MetalTerminalRenderer). Anchor the
+        // layer's opacity here so AppKit cannot flip it to non-opaque
+        // when the hosting window is translucent (background-opacity < 1).
+        // Without this anchor, any transient frame failure during a heavy
+        // burst of agent output or a full repaint composes the layer
+        // against whatever sits behind the window —
+        // showing the desktop straight through the terminal — instead of
+        // keeping the previous valid frame visible.
+        metalLayer.isOpaque = true
         return metalLayer
     }
 
