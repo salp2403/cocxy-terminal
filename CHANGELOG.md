@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   outcome of the action is explicit before the user picks.
 
 ### Fixed
+- After a successful in-panel PR merge with `Delete branch after
+  merge` enabled, Cocxy now explicitly deletes the same-repository
+  head ref through GitHub's refs API when the branch is still present.
+  This covers linked worktree checkouts where `gh pr merge
+  --delete-branch` can merge the PR but leave the remote feature
+  branch behind.
+- If `gh pr merge` reports a local worktree cleanup failure after
+  GitHub has already merged the PR, Cocxy now hydrates the merged PR
+  state and continues the post-merge cleanup flow instead of showing a
+  false merge failure.
 - The `[github].merge-enabled` preference now persists correctly when
   toggled off in Preferences. Earlier builds dropped the value during
   save so `Save` stayed dirty forever and the toggle reverted on

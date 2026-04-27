@@ -335,6 +335,52 @@ struct GitHubPaneViewModelPostMergeAftermathSwiftTestingTests {
         #expect(closedTabID.value != otherTabID)
     }
 
+    @Test("cleanup close skips stale refresh when merged worktree directory disappeared")
+    func cleanupCloseSkipsStaleRefreshWhenMergedWorktreeDirectoryDisappeared() async throws {
+        let workingDirectory = URL(
+            fileURLWithPath: "/tmp/github-pane-aftermath-deleted-worktree",
+            isDirectory: true
+        )
+        let loadedRunner = Self.loadedRunner()
+        let prListCount = Box<Int>(0)
+        let service = GitHubService { directory, args, timeout in
+            if args.contains("pr") && args.contains("list") {
+                prListCount.value += 1
+            }
+            return try loadedRunner(directory, args, timeout)
+        }
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { workingDirectory }
+        viewModel.tabIDProvider = { TabID() }
+        viewModel.refresh()
+        try await waitForCondition {
+            viewModel.pullRequests.contains(where: { $0.number == 42 })
+                && viewModel.isLoading == false
+        }
+        #expect(prListCount.value == 1)
+
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
+        viewModel.postMergeAftermathHandler = { _, _ in
+            .fetchedOnly(currentBranch: "feature/test", baseBranch: "main")
+        }
+        viewModel.postMergeCleanupAlertHandler = { _ in .closeWorktree }
+        viewModel.closeWorktreeTabHandler = { _ in true }
+
+        viewModel.requestMergePullRequest(
+            number: 42,
+            method: .squash,
+            deleteBranch: true
+        )
+
+        try await waitForCondition {
+            viewModel.lastMergeInfoMessage?.contains("closed") == true
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(prListCount.value == 1)
+        #expect(viewModel.lastErrorMessage == nil)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModel() -> GitHubPaneViewModel {

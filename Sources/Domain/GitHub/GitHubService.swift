@@ -415,6 +415,21 @@ actor GitHubService {
                 throw GitHubMergeError.autoMergeEnabled
             }
         } else {
+            if let merged = try? await viewPullRequest(
+                number: request.pullRequestNumber,
+                at: directory,
+                timeoutSeconds: timeoutSeconds
+            ), merged.state == .merged {
+                if request.deleteBranch {
+                    try deleteHeadBranchIfStillPresent(
+                        for: merged,
+                        at: directory,
+                        timeoutSeconds: timeoutSeconds
+                    )
+                }
+                return merged
+            }
+
             throw GitHubMergeError.classify(
                 stderr: combined,
                 exitCode: result.terminationStatus,
@@ -424,11 +439,21 @@ actor GitHubService {
 
         // Hydrate the post-merge state so the caller can refresh UI
         // without a second user-visible spinner.
-        return try await viewPullRequest(
+        let merged = try await viewPullRequest(
             number: request.pullRequestNumber,
             at: directory,
             timeoutSeconds: timeoutSeconds
         )
+
+        if request.deleteBranch {
+            try deleteHeadBranchIfStillPresent(
+                for: merged,
+                at: directory,
+                timeoutSeconds: timeoutSeconds
+            )
+        }
+
+        return merged
     }
 
     // MARK: - Helpers
@@ -454,6 +479,65 @@ actor GitHubService {
             return number
         }
         return nil
+    }
+
+    /// Explicitly deletes a same-repository PR head branch after a
+    /// successful merge when the user requested "Delete branch after
+    /// merge".
+    ///
+    /// `gh pr merge --delete-branch` does not reliably delete the
+    /// remote branch when Cocxy runs the merge from a checked-out
+    /// linked worktree. The merge itself succeeds, but the remote head
+    /// can remain. This helper closes that gap by asking GitHub's git
+    /// refs API to delete `heads/<headRefName>` after the PR is already
+    /// merged. Missing refs are treated as success so the path stays
+    /// idempotent when `gh` did delete the branch on its own.
+    private func deleteHeadBranchIfStillPresent(
+        for merged: GitHubPullRequest,
+        at directory: URL,
+        timeoutSeconds: TimeInterval
+    ) throws {
+        let headRef = merged.headRefName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseRef = merged.baseRefName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard merged.state == .merged,
+              !headRef.isEmpty,
+              headRef != baseRef else {
+            return
+        }
+
+        struct RepoIdentity: Decodable {
+            struct Owner: Decodable { let login: String }
+            let owner: Owner
+            let name: String
+        }
+
+        let repoResult = try runner(
+            directory,
+            ["repo", "view", "--json", "owner,name"],
+            timeoutSeconds
+        )
+        guard repoResult.terminationStatus == 0 else {
+            return
+        }
+        let repo = try GitHubJSONDecoder.decode(RepoIdentity.self, from: repoResult.stdout)
+
+        let encodedRef = headRef.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? headRef
+        let endpoint = "repos/\(repo.owner.login)/\(repo.name)/git/refs/heads/\(encodedRef)"
+        let deleteResult = try runner(
+            directory,
+            ["api", "-X", "DELETE", endpoint],
+            timeoutSeconds
+        )
+        if deleteResult.terminationStatus == 0 {
+            return
+        }
+
+        let lower = (deleteResult.stderr + "\n" + deleteResult.stdout).lowercased()
+        if lower.contains("reference does not exist") ||
+           lower.contains("not found") ||
+           lower.contains("no ref found") {
+            return
+        }
     }
 
     /// Normalises a user-supplied state string to a value the `gh`

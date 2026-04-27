@@ -84,6 +84,13 @@ struct GitHubServiceMergeSwiftTestingTests {
     }
     """
 
+    private static let repoIdentityJSON = """
+    {
+      "owner": {"login": "owner"},
+      "name": "repo"
+    }
+    """
+
     private static let cleanMergeabilityJSON = """
     {
       "number": 42,
@@ -234,7 +241,7 @@ struct GitHubServiceMergeSwiftTestingTests {
 
         let service = GitHubService(runner: spy.runner)
         let pr = try await service.mergePullRequest(
-            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash),
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: false),
             at: Self.workingDirectory
         )
         #expect(pr.number == 42)
@@ -246,6 +253,82 @@ struct GitHubServiceMergeSwiftTestingTests {
         #expect(spy.allInvocations[0].args.dropFirst().first == "merge")
         #expect(spy.allInvocations[1].args.first == "pr")
         #expect(spy.allInvocations[1].args.dropFirst().first == "view")
+    }
+
+    @Test("deleteBranch=true explicitly deletes the same-repo head ref after merge")
+    func deleteBranchTrueDeletesHeadRefAfterMerge() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: Self.mergedPRJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesRepoIdentity,
+                 result: GitHubCLIResult(stdout: Self.repoIdentityJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesAPI,
+                 result: GitHubCLIResult(stdout: "", stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        _ = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        let apiArgs = try #require(spy.allInvocations.first(where: { $0.args.first == "api" })?.args)
+        #expect(apiArgs == [
+            "api", "-X", "DELETE",
+            "repos/owner/repo/git/refs/heads/feature/test",
+        ])
+    }
+
+    @Test("deleteBranch=true treats an already-deleted head ref as success")
+    func deleteBranchAlreadyDeletedHeadRefIsSuccess() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: Self.mergedPRJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesRepoIdentity,
+                 result: GitHubCLIResult(stdout: Self.repoIdentityJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesAPI,
+                 result: GitHubCLIResult(
+                    stdout: "",
+                    stderr: "HTTP 422: Reference does not exist",
+                    terminationStatus: 1
+                 ))
+
+        let service = GitHubService(runner: spy.runner)
+        let pr = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        #expect(pr.state == .merged)
+    }
+
+    @Test("non-zero gh exit after remote merge is treated as merged")
+    func nonZeroGhExitAfterRemoteMergeIsTreatedAsMerged() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(
+                    stdout: "✓ Merged pull request #42 (Squash and merge)",
+                    stderr: "fatal: 'main' is already used by worktree at '/tmp/repo'",
+                    terminationStatus: 1
+                 ))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: Self.mergedPRJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesRepoIdentity,
+                 result: GitHubCLIResult(stdout: Self.repoIdentityJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesAPI,
+                 result: GitHubCLIResult(stdout: "", stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        let pr = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        #expect(pr.state == .merged)
+        #expect(spy.allInvocations.contains(where: { $0.args.first == "api" }))
     }
 
     // MARK: - mergePullRequest error classification
@@ -477,6 +560,14 @@ struct GitHubServiceMergeSwiftTestingTests {
     /// Predicate matching the `gh pr view <n> ...` follow-up call.
     private static let matchesView: @Sendable ([String]) -> Bool = { args in
         args.first == "pr" && args.dropFirst().first == "view"
+    }
+
+    private static let matchesRepoIdentity: @Sendable ([String]) -> Bool = { args in
+        args == ["repo", "view", "--json", "owner,name"]
+    }
+
+    private static let matchesAPI: @Sendable ([String]) -> Bool = { args in
+        args.first == "api"
     }
 
     /// Returns the args of the first merge invocation (or nil).

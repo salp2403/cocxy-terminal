@@ -347,13 +347,12 @@ final class GitHubPaneViewModel: ObservableObject {
                     guard let self else { return }
                     self.pullRequestsBeingMerged.remove(number)
                     self.lastMergeInfoMessage = "Merged PR #\(merged.number) via \(method.displayName)."
-                    self.refresh()
                     // v0.1.87: post-merge auto-pull. We capture the
                     // working directory used for the merge so the
                     // sync targets exactly the checkout we just
                     // merged from, even if the user switches tabs
                     // before the aftermath completes.
-                    self.runPostMergeAftermathIfWired(
+                    let didStartAftermath = self.runPostMergeAftermathIfWired(
                         workingDirectory: workingDirectory,
                         baseBranch: merged.baseRefName,
                         headRefName: merged.headRefName,
@@ -362,6 +361,9 @@ final class GitHubPaneViewModel: ObservableObject {
                         method: method,
                         tabID: mergeTabID
                     )
+                    if !didStartAftermath {
+                        self.refresh()
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -434,6 +436,7 @@ final class GitHubPaneViewModel: ObservableObject {
     /// Drives the aftermath sync if a handler is wired. Always runs in
     /// a detached `Task` so the merge success path returns immediately
     /// and the user sees the merge banner as soon as gh confirms.
+    @discardableResult
     func runPostMergeAftermathIfWired(
         workingDirectory: URL,
         baseBranch: String,
@@ -442,11 +445,11 @@ final class GitHubPaneViewModel: ObservableObject {
         mergedNumber: Int,
         method: GitHubMergeMethod,
         tabID: TabID? = nil
-    ) {
-        guard let aftermathHandler = postMergeAftermathHandler else { return }
+    ) -> Bool {
+        guard let aftermathHandler = postMergeAftermathHandler else { return false }
 
         let trimmedBase = baseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedBase.isEmpty else { return }
+        guard !trimmedBase.isEmpty else { return false }
 
         Task { [weak self] in
             do {
@@ -471,6 +474,10 @@ final class GitHubPaneViewModel: ObservableObject {
                     baseBanner: baseBanner,
                     tabID: tabID
                 )
+                await MainActor.run {
+                    guard let self else { return }
+                    self.refreshAfterMergeCleanup(mergedWorkingDirectory: workingDirectory)
+                }
             } catch {
                 await MainActor.run {
                     guard let self else { return }
@@ -478,6 +485,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 }
             }
         }
+        return true
     }
 
     /// Presents the cleanup alert if the outcome qualifies and routes
@@ -801,6 +809,18 @@ final class GitHubPaneViewModel: ObservableObject {
     /// without touching every call site.
     private func applyState(_ mutate: () -> Void) {
         mutate()
+    }
+
+    private func refreshAfterMergeCleanup(mergedWorkingDirectory: URL) {
+        if let currentWorkingDirectory = workingDirectoryProvider?(),
+           currentWorkingDirectory == mergedWorkingDirectory,
+           !FileManager.default.fileExists(atPath: currentWorkingDirectory.path) {
+            refreshGeneration &+= 1
+            refreshTask?.cancel()
+            isLoading = false
+            return
+        }
+        refresh()
     }
 
     private func clearLoadedDataIfNeeded(currentWorkingDirectory: URL) {
