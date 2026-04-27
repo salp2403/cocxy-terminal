@@ -152,6 +152,12 @@ check_exists "$RESOURCES/Markdown/katex-auto-render.min.js" "KaTeX auto-render"
 check_exists "$RESOURCES/Markdown/highlight.min.js" "Highlight.js"
 check_exists "$RESOURCES/Markdown/highlight-cocxy.css" "Highlight.js theme"
 
+# 8b. Browser panel JS bundles (DOM grab and future browser-side features)
+echo ""
+echo "[Browser JS]"
+check_exists "$RESOURCES/JS" "Browser JS resources directory"
+check_exists "$RESOURCES/JS/dom-grab.js" "DOM grab JS"
+
 # 9. QuickLook extension
 echo ""
 echo "[QuickLook]"

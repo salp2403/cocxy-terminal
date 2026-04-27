@@ -110,6 +110,7 @@ jobs:
           [ -d Resources/defaults ] && cp -R Resources/defaults "$RESOURCES_DIR/" || true
           [ -d Resources/Sounds ] && cp -R Resources/Sounds "$RESOURCES_DIR/" || true
           [ -d Resources/Markdown ] && cp -R Resources/Markdown "$RESOURCES_DIR/" || true
+          [ -d Resources/JS ] && cp -R Resources/JS "$RESOURCES_DIR/" || true
           [ -d build/QuickLookDerived/Build/Products/Release/CocxyQuickLook.appex ] && \
             cp -R build/QuickLookDerived/Build/Products/Release/CocxyQuickLook.appex "$PLUGINS_DIR/" || true
 

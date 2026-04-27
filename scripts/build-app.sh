@@ -162,6 +162,14 @@ if [ -d "${PROJECT_ROOT}/Resources/Markdown" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Markdown" "${RESOURCES}/Markdown"
 fi
 
+# Step 6e2: Copy in-page JS bundles used by the browser panel features
+# (dom-grab.js for the click-to-capture flow). Plain vanilla JS, no
+# bundler, no external dependencies — copied as-is so the WKWebView
+# user-script loader can pick it up by name at runtime.
+if [ -d "${PROJECT_ROOT}/Resources/JS" ]; then
+    cp -R "${PROJECT_ROOT}/Resources/JS" "${RESOURCES}/JS"
+fi
+
 # Step 6f: Build and embed the QuickLook extension.
 echo "==> Building QuickLook extension..."
 QL_APPEX="$("${PROJECT_ROOT}/scripts/build-quicklook-extension.sh" "${BUILD_MODE}")"
