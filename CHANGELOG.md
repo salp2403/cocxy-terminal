@@ -5,6 +5,31 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.89] - 2026-04-26
+
+### Fixed
+- The terminal renderer no longer aborts the app when CoreText hands
+  it a glyph id outside the `u16` range. The native Metal pipeline
+  (`MetalPipeline.ensureAtlasEntrySpan` and the ligature head path)
+  used to convert the shaper's `u32` glyph id with an unchecked cast,
+  so any value past 65535 produced an `integerOutOfBounds` panic and
+  killed the process mid-frame. The cast is now guarded with
+  `std.math.cast(u16, …)` and falls back to the no-atlas rendering
+  path on overflow. The Linux GPU pipeline gets the same guard for
+  parity, and the CoreText backend now rejects non-finite bounding-box
+  dimensions before they reach `@intFromFloat`, clamping width/height
+  to `u16` max as a second safety net. Bundled `CocxyCoreKit` bumped
+  to `0.13.5` with the fix.
+- The terminal surface no longer shows the desktop through the shell
+  when `appearance.background-opacity` is below `1.0`. The hosting
+  `CAMetalLayer` now anchors `isOpaque = true` explicitly so AppKit
+  cannot flip it to non-opaque just because the parent window is
+  translucent for the chrome. The clear color the renderer paints has
+  always been fully opaque, so this only affects the transient frames
+  produced during a heavy redraw burst (agent launch, full clear+
+  repaint, large paste): the previous, valid frame stays visible
+  instead of compositing the layer against the desktop.
+
 ## [0.1.88] - 2026-04-26
 
 ### Added
