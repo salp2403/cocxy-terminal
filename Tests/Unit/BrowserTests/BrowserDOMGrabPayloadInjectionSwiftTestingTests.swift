@@ -12,7 +12,7 @@ import Testing
 /// The contract mirrors the canonical paste path in
 /// `CocxyCoreView.handlePaste`:
 ///   * When the underlying terminal has bracketed paste mode active —
-///     every modern shell, every AI-agent CLI prompter — the markers
+///     every modern shell, many terminal-aware CLI prompters — the markers
 ///     wrap the payload so multiline blocks survive a shell focus
 ///     without being interpreted as separate commands.
 ///   * When the mode is inactive — recently launched shell, TUIs that

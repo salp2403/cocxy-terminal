@@ -9,8 +9,8 @@ import Foundation
 /// byte sequence the surface lifecycle hands to `CocxyCoreBridge.sendText`.
 ///
 /// The decision is one bit: is bracketed paste mode currently active on
-/// the receiving terminal? When yes (every modern shell and every
-/// AI-agent CLI prompter activate the mode at startup), the payload is
+/// the receiving terminal? When yes (every modern shell and many
+/// terminal-aware CLI prompters activate the mode at startup), the payload is
 /// wrapped with `CSI 200~ ... CSI 201~` so a multi-line block survives
 /// being focused on a shell prompt without being interpreted as
 /// separate commands. When no, the payload is returned untouched so
