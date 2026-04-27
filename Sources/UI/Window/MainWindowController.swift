@@ -380,6 +380,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// so split panes cannot safely share a single detector instance.
     var surfaceImageDetectors: [SurfaceID: InlineImageOSCDetector] = [:]
 
+    /// Per-surface background dispatcher that fans PTY output to the
+    /// thread-safe detectors (`CommandDurationTracker`,
+    /// `InlineImageOSCDetector`) off the main thread. Keeps scrolling
+    /// and mouse selection responsive while a sustained agent output
+    /// burst is in flight, because parser work no longer competes with
+    /// `renderFrame` for main-thread cycles.
+    var surfaceOutputDispatchers: [SurfaceID: SurfaceOutputBackgroundDispatcher] = [:]
+
     /// The container view that wraps the terminal area and overlays.
     var terminalContainerView: NSView?
 

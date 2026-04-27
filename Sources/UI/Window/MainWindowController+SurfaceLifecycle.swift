@@ -112,12 +112,23 @@ extension MainWindowController {
         let engine = injectedAgentDetectionEngine
         let commandTracker = commandTracker(for: tabID)
         let imageDetector = imageDetector(for: surfaceID, tabID: tabID)
+        let outputDispatcher = outputDispatcher(
+            for: surfaceID,
+            commandTracker: commandTracker,
+            imageDetector: imageDetector
+        )
 
         bridge.setOutputHandler(
             for: surfaceID
-        ) { [weak self, weak buffer, weak engine, weak commandTracker, weak imageDetector] data in
-            commandTracker?.processBytes(data)
-            imageDetector?.processBytes(data)
+        ) { [weak self, weak buffer, weak engine, weak outputDispatcher] data in
+            // Fan the chunk to the thread-safe detectors on the per-
+            // surface background queue. Both detectors are NSLock-
+            // protected and ordering is preserved by the dispatcher's
+            // serial queue, so partial-OSC parsers stay correct while
+            // the main thread is freed to render the terminal under
+            // sustained agent output.
+            outputDispatcher?.dispatch(data)
+
             Task { @MainActor in
                 if self?.shouldRouteOutputToDetection(
                     fromTabID: capturedTabID,
@@ -193,6 +204,44 @@ extension MainWindowController {
         return detector
     }
 
+    /// Returns the background dispatcher that hands PTY chunks to the
+    /// per-surface detectors off the main thread. Created on first use
+    /// for a surface so the surface-lifecycle path can wire it up at the
+    /// same point it constructs the underlying detectors.
+    ///
+    /// The dispatcher is keyed by `surfaceID` (not `tabID`) because the
+    /// inline image detector is per-surface and a split layout would
+    /// otherwise share a single dispatcher across panes — defeating the
+    /// independent ordering each parser relies on.
+    private func outputDispatcher(
+        for surfaceID: SurfaceID,
+        commandTracker: CommandDurationTracker,
+        imageDetector: InlineImageOSCDetector
+    ) -> SurfaceOutputBackgroundDispatcher {
+        if let existing = surfaceOutputDispatchers[surfaceID] {
+            return existing
+        }
+
+        // Capture the detectors weakly so the dispatcher does not extend
+        // their lifetimes past `clearSurfaceTracking`. If a chunk reaches
+        // the queue after the surface was torn down both closures collapse
+        // to no-ops and the data is dropped, exactly as it would be if
+        // the bridge had detached the output handler in the same moment.
+        let dispatcher = SurfaceOutputBackgroundDispatcher(
+            label: "dev.cocxy.terminal.output-processing.\(surfaceID.rawValue.uuidString)",
+            processors: [
+                { [weak commandTracker] data in
+                    commandTracker?.processBytes(data)
+                },
+                { [weak imageDetector] data in
+                    imageDetector?.processBytes(data)
+                },
+            ]
+        )
+        surfaceOutputDispatchers[surfaceID] = dispatcher
+        return dispatcher
+    }
+
     func clearSurfaceTracking(for surfaceID: SurfaceID) {
         if let surfaceView = surfaceView(for: surfaceID) {
             let key = ObjectIdentifier(surfaceView)
@@ -200,6 +249,7 @@ extension MainWindowController {
             inlineImageRenderers.removeValue(forKey: key)
         }
         surfaceImageDetectors.removeValue(forKey: surfaceID)
+        surfaceOutputDispatchers.removeValue(forKey: surfaceID)
         surfaceWorkingDirectories.removeValue(forKey: surfaceID)
     }
 
@@ -312,6 +362,7 @@ extension MainWindowController {
         tabOutputBuffers.removeAll()
         tabCommandTrackers.removeAll()
         surfaceImageDetectors.removeAll()
+        surfaceOutputDispatchers.removeAll()
         panelContentViews.removeAll()
 
         // Clear all inline image overlays before releasing surface views.
