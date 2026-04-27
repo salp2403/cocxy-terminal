@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // MultilineEnterEncoder.swift - Pure helper that encodes Shift+Return as
-// the byte sequence agent CLI prompters expect for "extend the prompt"
+// the byte sequence multiline prompt UIs expect for "extend the prompt"
 // rather than "submit".
 
 import Foundation
 
 /// Pure key-event classifier that owns exactly one chord — Shift+Return —
-/// and turns it into the PTY bytes an AI-agent CLI prompter expects when
+/// and turns it into the PTY bytes a multiline prompt UI expects when
 /// the user wants a newline that does NOT submit the prompt.
 ///
 /// Other keys, plain Return, and Shift combined with additional modifiers
@@ -17,10 +17,9 @@ import Foundation
 ///
 /// ## Why Shift+Return is special
 ///
-/// AI-agent CLIs (claude-code, codex, gemini, aider) draw an in-process
-/// prompt that needs to distinguish "submit" from "newline-continue".
-/// They follow the de facto convention used by every modern terminal
-/// emulator on macOS:
+/// In-process prompt UIs need to distinguish "submit" from
+/// "newline-continue". They follow the de facto convention used by every
+/// modern terminal emulator on macOS:
 ///   * Plain Return is `CR` (`\r`) and submits.
 ///   * Shift+Return is either the kitty keyboard report `CSI 13;2u`
 ///     (when the protocol is active) or a literal `LF` (`\n`) as the
@@ -78,7 +77,7 @@ enum MultilineEnterEncoder {
 
         // Legacy fallback: a single line feed. Plain Return arrives as
         // CR, so a standalone LF is the canonical "newline-continue"
-        // signal AI-agent prompters interpret as multiline input.
+        // signal multiline prompt UIs interpret as multiline input.
         return [0x0A]
     }
 }

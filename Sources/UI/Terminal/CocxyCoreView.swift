@@ -568,13 +568,12 @@ final class CocxyCoreView: NSView {
             return
         }
 
-        // Shift+Return: agent CLI prompters (claude-code, codex, gemini,
-        // aider) expect a newline that does NOT submit the prompt.
-        // Encode it explicitly so the chord is reported as the kitty
-        // keyboard CSI 13;2u when the protocol is active, or as a single
-        // LF when it is not. Plain Return arrives unchanged as CR via
-        // the regular dispatch below, preserving the "submit" semantics
-        // every shell and TUI already relies on.
+        // Shift+Return: multiline prompt UIs expect a newline that does
+        // NOT submit the prompt. Encode it explicitly so the chord is
+        // reported as the kitty keyboard CSI 13;2u when the protocol is
+        // active, or as a single LF when it is not. Plain Return arrives
+        // unchanged as CR via the regular dispatch below, preserving the
+        // "submit" semantics every shell and TUI already relies on.
         if let state = bridge.surfaceState(for: sid),
            let bytes = MultilineEnterEncoder.bytes(
                keyCode: event.keyCode,
@@ -891,11 +890,11 @@ final class CocxyCoreView: NSView {
 
         if let handler = onFileDrop, handler(urls) { return true }
 
-        // Default: paste each file path as shell-escaped text so AI-agent
-        // CLIs (claude-code, codex, gemini, aider) treat the drop as a
-        // single argument and trigger their image / file detection. The
-        // payload follows the canonical macOS shell-escape convention so
-        // the CLIs see the same bytes they receive from any other native
+        // Default: paste each file path as shell-escaped text so
+        // terminal-aware CLIs treat the drop as a single argument and
+        // trigger their image / file detection. The payload follows the
+        // canonical macOS shell-escape convention so the receiving
+        // process sees the same bytes it receives from any other native
         // terminal on the platform.
         let paths = FileDropPathFormatter.format(urls)
         guard let bridge = bridge, let sid = surfaceID else { return false }

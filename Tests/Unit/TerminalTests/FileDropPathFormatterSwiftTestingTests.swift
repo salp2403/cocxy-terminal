@@ -9,11 +9,11 @@ import Testing
 /// injects into the active PTY.
 ///
 /// The contract the formatter must honour mirrors the canonical macOS
-/// drag-and-drop shell-escape convention, so AI agent CLIs (claude-code,
-/// codex, gemini, aider) detect the dropped item as a single argument
-/// and run their image / file recognition logic against it. Without
-/// escaping, a path containing spaces splits into multiple words at the
-/// shell level and the CLI sees fragments instead of the full file.
+/// drag-and-drop shell-escape convention, so terminal-aware CLIs detect
+/// the dropped item as a single argument and run their image / file
+/// recognition logic against it. Without escaping, a path containing
+/// spaces splits into multiple words at the shell level and the CLI sees
+/// fragments instead of the full file.
 @Suite("FileDropPathFormatter")
 struct FileDropPathFormatterSwiftTestingTests {
 

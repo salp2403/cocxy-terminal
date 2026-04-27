@@ -9,11 +9,11 @@ import Foundation
 /// suitable for PTY injection.
 ///
 /// macOS's canonical drag-and-drop shell convention prefixes whitespace
-/// and shell metacharacters with a backslash. AI-agent CLIs (claude-code,
-/// codex, gemini, aider) rely on that convention to recognise the dropped
-/// item as a single argument: an unescaped path containing spaces splits
-/// at the shell level into multiple words and the CLI's path-detection
-/// logic only ever sees the first fragment.
+/// and shell metacharacters with a backslash. Terminal-aware CLIs rely
+/// on that convention to recognise the dropped item as a single
+/// argument: an unescaped path containing spaces splits at the shell
+/// level into multiple words and path-detection logic only ever sees the
+/// first fragment.
 ///
 /// The formatter is a pure value type so it stays trivially testable in
 /// isolation from AppKit, NSPasteboard, or the bridge.

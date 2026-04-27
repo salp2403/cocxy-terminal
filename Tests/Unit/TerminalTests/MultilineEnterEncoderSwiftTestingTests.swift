@@ -10,10 +10,8 @@ import Testing
 /// fall through to the regular dispatch path".
 ///
 /// The encoder owns exactly two outputs:
-///   - `CSI 13;2u` when the kitty keyboard protocol is active. AI-agent
-///     CLI prompters (claude-code, codex, gemini, aider) opt into the
-///     protocol during init, and they expect this exact report for the
-///     Shift+Return chord.
+///   - `CSI 13;2u` when the kitty keyboard protocol is active. Multiline
+///     prompt UIs use this exact report for the Shift+Return chord.
 ///   - `LF` (`\n`) when the protocol is inactive. Plain Return arrives as
 ///     `CR`, so a standalone `LF` is the canonical legacy distinction
 ///     between "extend the prompt" and "submit".
