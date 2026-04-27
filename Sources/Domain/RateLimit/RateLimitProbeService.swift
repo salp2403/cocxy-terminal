@@ -60,7 +60,7 @@ final class RateLimitProbeService: ObservableObject {
     /// and consulted by `refresh()` so concurrent refresh calls always
     /// see the most recent agent rather than racing against the
     /// previous selection.
-    private var currentAgent: RateLimitSnapshot.AgentKind?
+    private(set) var currentAgent: RateLimitSnapshot.AgentKind?
 
     /// Test-only accessor used by the suite that pins the XCTest gate.
     /// Never read from production code.
@@ -83,13 +83,16 @@ final class RateLimitProbeService: ObservableObject {
     /// timer. `nil` clears the snapshot synchronously and stops the
     /// timer so the pill hides without waiting for an `await`.
     func setActiveAgent(_ agent: RateLimitSnapshot.AgentKind?) {
+        guard currentAgent != agent else { return }
+
         currentAgent = agent
         pollCancellable?.cancel()
         pollCancellable = nil
 
-        if agent == nil {
+        guard let agent, providers[agent] != nil else {
             // Clear synchronously so the SwiftUI pill hides on the
             // next render without depending on a Task hop.
+            currentAgent = nil
             snapshot = nil
             return
         }

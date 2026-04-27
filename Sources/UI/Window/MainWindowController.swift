@@ -464,6 +464,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Service that monitors foreground processes for SSH detection.
     private(set) var processMonitor: ProcessMonitorService?
 
+    /// Local-only usage probe that feeds the status-bar rate-limit
+    /// indicator. The initial provider set is intentionally narrow:
+    /// unsupported agents resolve to nil and hide the pill.
+    let rateLimitProbeService = RateLimitProbeService(
+        providers: [.claude: ClaudeUsageProvider()]
+    )
+
+    /// Subscription that refreshes the status bar whenever the probe
+    /// publishes a new snapshot.
+    private var rateLimitProbeCancellable: AnyCancellable?
+
     // MARK: - Theme State
 
     /// Index of the currently active terminal color scheme.
@@ -572,6 +583,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         installWorkspaceWakeObservers()
         subscribeToConfigChanges()
         subscribeToActiveTabChanges()
+        subscribeToRateLimitProbeChanges()
         startProcessMonitor()
         installInputDropMonitorObserver()
     }
@@ -858,6 +870,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             hostname: currentHostname(),
             gitBranch: tabManager.activeTab?.gitBranch,
             agentSummary: computeAgentSummary(),
+            rateLimitSnapshot: rateLimitProbeService.snapshot,
             activePorts: [],
             sshSession: tabManager.activeTab?.sshSession
         )
@@ -892,6 +905,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         self.overlayContainerView = overlayLayer
 
         return rootView
+    }
+
+    private func subscribeToRateLimitProbeChanges() {
+        rateLimitProbeCancellable = rateLimitProbeService.$snapshot
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshStatusBar()
+            }
     }
 
     // MARK: - Tab Strip Callbacks

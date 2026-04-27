@@ -24,6 +24,10 @@ struct StatusBarView: View {
     /// Summary of agent activity across all tabs.
     let agentSummary: AgentSummary
 
+    /// Locally estimated usage snapshot for the active agent, if the
+    /// current agent has a provider and data is available.
+    var rateLimitSnapshot: RateLimitSnapshot?
+
     /// Active development server ports detected on localhost.
     var activePorts: [DetectedPort] = []
 
@@ -208,6 +212,11 @@ struct StatusBarView: View {
                 }
                 .frame(maxWidth: 280, alignment: .trailing)
                 .padding(.trailing, 8)
+            }
+
+            if let rateLimitSnapshot {
+                RateLimitIndicatorView(snapshot: rateLimitSnapshot)
+                    .padding(.trailing, 8)
             }
 
             // Right: agent activity pills

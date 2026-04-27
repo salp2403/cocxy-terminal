@@ -51,9 +51,9 @@ enum RateLimitIndicatorFormatting {
     ///
     /// The tooltip explicitly calls out that the value is a local
     /// estimate so the user does not mistake the pill for an
-    /// authoritative read of their plan rate limit. (Anthropic and
-    /// OpenAI do not expose plan quotas through a local file Cocxy
-    /// can read without telemetry.)
+    /// authoritative read of their plan rate limit. Providers should
+    /// use local files only, so Cocxy can render the indicator without
+    /// sending telemetry or asking an external quota endpoint.
     static func tooltipText(for snapshot: RateLimitSnapshot) -> String {
         let agent = agentDisplayName(snapshot.agent)
         let usedString = decimalFormatter.string(from: NSNumber(value: snapshot.usedAmount)) ?? "\(snapshot.usedAmount)"

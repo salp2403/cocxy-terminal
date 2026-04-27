@@ -98,12 +98,16 @@ extension MainWindowController {
     /// Refreshes the status bar content.
     func refreshStatusBar() {
         let activeTab = tabManager.activeTab
+        let rateLimitAgent = activeTab.flatMap(activeRateLimitAgentKind(for:))
+        rateLimitProbeService.setActiveAgent(rateLimitAgent)
+
         let appearance = configService?.current.appearance
         let isTransparent = (appearance?.backgroundOpacity ?? 1.0) < 1.0
         var statusBar = StatusBarView(
             hostname: currentHostname(),
             gitBranch: activeTab?.gitBranch,
             agentSummary: computeAgentSummary(),
+            rateLimitSnapshot: rateLimitProbeService.snapshot,
             activePorts: portScanner?.activePorts ?? [],
             sshSession: activeTab?.sshSession,
             lastCommandDuration: activeTab?.lastCommandDuration,
@@ -115,5 +119,15 @@ extension MainWindowController {
             ? appearance?.transparencyChromeTheme.vibrancyAppearance
             : nil
         statusBarHostingView?.rootView = statusBar
+    }
+
+    /// Resolves the locally supported rate-limit provider for a tab's
+    /// currently selected surface. The resolver intentionally uses the
+    /// same surface priority as the primary status-bar agent pill so
+    /// the usage indicator follows the agent the user is looking at.
+    func activeRateLimitAgentKind(for tab: Tab) -> RateLimitSnapshot.AgentKind? {
+        let resolved = resolveSurfaceAgentState(for: tab.id)
+        guard resolved.isActive || resolved.hasAgent else { return nil }
+        return RateLimitAgentResolver.kind(for: resolved.detectedAgent)
     }
 }
