@@ -568,6 +568,23 @@ final class CocxyCoreView: NSView {
             return
         }
 
+        // Shift+Return: agent CLI prompters (claude-code, codex, gemini,
+        // aider) expect a newline that does NOT submit the prompt.
+        // Encode it explicitly so the chord is reported as the kitty
+        // keyboard CSI 13;2u when the protocol is active, or as a single
+        // LF when it is not. Plain Return arrives unchanged as CR via
+        // the regular dispatch below, preserving the "submit" semantics
+        // every shell and TUI already relies on.
+        if let state = bridge.surfaceState(for: sid),
+           let bytes = MultilineEnterEncoder.bytes(
+               keyCode: event.keyCode,
+               modifiers: modifiers,
+               kittyKeyboardActive: cocxycore_terminal_mode_kitty_keyboard(state.terminal) > 0
+           ) {
+            _ = bridge.writeBytes(bytes, to: sid)
+            return
+        }
+
         // Ctrl+letter → compute ASCII control character directly.
         if modifiers.contains(.control),
            !modifiers.contains(.command),
