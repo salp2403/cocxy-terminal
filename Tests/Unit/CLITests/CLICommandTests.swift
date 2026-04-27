@@ -979,6 +979,31 @@ final class CLICommandDefinitionTests: XCTestCase {
             )
         }
     }
+
+    func testBrowserUsageExamplesMatchPublicParserShape() throws {
+        XCTAssertEqual(CLICommand.browserNavigate.usageExample, "cocxy browser navigate <url>")
+        XCTAssertEqual(CLICommand.browserBack.usageExample, "cocxy browser back")
+        XCTAssertEqual(CLICommand.browserForward.usageExample, "cocxy browser forward")
+        XCTAssertEqual(CLICommand.browserReload.usageExample, "cocxy browser reload")
+        XCTAssertEqual(CLICommand.browserGetState.usageExample, "cocxy browser state")
+        XCTAssertEqual(CLICommand.browserEval.usageExample, "cocxy browser eval <script>")
+        XCTAssertEqual(CLICommand.browserGetText.usageExample, "cocxy browser text")
+        XCTAssertEqual(CLICommand.browserListTabs.usageExample, "cocxy browser tabs")
+
+        guard case .browserNavigate(let url) = try CLIArgumentParser.parse(["browser", "navigate", "https://example.com"]) else {
+            return XCTFail("browser navigate should parse through the public CLI shape")
+        }
+        XCTAssertEqual(url, "https://example.com")
+
+        guard case .browserEval(let script) = try CLIArgumentParser.parse(["browser", "eval", "document.title"]) else {
+            return XCTFail("browser eval should parse through the public CLI shape")
+        }
+        XCTAssertEqual(script, "document.title")
+
+        XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "state"]))
+        XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "tabs"]))
+        XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "text"]))
+    }
 }
 
 // MARK: - CLISocketRequest Codable Tests

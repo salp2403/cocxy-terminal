@@ -417,14 +417,14 @@ public enum CLICommand: String, CaseIterable {
         case .remoteTunnels: return "cocxy remote-tunnels [--profile <name>]"
 
         // Browser
-        case .browserNavigate: return "cocxy browser-navigate <url>"
-        case .browserBack: return "cocxy browser-back"
-        case .browserForward: return "cocxy browser-forward"
-        case .browserReload: return "cocxy browser-reload"
-        case .browserGetState: return "cocxy browser-get-state"
-        case .browserEval: return "cocxy browser-eval <script>"
-        case .browserGetText: return "cocxy browser-get-text"
-        case .browserListTabs: return "cocxy browser-list-tabs"
+        case .browserNavigate: return "cocxy browser navigate <url>"
+        case .browserBack: return "cocxy browser back"
+        case .browserForward: return "cocxy browser forward"
+        case .browserReload: return "cocxy browser reload"
+        case .browserGetState: return "cocxy browser state"
+        case .browserEval: return "cocxy browser eval <script>"
+        case .browserGetText: return "cocxy browser text"
+        case .browserListTabs: return "cocxy browser tabs"
 
         // Window Management
         case .windowNew: return "cocxy window new"
