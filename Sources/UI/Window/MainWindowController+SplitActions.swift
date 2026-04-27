@@ -126,6 +126,7 @@ extension MainWindowController {
             let browserVM = BrowserViewModel()
             browserVM.historyStore = browserHistoryStore
             browserVM.activeProfileID = browserProfileManager?.activeProfileID
+            wireDOMGrabCallback(for: browserVM)
             if let url = panel.initialURL {
                 browserVM.urlString = url.absoluteString
             }

@@ -239,6 +239,65 @@ final class BrowserViewModelTests: XCTestCase {
         cancellable.cancel()
     }
 
+    // MARK: - DOM Grab
+
+    func testToggleDOMGrabModePublishesEnableAction() {
+        let vm = BrowserViewModel()
+        var received: BrowserViewModel.NavigationAction?
+        let cancellable = vm.navigationActionSubject.sink { received = $0 }
+
+        vm.toggleDOMGrabMode()
+
+        XCTAssertTrue(vm.isDOMGrabActive)
+        if case .setDOMGrabEnabled(let enabled) = received {
+            XCTAssertTrue(enabled)
+        } else {
+            XCTFail("Expected DOM grab toggle to emit .setDOMGrabEnabled(true)")
+        }
+        cancellable.cancel()
+    }
+
+    func testHandleDOMGrabPayloadForwardsPayloadAndDisablesSingleShotMode() {
+        let vm = BrowserViewModel()
+        let payload = BrowserDOMGrabPayload(
+            selector: "button.primary",
+            pageURL: URL(string: "https://cocxy.dev")!,
+            pageTitle: "Cocxy",
+            visibleText: "Download"
+        )
+
+        var forwarded: BrowserDOMGrabPayload?
+        var actions: [BrowserViewModel.NavigationAction] = []
+        vm.onDOMGrabPayload = { forwarded = $0 }
+        let cancellable = vm.navigationActionSubject.sink { actions.append($0) }
+
+        vm.setDOMGrabMode(true)
+        vm.handleDOMGrabPayload(payload)
+
+        XCTAssertEqual(forwarded, payload)
+        XCTAssertFalse(vm.isDOMGrabActive)
+        guard actions.count == 2 else {
+            XCTFail("Expected enable and disable actions")
+            cancellable.cancel()
+            return
+        }
+        if case .setDOMGrabEnabled(true) = actions[0] {} else {
+            XCTFail("Expected first action to enable DOM grab")
+        }
+        if case .setDOMGrabEnabled(false) = actions[1] {} else {
+            XCTFail("Expected second action to disable DOM grab")
+        }
+        cancellable.cancel()
+    }
+
+    func testDOMGrabSetEnabledScriptCallsExpectedHelper() {
+        let enableScript = BrowserDOMGrabWebKitSupport.setEnabledScript(true)
+        let disableScript = BrowserDOMGrabWebKitSupport.setEnabledScript(false)
+
+        XCTAssertTrue(enableScript.contains("cocxyDOMGrab.enable"))
+        XCTAssertTrue(disableScript.contains("cocxyDOMGrab.disable"))
+    }
+
     // MARK: - Default State
 
     func testDefaultURLIsLocalhost3000() {

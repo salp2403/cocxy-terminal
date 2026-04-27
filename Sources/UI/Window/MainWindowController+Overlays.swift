@@ -1736,10 +1736,12 @@ extension MainWindowController {
             let vm = BrowserViewModel()
             vm.historyStore = browserHistoryStore
             vm.activeProfileID = browserProfileManager?.activeProfileID
+            wireDOMGrabCallback(for: vm)
             browserViewModel = vm
         }
 
         guard let viewModel = browserViewModel else { return }
+        wireDOMGrabCallback(for: viewModel)
 
         browserHostingView?.removeFromSuperview()
         var swiftUIView = BrowserPanelView(

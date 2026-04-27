@@ -48,6 +48,12 @@ final class BrowserContentView: NSView {
     /// The web view rendering page content.
     private var webView: WKWebView?
 
+    /// Button that toggles click-to-capture mode for the current page.
+    private var domGrabButton: NSButton?
+
+    /// Handler retained while the current WKWebView is alive.
+    private var domGrabHandler: BrowserDOMGrabHandler?
+
     /// The URL text field.
     private var urlField: NSTextField?
 
@@ -128,6 +134,7 @@ final class BrowserContentView: NSView {
             wv?.navigationDelegate = nil
             if let wv {
                 capture?.uninstall(from: wv)
+                BrowserDOMGrabWebKitSupport.uninstall(from: wv)
             }
         }
     }
@@ -186,6 +193,13 @@ final class BrowserContentView: NSView {
         findButton.toolTip = "Find in page"
         toolbar.addSubview(findButton)
 
+        let domGrabButton = createToolbarButton(
+            symbol: "cursorarrow.click.2",
+            action: #selector(toggleDOMGrabAction)
+        )
+        domGrabButton.toolTip = "Grab DOM element"
+        self.domGrabButton = domGrabButton
+
         // DevTools button.
         let devToolsButton = createToolbarButton(
             symbol: "wrench.and.screwdriver",
@@ -222,6 +236,7 @@ final class BrowserContentView: NSView {
         rightStack.addArrangedSubview(historyButton)
         rightStack.addArrangedSubview(bookmarksButton)
         rightStack.addArrangedSubview(findButton)
+        rightStack.addArrangedSubview(domGrabButton)
         rightStack.addArrangedSubview(devToolsButton)
         rightStack.addArrangedSubview(reloadButton)
 
@@ -246,6 +261,7 @@ final class BrowserContentView: NSView {
         forwardButton.translatesAutoresizingMaskIntoConstraints = false
         reloadButton.translatesAutoresizingMaskIntoConstraints = false
         findButton.translatesAutoresizingMaskIntoConstraints = false
+        domGrabButton.translatesAutoresizingMaskIntoConstraints = false
         devToolsButton.translatesAutoresizingMaskIntoConstraints = false
         historyButton.translatesAutoresizingMaskIntoConstraints = false
         bookmarksButton.translatesAutoresizingMaskIntoConstraints = false
@@ -278,6 +294,9 @@ final class BrowserContentView: NSView {
 
             findButton.widthAnchor.constraint(equalToConstant: 24),
             findButton.heightAnchor.constraint(equalToConstant: 24),
+
+            domGrabButton.widthAnchor.constraint(equalToConstant: 24),
+            domGrabButton.heightAnchor.constraint(equalToConstant: 24),
 
             devToolsButton.widthAnchor.constraint(equalToConstant: 24),
             devToolsButton.heightAnchor.constraint(equalToConstant: 24),
@@ -314,6 +333,7 @@ final class BrowserContentView: NSView {
         let previousWebView = webView
         if let previousWebView {
             consoleCapture?.uninstall(from: previousWebView)
+            BrowserDOMGrabWebKitSupport.uninstall(from: previousWebView)
         }
         networkMonitor?.stopMonitoring()
         observations.removeAll()
@@ -326,6 +346,12 @@ final class BrowserContentView: NSView {
         if let profileID = viewModel.activeProfileID {
             config.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
         }
+        let domGrabHandler = BrowserDOMGrabHandler()
+        domGrabHandler.onPayload = { [weak viewModel] payload in
+            viewModel?.handleDOMGrabPayload(payload)
+        }
+        BrowserDOMGrabWebKitSupport.install(on: config, handler: domGrabHandler)
+        self.domGrabHandler = domGrabHandler
 
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.translatesAutoresizingMaskIntoConstraints = false
@@ -372,6 +398,7 @@ final class BrowserContentView: NSView {
         if loadCurrentURL, let url = viewModel.currentURL {
             wv.load(URLRequest(url: url))
         }
+        BrowserDOMGrabWebKitSupport.setEnabled(viewModel.isDOMGrabActive, on: wv)
     }
 
     // MARK: - ViewModel Binding
@@ -381,6 +408,14 @@ final class BrowserContentView: NSView {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] action in
                 self?.handleNavigation(action)
+            }
+            .store(in: &cancellables)
+
+        viewModel.$isDOMGrabActive
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] active in
+                self?.updateDOMGrabButton(active: active)
             }
             .store(in: &cancellables)
 
@@ -418,6 +453,8 @@ final class BrowserContentView: NSView {
                     NSLog("[Cocxy] JS eval error: %@", error.localizedDescription)
                 }
             }
+        case .setDOMGrabEnabled(let enabled):
+            BrowserDOMGrabWebKitSupport.setEnabled(enabled, on: webView)
         }
     }
 
@@ -437,6 +474,10 @@ final class BrowserContentView: NSView {
 
     @objc private func reloadAction(_ sender: Any?) {
         viewModel.reload()
+    }
+
+    @objc private func toggleDOMGrabAction(_ sender: Any?) {
+        viewModel.toggleDOMGrabMode()
     }
 
     @objc private func toggleHistoryAction(_ sender: Any?) {
@@ -465,6 +506,15 @@ final class BrowserContentView: NSView {
         let monitor = BrowserNetworkMonitor()
         monitor.startMonitoring(webView)
         self.networkMonitor = monitor
+    }
+
+    private func updateDOMGrabButton(active: Bool) {
+        domGrabButton?.contentTintColor = active
+            ? CocxyColors.blue
+            : CocxyColors.subtext0
+        domGrabButton?.toolTip = active
+            ? "Stop DOM grab"
+            : "Grab DOM element"
     }
 
     // MARK: - Feature Toggle Actions
@@ -624,6 +674,10 @@ extension BrowserContentView: WKNavigationDelegate {
             if let url = webView.url?.absoluteString {
                 self.viewModel.recordPageVisit(url: url, title: webView.title)
             }
+            BrowserDOMGrabWebKitSupport.setEnabled(
+                self.viewModel.isDOMGrabActive,
+                on: webView
+            )
         }
     }
 

@@ -300,6 +300,24 @@ struct BrowserPanelView: View {
             .accessibilityLabel("Find in page")
             .help("Find in page")
 
+            Button(action: { viewModel.toggleDOMGrabMode() }) {
+                Image(systemName: "cursorarrow.click.2")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(
+                        viewModel.isDOMGrabActive
+                            ? Color(nsColor: CocxyColors.blue)
+                            : Color(nsColor: CocxyColors.subtext0)
+                    )
+            }
+            .buttonStyle(.plain)
+            .frame(width: 22, height: 22)
+            .accessibilityLabel(
+                viewModel.isDOMGrabActive
+                    ? "Stop DOM grab"
+                    : "Grab DOM element"
+            )
+            .help("Grab DOM element")
+
             if let onToggleHistory {
                 Button(action: onToggleHistory) {
                     Image(systemName: "clock.arrow.circlepath")
@@ -624,9 +642,14 @@ struct WebViewRepresentable: NSViewRepresentable {
         if let profileID = viewModel.activeProfileID {
             configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
         }
+        BrowserDOMGrabWebKitSupport.install(
+            on: configuration,
+            handler: context.coordinator.domGrabHandler
+        )
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
         #if DEBUG
         webView.isInspectable = true
@@ -676,14 +699,21 @@ struct WebViewRepresentable: NSViewRepresentable {
 
     // MARK: - Coordinator
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
 
         private let viewModel: BrowserViewModel
         private var cancellables = Set<AnyCancellable>()
+        let domGrabHandler: BrowserDOMGrabHandler
         weak var webView: WKWebView?
 
         init(viewModel: BrowserViewModel) {
             self.viewModel = viewModel
+            self.domGrabHandler = BrowserDOMGrabHandler()
+            super.init()
+            self.domGrabHandler.onPayload = { [weak viewModel] payload in
+                viewModel?.handleDOMGrabPayload(payload)
+            }
         }
 
         /// Subscribes to the view model's navigation action subject.
@@ -711,6 +741,8 @@ struct WebViewRepresentable: NSViewRepresentable {
                                 NSLog("[Cocxy] JS eval error: %@", error.localizedDescription)
                             }
                         }
+                    case .setDOMGrabEnabled(let enabled):
+                        BrowserDOMGrabWebKitSupport.setEnabled(enabled, on: webView)
                     }
                 }
                 .store(in: &cancellables)
@@ -732,6 +764,10 @@ struct WebViewRepresentable: NSViewRepresentable {
                 if let url = webView.url?.absoluteString {
                     self.viewModel.recordPageVisit(url: url, title: webView.title)
                 }
+                BrowserDOMGrabWebKitSupport.setEnabled(
+                    self.viewModel.isDOMGrabActive,
+                    on: webView
+                )
             }
         }
 

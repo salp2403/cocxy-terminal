@@ -5,6 +5,16 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- The browser panel can now grab a DOM element directly into the
+  active terminal prompt. Click the new cursor tool in the browser
+  toolbar, then click an element in the page; Cocxy injects a
+  bracketed-paste payload with the page title, URL, CSS selector, and
+  visible text so agent prompts can reason about the exact UI element
+  without manual copy/paste.
+
 ## [0.1.89] - 2026-04-26
 
 ### Fixed

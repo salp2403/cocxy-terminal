@@ -71,16 +71,21 @@ final class BrowserViewModel: ObservableObject {
     /// Total number of matches found on the page.
     @Published var findTotalMatches: Int = 0
 
+    /// Whether click-to-capture mode is active in the current browser page.
+    @Published var isDOMGrabActive: Bool = false
+
     // MARK: - Navigation Actions
 
     /// Navigation action signals consumed by the WKWebView wrapper.
-    /// The coordinator reads these to trigger navigation, back, forward, and reload.
+    /// The coordinator reads these to trigger navigation, back, forward, reload,
+    /// JavaScript evaluation, and DOM-grab state changes.
     enum NavigationAction {
         case load(URL)
         case goBack
         case goForward
         case reload
         case evaluateJS(String)
+        case setDOMGrabEnabled(Bool)
     }
 
     /// Publisher that emits navigation actions for the web view coordinator to observe.
@@ -90,6 +95,9 @@ final class BrowserViewModel: ObservableObject {
 
     /// History store for recording page visits. Injected by the window controller.
     var historyStore: BrowserHistoryStoring?
+
+    /// Callback invoked when the WebKit DOM-grab bridge captures an element.
+    var onDOMGrabPayload: ((BrowserDOMGrabPayload) -> Void)?
 
     /// The active browser profile ID, used to associate visits and WebKit
     /// storage with a profile. Published so active browser hosts can rebuild
@@ -264,6 +272,31 @@ final class BrowserViewModel: ObservableObject {
     /// - Parameter script: The JavaScript code to evaluate.
     func evaluateJavaScript(_ script: String) {
         navigationActionSubject.send(.evaluateJS(script))
+    }
+
+    // MARK: - DOM Grab
+
+    /// Toggles click-to-capture mode for the current browser page.
+    func toggleDOMGrabMode() {
+        setDOMGrabMode(!isDOMGrabActive)
+    }
+
+    /// Sets click-to-capture mode and notifies the active WebKit host.
+    func setDOMGrabMode(_ enabled: Bool) {
+        guard isDOMGrabActive != enabled else {
+            navigationActionSubject.send(.setDOMGrabEnabled(enabled))
+            return
+        }
+        isDOMGrabActive = enabled
+        navigationActionSubject.send(.setDOMGrabEnabled(enabled))
+    }
+
+    /// Receives a typed DOM grab from the WebKit message handler.
+    func handleDOMGrabPayload(_ payload: BrowserDOMGrabPayload) {
+        onDOMGrabPayload?(payload)
+        if isDOMGrabActive {
+            setDOMGrabMode(false)
+        }
     }
 
     /// Returns the current browser state as a dictionary of string values.

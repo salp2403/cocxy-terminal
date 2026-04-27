@@ -92,6 +92,37 @@ extension MainWindowController {
         return nil
     }
 
+    /// Wires a browser view model to the active terminal surface so a DOM
+    /// grab becomes editable prompt text instead of disappearing inside the
+    /// browser layer.
+    func wireDOMGrabCallback(for viewModel: BrowserViewModel) {
+        viewModel.onDOMGrabPayload = { [weak self] payload in
+            _ = self?.injectBrowserDOMGrabPayload(payload)
+        }
+    }
+
+    /// Writes a formatted DOM grab into the active terminal pane.
+    ///
+    /// The text goes through the shared `TerminalEngine.sendText` path used
+    /// by paste and programmatic input. Bracketed paste guards multiline
+    /// payloads from being interpreted as separate shell commands when the
+    /// user captures from a browser while a shell prompt is focused instead
+    /// of an agent prompt.
+    @discardableResult
+    func injectBrowserDOMGrabPayload(_ payload: BrowserDOMGrabPayload) -> Bool {
+        guard let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
+            NSSound.beep()
+            return false
+        }
+
+        let formatted = BrowserDOMGrabPayloadFormatter.format(payload)
+        let bracketedPaste = "\u{1B}[200~\(formatted)\u{1B}[201~"
+        bridge.sendText(bracketedPaste, to: surfaceID)
+
+        focusActiveTerminalSurface()
+        return true
+    }
+
     func goBackFocusedBrowserPanel() {
         activeBrowserViewModel()?.goBack()
     }
