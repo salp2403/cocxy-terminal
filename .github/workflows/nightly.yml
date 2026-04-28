@@ -201,6 +201,16 @@ jobs:
 
           echo "$SUBMISSION"
 
+          # Extract submission ID and get detailed log
+          SUB_ID=$(echo "$SUBMISSION" | grep "id:" | head -1 | awk '{print $2}')
+          if [ -n "$SUB_ID" ]; then
+            echo "=== Notarization Log ==="
+            xcrun notarytool log "$SUB_ID" \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD" 2>&1 || true
+          fi
+
           if [ "$NOTARY_STATUS" -ne 0 ]; then
             echo "::error::Notarization command failed. The nightly DMG will not be published without a valid notary ticket."
             exit "$NOTARY_STATUS"
