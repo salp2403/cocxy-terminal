@@ -270,6 +270,24 @@ extension MainWindowController {
         // every config reload so the sidebar tracks `[notes].enabled`
         // without rebuilding the controller.
         refreshAuroraNotesAvailability(on: controller)
+        // Provider for the Aurora sidebar's per-workspace notes
+        // section. The controller calls it whenever the visible
+        // workspace IDs change (or after an explicit refresh tied to
+        // a CRUD event) and publishes the result on its main-actor
+        // map. The closure is `nonisolated` from the controller's
+        // perspective; it hops to the main actor through the
+        // helper's `await` body to read configService and storage
+        // path safely.
+        controller.notesSummariesProvider = { [weak self] workspaceIDs in
+            guard let self else { return [:] }
+            return await self.fetchAuroraNotesSummaries(for: workspaceIDs)
+        }
+        // Open a sidebar note. Routes through the standard overlay
+        // lifecycle so tab focus, persistence, and selection all
+        // follow the same rules as the existing user paths.
+        controller.onOpenNoteInWorkspace = { [weak self] workspaceID, noteID in
+            self?.openNote(workspaceIDRaw: workspaceID, noteIDRaw: noteID)
+        }
         controller.onInstallUpdate = { [weak self] in
             self?.sparkleUpdater?.checkForUpdates()
         }
@@ -387,8 +405,35 @@ extension MainWindowController {
         appDelegate.switchTheme(to: targetThemeName)
     }
 
-    private static func auroraThemeIdentity(for variant: ThemeVariant) -> Design.ThemeIdentity {
+    /// Maps a theme variant to the Aurora design palette identity. The
+    /// helper is shared so adjacent extensions (notably the Notes
+    /// overlay) can resolve the live palette without duplicating the
+    /// light/dark mapping. Internal — the design module never reaches
+    /// into AppKit-only types like `ThemeVariant`, so the seam stays in
+    /// the integration layer.
+    static func auroraThemeIdentity(for variant: ThemeVariant) -> Design.ThemeIdentity {
         variant == .light ? .paper : .aurora
+    }
+
+    /// Live Aurora theme identity for the window. Prefers the Aurora
+    /// chrome controller's value (so a runtime toggle is reflected
+    /// immediately), then the theme engine's active variant, and finally
+    /// `.aurora` as the dark default. Used by the Notes overlay and any
+    /// future overlay that adopts `Design.GlassSurface` so the chrome
+    /// renders in the right palette regardless of whether Aurora is
+    /// mounted.
+    func currentAuroraThemeIdentity() -> Design.ThemeIdentity {
+        if let controller = auroraChromeController {
+            return controller.themeIdentity
+        }
+        if let variant = (NSApp.delegate as? AppDelegate)?
+            .themeEngine?
+            .activeTheme
+            .metadata
+            .variant {
+            return Self.auroraThemeIdentity(for: variant)
+        }
+        return .aurora
     }
 
     /// Reconciles Aurora's per-surface store from the terminal buffers

@@ -132,6 +132,56 @@ actor NoteStore {
         return try loadNote(at: url, id: id, workspaceID: workspaceID)
     }
 
+    /// Compact summary of a workspace's notes used by Aurora's sidebar
+    /// section. Carries the total count plus a truncated list of the
+    /// most recently edited notes so the view layer never has to load
+    /// every body to render a header + recent rows.
+    struct WorkspaceSummary: Sendable, Equatable {
+        /// Total number of notes persisted in the workspace folder.
+        let count: Int
+        /// Most recently edited notes, sorted by `updatedAt`
+        /// descending, capped to the caller's `recentLimit`. Empty
+        /// when the workspace has no notes yet.
+        let recent: [Note]
+    }
+
+    /// Returns count + most-recent slice for `workspaceID`. Reads the
+    /// underlying directory through the existing `notes(in:)` path so
+    /// behaviour stays in lock-step with the listing the overlay
+    /// renders. Default `recentLimit` of 5 matches the Aurora sidebar
+    /// section design — the section caps the visible rows so a
+    /// workspace with hundreds of notes does not overflow the panel.
+    func summary(
+        for workspaceID: NoteWorkspaceID,
+        recentLimit: Int = 5
+    ) throws -> WorkspaceSummary {
+        let all = try notes(in: workspaceID)
+        let cap = max(0, recentLimit)
+        return WorkspaceSummary(
+            count: all.count,
+            recent: Array(all.prefix(cap))
+        )
+    }
+
+    /// Bulk variant of `summary(for:recentLimit:)`. Returns a map keyed
+    /// by the workspace identifier so the Aurora chrome can refresh
+    /// every visible workspace in a single hop without juggling
+    /// individual `await`s. Workspaces that throw an I/O error are
+    /// silently skipped — the sidebar omits the section for them
+    /// instead of breaking the whole refresh.
+    func summaries(
+        for workspaceIDs: [NoteWorkspaceID],
+        recentLimit: Int = 5
+    ) -> [NoteWorkspaceID: WorkspaceSummary] {
+        var result: [NoteWorkspaceID: WorkspaceSummary] = [:]
+        for id in workspaceIDs {
+            if let summary = try? summary(for: id, recentLimit: recentLimit) {
+                result[id] = summary
+            }
+        }
+        return result
+    }
+
     // MARK: - Mutation
 
     /// Creates a fresh note in `workspaceID` with the supplied body

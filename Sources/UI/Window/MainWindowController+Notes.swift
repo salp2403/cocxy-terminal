@@ -2,6 +2,7 @@
 // MainWindowController+Notes.swift - Notes overlay wiring.
 
 import AppKit
+import Combine
 import Foundation
 import SwiftUI
 
@@ -124,7 +125,7 @@ extension MainWindowController {
             format: config.format,
             autoSaveInterval: config.autoSaveIntervalSeconds
         )
-        return NotesViewModel(
+        let viewModel = NotesViewModel(
             store: store,
             resolver: DefaultNoteWorkspaceResolver(),
             searchEngine: NoteSearchEngineFactory.make(
@@ -134,6 +135,22 @@ extension MainWindowController {
             ),
             autoSaveEnabled: config.autoSave
         )
+
+        // Bridge note CRUD into the Aurora chrome so the sidebar's
+        // per-workspace notes section refreshes counts and recent
+        // titles after creates / deletes / saves. Skipping the very
+        // first emission avoids a redundant fetch right after the
+        // controller already requested its initial refresh; subsequent
+        // changes pass through. Cancel any prior subscription so a
+        // config-driven view-model swap does not stack listeners.
+        notesChangeCancellable?.cancel()
+        notesChangeCancellable = viewModel.$notes
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.auroraChromeController?.refreshNotesSummaries()
+            }
+
+        return viewModel
     }
 
     func currentNotesWorkingDirectory() -> URL? {
@@ -191,9 +208,101 @@ extension MainWindowController {
         NotesOverlayView(
             viewModel: viewModel,
             panelWidth: panelWidth,
+            themeIdentity: currentAuroraThemeIdentity(),
             onDismiss: { [weak self] in
                 self?.dismissNotes()
             }
         )
+    }
+
+    // MARK: - Aurora sidebar Notes section bridge
+
+    /// Provider closure used by `AuroraChromeController` to refresh
+    /// per-workspace notes summaries. Returns counts + recent titles
+    /// keyed by `NoteWorkspaceID.rawValue` so the sidebar can render
+    /// its expandable section without coupling to the Notes store.
+    ///
+    /// Reads the live config to honour `[notes].enabled` and the
+    /// configured storage directory. Returns an empty map when notes
+    /// are disabled so the sidebar hides every section the moment the
+    /// preference flips off.
+    func fetchAuroraNotesSummaries(
+        for workspaceIDs: Set<String>
+    ) async -> [String: Design.AuroraWorkspaceNotesSummary] {
+        let config = configService?.current.notes ?? .defaults
+        guard config.enabled, !workspaceIDs.isEmpty else { return [:] }
+
+        let storageRoot = Self.expandedNotesStorageURL(config.storageDir)
+        let store = NoteStore(storageRoot: storageRoot, format: config.format)
+        let typedIDs = workspaceIDs.map { NoteWorkspaceID(rawValue: $0) }
+        let summaries = await store.summaries(for: typedIDs, recentLimit: 5)
+
+        var result: [String: Design.AuroraWorkspaceNotesSummary] = [:]
+        for (id, summary) in summaries {
+            let rows = summary.recent.map { note in
+                Design.AuroraNoteRow(
+                    id: note.id.uuidString,
+                    title: note.derivedTitle,
+                    updatedAt: note.updatedAt
+                )
+            }
+            result[id.rawValue] = Design.AuroraWorkspaceNotesSummary(
+                workspaceID: id.rawValue,
+                count: summary.count,
+                recentNotes: rows
+            )
+        }
+        return result
+    }
+
+    /// Resolves the tab whose workspace identifier matches `rawID`.
+    /// Walks the live tab list through the same resolver the Notes
+    /// store uses on disk so the lookup follows the user's git-root
+    /// grouping exactly. Returns `nil` when no tab matches (closed
+    /// tab, stale sidebar fetch) so the caller can no-op silently.
+    func tabForNotesWorkspace(rawID: String) -> Tab? {
+        let resolver = DefaultNoteWorkspaceResolver()
+        for tab in tabManager.tabs {
+            let directory = tab.worktreeRoot ?? tab.workingDirectory
+            guard let resolved = resolver.resolveWorkspace(for: directory) else {
+                continue
+            }
+            if resolved.workspaceID.rawValue == rawID {
+                return tab
+            }
+        }
+        return nil
+    }
+
+    /// Opens the per-workspace overlay focused on the supplied note.
+    /// Drives the same lifecycle the user-facing path uses — focus
+    /// the owning tab if it is not already visible, mount the
+    /// overlay (when `[notes].enabled = true`), wait for the
+    /// asynchronous workspace load to finish, and then select the
+    /// requested note. No-op when notes are disabled, the tab is
+    /// gone, or the workspace cannot be resolved.
+    func openNote(workspaceIDRaw: String, noteIDRaw: String) {
+        let config = configService?.current.notes ?? .defaults
+        guard config.enabled else { return }
+        guard let targetTab = tabForNotesWorkspace(rawID: workspaceIDRaw) else { return }
+
+        if visibleTabID != targetTab.id {
+            _ = focusTab(id: targetTab.id)
+        }
+
+        if !isNotesVisible {
+            showNotes()
+        }
+
+        let viewModel = resolveNotesViewModel(config: config)
+        Task { [weak self, weak viewModel] in
+            guard let self, let viewModel else { return }
+            await self.loadNotesForVisibleTab(using: viewModel)
+            // The load above repopulates `notes` for the target
+            // workspace. Selection runs on the main actor so it
+            // observes the just-published listing without racing the
+            // SwiftUI host.
+            viewModel.selectNote(byRawID: noteIDRaw)
+        }
     }
 }

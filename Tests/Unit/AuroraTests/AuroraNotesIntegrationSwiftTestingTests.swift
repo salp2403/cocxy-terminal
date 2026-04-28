@@ -126,4 +126,96 @@ struct AuroraNotesIntegrationSwiftTestingTests {
 
         #expect(auroraController.onToggleNotes != nil)
     }
+
+    // MARK: - Aurora summaries provider
+
+    @Test("fetchAuroraNotesSummaries returns an empty map when notes are disabled so the sidebar hides every workspace section the moment the preference flips off")
+    func fetchSummariesEmptyWhenNotesDisabled() async {
+        let mainController = makeController(notesEnabled: false)
+
+        let result = await mainController.fetchAuroraNotesSummaries(for: ["any-id"])
+
+        #expect(result.isEmpty)
+    }
+
+    @Test("fetchAuroraNotesSummaries returns an empty map when the input set is empty so the controller never hits the disk for nothing")
+    func fetchSummariesEmptyWhenInputEmpty() async {
+        let mainController = makeController(notesEnabled: true)
+
+        let result = await mainController.fetchAuroraNotesSummaries(for: [])
+
+        #expect(result.isEmpty)
+    }
+
+    @Test("fetchAuroraNotesSummaries reads the live storage path so the sidebar mirrors what the user has on disk")
+    func fetchSummariesReadsConfiguredStorageDirectory() async throws {
+        // Stage a custom storage directory pre-populated with a note
+        // for a specific workspace, then build a MainWindowController
+        // whose config points at that directory. The fetch must surface
+        // the seeded note's title and count.
+        let storageRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent(
+                "cocxy-aurora-summaries-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: storageRoot) }
+
+        let workspaceID = NoteWorkspaceID(rawValue: "alpha000000a")
+        let store = NoteStore(storageRoot: storageRoot, format: .markdown, autoSaveInterval: 0)
+        let seed = try await store.create(in: workspaceID, body: "# Hello")
+
+        let toml = """
+        [notes]
+        enabled = true
+        storage-dir = "\(storageRoot.path)"
+        format = "markdown"
+        """
+        let provider = InMemoryNotesConfigProvider(content: toml)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        let mainController = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: service
+        )
+
+        let result = await mainController.fetchAuroraNotesSummaries(
+            for: [workspaceID.rawValue]
+        )
+
+        let summary = try #require(result[workspaceID.rawValue])
+        #expect(summary.count == 1)
+        #expect(summary.recentNotes.first?.id == seed.id.uuidString)
+        #expect(summary.recentNotes.first?.title == "Hello")
+    }
+
+    // MARK: - Tab resolution
+
+    @Test("tabForNotesWorkspace returns nil for an unknown identifier so a stale sidebar tap from a closed tab is silently dropped")
+    func tabForNotesWorkspaceNilWhenUnknown() {
+        let mainController = makeController(notesEnabled: true)
+
+        let resolved = mainController.tabForNotesWorkspace(rawID: "not-a-known-workspace")
+
+        #expect(resolved == nil)
+    }
+
+    // MARK: - Open note safety net
+
+    @Test("openNote is a no-op when notes are disabled so a stale Aurora sidebar tap cannot resurface the overlay against the user's preference")
+    func openNoteNoOpWhenNotesDisabled() {
+        let mainController = makeController(notesEnabled: false)
+
+        mainController.openNote(workspaceIDRaw: "ws", noteIDRaw: "note")
+
+        #expect(mainController.isNotesVisible == false)
+    }
+
+    @Test("openNote is a no-op when no tab matches the workspace identifier so a sidebar refresh racing a tab close cannot crash the window")
+    func openNoteNoOpWhenWorkspaceUnknown() {
+        let mainController = makeController(notesEnabled: true)
+
+        mainController.openNote(workspaceIDRaw: "absent000abc", noteIDRaw: "note")
+
+        #expect(mainController.isNotesVisible == false)
+    }
 }

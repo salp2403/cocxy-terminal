@@ -149,6 +149,35 @@ final class AuroraChromeController: ObservableObject {
     /// the SwiftUI host.
     @Published var onToggleNotes: (() -> Void)?
 
+    /// Notes summaries keyed by `NoteWorkspaceID.rawValue`.
+    ///
+    /// The Aurora sidebar reads this map to render an expandable notes
+    /// section under each workspace block (count + recent rows). The
+    /// controller fetches the data through `notesSummariesProvider`
+    /// when the set of visible workspace IDs changes; refreshes are
+    /// also requested explicitly by the host on note CRUD so counts
+    /// stay aligned with the overlay's view model.
+    @Published private(set) var notesByWorkspace: [String: Design.AuroraWorkspaceNotesSummary] = [:]
+
+    /// Closure provided by the host that returns notes summaries for a
+    /// set of `NoteWorkspaceID` raw values. Returning `nil` from the
+    /// provider — or leaving the provider unset — clears the published
+    /// map so the sidebar hides every notes section. Async because the
+    /// underlying `NoteStore` is an actor; the controller hops back to
+    /// the main actor before publishing.
+    var notesSummariesProvider: ((Set<String>) async -> [String: Design.AuroraWorkspaceNotesSummary])?
+
+    /// Invoked when the user picks a note row in the Aurora sidebar's
+    /// notes section. The host opens the per-workspace overlay and
+    /// selects the note. Stays `nil` while `[notes].enabled = false`
+    /// or while the host has not yet wired the action.
+    ///
+    /// First parameter is the `NoteWorkspaceID.rawValue`; second is the
+    /// note's UUID rendered as a string. Both are plain `String` so the
+    /// design module never imports `Foundation.UUID` from the Notes
+    /// feature.
+    var onOpenNoteInWorkspace: ((String, String) -> Void)?
+
     /// Invoked when the user clicks the update button shown after a
     /// silent Sparkle availability probe finds a new Cocxy version.
     var onInstallUpdate: (() -> Void)?
@@ -172,6 +201,15 @@ final class AuroraChromeController: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var clockTimerCancellable: AnyCancellable?
     private var portsCancellable: AnyCancellable?
+    /// Last set of `NoteWorkspaceID.rawValue` shown in the sidebar.
+    /// Used to skip redundant provider calls when refreshSources fires
+    /// for unrelated reasons (agent state churn, surface lifecycle)
+    /// without changing the actual list of workspaces.
+    private var lastRequestedNotesWorkspaceIDs: Set<String> = []
+    /// In-flight notes summaries fetch. Cancelled when a fresh request
+    /// arrives so a slow provider cannot race a faster follow-up and
+    /// publish stale data on top.
+    private var notesSummariesTask: Task<Void, Never>?
 
     /// Live provider for each tab's effective `[worktree].show-badge`
     /// config flag. The controller reads it on every refresh so
@@ -265,6 +303,70 @@ final class AuroraChromeController: ObservableObject {
         cancellables.removeAll()
         clockTimerCancellable?.cancel()
         clockTimerCancellable = nil
+        notesSummariesTask?.cancel()
+        notesSummariesTask = nil
+    }
+
+    /// Forces a notes summaries refresh for every workspace currently
+    /// shown. Public so the host can call it after note CRUD without
+    /// waiting for the next workspace-list change. Idempotent — the
+    /// previous in-flight task is cancelled so the latest input wins.
+    func refreshNotesSummaries() {
+        let ids = Set(workspaces.compactMap(\.notesWorkspaceID))
+        fetchNotesSummaries(for: ids)
+    }
+
+    /// Schedules a notes summaries fetch when the visible workspace
+    /// IDs differ from the last request. Called from `refreshSources`
+    /// after the workspace list is rebuilt so the sidebar tracks
+    /// added/removed tabs without forcing a refetch on every render
+    /// (agent state churn, surface lifecycle, palette toggles).
+    private func refreshNotesSummariesIfWorkspacesChanged() {
+        let ids = Set(workspaces.compactMap(\.notesWorkspaceID))
+        if ids == lastRequestedNotesWorkspaceIDs { return }
+        fetchNotesSummaries(for: ids)
+    }
+
+    /// Internal fetcher shared by the public refresher and the
+    /// auto-trigger inside `refreshSources`. Cancels the previous
+    /// in-flight task so the latest request always wins, even when
+    /// several refreshes pile up faster than the provider can serve
+    /// them.
+    private func fetchNotesSummaries(for ids: Set<String>) {
+        notesSummariesTask?.cancel()
+        notesSummariesTask = nil
+        lastRequestedNotesWorkspaceIDs = ids
+
+        // Empty input shortcuts to clearing the published map: hosts
+        // that flip `[notes].enabled` off should see the sidebar
+        // sections vanish immediately, regardless of whether a
+        // provider is wired.
+        if ids.isEmpty {
+            if !notesByWorkspace.isEmpty {
+                notesByWorkspace = [:]
+            }
+            return
+        }
+
+        guard let provider = notesSummariesProvider else {
+            if !notesByWorkspace.isEmpty {
+                notesByWorkspace = [:]
+            }
+            return
+        }
+
+        notesSummariesTask = Task { [weak self] in
+            let result = await provider(ids)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                if Task.isCancelled { return }
+                // Drop entries for workspaces that disappeared between
+                // request and response so the published map never
+                // surfaces stale rows for closed tabs.
+                let filtered = result.filter { ids.contains($0.key) }
+                self.notesByWorkspace = filtered
+            }
+        }
     }
 
     // MARK: - Snapshot refresh
@@ -307,6 +409,11 @@ final class AuroraChromeController: ObservableObject {
         let resolvedActiveTabID = activeTabID ?? tabManager.activeTabID
         activeSessionID = resolvedActiveTabID?.rawValue.uuidString
         workspaces = Design.AuroraWorkspaceAdapter.workspaces(from: sources)
+        // Re-fetch notes summaries when the visible workspace IDs
+        // change (tab opened/closed, project switched). Internal dedup
+        // makes this safe to call on every refresh — agent state churn
+        // does not retrigger a fetch.
+        refreshNotesSummariesIfWorkspacesChanged()
     }
 
     // MARK: - Palette
@@ -484,6 +591,7 @@ struct AuroraSidebarHost: View {
         Design.AuroraSidebarView(
             workspaces: controller.workspaces,
             activeSessionID: controller.activeSessionID,
+            notesByWorkspace: controller.notesByWorkspace,
             onTogglePalette: { controller.onTogglePalette?() },
             onCreateTab: { controller.onCreateTab?() },
             onActivateSession: { sessionID in
@@ -521,6 +629,9 @@ struct AuroraSidebarHost: View {
             },
             onToggleNotes: controller.onToggleNotes.map { handler in
                 { handler() }
+            },
+            onOpenNote: controller.onOpenNoteInWorkspace.map { handler in
+                { workspaceID, noteID in handler(workspaceID, noteID) }
             },
             onInstallUpdate: controller.availableUpdate.map { _ in
                 { controller.onInstallUpdate?() }

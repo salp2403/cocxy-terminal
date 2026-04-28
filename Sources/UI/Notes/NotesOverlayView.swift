@@ -14,9 +14,20 @@ struct NotesOverlayView: View {
     static let minimumPanelWidth: CGFloat = 420
     static let maximumPanelWidth: CGFloat = 760
     static let compactLayoutThreshold: CGFloat = 620
+    /// Corner radius applied to the leading edge of the right-docked
+    /// panel. The trailing edge stays flat because the panel hugs the
+    /// window's right border; rounding both sides would produce a
+    /// visible gap between the glass surface and the chrome.
+    static let leadingCornerRadius: CGFloat = Design.Radius.large.rawValue
 
     @ObservedObject var viewModel: NotesViewModel
     var panelWidth: CGFloat = NotesOverlayView.defaultPanelWidth
+    /// Aurora theme used to resolve the glass tint and chrome accents.
+    /// Defaults to `.aurora` so previews and tests render with the
+    /// shipping dark palette without forcing every host to compute one.
+    /// Production hosts pass the live identity (resolved from the
+    /// active theme variant) so the overlay tracks light/dark mode.
+    var themeIdentity: Design.ThemeIdentity = .aurora
     var onDismiss: (() -> Void)?
 
     @State private var pendingDeleteNote: Note?
@@ -25,20 +36,36 @@ struct NotesOverlayView: View {
         panelWidth < compactLayoutThreshold ? .stacked : .split
     }
 
+    /// Shape used as the glass surface. Leading edges round, trailing
+    /// edges stay flat to hug the window border. Exposed `static` so
+    /// snapshot or layout tests can assert geometry without instantiating
+    /// the view.
+    static var panelShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: leadingCornerRadius,
+            bottomLeadingRadius: leadingCornerRadius,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: 0,
+            style: .continuous
+        )
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider().opacity(0.5)
-            toolbar
-            Divider().opacity(0.35)
-            if let error = viewModel.lastError {
-                errorBanner(error)
+        Design.GlassSurface(shape: Self.panelShape) {
+            VStack(spacing: 0) {
+                header
+                Divider().opacity(0.5)
+                toolbar
+                Divider().opacity(0.35)
+                if let error = viewModel.lastError {
+                    errorBanner(error)
+                }
+                content
             }
-            content
         }
         .frame(width: panelWidth)
         .frame(maxHeight: .infinity)
-        .background(.thickMaterial)
+        .designThemePalette(Design.palette(for: themeIdentity))
         .confirmationDialog(
             "Delete note?",
             isPresented: Binding(

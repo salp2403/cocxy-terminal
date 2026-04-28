@@ -78,6 +78,15 @@ extension Design {
         /// user has kept `[worktree].show-badge = true`. The builder
         /// applies the config gate so the adapter stays pure.
         let hasWorktree: Bool
+        /// Absolute filesystem path of the workspace root the tab
+        /// belongs to (the git ancestor when one exists, otherwise the
+        /// tab's own working directory). The adapter hashes this path
+        /// to compute the per-workspace `NoteWorkspaceID` so the
+        /// sidebar's notes section binds to the same identifier the
+        /// store uses on disk. Optional — SSH or detached tabs that
+        /// have no resolvable directory leave it `nil`, in which case
+        /// the adapter omits the notes hook entirely.
+        let workspaceRootPath: String?
 
         init(
             id: String,
@@ -89,7 +98,8 @@ extension Design {
             workingDirectory: String? = nil,
             foregroundProcessName: String? = nil,
             lastCommandSummary: String? = nil,
-            hasWorktree: Bool = false
+            hasWorktree: Bool = false,
+            workspaceRootPath: String? = nil
         ) {
             self.id = id
             self.name = name
@@ -101,6 +111,7 @@ extension Design {
             self.foregroundProcessName = foregroundProcessName
             self.lastCommandSummary = lastCommandSummary
             self.hasWorktree = hasWorktree
+            self.workspaceRootPath = workspaceRootPath
         }
     }
 
@@ -148,14 +159,45 @@ extension Design {
                 let tabs = grouped[group] ?? []
                 let branch = tabs.lazy.compactMap(\.branch).first
                 let sessions = tabs.map(session(from:))
+                let notesWorkspaceID = notesWorkspaceID(forTabs: tabs)
                 return AuroraWorkspace(
                     id: group,
                     name: group,
                     branch: branch,
                     isCollapsed: false,
-                    sessions: sessions
+                    sessions: sessions,
+                    notesWorkspaceID: notesWorkspaceID
                 )
             }
+        }
+
+        /// Computes the per-workspace `NoteWorkspaceID` raw value used
+        /// by the Aurora sidebar's notes section. Picks the first tab
+        /// in the group that exposes a resolvable workspace root path,
+        /// falls back to the first tab's `workingDirectory`, and
+        /// returns `nil` when neither is available so the sidebar can
+        /// hide the section instead of binding to a broken identifier.
+        ///
+        /// Pure helper — kept `static` so tests can pin the contract
+        /// without instantiating the adapter and so the implementation
+        /// stays trivially diff-able with the resolver used by the
+        /// Notes module on disk (`NoteWorkspaceID(workspaceRoot:)`).
+        static func notesWorkspaceID(forTabs tabs: [AuroraSourceTab]) -> String? {
+            for tab in tabs {
+                if let path = tab.workspaceRootPath, !path.isEmpty {
+                    return NoteWorkspaceID(
+                        workspaceRoot: URL(fileURLWithPath: path, isDirectory: true)
+                    ).rawValue
+                }
+            }
+            for tab in tabs {
+                if let path = tab.workingDirectory, !path.isEmpty {
+                    return NoteWorkspaceID(
+                        workspaceRoot: URL(fileURLWithPath: path, isDirectory: true)
+                    ).rawValue
+                }
+            }
+            return nil
         }
 
         /// Builds a session from a source tab, deriving the primary

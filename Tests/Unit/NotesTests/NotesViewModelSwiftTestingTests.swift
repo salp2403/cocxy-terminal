@@ -273,4 +273,51 @@ struct NotesViewModelSwiftTestingTests {
         #expect(viewModel.searchResults.isEmpty)
         #expect(viewModel.lastError != nil)
     }
+
+    // MARK: - Select by raw ID
+
+    @Test("selectNote(byRawID:) selects the matching note so the Aurora sidebar can deep-link into a specific note from the per-workspace section")
+    func selectByRawIDPicksMatchingNote() async throws {
+        let (viewModel, store, resolved, root) = makeViewModel()
+        defer { cleanup(root) }
+        let first = try await store.create(in: resolved.workspaceID, body: "# First")
+        try await Task.sleep(nanoseconds: 5_000_000)
+        let second = try await store.create(in: resolved.workspaceID, body: "# Second")
+        await viewModel.load(directory: resolved.rootURL)
+        // Default selection is the most recently edited note.
+        #expect(viewModel.selectedNote?.id == second.id)
+
+        let result = viewModel.selectNote(byRawID: first.id.uuidString)
+
+        #expect(result == true)
+        #expect(viewModel.selectedNote?.id == first.id)
+    }
+
+    @Test("selectNote(byRawID:) returns false when the rawID is malformed so the caller can fall back to the default selection")
+    func selectByRawIDRejectsMalformed() async throws {
+        let (viewModel, store, resolved, root) = makeViewModel()
+        defer { cleanup(root) }
+        _ = try await store.create(in: resolved.workspaceID, body: "# Note")
+        await viewModel.load(directory: resolved.rootURL)
+        let beforeID = viewModel.selectedNote?.id
+
+        let result = viewModel.selectNote(byRawID: "not-a-uuid")
+
+        #expect(result == false)
+        #expect(viewModel.selectedNote?.id == beforeID)
+    }
+
+    @Test("selectNote(byRawID:) returns false when the note is not in the listing so a stale sidebar tap does not steal selection from the open note")
+    func selectByRawIDRejectsUnknownNote() async throws {
+        let (viewModel, store, resolved, root) = makeViewModel()
+        defer { cleanup(root) }
+        _ = try await store.create(in: resolved.workspaceID, body: "# Note")
+        await viewModel.load(directory: resolved.rootURL)
+        let beforeID = viewModel.selectedNote?.id
+
+        let result = viewModel.selectNote(byRawID: UUID().uuidString)
+
+        #expect(result == false)
+        #expect(viewModel.selectedNote?.id == beforeID)
+    }
 }

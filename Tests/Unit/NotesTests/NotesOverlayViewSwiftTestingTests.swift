@@ -3,6 +3,7 @@
 // checks for the docked Notes panel.
 
 import CoreGraphics
+import SwiftUI
 import Testing
 @testable import CocxyTerminal
 
@@ -44,6 +45,62 @@ struct NotesOverlayViewSwiftTestingTests {
             NotesOverlayView.contentLayout(
                 forPanelWidth: NotesOverlayView.maximumPanelWidth
             ) == .split
+        )
+    }
+
+    @Test("leading corner radius matches Design.Radius.large so the docked overlay aligns with the rest of the Aurora chrome")
+    func leadingCornerRadiusMatchesDesignToken() {
+        #expect(
+            NotesOverlayView.leadingCornerRadius == Design.Radius.large.rawValue
+        )
+    }
+
+    @Test("panel shape rounds the leading edge and keeps the trailing edge flat so the docked panel hugs the window border without a visible gap")
+    func panelShapeRoundsLeadingEdgeOnly() {
+        let shape = NotesOverlayView.panelShape
+        let radius = NotesOverlayView.leadingCornerRadius
+
+        #expect(shape.cornerRadii.topLeading == radius)
+        #expect(shape.cornerRadii.bottomLeading == radius)
+        #expect(shape.cornerRadii.topTrailing == 0)
+        #expect(shape.cornerRadii.bottomTrailing == 0)
+    }
+
+    @Test("default theme identity is Aurora so previews and tests render with the dark default palette without forcing every host to compute one")
+    @MainActor
+    func themeIdentityDefaultsToAurora() {
+        let viewModel = Self.makeViewModel()
+        let view = NotesOverlayView(viewModel: viewModel)
+
+        #expect(view.themeIdentity == .aurora)
+    }
+
+    @Test("paper theme identity propagates so overlays render in the light palette when the user picks a light terminal theme")
+    @MainActor
+    func themeIdentityCanBePaperForLightThemes() {
+        let viewModel = Self.makeViewModel()
+        let view = NotesOverlayView(
+            viewModel: viewModel,
+            themeIdentity: .paper
+        )
+
+        #expect(view.themeIdentity == .paper)
+    }
+
+    // MARK: - Test helpers
+
+    @MainActor
+    private static func makeViewModel() -> NotesViewModel {
+        let temp = URL(
+            fileURLWithPath: NSTemporaryDirectory(),
+            isDirectory: true
+        )
+        .appendingPathComponent("notes-overlay-tests-\(UUID().uuidString)")
+        let store = NoteStore(storageRoot: temp, autoSaveInterval: 0)
+        return NotesViewModel(
+            store: store,
+            resolver: DefaultNoteWorkspaceResolver(),
+            searchEngine: NoteSearchGrep(store: store)
         )
     }
 }

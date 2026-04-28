@@ -291,6 +291,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var notesViewModel: NotesViewModel?
     var notesHostingView: NSHostingView<NotesOverlayView>?
     var isNotesVisible: Bool = false
+    /// Subscription that fans note CRUD events out to the Aurora
+    /// chrome controller so the sidebar's per-workspace notes section
+    /// counts stay in sync with the overlay's listing. Re-created on
+    /// every `makeNotesViewModel` call so a config-driven view-model
+    /// swap discards the old subscription.
+    var notesChangeCancellable: AnyCancellable?
 
     /// Forced `NSAppearance` applied to every translucent vibrancy view.
     ///

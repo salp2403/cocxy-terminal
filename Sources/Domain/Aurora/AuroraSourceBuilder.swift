@@ -159,6 +159,13 @@ enum AuroraSourceBuilder {
             // Apply the config gate at source-build time so the adapter
             // can stay pure and the view layer does not read config.
             let hasWorktree = tab.worktreeID != nil && worktreeBadgeVisibleProvider(tab)
+            // Workspace root path used by the Aurora notes section so
+            // the sidebar can compute the same `NoteWorkspaceID` the
+            // Notes store uses on disk. Falls back to the tab's own
+            // working directory when no git ancestor exists, matching
+            // `DefaultNoteWorkspaceResolver`'s contract.
+            let workspaceRootPath = (workspaceRootResolver.workspaceRoot(for: tab.workingDirectory)
+                ?? tab.workingDirectory).standardizedFileURL.path
             return Design.AuroraSourceTab(
                 id: tab.id.rawValue.uuidString,
                 name: tab.displayTitle,
@@ -169,7 +176,8 @@ enum AuroraSourceBuilder {
                 workingDirectory: tab.workingDirectory.path,
                 foregroundProcessName: tab.processName,
                 lastCommandSummary: commandSummary(for: tab),
-                hasWorktree: hasWorktree
+                hasWorktree: hasWorktree,
+                workspaceRootPath: workspaceRootPath
             )
         }
     }

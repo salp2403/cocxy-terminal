@@ -219,6 +219,30 @@ extension Design {
         let branch: String?
         var isCollapsed: Bool
         let sessions: [AuroraSession]
+        /// Raw value of the `NoteWorkspaceID` for this workspace, when
+        /// resolvable. Computed by the adapter from the workspace root
+        /// path so the Aurora sidebar can show a per-workspace notes
+        /// section. Stays optional (`nil`) for tabs whose path is not
+        /// resolvable — SSH sessions, detached tabs, fallback shells —
+        /// so the sidebar simply omits the notes block instead of
+        /// surfacing a non-functional affordance.
+        let notesWorkspaceID: String?
+
+        init(
+            id: String,
+            name: String,
+            branch: String?,
+            isCollapsed: Bool,
+            sessions: [AuroraSession],
+            notesWorkspaceID: String? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.branch = branch
+            self.isCollapsed = isCollapsed
+            self.sessions = sessions
+            self.notesWorkspaceID = notesWorkspaceID
+        }
 
         /// Filters the session list by a case-insensitive substring
         /// against the session name. An empty query returns every
@@ -232,8 +256,49 @@ extension Design {
                 name: name,
                 branch: branch,
                 isCollapsed: isCollapsed,
-                sessions: filtered
+                sessions: filtered,
+                notesWorkspaceID: notesWorkspaceID
             )
+        }
+    }
+
+    // MARK: - Notes summary models
+
+    /// Compact representation of a single note for the Aurora sidebar
+    /// notes section. Pure value type so the controller can publish it
+    /// across actor boundaries without any reactive plumbing.
+    ///
+    /// `id` is the note's UUID rendered as a string so the sidebar can
+    /// pass it back to the host as a stable identifier without leaking
+    /// the `UUID` type into the design module.
+    struct AuroraNoteRow: Identifiable, Equatable, Hashable, Sendable {
+        let id: String
+        let title: String
+        let updatedAt: Date
+
+        init(id: String, title: String, updatedAt: Date) {
+            self.id = id
+            self.title = title
+            self.updatedAt = updatedAt
+        }
+    }
+
+    /// Aggregated notes state for a single workspace.
+    ///
+    /// The Aurora sidebar shows the workspace's note count plus a
+    /// truncated list of the most recently edited notes. This summary
+    /// captures both pieces in a single value so the published map on
+    /// `AuroraChromeController` remains a flat dictionary keyed by the
+    /// workspace's `NoteWorkspaceID.rawValue`.
+    struct AuroraWorkspaceNotesSummary: Equatable, Hashable, Sendable {
+        let workspaceID: String
+        let count: Int
+        let recentNotes: [AuroraNoteRow]
+
+        init(workspaceID: String, count: Int, recentNotes: [AuroraNoteRow]) {
+            self.workspaceID = workspaceID
+            self.count = count
+            self.recentNotes = recentNotes
         }
     }
 

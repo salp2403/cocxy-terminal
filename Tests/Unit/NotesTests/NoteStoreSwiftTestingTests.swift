@@ -222,4 +222,101 @@ struct NoteStoreSwiftTestingTests {
         #expect(directoryURL.path == root.appendingPathComponent(Self.workspaceID.rawValue).path)
         #expect(fileURL.lastPathComponent == "\(id.uuidString).md")
     }
+
+    // MARK: - Summary
+
+    @Test("summary returns a zero count and an empty recent list when the workspace folder does not exist yet so the Aurora sidebar can render a fresh workspace without errors")
+    func summaryEmptyForFreshWorkspace() async throws {
+        let (store, root) = makeStore()
+        defer { cleanup(root) }
+
+        let summary = try await store.summary(for: Self.workspaceID)
+
+        #expect(summary.count == 0)
+        #expect(summary.recent.isEmpty)
+    }
+
+    @Test("summary count matches the persisted notes total so the sidebar header always shows the real count")
+    func summaryCountsEveryPersistedNote() async throws {
+        let (store, root) = makeStore()
+        defer { cleanup(root) }
+
+        for body in ["# A", "# B", "# C"] {
+            _ = try await store.create(in: Self.workspaceID, body: body)
+        }
+
+        let summary = try await store.summary(for: Self.workspaceID)
+
+        #expect(summary.count == 3)
+    }
+
+    @Test("summary truncates the recent list to the documented limit so the Aurora sidebar's expandable section never overflows")
+    func summaryTruncatesRecentToLimit() async throws {
+        let (store, root) = makeStore()
+        defer { cleanup(root) }
+
+        for index in 0..<7 {
+            _ = try await store.create(in: Self.workspaceID, body: "# Note \(index)")
+        }
+
+        let summary = try await store.summary(for: Self.workspaceID, recentLimit: 3)
+
+        #expect(summary.count == 7)
+        #expect(summary.recent.count == 3)
+    }
+
+    @Test("summary recent list is sorted by updatedAt descending so the most recently edited notes appear first in the sidebar")
+    func summarySortsRecentByUpdatedAtDescending() async throws {
+        let (store, root) = makeStore()
+        defer { cleanup(root) }
+
+        var first = try await store.create(in: Self.workspaceID, body: "# First")
+        try await Task.sleep(nanoseconds: 5_000_000)
+        let second = try await store.create(in: Self.workspaceID, body: "# Second")
+        try await Task.sleep(nanoseconds: 5_000_000)
+        // Re-save first so it bumps its updatedAt above second.
+        first.body = "# First updated"
+        try await store.save(first)
+        // Touch second so it preserves its identity but stays older.
+        _ = second
+
+        let summary = try await store.summary(for: Self.workspaceID, recentLimit: 5)
+
+        #expect(summary.recent.first?.id == first.id)
+    }
+
+    @Test("summaries returns one entry per requested workspace so the chrome controller can publish the map atomically")
+    func summariesReturnsEntryPerWorkspace() async throws {
+        let (store, root) = makeStore()
+        defer { cleanup(root) }
+
+        let alphaID = NoteWorkspaceID(rawValue: "alpha000abcde")
+        let betaID = NoteWorkspaceID(rawValue: "beta00000abcd")
+        _ = try await store.create(in: alphaID, body: "# Alpha")
+        _ = try await store.create(in: alphaID, body: "# Alpha 2")
+        _ = try await store.create(in: betaID, body: "# Beta")
+
+        let summaries = await store.summaries(for: [alphaID, betaID])
+
+        #expect(summaries[alphaID]?.count == 2)
+        #expect(summaries[betaID]?.count == 1)
+    }
+
+    @Test("summaries silently skips workspaces whose folder is missing so the sidebar refresh never fails because of a closed tab")
+    func summariesSkipsMissingWorkspaces() async throws {
+        let (store, root) = makeStore()
+        defer { cleanup(root) }
+
+        let presentID = NoteWorkspaceID(rawValue: "present00abc")
+        _ = try await store.create(in: presentID, body: "# Note")
+        let missingID = NoteWorkspaceID(rawValue: "missing00abc")
+
+        let summaries = await store.summaries(for: [presentID, missingID])
+
+        #expect(summaries[presentID]?.count == 1)
+        // Missing workspace returns an empty summary rather than
+        // omitting the entry — `notes(in:)` already maps "no folder"
+        // to "empty array" without throwing.
+        #expect(summaries[missingID]?.count == 0)
+    }
 }

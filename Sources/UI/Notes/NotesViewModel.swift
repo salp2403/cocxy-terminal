@@ -169,6 +169,23 @@ final class NotesViewModel: ObservableObject {
         selectedNote = note
     }
 
+    /// Selects the note whose UUID rendered as a string equals
+    /// `rawID`. Returns `true` when the note exists in the current
+    /// listing so callers (notably the Aurora sidebar's notes section)
+    /// can decide whether to fall back to opening the overlay without
+    /// a pre-selection. The lookup uses the in-memory listing, which
+    /// the overlay's load path always populates before any UI tap can
+    /// reach this method.
+    @discardableResult
+    func selectNote(byRawID rawID: String) -> Bool {
+        guard let uuid = UUID(uuidString: rawID),
+              let note = notes.first(where: { $0.id == uuid }) else {
+            return false
+        }
+        selectedNote = note
+        return true
+    }
+
     /// Forces every in-flight scheduled save to complete. Wraps
     /// `NoteStore.flushPendingSaves()` so callers (notably tests and
     /// the window-close path) do not have to import the actor type.

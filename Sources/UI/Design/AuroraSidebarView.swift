@@ -40,10 +40,17 @@ extension Design {
         /// active row that the controller resolved from the live tab
         /// manager snapshot.
         let activeSessionID: String?
+        /// Per-workspace notes summaries keyed by
+        /// `NoteWorkspaceID.rawValue`. Empty (`[:]`) hides every notes
+        /// section so the sidebar stays bit-for-bit identical to the
+        /// pre-notes layout when the feature is disabled, the provider
+        /// is unwired, or no workspace currently has notes.
+        var notesByWorkspace: [String: AuroraWorkspaceNotesSummary] = [:]
         @State private var query: String = ""
         @State private var hoveredSession: HoveredSessionContext?
         @State private var sessionFrames: [String: CGRect] = [:]
         @State private var workspaceDisclosure = AuroraWorkspaceDisclosureOverrides()
+        @State private var notesExpansion: [String: Bool] = [:]
 
         let onTogglePalette: () -> Void
         let onCreateTab: () -> Void
@@ -65,6 +72,14 @@ extension Design {
         /// when the feature is turned off instead of leaking a button
         /// that does nothing.
         var onToggleNotes: (() -> Void)? = nil
+        /// Optional callback when the user picks a note row in the
+        /// per-workspace notes section. First parameter is the
+        /// `NoteWorkspaceID.rawValue`; second is the note's UUID
+        /// rendered as a string. Stays optional so configurations
+        /// without notes wiring (no provider, feature disabled) hide
+        /// every section's row click instead of triggering a no-op
+        /// handler.
+        var onOpenNote: ((String, String) -> Void)? = nil
         /// Optional callback shown only when `availableUpdate` exists.
         /// The host routes this to Sparkle's user-initiated update check.
         var onInstallUpdate: (() -> Void)? = nil
@@ -307,10 +322,38 @@ extension Design {
                                 }
                             )
                         }
+                        notesSection(for: workspace)
                     }
                     .padding(.top, Spacing.hairline)
                     .padding(.bottom, Spacing.xSmall)
                 }
+            }
+        }
+
+        /// Renders the per-workspace notes section under the session
+        /// list when the workspace has both a resolvable
+        /// `notesWorkspaceID` and a non-empty summary published by the
+        /// chrome controller. The section stays hidden otherwise so
+        /// disabling notes (or hosts that never wire `onOpenNote`)
+        /// keeps the sidebar's classic layout untouched.
+        @ViewBuilder
+        private func notesSection(for workspace: AuroraWorkspace) -> some View {
+            if let workspaceID = workspace.notesWorkspaceID,
+               let summary = notesByWorkspace[workspaceID],
+               summary.count > 0,
+               let onOpenNote {
+                NotesSectionView(
+                    summary: summary,
+                    isExpanded: notesExpansion[workspaceID] ?? false,
+                    onToggleExpansion: {
+                        let current = notesExpansion[workspaceID] ?? false
+                        notesExpansion[workspaceID] = !current
+                    },
+                    onOpenNote: { noteID in
+                        onOpenNote(workspaceID, noteID)
+                    }
+                )
+                .padding(.top, 2)
             }
         }
 
@@ -808,6 +851,97 @@ extension Design {
             case .aider: return "Aider"
             case .shell: return "Shell"
             }
+        }
+    }
+
+    // MARK: - Notes section
+
+    /// Per-workspace notes block rendered under the session list when a
+    /// workspace has notes. Renders a header (icon + count + chevron)
+    /// that toggles a list of the most recently edited notes; each
+    /// note row dispatches `onOpenNote` so the host can open the
+    /// docked overlay and select the chosen note.
+    ///
+    /// Kept presentational — every behaviour (counts, list contents,
+    /// expansion state, click routing) flows through inputs so the
+    /// view stays previewable and unit-testable in isolation.
+    struct NotesSectionView: View {
+        let summary: AuroraWorkspaceNotesSummary
+        let isExpanded: Bool
+        let onToggleExpansion: () -> Void
+        let onOpenNote: (String) -> Void
+
+        @Environment(\.designThemePalette) private var palette
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 1) {
+                header
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(summary.recentNotes) { row in
+                            noteRow(row)
+                        }
+                    }
+                    .padding(.leading, 14)
+                }
+            }
+            .padding(.leading, 12)
+        }
+
+        private var header: some View {
+            Button(action: onToggleExpansion) {
+                HStack(spacing: Spacing.xSmall) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(palette.textLow.resolvedColor())
+                    Text("Notes")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .tracking(0.6)
+                        .textCase(.uppercase)
+                        .foregroundStyle(palette.textLow.resolvedColor())
+                    Text(verbatim: "\(summary.count)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(palette.textDim.resolvedColor())
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(palette.textLow.resolvedColor())
+                        .animation(.easeInOut(duration: 0.18), value: isExpanded)
+                }
+                .padding(.horizontal, Spacing.xSmall)
+                .padding(.vertical, 5)
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Notes — \(summary.count) note\(summary.count == 1 ? "" : "s")")
+            .accessibilityHint(isExpanded ? "Collapse notes list" : "Expand notes list")
+        }
+
+        private func noteRow(_ row: AuroraNoteRow) -> some View {
+            Button {
+                onOpenNote(row.id)
+            } label: {
+                HStack(alignment: .center, spacing: 6) {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(palette.textLow.resolvedColor())
+                        .frame(width: 12)
+                    Text(row.title)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(palette.textHigh.resolvedColor())
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 4)
+                    Text(row.updatedAt.formatted(date: .omitted, time: .shortened))
+                        .font(.system(size: 9.5, design: .monospaced))
+                        .foregroundStyle(palette.textDim.resolvedColor())
+                }
+                .padding(.horizontal, Spacing.xSmall)
+                .padding(.vertical, 4)
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open note: \(row.title)")
         }
     }
 
