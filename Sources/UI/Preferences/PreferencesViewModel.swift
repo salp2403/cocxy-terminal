@@ -643,7 +643,8 @@ final class PreferencesViewModel: ObservableObject {
             sessions: savedConfig.sessions,
             worktree: buildWorktreeConfigFromViewModel(),
             github: buildGitHubConfigFromViewModel(),
-            notes: notes
+            notes: notes,
+            experimental: savedConfig.experimental
         )
         pendingKeybindings = nil
     }
@@ -904,6 +905,10 @@ final class PreferencesViewModel: ObservableObject {
         shortcut = "\(notes.shortcut)"
         auto-save = \(notes.autoSave)
         auto-save-interval-seconds = \(Self.tomlNumber(notes.autoSaveIntervalSeconds))
+
+        [experimental]
+        pip-enabled = \(defaults.experimental.pipEnabled)
+        pty-daemon = \(defaults.experimental.ptyDaemonEnabled)
         """
     }
 

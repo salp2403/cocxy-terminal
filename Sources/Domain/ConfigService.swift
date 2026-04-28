@@ -359,6 +359,13 @@ final class ConfigService: ConfigProviding {
         # Debounce window for auto-save in seconds. Clamped to
         # [0.1, 60] at parse time so a typo cannot disable saving.
         auto-save-interval-seconds = \(defaults.notes.autoSaveIntervalSeconds)
+
+        [experimental]
+        # Architecture-heavy developer features guarded by ADRs. Keep
+        # disabled unless you are explicitly testing the matching
+        # implementation path.
+        pip-enabled = \(defaults.experimental.pipEnabled)
+        pty-daemon = \(defaults.experimental.ptyDaemonEnabled)
         """
     }
 
@@ -388,6 +395,7 @@ final class ConfigService: ConfigProviding {
         let worktree = parseWorktreeConfig(from: parsed)
         let github = parseGitHubConfig(from: parsed)
         let notes = parseNotesConfig(from: parsed)
+        let experimental = parseExperimentalConfig(from: parsed)
         let keybindings = parseKeybindingsConfig(from: parsed)
             .applyingFallbackShortcut(
                 actionId: KeybindingActionCatalog.windowNotes.id,
@@ -406,7 +414,8 @@ final class ConfigService: ConfigProviding {
             sessions: sessions,
             worktree: worktree,
             github: github,
-            notes: notes
+            notes: notes,
+            experimental: experimental
         )
     }
 
@@ -809,6 +818,18 @@ final class ConfigService: ConfigProviding {
             return NotesConfig.defaults.shortcut
         }
         return parsed.canonical
+    }
+
+    /// Parses `[experimental]` feature gates. Missing or malformed values
+    /// stay disabled so unfinished architecture-heavy features cannot be
+    /// reached accidentally.
+    private func parseExperimentalConfig(from parsed: [String: TOMLValue]) -> ExperimentalConfig {
+        let table = extractTable("experimental", from: parsed)
+        let defaults = ExperimentalConfig.defaults
+        return ExperimentalConfig(
+            pipEnabled: boolValue(table["pip-enabled"]) ?? defaults.pipEnabled,
+            ptyDaemonEnabled: boolValue(table["pty-daemon"]) ?? defaults.ptyDaemonEnabled
+        )
     }
 
     // MARK: - Value Extractors

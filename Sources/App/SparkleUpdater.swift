@@ -45,12 +45,12 @@ final class SparkleUpdater: NSObject, ObservableObject {
     /// `updater(_:didAbortWithError:)`) inside this file. Production code
     /// outside `SparkleUpdater` must NOT mutate this property; doing so
     /// would desync the published value from the actual Sparkle session.
-    /// The `internal(set)` access is intentional so the test target can
+    /// The setter intentionally remains internal so the test target can
     /// drive the publisher through `@testable import CocxyTerminal`
-    /// without booting the real Sparkle framework — the test surface is
+    /// without booting the real Sparkle framework; the test surface is
     /// otherwise impossible to exercise because Sparkle owns the
     /// callbacks.
-    @Published internal(set) var availableUpdate: CocxyUpdateAvailability?
+    @Published var availableUpdate: CocxyUpdateAvailability?
     @Published private(set) var lastProbeErrorDescription: String?
 
     var canCheckForUpdates: Bool {

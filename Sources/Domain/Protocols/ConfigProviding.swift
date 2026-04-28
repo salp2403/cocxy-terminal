@@ -58,6 +58,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let worktree: WorktreeConfig
     let github: GitHubConfig
     let notes: NotesConfig
+    let experimental: ExperimentalConfig
 
     init(
         general: GeneralConfig,
@@ -71,7 +72,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         sessions: SessionsConfig,
         worktree: WorktreeConfig = .defaults,
         github: GitHubConfig = .defaults,
-        notes: NotesConfig = .defaults
+        notes: NotesConfig = .defaults,
+        experimental: ExperimentalConfig = .defaults
     ) {
         self.general = general
         self.appearance = appearance
@@ -85,6 +87,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.worktree = worktree
         self.github = github
         self.notes = notes
+        self.experimental = experimental
     }
 
     /// Creates a configuration with all default values.
@@ -101,7 +104,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             sessions: .defaults,
             worktree: .defaults,
             github: .defaults,
-            notes: .defaults
+            notes: .defaults,
+            experimental: .defaults
         )
     }
 
@@ -118,6 +122,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case general, appearance, terminal, agentDetection, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes
+        case experimental
     }
 
     init(from decoder: Decoder) throws {
@@ -137,6 +142,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.github = try container.decodeIfPresent(GitHubConfig.self, forKey: .github)
             ?? .defaults
         self.notes = try container.decodeIfPresent(NotesConfig.self, forKey: .notes)
+            ?? .defaults
+        self.experimental = try container.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental)
             ?? .defaults
     }
 
@@ -238,7 +245,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // preferences, not project-level. Preserved verbatim through
             // the project-overrides merge so a `.cocxy.toml` cannot
             // accidentally clobber them.
-            notes: notes
+            notes: notes,
+            experimental: experimental
         )
     }
 }
@@ -1029,6 +1037,43 @@ struct NotesConfig: Codable, Sendable, Equatable {
             ?? defaults.autoSave
         self.autoSaveIntervalSeconds = try container.decodeIfPresent(Double.self, forKey: .autoSaveIntervalSeconds)
             ?? defaults.autoSaveIntervalSeconds
+    }
+}
+
+// MARK: - Experimental Config
+
+/// `[experimental]` feature gates for architecture-heavy P5 work.
+///
+/// These flags default to `false` so risky surface lifecycle features
+/// cannot become reachable until their implementation and smoke matrix
+/// are explicitly complete. They are intentionally global, not
+/// per-project: PIP and daemon mode affect process/window ownership,
+/// not repository behaviour.
+struct ExperimentalConfig: Codable, Sendable, Equatable {
+    let pipEnabled: Bool
+    let ptyDaemonEnabled: Bool
+
+    static var defaults: ExperimentalConfig {
+        ExperimentalConfig(pipEnabled: false, ptyDaemonEnabled: false)
+    }
+
+    init(pipEnabled: Bool = false, ptyDaemonEnabled: Bool = false) {
+        self.pipEnabled = pipEnabled
+        self.ptyDaemonEnabled = ptyDaemonEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case pipEnabled
+        case ptyDaemonEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ExperimentalConfig.defaults
+        self.pipEnabled = try container.decodeIfPresent(Bool.self, forKey: .pipEnabled)
+            ?? defaults.pipEnabled
+        self.ptyDaemonEnabled = try container.decodeIfPresent(Bool.self, forKey: .ptyDaemonEnabled)
+            ?? defaults.ptyDaemonEnabled
     }
 }
 
