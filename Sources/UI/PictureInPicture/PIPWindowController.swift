@@ -33,7 +33,6 @@ final class PIPWindowController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.titleVisibility = .visible
-        panel.contentView = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
 
         super.init()
 
@@ -49,9 +48,10 @@ final class PIPWindowController: NSObject, NSWindowDelegate {
                 display: false
             )
         }
-        panel.contentView?.addSubview(detachedView)
-        detachedView.frame = panel.contentView?.bounds ?? panel.contentRect(forFrameRect: panel.frame)
+        detachedView.frame = NSRect(origin: .zero, size: panel.contentRect(forFrameRect: panel.frame).size)
         detachedView.autoresizingMask = [.width, .height]
+        panel.contentView = detachedView
+        panel.initialFirstResponder = detachedView
         self.window = panel
     }
 
@@ -59,12 +59,21 @@ final class PIPWindowController: NSObject, NSWindowDelegate {
 
     func show() {
         window?.makeKeyAndOrderFront(nil)
+        focusDetachedView()
+    }
+
+    func focusDetachedView() {
+        window?.makeFirstResponder(detachedView)
     }
 
     func restore() {
         guard !didRestore else { return }
         didRestore = true
-        detachedView.removeFromSuperview()
+        if window?.contentView === detachedView {
+            window?.contentView = NSView(frame: .zero)
+        } else {
+            detachedView.removeFromSuperview()
+        }
         onRestore(tabID, detachedView)
     }
 

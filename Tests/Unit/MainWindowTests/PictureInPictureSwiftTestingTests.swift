@@ -52,6 +52,26 @@ struct PictureInPictureSwiftTestingTests {
         #expect(controller.pipControllers[tabID] != nil)
     }
 
+    @Test("detach re-arms rendering after moving the terminal into the PIP panel")
+    func detachRearmsRenderingForReparentedSurface() {
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: makeConfigService(pipEnabled: true)
+        )
+        guard let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID,
+              let surfaceView = controller.tabSurfaceViews[tabID] as? CocxyCoreView else {
+            Issue.record("Expected initial CocxyCore surface")
+            return
+        }
+        surfaceView.needsRender = false
+
+        let didDetach = controller.detachActiveTerminalToPIP()
+
+        #expect(didDetach == true)
+        #expect(surfaceView.needsRender == true)
+        #expect(surfaceView.window?.firstResponder === surfaceView)
+    }
+
     private func makeConfigService(pipEnabled: Bool) -> ConfigService {
         let provider = InMemoryPIPConfigProvider(content: """
         [experimental]

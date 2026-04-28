@@ -35,6 +35,7 @@ extension MainWindowController {
         )
         pipControllers[tabID] = controller
         controller.show()
+        refreshReparentedTerminalSurface(surfaceView, controller: controller)
         refreshStatusBar()
         refreshTabStrip(syncFromFirstResponder: false)
         return true
@@ -56,6 +57,26 @@ extension MainWindowController {
         }
         displayedTabID = nil
         handleTabSwitch(to: tabID)
+        refreshReparentedTerminalSurface(view)
+    }
+
+    private func refreshReparentedTerminalSurface(_ view: NSView, controller: PIPWindowController? = nil) {
+        guard let surfaceView = view as? TerminalHostView else { return }
+        surfaceView.needsLayout = true
+        surfaceView.layoutSubtreeIfNeeded()
+        surfaceView.refreshDisplayLinkAnchor()
+        surfaceView.updateInteractionMetrics()
+        surfaceView.requestImmediateRedraw()
+        if let coreView = surfaceView as? CocxyCoreView {
+            coreView.renderFrame()
+            coreView.requestImmediateRedraw()
+            DispatchQueue.main.async { [weak coreView] in
+                coreView?.renderFrame()
+                coreView?.requestImmediateRedraw()
+            }
+        }
+        controller?.focusDetachedView()
+        surfaceView.window?.makeFirstResponder(surfaceView)
     }
 
     @objc func detachActiveTerminalToPIPAction(_ sender: Any?) {
