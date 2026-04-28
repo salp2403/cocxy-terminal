@@ -154,6 +154,18 @@ enum KeybindingActionCatalog {
         )
     )
 
+    static let windowNotes = KeybindingAction(
+        id: "window.notes",
+        displayName: "Toggle Notes",
+        summary: "Show or hide per-workspace notes.",
+        category: .window,
+        defaultShortcut: KeybindingShortcut(
+            requiresCommand: true,
+            requiresOption: true,
+            baseKey: "n"
+        )
+    )
+
     // MARK: - Tab
 
     static let tabNew = KeybindingAction(
@@ -449,6 +461,7 @@ enum KeybindingActionCatalog {
         windowPreferences,
         windowQuickTerminal,
         windowGitHubPane,
+        windowNotes,
         // Tab
         tabNew,
         tabClose,

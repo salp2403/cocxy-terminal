@@ -1317,6 +1317,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.appearance.backgroundOpacity)"
         case "appearance.background-blur-radius":
             return "\(config.appearance.backgroundBlurRadius)"
+        case "appearance.aurora-enabled":
+            return "\(config.appearance.auroraEnabled)"
+        case "appearance.rate-limit-indicator-enabled":
+            return "\(config.appearance.rateLimitIndicatorEnabled)"
 
         // Terminal
         case "terminal.scrollback-lines":
@@ -1417,6 +1421,22 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.sessions.autoSaveInterval)"
         case "sessions.restore-on-launch":
             return "\(config.sessions.restoreOnLaunch)"
+
+        // Notes
+        case "notes.enabled":
+            return "\(config.notes.enabled)"
+        case "notes.format":
+            return config.notes.format.rawValue
+        case "notes.search-engine":
+            return config.notes.searchEngine.rawValue
+        case "notes.storage-dir":
+            return config.notes.storageDir
+        case "notes.shortcut":
+            return config.notes.shortcut
+        case "notes.auto-save":
+            return "\(config.notes.autoSave)"
+        case "notes.auto-save-interval-seconds":
+            return "\(config.notes.autoSaveIntervalSeconds)"
 
         default:
             return nil
@@ -2536,6 +2556,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "appearance.theme", "appearance.font-family", "appearance.font-size",
             "appearance.tab-position", "appearance.window-padding", "appearance.ligatures",
             "appearance.background-opacity", "appearance.background-blur-radius",
+            "appearance.aurora-enabled", "appearance.rate-limit-indicator-enabled",
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",
@@ -2558,7 +2579,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "keybindings.split-vertical", "keybindings.split-horizontal",
             "keybindings.goto-attention", "keybindings.toggle-quick-terminal",
             "sessions.auto-save", "sessions.auto-save-interval",
-            "sessions.restore-on-launch"
+            "sessions.restore-on-launch",
+            "notes.enabled", "notes.format", "notes.search-engine",
+            "notes.storage-dir", "notes.shortcut", "notes.auto-save",
+            "notes.auto-save-interval-seconds"
         ]
     }
 

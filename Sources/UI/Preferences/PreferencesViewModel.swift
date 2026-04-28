@@ -79,6 +79,14 @@ final class PreferencesViewModel: ObservableObject {
     /// Whether the experimental Aurora chrome is enabled.
     @Published var auroraEnabled: Bool
 
+    /// Whether the status-bar rate-limit indicator pill is enabled.
+    ///
+    /// When `false`, `MainWindowController.refreshStatusBar()` clears
+    /// the active agent on the probe service so the pill stays hidden
+    /// regardless of the agent or its provider's snapshot. Hot-reloads
+    /// through the standard config publisher pipeline.
+    @Published var rateLimitIndicatorEnabled: Bool
+
     /// Whether the chrome theme picker should be interactive.
     ///
     /// Mirrors the runtime rule: the override only matters while the
@@ -216,6 +224,16 @@ final class PreferencesViewModel: ObservableObject {
     /// CLI verb returns an actionable error pointing here.
     @Published var githubMergeEnabled: Bool
 
+    // MARK: - Notes
+
+    @Published var notesEnabled: Bool
+    @Published var notesFormat: String
+    @Published var notesSearchEngine: String
+    @Published var notesStorageDir: String
+    @Published var notesShortcut: String
+    @Published var notesAutoSave: Bool
+    @Published var notesAutoSaveIntervalSeconds: Double
+
     // MARK: - Read-Only Keybindings
 
     /// New tab shortcut from the saved config.
@@ -284,6 +302,7 @@ final class PreferencesViewModel: ObservableObject {
             || backgroundOpacity != c.appearance.backgroundOpacity
             || transparencyChromeTheme != c.appearance.transparencyChromeTheme
             || auroraEnabled != c.appearance.auroraEnabled
+            || rateLimitIndicatorEnabled != c.appearance.rateLimitIndicatorEnabled
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -301,6 +320,7 @@ final class PreferencesViewModel: ObservableObject {
             || showDockBadge != c.notifications.showDockBadge
             || worktreeHasUnsavedChanges(comparedTo: c.worktree)
             || githubHasUnsavedChanges(comparedTo: c.github)
+            || notesHasUnsavedChanges(comparedTo: c.notes)
             || (pendingKeybindings != nil && pendingKeybindings != c.keybindings)
     }
 
@@ -320,6 +340,7 @@ final class PreferencesViewModel: ObservableObject {
         backgroundOpacity = c.appearance.backgroundOpacity
         transparencyChromeTheme = c.appearance.transparencyChromeTheme
         auroraEnabled = c.appearance.auroraEnabled
+        rateLimitIndicatorEnabled = c.appearance.rateLimitIndicatorEnabled
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -350,6 +371,13 @@ final class PreferencesViewModel: ObservableObject {
         githubIncludeDrafts = c.github.includeDrafts
         githubDefaultState = c.github.defaultState
         githubMergeEnabled = c.github.mergeEnabled
+        notesEnabled = c.notes.enabled
+        notesFormat = c.notes.format.rawValue
+        notesSearchEngine = c.notes.searchEngine.rawValue
+        notesStorageDir = c.notes.storageDir
+        notesShortcut = c.notes.shortcut
+        notesAutoSave = c.notes.autoSave
+        notesAutoSaveIntervalSeconds = c.notes.autoSaveIntervalSeconds
         pendingKeybindings = nil
     }
 
@@ -404,6 +432,7 @@ final class PreferencesViewModel: ObservableObject {
         self.backgroundOpacity = config.appearance.backgroundOpacity
         self.transparencyChromeTheme = config.appearance.transparencyChromeTheme
         self.auroraEnabled = config.appearance.auroraEnabled
+        self.rateLimitIndicatorEnabled = config.appearance.rateLimitIndicatorEnabled
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -444,6 +473,15 @@ final class PreferencesViewModel: ObservableObject {
         self.githubIncludeDrafts = config.github.includeDrafts
         self.githubDefaultState = config.github.defaultState
         self.githubMergeEnabled = config.github.mergeEnabled
+
+        // Notes
+        self.notesEnabled = config.notes.enabled
+        self.notesFormat = config.notes.format.rawValue
+        self.notesSearchEngine = config.notes.searchEngine.rawValue
+        self.notesStorageDir = config.notes.storageDir
+        self.notesShortcut = config.notes.shortcut
+        self.notesAutoSave = config.notes.autoSave
+        self.notesAutoSaveIntervalSeconds = config.notes.autoSaveIntervalSeconds
 
         // Available themes from built-in list.
         self.availableThemes = Self.defaultThemeNames()
@@ -539,6 +577,12 @@ final class PreferencesViewModel: ObservableObject {
     /// until the user makes further edits.
     private func updateSavedSnapshot() {
         let clampedOpacity = min(max(backgroundOpacity, 0.3), 1.0)
+        let notes = buildNotesConfigFromViewModel()
+        let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
+            .applyingFallbackShortcut(
+                actionId: KeybindingActionCatalog.windowNotes.id,
+                shortcut: notes.shortcut
+            )
         savedConfig = CocxyConfig(
             general: GeneralConfig(
                 shell: shell,
@@ -559,7 +603,8 @@ final class PreferencesViewModel: ObservableObject {
                 backgroundOpacity: clampedOpacity,
                 backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius,
                 transparencyChromeTheme: transparencyChromeTheme,
-                auroraEnabled: auroraEnabled
+                auroraEnabled: auroraEnabled,
+                rateLimitIndicatorEnabled: rateLimitIndicatorEnabled
             ),
             terminal: TerminalConfig(
                 scrollbackLines: savedConfig.terminal.scrollbackLines,
@@ -594,10 +639,11 @@ final class PreferencesViewModel: ObservableObject {
                 soundError: savedConfig.notifications.soundError
             ),
             quickTerminal: savedConfig.quickTerminal,
-            keybindings: pendingKeybindings ?? savedConfig.keybindings,
+            keybindings: keybindings,
             sessions: savedConfig.sessions,
             worktree: buildWorktreeConfigFromViewModel(),
-            github: buildGitHubConfigFromViewModel()
+            github: buildGitHubConfigFromViewModel(),
+            notes: notes
         )
         pendingKeybindings = nil
     }
@@ -691,6 +737,46 @@ final class PreferencesViewModel: ObservableObject {
             || githubMergeEnabled != config.mergeEnabled
     }
 
+    /// Builds a `NotesConfig` value from the editable view-model fields.
+    /// Enum-backed values are coerced to their safe defaults and the
+    /// auto-save interval is clamped to match `ConfigService`.
+    private func buildNotesConfigFromViewModel() -> NotesConfig {
+        let defaults = NotesConfig.defaults
+        let trimmedStorageDir = notesStorageDir.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedShortcut = notesShortcut.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clampedInterval = min(max(notesAutoSaveIntervalSeconds, 0.1), 60)
+        return NotesConfig(
+            enabled: notesEnabled,
+            format: NoteFormat.parse(notesFormat),
+            searchEngine: NoteSearchEngineKind.parse(notesSearchEngine),
+            storageDir: trimmedStorageDir.isEmpty ? defaults.storageDir : trimmedStorageDir,
+            shortcut: normalizedNotesShortcut(trimmedShortcut),
+            autoSave: notesAutoSave,
+            autoSaveIntervalSeconds: clampedInterval
+        )
+    }
+
+    private func normalizedNotesShortcut(_ rawShortcut: String) -> String {
+        let raw = rawShortcut.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty,
+              let parsed = KeybindingShortcut.parse(raw),
+              parsed.isAssignableToMenuItem
+        else {
+            return NotesConfig.defaults.shortcut
+        }
+        return parsed.canonical
+    }
+
+    private func notesHasUnsavedChanges(comparedTo config: NotesConfig) -> Bool {
+        notesEnabled != config.enabled
+            || notesFormat != config.format.rawValue
+            || notesSearchEngine != config.searchEngine.rawValue
+            || notesStorageDir != config.storageDir
+            || notesShortcut != config.shortcut
+            || notesAutoSave != config.autoSave
+            || notesAutoSaveIntervalSeconds != config.autoSaveIntervalSeconds
+    }
+
     // MARK: - TOML Generation
 
     /// Generates a complete TOML configuration string from the current values.
@@ -708,6 +794,7 @@ final class PreferencesViewModel: ObservableObject {
 
         let defaults = savedConfig
         let keybindings = pendingKeybindings ?? defaults.keybindings
+        let notes = buildNotesConfigFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
             "window-padding-x = \(Self.tomlNumber($0))\n"
         } ?? ""
@@ -737,6 +824,7 @@ final class PreferencesViewModel: ObservableObject {
         background-blur-radius = \(Self.tomlNumber(defaults.appearance.backgroundBlurRadius))
         transparency-chrome-theme = "\(transparencyChromeTheme.rawValue)"
         aurora-enabled = \(auroraEnabled)
+        rate-limit-indicator-enabled = \(rateLimitIndicatorEnabled)
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
@@ -807,6 +895,15 @@ final class PreferencesViewModel: ObservableObject {
         include-drafts = \(githubIncludeDrafts)
         default-state = "\(GitHubConfig.allowedDefaultStates.contains(githubDefaultState.lowercased()) ? githubDefaultState.lowercased() : defaults.github.defaultState)"
         merge-enabled = \(githubMergeEnabled)
+
+        [notes]
+        enabled = \(notes.enabled)
+        format = "\(notes.format.rawValue)"
+        search-engine = "\(notes.searchEngine.rawValue)"
+        storage-dir = "\(notes.storageDir)"
+        shortcut = "\(notes.shortcut)"
+        auto-save = \(notes.autoSave)
+        auto-save-interval-seconds = \(Self.tomlNumber(notes.autoSaveIntervalSeconds))
         """
     }
 

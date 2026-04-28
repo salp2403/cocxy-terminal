@@ -57,6 +57,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let sessions: SessionsConfig
     let worktree: WorktreeConfig
     let github: GitHubConfig
+    let notes: NotesConfig
 
     init(
         general: GeneralConfig,
@@ -69,7 +70,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         keybindings: KeybindingsConfig,
         sessions: SessionsConfig,
         worktree: WorktreeConfig = .defaults,
-        github: GitHubConfig = .defaults
+        github: GitHubConfig = .defaults,
+        notes: NotesConfig = .defaults
     ) {
         self.general = general
         self.appearance = appearance
@@ -82,6 +84,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.sessions = sessions
         self.worktree = worktree
         self.github = github
+        self.notes = notes
     }
 
     /// Creates a configuration with all default values.
@@ -97,7 +100,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             keybindings: .defaults,
             sessions: .defaults,
             worktree: .defaults,
-            github: .defaults
+            github: .defaults,
+            notes: .defaults
         )
     }
 
@@ -113,7 +117,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// hit a decode failure.
     private enum CodingKeys: String, CodingKey {
         case general, appearance, terminal, agentDetection, codeReview
-        case notifications, quickTerminal, keybindings, sessions, worktree, github
+        case notifications, quickTerminal, keybindings, sessions, worktree, github, notes
     }
 
     init(from decoder: Decoder) throws {
@@ -131,6 +135,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.worktree = try container.decodeIfPresent(WorktreeConfig.self, forKey: .worktree)
             ?? .defaults
         self.github = try container.decodeIfPresent(GitHubConfig.self, forKey: .github)
+            ?? .defaults
+        self.notes = try container.decodeIfPresent(NotesConfig.self, forKey: .notes)
             ?? .defaults
     }
 
@@ -157,7 +163,12 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             backgroundOpacity: overrides.backgroundOpacity ?? appearance.backgroundOpacity,
             backgroundBlurRadius: overrides.backgroundBlurRadius ?? appearance.backgroundBlurRadius,
             transparencyChromeTheme: appearance.transparencyChromeTheme,
-            auroraEnabled: appearance.auroraEnabled
+            auroraEnabled: appearance.auroraEnabled,
+            // Status-bar UI preference: stays global (not overridable per-project)
+            // for the same reason as auroraEnabled — it's a user choice, not a
+            // project setting. Round-tripped here so the merge does not silently
+            // reset the field to its default after `.cocxy.toml` overrides apply.
+            rateLimitIndicatorEnabled: appearance.rateLimitIndicatorEnabled
         )
 
         let mergedKeybindings: KeybindingsConfig
@@ -221,7 +232,13 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             keybindings: mergedKeybindings,
             sessions: sessions,
             worktree: mergedWorktree,
-            github: mergedGitHub
+            github: mergedGitHub,
+            // Notes config is global by design (storage path, search
+            // engine, shortcut, format, auto-save) — they are user-level
+            // preferences, not project-level. Preserved verbatim through
+            // the project-overrides merge so a `.cocxy.toml` cannot
+            // accidentally clobber them.
+            notes: notes
         )
     }
 }
@@ -303,6 +320,20 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     /// Hot-reloadable via `ConfigService.configChangedPublisher`.
     let auroraEnabled: Bool
 
+    /// Switch for the status-bar rate-limit indicator pill.
+    ///
+    /// When `true` (default), the pill appears in the status bar whenever
+    /// the active tab's resolved agent has a registered
+    /// `RateLimitProviding` implementation that returns a non-nil
+    /// snapshot. When `false`, the wiring in `refreshStatusBar()` clears
+    /// the probe's active agent so the pill stays hidden regardless of
+    /// the agent or its provider's snapshot.
+    ///
+    /// Defaults to `true` so legacy configs and fresh installs see the
+    /// indicator without any extra opt-in. Hot-reloadable via
+    /// `ConfigService.configChangedPublisher`.
+    let rateLimitIndicatorEnabled: Bool
+
     /// Effective horizontal padding (prefers windowPaddingX, falls back to windowPadding).
     var effectivePaddingX: Double { windowPaddingX ?? windowPadding }
     /// Effective vertical padding (prefers windowPaddingY, falls back to windowPadding).
@@ -322,7 +353,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         backgroundOpacity: Double,
         backgroundBlurRadius: Double,
         transparencyChromeTheme: TransparencyChromeTheme = .followSystem,
-        auroraEnabled: Bool = true
+        auroraEnabled: Bool = true,
+        rateLimitIndicatorEnabled: Bool = true
     ) {
         self.theme = theme
         self.lightTheme = lightTheme
@@ -338,6 +370,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         self.backgroundBlurRadius = backgroundBlurRadius
         self.transparencyChromeTheme = transparencyChromeTheme
         self.auroraEnabled = auroraEnabled
+        self.rateLimitIndicatorEnabled = rateLimitIndicatorEnabled
     }
 
     static var defaults: AppearanceConfig {
@@ -355,15 +388,17 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             backgroundOpacity: 1.0,
             backgroundBlurRadius: 0,
             transparencyChromeTheme: .followSystem,
-            auroraEnabled: true
+            auroraEnabled: true,
+            rateLimitIndicatorEnabled: true
         )
     }
 
     // MARK: - Codable
 
     /// Backwards-compatible decoding: configs persisted before the
-    /// `transparencyChromeTheme` or `auroraEnabled` keys existed decode
-    /// cleanly with their runtime defaults.
+    /// `transparencyChromeTheme`, `auroraEnabled`, or
+    /// `rateLimitIndicatorEnabled` keys existed decode cleanly with their
+    /// runtime defaults.
     private enum CodingKeys: String, CodingKey {
         case theme
         case lightTheme
@@ -379,6 +414,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         case backgroundBlurRadius
         case transparencyChromeTheme
         case auroraEnabled
+        case rateLimitIndicatorEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -403,6 +439,10 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             Bool.self,
             forKey: .auroraEnabled
         ) ?? AppearanceConfig.defaults.auroraEnabled
+        self.rateLimitIndicatorEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .rateLimitIndicatorEnabled
+        ) ?? AppearanceConfig.defaults.rateLimitIndicatorEnabled
     }
 }
 
@@ -873,6 +913,122 @@ struct GitHubConfig: Codable, Sendable, Equatable {
         self.includeDrafts = try container.decodeIfPresent(Bool.self, forKey: .includeDrafts) ?? defaults.includeDrafts
         self.defaultState = try container.decodeIfPresent(String.self, forKey: .defaultState) ?? defaults.defaultState
         self.mergeEnabled = try container.decodeIfPresent(Bool.self, forKey: .mergeEnabled) ?? defaults.mergeEnabled
+    }
+}
+
+// MARK: - Notes Config
+
+/// `[notes]` section of the configuration.
+///
+/// Controls the per-workspace notes feature: storage location, on-disk
+/// format, the search backend, the shortcut that opens the editor, and
+/// the auto-save behaviour. All knobs are global (user-level) — no
+/// per-project override exists, by design — so a `.cocxy.toml` cannot
+/// accidentally redirect notes onto a different folder for one repo.
+struct NotesConfig: Codable, Sendable, Equatable {
+
+    /// Master switch. When `false`, the wiring layer skips registering
+    /// the shortcut, hides the sidebar section, and never instantiates
+    /// the store / search engine.
+    let enabled: Bool
+
+    /// On-disk format used by the store when persisting notes. See
+    /// `NoteFormat` for the trade-offs between the two formats.
+    let format: NoteFormat
+
+    /// Backend the search bar uses when the user types a query. See
+    /// `NoteSearchEngineKind` for the trade-offs between the three
+    /// implementations.
+    let searchEngine: NoteSearchEngineKind
+
+    /// Directory where every workspace's notes folder lives. Tilde
+    /// (`~`) is expanded by the consumer at use time so the canonical
+    /// representation in TOML stays portable across users.
+    let storageDir: String
+
+    /// Keyboard shortcut that opens the notes overlay. Stored as a
+    /// canonical lower-case `cmd+alt+n` string and parsed by the
+    /// keybindings layer at install time.
+    let shortcut: String
+
+    /// Whether the editor auto-saves on edit (debounced) or only on
+    /// explicit save. Defaults to `true` so users do not lose work.
+    let autoSave: Bool
+
+    /// Debounce window for `autoSave` in seconds. Used as the
+    /// `autoSaveInterval` of the underlying `NoteStore`. Stored as
+    /// `Double` so users can pick `0.5` for a snappy save without
+    /// having to opt out of auto-save altogether.
+    let autoSaveIntervalSeconds: Double
+
+    /// Sensible defaults for a fresh install or a config that did not
+    /// declare the `[notes]` section. Match the values the
+    /// `generateDefaultToml` template emits so a user who has never
+    /// edited their config sees the same behaviour as the documented
+    /// defaults.
+    static var defaults: NotesConfig {
+        NotesConfig(
+            enabled: true,
+            format: .markdown,
+            searchEngine: .grep,
+            storageDir: "~/.config/cocxy/notes",
+            shortcut: "cmd+alt+n",
+            autoSave: true,
+            autoSaveIntervalSeconds: 5
+        )
+    }
+
+    init(
+        enabled: Bool = true,
+        format: NoteFormat = .markdown,
+        searchEngine: NoteSearchEngineKind = .grep,
+        storageDir: String = "~/.config/cocxy/notes",
+        shortcut: String = "cmd+alt+n",
+        autoSave: Bool = true,
+        autoSaveIntervalSeconds: Double = 5
+    ) {
+        self.enabled = enabled
+        self.format = format
+        self.searchEngine = searchEngine
+        self.storageDir = storageDir
+        self.shortcut = shortcut
+        self.autoSave = autoSave
+        self.autoSaveIntervalSeconds = autoSaveIntervalSeconds
+    }
+
+    // MARK: - Codable — tolerant decoding
+
+    /// Backwards-compatible decoding so configs persisted before the
+    /// `[notes]` section existed decode cleanly with their runtime
+    /// defaults. Every key is optional with a fallback so a damaged or
+    /// truncated TOML never blocks the load path.
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case format
+        case searchEngine
+        case storageDir
+        case shortcut
+        case autoSave
+        case autoSaveIntervalSeconds
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = NotesConfig.defaults
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+            ?? defaults.enabled
+        self.format = try container.decodeIfPresent(NoteFormat.self, forKey: .format)
+            ?? defaults.format
+        self.searchEngine = try container.decodeIfPresent(NoteSearchEngineKind.self, forKey: .searchEngine)
+            ?? defaults.searchEngine
+        self.storageDir = try container.decodeIfPresent(String.self, forKey: .storageDir)
+            ?? defaults.storageDir
+        self.shortcut = try container.decodeIfPresent(String.self, forKey: .shortcut)
+            ?? defaults.shortcut
+        self.autoSave = try container.decodeIfPresent(Bool.self, forKey: .autoSave)
+            ?? defaults.autoSave
+        self.autoSaveIntervalSeconds = try container.decodeIfPresent(Double.self, forKey: .autoSaveIntervalSeconds)
+            ?? defaults.autoSaveIntervalSeconds
     }
 }
 

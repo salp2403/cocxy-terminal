@@ -150,6 +150,42 @@ struct KeybindingsConfig: Codable, Sendable, Equatable {
         return resolved != entry.defaultShortcut.canonical
     }
 
+    /// Applies a catalog shortcut fallback for features that historically
+    /// exposed their own shortcut key outside `[keybindings]`.
+    ///
+    /// Explicit `[keybindings]` entries always win. When no explicit override
+    /// exists, a valid fallback becomes the resolved shortcut for the catalog
+    /// action; default-equivalent values stay implicit so TOML output remains
+    /// compact and the Keybindings editor still treats them as defaults.
+    func applyingFallbackShortcut(actionId: String, shortcut rawShortcut: String) -> KeybindingsConfig {
+        guard legacyValue(forActionId: actionId) == nil,
+              customOverrides[actionId] == nil,
+              let action = KeybindingAction.catalogEntry(for: actionId),
+              let parsed = KeybindingShortcut.parse(rawShortcut)
+        else {
+            return self
+        }
+
+        let canonical = parsed.canonical
+        guard canonical != action.defaultShortcut.canonical else {
+            return self
+        }
+
+        var overrides = customOverrides
+        overrides[actionId] = canonical
+        return KeybindingsConfig(
+            newTab: newTab,
+            closeTab: closeTab,
+            nextTab: nextTab,
+            prevTab: prevTab,
+            splitVertical: splitVertical,
+            splitHorizontal: splitHorizontal,
+            gotoAttention: gotoAttention,
+            toggleQuickTerminal: toggleQuickTerminal,
+            customOverrides: overrides
+        )
+    }
+
     /// Reads the legacy typed field that corresponds to this action id, if any.
     private func legacyValue(forActionId actionId: String) -> String? {
         switch actionId {

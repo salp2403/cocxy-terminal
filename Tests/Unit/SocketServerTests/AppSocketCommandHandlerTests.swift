@@ -502,6 +502,62 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertNotNil(response.data?["value"])
     }
 
+    func test_configGet_notesKeys_returnsDefaults() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-notes",
+            command: "config-get",
+            params: ["key": "notes.enabled"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "notes.enabled")
+        XCTAssertEqual(response.data?["value"], "\(NotesConfig.defaults.enabled)")
+    }
+
+    func test_configGet_rateLimitIndicatorKey_returnsDefault() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-rate-limit",
+            command: "config-get",
+            params: ["key": "appearance.rate-limit-indicator-enabled"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "appearance.rate-limit-indicator-enabled")
+        XCTAssertEqual(response.data?["value"], "\(AppearanceConfig.defaults.rateLimitIndicatorEnabled)")
+    }
+
+    func test_configGet_auroraEnabledKey_returnsDefault() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-aurora-enabled",
+            command: "config-get",
+            params: ["key": "appearance.aurora-enabled"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "appearance.aurora-enabled")
+        XCTAssertEqual(response.data?["value"], "\(AppearanceConfig.defaults.auroraEnabled)")
+    }
+
+    func test_configList_includesNewNotesAndRateLimitKeys() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(id: "cl-new-keys", command: "config-list", params: nil))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["notes.enabled"], "\(NotesConfig.defaults.enabled)")
+        XCTAssertEqual(response.data?["notes.shortcut"], NotesConfig.defaults.shortcut)
+        XCTAssertEqual(response.data?["appearance.aurora-enabled"], "\(AppearanceConfig.defaults.auroraEnabled)")
+        XCTAssertEqual(
+            response.data?["appearance.rate-limit-indicator-enabled"],
+            "\(AppearanceConfig.defaults.rateLimitIndicatorEnabled)"
+        )
+    }
+
     // MARK: config-set
 
     func test_configSet_withMissingKey_returnsError() {

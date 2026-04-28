@@ -136,6 +136,19 @@ final class AuroraChromeController: ObservableObject {
     /// open the same overlay.
     var onToggleNotifications: (() -> Void)?
 
+    /// Invoked when the user clicks the note glyph in the Aurora
+    /// sidebar tray. The host wires this to `toggleNotes()` so the
+    /// per-workspace notes overlay opens for the visible tab. Stays
+    /// `nil` while `[notes].enabled = false` so the sidebar tray
+    /// suppresses the button entirely.
+    ///
+    /// This is published because the sidebar renders the note button
+    /// from the closure's presence. Config reloads may toggle
+    /// `[notes].enabled` without changing workspaces or any other
+    /// published Aurora state, so the closure itself has to invalidate
+    /// the SwiftUI host.
+    @Published var onToggleNotes: (() -> Void)?
+
     /// Invoked when the user clicks the update button shown after a
     /// silent Sparkle availability probe finds a new Cocxy version.
     var onInstallUpdate: (() -> Void)?
@@ -504,6 +517,9 @@ struct AuroraSidebarHost: View {
                 }
             },
             onToggleNotifications: controller.onToggleNotifications.map { handler in
+                { handler() }
+            },
+            onToggleNotes: controller.onToggleNotes.map { handler in
                 { handler() }
             },
             onInstallUpdate: controller.availableUpdate.map { _ in

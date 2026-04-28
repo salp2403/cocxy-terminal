@@ -129,6 +129,26 @@ extension MainWindowController {
            appDelegate.windowController === self {
             appDelegate.applyBridgeConfigurationChanges(from: old, to: config)
         }
+
+        // Status-bar UI flags live outside the bridge predicate above
+        // because they affect rendering only. `subscribeToConfigChanges`
+        // funnels every config update through `applyConfig`, but the
+        // status bar refresh path is otherwise driven by tab / agent
+        // events — without an explicit hook here, toggling the
+        // rate-limit indicator preference would not take effect until
+        // the next unrelated refresh trigger fired (focus change,
+        // process exit, polling tick five minutes later). Detect the
+        // flip and call `refreshStatusBar()` so the pill appears or
+        // disappears immediately on save, matching the hot-reload
+        // behaviour the rest of the appearance section already has.
+        if old?.appearance.rateLimitIndicatorEnabled
+            != config.appearance.rateLimitIndicatorEnabled {
+            refreshStatusBar()
+        }
+
+        if old?.notes != config.notes {
+            handleNotesConfigChanged(config.notes)
+        }
     }
 
     // MARK: - Tab Position

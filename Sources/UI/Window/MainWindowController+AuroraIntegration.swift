@@ -55,6 +55,13 @@ extension MainWindowController {
             reconcileAuroraAgentStateFromVisibleBuffers()
             auroraChromeController?.setPaletteActions(buildAuroraPaletteActions())
             refreshAuroraShortcutLabels()
+            // The notes tray button visibility tracks `[notes].enabled`
+            // and must be re-evaluated on every config reload. The
+            // helper is no-op when the controller is nil so this stays
+            // safe during the very first install pass.
+            if let controller = auroraChromeController {
+                refreshAuroraNotesAvailability(on: controller)
+            }
             applyAuroraChromeVisibility(true)
         } else if auroraChromeController != nil {
             applyAuroraChromeVisibility(false)
@@ -139,6 +146,24 @@ extension MainWindowController {
         in config: KeybindingsConfig
     ) -> String {
         Self.auroraShortcutLabel(for: action, in: config)
+    }
+
+    /// Sets `controller.onToggleNotes` to a non-nil closure when the
+    /// notes feature is enabled in the live configuration, and to
+    /// `nil` otherwise. The Aurora sidebar tray surfaces the note
+    /// glyph only while the closure is provided, so toggling the
+    /// preference (or shipping a build that defaults `enabled = false`)
+    /// makes the affordance disappear without the sidebar having to
+    /// know about `NotesConfig`.
+    func refreshAuroraNotesAvailability(on controller: AuroraChromeController) {
+        let enabled = configService?.current.notes.enabled ?? NotesConfig.defaults.enabled
+        if enabled {
+            controller.onToggleNotes = { [weak self] in
+                self?.toggleNotes()
+            }
+        } else {
+            controller.onToggleNotes = nil
+        }
     }
 
     /// Applies the Aurora chrome state using the current `ConfigService`
@@ -239,6 +264,12 @@ extension MainWindowController {
         controller.onToggleNotifications = { [weak self] in
             self?.toggleNotificationPanel()
         }
+        // Notes tray button is only meaningful when the user has the
+        // feature enabled in `[notes]`. Initialise the callback once
+        // here and let `refreshAuroraNotesAvailability` toggle it on
+        // every config reload so the sidebar tracks `[notes].enabled`
+        // without rebuilding the controller.
+        refreshAuroraNotesAvailability(on: controller)
         controller.onInstallUpdate = { [weak self] in
             self?.sparkleUpdater?.checkForUpdates()
         }

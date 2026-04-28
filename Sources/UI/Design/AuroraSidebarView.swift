@@ -58,6 +58,13 @@ extension Design {
         /// notification center can omit it; the header renders the
         /// bell glyph when a handler is provided.
         var onToggleNotifications: (() -> Void)? = nil
+        /// Optional callback for the notes tray button. Stays optional
+        /// so tests, previews, and configurations with `[notes].enabled
+        /// = false` can omit it; the header renders the note glyph
+        /// only when a handler is provided so the affordance disappears
+        /// when the feature is turned off instead of leaking a button
+        /// that does nothing.
+        var onToggleNotes: (() -> Void)? = nil
         /// Optional callback shown only when `availableUpdate` exists.
         /// The host routes this to Sparkle's user-initiated update check.
         var onInstallUpdate: (() -> Void)? = nil
@@ -128,6 +135,13 @@ extension Design {
                     help: "Command palette (\(paletteShortcutLabel))",
                     action: onTogglePalette
                 )
+                if let onToggleNotes {
+                    trayIconButton(
+                        systemImage: "note.text",
+                        help: "Toggle notes for this workspace",
+                        action: onToggleNotes
+                    )
+                }
                 if let onToggleNotifications {
                     trayIconButton(
                         systemImage: "bell",

@@ -415,6 +415,80 @@ struct EditableAppearanceSection: View {
                 }
             }
 
+            Section("Status bar") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(
+                        "Show rate-limit indicator",
+                        isOn: $viewModel.rateLimitIndicatorEnabled
+                    )
+                    .help(
+                        "Displays a status-bar pill with locally-estimated "
+                        + "usage for the active agent. The pill only appears "
+                        + "when the active agent has a registered local "
+                        + "provider with available data — turning this off "
+                        + "hides it for every agent."
+                    )
+                    Text(
+                        "Reads only local files the agent's CLI already keeps "
+                        + "on disk. No data leaves your machine."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Section("Notes") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("Enable workspace notes", isOn: $viewModel.notesEnabled)
+                        .help("Shows the Notes panel and enables the configured notes shortcut.")
+
+                    Picker("Format", selection: $viewModel.notesFormat) {
+                        ForEach(NoteFormat.allCases, id: \.rawValue) { format in
+                            Text(format.rawValue).tag(format.rawValue)
+                        }
+                    }
+                    .disabled(!viewModel.notesEnabled)
+
+                    Picker("Search", selection: $viewModel.notesSearchEngine) {
+                        ForEach(NoteSearchEngineKind.allCases, id: \.rawValue) { engine in
+                            Text(engine.rawValue).tag(engine.rawValue)
+                        }
+                    }
+                    .disabled(!viewModel.notesEnabled)
+
+                    TextField("Storage directory", text: $viewModel.notesStorageDir)
+                        .disabled(!viewModel.notesEnabled)
+
+                    TextField("Shortcut", text: $viewModel.notesShortcut)
+                        .disabled(!viewModel.notesEnabled)
+
+                    Toggle("Auto-save notes", isOn: $viewModel.notesAutoSave)
+                        .disabled(!viewModel.notesEnabled)
+
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text("Auto-save interval")
+                            Spacer()
+                            Text("\(viewModel.notesAutoSaveIntervalSeconds, specifier: "%.1f") s")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Slider(
+                            value: $viewModel.notesAutoSaveIntervalSeconds,
+                            in: 0.1...60,
+                            step: 0.1
+                        )
+                        .disabled(!viewModel.notesEnabled || !viewModel.notesAutoSave)
+                    }
+
+                    Text("Notes are stored per workspace under the configured local folder.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Section("Transparency") {
                 VStack(alignment: .leading) {
                     HStack {

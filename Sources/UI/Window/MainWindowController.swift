@@ -286,6 +286,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// preload a pane view model with a stubbed service.
     var injectedGitHubPaneViewModel: GitHubPaneViewModel?
 
+    // MARK: - Notes Overlay State
+
+    var notesViewModel: NotesViewModel?
+    var notesHostingView: NSHostingView<NotesOverlayView>?
+    var isNotesVisible: Bool = false
+
     /// Forced `NSAppearance` applied to every translucent vibrancy view.
     ///
     /// Cached from the last call to `applyEffectiveAppearance` so new
@@ -465,10 +471,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     private(set) var processMonitor: ProcessMonitorService?
 
     /// Local-only usage probe that feeds the status-bar rate-limit
-    /// indicator. The initial provider set is intentionally narrow:
-    /// unsupported agents resolve to nil and hide the pill.
+    /// indicator. Registers one provider per supported agent so the
+    /// resolver can map detected agents onto the canonical
+    /// `RateLimitSnapshot.AgentKind` without producing "no provider"
+    /// holes. Providers with no documented local surface return `nil`
+    /// from `snapshot()` and the pill hides silently — see
+    /// `CodexUsageProvider` for the canonical example. Unsupported
+    /// agents (no entry in the dictionary) also resolve to nil.
     let rateLimitProbeService = RateLimitProbeService(
-        providers: [.claude: ClaudeUsageProvider()]
+        providers: [
+            .claude: ClaudeUsageProvider(),
+            .codex: CodexUsageProvider(),
+        ]
     )
 
     /// Subscription that refreshes the status bar whenever the probe
@@ -1570,6 +1584,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             if isTimelineVisible { dismissTimeline() }
             if isNotificationPanelVisible { dismissNotificationPanel() }
             if isBrowserVisible { dismissBrowser() }
+            if isNotesVisible { dismissNotes() }
         }
 
         // Collapse sidebar when window is very narrow.
@@ -1577,7 +1592,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             toggleTabBarAction(nil)
         }
 
-        if isTimelineVisible || isDashboardVisible || isCodeReviewVisible || isGitHubPaneVisible {
+        if isTimelineVisible || isDashboardVisible || isCodeReviewVisible || isGitHubPaneVisible || isNotesVisible {
             layoutRightDockedAgentPanels()
         }
     }
@@ -1915,6 +1930,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         refreshTabStrip(syncFromFirstResponder: false)
         updateAgentProgressOverlay()
         applyProjectConfig(for: tabID)
+        refreshNotesForVisibleTabIfNeeded()
     }
 
     private func isVisibleHierarchyAttached(for tabID: TabID, in container: NSView) -> Bool {

@@ -98,10 +98,21 @@ extension MainWindowController {
     /// Refreshes the status bar content.
     func refreshStatusBar() {
         let activeTab = tabManager.activeTab
-        let rateLimitAgent = activeTab.flatMap(activeRateLimitAgentKind(for:))
+        let appearance = configService?.current.appearance
+        // The rate-limit indicator pill follows two gates: the active
+        // agent must resolve to a registered provider AND the user
+        // preference must be on. Defaulting to `true` keeps legacy
+        // configs / first launches showing the pill, matching the
+        // behaviour shipped before this preference existed.
+        let indicatorEnabled = appearance?.rateLimitIndicatorEnabled ?? true
+        let rateLimitAgent: RateLimitSnapshot.AgentKind?
+        if indicatorEnabled {
+            rateLimitAgent = activeTab.flatMap(activeRateLimitAgentKind(for:))
+        } else {
+            rateLimitAgent = nil
+        }
         rateLimitProbeService.setActiveAgent(rateLimitAgent)
 
-        let appearance = configService?.current.appearance
         let isTransparent = (appearance?.backgroundOpacity ?? 1.0) < 1.0
         var statusBar = StatusBarView(
             hostname: currentHostname(),

@@ -199,6 +199,13 @@ final class ConfigService: ConfigProviding {
         # sidebar / status bar while keeping the rest of the terminal
         # behavior unchanged.
         aurora-enabled = \(defaults.appearance.auroraEnabled)
+        # Rate-limit indicator pill in the status bar. Shows local-only,
+        # estimated usage for agents that expose a stable usage source
+        # (currently Claude Code via ~/.claude/metrics/costs.jsonl). Set
+        # to false to hide the pill entirely; the pill is also hidden
+        # when the active agent has no provider or its provider returns
+        # no data.
+        rate-limit-indicator-enabled = \(defaults.appearance.rateLimitIndicatorEnabled)
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
@@ -313,6 +320,45 @@ final class ConfigService: ConfigProviding {
         # `cocxy github pr-merge` CLI verb. The flag is a defensive
         # safety net; leave it on for normal operation.
         merge-enabled = \(defaults.github.mergeEnabled)
+
+        [notes]
+        # Per-workspace notes feature. The notes overlay appears in the
+        # sidebar and the editor opens with the configured shortcut.
+        # Set to false to hide the feature entirely; the wiring layer
+        # does not register the shortcut nor the sidebar section when
+        # disabled.
+        enabled = \(defaults.notes.enabled)
+        # On-disk format for stored notes:
+        #   * "markdown"             — plain markdown body, no metadata.
+        #   * "markdown-frontmatter" — markdown body preceded by a YAML
+        #                              metadata block (title, id,
+        #                              timestamps).
+        format = "\(defaults.notes.format.rawValue)"
+        # Search backend used by the notes search bar:
+        #   * "grep"      — case-insensitive substring match in memory.
+        #                   Default; zero dependencies.
+        #   * "fts5"      — SQLite FTS5 in-memory index. Requires the
+        #                   `sqlite3` CLI on the user's PATH.
+        #   * "spotlight" — `mdfind` against the macOS Spotlight index.
+        #                   Only matches notes Spotlight has indexed; by
+        #                   default ~/.config/ is excluded so users have
+        #                   to opt the notes folder into the index.
+        search-engine = "\(defaults.notes.searchEngine.rawValue)"
+        # Directory where workspace-id sub-folders containing the
+        # individual note `.md` files live. Tilde is expanded by the
+        # consumer at use time.
+        storage-dir = "\(defaults.notes.storageDir)"
+        # Keyboard shortcut that opens the notes editor overlay.
+        # Cmd+N and Cmd+Shift+N are reserved for terminal actions, so
+        # the default lives on Cmd+Option+N.
+        shortcut = "\(defaults.notes.shortcut)"
+        # Whether the editor saves on every keystroke (debounced) or
+        # only on explicit Cmd+S. Defaults to true so users do not
+        # lose work if the window closes unexpectedly.
+        auto-save = \(defaults.notes.autoSave)
+        # Debounce window for auto-save in seconds. Clamped to
+        # [0.1, 60] at parse time so a typo cannot disable saving.
+        auto-save-interval-seconds = \(defaults.notes.autoSaveIntervalSeconds)
         """
     }
 
@@ -338,10 +384,15 @@ final class ConfigService: ConfigProviding {
         let codeReview = parseCodeReviewConfig(from: parsed)
         let notifications = parseNotificationConfig(from: parsed)
         let quickTerminal = parseQuickTerminalConfig(from: parsed)
-        let keybindings = parseKeybindingsConfig(from: parsed)
         let sessions = parseSessionsConfig(from: parsed)
         let worktree = parseWorktreeConfig(from: parsed)
         let github = parseGitHubConfig(from: parsed)
+        let notes = parseNotesConfig(from: parsed)
+        let keybindings = parseKeybindingsConfig(from: parsed)
+            .applyingFallbackShortcut(
+                actionId: KeybindingActionCatalog.windowNotes.id,
+                shortcut: notes.shortcut
+            )
 
         return CocxyConfig(
             general: general,
@@ -354,7 +405,8 @@ final class ConfigService: ConfigProviding {
             keybindings: keybindings,
             sessions: sessions,
             worktree: worktree,
-            github: github
+            github: github,
+            notes: notes
         )
     }
 
@@ -417,7 +469,9 @@ final class ConfigService: ConfigProviding {
             backgroundOpacity: clamp(rawOpacity, min: 0.1, max: 1.0),
             backgroundBlurRadius: clamp(rawBlur, min: 0, max: 100),
             transparencyChromeTheme: chromeTheme,
-            auroraEnabled: boolValue(table["aurora-enabled"]) ?? defaults.auroraEnabled
+            auroraEnabled: boolValue(table["aurora-enabled"]) ?? defaults.auroraEnabled,
+            rateLimitIndicatorEnabled: boolValue(table["rate-limit-indicator-enabled"])
+                ?? defaults.rateLimitIndicatorEnabled
         )
     }
 
@@ -720,6 +774,41 @@ final class ConfigService: ConfigProviding {
             defaultState: validatedState,
             mergeEnabled: boolValue(table["merge-enabled"]) ?? defaults.mergeEnabled
         )
+    }
+
+    /// Parses the `[notes]` section with tolerant validation. Every
+    /// field falls back to the runtime default on a missing key, a
+    /// wrong-shaped value, or a typo in an enum-backed option, so a
+    /// malformed config never blocks the load path.
+    private func parseNotesConfig(from parsed: [String: TOMLValue]) -> NotesConfig {
+        let table = extractTable("notes", from: parsed)
+        let defaults = NotesConfig.defaults
+
+        let format = NoteFormat.parse(stringValue(table["format"]))
+        let searchEngine = NoteSearchEngineKind.parse(stringValue(table["search-engine"]))
+
+        let rawAutoSaveInterval = doubleValue(table["auto-save-interval-seconds"])
+            ?? defaults.autoSaveIntervalSeconds
+        let clampedAutoSaveInterval = clamp(rawAutoSaveInterval, min: 0.1, max: 60)
+
+        return NotesConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            format: format,
+            searchEngine: searchEngine,
+            storageDir: stringValue(table["storage-dir"]) ?? defaults.storageDir,
+            shortcut: normalizedNotesShortcut(stringValue(table["shortcut"]) ?? defaults.shortcut),
+            autoSave: boolValue(table["auto-save"]) ?? defaults.autoSave,
+            autoSaveIntervalSeconds: clampedAutoSaveInterval
+        )
+    }
+
+    private func normalizedNotesShortcut(_ rawShortcut: String) -> String {
+        guard let parsed = KeybindingShortcut.parse(rawShortcut),
+              parsed.isAssignableToMenuItem
+        else {
+            return NotesConfig.defaults.shortcut
+        }
+        return parsed.canonical
     }
 
     // MARK: - Value Extractors

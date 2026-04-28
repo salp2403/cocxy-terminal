@@ -334,6 +334,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
             ("dashboard.toggle", KeybindingActionCatalog.reviewDashboard.id),
             ("agent.review", KeybindingActionCatalog.reviewCodeReview.id),
             ("github.toggle", KeybindingActionCatalog.windowGitHubPane.id),
+            ("notes.toggle", KeybindingActionCatalog.windowNotes.id),
             ("timeline.toggle", KeybindingActionCatalog.reviewTimeline.id),
             ("search.toggle", KeybindingActionCatalog.editorFind.id),
             ("editor.zoomIn", KeybindingActionCatalog.editorZoomIn.id),

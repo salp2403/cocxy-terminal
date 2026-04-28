@@ -111,6 +111,7 @@ extension MainWindowController {
         "dashboard.toggle": KeybindingActionCatalog.reviewDashboard.id,
         "agent.review": KeybindingActionCatalog.reviewCodeReview.id,
         "github.toggle": KeybindingActionCatalog.windowGitHubPane.id,
+        "notes.toggle": KeybindingActionCatalog.windowNotes.id,
         "timeline.toggle": KeybindingActionCatalog.reviewTimeline.id,
         "search.toggle": KeybindingActionCatalog.editorFind.id,
         "editor.zoomIn": KeybindingActionCatalog.editorZoomIn.id,
@@ -302,6 +303,17 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleGitHubPane() }
+                }
+            ),
+            CommandAction(
+                id: "notes.toggle",
+                name: "Toggle Notes",
+                description: "Show or hide per-workspace notes",
+                shortcut: paletteShortcutLabel("notes.toggle", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.toggleNotes() }
                 }
             ),
             CommandAction(
@@ -1521,11 +1533,17 @@ extension MainWindowController {
             syncGitHubPaneRootView(panelWidth: ghWidth)
         }
 
+        if isNotesVisible {
+            let notesWidth = clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width)
+            syncNotesRootView(panelWidth: notesWidth)
+        }
+
         let visiblePanels: [DockedPanel] = [
             isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!, avoidsStatusBar: false) : nil,
             isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!, avoidsStatusBar: false) : nil,
             isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!, avoidsStatusBar: true) : nil,
-            isGitHubPaneVisible ? DockedPanel(width: gitHubPanePanelWidth, view: gitHubPaneHostingView!, avoidsStatusBar: true) : nil
+            isGitHubPaneVisible ? DockedPanel(width: gitHubPanePanelWidth, view: gitHubPaneHostingView!, avoidsStatusBar: true) : nil,
+            isNotesVisible ? DockedPanel(width: clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width), view: notesHostingView!, avoidsStatusBar: true) : nil
         ].compactMap { $0 }
 
         var currentX = overlayContainer.bounds.width
@@ -2009,6 +2027,8 @@ extension MainWindowController {
             dismissBrowserBookmarks()
         } else if isBrowserVisible {
             dismissBrowser()
+        } else if isNotesVisible {
+            dismissNotes()
         } else if isNotificationPanelVisible {
             dismissNotificationPanel()
         } else if codeReviewSuggestionHostingView != nil {
