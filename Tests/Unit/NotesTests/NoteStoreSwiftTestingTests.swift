@@ -130,10 +130,11 @@ struct NoteStoreSwiftTestingTests {
         #expect(loaded?.id == saved.id)
         #expect(loaded?.body == "# Title\nbody")
         // Timestamps round-trip with second-level precision because the
-        // ISO-8601 formatter strips fractional seconds.
-        let savedSecond = Int(saved.createdAt.timeIntervalSince1970)
-        let loadedSecond = loaded.map { Int($0.createdAt.timeIntervalSince1970) }
-        #expect(loadedSecond == savedSecond)
+        // ISO-8601 formatter strips fractional seconds. The formatter may
+        // round a value very close to the next second upward, so compare the
+        // actual delta rather than truncating both sides with Int().
+        let loadedCreatedAt = try #require(loaded?.createdAt)
+        #expect(abs(loadedCreatedAt.timeIntervalSince(saved.createdAt)) < 1)
     }
 
     // MARK: - Save / update
