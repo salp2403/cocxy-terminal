@@ -34,6 +34,7 @@ extension MainWindowController {
         let panelWidth = clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width)
         let swiftUIView = makeNotesOverlayView(viewModel: viewModel, panelWidth: panelWidth)
         let hostingView = NSHostingView(rootView: swiftUIView)
+        hostingView.appearance = Design.appearance(for: swiftUIView.themeIdentity)
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
@@ -87,6 +88,9 @@ extension MainWindowController {
         if !config.enabled {
             if isNotesVisible { dismissNotes() }
             notesViewModel = nil
+            notesChangeCancellable?.cancel()
+            notesChangeCancellable = nil
+            auroraChromeController?.refreshNotesSummaries()
             return
         }
 
@@ -198,7 +202,9 @@ extension MainWindowController {
         let width = panelWidth ?? clampedNotesPanelWidth(
             containerWidth: overlayContainerView?.bounds.width ?? NotesOverlayView.defaultPanelWidth
         )
-        hostingView.rootView = makeNotesOverlayView(viewModel: viewModel, panelWidth: width)
+        let swiftUIView = makeNotesOverlayView(viewModel: viewModel, panelWidth: width)
+        hostingView.appearance = Design.appearance(for: swiftUIView.themeIdentity)
+        hostingView.rootView = swiftUIView
     }
 
     private func makeNotesOverlayView(

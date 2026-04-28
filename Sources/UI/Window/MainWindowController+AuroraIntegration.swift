@@ -148,22 +148,31 @@ extension MainWindowController {
         Self.auroraShortcutLabel(for: action, in: config)
     }
 
-    /// Sets `controller.onToggleNotes` to a non-nil closure when the
-    /// notes feature is enabled in the live configuration, and to
-    /// `nil` otherwise. The Aurora sidebar tray surfaces the note
-    /// glyph only while the closure is provided, so toggling the
-    /// preference (or shipping a build that defaults `enabled = false`)
-    /// makes the affordance disappear without the sidebar having to
-    /// know about `NotesConfig`.
+    /// Wires every Aurora sidebar Notes affordance from the live
+    /// `[notes]` configuration. When Notes is enabled, the tray button,
+    /// per-workspace summaries provider and row-open callback are all
+    /// active. When disabled, every hook is cleared and the published
+    /// summaries map is refreshed to empty so config hot-reload cannot
+    /// leave stale "Notes" sections visible under workspaces.
     func refreshAuroraNotesAvailability(on controller: AuroraChromeController) {
         let enabled = configService?.current.notes.enabled ?? NotesConfig.defaults.enabled
         if enabled {
             controller.onToggleNotes = { [weak self] in
                 self?.toggleNotes()
             }
+            controller.notesSummariesProvider = { [weak self] workspaceIDs in
+                guard let self else { return [:] }
+                return await self.fetchAuroraNotesSummaries(for: workspaceIDs)
+            }
+            controller.onOpenNoteInWorkspace = { [weak self] workspaceID, noteID in
+                self?.openNote(workspaceIDRaw: workspaceID, noteIDRaw: noteID)
+            }
         } else {
             controller.onToggleNotes = nil
+            controller.notesSummariesProvider = nil
+            controller.onOpenNoteInWorkspace = nil
         }
+        controller.refreshNotesSummaries()
     }
 
     /// Applies the Aurora chrome state using the current `ConfigService`
@@ -270,24 +279,6 @@ extension MainWindowController {
         // every config reload so the sidebar tracks `[notes].enabled`
         // without rebuilding the controller.
         refreshAuroraNotesAvailability(on: controller)
-        // Provider for the Aurora sidebar's per-workspace notes
-        // section. The controller calls it whenever the visible
-        // workspace IDs change (or after an explicit refresh tied to
-        // a CRUD event) and publishes the result on its main-actor
-        // map. The closure is `nonisolated` from the controller's
-        // perspective; it hops to the main actor through the
-        // helper's `await` body to read configService and storage
-        // path safely.
-        controller.notesSummariesProvider = { [weak self] workspaceIDs in
-            guard let self else { return [:] }
-            return await self.fetchAuroraNotesSummaries(for: workspaceIDs)
-        }
-        // Open a sidebar note. Routes through the standard overlay
-        // lifecycle so tab focus, persistence, and selection all
-        // follow the same rules as the existing user paths.
-        controller.onOpenNoteInWorkspace = { [weak self] workspaceID, noteID in
-            self?.openNote(workspaceIDRaw: workspaceID, noteIDRaw: noteID)
-        }
         controller.onInstallUpdate = { [weak self] in
             self?.sparkleUpdater?.checkForUpdates()
         }
@@ -391,6 +382,7 @@ extension MainWindowController {
         controller.statusBarHost?.appearance = appearance
         controller.paletteHost?.appearance = appearance
         controller.sidebarTooltipHost?.appearance = appearance
+        syncNotesRootView()
     }
 
     func toggleAuroraThemeMode() {

@@ -140,4 +140,26 @@ final class OverlayContainerTests: XCTestCase {
             "Search bar must be visible after toggle"
         )
     }
+
+    func testNotesOverlayTracksAuroraThemeChanges() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.auroraChromeController = AuroraChromeController(
+            tabManager: TabManager(),
+            store: AgentStatePerSurfaceStore()
+        )
+
+        controller.showNotes()
+        XCTAssertEqual(controller.notesHostingView?.rootView.themeIdentity, .aurora)
+
+        controller.syncAuroraDesignTheme(for: .light)
+
+        XCTAssertEqual(
+            controller.notesHostingView?.rootView.themeIdentity,
+            .paper,
+            "An already-open notes overlay must re-render with the live Aurora palette when the user toggles light/dark mode."
+        )
+        XCTAssertEqual(controller.notesHostingView?.appearance?.name, NSAppearance.Name.aqua)
+    }
 }

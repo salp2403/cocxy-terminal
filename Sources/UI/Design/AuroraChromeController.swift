@@ -160,11 +160,11 @@ final class AuroraChromeController: ObservableObject {
     @Published private(set) var notesByWorkspace: [String: Design.AuroraWorkspaceNotesSummary] = [:]
 
     /// Closure provided by the host that returns notes summaries for a
-    /// set of `NoteWorkspaceID` raw values. Returning `nil` from the
-    /// provider — or leaving the provider unset — clears the published
-    /// map so the sidebar hides every notes section. Async because the
-    /// underlying `NoteStore` is an actor; the controller hops back to
-    /// the main actor before publishing.
+    /// set of `NoteWorkspaceID` raw values. Leaving the provider unset
+    /// clears the published map, and a provider can return an empty map
+    /// when Notes is disabled so the sidebar hides every notes section.
+    /// Async because the underlying `NoteStore` is an actor; the
+    /// controller hops back to the main actor before publishing.
     var notesSummariesProvider: ((Set<String>) async -> [String: Design.AuroraWorkspaceNotesSummary])?
 
     /// Invoked when the user picks a note row in the Aurora sidebar's

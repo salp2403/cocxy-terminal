@@ -93,21 +93,57 @@ struct AuroraNotesIntegrationSwiftTestingTests {
         mainController.refreshAuroraNotesAvailability(on: auroraController)
 
         #expect(auroraController.onToggleNotes != nil)
+        #expect(auroraController.notesSummariesProvider != nil)
+        #expect(auroraController.onOpenNoteInWorkspace != nil)
     }
 
-    @Test("refreshAuroraNotesAvailability clears the closure when the user has notes disabled so the sidebar tray button disappears")
-    func availabilityClearsClosureWhenDisabled() {
+    @Test("refreshAuroraNotesAvailability clears every notes hook and stale summaries when the user disables notes so the whole sidebar feature disappears")
+    func availabilityClearsHooksAndSummariesWhenDisabled() async throws {
         let mainController = makeController(notesEnabled: false)
         let auroraController = AuroraChromeController(
             tabManager: TabManager(),
             store: AgentStatePerSurfaceStore()
         )
-        // Pre-populate with a closure to make the clearing observable.
+        auroraController.workspaces = [
+            Design.AuroraWorkspace(
+                id: "alpha",
+                name: "alpha",
+                branch: nil,
+                isCollapsed: false,
+                sessions: [],
+                notesWorkspaceID: "id-alpha"
+            )
+        ]
+        // Pre-populate the full hook surface to make the clearing observable.
         auroraController.onToggleNotes = {}
+        auroraController.notesSummariesProvider = { _ in
+            [
+                "id-alpha": Design.AuroraWorkspaceNotesSummary(
+                    workspaceID: "id-alpha",
+                    count: 1,
+                    recentNotes: []
+                )
+            ]
+        }
+        auroraController.onOpenNoteInWorkspace = { _, _ in }
+        auroraController.refreshNotesSummaries()
+        _ = try await waitForMap(
+            on: auroraController,
+            condition: { $0["id-alpha"]?.count == 1 },
+            timeout: 1.0
+        )
 
         mainController.refreshAuroraNotesAvailability(on: auroraController)
 
         #expect(auroraController.onToggleNotes == nil)
+        #expect(auroraController.notesSummariesProvider == nil)
+        #expect(auroraController.onOpenNoteInWorkspace == nil)
+        let cleared = try await waitForMap(
+            on: auroraController,
+            condition: { $0.isEmpty },
+            timeout: 1.0
+        )
+        #expect(cleared.isEmpty)
     }
 
     @Test("refreshAuroraNotesAvailability defaults to enabled when no config service is wired so a fresh window does not hide the button while bootstrapping")
@@ -218,4 +254,21 @@ struct AuroraNotesIntegrationSwiftTestingTests {
 
         #expect(mainController.isNotesVisible == false)
     }
+
+    private func waitForMap(
+        on controller: AuroraChromeController,
+        condition: @escaping ([String: Design.AuroraWorkspaceNotesSummary]) -> Bool,
+        timeout: TimeInterval
+    ) async throws -> [String: Design.AuroraWorkspaceNotesSummary] {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition(controller.notesByWorkspace) {
+                return controller.notesByWorkspace
+            }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        throw WaitError.timeout
+    }
+
+    private enum WaitError: Error { case timeout }
 }
