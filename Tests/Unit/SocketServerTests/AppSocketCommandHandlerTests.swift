@@ -575,6 +575,20 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], "\(AppearanceConfig.defaults.auroraEnabled)")
     }
 
+    func test_configGet_quickSwitchModeKey_returnsDefault() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-quickswitch-mode",
+            command: "config-get",
+            params: ["key": "appearance.quickswitch-mode"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "appearance.quickswitch-mode")
+        XCTAssertEqual(response.data?["value"], AppearanceConfig.defaults.quickSwitchMode.rawValue)
+    }
+
     func test_configList_includesNewNotesAndRateLimitKeys() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(id: "cl-new-keys", command: "config-list", params: nil))
@@ -586,6 +600,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(
             response.data?["appearance.rate-limit-indicator-enabled"],
             "\(AppearanceConfig.defaults.rateLimitIndicatorEnabled)"
+        )
+        XCTAssertEqual(
+            response.data?["appearance.quickswitch-mode"],
+            AppearanceConfig.defaults.quickSwitchMode.rawValue
         )
     }
 

@@ -206,6 +206,10 @@ final class ConfigService: ConfigProviding {
         # when the active agent has no provider or its provider returns
         # no data.
         rate-limit-indicator-enabled = \(defaults.appearance.rateLimitIndicatorEnabled)
+        # unified opens the cross-surface switcher (tabs, browser tabs,
+        # worktrees and notes). tabs-only restores the legacy unread-tab
+        # rotation path for rollback.
+        quickswitch-mode = "\(defaults.appearance.quickSwitchMode.rawValue)"
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
@@ -463,6 +467,7 @@ final class ConfigService: ConfigProviding {
         let rawOpacity = doubleValue(table["background-opacity"]) ?? defaults.backgroundOpacity
         let rawBlur = doubleValue(table["background-blur-radius"]) ?? defaults.backgroundBlurRadius
         let chromeTheme = parseTransparencyChromeTheme(table["transparency-chrome-theme"])
+        let quickSwitchMode = parseQuickSwitchMode(table["quickswitch-mode"])
 
         return AppearanceConfig(
             theme: stringValue(table["theme"]) ?? defaults.theme,
@@ -480,7 +485,8 @@ final class ConfigService: ConfigProviding {
             transparencyChromeTheme: chromeTheme,
             auroraEnabled: boolValue(table["aurora-enabled"]) ?? defaults.auroraEnabled,
             rateLimitIndicatorEnabled: boolValue(table["rate-limit-indicator-enabled"])
-                ?? defaults.rateLimitIndicatorEnabled
+                ?? defaults.rateLimitIndicatorEnabled,
+            quickSwitchMode: quickSwitchMode
         )
     }
 
@@ -493,9 +499,8 @@ final class ConfigService: ConfigProviding {
     /// zero-break contract: older configs and typos never crash the app
     /// and never alter the chrome appearance.
     private func parseTransparencyChromeTheme(_ value: TOMLValue?) -> TransparencyChromeTheme {
-        guard let value else {
-            return .followSystem
-        }
+        guard let value else { return .followSystem }
+
         switch value {
         case .string(let raw):
             if let parsed = TransparencyChromeTheme(rawValue: raw) {
@@ -512,6 +517,25 @@ final class ConfigService: ConfigProviding {
             )
             return .followSystem
         }
+    }
+
+    /// Parses the `quickswitch-mode` value tolerantly.
+    ///
+    /// Accepts `"unified"` and `"tabs-only"`. Unknown or non-string values
+    /// fall back to `.unified` so the modern switcher remains the default
+    /// while preserving a safe rollback key for users who need legacy
+    /// unread-tab rotation.
+    private func parseQuickSwitchMode(_ value: TOMLValue?) -> QuickSwitchMode {
+        guard let value else { return .unified }
+        if let raw = stringValue(value) {
+            guard let mode = QuickSwitchMode(rawValue: raw) else {
+                NSLog("[ConfigService] Unknown quickswitch-mode value %@; falling back to unified.", raw)
+                return .unified
+            }
+            return mode
+        }
+        NSLog("[ConfigService] quickswitch-mode must be a string; falling back to unified.")
+        return .unified
     }
 
     /// Parses the `[terminal]` section with validation.

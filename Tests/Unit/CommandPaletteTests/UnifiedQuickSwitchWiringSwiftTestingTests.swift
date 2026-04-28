@@ -3,12 +3,56 @@
 
 import Foundation
 import Testing
+import Combine
 import CocxyShared
 @testable import CocxyTerminal
 
 @MainActor
 @Suite("Unified QuickSwitch wiring")
 struct UnifiedQuickSwitchWiringSwiftTestingTests {
+
+    private final class InMemoryConfigProvider: ConfigFileProviding, @unchecked Sendable {
+        var content: String?
+
+        init(content: String) {
+            self.content = content
+        }
+
+        func readConfigFile() -> String? { content }
+        func writeConfigFile(_ content: String) throws { self.content = content }
+    }
+
+    private final class NotificationSpy: NotificationManaging {
+        var nextUnreadTabID: TabID?
+        private(set) var gotoNextUnreadCallCount = 0
+
+        var unreadCount: Int { nextUnreadTabID == nil ? 0 : 1 }
+        var notificationsPublisher: AnyPublisher<CocxyNotification, Never> {
+            Empty().eraseToAnyPublisher()
+        }
+        var unreadCountPublisher: AnyPublisher<Int, Never> {
+            Empty().eraseToAnyPublisher()
+        }
+
+        func notify(_ notification: CocxyNotification) {}
+        func markAsRead(tabId: TabID) {}
+        func markAllAsRead() {}
+
+        func gotoNextUnread() -> TabID? {
+            gotoNextUnreadCallCount += 1
+            return nextUnreadTabID
+        }
+    }
+
+    private func configService(quickSwitchMode: QuickSwitchMode) throws -> ConfigService {
+        let provider = InMemoryConfigProvider(content: """
+        [appearance]
+        quickswitch-mode = "\(quickSwitchMode.rawValue)"
+        """)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        return service
+    }
 
     @Test("items merge terminal tabs, browser tabs, and worktree tabs")
     func itemsMergeSupportedSurfaces() {
@@ -89,5 +133,44 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
         )
 
         #expect(controller.tabManager.activeTabID == worktreeTab.id)
+    }
+
+    @Test("configured QuickSwitch defaults to the unified command palette")
+    func configuredQuickSwitchOpensUnifiedOverlay() throws {
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: try configService(quickSwitchMode: .unified)
+        )
+        controller.showWindow(nil)
+
+        controller.performConfiguredQuickSwitch()
+
+        #expect(controller.isCommandPaletteVisible == true)
+        #expect(controller.commandPaletteViewModel != nil)
+    }
+
+    @Test("tabs-only mode uses the legacy unread-tab rotation")
+    func configuredQuickSwitchUsesLegacyTabsOnlyMode() throws {
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: try configService(quickSwitchMode: .tabsOnly)
+        )
+        let first = controller.tabManager.tabs[0]
+        let target = controller.tabManager.addTab(workingDirectory: URL(fileURLWithPath: "/tmp/attention"))
+        controller.tabManager.setActive(id: first.id)
+
+        let notificationSpy = NotificationSpy()
+        notificationSpy.nextUnreadTabID = target.id
+        controller.quickSwitchController = QuickSwitchController(
+            notificationManager: notificationSpy,
+            tabActivator: controller.tabManager
+        )
+
+        controller.performConfiguredQuickSwitch()
+
+        #expect(notificationSpy.gotoNextUnreadCallCount == 1)
+        #expect(controller.tabManager.activeTabID == target.id)
+        #expect(controller.isCommandPaletteVisible == false)
+        #expect(controller.commandPaletteViewModel == nil)
     }
 }

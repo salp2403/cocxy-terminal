@@ -2254,7 +2254,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     ///
     /// Delegates to the `quickSwitchController` if configured, otherwise no-op.
     @objc func quickSwitchAction(_ sender: Any?) {
-        showUnifiedQuickSwitchOverlay()
+        performConfiguredQuickSwitch()
     }
 
     /// The Quick Switch controller. Set by AppDelegate after initialization.

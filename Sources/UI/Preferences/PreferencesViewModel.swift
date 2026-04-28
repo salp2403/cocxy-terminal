@@ -87,6 +87,9 @@ final class PreferencesViewModel: ObservableObject {
     /// through the standard config publisher pipeline.
     @Published var rateLimitIndicatorEnabled: Bool
 
+    /// QuickSwitch behavior for the go-to-attention shortcut.
+    @Published var quickSwitchMode: QuickSwitchMode
+
     /// Whether the chrome theme picker should be interactive.
     ///
     /// Mirrors the runtime rule: the override only matters while the
@@ -303,6 +306,7 @@ final class PreferencesViewModel: ObservableObject {
             || transparencyChromeTheme != c.appearance.transparencyChromeTheme
             || auroraEnabled != c.appearance.auroraEnabled
             || rateLimitIndicatorEnabled != c.appearance.rateLimitIndicatorEnabled
+            || quickSwitchMode != c.appearance.quickSwitchMode
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -341,6 +345,7 @@ final class PreferencesViewModel: ObservableObject {
         transparencyChromeTheme = c.appearance.transparencyChromeTheme
         auroraEnabled = c.appearance.auroraEnabled
         rateLimitIndicatorEnabled = c.appearance.rateLimitIndicatorEnabled
+        quickSwitchMode = c.appearance.quickSwitchMode
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -433,6 +438,7 @@ final class PreferencesViewModel: ObservableObject {
         self.transparencyChromeTheme = config.appearance.transparencyChromeTheme
         self.auroraEnabled = config.appearance.auroraEnabled
         self.rateLimitIndicatorEnabled = config.appearance.rateLimitIndicatorEnabled
+        self.quickSwitchMode = config.appearance.quickSwitchMode
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -604,7 +610,8 @@ final class PreferencesViewModel: ObservableObject {
                 backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius,
                 transparencyChromeTheme: transparencyChromeTheme,
                 auroraEnabled: auroraEnabled,
-                rateLimitIndicatorEnabled: rateLimitIndicatorEnabled
+                rateLimitIndicatorEnabled: rateLimitIndicatorEnabled,
+                quickSwitchMode: quickSwitchMode
             ),
             terminal: TerminalConfig(
                 scrollbackLines: savedConfig.terminal.scrollbackLines,
@@ -826,6 +833,7 @@ final class PreferencesViewModel: ObservableObject {
         transparency-chrome-theme = "\(transparencyChromeTheme.rawValue)"
         aurora-enabled = \(auroraEnabled)
         rate-limit-indicator-enabled = \(rateLimitIndicatorEnabled)
+        quickswitch-mode = "\(quickSwitchMode.rawValue)"
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)

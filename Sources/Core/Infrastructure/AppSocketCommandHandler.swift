@@ -1323,6 +1323,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.appearance.auroraEnabled)"
         case "appearance.rate-limit-indicator-enabled":
             return "\(config.appearance.rateLimitIndicatorEnabled)"
+        case "appearance.quickswitch-mode":
+            return config.appearance.quickSwitchMode.rawValue
 
         // Terminal
         case "terminal.scrollback-lines":
@@ -2559,6 +2561,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "appearance.tab-position", "appearance.window-padding", "appearance.ligatures",
             "appearance.background-opacity", "appearance.background-blur-radius",
             "appearance.aurora-enabled", "appearance.rate-limit-indicator-enabled",
+            "appearance.quickswitch-mode",
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",

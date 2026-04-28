@@ -29,6 +29,23 @@ extension MainWindowController {
         showTransientCommandPaletteOverlay(engine: StaticCommandPaletteEngine(actions: actions))
     }
 
+    /// Executes the user-configured QuickSwitch mode.
+    ///
+    /// The default `.unified` mode opens the cross-surface switcher.
+    /// `.tabsOnly` is a rollback lever for users who want the legacy
+    /// unread-tab rotation bound to the same shortcut/menu command.
+    func performConfiguredQuickSwitch() {
+        let mode = configService?.current.appearance.quickSwitchMode ?? .unified
+        switch mode {
+        case .unified:
+            showUnifiedQuickSwitchOverlay()
+        case .tabsOnly:
+            if let result = quickSwitchController?.performQuickSwitch() {
+                NSLog("[UnifiedQuickSwitch] Used legacy unread-tab quick switch: %@", result.description)
+            }
+        }
+    }
+
     func showTransientCommandPaletteOverlay(engine: any CommandPaletteSearching) {
         guard let overlayContainer = overlayContainerView else { return }
 

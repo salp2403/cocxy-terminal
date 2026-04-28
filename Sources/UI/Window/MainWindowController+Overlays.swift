@@ -679,7 +679,7 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in
-                        self?.showUnifiedQuickSwitchOverlay()
+                        self?.performConfiguredQuickSwitch()
                     }
                 }
             ),

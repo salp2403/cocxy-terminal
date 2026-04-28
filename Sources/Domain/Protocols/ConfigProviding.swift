@@ -175,7 +175,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // for the same reason as auroraEnabled — it's a user choice, not a
             // project setting. Round-tripped here so the merge does not silently
             // reset the field to its default after `.cocxy.toml` overrides apply.
-            rateLimitIndicatorEnabled: appearance.rateLimitIndicatorEnabled
+            rateLimitIndicatorEnabled: appearance.rateLimitIndicatorEnabled,
+            quickSwitchMode: appearance.quickSwitchMode
         )
 
         let mergedKeybindings: KeybindingsConfig
@@ -342,6 +343,13 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     /// `ConfigService.configChangedPublisher`.
     let rateLimitIndicatorEnabled: Bool
 
+    /// QuickSwitch behavior behind the existing "go to attention" shortcut.
+    ///
+    /// Defaults to `.unified`, which opens the cross-surface switcher for
+    /// terminal tabs, browser tabs, worktrees, and notes. `.tabsOnly` keeps
+    /// the legacy unread-tab rotation path as a rollback lever.
+    let quickSwitchMode: QuickSwitchMode
+
     /// Effective horizontal padding (prefers windowPaddingX, falls back to windowPadding).
     var effectivePaddingX: Double { windowPaddingX ?? windowPadding }
     /// Effective vertical padding (prefers windowPaddingY, falls back to windowPadding).
@@ -362,7 +370,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         backgroundBlurRadius: Double,
         transparencyChromeTheme: TransparencyChromeTheme = .followSystem,
         auroraEnabled: Bool = true,
-        rateLimitIndicatorEnabled: Bool = true
+        rateLimitIndicatorEnabled: Bool = true,
+        quickSwitchMode: QuickSwitchMode = .unified
     ) {
         self.theme = theme
         self.lightTheme = lightTheme
@@ -379,6 +388,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         self.transparencyChromeTheme = transparencyChromeTheme
         self.auroraEnabled = auroraEnabled
         self.rateLimitIndicatorEnabled = rateLimitIndicatorEnabled
+        self.quickSwitchMode = quickSwitchMode
     }
 
     static var defaults: AppearanceConfig {
@@ -397,16 +407,17 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             backgroundBlurRadius: 0,
             transparencyChromeTheme: .followSystem,
             auroraEnabled: true,
-            rateLimitIndicatorEnabled: true
+            rateLimitIndicatorEnabled: true,
+            quickSwitchMode: .unified
         )
     }
 
     // MARK: - Codable
 
     /// Backwards-compatible decoding: configs persisted before the
-    /// `transparencyChromeTheme`, `auroraEnabled`, or
-    /// `rateLimitIndicatorEnabled` keys existed decode cleanly with their
-    /// runtime defaults.
+    /// `transparencyChromeTheme`, `auroraEnabled`,
+    /// `rateLimitIndicatorEnabled`, or `quickSwitchMode` keys existed decode
+    /// cleanly with their runtime defaults.
     private enum CodingKeys: String, CodingKey {
         case theme
         case lightTheme
@@ -423,6 +434,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         case transparencyChromeTheme
         case auroraEnabled
         case rateLimitIndicatorEnabled
+        case quickSwitchMode
     }
 
     init(from decoder: Decoder) throws {
@@ -451,7 +463,20 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             Bool.self,
             forKey: .rateLimitIndicatorEnabled
         ) ?? AppearanceConfig.defaults.rateLimitIndicatorEnabled
+        self.quickSwitchMode = try container.decodeIfPresent(
+            QuickSwitchMode.self,
+            forKey: .quickSwitchMode
+        ) ?? AppearanceConfig.defaults.quickSwitchMode
     }
+}
+
+/// Behavior selected for the keyboard/menu QuickSwitch action.
+///
+/// The kebab-case raw values are the TOML contract for
+/// `[appearance].quickswitch-mode`.
+enum QuickSwitchMode: String, Codable, Sendable, Equatable, CaseIterable {
+    case unified
+    case tabsOnly = "tabs-only"
 }
 
 /// Forced appearance for translucent chrome (sidebar, tab strip, status bar)
