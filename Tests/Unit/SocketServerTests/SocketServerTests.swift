@@ -231,6 +231,54 @@ enum SocketTestClient {
     }
 }
 
+// MARK: - Socket Test Fixtures
+
+enum SocketTestFixture {
+    static func createDeadSocketFile(at path: String) throws {
+        let directory = (path as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(
+            atPath: directory,
+            withIntermediateDirectories: true
+        )
+
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw NSError(domain: "test", code: Int(errno), userInfo: [
+                NSLocalizedDescriptionKey: "Failed to create fixture socket"
+            ])
+        }
+        defer { Darwin.close(fd) }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = path.utf8CString
+        guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else {
+            throw NSError(domain: "test", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "Fixture socket path too long"
+            ])
+        }
+
+        withUnsafeMutablePointer(to: &addr.sun_path) { sunPathPtr in
+            let rawPtr = UnsafeMutableRawPointer(sunPathPtr)
+            pathBytes.withUnsafeBufferPointer { buffer in
+                rawPtr.copyMemory(from: buffer.baseAddress!, byteCount: buffer.count)
+            }
+        }
+
+        let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
+        let result = withUnsafePointer(to: &addr) { addrPtr in
+            addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                Darwin.bind(fd, sockaddrPtr, addrLen)
+            }
+        }
+        guard result == 0 else {
+            throw NSError(domain: "test", code: Int(errno), userInfo: [
+                NSLocalizedDescriptionKey: "Failed to bind fixture socket: \(String(cString: strerror(errno)))"
+            ])
+        }
+    }
+}
+
 // MARK: - Socket Server Tests
 
 /// Tests for `SocketServerImpl`.
@@ -333,6 +381,54 @@ final class SocketServerTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: testSocketPath))
         XCTAssertTrue(server.isRunning)
+    }
+
+    @MainActor
+    func testStartDoesNotStealLiveSocketFromAnotherServer() throws {
+        let firstHandler = MockSocketCommandHandler()
+        let firstServer = SocketServerImpl(
+            socketPath: testSocketPath,
+            commandHandler: firstHandler
+        )
+        try firstServer.start()
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
+        defer { firstServer.stop() }
+
+        let secondServer = SocketServerImpl(
+            socketPath: testSocketPath,
+            commandHandler: MockSocketCommandHandler()
+        )
+
+        XCTAssertThrowsError(try secondServer.start()) { error in
+            guard case CLISocketError.bindFailed(_, let reason) = error else {
+                XCTFail("Expected bindFailed, got \(error)")
+                return
+            }
+            XCTAssertTrue(reason.contains("another Cocxy Terminal instance"))
+        }
+
+        let request = SocketRequest(id: "live-1", command: "status", params: nil)
+        let response = try performRoundTrip(request: request)
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(firstHandler.receivedRequests.first?.id, "live-1")
+    }
+
+    @MainActor
+    func testRestartIfNeededRecoversWhenSocketPathPointsToDeadSocket() throws {
+        let (server, _) = try startServer()
+        defer { server.stop() }
+
+        try FileManager.default.removeItem(atPath: testSocketPath)
+        try SocketTestFixture.createDeadSocketFile(at: testSocketPath)
+        XCTAssertFalse(server.isHealthy)
+
+        server.restartIfNeeded()
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
+
+        let response = try performRoundTrip(
+            request: SocketRequest(id: "restart-1", command: "status", params: nil)
+        )
+        XCTAssertTrue(response.success)
     }
 
     // MARK: - 3. UID authentication (same UID accepted)

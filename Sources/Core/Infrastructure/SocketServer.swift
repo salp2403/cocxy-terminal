@@ -129,7 +129,7 @@ final class SocketServerImpl: CLISocketServing {
         guard !isRunning else { return }
 
         try createSocketDirectory()
-        removeStaleSocketFile()
+        try removeSocketFileIfStaleOrThrowIfActive()
         try bindSocket()
         startAcceptLoop()
 
@@ -161,14 +161,18 @@ final class SocketServerImpl: CLISocketServing {
 
     // MARK: - Health Check
 
-    /// Returns true if the server is running and the socket file exists on disk.
+    /// Returns true if the server is running and the socket path accepts
+    /// new AF_UNIX connections.
     ///
-    /// The socket file can disappear if another process removes it or if a
-    /// deinit race condition occurred during reopen. This check allows
-    /// external callers to detect the situation and restart the server.
+    /// Merely checking that the socket file exists is not enough: a
+    /// second app instance can briefly bind the same path, then exit and
+    /// leave a dead socket file behind. In that state `cocxy status`
+    /// gets `ECONNREFUSED` while the UI is still alive. A real connect
+    /// probe catches that stale endpoint so the health timer can restart
+    /// the listener.
     var isHealthy: Bool {
         guard isRunning, serverFD >= 0 else { return false }
-        return FileManager.default.fileExists(atPath: socketPath)
+        return Self.socketAcceptsConnections(at: socketPath)
     }
 
     /// Restarts the server if the socket file has disappeared while the
@@ -231,6 +235,52 @@ final class SocketServerImpl: CLISocketServing {
         try? FileManager.default.removeItem(atPath: socketPath)
     }
 
+    /// Removes the socket path only when it is stale. If another live
+    /// Cocxy instance is already accepting connections at the path, keep
+    /// it intact and fail this server start instead of stealing the CLI
+    /// endpoint from the running app.
+    private nonisolated func removeSocketFileIfStaleOrThrowIfActive() throws {
+        guard FileManager.default.fileExists(atPath: socketPath) else { return }
+        if Self.socketAcceptsConnections(at: socketPath) {
+            throw CLISocketError.bindFailed(
+                path: socketPath,
+                reason: "Socket already accepts connections; another Cocxy Terminal instance is running"
+            )
+        }
+        removeStaleSocketFile()
+    }
+
+    /// Fast AF_UNIX connect probe used for both startup stale-file
+    /// detection and periodic health checks. A successful connect is
+    /// immediately closed; the accept loop will observe EOF and drop it.
+    private nonisolated static func socketAcceptsConnections(at path: String) -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { Darwin.close(fd) }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = path.utf8CString
+        guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else {
+            return false
+        }
+
+        withUnsafeMutablePointer(to: &addr.sun_path) { sunPathPtr in
+            let rawPtr = UnsafeMutableRawPointer(sunPathPtr)
+            pathBytes.withUnsafeBufferPointer { buffer in
+                rawPtr.copyMemory(from: buffer.baseAddress!, byteCount: buffer.count)
+            }
+        }
+
+        let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
+        let result = withUnsafePointer(to: &addr) { addrPtr in
+            addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                Darwin.connect(fd, sockaddrPtr, addrLen)
+            }
+        }
+        return result == 0
+    }
+
     /// Creates, binds, and starts listening on the AF_UNIX socket.
     private func bindSocket() throws {
         // 1. Create socket.
@@ -241,6 +291,7 @@ final class SocketServerImpl: CLISocketServing {
                 reason: "socket() failed: \(String(cString: strerror(errno)))"
             )
         }
+        _ = Darwin.fcntl(fd, F_SETFD, FD_CLOEXEC)
 
         // 2. Build the sockaddr_un structure.
         var addr = sockaddr_un()
