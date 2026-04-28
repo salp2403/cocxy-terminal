@@ -7,13 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.90] - 2026-04-27
+
 ### Added
+- Per-workspace notes module. Cocxy now keeps a markdown notebook
+  attached to each git workspace (with a fallback for non-git
+  directories). Press `Cmd+Option+N` or click the new note glyph in
+  the Aurora sidebar tray to open the right-docked editor. The panel
+  uses an adaptive layout: wide panes show a list/editor split, narrow
+  panes stack the list above the editor so the writing area never gets
+  crushed. Delete now goes through a confirmation dialog so a missed
+  click cannot wipe a note. Notes are stored under
+  `~/.config/cocxy/notes/<workspace-id>/<note-uuid>.md` so per-tab
+  workspaces never collide and nothing gets committed to user repos by
+  accident.
+- Three configurable note search backends. `[notes].search-engine`
+  picks between an in-memory `grep` (default, zero dependencies), a
+  SQLite FTS5 index that uses the system `sqlite3` with a trigram
+  tokenizer for ranked matches, and a Spotlight bridge that calls
+  `mdfind` against the workspace folder. Each backend reports a
+  normalised `[0, 1]` score so the UI uses the same colour ramp
+  regardless of which one the user picked.
+- Configurable note format. `[notes].format` chooses between
+  `markdown` (the body verbatim) and `markdown-frontmatter` (a YAML
+  metadata block at the top with title, id, and timestamps). Both
+  formats round-trip cleanly through any external markdown editor.
+- Notes preferences pane. Settings now exposes the full `[notes]`
+  surface (enabled, format, search engine, storage directory,
+  shortcut, auto-save toggle, auto-save interval) so users do not
+  have to edit `config.toml` to change behaviour.
+- Status-bar rate-limit indicator preference. The new
+  `appearance.rate-limit-indicator-enabled` toggle (default `true`)
+  hides the pill regardless of the active agent or its provider.
+  Hot-reloads via the standard config publisher pipeline.
 - The browser panel can now grab a DOM element directly into the
   active terminal prompt. Click the new cursor tool in the browser
   toolbar, then click an element in the page; Cocxy injects a
   bracketed-paste payload with the page title, URL, CSS selector, and
   visible text so agent prompts can reason about the exact UI element
   without manual copy/paste.
+
+### Changed
+- `cocxy config get` and `cocxy config list` now surface the full
+  configuration tree, including `notes.*`, `appearance.aurora-enabled`,
+  and `appearance.rate-limit-indicator-enabled`. Previously these keys
+  existed in the model but were not reachable from the CLI socket.
+- The Aurora sidebar tray now exposes a notes button next to the
+  command palette, notifications, and `+` glyphs. Visibility is gated
+  on `[notes].enabled`, and the button reflects toggle changes
+  immediately because the host callback is published on the chrome
+  controller.
+- New per-agent rate-limit provider for OpenAI Codex. The provider is
+  registered so the resolver can map detected Codex agents onto the
+  canonical `.codex` enum case, but it returns `nil` deliberately
+  until the CLI ships a stable, documented surface for billable token
+  usage. The status-bar pill therefore stays hidden for Codex sessions
+  and never displays misleading numbers.
 
 ## [0.1.89] - 2026-04-26
 
