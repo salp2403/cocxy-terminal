@@ -76,6 +76,18 @@ Open an issue using the **Feature Request** template. Describe the problem you a
 
    All tests must pass before you open a pull request.
 
+4. (Recommended) Install the local pre-commit hook:
+
+   ```bash
+   bash scripts/setup-local-hooks.sh
+   ```
+
+   The hook rejects accidental staging of secret-shaped files
+   (`.env`, `*.pem`, `id_rsa*`, certificates, kubeconfig, …) so a
+   committed credential never reaches the public history. Git hooks
+   are not part of the repository, so re-run the script after every
+   fresh clone or worktree creation.
+
 ## Pull Request Process
 
 ### Branch Naming

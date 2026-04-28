@@ -1,0 +1,55 @@
+#!/bin/sh
+# Local pre-commit guard for Cocxy Terminal contributors.
+#
+# Rejects staging of files that almost always indicate a leaked secret
+# or developer credential. The patterns below are intentionally generic
+# (industry-standard secret filenames) so the hook can ship with the
+# public repository without revealing any project-internal layout.
+#
+# Maintainers may extend this hook locally with project-specific paths;
+# such extensions live only in `.git/hooks/pre-commit` of the local
+# clone and are NOT committed back to the repository.
+#
+# Installed by `scripts/setup-local-hooks.sh`.
+
+set -e
+
+blocked=$(git diff --cached --name-only --diff-filter=ACMR | \
+    awk '
+        # Environment files commonly used to hold credentials.
+        /(^|\/)\.env$/                 { print; next }
+        /(^|\/)\.env\..+/              { print; next }
+        # Cryptographic keys and certificates.
+        /\.pem$/                       { print; next }
+        /\.p12$/                       { print; next }
+        /\.pfx$/                       { print; next }
+        /\.key$/                       { print; next }
+        /\.crt$/                       { print; next }
+        /\.cer$/                       { print; next }
+        # Private SSH keys.
+        /(^|\/)id_rsa($|\.)/           { print; next }
+        /(^|\/)id_ed25519($|\.)/       { print; next }
+        /(^|\/)id_ecdsa($|\.)/         { print; next }
+        /(^|\/)id_dsa($|\.)/           { print; next }
+        # GPG / PGP material.
+        /\.gpg$/                       { print; next }
+        /\.asc$/                       { print; next }
+        # Heuristic name matches for credential files.
+        /credentials?($|\.)/           { print; next }
+        /(^|\/)\.netrc$/               { print; next }
+        /(^|\/)\.pgpass$/              { print; next }
+        # Cloud / Kubernetes configs that frequently embed tokens.
+        /(^|\/)kubeconfig($|\.)/       { print; next }
+        /(^|\/)\.kube\/config$/        { print; next }
+        # Apple keychain dumps.
+        /\.keychain($|-)/              { print; next }
+    ') || true
+
+if [ -n "$blocked" ]; then
+    printf '\n[pre-commit] rejected: secret-shaped path staged:\n' >&2
+    printf '  %s\n' $blocked >&2
+    printf '\nrun "git restore --staged <path>" to unstage, then re-commit.\n\n' >&2
+    exit 1
+fi
+
+exit 0
