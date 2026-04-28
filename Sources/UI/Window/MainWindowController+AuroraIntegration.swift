@@ -382,7 +382,7 @@ extension MainWindowController {
         controller.statusBarHost?.appearance = appearance
         controller.paletteHost?.appearance = appearance
         controller.sidebarTooltipHost?.appearance = appearance
-        syncNotesRootView()
+        syncNotesRootView(rebuildHostForAppearanceChange: true)
     }
 
     func toggleAuroraThemeMode() {

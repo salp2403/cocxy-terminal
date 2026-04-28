@@ -151,10 +151,15 @@ final class OverlayContainerTests: XCTestCase {
         )
 
         controller.showNotes()
+        let originalHostingView = controller.notesHostingView
         XCTAssertEqual(controller.notesHostingView?.rootView.themeIdentity, .aurora)
 
         controller.syncAuroraDesignTheme(for: .light)
 
+        XCTAssertFalse(
+            controller.notesHostingView === originalHostingView,
+            "Theme switches must rebuild the Notes host so AppKit material views do not keep the previous appearance."
+        )
         XCTAssertEqual(
             controller.notesHostingView?.rootView.themeIdentity,
             .paper,

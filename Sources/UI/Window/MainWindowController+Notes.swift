@@ -193,7 +193,10 @@ extension MainWindowController {
         )
     }
 
-    func syncNotesRootView(panelWidth: CGFloat? = nil) {
+    func syncNotesRootView(
+        panelWidth: CGFloat? = nil,
+        rebuildHostForAppearanceChange: Bool = false
+    ) {
         guard isNotesVisible,
               let hostingView = notesHostingView,
               let viewModel = notesViewModel else {
@@ -203,7 +206,22 @@ extension MainWindowController {
             containerWidth: overlayContainerView?.bounds.width ?? NotesOverlayView.defaultPanelWidth
         )
         let swiftUIView = makeNotesOverlayView(viewModel: viewModel, panelWidth: width)
-        hostingView.appearance = Design.appearance(for: swiftUIView.themeIdentity)
+        let appearance = Design.appearance(for: swiftUIView.themeIdentity)
+
+        if rebuildHostForAppearanceChange,
+           hostingView.appearance?.name != appearance?.name,
+           let parent = hostingView.superview {
+            let replacement = NSHostingView(rootView: swiftUIView)
+            replacement.appearance = appearance
+            replacement.wantsLayer = hostingView.wantsLayer
+            replacement.frame = hostingView.frame
+            replacement.autoresizingMask = hostingView.autoresizingMask
+            parent.replaceSubview(hostingView, with: replacement)
+            notesHostingView = replacement
+            return
+        }
+
+        hostingView.appearance = appearance
         hostingView.rootView = swiftUIView
     }
 
