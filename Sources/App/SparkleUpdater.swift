@@ -38,7 +38,19 @@ final class SparkleUpdater: NSObject, ObservableObject {
         }
     }
 
-    @Published private(set) var availableUpdate: CocxyUpdateAvailability?
+    /// Update availability surfaced to the sidebar / status bar.
+    ///
+    /// Updated only by Sparkle delegate callbacks (see
+    /// `updateAvailability(from:)`, `updaterDidNotFindUpdate`,
+    /// `updater(_:didAbortWithError:)`) inside this file. Production code
+    /// outside `SparkleUpdater` must NOT mutate this property; doing so
+    /// would desync the published value from the actual Sparkle session.
+    /// The `internal(set)` access is intentional so the test target can
+    /// drive the publisher through `@testable import CocxyTerminal`
+    /// without booting the real Sparkle framework — the test surface is
+    /// otherwise impossible to exercise because Sparkle owns the
+    /// callbacks.
+    @Published internal(set) var availableUpdate: CocxyUpdateAvailability?
     @Published private(set) var lastProbeErrorDescription: String?
 
     var canCheckForUpdates: Bool {
