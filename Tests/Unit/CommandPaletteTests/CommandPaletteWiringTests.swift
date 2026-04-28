@@ -43,6 +43,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "editor.zoomIn",
             "editor.zoomOut",
             "editor.resetZoom",
+            "editor.openDefault",
             "preferences.show",
             "welcome.show",
             "tabbar.toggle",

@@ -22,6 +22,7 @@ enum CommandCategory: String, Codable, Sendable, CaseIterable {
     case config     = "Config"
     case cli        = "CLI"
     case worktree   = "Worktree"
+    case editor     = "Editor"
 }
 
 // MARK: - Command Action

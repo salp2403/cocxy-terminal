@@ -490,7 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Initializes the terminal engine bridge.
     private func initializeBridge() {
-        let newBridge: any TerminalEngine = CocxyCoreBridge()
+        let newBridge: any TerminalEngine = makeTerminalEngineBridge()
 
         let fontFamily = configService?.current.appearance.fontFamily
             ?? AppearanceConfig.defaults.fontFamily
@@ -558,6 +558,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The app can still show a window with an error state.
             // For now, we proceed without a bridge.
         }
+    }
+
+    private func makeTerminalEngineBridge() -> any TerminalEngine {
+        let experimental = configService?.current.experimental ?? .defaults
+        let helperURL = PTYDaemonHelperLocator().executableURL()
+        let readiness = PTYDaemonReadinessResolver().resolve(config: experimental, helperURL: helperURL)
+        if readiness != .disabled {
+            NSLog("[AppDelegate] %@", readiness.diagnostic)
+        }
+        return CocxyCoreBridge()
     }
 
     // MARK: - Theme Switching
@@ -718,7 +728,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func createBridgeForTheme(_ themeName: String, palette: ThemePalette) -> (any TerminalEngine)? {
-        let newBridge: any TerminalEngine = CocxyCoreBridge()
+        let newBridge: any TerminalEngine = makeTerminalEngineBridge()
         let fontFamily = configService?.current.appearance.fontFamily
             ?? AppearanceConfig.defaults.fontFamily
         let fontSize = configService?.current.appearance.fontSize

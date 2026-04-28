@@ -2,6 +2,7 @@
 // CodexUsageProvider.swift - Local-only provider that returns `nil`
 // until the CLI ships a stable, documented local usage surface.
 
+import CocxyShared
 import Foundation
 
 /// Local-only `RateLimitProviding` implementation for Codex CLI.
@@ -70,13 +71,23 @@ struct CodexUsageProvider: RateLimitProviding {
     /// can dispatch by agent without inspecting the snapshot.
     let agent: RateLimitSnapshot.AgentKind = .codex
 
+    private let authJSONURL: URL
+    private let selectionURL: URL
+
     /// Default initializer with no parameters — the provider has no
-    /// configurable knobs because it has no usable data source today.
-    /// Once a future implementation reads a local surface, this
-    /// initializer can grow parameters without breaking call sites
-    /// (the existing `MainWindowController` registration uses the
-    /// no-argument form).
-    init() {}
+    /// required knobs because it has no usable usage surface today.
+    /// It still reads the selected Codex account at refresh time so
+    /// account switches made from the command palette are reflected
+    /// without restarting Cocxy. Once a future CLI release exposes a
+    /// stable local usage surface, `snapshot()` can use `activeAccount()`
+    /// to scope the sample to the selected account.
+    init(
+        authJSONURL: URL = CodexAccountScanner.defaultAuthJSONURL(),
+        selectionURL: URL = CodexAccountSelectionStore.defaultSelectionURL()
+    ) {
+        self.authJSONURL = authJSONURL
+        self.selectionURL = selectionURL
+    }
 
     // MARK: - RateLimitProviding
 
@@ -88,6 +99,25 @@ struct CodexUsageProvider: RateLimitProviding {
     /// zero-telemetry contract rules out consulting the account
     /// dashboard remotely.
     func snapshot() async -> RateLimitSnapshot? {
-        nil
+        _ = activeAccount()
+        return nil
+    }
+
+    /// Resolves the account Cocxy should scope future Codex usage data
+    /// to. The lookup intentionally reads from disk every time so the
+    /// command-palette hot-swap path takes effect in the next refresh
+    /// without rebuilding providers or restarting the app.
+    func activeAccount() -> CodexAccount? {
+        let accounts = CodexAccountScanner.accounts(authJSONURL: authJSONURL)
+        let selectedID = CodexAccountSelectionStore.load(from: selectionURL).selectedAccountID
+
+        if let selectedID,
+           let selected = accounts.first(where: { $0.id == selectedID }) {
+            return selected
+        }
+        if accounts.count == 1 {
+            return accounts[0]
+        }
+        return nil
     }
 }

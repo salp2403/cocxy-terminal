@@ -159,7 +159,7 @@ extension MainWindowController {
         // Register actions with direct handlers to the window controller.
         // Each handler first dismisses the palette, then executes the action
         // on the next run loop tick to avoid SwiftUI state mutation during rendering.
-        let actions: [CommandAction] = [
+        var actions: [CommandAction] = [
             CommandAction(
                 id: "window.new",
                 name: "New Window",
@@ -679,7 +679,7 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in
-                        _ = self?.quickSwitchController?.performQuickSwitch()
+                        self?.showUnifiedQuickSwitchOverlay()
                     }
                 }
             ),
@@ -693,6 +693,21 @@ extension MainWindowController {
                     self?.dismissCommandPalette()
                     Task { @MainActor in
                         (NSApp.delegate as? AppDelegate)?.quickTerminalController?.toggle()
+                    }
+                }
+            ),
+            CommandAction(
+                id: "window.pictureInPicture",
+                name: "Float Active Terminal",
+                description: (configService?.current.experimental.pipEnabled == true)
+                    ? "Move the active terminal into a floating Picture-in-Picture panel"
+                    : "Enable [experimental].pip-enabled to use terminal Picture-in-Picture",
+                shortcut: nil,
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        _ = self?.detachActiveTerminalToPIP()
                     }
                 }
             ),
@@ -734,6 +749,8 @@ extension MainWindowController {
                 }
             ),
         ]
+        actions.append(contentsOf: commandPaletteEditorActions())
+        actions.append(contentsOf: commandPaletteCodexAccountActions())
 
         engine.registerActions(actions)
         return engine
@@ -1591,7 +1608,10 @@ extension MainWindowController {
             },
             onDismiss: { [weak self] in
                 self?.dismissCodeReview()
-            }
+            },
+            externalEditorActions: codeReviewExternalEditorActions(
+                workingDirectory: currentCodeReviewWorkingDirectory()
+            )
         )
     }
 

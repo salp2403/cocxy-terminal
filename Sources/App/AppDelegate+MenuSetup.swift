@@ -230,12 +230,19 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(notesItem, with: KeybindingActionCatalog.windowNotes)
         viewMenu.addItem(notesItem)
 
+        let quickSwitchItem = NSMenuItem(
+            title: "Quick Switch",
+            action: #selector(MainWindowController.quickSwitchAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(quickSwitchItem, with: KeybindingActionCatalog.remoteGoToAttention)
+        viewMenu.addItem(quickSwitchItem)
+
         let smartRoutingItem = NSMenuItem(
             title: "Smart Routing",
             action: #selector(MainWindowController.showSmartRoutingAction(_:)),
             keyEquivalent: ""
         )
-        MenuKeybindingsBinder.tag(smartRoutingItem, with: KeybindingActionCatalog.remoteGoToAttention)
         viewMenu.addItem(smartRoutingItem)
 
         viewMenu.addItem(withTitle: "Remote Workspaces...",

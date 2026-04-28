@@ -244,6 +244,33 @@ final class ViewMenuItemTests: XCTestCase {
         let resetZoom = viewMenu.items.first(where: { $0.title == "Reset Zoom" })
         XCTAssertEqual(resetZoom?.keyEquivalent, "0", "Reset Zoom shortcut must be Cmd+0")
     }
+
+    func testQuickSwitchOwnsGotoAttentionShortcut() {
+        guard let quickSwitch = viewMenu.items.first(where: { $0.title == "Quick Switch" }) else {
+            XCTFail("View menu must expose Quick Switch")
+            return
+        }
+
+        XCTAssertEqual(quickSwitch.action, #selector(MainWindowController.quickSwitchAction(_:)))
+        XCTAssertEqual(
+            MenuKeybindingsBinder.actionId(of: quickSwitch),
+            KeybindingActionCatalog.remoteGoToAttention.id,
+            "The goto-attention shortcut must open Unified QuickSwitch, not Smart Routing."
+        )
+    }
+
+    func testSmartRoutingKeepsMenuEntryWithoutGotoAttentionShortcut() {
+        guard let smartRouting = viewMenu.items.first(where: { $0.title == "Smart Routing" }) else {
+            XCTFail("View menu must keep Smart Routing available")
+            return
+        }
+
+        XCTAssertEqual(smartRouting.action, #selector(MainWindowController.showSmartRoutingAction(_:)))
+        XCTAssertNil(
+            MenuKeybindingsBinder.actionId(of: smartRouting),
+            "Smart Routing remains available from the View menu but no longer captures Cmd+Shift+U."
+        )
+    }
 }
 
 // MARK: - Window Menu Tests

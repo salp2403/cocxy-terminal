@@ -2,6 +2,7 @@
 
 import Foundation
 import Testing
+import CocxyShared
 @testable import CocxyTerminal
 
 /// Unit coverage for `CodexUsageProvider`.
@@ -73,5 +74,31 @@ struct CodexUsageProviderSwiftTestingTests {
         let rhs = CodexUsageProvider()
 
         #expect(lhs.agent == rhs.agent)
+    }
+
+    @Test("activeAccount follows the selected account on disk without rebuilding the provider")
+    func activeAccountFollowsSelectionStore() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let authURL = root.appendingPathComponent("auth.json")
+        let selectionURL = root.appendingPathComponent("selection.json")
+        let json = """
+        {
+          "accounts": [
+            { "id": "acct_1", "email": "one@example.com" },
+            { "id": "acct_2", "email": "two@example.com" }
+          ]
+        }
+        """
+        try Data(json.utf8).write(to: authURL)
+        let provider = CodexUsageProvider(authJSONURL: authURL, selectionURL: selectionURL)
+
+        try CodexAccountSelectionStore.save(CodexAccountSelection(selectedAccountID: "acct_1"), to: selectionURL)
+        #expect(provider.activeAccount()?.id == "acct_1")
+
+        try CodexAccountSelectionStore.save(CodexAccountSelection(selectedAccountID: "acct_2"), to: selectionURL)
+        #expect(provider.activeAccount()?.id == "acct_2")
     }
 }

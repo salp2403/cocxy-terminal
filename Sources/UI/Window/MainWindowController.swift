@@ -473,6 +473,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Remote port scanner for detecting dev servers on SSH-connected hosts.
     var remotePortScanner: RemotePortScanner?
 
+    /// Floating Picture-in-Picture panels keyed by the tab they own.
+    /// The panel reparents the live terminal view; keeping a strong
+    /// controller here prevents AppKit from releasing it before the
+    /// user closes/restores the panel.
+    var pipControllers: [TabID: PIPWindowController] = [:]
+
     /// Service that monitors foreground processes for SSH detection.
     private(set) var processMonitor: ProcessMonitorService?
 
@@ -2248,8 +2254,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     ///
     /// Delegates to the `quickSwitchController` if configured, otherwise no-op.
     @objc func quickSwitchAction(_ sender: Any?) {
-        guard let quickSwitch = quickSwitchController else { return }
-        _ = quickSwitch.performQuickSwitch()
+        showUnifiedQuickSwitchOverlay()
     }
 
     /// The Quick Switch controller. Set by AppDelegate after initialization.
