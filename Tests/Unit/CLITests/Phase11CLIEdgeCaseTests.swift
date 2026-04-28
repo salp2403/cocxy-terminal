@@ -117,7 +117,7 @@ final class Phase11CLIEdgeCaseTests: XCTestCase {
         let allCases = CLICommand.allCases
 
         XCTAssertEqual(allCases.count, 104,
-                       "EC-12: CLICommand must have exactly 104 cases after the P5 worktree-focus verb")
+                       "EC-12: CLICommand must have exactly 104 socket commands after the P5 worktree-focus verb")
 
         for command in allCases {
             XCTAssertFalse(

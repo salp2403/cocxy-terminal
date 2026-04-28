@@ -2,6 +2,7 @@
 // ArgumentParser.swift - Manual CLI argument parsing (zero dependencies).
 
 import Foundation
+import CocxyShared
 
 // MARK: - Parsed Command
 
@@ -60,6 +61,9 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy review status`
     case reviewStats
+
+    /// `cocxy open <path> [--editor <id>] [--line <n>] [--column <n>]`
+    case editorOpen(path: String, editor: String?, line: Int?, column: Int?)
 
     /// `cocxy --help` or `cocxy help`
     case help
@@ -528,6 +532,9 @@ public enum CLIArgumentParser {
         case "review":
             return try parseReview(arguments: Array(arguments.dropFirst()))
 
+        case "open":
+            return try parseEditorOpen(arguments: Array(arguments.dropFirst()))
+
         // MARK: v2 compound commands
 
         case "tab":
@@ -839,6 +846,81 @@ public enum CLIArgumentParser {
         }
 
         return .review
+    }
+
+    /// Parses `cocxy open <path> [--editor <id>] [--line <n>] [--column <n>]`.
+    private static func parseEditorOpen(arguments: [String]) throws -> ParsedCommand {
+        if isOnlyHelpRequest(arguments) {
+            return .help
+        }
+
+        var path: String?
+        var editor: String?
+        var line: Int?
+        var column: Int?
+        var index = 0
+        while index < arguments.count {
+            let token = arguments[index]
+            switch token {
+            case "--editor", "-e":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "open", argument: "value for --editor")
+                }
+                editor = arguments[index + 1]
+                index += 2
+            case "--line":
+                guard index + 1 < arguments.count, let parsed = Int(arguments[index + 1]), parsed > 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "open",
+                        argument: token,
+                        reason: "--line expects a positive integer."
+                    )
+                }
+                line = parsed
+                index += 2
+            case "--column":
+                guard index + 1 < arguments.count, let parsed = Int(arguments[index + 1]), parsed > 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "open",
+                        argument: token,
+                        reason: "--column expects a positive integer."
+                    )
+                }
+                column = parsed
+                index += 2
+            default:
+                if token.hasPrefix("-") {
+                    throw CLIError.invalidArgument(
+                        command: "open",
+                        argument: token,
+                        reason: "Unknown option. Valid flags: --editor, --line, --column."
+                    )
+                }
+                guard path == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "open",
+                        argument: token,
+                        reason: "`open` accepts exactly one path."
+                    )
+                }
+                path = token
+                index += 1
+            }
+        }
+
+        guard let path, path.isEmpty == false else {
+            throw CLIError.missingArgument(command: "open", argument: "path")
+        }
+
+        if let editor, EditorRegistry.launcher(matching: editor) == nil {
+            throw CLIError.invalidArgument(
+                command: "open",
+                argument: editor,
+                reason: "Unknown editor. Valid editors: \(EditorRegistry.builtIn.map(\.id).joined(separator: ", ")), system."
+            )
+        }
+
+        return .editorOpen(path: path, editor: editor, line: line, column: column)
     }
 
     // MARK: - Private: v2 Subcommand Parsers
@@ -1984,6 +2066,7 @@ public enum CLIArgumentParser {
             )
             lines.append("  \(command.usageExample)\(padding)\(command.helpDescription)")
         }
+        lines.append("  cocxy open <path> [--editor <id>] [--line <n>] [--column <n>] Open a file or folder in a registered editor")
         lines.append("")
         lines.append("OPTIONS:")
         lines.append("  --help, -h              Show this help message")

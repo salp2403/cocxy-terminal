@@ -3,10 +3,18 @@
 
 import SwiftUI
 
+struct CodeReviewExternalEditorAction: Identifiable {
+    let id: String
+    let title: String
+    let systemImage: String
+    let open: (String) -> Void
+}
+
 struct FileListView: View {
     let diffs: [FileDiff]
     let commentCount: (String) -> Int
     let selectedPath: String?
+    let externalEditorActions: [CodeReviewExternalEditorAction]
     let onSelect: (String) -> Void
 
     var body: some View {
@@ -21,6 +29,15 @@ struct FileListView: View {
                     .contentShape(RoundedRectangle(cornerRadius: 10))
                     .onTapGesture {
                         onSelect(diff.filePath)
+                    }
+                    .contextMenu {
+                        ForEach(externalEditorActions) { action in
+                            Button {
+                                action.open(diff.filePath)
+                            } label: {
+                                Label(action.title, systemImage: action.systemImage)
+                            }
+                        }
                     }
                     .accessibilityElement()
                     .accessibilityLabel("\(diff.displayName), \(accessibilityStatus(diff.status)), plus \(diff.additions), minus \(diff.deletions)")

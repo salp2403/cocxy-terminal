@@ -587,8 +587,9 @@ final class EnumParityTests: XCTestCase {
     func testCLICommandHasExpectedCaseCount() {
         // v0.1.81 added four worktree verbs bringing the total to 97.
         // v0.1.84 added five GitHub verbs (status/prs/issues/open/refresh)
-        // bringing it to 102. v0.1.86 added github-pr-merge, and P5
-        // added worktree-focus, bringing the total to 104.
+        // bringing it to 102. v0.1.86 added github-pr-merge, and
+        // P5 added worktree-focus. Local-only commands such as
+        // `cocxy open` intentionally stay out of the socket protocol.
         XCTAssertEqual(CLICommand.allCases.count, 104)
     }
 

@@ -12,6 +12,7 @@ struct CodeReviewPanelView: View {
     var onDecreaseWidth: (() -> Void)? = nil
     var onIncreaseWidth: (() -> Void)? = nil
     var onDismiss: (() -> Void)? = nil
+    var externalEditorActions: [CodeReviewExternalEditorAction] = []
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -465,6 +466,7 @@ struct CodeReviewPanelView: View {
                 diffs: viewModel.currentDiffs,
                 commentCount: viewModel.commentCount(for:),
                 selectedPath: viewModel.selectedFilePath,
+                externalEditorActions: externalEditorActions,
                 onSelect: { path in
                     viewModel.selectFile(path)
                 }

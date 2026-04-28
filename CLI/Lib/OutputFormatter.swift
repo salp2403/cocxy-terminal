@@ -39,7 +39,7 @@ public enum OutputFormatter {
             return "Tab closed."
         case .split:
             return "Pane split."
-        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks:
+        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen:
             // These commands are handled locally, not via socket.
             return response.data?.values.joined(separator: "\n") ?? ""
         case .review:

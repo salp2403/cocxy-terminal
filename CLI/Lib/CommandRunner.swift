@@ -2,6 +2,7 @@
 // CommandRunner.swift - Orchestrates parsing, socket communication, and output.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Command Runner
 
@@ -70,6 +71,8 @@ public struct CommandRunner {
             return HookHandlerCommand.execute(socketClient: socketClient)
         case .setupHooks(let agent, let remove):
             return SetupHooksCommand.execute(target: agent, remove: remove)
+        case .editorOpen(let path, let editor, let line, let column):
+            return executeEditorOpen(path: path, editor: editor, line: line, column: column)
         default:
             break
         }
@@ -196,6 +199,70 @@ public struct CommandRunner {
         }
     }
 
+    // MARK: - Local Commands: Editor Integration
+
+    /// Executes `cocxy open` locally. Opening external editors is a
+    /// host-side concern and should not require a running app socket.
+    private func executeEditorOpen(path: String, editor: String?, line: Int?, column: Int?) -> CLIResult {
+        let request = EditorOpenRequest(filePath: path, editorID: editor, line: line, column: column)
+        let launcher = EditorRegistry.launcher(matching: editor)
+        let executablePath = launcher?.executableNames.lazy.compactMap { Self.resolveExecutable(named: $0) }.first
+        let bundleIdentifier = launcher?.bundleIdentifiers.first
+        let plan = EditorLaunchPlanner.plan(
+            request: request,
+            launcher: launcher,
+            executablePath: executablePath,
+            bundleIdentifier: bundleIdentifier
+        )
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: plan.executablePath)
+        process.arguments = plan.arguments
+
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return CLIResult(
+                exitCode: 1,
+                stdout: "",
+                stderr: "Error: Failed to open \(path): \(error.localizedDescription)"
+            )
+        }
+
+        guard process.terminationStatus == 0 else {
+            let errorData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderr = String(data: errorData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return CLIResult(
+                exitCode: process.terminationStatus,
+                stdout: "",
+                stderr: "Error: Failed to open \(path) in \(plan.displayName)\(stderr.map { ": \($0)" } ?? ".")"
+            )
+        }
+
+        return CLIResult(
+            exitCode: 0,
+            stdout: "Opened \(URL(fileURLWithPath: path).standardizedFileURL.path) in \(plan.displayName).",
+            stderr: ""
+        )
+    }
+
+    private static func resolveExecutable(named name: String) -> String? {
+        let path = ProcessInfo.processInfo.environment["PATH"]
+            ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        for directory in path.split(separator: ":").map(String.init) {
+            let candidate = URL(fileURLWithPath: directory).appendingPathComponent(name).path
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
     // MARK: - Request Building
 
     /// Builds a `CLISocketRequest` from a parsed command.
@@ -241,7 +308,7 @@ public struct CommandRunner {
         case .status:
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
-        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks:
+        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen:
             // These are handled locally; should never reach socket request building.
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
