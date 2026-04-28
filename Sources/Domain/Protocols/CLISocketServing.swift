@@ -321,6 +321,9 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case worktreeAdd = "worktree-add"
     /// `cocxy worktree-list` — list every cocxy-managed worktree.
     case worktreeList = "worktree-list"
+    /// `cocxy worktree-focus <id>` — focus an existing cocxy-managed
+    /// worktree, reopening it in a tab when no live tab is attached.
+    case worktreeFocus = "worktree-focus"
     /// `cocxy worktree-remove <id>` — remove a cocxy-managed worktree
     /// (preflight on `git status --porcelain` unless `--force`).
     case worktreeRemove = "worktree-remove"

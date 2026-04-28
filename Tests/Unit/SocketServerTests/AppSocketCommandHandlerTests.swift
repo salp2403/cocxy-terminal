@@ -99,6 +99,37 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertFalse(response.success)
     }
 
+    func test_worktreeFocus_routesToWorktreeProvider() {
+        var capturedKind: String?
+        var capturedParams: [String: String]?
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            worktreeCLIProvider: { kind, params in
+                capturedKind = kind
+                capturedParams = params
+                return (
+                    success: true,
+                    data: [
+                        "id": params["id"] ?? "",
+                        "status": "focused"
+                    ]
+                )
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "wt-focus-1",
+            command: "worktree-focus",
+            params: ["id": "abc123"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(capturedKind, "focus")
+        XCTAssertEqual(capturedParams?["id"], "abc123")
+        XCTAssertEqual(response.data?["status"], "focused")
+    }
+
     // MARK: - Group 1: Tab Operations
 
     // MARK: focus-tab

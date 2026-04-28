@@ -107,6 +107,13 @@ extension AppDelegate {
                     store: store,
                     service: service
                 )
+            case "focus":
+                return try await runFocus(
+                    params: params,
+                    context: context,
+                    store: store,
+                    service: service
+                )
             case "remove":
                 return try await runRemove(
                     params: params,
@@ -227,6 +234,63 @@ extension AppDelegate {
         return (true, [
             "entries": json,
             "count": String(entries.count)
+        ])
+    }
+
+    nonisolated private func runFocus(
+        params: [String: String],
+        context: WorktreeCLIContext,
+        store: WorktreeManifestStore,
+        service: WorktreeService
+    ) async throws -> (Bool, [String: String]) {
+        guard let id = params["id"]?.nilIfEmpty else {
+            return (false, ["error": "worktree-focus requires --id <worktree-id>"])
+        }
+
+        let entries = try await service.list(store: store)
+        guard let entry = entries.first(where: { $0.id == id }) else {
+            throw WorktreeServiceError.worktreeNotFound(id: id)
+        }
+
+        let attachedTabID: TabID? = await MainActor.run {
+            if let tabID = entry.tabID,
+               let controller = self.controllerContainingTab(tabID),
+               controller.focusTab(id: tabID) {
+                controller.window?.makeKeyAndOrderFront(nil)
+                return tabID
+            }
+
+            let controller = self.focusedWindowController()
+                ?? context.activeTabID.flatMap { self.controllerContainingTab($0) }
+                ?? self.windowController
+            guard let controller else { return nil }
+            let newTabID = controller.createTab(workingDirectory: entry.path)
+            controller.attachWorktree(
+                entry,
+                originRepo: context.originRepoPath,
+                to: newTabID
+            )
+            controller.window?.makeKeyAndOrderFront(nil)
+            return newTabID
+        }
+
+        guard let attachedTabID else {
+            return (false, ["error": "No window available to focus worktree \(id)."])
+        }
+
+        var focusedEntry = entry
+        if entry.tabID != attachedTabID {
+            focusedEntry.tabID = attachedTabID
+            try await store.upsert(focusedEntry)
+        }
+
+        return (true, [
+            "id": focusedEntry.id,
+            "branch": focusedEntry.branch,
+            "path": focusedEntry.path.path,
+            "origin": context.originRepoPath.path,
+            "tab-id": attachedTabID.rawValue.uuidString,
+            "status": "focused"
         ])
     }
 

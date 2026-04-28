@@ -52,13 +52,13 @@ public enum ParsedCommand: Equatable {
     /// `cocxy review`
     case review
 
-    /// `cocxy review --refresh`
+    /// `cocxy review refresh`
     case reviewRefresh
 
-    /// `cocxy review --submit`
+    /// `cocxy review submit`
     case reviewSubmit
 
-    /// `cocxy review --stats`
+    /// `cocxy review status`
     case reviewStats
 
     /// `cocxy --help` or `cocxy help`
@@ -351,6 +351,9 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy worktree remove <id> [--force]`
     case worktreeRemove(id: String, force: Bool)
+
+    /// `cocxy worktree focus <id>`
+    case worktreeFocus(id: String)
 
     /// `cocxy worktree prune`
     case worktreePrune
@@ -793,6 +796,19 @@ public enum CLIArgumentParser {
     private static func parseReview(arguments: [String]) throws -> ParsedCommand {
         guard !arguments.isEmpty else { return .review }
 
+        if arguments.count == 1 {
+            switch arguments[0] {
+            case "refresh":
+                return .reviewRefresh
+            case "submit":
+                return .reviewSubmit
+            case "status", "stats":
+                return .reviewStats
+            default:
+                break
+            }
+        }
+
         let flags = Set(arguments)
         let supported = Set(["--refresh", "--submit", "--stats"])
         let unsupported = flags.subtracting(supported)
@@ -800,7 +816,7 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "review",
                 argument: invalid,
-                reason: "Unknown flag. Use --refresh, --submit, or --stats."
+                reason: "Unknown action. Use refresh, submit, status, --refresh, --submit, or --stats."
             )
         }
 
@@ -1629,15 +1645,16 @@ public enum CLIArgumentParser {
         guard let subcommand = arguments.first else {
             throw CLIError.missingArgument(
                 command: "worktree",
-                argument: "add|list|remove|prune"
+                argument: "add|create|list|focus|remove|prune"
             )
         }
         let rest = Array(arguments.dropFirst())
         switch subcommand {
-        case "add":
+        case "add", "create":
             var agent: String?
             var branch: String?
             var baseRef: String?
+            var positionalBranch: String?
             var index = 0
             while index < rest.count {
                 let token = rest[index]
@@ -1670,17 +1687,32 @@ public enum CLIArgumentParser {
                     baseRef = rest[index + 1]
                     index += 2
                 default:
+                    if subcommand == "create", positionalBranch == nil, !token.hasPrefix("-") {
+                        positionalBranch = token
+                        index += 1
+                        continue
+                    }
                     throw CLIError.invalidArgument(
-                        command: "worktree add",
+                        command: "worktree \(subcommand)",
                         argument: token,
                         reason: "Unknown option. Valid flags: --agent, --branch, --base-ref."
                     )
                 }
             }
+            branch = branch ?? positionalBranch
             return .worktreeAdd(agent: agent, branch: branch, baseRef: baseRef)
 
         case "list":
             return .worktreeList
+
+        case "focus":
+            guard rest.count == 1, let id = rest.first, !id.isEmpty else {
+                throw CLIError.missingArgument(
+                    command: "worktree focus",
+                    argument: "id"
+                )
+            }
+            return .worktreeFocus(id: id)
 
         case "remove":
             guard let id = rest.first else {
@@ -1710,7 +1742,7 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "worktree",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use add, list, remove, or prune."
+                reason: "Unknown subcommand. Use add, create, list, focus, remove, or prune."
             )
         }
     }

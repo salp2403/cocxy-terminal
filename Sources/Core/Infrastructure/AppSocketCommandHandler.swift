@@ -862,6 +862,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleWorktreeAdd(request)
         case .worktreeList:
             return handleWorktreeList(request)
+        case .worktreeFocus:
+            return handleWorktreeFocus(request)
         case .worktreeRemove:
             return handleWorktreeRemove(request)
         case .worktreePrune:
@@ -2672,6 +2674,13 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// without the handler having to deserialise anything.
     private func handleWorktreeList(_ request: SocketRequest) -> SocketResponse {
         runWorktreeProvider(kind: "list", request: request)
+    }
+
+    /// Routes `cocxy worktree-focus`. The provider resolves the
+    /// worktree id through the manifest, focuses an attached tab when
+    /// one exists, or opens a new tab at the worktree root otherwise.
+    private func handleWorktreeFocus(_ request: SocketRequest) -> SocketResponse {
+        runWorktreeProvider(kind: "focus", request: request)
     }
 
     /// Routes `cocxy worktree-remove`. The id is required; `force`

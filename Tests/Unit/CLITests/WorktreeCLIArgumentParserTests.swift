@@ -81,6 +81,21 @@ struct WorktreeCLIArgumentParserTests {
         }
     }
 
+    @Test("worktree create treats the positional branch as the branch template")
+    func createAliasUsesPositionalBranch() throws {
+        let parsed = try CLIArgumentParser.parse([
+            "worktree", "create", "feature/{id}"
+        ])
+        switch parsed {
+        case .worktreeAdd(let agent, let branch, let baseRef):
+            #expect(agent == nil)
+            #expect(branch == "feature/{id}")
+            #expect(baseRef == nil)
+        default:
+            Issue.record("Expected worktreeAdd")
+        }
+    }
+
     @Test("worktree add rejects unknown flags")
     func addUnknownFlagThrows() {
         #expect(throws: CLIError.self) {
@@ -105,6 +120,21 @@ struct WorktreeCLIArgumentParserTests {
     func listParses() throws {
         let parsed = try CLIArgumentParser.parse(["worktree", "list"])
         #expect(parsed == .worktreeList)
+    }
+
+    // MARK: - focus
+
+    @Test("worktree focus requires an id")
+    func focusRequiresID() {
+        #expect(throws: CLIError.self) {
+            _ = try CLIArgumentParser.parse(["worktree", "focus"])
+        }
+    }
+
+    @Test("worktree focus parses the id")
+    func focusParsesID() throws {
+        let parsed = try CLIArgumentParser.parse(["worktree", "focus", "abc123"])
+        #expect(parsed == .worktreeFocus(id: "abc123"))
     }
 
     // MARK: - remove

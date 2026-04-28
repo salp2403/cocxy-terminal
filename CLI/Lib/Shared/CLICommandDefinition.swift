@@ -172,6 +172,7 @@ public enum CLICommand: String, CaseIterable {
 
     case worktreeAdd = "worktree-add"
     case worktreeList = "worktree-list"
+    case worktreeFocus = "worktree-focus"
     case worktreeRemove = "worktree-remove"
     case worktreePrune = "worktree-prune"
 
@@ -332,6 +333,7 @@ public enum CLICommand: String, CaseIterable {
         // Worktree v0.1.81
         case .worktreeAdd: return "Create a cocxy-managed git worktree and attach it to the active tab"
         case .worktreeList: return "List every cocxy-managed git worktree for the active tab's repo as JSON"
+        case .worktreeFocus: return "Focus an existing cocxy-managed git worktree, reopening it in a tab when needed"
         case .worktreeRemove: return "Remove a cocxy-managed git worktree (refuses when dirty unless --force)"
         case .worktreePrune: return "Drop manifest entries whose worktree git no longer tracks"
 
@@ -363,9 +365,9 @@ public enum CLICommand: String, CaseIterable {
         case .hookHandler: return "cocxy hook-handler (reads JSON from stdin)"
         case .setupHooks: return "cocxy setup-hooks [--agent claude|codex|gemini|kiro|all] [--remove]"
         case .review: return "cocxy review"
-        case .reviewRefresh: return "cocxy review --refresh"
-        case .reviewSubmit: return "cocxy review --submit"
-        case .reviewStats: return "cocxy review --stats"
+        case .reviewRefresh: return "cocxy review refresh"
+        case .reviewSubmit: return "cocxy review submit"
+        case .reviewStats: return "cocxy review status"
 
         // Tab extended
         case .tabRename: return "cocxy tab rename <id> <name>"
@@ -484,6 +486,7 @@ public enum CLICommand: String, CaseIterable {
         // Worktree v0.1.81
         case .worktreeAdd: return "cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]"
         case .worktreeList: return "cocxy worktree list"
+        case .worktreeFocus: return "cocxy worktree focus <id>"
         case .worktreeRemove: return "cocxy worktree remove <id> [--force]"
         case .worktreePrune: return "cocxy worktree prune"
 

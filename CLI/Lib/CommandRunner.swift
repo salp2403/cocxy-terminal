@@ -669,6 +669,13 @@ public struct CommandRunner {
                 params: ["id": id, "force": force ? "true" : "false"]
             )
 
+        case .worktreeFocus(let id):
+            return CLISocketRequest(
+                id: requestID,
+                command: "worktree-focus",
+                params: ["id": id]
+            )
+
         case .worktreePrune:
             return CLISocketRequest(id: requestID, command: "worktree-prune", params: nil)
 

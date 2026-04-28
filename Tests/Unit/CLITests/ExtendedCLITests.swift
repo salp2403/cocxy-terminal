@@ -497,6 +497,10 @@ final class ReviewCommandTests: XCTestCase {
         XCTAssertEqual(try CLIArgumentParser.parse(["review", "--refresh"]), .reviewRefresh)
         XCTAssertEqual(try CLIArgumentParser.parse(["review", "--submit"]), .reviewSubmit)
         XCTAssertEqual(try CLIArgumentParser.parse(["review", "--stats"]), .reviewStats)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "refresh"]), .reviewRefresh)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "submit"]), .reviewSubmit)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "status"]), .reviewStats)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "stats"]), .reviewStats)
     }
 
     func testReviewRejectsMultipleFlags() {
@@ -521,6 +525,23 @@ final class ReviewCommandTests: XCTestCase {
         XCTAssertEqual(runner.buildRequest(from: .reviewRefresh).command, "review-refresh")
         XCTAssertEqual(runner.buildRequest(from: .reviewSubmit).command, "review-submit")
         XCTAssertEqual(runner.buildRequest(from: .reviewStats).command, "review-stats")
+    }
+
+    func testWorktreeFocusBuildRequestAndSuccessMessage() {
+        let request = runner.buildRequest(from: .worktreeFocus(id: "abc123"))
+        XCTAssertEqual(request.command, "worktree-focus")
+        XCTAssertEqual(request.params?["id"], "abc123")
+
+        let response = CLISocketResponse(
+            id: "worktree-focus-1",
+            success: true,
+            data: ["id": "abc123"],
+            error: nil
+        )
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(command: .worktreeFocus(id: "abc123"), response: response),
+            "Worktree abc123 focused."
+        )
     }
 
     func testReviewSuccessMessagesAreReadable() {
@@ -566,9 +587,9 @@ final class EnumParityTests: XCTestCase {
     func testCLICommandHasExpectedCaseCount() {
         // v0.1.81 added four worktree verbs bringing the total to 97.
         // v0.1.84 added five GitHub verbs (status/prs/issues/open/refresh)
-        // bringing it to 102. v0.1.86 added github-pr-merge bringing
-        // the total to 103.
-        XCTAssertEqual(CLICommand.allCases.count, 103)
+        // bringing it to 102. v0.1.86 added github-pr-merge, and P5
+        // added worktree-focus, bringing the total to 104.
+        XCTAssertEqual(CLICommand.allCases.count, 104)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription

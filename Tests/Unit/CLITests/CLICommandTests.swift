@@ -940,10 +940,10 @@ final class CLICommandDefinitionTests: XCTestCase {
     // MARK: - 43. All commands exist (current catalog size)
 
     func testAllCommandsExist() {
-        // v0.1.81 added four worktree verbs (worktree-add/list/remove/prune)
-        // bringing the total from 93 to 97. v0.1.84 added five GitHub
-        // verbs (github-status/prs/issues/open/refresh) bringing it to 102.
-        XCTAssertEqual(CLICommand.allCases.count, 103)
+        // v0.1.81 added worktree verbs, v0.1.84 added five GitHub
+        // verbs, v0.1.86 added github-pr-merge, and P5 adds
+        // worktree-focus.
+        XCTAssertEqual(CLICommand.allCases.count, 104)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -1003,6 +1003,14 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "state"]))
         XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "tabs"]))
         XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "text"]))
+    }
+
+    func testWorktreeFocusUsageMatchesPublicParserShape() throws {
+        XCTAssertEqual(CLICommand.worktreeFocus.usageExample, "cocxy worktree focus <id>")
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["worktree", "focus", "abc123"]),
+            .worktreeFocus(id: "abc123")
+        )
     }
 }
 

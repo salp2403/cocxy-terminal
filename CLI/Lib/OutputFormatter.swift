@@ -268,6 +268,11 @@ public enum OutputFormatter {
                 return "Worktree removed."
             }
             return "Worktree \(id) removed."
+        case .worktreeFocus:
+            guard let id = response.data?["id"] else {
+                return "Worktree focused."
+            }
+            return "Worktree \(id) focused."
         case .worktreePrune:
             let count = response.data?["count"] ?? "0"
             return "Pruned \(count) orphan worktree\(count == "1" ? "" : "s")."
