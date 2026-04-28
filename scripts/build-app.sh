@@ -185,6 +185,15 @@ if [ -f "${BUILD_DIR}/cocxy" ]; then
     echo "    CLI companion: ${RESOURCES}/cocxy"
 fi
 
+# Step 7b: Build and place the local PTY daemon helper in Resources. It is
+# launched only behind the explicit [experimental].pty-daemon gate.
+echo "==> Building PTY daemon helper..."
+swift build --target cocxyd ${SWIFT_FLAGS} 2>&1 | tail -1
+if [ -f "${BUILD_DIR}/cocxyd" ]; then
+    cp "${BUILD_DIR}/cocxyd" "${RESOURCES}/cocxyd"
+    echo "    PTY daemon helper: ${RESOURCES}/cocxyd"
+fi
+
 # Step 8: Ad-hoc code sign (required for local execution on modern macOS).
 echo "==> Signing app bundle (ad-hoc)..."
 codesign --force --sign - --entitlements "${APP_ENTITLEMENTS}" "${APP_BUNDLE}" 2>/dev/null || true

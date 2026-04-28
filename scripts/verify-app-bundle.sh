@@ -134,6 +134,7 @@ check_exists "$RESOURCES/defaults" "defaults directory"
 echo ""
 echo "[CLI]"
 check_exists "$RESOURCES/cocxy" "CLI companion binary"
+check_exists "$RESOURCES/cocxyd" "PTY daemon helper binary"
 
 # 7. App icon
 echo ""

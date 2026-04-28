@@ -1,0 +1,147 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// PTYDaemonReadiness.swift - Local PTY daemon readiness and fallback policy.
+
+import Foundation
+import CocxyShared
+
+enum PTYDaemonReadiness: Equatable {
+    case disabled
+    case helperMissing
+    case helperUnhealthy(String)
+    case helperHealthyButSurfaceBridgeUnavailable(PTYDaemonHello)
+    case terminalSurfaceBridgeAvailable(PTYDaemonHello)
+
+    var shouldUseInProcessEngine: Bool {
+        switch self {
+        case .terminalSurfaceBridgeAvailable:
+            // The helper can speak the surface protocol, but this app build
+            // still needs a dedicated TerminalEngine adapter before ownership
+            // of live terminal surfaces can safely move out of process.
+            return true
+        case .disabled, .helperMissing, .helperUnhealthy, .helperHealthyButSurfaceBridgeUnavailable:
+            return true
+        }
+    }
+
+    var diagnostic: String {
+        switch self {
+        case .disabled:
+            return "PTY daemon disabled; using in-process CocxyCore bridge."
+        case .helperMissing:
+            return "PTY daemon requested but bundled helper is missing; using in-process CocxyCore bridge."
+        case .helperUnhealthy(let reason):
+            return "PTY daemon requested but helper handshake failed (\(reason)); using in-process CocxyCore bridge."
+        case .helperHealthyButSurfaceBridgeUnavailable:
+            return "PTY daemon helper is healthy but does not expose terminal-surface-v1; using in-process CocxyCore bridge."
+        case .terminalSurfaceBridgeAvailable:
+            return "PTY daemon helper exposes terminal-surface-v1; this build keeps in-process bridge until the daemon TerminalEngine adapter is enabled."
+        }
+    }
+}
+
+struct PTYDaemonHelperLocator {
+    var bundle: Bundle = .main
+    var fileManager: FileManager = .default
+
+    func executableURL() -> URL? {
+        let candidates: [URL?] = [
+            bundle.url(forResource: PTYDaemonProtocol.helperName, withExtension: nil),
+            bundle.executableURL?
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Resources", isDirectory: true)
+                .appendingPathComponent(PTYDaemonProtocol.helperName, isDirectory: false),
+            bundle.executableURL?
+                .deletingLastPathComponent()
+                .appendingPathComponent(PTYDaemonProtocol.helperName, isDirectory: false)
+        ]
+
+        return candidates.compactMap { $0 }.first { url in
+            fileManager.isExecutableFile(atPath: url.path)
+        }
+    }
+}
+
+struct PTYDaemonReadinessResolver {
+    var handshake: (URL) -> Result<PTYDaemonHello, Error>
+
+    init(handshake: @escaping (URL) -> Result<PTYDaemonHello, Error> = { url in
+        Result { try PTYDaemonHandshake().probe(executableURL: url) }
+    }) {
+        self.handshake = handshake
+    }
+
+    func resolve(config: ExperimentalConfig, helperURL: URL?) -> PTYDaemonReadiness {
+        guard config.ptyDaemonEnabled else { return .disabled }
+        guard let helperURL else { return .helperMissing }
+
+        switch handshake(helperURL) {
+        case .success(let hello):
+            if hello.supportsTerminalSurfaces {
+                return .terminalSurfaceBridgeAvailable(hello)
+            }
+            return .helperHealthyButSurfaceBridgeUnavailable(hello)
+        case .failure(let error):
+            return .helperUnhealthy(String(describing: error))
+        }
+    }
+}
+
+struct PTYDaemonHandshake {
+    enum HandshakeError: Error, Equatable {
+        case launchFailed(String)
+        case timeout
+        case emptyResponse
+        case invalidResponse(String)
+    }
+
+    var timeoutSeconds: TimeInterval = 2
+
+    func probe(executableURL: URL) throws -> PTYDaemonHello {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = ["--stdio"]
+
+        let input = Pipe()
+        let output = Pipe()
+        let error = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = error
+
+        let group = DispatchGroup()
+        group.enter()
+        process.terminationHandler = { _ in group.leave() }
+
+        do {
+            try process.run()
+        } catch {
+            throw HandshakeError.launchFailed(String(describing: error))
+        }
+
+        let request = PTYDaemonRequest(id: UUID().uuidString, command: .hello)
+        input.fileHandleForWriting.write(try PTYDaemonLineCodec.encode(request))
+        input.fileHandleForWriting.closeFile()
+
+        if group.wait(timeout: .now() + timeoutSeconds) == .timedOut {
+            process.terminate()
+            throw HandshakeError.timeout
+        }
+
+        let responseData = output.fileHandleForReading.readDataToEndOfFile()
+        guard responseData.isEmpty == false else { throw HandshakeError.emptyResponse }
+
+        let firstLine: Data
+        if let newlineIndex = responseData.firstIndex(of: 0x0A) {
+            firstLine = responseData.prefix(through: newlineIndex)
+        } else {
+            throw HandshakeError.invalidResponse("missing newline")
+        }
+
+        let response = try PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: firstLine)
+        guard response.ok, let hello = response.hello else {
+            throw HandshakeError.invalidResponse(response.error ?? "missing hello")
+        }
+        return hello
+    }
+}

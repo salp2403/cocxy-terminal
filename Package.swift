@@ -13,6 +13,10 @@ let package = Package(
             name: "CocxyMarkdownLib",
             targets: ["CocxyMarkdownLib"]
         ),
+        .library(
+            name: "CocxyShared",
+            targets: ["CocxyShared"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
@@ -23,10 +27,16 @@ let package = Package(
             dependencies: [],
             path: "Sources/Domain/Markdown"
         ),
+        .target(
+            name: "CocxyShared",
+            dependencies: [],
+            path: "Shared"
+        ),
         // MARK: - Main App
         .executableTarget(
             name: "CocxyTerminal",
             dependencies: [
+                "CocxyShared",
                 "CocxyMarkdownLib",
                 "CocxyCoreKit",
                 .product(name: "Sparkle", package: "Sparkle"),
@@ -51,6 +61,7 @@ let package = Package(
             name: "CocxyTerminalTests",
             dependencies: [
                 "CocxyTerminal",
+                "CocxyShared",
                 "CocxyMarkdownLib",
             ],
             path: "Tests",
@@ -64,7 +75,7 @@ let package = Package(
         // MARK: - CLI Companion
         .target(
             name: "CocxyCLILib",
-            dependencies: [],
+            dependencies: ["CocxyShared"],
             path: "CLI/Lib"
         ),
         .executableTarget(
@@ -72,9 +83,14 @@ let package = Package(
             dependencies: ["CocxyCLILib"],
             path: "CLI/Sources/Entry"
         ),
+        .executableTarget(
+            name: "cocxyd",
+            dependencies: ["CocxyShared"],
+            path: "Daemon/Sources"
+        ),
         .testTarget(
             name: "CocxyCLITests",
-            dependencies: ["CocxyCLILib"],
+            dependencies: ["CocxyCLILib", "CocxyShared"],
             path: "Tests/Unit/CLITests"
         ),
     ]

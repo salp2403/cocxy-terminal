@@ -1,0 +1,29 @@
+name: Performance
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cold-start:
+    name: Cold start smoke budget
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Build app bundle
+        run: ./scripts/build-app.sh debug
+
+      - name: Measure cold start
+        run: |
+          chmod +x scripts/bench-cold-start.sh
+          scripts/bench-cold-start.sh --app build/CocxyTerminal.app --runs 5
