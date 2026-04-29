@@ -148,4 +148,50 @@ struct RateLimitIndicatorFormattingSwiftTestingTests {
         // an authoritative read of their plan limit.
         #expect(text.lowercased().contains("estimate"))
     }
+
+    @Test("tooltip discloses the upstream Codex ledger inflation so users can interpret the number as a relative activity signal")
+    func tooltipDisclosesCodexLedgerInflation() {
+        let codexSnapshot = makeSnapshot(
+            agent: .codex,
+            usagePercent: 0.0,
+            usedAmount: 1234,
+            limitAmount: 0,
+            unit: .tokens
+        )
+
+        let text = RateLimitIndicatorFormatting.tooltipText(for: codexSnapshot)
+
+        // The exact wording is allowed to evolve, but the disclosure
+        // MUST mention the inflation so the user knows the absolute
+        // number is not directly comparable to Codex's own reporting.
+        #expect(text.lowercased().contains("inflated"))
+        #expect(text.contains("openai/codex#18498"))
+        #expect(text.lowercased().contains("relative activity"))
+    }
+
+    @Test("tooltip skips the Codex inflation disclosure for other agents so unrelated providers do not leak Codex-specific caveats")
+    func tooltipOmitsCodexDisclosureForOtherAgents() {
+        for agent in [RateLimitSnapshot.AgentKind.claude, .gemini, .aider] {
+            let snapshot = makeSnapshot(
+                agent: agent,
+                usagePercent: 0.5,
+                usedAmount: 500,
+                limitAmount: 1000,
+                unit: .tokens
+            )
+
+            let text = RateLimitIndicatorFormatting.tooltipText(for: snapshot)
+
+            #expect(!text.contains("openai/codex#18498"))
+            #expect(!text.lowercased().contains("inflated token totals"))
+        }
+    }
+
+    @Test("upstreamLedgerDisclosure returns nil for non-Codex agents so the helper stays a pure decision table the tooltip can rely on")
+    func upstreamLedgerDisclosureScopedToCodex() {
+        #expect(RateLimitIndicatorFormatting.upstreamLedgerDisclosure(for: .codex) != nil)
+        #expect(RateLimitIndicatorFormatting.upstreamLedgerDisclosure(for: .claude) == nil)
+        #expect(RateLimitIndicatorFormatting.upstreamLedgerDisclosure(for: .gemini) == nil)
+        #expect(RateLimitIndicatorFormatting.upstreamLedgerDisclosure(for: .aider) == nil)
+    }
 }
