@@ -102,6 +102,18 @@ public enum EditorRegistry {
             executableNames: ["xed"]
         ),
         EditorLauncher(
+            id: "emacs",
+            displayName: "Emacs",
+            bundleIdentifiers: ["org.gnu.Emacs"],
+            executableNames: ["emacsclient"]
+        ),
+        EditorLauncher(
+            id: "aquamacs",
+            displayName: "Aquamacs",
+            bundleIdentifiers: ["org.gnu.Aquamacs"],
+            executableNames: []
+        ),
+        EditorLauncher(
             id: "bbedit",
             displayName: "BBEdit",
             bundleIdentifiers: ["com.barebones.bbedit"],
@@ -229,6 +241,13 @@ public enum EditorLaunchPlanner {
             if let line {
                 return ["--line", "\(line)", filePath]
             }
+            return [filePath]
+        case "emacs":
+            if let line {
+                return ["-n", "+\(line):\(column ?? 1)", filePath]
+            }
+            return ["-n", filePath]
+        case "aquamacs":
             return [filePath]
         case "neovim", "helix":
             if let line {

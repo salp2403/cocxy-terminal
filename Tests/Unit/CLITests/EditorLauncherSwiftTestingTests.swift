@@ -13,6 +13,8 @@ struct EditorLauncherSwiftTestingTests {
         #expect(EditorRegistry.launcher(matching: "VS Code")?.id == "vscode")
         #expect(EditorRegistry.launcher(matching: "code")?.id == "vscode")
         #expect(EditorRegistry.launcher(matching: "Sublime Text")?.id == "sublime")
+        #expect(EditorRegistry.launcher(matching: "emacsclient")?.id == "emacs")
+        #expect(EditorRegistry.launcher(matching: "Aquamacs")?.id == "aquamacs")
     }
 
     @Test("system/default editor falls back to /usr/bin/open")
@@ -50,6 +52,18 @@ struct EditorLauncherSwiftTestingTests {
             column: 4
         )
         #expect(args == ["--line", "9", "/tmp/App.swift"])
+    }
+
+    @Test("Emacs uses non-blocking emacsclient line syntax")
+    func emacsUsesNonBlockingClientLineSyntax() {
+        let launcher = EditorRegistry.launcher(matching: "emacs")
+        let args = EditorLaunchPlanner.commandArguments(
+            for: launcher!,
+            filePath: "/tmp/App.swift",
+            line: 9,
+            column: 4
+        )
+        #expect(args == ["-n", "+9:4", "/tmp/App.swift"])
     }
 
     @Test("terminal editors are marked in launch plans")
