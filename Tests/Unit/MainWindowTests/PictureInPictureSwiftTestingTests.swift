@@ -100,6 +100,26 @@ struct PictureInPictureSwiftTestingTests {
         #expect(surfaceView.window?.firstResponder === surfaceView)
     }
 
+    @Test("windowWillClose tears down active PIP panels so they do not outlive the controller")
+    func windowWillCloseTearsDownActivePIPPanels() {
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: makeConfigService(pipEnabled: true)
+        )
+        guard let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
+            Issue.record("Expected initial tab")
+            return
+        }
+
+        #expect(controller.detachActiveTerminalToPIP() == true)
+        #expect(controller.pipControllers[tabID] != nil)
+
+        let notification = Notification(name: NSWindow.willCloseNotification, object: nil)
+        controller.windowWillClose(notification)
+
+        #expect(controller.pipControllers.isEmpty)
+    }
+
     @Test("PIP remains owned by its panel if the source tab disappears before restore")
     func pipSurvivesSourceTabRemovalUntilPanelRestores() async {
         let controller = MainWindowController(

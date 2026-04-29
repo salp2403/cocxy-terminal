@@ -1438,6 +1438,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         remoteUnreadCancellable = nil
         removeWorkspaceWakeObservers()
 
+        // Tear down any active Picture-in-Picture panels before destroying
+        // surfaces so the floating windows do not outlive this controller.
+        // Detaching the delegate first prevents the panel's own
+        // windowWillClose from scheduling an async restore back into a
+        // deallocating controller via the weak self capture.
+        for pipController in pipControllers.values {
+            pipController.window?.delegate = nil
+            pipController.window?.close()
+        }
+        pipControllers.removeAll()
+
         destroyAllSurfaces()
 
         // Remove this controller from the app delegate's additional window list
