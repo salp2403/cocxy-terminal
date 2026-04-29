@@ -94,6 +94,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case reviewSubmit = "review-submit"
     /// Print current review statistics.
     case reviewStats = "review-stats"
+    /// Approve the active GitHub pull request.
+    case reviewApprove = "review-approve"
+    /// Request changes on the active GitHub pull request.
+    case reviewRequestChanges = "review-request-changes"
 
     // MARK: - Tab extended (v2)
 

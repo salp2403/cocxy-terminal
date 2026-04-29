@@ -501,6 +501,17 @@ final class ReviewCommandTests: XCTestCase {
         XCTAssertEqual(try CLIArgumentParser.parse(["review", "submit"]), .reviewSubmit)
         XCTAssertEqual(try CLIArgumentParser.parse(["review", "status"]), .reviewStats)
         XCTAssertEqual(try CLIArgumentParser.parse(["review", "stats"]), .reviewStats)
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["review", "approve", "--pr", "42", "--body", "Ship it"]),
+            .reviewApprove(prNumber: 42, body: "Ship it", readBodyFromStdin: false)
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["review", "request-changes", "--pr", "42", "--stdin"]),
+            .reviewRequestChanges(prNumber: 42, body: nil, readBodyFromStdin: true)
+        )
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "--help"]), .help)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "approve", "--help"]), .help)
+        XCTAssertEqual(try CLIArgumentParser.parse(["review", "request-changes", "--help"]), .help)
     }
 
     func testReviewRejectsMultipleFlags() {
@@ -525,6 +536,22 @@ final class ReviewCommandTests: XCTestCase {
         XCTAssertEqual(runner.buildRequest(from: .reviewRefresh).command, "review-refresh")
         XCTAssertEqual(runner.buildRequest(from: .reviewSubmit).command, "review-submit")
         XCTAssertEqual(runner.buildRequest(from: .reviewStats).command, "review-stats")
+        let approve = runner.buildRequest(from: .reviewApprove(
+            prNumber: 42,
+            body: "Ship it",
+            readBodyFromStdin: false
+        ))
+        XCTAssertEqual(approve.command, "review-approve")
+        XCTAssertEqual(approve.params?["pr"], "42")
+        XCTAssertEqual(approve.params?["body"], "Ship it")
+
+        let requestChanges = runner.buildRequest(from: .reviewRequestChanges(
+            prNumber: nil,
+            body: "Please fix the edge case.",
+            readBodyFromStdin: false
+        ))
+        XCTAssertEqual(requestChanges.command, "review-request-changes")
+        XCTAssertEqual(requestChanges.params?["body"], "Please fix the edge case.")
     }
 
     func testWorktreeFocusBuildRequestAndSuccessMessage() {
@@ -576,6 +603,38 @@ final class ReviewCommandTests: XCTestCase {
             OutputFormatter.formatSuccess(command: .reviewSubmit, response: snakeCaseResponse),
             "Submitted 2 comments."
         )
+
+        let approveResponse = CLISocketResponse(
+            id: "review-4",
+            success: true,
+            data: ["summary": "Review approved for PR #42."],
+            error: nil
+        )
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(
+                command: .reviewApprove(prNumber: 42, body: nil, readBodyFromStdin: false),
+                response: approveResponse
+            ),
+            "Review approved for PR #42."
+        )
+
+        let requestChangesResponse = CLISocketResponse(
+            id: "review-5",
+            success: true,
+            data: ["summary": "Review changes requested for PR #42."],
+            error: nil
+        )
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(
+                command: .reviewRequestChanges(
+                    prNumber: 42,
+                    body: "Please fix the failing check.",
+                    readBodyFromStdin: false
+                ),
+                response: requestChangesResponse
+            ),
+            "Review changes requested for PR #42."
+        )
     }
 }
 
@@ -588,9 +647,10 @@ final class EnumParityTests: XCTestCase {
         // v0.1.81 added four worktree verbs bringing the total to 97.
         // v0.1.84 added five GitHub verbs (status/prs/issues/open/refresh)
         // bringing it to 102. v0.1.86 added github-pr-merge, and
-        // P5 added worktree-focus. Local-only commands such as
+        // P5 added worktree-focus plus review approve/request-changes.
+        // Local-only commands such as
         // `cocxy open` intentionally stay out of the socket protocol.
-        XCTAssertEqual(CLICommand.allCases.count, 104)
+        XCTAssertEqual(CLICommand.allCases.count, 106)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription

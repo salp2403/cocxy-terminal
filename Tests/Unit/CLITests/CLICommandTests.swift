@@ -942,8 +942,8 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // v0.1.81 added worktree verbs, v0.1.84 added five GitHub
         // verbs, v0.1.86 added github-pr-merge, and P5 adds
-        // worktree-focus.
-        XCTAssertEqual(CLICommand.allCases.count, 104)
+        // worktree-focus plus review approve/request-changes.
+        XCTAssertEqual(CLICommand.allCases.count, 106)
     }
 
     // MARK: - 39. Raw values match server protocol

@@ -53,6 +53,10 @@ public enum OutputFormatter {
             return "Code review comments submitted."
         case .reviewStats:
             return formatDataOrJSON(response: response)
+        case .reviewApprove:
+            return response.data?["summary"] ?? "Pull request approved."
+        case .reviewRequestChanges:
+            return response.data?["summary"] ?? "Pull request changes requested."
         case .help, .version:
             return ""
 

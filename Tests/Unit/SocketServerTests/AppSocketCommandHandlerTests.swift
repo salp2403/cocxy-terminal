@@ -100,14 +100,14 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_worktreeFocus_routesToWorktreeProvider() {
-        var capturedKind: String?
-        var capturedParams: [String: String]?
+        let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(
             tabManager: nil,
             hookEventReceiver: nil,
             worktreeCLIProvider: { kind, params in
-                capturedKind = kind
-                capturedParams = params
+                captured.withValue { value in
+                    value = (kind, params)
+                }
                 return (
                     success: true,
                     data: [
@@ -125,9 +125,70 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         ))
 
         XCTAssertTrue(response.success)
-        XCTAssertEqual(capturedKind, "focus")
-        XCTAssertEqual(capturedParams?["id"], "abc123")
+        let snapshot = captured.withValue { $0 }
+        XCTAssertEqual(snapshot.kind, "focus")
+        XCTAssertEqual(snapshot.params?["id"], "abc123")
         XCTAssertEqual(response.data?["status"], "focused")
+    }
+
+    func test_reviewApprove_routesToGitHubProvider() {
+        let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            githubCLIProvider: { kind, params in
+                captured.withValue { value in
+                    value = (kind, params)
+                }
+                return (
+                    success: true,
+                    data: ["summary": "Review approved for PR #42."]
+                )
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "review-approve-1",
+            command: "review-approve",
+            params: ["pr": "42", "body": "Ship it"]
+        ))
+
+        XCTAssertTrue(response.success)
+        let snapshot = captured.withValue { $0 }
+        XCTAssertEqual(snapshot.kind, "review-approve")
+        XCTAssertEqual(snapshot.params?["pr"], "42")
+        XCTAssertEqual(snapshot.params?["body"], "Ship it")
+        XCTAssertEqual(response.data?["summary"], "Review approved for PR #42.")
+    }
+
+    func test_reviewRequestChanges_routesToGitHubProvider() {
+        let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            githubCLIProvider: { kind, params in
+                captured.withValue { value in
+                    value = (kind, params)
+                }
+                return (
+                    success: true,
+                    data: ["summary": "Review changes requested for PR #42."]
+                )
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "review-request-changes-1",
+            command: "review-request-changes",
+            params: ["pr": "42", "body": "Please fix the failing check."]
+        ))
+
+        XCTAssertTrue(response.success)
+        let snapshot = captured.withValue { $0 }
+        XCTAssertEqual(snapshot.kind, "review-request-changes")
+        XCTAssertEqual(snapshot.params?["pr"], "42")
+        XCTAssertEqual(snapshot.params?["body"], "Please fix the failing check.")
+        XCTAssertEqual(response.data?["summary"], "Review changes requested for PR #42.")
     }
 
     // MARK: - Group 1: Tab Operations
@@ -605,6 +666,26 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             response.data?["appearance.quickswitch-mode"],
             AppearanceConfig.defaults.quickSwitchMode.rawValue
         )
+        XCTAssertEqual(response.data?["worktree.enabled"], "\(WorktreeConfig.defaults.enabled)")
+        XCTAssertEqual(response.data?["worktree.on-close"], WorktreeConfig.defaults.onClose.rawValue)
+        XCTAssertEqual(response.data?["experimental.pip-enabled"], "\(ExperimentalConfig.defaults.pipEnabled)")
+        XCTAssertEqual(response.data?["experimental.pty-daemon"], "\(ExperimentalConfig.defaults.ptyDaemonEnabled)")
+    }
+
+    func test_configList_withFilterOnlyReturnsMatchingKeys() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cl-filter",
+            command: "config-list",
+            params: ["filter": "worktree."]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "9")
+        XCTAssertEqual(response.data?["worktree.enabled"], "\(WorktreeConfig.defaults.enabled)")
+        XCTAssertEqual(response.data?["worktree.on-close"], WorktreeConfig.defaults.onClose.rawValue)
+        XCTAssertNil(response.data?["appearance.theme"])
+        XCTAssertNil(response.data?["experimental.pip-enabled"])
     }
 
     // MARK: config-set
@@ -636,7 +717,15 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configSet_withValidParams_returnsAcknowledged() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let didReload = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            configReloadProvider: {
+                didReload.withValue { $0 = true }
+                return true
+            }
+        )
         let request = SocketRequest(
             id: "cs-3",
             command: "config-set",
@@ -646,6 +735,73 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "updated")
+        XCTAssertTrue(didReload.withValue { $0 })
+    }
+
+    func test_configSet_reportsReloadFailure() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            configReloadProvider: { false }
+        )
+        let request = SocketRequest(
+            id: "cs-reload-failure",
+            command: "config-set",
+            params: ["key": "appearance.theme", "value": "dracula"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Configuration was written but could not be reloaded")
+    }
+
+    func test_configTOMLUpdater_insertsMissingFieldInsideExistingSection() {
+        let toml = """
+        [appearance]
+        theme = "dracula"
+
+        [terminal]
+        scrollback-lines = 10000
+        """
+
+        let updated = AppSocketConfigTOMLUpdater.updateTomlValue(
+            in: toml,
+            section: "appearance",
+            field: "quickswitch-mode",
+            newValue: "tabs-only"
+        )
+
+        XCTAssertTrue(updated.contains("quickswitch-mode = \"tabs-only\""))
+        XCTAssertLessThan(
+            updated.range(of: "quickswitch-mode = \"tabs-only\"")!.lowerBound,
+            updated.range(of: "[terminal]")!.lowerBound
+        )
+        XCTAssertGreaterThan(
+            updated.range(of: "quickswitch-mode = \"tabs-only\"")!.lowerBound,
+            updated.range(of: "[appearance]")!.lowerBound
+        )
+    }
+
+    func test_configTOMLUpdater_appendsMissingSection() {
+        let updated = AppSocketConfigTOMLUpdater.updateTomlValue(
+            in: "[general]\nshell = \"/bin/zsh\"",
+            section: "experimental",
+            field: "pip-enabled",
+            newValue: "true"
+        )
+
+        XCTAssertTrue(updated.contains("\n[experimental]\npip-enabled = true"))
+    }
+
+    func test_configTOMLUpdater_escapesInsertedStringValues() {
+        let updated = AppSocketConfigTOMLUpdater.updateTomlValue(
+            in: "[worktree]",
+            section: "worktree",
+            field: "base-path",
+            newValue: "/tmp/quoted \"folder\" \\ suffix"
+        )
+
+        XCTAssertTrue(updated.contains("base-path = \"/tmp/quoted \\\"folder\\\" \\\\ suffix\""))
     }
 
     // MARK: - Group 3: Theme Operations

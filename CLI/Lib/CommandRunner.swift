@@ -30,7 +30,7 @@ public struct CommandRunner {
     /// - Parameter arguments: The arguments array (excluding the program name).
     /// - Returns: A `CLIResult` with the exit code and output.
     public func run(arguments: [String]) -> CLIResult {
-        let parsedCommand: ParsedCommand
+        var parsedCommand: ParsedCommand
         do {
             parsedCommand = try CLIArgumentParser.parse(arguments)
         } catch let error as CLIError {
@@ -45,6 +45,9 @@ public struct CommandRunner {
                 stdout: "",
                 stderr: "Error: \(error.localizedDescription)"
             )
+        }
+        if let commandWithBody = parsedCommand.fillingReviewBodyFromStdinIfNeeded() {
+            parsedCommand = commandWithBody
         }
 
         // Handle commands that don't need the server.
@@ -323,6 +326,26 @@ public struct CommandRunner {
 
         case .reviewStats:
             return CLISocketRequest(id: requestID, command: "review-stats", params: nil)
+
+        case .reviewApprove(let prNumber, let body, _):
+            var params: [String: String] = [:]
+            if let prNumber { params["pr"] = "\(prNumber)" }
+            if let body { params["body"] = body }
+            return CLISocketRequest(
+                id: requestID,
+                command: "review-approve",
+                params: params.isEmpty ? nil : params
+            )
+
+        case .reviewRequestChanges(let prNumber, let body, _):
+            var params: [String: String] = [:]
+            if let prNumber { params["pr"] = "\(prNumber)" }
+            if let body { params["body"] = body }
+            return CLISocketRequest(
+                id: requestID,
+                command: "review-request-changes",
+                params: params.isEmpty ? nil : params
+            )
 
         case .help, .version:
             return CLISocketRequest(id: requestID, command: "status", params: nil)
@@ -789,6 +812,33 @@ public struct CommandRunner {
                 params: params
             )
         }
+    }
+}
+
+private extension ParsedCommand {
+    func fillingReviewBodyFromStdinIfNeeded() -> ParsedCommand? {
+        switch self {
+        case .reviewApprove(let prNumber, let body, true):
+            return .reviewApprove(
+                prNumber: prNumber,
+                body: body ?? Self.readStdinBody(),
+                readBodyFromStdin: false
+            )
+        case .reviewRequestChanges(let prNumber, let body, true):
+            return .reviewRequestChanges(
+                prNumber: prNumber,
+                body: body ?? Self.readStdinBody(),
+                readBodyFromStdin: false
+            )
+        default:
+            return nil
+        }
+    }
+
+    static func readStdinBody() -> String {
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 }
 

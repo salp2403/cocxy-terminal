@@ -91,6 +91,10 @@ extension AppDelegate {
             return await runGitHubRefresh()
         case "pr-merge":
             return await runGitHubPRMerge(params: params, config: githubConfig)
+        case "review-approve":
+            return await runGitHubPRReview(params: params, action: .approve)
+        case "review-request-changes":
+            return await runGitHubPRReview(params: params, action: .requestChanges)
         default:
             return (false, ["error": "Unknown github subcommand: \(kind)"])
         }
@@ -406,6 +410,42 @@ extension AppDelegate {
                     continuation.resume(throwing: error)
                 }
             }
+        }
+    }
+
+    // MARK: - PR Review (P5 CLI)
+
+    /// `cocxy review approve/request-changes` — submits a GitHub PR
+    /// review from the active tab's repository. This intentionally
+    /// lives beside the GitHub CLI bridge because the operation is a
+    /// `gh pr review` call even though the public command is grouped
+    /// under `review` for user ergonomics.
+    nonisolated private func runGitHubPRReview(
+        params: [String: String],
+        action: GitHubPullRequestReviewAction
+    ) async -> (Bool, [String: String]) {
+        guard let directory = await MainActor.run(body: { self.currentGitHubCLIWorkingDirectory() }) else {
+            return (false, [
+                "error": "Open a git repository before submitting a pull request review.",
+            ])
+        }
+
+        let prNumber = params["pr"].flatMap(Int.init)
+        do {
+            try await Self.sharedGitHubService.reviewPullRequest(
+                number: prNumber,
+                action: action,
+                body: params["body"],
+                at: directory
+            )
+            let target = prNumber.map { "PR #\($0)" } ?? "the active pull request"
+            return (true, [
+                "summary": "Review \(action.displayName) for \(target).",
+            ])
+        } catch let error as GitHubCLIError {
+            return (false, ["error": GitHubPaneViewModel.banner(for: error)])
+        } catch {
+            return (false, ["error": error.localizedDescription])
         }
     }
 

@@ -477,4 +477,48 @@ struct GitHubServiceSwiftTestingTests {
             from: "https://github.com/u/r/tree/main"
         ) == nil)
     }
+
+    // MARK: - reviewPullRequest
+
+    @Test("reviewPullRequest approves an explicit PR with an optional body")
+    func reviewPullRequest_approvesExplicitPRWithBody() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: { $0.contains("review") }, result: GitHubCLIResult(
+            stdout: "",
+            stderr: "",
+            terminationStatus: 0
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        try await service.reviewPullRequest(
+            number: 42,
+            action: .approve,
+            body: "Ship it",
+            at: URL(fileURLWithPath: "/tmp")
+        )
+
+        let args = try #require(spy.allInvocations.first?.args)
+        #expect(args == ["pr", "review", "42", "--approve", "--body", "Ship it"])
+    }
+
+    @Test("reviewPullRequest request-changes preserves gh current-branch default")
+    func reviewPullRequest_requestChangesWithoutExplicitPR() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: { $0.contains("review") }, result: GitHubCLIResult(
+            stdout: "",
+            stderr: "",
+            terminationStatus: 0
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        try await service.reviewPullRequest(
+            number: nil,
+            action: .requestChanges,
+            body: nil,
+            at: URL(fileURLWithPath: "/tmp")
+        )
+
+        let args = try #require(spy.allInvocations.first?.args)
+        #expect(args == ["pr", "review", "--request-changes"])
+    }
 }

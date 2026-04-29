@@ -20,6 +20,77 @@ enum CocxyVersion {
     }()
 }
 
+enum AppSocketConfigTOMLUpdater {
+    static func updateTomlValue(
+        in content: String,
+        section: String,
+        field: String,
+        newValue: String
+    ) -> String {
+        let rendered = "\(field) = \(renderedValue(newValue))"
+        var lines = content.components(separatedBy: "\n")
+        var inTargetSection = false
+        var sawTargetSection = false
+        var insertIndex: Int?
+
+        for index in lines.indices {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+
+            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+                if inTargetSection && insertIndex == nil {
+                    insertIndex = index
+                }
+
+                let sectionName = trimmed
+                    .dropFirst()
+                    .dropLast()
+                    .trimmingCharacters(in: .whitespaces)
+                inTargetSection = (sectionName == section)
+                if inTargetSection {
+                    sawTargetSection = true
+                    insertIndex = index + 1
+                }
+                continue
+            }
+
+            if inTargetSection {
+                let matchesField = trimmed.hasPrefix("\(field) =")
+                    || trimmed.hasPrefix("\(field)=")
+                if matchesField {
+                    lines[index] = rendered
+                    return lines.joined(separator: "\n")
+                }
+                insertIndex = index + 1
+            }
+        }
+
+        if sawTargetSection {
+            lines.insert(rendered, at: insertIndex ?? lines.count)
+            return lines.joined(separator: "\n")
+        }
+
+        if lines.last?.isEmpty == false {
+            lines.append("")
+        }
+        lines.append("[\(section)]")
+        lines.append(rendered)
+        return lines.joined(separator: "\n")
+    }
+
+    private static func renderedValue(_ value: String) -> String {
+        if value == "true" || value == "false" || Int(value) != nil || Double(value) != nil {
+            return value
+        }
+        return "\"\(escapedStringValue(value))\""
+    }
+
+    private static func escapedStringValue(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+}
+
 enum TabCloseOutcome: Sendable {
     case closed
     case lastTabBlocked
@@ -825,6 +896,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleReviewSubmit(request)
         case .reviewStats:
             return handleReviewStats(request)
+        case .reviewApprove:
+            return handleGitHubCLI(kind: "review-approve", request: request)
+        case .reviewRequestChanges:
+            return handleGitHubCLI(kind: "review-request-changes", request: request)
 
         // Timeline (v4)
         case .timelineShow:
@@ -1167,7 +1242,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         let existingContent = (try? String(contentsOfFile: configPath, encoding: .utf8))
             ?? ConfigService.generateDefaultToml()
 
-        let updatedContent = updateTomlValue(
+        let updatedContent = AppSocketConfigTOMLUpdater.updateTomlValue(
             in: existingContent,
             section: sectionFromKey(key),
             field: fieldFromKey(key),
@@ -1180,6 +1255,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 withIntermediateDirectories: true
             )
             try updatedContent.write(toFile: configPath, atomically: true, encoding: .utf8)
+            if let reload = configReloadProvider, reload() == false {
+                return .failure(
+                    id: request.id,
+                    error: "Configuration was written but could not be reloaded"
+                )
+            }
         } catch {
             return .failure(
                 id: request.id,
@@ -1399,6 +1480,32 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.quickTerminal.animationDuration)"
         case "quick-terminal.screen":
             return config.quickTerminal.screen.rawValue
+
+        // Worktree
+        case "worktree.enabled":
+            return "\(config.worktree.enabled)"
+        case "worktree.base-path":
+            return config.worktree.basePath
+        case "worktree.branch-template":
+            return config.worktree.branchTemplate
+        case "worktree.base-ref":
+            return config.worktree.baseRef
+        case "worktree.on-close":
+            return config.worktree.onClose.rawValue
+        case "worktree.open-in-new-tab":
+            return "\(config.worktree.openInNewTab)"
+        case "worktree.id-length":
+            return "\(config.worktree.idLength)"
+        case "worktree.inherit-project-config":
+            return "\(config.worktree.inheritProjectConfig)"
+        case "worktree.show-badge":
+            return "\(config.worktree.showBadge)"
+
+        // Experimental
+        case "experimental.pip-enabled":
+            return "\(config.experimental.pipEnabled)"
+        case "experimental.pty-daemon":
+            return "\(config.experimental.ptyDaemonEnabled)"
 
         // Keybindings
         case "keybindings.new-tab":
@@ -2373,8 +2480,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Lists all configuration keys and their current values.
     private func handleConfigList(_ request: SocketRequest) -> SocketResponse {
         let config = configProvider?() ?? CocxyConfig.defaults
+        let filter = request.params?["filter"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
 
-        let keys = allConfigKeys
+        let keys: [String]
+        if let filter, !filter.isEmpty {
+            keys = allConfigKeys.filter { $0.lowercased().hasPrefix(filter) }
+        } else {
+            keys = allConfigKeys
+        }
         var data: [String: String] = ["count": "\(keys.count)"]
         for key in keys {
             if let value = resolveConfigValue(key: key, config: config) {
@@ -2579,6 +2694,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "quick-terminal.position", "quick-terminal.height-percentage",
             "quick-terminal.hide-on-deactivate", "quick-terminal.working-directory",
             "quick-terminal.animation-duration", "quick-terminal.screen",
+            "worktree.enabled", "worktree.base-path", "worktree.branch-template",
+            "worktree.base-ref", "worktree.on-close", "worktree.open-in-new-tab",
+            "worktree.id-length", "worktree.inherit-project-config",
+            "worktree.show-badge",
+            "experimental.pip-enabled", "experimental.pty-daemon",
             "keybindings.new-tab", "keybindings.close-tab",
             "keybindings.next-tab", "keybindings.prev-tab",
             "keybindings.split-vertical", "keybindings.split-horizontal",
@@ -2614,52 +2734,6 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     private func fieldFromKey(_ key: String) -> String {
         let components = key.split(separator: ".", maxSplits: 1)
         return components.count > 1 ? String(components[1]) : ""
-    }
-
-    /// Updates a single value in a TOML string.
-    ///
-    /// Finds the line matching `field = ...` within the `[section]` block
-    /// and replaces its value. Returns the original content if the field
-    /// is not found (append is not attempted to avoid malformed TOML).
-    private func updateTomlValue(
-        in content: String,
-        section: String,
-        field: String,
-        newValue: String
-    ) -> String {
-        var lines = content.components(separatedBy: "\n")
-        var inTargetSection = false
-
-        for index in lines.indices {
-            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
-
-            // Detect section headers.
-            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
-                let sectionName = trimmed
-                    .dropFirst()
-                    .dropLast()
-                    .trimmingCharacters(in: .whitespaces)
-                inTargetSection = (sectionName == section)
-                continue
-            }
-
-            // Update the matching field in the target section.
-            // Match both "field = value" and "field=value" (TOML allows both).
-            let fieldPrefix = trimmed.hasPrefix("\(field) =") || trimmed.hasPrefix("\(field)=")
-            if inTargetSection && fieldPrefix {
-                let quotedValue: String
-                if newValue == "true" || newValue == "false" || Int(newValue) != nil
-                    || Double(newValue) != nil {
-                    quotedValue = newValue
-                } else {
-                    quotedValue = "\"\(newValue)\""
-                }
-                lines[index] = "\(field) = \(quotedValue)"
-                break
-            }
-        }
-
-        return lines.joined(separator: "\n")
     }
 
     // MARK: - Worktree (v0.1.81)

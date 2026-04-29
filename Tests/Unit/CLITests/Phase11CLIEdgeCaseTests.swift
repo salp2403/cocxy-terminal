@@ -116,8 +116,8 @@ final class Phase11CLIEdgeCaseTests: XCTestCase {
         // Every command must be self-documenting.
         let allCases = CLICommand.allCases
 
-        XCTAssertEqual(allCases.count, 104,
-                       "EC-12: CLICommand must have exactly 104 socket commands after the P5 worktree-focus verb")
+        XCTAssertEqual(allCases.count, 106,
+                       "EC-12: CLICommand must have exactly 106 socket commands after the P5 review PR verbs")
 
         for command in allCases {
             XCTAssertFalse(

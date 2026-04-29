@@ -328,6 +328,41 @@ actor GitHubService {
         return response.number
     }
 
+    // MARK: - Review PR
+
+    /// Submits a pull-request review through `gh pr review`.
+    ///
+    /// `number = nil` intentionally preserves the GitHub CLI default of
+    /// resolving the pull request from the current branch. That keeps the
+    /// CLI ergonomic for scripts while still allowing deterministic
+    /// `--pr <number>` invocations in CI or from a different checkout.
+    func reviewPullRequest(
+        number: Int?,
+        action: GitHubPullRequestReviewAction,
+        body: String?,
+        at directory: URL,
+        timeoutSeconds: TimeInterval = 30.0
+    ) async throws {
+        var args = ["pr", "review"]
+        if let number {
+            args.append("\(number)")
+        }
+        args.append(action.ghFlag)
+        if let body = body?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !body.isEmpty {
+            args.append(contentsOf: ["--body", body])
+        }
+
+        let result = try runner(directory, args, timeoutSeconds)
+        if result.terminationStatus != 0 {
+            throw GitHubCLI.classifyError(
+                command: "gh pr review",
+                stderr: result.stderr,
+                exitCode: result.terminationStatus
+            )
+        }
+    }
+
     // MARK: - Mergeability
 
     /// Fetches a typed snapshot describing whether a pull request can

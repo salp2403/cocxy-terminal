@@ -62,6 +62,12 @@ public enum ParsedCommand: Equatable {
     /// `cocxy review status`
     case reviewStats
 
+    /// `cocxy review approve [--pr <n>] [--body <text>|--stdin]`
+    case reviewApprove(prNumber: Int?, body: String?, readBodyFromStdin: Bool)
+
+    /// `cocxy review request-changes [--pr <n>] [--body <text>|--stdin]`
+    case reviewRequestChanges(prNumber: Int?, body: String?, readBodyFromStdin: Bool)
+
     /// `cocxy open <path> [--editor <id>] [--line <n>] [--column <n>]`
     case editorOpen(path: String, editor: String?, line: Int?, column: Int?)
 
@@ -802,6 +808,9 @@ public enum CLIArgumentParser {
 
     private static func parseReview(arguments: [String]) throws -> ParsedCommand {
         guard !arguments.isEmpty else { return .review }
+        if isOnlyHelpRequest(arguments) {
+            return .help
+        }
 
         if arguments.count == 1 {
             switch arguments[0] {
@@ -811,9 +820,36 @@ public enum CLIArgumentParser {
                 return .reviewSubmit
             case "status", "stats":
                 return .reviewStats
+            case "approve":
+                return .reviewApprove(prNumber: nil, body: nil, readBodyFromStdin: false)
+            case "request-changes":
+                return .reviewRequestChanges(prNumber: nil, body: nil, readBodyFromStdin: false)
             default:
                 break
             }
+        }
+
+        if let action = arguments.first, action == "approve" || action == "request-changes" {
+            let rest = Array(arguments.dropFirst())
+            if isOnlyHelpRequest(rest) {
+                return .help
+            }
+            let parsed = try parseReviewPRReview(
+                command: "review \(action)",
+                arguments: rest
+            )
+            if action == "approve" {
+                return .reviewApprove(
+                    prNumber: parsed.prNumber,
+                    body: parsed.body,
+                    readBodyFromStdin: parsed.readBodyFromStdin
+                )
+            }
+            return .reviewRequestChanges(
+                prNumber: parsed.prNumber,
+                body: parsed.body,
+                readBodyFromStdin: parsed.readBodyFromStdin
+            )
         }
 
         let flags = Set(arguments)
@@ -846,6 +882,69 @@ public enum CLIArgumentParser {
         }
 
         return .review
+    }
+
+    private static func parseReviewPRReview(
+        command: String,
+        arguments: [String]
+    ) throws -> (prNumber: Int?, body: String?, readBodyFromStdin: Bool) {
+        var prNumber: Int?
+        var body: String?
+        var readBodyFromStdin = false
+        var index = 0
+
+        while index < arguments.count {
+            let token = arguments[index]
+            switch token {
+            case "--pr":
+                guard index + 1 < arguments.count,
+                      let parsed = Int(arguments[index + 1]),
+                      parsed > 0 else {
+                    throw CLIError.invalidArgument(
+                        command: command,
+                        argument: token,
+                        reason: "--pr expects a positive pull request number."
+                    )
+                }
+                prNumber = parsed
+                index += 2
+            case "--body":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: command, argument: "value for --body")
+                }
+                let value = arguments[index + 1]
+                if value == "-" {
+                    readBodyFromStdin = true
+                } else {
+                    body = value
+                }
+                index += 2
+            case "--body-file":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: command, argument: "value for --body-file")
+                }
+                guard arguments[index + 1] == "-" else {
+                    throw CLIError.invalidArgument(
+                        command: command,
+                        argument: arguments[index + 1],
+                        reason: "Only --body-file - is supported; pass file contents on stdin."
+                    )
+                }
+                readBodyFromStdin = true
+                index += 2
+            case "--stdin":
+                readBodyFromStdin = true
+                index += 1
+            default:
+                throw CLIError.invalidArgument(
+                    command: command,
+                    argument: token,
+                    reason: "Unknown option. Valid flags: --pr, --body, --body-file -, --stdin."
+                )
+            }
+        }
+
+        return (prNumber, body, readBodyFromStdin)
     }
 
     /// Parses `cocxy open <path> [--editor <id>] [--line <n>] [--column <n>]`.

@@ -234,6 +234,26 @@ enum GitHubReviewDecision: String, Codable, Equatable, Sendable {
     }
 }
 
+/// Action Cocxy can submit through `gh pr review`.
+enum GitHubPullRequestReviewAction: String, Equatable, Sendable {
+    case approve
+    case requestChanges
+
+    var ghFlag: String {
+        switch self {
+        case .approve: return "--approve"
+        case .requestChanges: return "--request-changes"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .approve: return "approved"
+        case .requestChanges: return "requested changes"
+        }
+    }
+}
+
 /// Pull request summary as returned by `gh pr list --json`.
 struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     let number: Int

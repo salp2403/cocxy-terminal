@@ -29,6 +29,8 @@ public enum CLICommand: String, CaseIterable {
     case reviewRefresh = "review-refresh"
     case reviewSubmit = "review-submit"
     case reviewStats = "review-stats"
+    case reviewApprove = "review-approve"
+    case reviewRequestChanges = "review-request-changes"
 
     // MARK: - Tab extended (v2)
 
@@ -215,6 +217,8 @@ public enum CLICommand: String, CaseIterable {
         case .reviewRefresh: return "Refresh the agent code review diff"
         case .reviewSubmit: return "Submit all pending review comments to the active agent"
         case .reviewStats: return "Print the current agent code review statistics"
+        case .reviewApprove: return "Approve the active GitHub pull request, reading an optional body from stdin"
+        case .reviewRequestChanges: return "Request changes on the active GitHub pull request, reading an optional body from stdin"
 
         // Tab extended
         case .tabRename: return "Rename a tab by UUID"
@@ -368,6 +372,8 @@ public enum CLICommand: String, CaseIterable {
         case .reviewRefresh: return "cocxy review refresh"
         case .reviewSubmit: return "cocxy review submit"
         case .reviewStats: return "cocxy review status"
+        case .reviewApprove: return "cocxy review approve [--pr <n>] [--body <text>|--stdin]"
+        case .reviewRequestChanges: return "cocxy review request-changes [--pr <n>] [--body <text>|--stdin]"
 
         // Tab extended
         case .tabRename: return "cocxy tab rename <id> <name>"
