@@ -57,6 +57,9 @@ jobs:
       - name: Build CLI companion
         run: swift build --target cocxy -c release --arch arm64 || true
 
+      - name: Build PTY daemon helper
+        run: swift build --target cocxyd -c release --arch arm64 || true
+
       - name: Install xcodegen
         run: brew install xcodegen
 
@@ -88,6 +91,11 @@ jobs:
 
           if [ -f ".build/arm64-apple-macosx/release/cocxy" ]; then
             cp ".build/arm64-apple-macosx/release/cocxy" "$RESOURCES_DIR/cocxy"
+          fi
+
+          # Copy PTY daemon helper if built (verify-app-bundle.sh requires it)
+          if [ -f ".build/arm64-apple-macosx/release/cocxyd" ]; then
+            cp ".build/arm64-apple-macosx/release/cocxyd" "$RESOURCES_DIR/cocxyd"
           fi
 
           ./scripts/generate-app-info-plist.sh "$CONTENTS_DIR/Info.plist" \
