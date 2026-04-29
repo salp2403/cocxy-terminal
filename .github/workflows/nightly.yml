@@ -157,6 +157,12 @@ jobs:
               --sign "$SIGNING_IDENTITY" \
               "$APP_DIR/Contents/Resources/cocxy" || true
 
+          [ -f "$APP_DIR/Contents/Resources/cocxyd" ] && \
+            codesign --force --options runtime --timestamp \
+              --entitlements "$ENTITLEMENTS" \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Resources/cocxyd" || true
+
           [ -d "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex" ] && \
             codesign --force --options runtime --timestamp \
               --sign "$SIGNING_IDENTITY" \
