@@ -3,6 +3,7 @@
 import AppKit
 import Testing
 @testable import CocxyTerminal
+import CocxyShared
 
 @Suite("CocxyCore host wiring", .serialized)
 @MainActor
@@ -15,6 +16,20 @@ struct CocxyCoreHostWiringTests {
         let view: TerminalHostView = CocxyCoreView(viewModel: viewModel)
 
         #expect(view is CocxyCoreView)
+    }
+
+    @Test("host view factory keeps CocxyCore on Metal and uses daemon host for PTYDaemonClient")
+    func hostViewFactorySelectsRendererForEngine() throws {
+        let cocxyBridge = try makeBridge()
+        let cocxyModel = TerminalViewModel(engine: cocxyBridge)
+        let cocxyView = TerminalHostViewFactory.make(viewModel: cocxyModel, engine: cocxyBridge)
+
+        let daemonClient = PTYDaemonClient(connection: FactoryMockPTYDaemonConnection())
+        let daemonModel = TerminalViewModel(engine: daemonClient)
+        let daemonView = TerminalHostViewFactory.make(viewModel: daemonModel, engine: daemonClient)
+
+        #expect(cocxyView is CocxyCoreView)
+        #expect(daemonView is PTYDaemonHostView)
     }
 
     @Test("wireSurfaceHandlers installs an outputBufferProvider on CocxyCoreView")
@@ -79,4 +94,17 @@ struct CocxyCoreHostWiringTests {
         #expect(lines.contains("alpha"))
         #expect(lines.contains("beta"))
     }
+}
+
+@MainActor
+private final class FactoryMockPTYDaemonConnection: PTYDaemonClientConnection {
+    func send(_ request: PTYDaemonRequest) throws -> PTYDaemonResponse {
+        PTYDaemonResponse(id: request.id, ok: false, error: "not used")
+    }
+
+    func receiveEvent(timeout: TimeInterval) throws -> PTYDaemonEvent? {
+        nil
+    }
+
+    func reconnect() throws {}
 }

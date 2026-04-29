@@ -27,7 +27,7 @@ extension MainWindowController {
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         viewModel.setDefaultFontSize(configuredFontSize)
-        let surfaceView = CocxyCoreView(viewModel: viewModel)
+        let surfaceView = TerminalHostViewFactory.make(viewModel: viewModel, engine: bridge)
 
         tabViewModels[newTab.id] = viewModel
         tabSurfaceViews[newTab.id] = surfaceView

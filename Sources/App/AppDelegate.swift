@@ -818,7 +818,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let configuredFontSize = configService?.current.appearance.fontSize
                 ?? AppearanceConfig.defaults.fontSize
             viewModel.setDefaultFontSize(configuredFontSize)
-            let surfaceView = CocxyCoreView(viewModel: viewModel)
+            let surfaceView = TerminalHostViewFactory.make(viewModel: viewModel, engine: newBridge)
 
             wc.tabViewModels[tab.id] = viewModel
             wc.tabSurfaceViews[tab.id] = surfaceView

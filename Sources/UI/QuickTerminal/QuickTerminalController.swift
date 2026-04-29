@@ -114,7 +114,10 @@ final class QuickTerminalController {
         let terminalViewModel = TerminalViewModel(engine: bridge)
         terminalViewModel.setDefaultFontSize(config.appearance.fontSize)
         self.terminalViewModel = terminalViewModel
-        let surfaceView = CocxyCoreView(viewModel: terminalViewModel)
+        let surfaceView = TerminalHostViewFactory.make(
+            viewModel: terminalViewModel,
+            engine: bridge
+        )
         surfaceView.translatesAutoresizingMaskIntoConstraints = false
 
         newPanel.contentView = surfaceView

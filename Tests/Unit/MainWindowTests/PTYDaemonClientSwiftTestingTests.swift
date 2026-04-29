@@ -230,6 +230,69 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(title.withValue { $0 } == "Daemon Shell")
     }
 
+    @Test("frame subscription requests an initial frame and tick forwards frame events")
+    func frameSubscriptionRequestsInitialFrameAndForwardsFrameEvents() throws {
+        let surfaceID = UUID()
+        let initialFrame = PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 2,
+            rows: 1,
+            cells: [
+                PTYDaemonGridCell(
+                    row: 0,
+                    column: 0,
+                    glyph: 65,
+                    foregroundRGBA: 0xffffffff,
+                    backgroundRGBA: 0x000000ff
+                )
+            ],
+            cursor: PTYDaemonCursor(row: 0, column: 1)
+        )
+        let eventFrame = PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.uuidString,
+            revision: 2,
+            timestamp: 2,
+            columns: 2,
+            rows: 1,
+            cells: [
+                PTYDaemonGridCell(
+                    row: 0,
+                    column: 1,
+                    glyph: 66,
+                    foregroundRGBA: 0xffffffff,
+                    backgroundRGBA: 0x000000ff
+                )
+            ],
+            cursor: PTYDaemonCursor(row: 0, column: 0)
+        )
+        let connection = MockPTYDaemonClientConnection(
+            responses: [
+                PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+                PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
+                PTYDaemonResponse(id: "frame", ok: true, frame: initialFrame),
+            ],
+            events: [
+                PTYDaemonEvent(event: .surfaceFrame, surfaceID: surfaceID.uuidString, frame: eventFrame)
+            ]
+        )
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let deliveredRevision = LockedBox<UInt64?>(nil)
+
+        client.setFrameHandler(for: surface) { frame in
+            deliveredRevision.withValue { $0 = frame.revision }
+        }
+        let subscribed = client.subscribeFrames(for: surface)
+        client.tick()
+
+        #expect(subscribed?.revision == 1)
+        #expect(deliveredRevision.withValue { $0 } == 2)
+        #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate, .surfaceFrameSubscribe])
+    }
+
     @Test("surface send reconnects and reattaches live surfaces before retry")
     func surfaceSendReconnectsAndReattachesLiveSurfacesBeforeRetry() throws {
         let surfaceID = UUID()
@@ -385,6 +448,46 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(event?.bytesBase64 == "b2sK")
     }
 
+    @Test("real helper process connection initializes, writes, streams output and frames")
+    func realHelperProcessConnectionDrivesDaemonSurface() throws {
+        let helperURL = try realHelperExecutableURL()
+        let client = PTYDaemonClient(
+            connection: PTYDaemonProcessConnection(executableURL: helperURL, timeoutSeconds: 5)
+        )
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(
+            in: NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 180)),
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            command: "/bin/sh"
+        )
+        defer { client.destroySurface(surface) }
+
+        let marker = "s93-client-ok-\(UUID().uuidString.prefix(8))"
+        let output = LockedBox("")
+        let frameRevisions = LockedBox<[UInt64]>([])
+        client.setOutputHandler(for: surface) { data in
+            if let text = String(data: data, encoding: .utf8) {
+                output.withValue { $0 += text }
+            }
+        }
+        client.setFrameHandler(for: surface) { frame in
+            frameRevisions.withValue { $0.append(frame.revision) }
+        }
+        _ = client.subscribeFrames(for: surface)
+        client.sendText("printf '\(marker)\\n'\n", to: surface)
+
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline,
+              output.withValue({ !$0.contains(marker) }) ||
+              frameRevisions.withValue({ $0.isEmpty }) {
+            client.tick()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+
+        #expect(output.withValue { $0 }.contains(marker))
+        #expect(frameRevisions.withValue { $0.isEmpty } == false)
+    }
+
     private func terminalSurfaceHello() -> PTYDaemonHello {
         PTYDaemonHello(
             version: "dev",
@@ -404,6 +507,20 @@ struct PTYDaemonClientSwiftTestingTests {
             themeName: "Catppuccin Mocha",
             shell: "/bin/zsh",
             workingDirectory: URL(fileURLWithPath: "/tmp")
+        )
+    }
+
+    private func realHelperExecutableURL() throws -> URL {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let candidates = [
+            root.appendingPathComponent(".build/debug/\(PTYDaemonProtocol.helperName)"),
+            root.appendingPathComponent(".build/arm64-apple-macosx/debug/\(PTYDaemonProtocol.helperName)"),
+        ]
+        for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate.path) {
+            return candidate
+        }
+        throw TerminalEngineError.initializationFailed(
+            reason: "Missing built cocxyd helper at \(candidates.map(\.path).joined(separator: ", "))"
         )
     }
 }

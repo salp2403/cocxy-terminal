@@ -83,14 +83,19 @@ let package = Package(
             dependencies: ["CocxyCLILib"],
             path: "CLI/Sources/Entry"
         ),
+        .target(
+            name: "CocxyDaemonLib",
+            dependencies: ["CocxyShared", "CocxyCoreKit"],
+            path: "Daemon/Lib"
+        ),
         .executableTarget(
             name: "cocxyd",
-            dependencies: ["CocxyShared"],
+            dependencies: ["CocxyDaemonLib"],
             path: "Daemon/Sources"
         ),
         .testTarget(
             name: "CocxyCLITests",
-            dependencies: ["CocxyCLILib", "CocxyShared"],
+            dependencies: ["CocxyCLILib", "CocxyShared", "CocxyDaemonLib"],
             path: "Tests/Unit/CLITests"
         ),
     ]
