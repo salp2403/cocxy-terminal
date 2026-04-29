@@ -2993,3 +2993,13 @@ final class CocxyCoreBridge: TerminalEngine {
         return width
     }
 }
+
+// MARK: - TerminalEngine Capability Projection
+
+extension TerminalEngine {
+    /// Returns the in-process CocxyCore bridge when this engine is backed by
+    /// CocxyCore. Higher-level callers use this capability projection instead
+    /// of scattering concrete casts through UI/App code. Daemon-backed engines
+    /// return nil and the caller can fall back to the protocol-level path.
+    var cocxyCoreBridge: CocxyCoreBridge? { self as? CocxyCoreBridge }
+}

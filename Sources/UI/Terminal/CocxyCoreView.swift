@@ -1147,7 +1147,7 @@ extension CocxyCoreView: TerminalHostingView {
         bridge: any TerminalEngine,
         surfaceID: SurfaceID
     ) {
-        guard let bridge = bridge as? CocxyCoreBridge,
+        guard let bridge = bridge.cocxyCoreBridge,
               let viewModel else { return }
         configure(bridge: bridge, surfaceID: surfaceID, viewModel: viewModel)
         syncSizeWithTerminal()

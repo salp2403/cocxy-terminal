@@ -112,16 +112,12 @@ extension MainWindowController {
     /// bytes leak as visible `[200~` / `[201~` characters in the prompt.
     @discardableResult
     func injectBrowserDOMGrabPayload(_ payload: BrowserDOMGrabPayload) -> Bool {
-        // Mode probing requires the concrete bridge — `TerminalEngine`
-        // does not expose `surfaceState(for:)` because mocks do not
-        // model the C-side terminal handle. The downcast keeps the
-        // production path identical to `CocxyCoreView.handlePaste` and
-        // makes the inject a no-op (with a UI beep) in the rare cases
-        // where a non-Cocxy bridge is wired in — exactly what would
-        // already happen if any of the optional chain entries above
-        // were missing.
+        // Mode probing uses the CocxyCore capability projection because
+        // generic TerminalEngine implementations do not expose the C-side
+        // terminal handle. Non-Cocxy engines no-op with a UI beep, matching
+        // the existing optional-chain failure behavior.
         guard let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
-              let cocxyBridge = bridge as? CocxyCoreBridge,
+              let cocxyBridge = bridge.cocxyCoreBridge,
               let state = cocxyBridge.surfaceState(for: surfaceID) else {
             NSSound.beep()
             return false

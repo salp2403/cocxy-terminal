@@ -11,23 +11,23 @@ struct ColdStartBudgetSwiftTestingTests {
     func medianIgnoresInvalidSamples() {
         let evaluation = ColdStartBudget.evaluate(samples: [
             ColdStartSample(milliseconds: .nan),
-            ColdStartSample(milliseconds: 1_940),
+            ColdStartSample(milliseconds: 430),
             ColdStartSample(milliseconds: -1),
-            ColdStartSample(milliseconds: 1_980),
-            ColdStartSample(milliseconds: 1_960),
+            ColdStartSample(milliseconds: 480),
+            ColdStartSample(milliseconds: 460),
         ])
-        #expect(evaluation.medianMilliseconds == 1_960)
+        #expect(evaluation.medianMilliseconds == 460)
         #expect(evaluation.isWithinBudget)
     }
 
     @Test("gate allows values inside the tolerance band")
     func toleranceBandIsAccepted() {
         let evaluation = ColdStartBudget.evaluate(samples: [
-            ColdStartSample(milliseconds: 2_200),
-            ColdStartSample(milliseconds: 2_190),
-            ColdStartSample(milliseconds: 2_160),
+            ColdStartSample(milliseconds: 550),
+            ColdStartSample(milliseconds: 545),
+            ColdStartSample(milliseconds: 540),
         ])
-        #expect(abs(evaluation.toleratedBudgetMilliseconds - 2_200) < 0.001)
+        #expect(abs(evaluation.toleratedBudgetMilliseconds - 550) < 0.001)
         #expect(evaluation.isWithinBudget)
         #expect(evaluation.shouldFailGate == false)
     }
@@ -35,9 +35,9 @@ struct ColdStartBudgetSwiftTestingTests {
     @Test("gate fails only after required consecutive over-budget samples")
     func consecutiveFailuresAreRequired() {
         let evaluation = ColdStartBudget.evaluate(samples: [
-            ColdStartSample(milliseconds: 2_201),
-            ColdStartSample(milliseconds: 2_250),
-            ColdStartSample(milliseconds: 2_300),
+            ColdStartSample(milliseconds: 551),
+            ColdStartSample(milliseconds: 575),
+            ColdStartSample(milliseconds: 600),
         ])
         #expect(evaluation.isWithinBudget == false)
         #expect(evaluation.consecutiveFailures == 3)
@@ -46,7 +46,7 @@ struct ColdStartBudgetSwiftTestingTests {
 
     @Test("documented budgets separate app readiness from future internal signpost work")
     func budgetConstantsDocumentMeasurementScope() {
-        #expect(ColdStartBudget.defaultBudgetMilliseconds == 2_000)
+        #expect(ColdStartBudget.defaultBudgetMilliseconds == 500)
         #expect(ColdStartBudget.internalCriticalPathBudgetMilliseconds == 50)
     }
 

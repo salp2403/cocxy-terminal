@@ -18,6 +18,36 @@ func syncOnMainActor<T: Sendable>(_ body: @escaping @MainActor @Sendable () -> T
     }
 }
 
+@inline(__always)
+func syncOnMainActorIfAvailable<T: Sendable>(
+    timeout: DispatchTimeInterval,
+    _ body: @escaping @MainActor @Sendable () -> T
+) -> T? {
+    if Thread.isMainThread {
+        return MainActor.assumeIsolated {
+            body()
+        }
+    }
+
+    let result = LockedBox<T?>(nil)
+    let timedOut = LockedBox(false)
+    let semaphore = DispatchSemaphore(value: 0)
+    DispatchQueue.main.async {
+        guard timedOut.withValue({ $0 == false }) else { return }
+        let value = MainActor.assumeIsolated {
+            body()
+        }
+        result.withValue { $0 = value }
+        semaphore.signal()
+    }
+
+    guard semaphore.wait(timeout: .now() + timeout) == .success else {
+        timedOut.withValue { $0 = true }
+        return nil
+    }
+    return result.withValue { $0 }
+}
+
 final class WeakReference<Object: AnyObject>: @unchecked Sendable {
     weak var value: Object?
 

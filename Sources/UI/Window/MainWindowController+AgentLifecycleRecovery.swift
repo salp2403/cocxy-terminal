@@ -241,11 +241,11 @@ extension MainWindowController {
     /// need bridge events can drive the monitor directly and ignore
     /// this plumbing.
     ///
-    /// The wiring is conditional on the concrete `CocxyCoreBridge`
-    /// type: only that bridge emits `InputDeliveryEvent`, and other
-    /// `TerminalEngine` conformers used by tests (`MockTerminalEngine`)
-    /// have no observer field. Those code paths simply skip the
-    /// install — the monitor still works when driven directly.
+    /// The wiring is conditional on the CocxyCore capability: only that
+    /// bridge emits `InputDeliveryEvent`, and other `TerminalEngine`
+    /// conformers used by tests have no observer field. Those code paths
+    /// simply skip the install, and the monitor still works when driven
+    /// directly.
     func installInputDropMonitorObserver() {
         surfaceInputDropMonitor.onStuckPane = { [weak self] surfaceID, reason in
             self?.presentStuckPaneNotification(
@@ -254,7 +254,7 @@ extension MainWindowController {
             )
         }
 
-        guard let cocxyBridge = bridge as? CocxyCoreBridge else { return }
+        guard let cocxyBridge = bridge.cocxyCoreBridge else { return }
         cocxyBridge.inputDeliveryObserver = { [weak self] surfaceID, event in
             guard let self else { return }
             switch event {

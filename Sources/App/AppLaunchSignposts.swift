@@ -1,0 +1,115 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// AppLaunchSignposts.swift - Cold-start signposts for app launch analysis.
+
+import Foundation
+import os.signpost
+
+/// App-owned launch phases that can be profiled independently from
+/// LaunchServices, AppKit process startup, and CLI socket round trips.
+enum AppLaunchStep: CaseIterable, Equatable, Sendable {
+    case bundledFonts
+    case themeEngine
+    case configService
+    case configWatcher
+    case sessionManager
+    case menuSetup
+    case keybindings
+    case bridge
+    case agentDetectionEngine
+    case sessionRegistry
+    case mainWindow
+    case agentWiring
+    case notifications
+    case portScanner
+    case plugins
+    case socketServer
+    case quickTerminal
+    case appearanceObserver
+    case remoteWorkspace
+    case browserPro
+    case autoUpdate
+    case sessionRestore
+    case autoSave
+    case appIcon
+    case firstLaunch
+    case welcome
+    case menuBar
+
+    var label: String {
+        switch self {
+        case .bundledFonts: return "Bundled fonts"
+        case .themeEngine: return "Theme engine"
+        case .configService: return "Config service"
+        case .configWatcher: return "Config watcher"
+        case .sessionManager: return "Session manager"
+        case .menuSetup: return "Menu setup"
+        case .keybindings: return "Keybindings"
+        case .bridge: return "Terminal bridge"
+        case .agentDetectionEngine: return "Agent detection engine"
+        case .sessionRegistry: return "Session registry"
+        case .mainWindow: return "Main window"
+        case .agentWiring: return "Agent wiring"
+        case .notifications: return "Notifications"
+        case .portScanner: return "Port scanner"
+        case .plugins: return "Plugins"
+        case .socketServer: return "Socket server"
+        case .quickTerminal: return "Quick terminal"
+        case .appearanceObserver: return "Appearance observer"
+        case .remoteWorkspace: return "Remote workspace"
+        case .browserPro: return "Browser Pro"
+        case .autoUpdate: return "Auto update"
+        case .sessionRestore: return "Session restore"
+        case .autoSave: return "Session auto-save"
+        case .appIcon: return "App icon"
+        case .firstLaunch: return "First launch setup"
+        case .welcome: return "Welcome"
+        case .menuBar: return "Menu bar"
+        }
+    }
+
+    var signpostName: StaticString {
+        switch self {
+        case .bundledFonts: return "Bundled fonts"
+        case .themeEngine: return "Theme engine"
+        case .configService: return "Config service"
+        case .configWatcher: return "Config watcher"
+        case .sessionManager: return "Session manager"
+        case .menuSetup: return "Menu setup"
+        case .keybindings: return "Keybindings"
+        case .bridge: return "Terminal bridge"
+        case .agentDetectionEngine: return "Agent detection engine"
+        case .sessionRegistry: return "Session registry"
+        case .mainWindow: return "Main window"
+        case .agentWiring: return "Agent wiring"
+        case .notifications: return "Notifications"
+        case .portScanner: return "Port scanner"
+        case .plugins: return "Plugins"
+        case .socketServer: return "Socket server"
+        case .quickTerminal: return "Quick terminal"
+        case .appearanceObserver: return "Appearance observer"
+        case .remoteWorkspace: return "Remote workspace"
+        case .browserPro: return "Browser Pro"
+        case .autoUpdate: return "Auto update"
+        case .sessionRestore: return "Session restore"
+        case .autoSave: return "Session auto-save"
+        case .appIcon: return "App icon"
+        case .firstLaunch: return "First launch setup"
+        case .welcome: return "Welcome"
+        case .menuBar: return "Menu bar"
+        }
+    }
+}
+
+enum AppLaunchSignposts {
+    private static let log = OSLog(
+        subsystem: "dev.cocxy.terminal",
+        category: "cold-start"
+    )
+
+    @discardableResult
+    static func measure<T>(_ step: AppLaunchStep, _ work: () throws -> T) rethrows -> T {
+        os_signpost(.begin, log: log, name: step.signpostName)
+        defer { os_signpost(.end, log: log, name: step.signpostName) }
+        return try work()
+    }
+}

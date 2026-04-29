@@ -73,8 +73,8 @@ final class TerminalViewModel: ObservableObject {
     /// Used to forward commands and query surface state.
     private(set) weak var engine: (any TerminalEngine)?
 
-    /// Convenience accessor for callers that need the concrete CocxyCoreBridge.
-    var cocxyCoreBridge: CocxyCoreBridge? { engine as? CocxyCoreBridge }
+    /// CocxyCore capability accessor for callers that need bridge-specific diagnostics.
+    var cocxyCoreBridge: CocxyCoreBridge? { engine?.cocxyCoreBridge }
 
     // MARK: - Initialization
 

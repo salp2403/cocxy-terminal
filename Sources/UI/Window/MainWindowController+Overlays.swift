@@ -1271,7 +1271,7 @@ extension MainWindowController {
 
     private func preferredCodeReviewSurfaceID(for tabID: TabID) -> SurfaceID? {
         func isLive(_ surfaceID: SurfaceID) -> Bool {
-            guard let cocxyBridge = bridge as? CocxyCoreBridge else { return true }
+            guard let cocxyBridge = bridge.cocxyCoreBridge else { return true }
             return cocxyBridge.withTerminalLock(surfaceID) { _ in true } == true
         }
 
@@ -1388,7 +1388,7 @@ extension MainWindowController {
 
     private func searchLinesForActiveSurface() -> [String] {
         guard let surfaceID = activeSearchSurfaceID(),
-              let cocxyBridge = bridge as? CocxyCoreBridge else {
+              let cocxyBridge = bridge.cocxyCoreBridge else {
             return terminalOutputBuffer.lines
         }
 

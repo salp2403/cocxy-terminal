@@ -450,7 +450,7 @@ extension MainWindowController {
     /// no shell prompt; that is safe to recover.
     func reconcileAuroraAgentStateFromVisibleBuffers() {
         guard let store = injectedPerSurfaceStore,
-              let cocxyBridge = bridge as? CocxyCoreBridge else { return }
+              let cocxyBridge = bridge.cocxyCoreBridge else { return }
 
         let compiledDefaults = AgentConfigService
             .defaultAgentConfigs()

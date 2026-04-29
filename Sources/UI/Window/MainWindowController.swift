@@ -1341,7 +1341,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             tab.sshSession = event.sshSession
             tab.lastActivityAt = Date()
         }
-        if let cocxyBridge = bridge as? CocxyCoreBridge,
+        if let cocxyBridge = bridge.cocxyCoreBridge,
            let surfaceID = surfaceIDs(for: event.tabID).first {
             cocxyBridge.syncCurrentStreamWithForegroundProcess(pid: event.pid, for: surfaceID)
         }
@@ -1818,7 +1818,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             viewModel.setCurrentFontSize(size)
         }
 
-        if let cocxyBridge = bridge as? CocxyCoreBridge {
+        if let cocxyBridge = bridge.cocxyCoreBridge {
             cocxyBridge.applyFont(
                 family: effective.appearance.fontFamily,
                 size: fontSize,
@@ -2007,7 +2007,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             viewModel.setDefaultFontSize(effective.appearance.fontSize)
         }
 
-        if let cocxyBridge = bridge as? CocxyCoreBridge {
+        if let cocxyBridge = bridge.cocxyCoreBridge {
             cocxyBridge.applyFont(
                 family: effective.appearance.fontFamily,
                 size: effective.appearance.fontSize,

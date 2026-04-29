@@ -14,10 +14,7 @@ enum PTYDaemonReadiness: Equatable {
     var shouldUseInProcessEngine: Bool {
         switch self {
         case .terminalSurfaceBridgeAvailable:
-            // The helper can speak the surface protocol, but this app build
-            // still needs a dedicated TerminalEngine adapter before ownership
-            // of live terminal surfaces can safely move out of process.
-            return true
+            return false
         case .disabled, .helperMissing, .helperUnhealthy, .helperHealthyButSurfaceBridgeUnavailable:
             return true
         }
@@ -32,9 +29,9 @@ enum PTYDaemonReadiness: Equatable {
         case .helperUnhealthy(let reason):
             return "PTY daemon requested but helper handshake failed (\(reason)); using in-process CocxyCore bridge."
         case .helperHealthyButSurfaceBridgeUnavailable:
-            return "PTY daemon helper is healthy but does not expose terminal-surface-v1; using in-process CocxyCore bridge."
+            return "PTY daemon helper is healthy but does not expose the complete terminal engine capability set; using in-process CocxyCore bridge."
         case .terminalSurfaceBridgeAvailable:
-            return "PTY daemon helper exposes terminal-surface-v1; this build keeps in-process bridge until the daemon TerminalEngine adapter is enabled."
+            return "PTY daemon helper exposes terminal-surface-v1 and terminal-engine-v1; using experimental PTYDaemonClient TerminalEngine adapter."
         }
     }
 }
@@ -77,7 +74,7 @@ struct PTYDaemonReadinessResolver {
 
         switch handshake(helperURL) {
         case .success(let hello):
-            if hello.supportsTerminalSurfaces {
+            if hello.supportsTerminalEngineAdapter {
                 return .terminalSurfaceBridgeAvailable(hello)
             }
             return .helperHealthyButSurfaceBridgeUnavailable(hello)

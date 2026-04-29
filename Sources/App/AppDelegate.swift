@@ -254,36 +254,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        BundledFontRegistry.ensureRegistered()
-        themeEngine = ThemeEngineImpl()
-        initializeConfigService()
-        startConfigWatcher()
-        initializeSessionManager()
-        setupMainMenu()
-        applyKeybindingsToMainMenu()
-        startMenuKeybindingsObserver()
-        initializeBridge()
-        initializeAgentDetectionEngine()
-        initializeSessionRegistry()
-        createMainWindow()
-        wireAgentDetectionToWindow()
-        initializeNotificationStack()
-        wireAgentDetectionToNotifications()
-        initializePortScanner()
-        setupPlugins()
-        initializeSocketServer()
-        initializeQuickTerminal()
-        initializeAppearanceObserver()
-        setupRemoteWorkspace()
-        setupBrowserPro()
-        setupAutoUpdate()
-        restoreSessionOnLaunch()
-        startSessionAutoSaveIfNeeded()
-        observeSessionAutoSaveConfigChanges()
-        applyPlaceholderAppIcon()
-        performFirstLaunchSetup()
-        showWelcomeOnFirstLaunch()
-        initializeMenuBarItem()
+        AppLaunchSignposts.measure(.bundledFonts) {
+            BundledFontRegistry.ensureRegistered()
+        }
+        AppLaunchSignposts.measure(.themeEngine) {
+            themeEngine = ThemeEngineImpl()
+        }
+        AppLaunchSignposts.measure(.configService) { initializeConfigService() }
+        AppLaunchSignposts.measure(.configWatcher) { startConfigWatcher() }
+        AppLaunchSignposts.measure(.sessionManager) { initializeSessionManager() }
+        AppLaunchSignposts.measure(.menuSetup) { setupMainMenu() }
+        AppLaunchSignposts.measure(.keybindings) {
+            applyKeybindingsToMainMenu()
+            startMenuKeybindingsObserver()
+        }
+        AppLaunchSignposts.measure(.bridge) { initializeBridge() }
+        AppLaunchSignposts.measure(.agentDetectionEngine) { initializeAgentDetectionEngine() }
+        AppLaunchSignposts.measure(.sessionRegistry) { initializeSessionRegistry() }
+        AppLaunchSignposts.measure(.mainWindow) { createMainWindow() }
+        AppLaunchSignposts.measure(.agentWiring) { wireAgentDetectionToWindow() }
+        AppLaunchSignposts.measure(.notifications) {
+            initializeNotificationStack()
+            wireAgentDetectionToNotifications()
+        }
+        AppLaunchSignposts.measure(.socketServer) { initializeSocketServer() }
+        AppLaunchSignposts.measure(.portScanner) { initializePortScanner() }
+        AppLaunchSignposts.measure(.plugins) { setupPlugins() }
+        AppLaunchSignposts.measure(.quickTerminal) { initializeQuickTerminal() }
+        AppLaunchSignposts.measure(.appearanceObserver) { initializeAppearanceObserver() }
+        AppLaunchSignposts.measure(.remoteWorkspace) { setupRemoteWorkspace() }
+        AppLaunchSignposts.measure(.browserPro) { setupBrowserPro() }
+        AppLaunchSignposts.measure(.autoUpdate) { setupAutoUpdate() }
+        AppLaunchSignposts.measure(.sessionRestore) { restoreSessionOnLaunch() }
+        AppLaunchSignposts.measure(.autoSave) {
+            startSessionAutoSaveIfNeeded()
+            observeSessionAutoSaveConfigChanges()
+        }
+        AppLaunchSignposts.measure(.appIcon) { applyPlaceholderAppIcon() }
+        AppLaunchSignposts.measure(.firstLaunch) { performFirstLaunchSetup() }
+        AppLaunchSignposts.measure(.welcome) { showWelcomeOnFirstLaunch() }
+        AppLaunchSignposts.measure(.menuBar) { initializeMenuBarItem() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -567,6 +577,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if readiness != .disabled {
             NSLog("[AppDelegate] %@", readiness.diagnostic)
         }
+        if case .terminalSurfaceBridgeAvailable = readiness, let helperURL {
+            return PTYDaemonClient(
+                connection: PTYDaemonProcessConnection(executableURL: helperURL)
+            )
+        }
         return CocxyCoreBridge()
     }
 
@@ -592,7 +607,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard let cocxyBridge = bridge as? CocxyCoreBridge else {
+        guard let cocxyBridge = bridge?.cocxyCoreBridge else {
             NSLog("[AppDelegate] Theme switch requested before CocxyCore bridge was ready")
             return
         }
@@ -632,7 +647,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applyBridgeConfigurationChanges(from oldConfig: CocxyConfig?, to newConfig: CocxyConfig) {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge else { return }
+        guard let cocxyBridge = bridge?.cocxyCoreBridge else { return }
 
         let resolvedTheme = try? themeEngine?.themeByName(newConfig.appearance.theme)
         cocxyBridge.updateDefaults(
@@ -1454,6 +1469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let delegateRef = WeakReference(self)
         let configServiceRef = WeakReference(configService)
         let sessionManagerRef = WeakReference(self.sessionManager)
+        let coldStartStatusTimeout: DispatchTimeInterval = .milliseconds(25)
         let liveConfigProvider: (@Sendable () -> CocxyConfig)?
         if configService != nil {
             liveConfigProvider = {
@@ -1484,11 +1500,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             tabCountProviderOverride: {
-                syncOnMainActor {
+                syncOnMainActorIfAvailable(timeout: coldStartStatusTimeout) {
                     delegateRef.value?.allWindowControllers.reduce(0) { partial, controller in
                         partial + controller.tabManager.tabs.count
                     } ?? 0
-                }
+                } ?? 0
             },
             tabInfoProviderOverride: {
                 syncOnMainActor {
@@ -1603,9 +1619,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             configProvider: liveConfigProvider,
             statusDetailsProvider: {
-                syncOnMainActor {
+                syncOnMainActorIfAvailable(timeout: coldStartStatusTimeout) {
                     delegateRef.value?.runtimeStatusDetailsForCLI() ?? [:]
-                }
+                } ?? ["launch_status": "warming"]
             },
             themeEngineProvider: {
                 if Thread.isMainThread {

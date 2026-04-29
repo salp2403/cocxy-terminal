@@ -46,6 +46,26 @@ private func runStdioLoop() {
         case .shutdown:
             writeResponse(PTYDaemonResponse(id: request.id, ok: true))
             return
+        case .surfaceCreate,
+             .surfaceAttach,
+             .surfaceWrite,
+             .surfaceResize,
+             .surfaceClose,
+             .surfaceFrameSubscribe,
+             .surfaceSignal,
+             .surfaceKey,
+             .surfacePreedit,
+             .surfaceFocus,
+             .surfaceSearch,
+             .surfaceScroll,
+             .surfaceProcess:
+            writeResponse(
+                PTYDaemonResponse(
+                    id: request.id,
+                    ok: false,
+                    error: "\(request.command.rawValue) requires \(PTYDaemonProtocol.terminalSurfaceCapability)"
+                )
+            )
         }
     }
 }

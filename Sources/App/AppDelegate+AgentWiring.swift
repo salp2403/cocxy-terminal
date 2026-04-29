@@ -37,7 +37,7 @@ extension AppDelegate {
         try? agentConfigService.reload()
         self.agentConfigService = agentConfigService
         let compiledConfigs = agentConfigService.currentConfigs
-        if let cocxyBridge = bridge as? CocxyCoreBridge {
+        if let cocxyBridge = bridge?.cocxyCoreBridge {
             cocxyBridge.updateNativeAgentPatterns(from: compiledConfigs)
         }
 
@@ -91,7 +91,7 @@ extension AppDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak engine, weak self] newConfigs in
                 engine?.updateAgentConfigs(newConfigs)
-                if let cocxyBridge = self?.bridge as? CocxyCoreBridge {
+                if let cocxyBridge = self?.bridge?.cocxyCoreBridge {
                     cocxyBridge.updateNativeAgentPatterns(from: newConfigs)
                 }
             }
@@ -613,7 +613,7 @@ extension AppDelegate {
     /// Hook events feed the detection engine and dashboard, while timeline
     /// events enrich the timeline store with CocxyCore-native semantic data.
     private func wireCocxyCoreBridgeIfNeeded() {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let receiver = hookEventReceiver else { return }
 
         cocxyBridge.setCwdProvider { [weak self] surfaceID in
@@ -679,7 +679,7 @@ extension AppDelegate {
     }
 
     private func wireCocxyCoreSemanticTimelineIfNeeded() {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let timelineStore = agentTimelineStore else { return }
 
         cocxyBridge.semanticAdapter.timelinePublisher
@@ -767,7 +767,7 @@ extension AppDelegate {
         in controller: MainWindowController,
         tabID: TabID
     ) {
-        guard let cocxyBridge = controller.bridge as? CocxyCoreBridge else { return }
+        guard let cocxyBridge = controller.bridge.cocxyCoreBridge else { return }
         let candidateSurfaceIDs = controller.surfaceIDs(for: tabID)
         guard !candidateSurfaceIDs.isEmpty else { return }
 
@@ -994,7 +994,7 @@ extension AppDelegate {
                 }
                 return matchingSurfaces[0]
             }
-            if let cocxyBridge = bridge as? CocxyCoreBridge,
+            if let cocxyBridge = bridge?.cocxyCoreBridge,
                let resolved = cocxyBridge.resolveSurfaceID(
                    matchingCwd: cwdHint,
                    within: Set(tabSurfaces)

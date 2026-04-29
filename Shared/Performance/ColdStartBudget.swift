@@ -57,7 +57,7 @@ public enum ColdStartBudget {
     /// bundle-readiness path crosses LaunchServices, app startup, socket
     /// binding, and CLI round-trip overhead, so a 50 ms gate would fail even for
     /// healthy local builds and would not protect users from real regressions.
-    public static let defaultBudgetMilliseconds: Double = 2_000
+    public static let defaultBudgetMilliseconds: Double = 500
 
     /// Target kept for the future signpost-level benchmark that measures only
     /// Cocxy-owned synchronous launch work, not LaunchServices or socket

@@ -72,8 +72,8 @@ struct PTYDaemonReadinessSwiftTestingTests {
         #expect(readiness.shouldUseInProcessEngine == true)
     }
 
-    @Test("terminal-surface capable helper remains guarded until bridge adapter is present")
-    func terminalSurfaceHelperStillUsesLocalBridgeUntilAdapterExists() {
+    @Test("terminal-surface-only helper still falls back")
+    func terminalSurfaceOnlyHelperStillFallsBack() {
         let hello = PTYDaemonHello(
             version: "dev",
             capabilities: [
@@ -88,7 +88,30 @@ struct PTYDaemonReadinessSwiftTestingTests {
             helperURL: URL(fileURLWithPath: "/tmp/cocxyd")
         )
 
-        #expect(readiness == .terminalSurfaceBridgeAvailable(hello))
+        #expect(readiness == .helperHealthyButSurfaceBridgeUnavailable(hello))
         #expect(readiness.shouldUseInProcessEngine == true)
+        #expect(readiness.diagnostic.contains("complete terminal engine capability"))
+    }
+
+    @Test("terminal-engine capable helper selects the daemon adapter path")
+    func terminalEngineHelperSelectsDaemonAdapterPath() {
+        let hello = PTYDaemonHello(
+            version: "dev",
+            capabilities: [
+                PTYDaemonProtocol.jsonLinesCapability,
+                PTYDaemonProtocol.terminalSurfaceCapability,
+                PTYDaemonProtocol.terminalEngineCapability
+            ]
+        )
+        let resolver = PTYDaemonReadinessResolver { _ in .success(hello) }
+
+        let readiness = resolver.resolve(
+            config: ExperimentalConfig(ptyDaemonEnabled: true),
+            helperURL: URL(fileURLWithPath: "/tmp/cocxyd")
+        )
+
+        #expect(readiness == .terminalSurfaceBridgeAvailable(hello))
+        #expect(readiness.shouldUseInProcessEngine == false)
+        #expect(readiness.diagnostic.contains("PTYDaemonClient"))
     }
 }

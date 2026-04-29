@@ -63,6 +63,25 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     @MainActor
+    func test_statusCommand_canReturnLaunchWarmupSnapshot() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            tabCountProviderOverride: { 0 },
+            statusDetailsProvider: {
+                ["launch_status": "warming"]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(id: "test-2c", command: "status", params: nil))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "running")
+        XCTAssertEqual(response.data?["tabs"], "0")
+        XCTAssertEqual(response.data?["launch_status"], "warming")
+    }
+
+    @MainActor
     func test_listTabsCommand_returnsTabInfo() {
         let tabManager = TabManager()
         let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)

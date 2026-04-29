@@ -46,7 +46,7 @@ extension AppDelegate {
 
     @MainActor
     func runtimeStatusDetailsForCLI() -> [String: String] {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return [:]
         }
@@ -175,7 +175,7 @@ extension AppDelegate {
         maxConnections: UInt16,
         maxFPS: UInt32
     ) -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -196,7 +196,7 @@ extension AppDelegate {
 
     @MainActor
     func stopWebTerminalForCLI() -> Bool {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return false
         }
@@ -208,7 +208,7 @@ extension AppDelegate {
 
     @MainActor
     func webStatusForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -217,7 +217,7 @@ extension AppDelegate {
 
     @MainActor
     func streamListForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -239,7 +239,7 @@ extension AppDelegate {
 
     @MainActor
     func resetTerminalForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               cocxyBridge.resetTerminal(for: surfaceID) else {
             return nil
@@ -250,7 +250,7 @@ extension AppDelegate {
 
     @MainActor
     func sendSignalForCLI(_ signal: Int32) -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               cocxyBridge.sendSignal(signal, to: surfaceID) else {
             return nil
@@ -264,7 +264,7 @@ extension AppDelegate {
 
     @MainActor
     func processDiagnosticsForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let diagnostics = cocxyBridge.processDiagnostics(for: surfaceID),
               let content = encodeCLIJSON(diagnostics) else {
@@ -276,7 +276,7 @@ extension AppDelegate {
 
     @MainActor
     func modeDiagnosticsForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let diagnostics = cocxyBridge.modeDiagnostics(for: surfaceID),
               let content = encodeCLIJSON(diagnostics) else {
@@ -288,7 +288,7 @@ extension AppDelegate {
 
     @MainActor
     func searchDiagnosticsForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let diagnostics = cocxyBridge.searchDiagnostics(for: surfaceID),
               let content = encodeCLIJSON(diagnostics) else {
@@ -300,7 +300,7 @@ extension AppDelegate {
 
     @MainActor
     func ligatureDiagnosticsForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let diagnostics = cocxyBridge.ligatureDiagnostics(for: surfaceID),
               let content = encodeCLIJSON(diagnostics) else {
@@ -312,7 +312,7 @@ extension AppDelegate {
 
     @MainActor
     func protocolDiagnosticsForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let diagnostics = cocxyBridge.protocolDiagnostics(for: surfaceID),
               let content = encodeCLIJSON(diagnostics) else {
@@ -324,7 +324,7 @@ extension AppDelegate {
 
     @MainActor
     func selectionSnapshotForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let snapshot = cocxyBridge.selectionSnapshot(for: surfaceID),
               let content = encodeCLIJSON(snapshot) else {
@@ -336,7 +336,7 @@ extension AppDelegate {
 
     @MainActor
     func fontMetricsForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let snapshot = cocxyBridge.fontMetricsSnapshot(for: surfaceID),
               let content = encodeCLIJSON(snapshot) else {
@@ -348,7 +348,7 @@ extension AppDelegate {
 
     @MainActor
     func preeditSnapshotForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let snapshot = cocxyBridge.preeditSnapshot(for: surfaceID),
               let content = encodeCLIJSON(snapshot) else {
@@ -360,7 +360,7 @@ extension AppDelegate {
 
     @MainActor
     func semanticSummaryForCLI(limit: UInt32) -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI(),
               let diagnostics = cocxyBridge.semanticDiagnostics(for: surfaceID) else {
             return nil
@@ -401,7 +401,7 @@ extension AppDelegate {
 
     @MainActor
     func setCurrentStreamForCLI(_ streamID: UInt32) -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -415,7 +415,7 @@ extension AppDelegate {
 
     @MainActor
     func requestProtocolCapabilitiesForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -429,7 +429,7 @@ extension AppDelegate {
 
     @MainActor
     func sendProtocolViewportForCLI(requestID: String?) -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -447,7 +447,7 @@ extension AppDelegate {
 
     @MainActor
     func sendProtocolMessageForCLI(type: String, payload: String) -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -468,7 +468,7 @@ extension AppDelegate {
 
     @MainActor
     func clearImagesForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -482,7 +482,7 @@ extension AppDelegate {
 
     @MainActor
     func listImagesForCLI() -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -513,7 +513,7 @@ extension AppDelegate {
 
     @MainActor
     func deleteImageForCLI(_ imageID: UInt32) -> [String: String]? {
-        guard let cocxyBridge = bridge as? CocxyCoreBridge,
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
@@ -708,7 +708,7 @@ extension AppDelegate {
                let bridge,
                let bridgeResults = bridge.searchScrollback(surfaceID: surfaceID, options: options) {
                 nativeResults = bridgeResults
-                if let cocxyBridge = bridge as? CocxyCoreBridge {
+                if let cocxyBridge = bridge.cocxyCoreBridge {
                     let historyLines = cocxyBridge.historyLines(for: surfaceID)
                     lines = historyLines.isEmpty ? controller.tabOutputBuffers[tabID]?.lines ?? [] : historyLines
                 } else {
@@ -726,7 +726,7 @@ extension AppDelegate {
                let bridge,
                let bridgeResults = bridge.searchScrollback(surfaceID: surfaceID, options: options) {
                 nativeResults = bridgeResults
-                if let cocxyBridge = bridge as? CocxyCoreBridge {
+                if let cocxyBridge = bridge.cocxyCoreBridge {
                     let historyLines = cocxyBridge.historyLines(for: surfaceID)
                     lines = historyLines.isEmpty ? controller.terminalOutputBuffer.lines : historyLines
                 } else {
