@@ -7,8 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.91] - 2026-04-29
 
+### Added
+- CLI verbs `cocxy worktree {focus, list}` and `cocxy review {approve,
+  request-changes}` (with `--body <text>` / `--stdin` support).
+- Editor integration registry with 12 external launchers (VS Code, Cursor,
+  Sublime Text, Zed, Xcode, Emacs, Aquamacs, BBEdit, TextMate, IntelliJ,
+  Neovim, Helix). Available via Command Palette, Code Review file context
+  menu, and the new CLI verb `cocxy open <path> [--editor <id>]
+  [--line N] [--column N]`.
+- Codex account hot-swap: scanner detects local accounts, Command Palette
+  offers "Switch Codex Account: ..." actions, and `CodexUsageProvider`
+  reads `~/.codex/state_5.sqlite` defensively. The rate-limit pill renders
+  the value as a local estimate with an explicit tooltip disclosure that
+  the upstream ledger reports inflated token totals
+  (openai/codex#18498).
+- Unified QuickSwitch overlay (Cmd+Shift+U) blending terminal tabs,
+  browser tabs, worktrees, and notes through a pure ranker. The legacy
+  unread-tab rotation stays one config flip away via
+  `appearance.quickswitch-mode = "tabs-only"`.
+- Picture-in-Picture floating panel behind `experimental.pip-enabled`.
+  The Command Palette action "Float Active Terminal" detaches the live
+  surface into an `NSPanel` and restores it back to the main window when
+  the panel closes; the surface keeps its PTY, scrollback, agent state,
+  and renderer attachment throughout the move.
+- PTY daemon helper spike behind `experimental.pty-daemon`. The bundled
+  `cocxyd` advertises an `ipc-jsonl-v1` handshake; the readiness probe
+  intentionally falls back to the in-process engine until a dedicated
+  daemon-backed `TerminalEngine` adapter ships.
+- Cold-start performance gate enforced on every push. The new
+  `scripts/bench-cold-start.sh` runs in the `Performance` workflow with
+  `--enforce`, holding the median launch time below the formal budget
+  of 2000 ms (with a 10% tolerance band) until the optimisation work
+  reaches the aspirational 50 ms target.
+- Live config editing through the CLI socket: `cocxy config set <key>
+  <value>` reloads the affected subsystem in place without restarting
+  the app.
+- Per-workspace notes Liquid Glass overlay with a new sidebar section in
+  Aurora, including theme-switch resilient hosts and Aurora hook cleanup.
+
 ### Fixed
-- Codesign cocxyd helper for notarization
+- Picture-in-Picture: `MainWindowController.windowWillClose` now closes
+  every active PIP panel before destroying surfaces. The previous flow
+  left orphan panels and risked an async restore callback into a
+  deallocating controller through the panel's weak self capture.
+- Picture-in-Picture: terminal surface refresh after reparenting (display
+  link anchor, interaction metrics, immediate redraw, render frame).
+- Picture-in-Picture: command palette runtime state refresh after a live
+  config reload so PIP-related actions reflect the latest flags.
+- Rate-limit indicator: the Codex tooltip now appends a fourth line that
+  cites the local-ledger inflation (openai/codex#18498) so users do not
+  read the value as an authoritative quota.
+- Notes: rebuild of the overlay host on theme switches; Aurora hook
+  cleanup on dismissal; stabilised round-trip on persisted timestamps.
+- CLI socket: keeps the live socket file across simultaneous app
+  instances instead of clobbering it on second-launch.
+- CI: nightly mirrors the notary-log extraction step from the release
+  workflow; both pipelines now build, copy, and codesign the `cocxyd`
+  helper so notarization no longer rejects the bundle for missing
+  Developer ID, secure timestamp, or hardened runtime.
+
+### Security
+- `cocxyd` helper is codesigned with Developer ID, hardened runtime, and
+  a secure timestamp to satisfy Apple notarization.
 
 ## [Unreleased]
 
