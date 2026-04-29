@@ -5,39 +5,13 @@ import Testing
 import CocxyShared
 @testable import CocxyTerminal
 
-/// Unit coverage for `CodexUsageProvider`.
-///
-/// At the time of writing, Codex CLI does not publish a
-/// stable, documented surface that exposes locally-observable token
-/// usage:
-///
-///   * `~/.codex/state_5.sqlite` is internal CLI state with an
-///     undocumented schema and is subject to change. The
-///     `threads.tokens_used` column also includes context, prompt
-///     cache, and plugin/skill overhead rather than billable tokens,
-///     so the value can be one to two orders of magnitude larger than
-///     what an account dashboard would report.
-///   * `~/.codex/logs_2.sqlite` is similarly undocumented, grows
-///     unboundedly, and contains conversation transcripts which are
-///     PII. Reading it without an audited schema is unsafe.
-///   * `~/.codex/session_index.jsonl` does not include token counts
-///     in any version observed locally.
-///   * `codex exec --json` emits state events but the schema does not
-///     document a stable token-usage payload.
-///
-/// Official CLI guidance directs users to the account dashboard for
-/// accurate token accounting. Cocxy guarantees zero
-/// outgoing telemetry, so consulting that dashboard remotely is also
-/// ruled out.
-///
-/// The provider therefore returns `nil` deliberately. The probe
-/// service hides the pill silently on `nil`, which is exactly the
-/// contract `RateLimitProviding` documents for "no reliable data
-/// available". When the CLI ships a documented, programmatic, locally
-/// reachable surface, the provider implementation can change in place
-/// without touching the wiring in `MainWindowController`.
+/// Unit coverage for `CodexUsageProvider`. The provider reads only
+/// numeric ledger columns from a local SQLite database and never touches
+/// Codex logs or transcript-bearing fields.
 @Suite("CodexUsageProvider")
 struct CodexUsageProviderSwiftTestingTests {
+
+    private let sqlite3URL = URL(fileURLWithPath: "/usr/bin/sqlite3")
 
     @Test("agent kind is .codex so the probe service registers the provider against the canonical enum case")
     func agentKindIsCodex() {
@@ -46,26 +20,86 @@ struct CodexUsageProviderSwiftTestingTests {
         #expect(provider.agent == .codex)
     }
 
-    @Test("snapshot returns nil deliberately so the pill hides silently for Codex until a stable usage surface exists")
-    func snapshotReturnsNilDeliberately() async {
-        let provider = CodexUsageProvider()
+    @Test("snapshot aggregates numeric token totals from the local thread ledger")
+    func snapshotAggregatesNumericTokenTotals() async throws {
+        try requireSQLiteOrSkip()
+        let root = try makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = root.appendingPathComponent("state_5.sqlite")
+        try runSQLite(
+            databaseURL,
+            """
+            CREATE TABLE threads (
+              id TEXT,
+              updated_at INTEGER,
+              tokens_used INTEGER,
+              title TEXT,
+              first_user_message TEXT
+            );
+            INSERT INTO threads VALUES ('old', 1699999700, 100, 'old title', 'old prompt');
+            INSERT INTO threads VALUES ('recent-a', 1700000100, 200, 'secret title', 'secret prompt');
+            INSERT INTO threads VALUES ('recent-b', 1700000200, 300, 'secret title 2', 'secret prompt 2');
+            INSERT INTO threads VALUES ('empty', 1700000300, NULL, 'ignored', 'ignored');
+            """
+        )
+        let provider = CodexUsageProvider(
+            stateDatabaseURL: databaseURL,
+            sqlite3URL: sqlite3URL,
+            aggregationWindow: 600,
+            now: { Date(timeIntervalSince1970: 1_700_000_400) }
+        )
+
+        let snapshot = await provider.snapshot()
+
+        #expect(snapshot?.agent == .codex)
+        #expect(snapshot?.usedAmount == 500)
+        #expect(snapshot?.limitAmount == 0)
+        #expect(snapshot?.usagePercent == 0)
+        #expect(snapshot?.unit == .tokens)
+    }
+
+    @Test("snapshot returns nil when sqlite is missing so the optional pill hides silently")
+    func snapshotReturnsNilWhenSQLiteIsMissing() async throws {
+        let root = try makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = root.appendingPathComponent("state_5.sqlite")
+        try Data().write(to: databaseURL)
+        let provider = CodexUsageProvider(
+            stateDatabaseURL: databaseURL,
+            sqlite3URL: URL(fileURLWithPath: "/nonexistent/sqlite3"),
+            now: { Date(timeIntervalSince1970: 1_700_000_400) }
+        )
 
         let snapshot = await provider.snapshot()
 
         #expect(snapshot == nil)
     }
 
-    @Test("snapshot stays nil across repeated calls so the polling probe never observes a transient value")
-    func snapshotIsIdempotentlyNil() async {
-        let provider = CodexUsageProvider()
+    @Test("snapshot returns nil when the internal schema drifts")
+    func snapshotReturnsNilWhenSchemaDrifts() async throws {
+        try requireSQLiteOrSkip()
+        let root = try makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = root.appendingPathComponent("state_5.sqlite")
+        try runSQLite(
+            databaseURL,
+            """
+            CREATE TABLE threads (
+              id TEXT,
+              updated_at INTEGER
+            );
+            INSERT INTO threads VALUES ('row', 1700000200);
+            """
+        )
+        let provider = CodexUsageProvider(
+            stateDatabaseURL: databaseURL,
+            sqlite3URL: sqlite3URL,
+            now: { Date(timeIntervalSince1970: 1_700_000_400) }
+        )
 
-        let first = await provider.snapshot()
-        let second = await provider.snapshot()
-        let third = await provider.snapshot()
+        let snapshot = await provider.snapshot()
 
-        #expect(first == nil)
-        #expect(second == nil)
-        #expect(third == nil)
+        #expect(snapshot == nil)
     }
 
     @Test("provider value-types are equal when constructed with the default initializer so the probe service treats them as a single registration")
@@ -100,5 +134,46 @@ struct CodexUsageProviderSwiftTestingTests {
 
         try CodexAccountSelectionStore.save(CodexAccountSelection(selectedAccountID: "acct_2"), to: selectionURL)
         #expect(provider.activeAccount()?.id == "acct_2")
+    }
+
+    // MARK: - Helpers
+
+    private func makeTempRoot() throws -> URL {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private func requireSQLiteOrSkip() throws {
+        guard FileManager.default.isExecutableFile(atPath: sqlite3URL.path) else {
+            try #require(Bool(false), "sqlite3 not available — skipping Codex usage provider SQLite tests")
+            return
+        }
+    }
+
+    private func runSQLite(_ databaseURL: URL, _ sql: String) throws {
+        let process = Process()
+        process.executableURL = sqlite3URL
+        process.arguments = [databaseURL.path]
+        let stdin = Pipe()
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardInput = stdin
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        try stdin.fileHandleForWriting.write(contentsOf: Data(sql.utf8))
+        try? stdin.fileHandleForWriting.close()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            let data = stderr.fileHandleForReading.readDataToEndOfFile()
+            let message = String(decoding: data, as: UTF8.self)
+            throw NSError(
+                domain: "CodexUsageProviderTests",
+                code: Int(process.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
     }
 }

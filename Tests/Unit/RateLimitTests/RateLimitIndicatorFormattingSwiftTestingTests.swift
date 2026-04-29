@@ -64,6 +64,19 @@ struct RateLimitIndicatorFormattingSwiftTestingTests {
         #expect(RateLimitIndicatorFormatting.percentLabel(for: snapshot) == "0%")
     }
 
+    @Test("percentLabel renders local when the provider cannot determine a denominator")
+    func percentLabelRendersLocalForUnknownLimit() {
+        let snapshot = makeSnapshot(
+            agent: .codex,
+            usagePercent: 0.0,
+            usedAmount: 25_000,
+            limitAmount: 0,
+            unit: .tokens
+        )
+
+        #expect(RateLimitIndicatorFormatting.percentLabel(for: snapshot) == "local")
+    }
+
     // MARK: - agentDisplayName
 
     @Test("each agent kind maps to its proper display name")

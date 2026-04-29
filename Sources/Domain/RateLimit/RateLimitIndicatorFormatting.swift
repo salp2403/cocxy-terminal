@@ -15,10 +15,12 @@ enum RateLimitIndicatorFormatting {
     // MARK: - Percent label
 
     /// Renders `usagePercent` as a whole-number percent suffixed with
-    /// "%". Negative values clamp to `0%` so the pill never displays
-    /// a negative number when a provider extrapolates from too little
-    /// data.
+    /// "%". When the provider cannot determine a denominator
+    /// (`limitAmount == 0`), the pill renders `local` instead of a fake
+    /// percentage so users do not mistake a local activity counter for
+    /// an authoritative quota read.
     static func percentLabel(for snapshot: RateLimitSnapshot) -> String {
+        guard snapshot.limitAmount > 0 else { return "local" }
         let clamped = max(0, snapshot.usagePercent)
         let percent = Int((clamped * 100).rounded())
         return "\(percent)%"

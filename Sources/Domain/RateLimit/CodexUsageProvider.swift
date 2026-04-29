@@ -1,70 +1,40 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// CodexUsageProvider.swift - Local-only provider that returns `nil`
-// until the CLI ships a stable, documented local usage surface.
+// CodexUsageProvider.swift - Local-only provider that aggregates the
+// Codex CLI's local thread ledger without reading transcripts.
 
 import CocxyShared
 import Foundation
 
 /// Local-only `RateLimitProviding` implementation for Codex CLI.
 ///
-/// ## Why this provider returns `nil`
+/// ## Data source
 ///
-/// At the time of writing, the Codex CLI does not publish a stable,
-/// documented, locally-reachable surface that exposes billable token
-/// usage:
+/// The Codex CLI keeps local runtime state in `~/.codex/state_5.sqlite`.
+/// The database is not a documented quota API, so this provider uses it
+/// only as a best-effort local activity estimate:
 ///
-///   * `~/.codex/state_5.sqlite` is internal CLI state with an
-///     undocumented schema and grows across CLI versions. The
-///     `threads.tokens_used` column also includes context, prompt
-///     cache, and plugin/skill overhead rather than billable tokens,
-///     so the value can be one to two orders of magnitude larger than
-///     what an account dashboard would report.
-///   * `~/.codex/logs_2.sqlite` is similarly undocumented, grows
-///     unboundedly, and contains conversation transcripts which are
-///     PII. Reading it without an audited schema is unsafe.
-///   * `~/.codex/session_index.jsonl` does not include token counts
-///     in any version observed locally.
-///   * `codex exec --json` emits state events but the schema does not
-///     document a stable token-usage payload.
+///   * reads only `threads.tokens_used` and `threads.updated_at`;
+///   * never reads `title`, `first_user_message`, logs, or transcripts;
+///   * filters to a rolling time window so stale sessions fade out;
+///   * returns `nil` if the database or `sqlite3` CLI is missing, if the
+///     schema changed, or if the query fails.
 ///
-/// Official CLI guidance directs users to the account dashboard for
-/// accurate token accounting. Cocxy guarantees zero
-/// outgoing telemetry (principio inmutable del proyecto), so
-/// consulting that dashboard remotely is also ruled out.
-///
-/// The provider therefore returns `nil` deliberately. The probe
-/// service hides the pill silently on `nil`, which is exactly the
-/// contract `RateLimitProviding` documents for "no reliable data
-/// available":
-///
-/// > Returning `nil` is the legitimate way to signal "no data
-/// > available" — the probe service hides the pill silently in that
-/// > case so a missing CLI or a dormant agent never surfaces as an
-/// > error banner.
+/// Because this is not an authoritative account quota surface, the
+/// returned `RateLimitSnapshot` sets `limitAmount` to zero. The UI shows
+/// it as a local usage estimate rather than a percent of a real plan
+/// limit.
 ///
 /// ## When to update this provider
 ///
 /// When the CLI ships a documented, programmatic, locally-reachable
-/// surface for usage data, the provider implementation can change in
-/// place without touching the wiring in `MainWindowController`. The
-/// closed `RateLimitSnapshot` value type is already shared across
-/// providers, so a future implementation only needs to:
+/// quota surface, the provider implementation can change in place
+/// without touching the wiring in `MainWindowController`. The closed
+/// `RateLimitSnapshot` value type is already shared across providers,
+/// so a future implementation only needs to:
 ///
 ///   1. Read the new local surface (file or local socket).
 ///   2. Aggregate values inside the polling window.
 ///   3. Return a `RateLimitSnapshot(agent: .codex, ...)`.
-///
-/// ## Why register the provider at all
-///
-/// Even though `snapshot()` returns `nil` today, the provider is
-/// registered in `MainWindowController.rateLimitProbeService` so that
-/// `RateLimitAgentResolver.kind(for:)` can map a detected Codex agent
-/// onto the canonical `.codex` enum case without producing a "no
-/// provider registered" hole. The probe service treats a `nil`
-/// snapshot identically to an unregistered provider for rendering
-/// purposes (the pill hides), but registering the provider keeps the
-/// wiring uniform across agents and lets a future swap-in implementation
-/// take effect with no callsite changes.
 struct CodexUsageProvider: RateLimitProviding {
 
     /// Agent the provider tracks. Always `.codex` so the probe service
@@ -73,34 +43,76 @@ struct CodexUsageProvider: RateLimitProviding {
 
     private let authJSONURL: URL
     private let selectionURL: URL
+    private let stateDatabaseURL: URL
+    private let sqlite3URL: URL
+    private let aggregationWindow: TimeInterval
+    private let now: @Sendable () -> Date
 
-    /// Default initializer with no parameters — the provider has no
-    /// required knobs because it has no usable usage surface today.
-    /// It still reads the selected Codex account at refresh time so
-    /// account switches made from the command palette are reflected
-    /// without restarting Cocxy. Once a future CLI release exposes a
-    /// stable local usage surface, `snapshot()` can use `activeAccount()`
-    /// to scope the sample to the selected account.
+    /// Default location of Codex CLI's local thread ledger.
+    static var defaultStateDatabaseURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/state_5.sqlite")
+    }
+
+    /// Reads the selected Codex account at refresh time so account
+    /// switches made from the command palette are reflected without
+    /// restarting Cocxy. The current local SQLite schema does not expose
+    /// a stable account foreign key, so the snapshot is an all-local
+    /// Codex activity estimate rather than account-scoped billing data.
     init(
         authJSONURL: URL = CodexAccountScanner.defaultAuthJSONURL(),
-        selectionURL: URL = CodexAccountSelectionStore.defaultSelectionURL()
+        selectionURL: URL = CodexAccountSelectionStore.defaultSelectionURL(),
+        stateDatabaseURL: URL = CodexUsageProvider.defaultStateDatabaseURL,
+        sqlite3URL: URL = URL(fileURLWithPath: "/usr/bin/sqlite3"),
+        aggregationWindow: TimeInterval = 60 * 60 * 24,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.authJSONURL = authJSONURL
         self.selectionURL = selectionURL
+        self.stateDatabaseURL = stateDatabaseURL
+        self.sqlite3URL = sqlite3URL
+        self.aggregationWindow = aggregationWindow
+        self.now = now
     }
 
     // MARK: - RateLimitProviding
 
-    /// Returns `nil` so the rate-limit pill hides silently for Codex.
-    ///
-    /// See the type-level documentation above for the rationale: the
-    /// Codex CLI does not currently expose a stable, documented,
-    /// locally-reachable surface for billable token usage, and Cocxy's
-    /// zero-telemetry contract rules out consulting the account
-    /// dashboard remotely.
+    /// Returns a local usage estimate from Codex's thread ledger.
+    /// Missing files, missing `sqlite3`, schema drift, or query failures
+    /// all collapse to `nil` so the pill hides silently instead of
+    /// surfacing a scary banner for an optional indicator.
     func snapshot() async -> RateLimitSnapshot? {
         _ = activeAccount()
-        return nil
+        let stateDatabaseURL = stateDatabaseURL
+        let sqlite3URL = sqlite3URL
+        let aggregationWindow = aggregationWindow
+        let sampleInstant = now()
+
+        return await Task.detached(priority: .utility) {
+            guard FileManager.default.isReadableFile(atPath: stateDatabaseURL.path),
+                  FileManager.default.isExecutableFile(atPath: sqlite3URL.path)
+            else {
+                return nil
+            }
+
+            let cutoff = Int(sampleInstant.addingTimeInterval(-aggregationWindow).timeIntervalSince1970.rounded(.down))
+            guard let totalTokens = Self.queryTokenTotal(
+                sqlite3URL: sqlite3URL,
+                databaseURL: stateDatabaseURL,
+                cutoffEpochSeconds: cutoff
+            ) else {
+                return nil
+            }
+
+            return RateLimitSnapshot(
+                agent: .codex,
+                usagePercent: 0,
+                usedAmount: totalTokens,
+                limitAmount: 0,
+                unit: .tokens,
+                updatedAt: sampleInstant
+            )
+        }.value
     }
 
     /// Resolves the account Cocxy should scope future Codex usage data
@@ -119,5 +131,65 @@ struct CodexUsageProvider: RateLimitProviding {
             return accounts[0]
         }
         return nil
+    }
+
+    // MARK: - SQLite ledger query
+
+    /// Aggregates only numeric columns from the local thread ledger.
+    /// The SQL intentionally avoids transcript-bearing columns so this
+    /// provider never reads prompt text while computing the status-bar
+    /// estimate.
+    static func queryTokenTotal(
+        sqlite3URL: URL,
+        databaseURL: URL,
+        cutoffEpochSeconds: Int,
+        timeoutSeconds: TimeInterval = 1.5
+    ) -> Int? {
+        let query = """
+        SELECT COALESCE(SUM(tokens_used), 0)
+        FROM threads
+        WHERE tokens_used IS NOT NULL
+          AND updated_at >= \(cutoffEpochSeconds);
+        """
+
+        let process = Process()
+        process.executableURL = sqlite3URL
+        process.arguments = [
+            "-readonly",
+            "-batch",
+            "-noheader",
+            databaseURL.path,
+            query,
+        ]
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        let completion = DispatchGroup()
+        completion.enter()
+        process.terminationHandler = { _ in completion.leave() }
+
+        do {
+            try process.run()
+        } catch {
+            try? stdoutPipe.fileHandleForWriting.close()
+            try? stderrPipe.fileHandleForWriting.close()
+            return nil
+        }
+
+        if completion.wait(timeout: .now() + timeoutSeconds) == .timedOut {
+            process.terminate()
+            _ = completion.wait(timeout: .now() + 0.2)
+            return nil
+        }
+        guard process.terminationStatus == 0 else { return nil }
+
+        let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let value = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let total = Int(value), total >= 0 else { return nil }
+        return total
     }
 }
