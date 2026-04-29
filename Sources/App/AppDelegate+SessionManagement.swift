@@ -458,14 +458,17 @@ extension AppDelegate {
                controller.splitViewModels.isEmpty {
                 viewModel = controller.terminalViewModel
                 viewModel.setDefaultFontSize(configuredFontSize)
-                let freshPrimarySurfaceView = CocxyCoreView(viewModel: viewModel)
+                let freshPrimarySurfaceView = TerminalHostViewFactory.make(
+                    viewModel: viewModel,
+                    engine: bridge
+                )
                 controller.terminalSurfaceView = freshPrimarySurfaceView
                 surfaceView = freshPrimarySurfaceView
             } else {
                 let newViewModel = TerminalViewModel(engine: bridge)
                 newViewModel.setDefaultFontSize(configuredFontSize)
                 viewModel = newViewModel
-                surfaceView = CocxyCoreView(viewModel: newViewModel)
+                surfaceView = TerminalHostViewFactory.make(viewModel: newViewModel, engine: bridge)
             }
 
             do {

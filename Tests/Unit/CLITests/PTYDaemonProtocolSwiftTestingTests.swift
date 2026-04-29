@@ -28,8 +28,8 @@ struct PTYDaemonProtocolSwiftTestingTests {
         }
     }
 
-    @Test("default helper hello is IPC-only until terminal surface bridge ships")
-    func defaultHelloIsIPCOnly() {
+    @Test("default protocol hello stays IPC-only unless a helper opts into terminal capabilities")
+    func defaultProtocolHelloIsIPCOnly() {
         let hello = PTYDaemonHello(version: "dev", pid: 42)
 
         #expect(hello.protocolVersion == PTYDaemonProtocol.protocolVersion)

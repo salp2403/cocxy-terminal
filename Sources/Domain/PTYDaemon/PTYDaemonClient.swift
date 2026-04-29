@@ -200,6 +200,7 @@ final class PTYDaemonClient: TerminalEngine {
     private var stalledSurfaces = Set<SurfaceID>()
     private var outputHandlers: [SurfaceID: @Sendable (Data) -> Void] = [:]
     private var oscHandlers: [SurfaceID: @Sendable (OSCNotification) -> Void] = [:]
+    private var frameHandlers: [SurfaceID: @Sendable (PTYDaemonSurfaceFrame) -> Void] = [:]
 
     init(connection: PTYDaemonClientConnection) {
         self.connection = connection
@@ -260,6 +261,7 @@ final class PTYDaemonClient: TerminalEngine {
         stalledSurfaces.remove(id)
         outputHandlers[id] = nil
         oscHandlers[id] = nil
+        frameHandlers[id] = nil
     }
 
     @discardableResult
@@ -323,6 +325,18 @@ final class PTYDaemonClient: TerminalEngine {
         handler: @escaping @Sendable (OSCNotification) -> Void
     ) {
         oscHandlers[surface] = handler
+    }
+
+    func setFrameHandler(
+        for surface: SurfaceID,
+        handler: @escaping @Sendable (PTYDaemonSurfaceFrame) -> Void
+    ) {
+        frameHandlers[surface] = handler
+    }
+
+    func subscribeFrames(for surface: SurfaceID) -> PTYDaemonSurfaceFrame? {
+        let response = try? sendSurfaceRequest(surface, command: .surfaceFrameSubscribe)
+        return response?.ok == true ? response?.frame : nil
     }
 
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {
@@ -428,7 +442,8 @@ final class PTYDaemonClient: TerminalEngine {
                   let notification = makeOSCNotification(from: osc) else { return }
             oscHandlers[surface]?(notification)
         case .surfaceFrame:
-            break
+            guard let frame = event.frame else { return }
+            frameHandlers[surface]?(frame)
         case .surfaceClosed:
             liveSurfaces.remove(surface)
             stalledSurfaces.insert(surface)

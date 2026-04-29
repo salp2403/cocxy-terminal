@@ -794,7 +794,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func buildTerminalSurface() -> TerminalHostView {
-        let surfaceView = CocxyCoreView(viewModel: terminalViewModel)
+        let surfaceView = TerminalHostViewFactory.make(
+            viewModel: terminalViewModel,
+            engine: bridge
+        )
         self.terminalSurfaceView = surfaceView
         return surfaceView
     }

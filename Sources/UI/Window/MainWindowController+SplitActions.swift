@@ -253,7 +253,7 @@ extension MainWindowController {
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         newViewModel.setDefaultFontSize(configuredFontSize)
-        let newSurfaceView = CocxyCoreView(viewModel: newViewModel)
+        let newSurfaceView = TerminalHostViewFactory.make(viewModel: newViewModel, engine: bridge)
 
         let workingDirectory = currentTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
             ?? tabManager.activeTab?.workingDirectory
