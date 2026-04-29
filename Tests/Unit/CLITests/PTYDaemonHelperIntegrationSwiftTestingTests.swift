@@ -16,6 +16,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         #expect(decoded.ok == true)
         #expect(decoded.hello?.capabilities == [PTYDaemonProtocol.jsonLinesCapability])
         #expect(decoded.hello?.supportsTerminalSurfaces == false)
+        #expect(decoded.hello?.supportsTerminalHostRenderer == false)
         #expect(decoded.hello?.supportsTerminalEngineAdapter == false)
     }
 

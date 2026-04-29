@@ -90,17 +90,40 @@ struct PTYDaemonReadinessSwiftTestingTests {
 
         #expect(readiness == .helperHealthyButSurfaceBridgeUnavailable(hello))
         #expect(readiness.shouldUseInProcessEngine == true)
-        #expect(readiness.diagnostic.contains("complete terminal engine capability"))
+        #expect(readiness.diagnostic.contains("complete terminal engine"))
     }
 
-    @Test("terminal-engine capable helper selects the daemon adapter path")
-    func terminalEngineHelperSelectsDaemonAdapterPath() {
+    @Test("terminal-engine capable helper without host renderer still falls back")
+    func terminalEngineHelperWithoutHostRendererStillFallsBack() {
         let hello = PTYDaemonHello(
             version: "dev",
             capabilities: [
                 PTYDaemonProtocol.jsonLinesCapability,
                 PTYDaemonProtocol.terminalSurfaceCapability,
                 PTYDaemonProtocol.terminalEngineCapability
+            ]
+        )
+        let resolver = PTYDaemonReadinessResolver(expectedHelperVersion: nil) { _ in .success(hello) }
+
+        let readiness = resolver.resolve(
+            config: ExperimentalConfig(ptyDaemonEnabled: true),
+            helperURL: URL(fileURLWithPath: "/tmp/cocxyd")
+        )
+
+        #expect(readiness == .helperHealthyButSurfaceBridgeUnavailable(hello))
+        #expect(readiness.shouldUseInProcessEngine == true)
+        #expect(readiness.diagnostic.contains("host renderer"))
+    }
+
+    @Test("terminal-engine helper with host renderer selects the daemon adapter path")
+    func terminalEngineHelperWithHostRendererSelectsDaemonAdapterPath() {
+        let hello = PTYDaemonHello(
+            version: "dev",
+            capabilities: [
+                PTYDaemonProtocol.jsonLinesCapability,
+                PTYDaemonProtocol.terminalSurfaceCapability,
+                PTYDaemonProtocol.terminalEngineCapability,
+                PTYDaemonProtocol.terminalHostRendererCapability
             ]
         )
         let resolver = PTYDaemonReadinessResolver(expectedHelperVersion: nil) { _ in .success(hello) }
@@ -122,7 +145,8 @@ struct PTYDaemonReadinessSwiftTestingTests {
             capabilities: [
                 PTYDaemonProtocol.jsonLinesCapability,
                 PTYDaemonProtocol.terminalSurfaceCapability,
-                PTYDaemonProtocol.terminalEngineCapability
+                PTYDaemonProtocol.terminalEngineCapability,
+                PTYDaemonProtocol.terminalHostRendererCapability
             ]
         )
         let resolver = PTYDaemonReadinessResolver(expectedHelperVersion: "0.1.91") { _ in .success(hello) }

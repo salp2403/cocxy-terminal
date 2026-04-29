@@ -49,6 +49,29 @@ struct PTYDaemonClientSwiftTestingTests {
         }
     }
 
+    @Test("initialize rejects terminal-engine without host-renderer capability")
+    func initializeRejectsTerminalEngineWithoutHostRendererCapability() {
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(
+                id: "hello",
+                ok: true,
+                hello: PTYDaemonHello(
+                    version: "dev",
+                    capabilities: [
+                        PTYDaemonProtocol.jsonLinesCapability,
+                        PTYDaemonProtocol.terminalSurfaceCapability,
+                        PTYDaemonProtocol.terminalEngineCapability,
+                    ]
+                )
+            )
+        ])
+        let client = PTYDaemonClient(connection: connection)
+
+        #expect(throws: TerminalEngineError.self) {
+            try client.initialize(config: testConfig())
+        }
+    }
+
     @Test("initialize accepts complete terminal engine capability set")
     func initializeAcceptsTerminalEngineCapabilitySet() throws {
         let connection = MockPTYDaemonClientConnection(responses: [
@@ -369,6 +392,7 @@ struct PTYDaemonClientSwiftTestingTests {
                 PTYDaemonProtocol.jsonLinesCapability,
                 PTYDaemonProtocol.terminalSurfaceCapability,
                 PTYDaemonProtocol.terminalEngineCapability,
+                PTYDaemonProtocol.terminalHostRendererCapability,
             ]
         )
     }

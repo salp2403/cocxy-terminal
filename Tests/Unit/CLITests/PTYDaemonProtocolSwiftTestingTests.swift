@@ -35,10 +35,11 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(hello.protocolVersion == PTYDaemonProtocol.protocolVersion)
         #expect(hello.capabilities == [PTYDaemonProtocol.jsonLinesCapability])
         #expect(hello.supportsTerminalSurfaces == false)
+        #expect(hello.supportsTerminalHostRenderer == false)
         #expect(hello.supportsTerminalEngineAdapter == false)
     }
 
-    @Test("terminal engine adapter requires both surface frames and engine transport")
+    @Test("terminal engine adapter requires surface frames, engine transport and host renderer")
     func terminalEngineAdapterRequiresCompleteCapabilitySet() {
         let framesOnly = PTYDaemonHello(
             version: "dev",
@@ -47,7 +48,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
                 PTYDaemonProtocol.terminalSurfaceCapability,
             ]
         )
-        let complete = PTYDaemonHello(
+        let engineOnly = PTYDaemonHello(
             version: "dev",
             capabilities: [
                 PTYDaemonProtocol.jsonLinesCapability,
@@ -55,9 +56,22 @@ struct PTYDaemonProtocolSwiftTestingTests {
                 PTYDaemonProtocol.terminalEngineCapability,
             ]
         )
+        let complete = PTYDaemonHello(
+            version: "dev",
+            capabilities: [
+                PTYDaemonProtocol.jsonLinesCapability,
+                PTYDaemonProtocol.terminalSurfaceCapability,
+                PTYDaemonProtocol.terminalEngineCapability,
+                PTYDaemonProtocol.terminalHostRendererCapability,
+            ]
+        )
 
         #expect(framesOnly.supportsTerminalSurfaces == true)
         #expect(framesOnly.supportsTerminalEngineAdapter == false)
+        #expect(engineOnly.supportsTerminalSurfaces == true)
+        #expect(engineOnly.supportsTerminalHostRenderer == false)
+        #expect(engineOnly.supportsTerminalEngineAdapter == false)
+        #expect(complete.supportsTerminalHostRenderer == true)
         #expect(complete.supportsTerminalEngineAdapter == true)
     }
 

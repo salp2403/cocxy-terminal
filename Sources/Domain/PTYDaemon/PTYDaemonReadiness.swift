@@ -36,9 +36,9 @@ enum PTYDaemonReadiness: Equatable {
         case .helperVersionMismatch(let actual, let expected):
             return "PTY daemon helper version \(actual) does not match app version \(expected); using in-process CocxyCore bridge."
         case .helperHealthyButSurfaceBridgeUnavailable:
-            return "PTY daemon helper is healthy but does not expose the complete terminal engine capability set; using in-process CocxyCore bridge."
+            return "PTY daemon helper is healthy but does not expose the complete terminal engine and host renderer capability set; using in-process CocxyCore bridge."
         case .terminalSurfaceBridgeAvailable:
-            return "PTY daemon helper exposes terminal-surface-v1 and terminal-engine-v1; using experimental PTYDaemonClient TerminalEngine adapter."
+            return "PTY daemon helper exposes terminal-surface-v1, terminal-engine-v1 and terminal-host-renderer-v1; using experimental PTYDaemonClient TerminalEngine adapter."
         }
     }
 }

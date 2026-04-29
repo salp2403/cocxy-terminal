@@ -214,7 +214,7 @@ final class PTYDaemonClient: TerminalEngine {
         }
         guard hello.supportsTerminalEngineAdapter else {
             throw TerminalEngineError.initializationFailed(
-                reason: "PTY daemon lacks \(PTYDaemonProtocol.terminalEngineCapability)"
+                reason: "PTY daemon lacks the complete terminal engine and host renderer capability set"
             )
         }
         initialized = true

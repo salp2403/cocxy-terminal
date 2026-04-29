@@ -9,6 +9,7 @@ public enum PTYDaemonProtocol {
     public static let jsonLinesCapability = "ipc-jsonl-v1"
     public static let terminalSurfaceCapability = "terminal-surface-v1"
     public static let terminalEngineCapability = "terminal-engine-v1"
+    public static let terminalHostRendererCapability = "terminal-host-renderer-v1"
 }
 
 public struct PTYDaemonHello: Codable, Equatable, Sendable {
@@ -33,9 +34,14 @@ public struct PTYDaemonHello: Codable, Equatable, Sendable {
         capabilities.contains(PTYDaemonProtocol.terminalSurfaceCapability)
     }
 
+    public var supportsTerminalHostRenderer: Bool {
+        capabilities.contains(PTYDaemonProtocol.terminalHostRendererCapability)
+    }
+
     public var supportsTerminalEngineAdapter: Bool {
         supportsTerminalSurfaces &&
-            capabilities.contains(PTYDaemonProtocol.terminalEngineCapability)
+            capabilities.contains(PTYDaemonProtocol.terminalEngineCapability) &&
+            supportsTerminalHostRenderer
     }
 }
 
