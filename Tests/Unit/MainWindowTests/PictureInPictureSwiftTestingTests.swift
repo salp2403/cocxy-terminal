@@ -27,9 +27,37 @@ struct PictureInPictureSwiftTestingTests {
         #expect(controller.didRestore == true)
     }
 
+    @Test("PIPWindowController configures a floating resizable panel for agent work")
+    func panelUsesFloatingResizableWindowConfiguration() {
+        let controller = PIPWindowController(
+            tabID: TabID(),
+            title: "PIP",
+            detachedView: NSView(frame: NSRect(x: 0, y: 0, width: 120, height: 80)),
+            onRestore: { _, _ in }
+        )
+
+        #expect(controller.window?.level == .floating)
+        #expect(controller.window?.styleMask.contains(.resizable) == true)
+        #expect(controller.window?.styleMask.contains(.closable) == true)
+        #expect(controller.window?.collectionBehavior.contains(.canJoinAllSpaces) == true)
+        #expect(controller.window?.collectionBehavior.contains(.fullScreenAuxiliary) == true)
+    }
+
     @Test("detach is feature-gated off by default")
     func detachIsFeatureGatedOffByDefault() {
         let controller = MainWindowController(bridge: MockTerminalEngine())
+
+        #expect(controller.detachActiveTerminalToPIP() == false)
+        #expect(controller.pipControllers.isEmpty)
+    }
+
+    @Test("detach is blocked while a split view is active so view ownership stays unambiguous")
+    func detachIsBlockedWhenSplitViewIsActive() {
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: makeConfigService(pipEnabled: true)
+        )
+        controller.activeSplitView = NSSplitView(frame: NSRect(x: 0, y: 0, width: 300, height: 200))
 
         #expect(controller.detachActiveTerminalToPIP() == false)
         #expect(controller.pipControllers.isEmpty)
@@ -70,6 +98,33 @@ struct PictureInPictureSwiftTestingTests {
         #expect(didDetach == true)
         #expect(surfaceView.needsRender == true)
         #expect(surfaceView.window?.firstResponder === surfaceView)
+    }
+
+    @Test("PIP remains owned by its panel if the source tab disappears before restore")
+    func pipSurvivesSourceTabRemovalUntilPanelRestores() async {
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: makeConfigService(pipEnabled: true)
+        )
+        guard let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
+            Issue.record("Expected initial tab")
+            return
+        }
+
+        #expect(controller.detachActiveTerminalToPIP() == true)
+        let secondTab = controller.tabManager.addTab()
+        controller.tabManager.removeTab(id: tabID)
+
+        #expect(controller.tabManager.tab(for: tabID) == nil)
+        #expect(controller.tabManager.activeTabID == secondTab.id)
+        #expect(controller.pipControllers[tabID] != nil)
+
+        controller.pipControllers[tabID]?.restore()
+        await Task.yield()
+
+        #expect(controller.pipControllers[tabID] == nil)
+        #expect(controller.tabManager.tab(for: tabID) == nil)
+        #expect(controller.tabManager.activeTabID == secondTab.id)
     }
 
     private func makeConfigService(pipEnabled: Bool) -> ConfigService {

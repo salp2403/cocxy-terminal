@@ -85,6 +85,14 @@ final class CommandPaletteViewModel: ObservableObject {
         selectedIndex = 0
     }
 
+    /// Invalidates SwiftUI's computed result list after the backing engine
+    /// updates an existing action in place. The palette keeps its engine alive
+    /// across open/close cycles to preserve recents, so config-sensitive rows
+    /// need an explicit redraw when their metadata changes.
+    func refreshResults() {
+        objectWillChange.send()
+    }
+
     /// Executes the currently selected action and dismisses the palette.
     func executeSelected() {
         let actions = filteredActions

@@ -146,6 +146,11 @@ extension MainWindowController {
             refreshStatusBar()
         }
 
+        if old?.keybindings != config.keybindings
+            || old?.experimental != config.experimental {
+            refreshCommandPaletteRuntimeStateIfNeeded(config)
+        }
+
         if old?.notes != config.notes {
             handleNotesConfigChanged(config.notes)
         }

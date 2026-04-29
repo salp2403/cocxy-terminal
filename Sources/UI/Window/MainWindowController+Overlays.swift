@@ -50,12 +50,14 @@ extension MainWindowController {
         let engine: CommandPaletteEngineImpl
         if let existing = commandPaletteEngine {
             engine = existing
-            let keybindings = configService?.current.keybindings ?? .defaults
-            engine.rebuildBuiltInShortcuts(using: keybindings)
         } else {
             engine = createWiredCommandPaletteEngine()
             commandPaletteEngine = engine
         }
+        refreshCommandPaletteRuntimeState(
+            engine,
+            config: configService?.current ?? .defaults
+        )
         commandPaletteViewModel = CommandPaletteViewModel(engine: engine)
 
         guard let viewModel = commandPaletteViewModel else { return }
@@ -139,6 +141,47 @@ extension MainWindowController {
         }
         let config = configService?.current.keybindings ?? .defaults
         return MenuKeybindingsBinder.prettyShortcut(for: actionId, in: config)
+    }
+
+    /// Refreshes command metadata that depends on live config while preserving
+    /// the engine's recents and frequency ranking. The palette deliberately
+    /// reuses its engine across open/close cycles, so config-sensitive rows
+    /// must be updated in place after `cocxy config set` or a Settings save.
+    func refreshCommandPaletteRuntimeState(
+        _ engine: CommandPaletteEngineImpl,
+        config: CocxyConfig
+    ) {
+        engine.rebuildBuiltInShortcuts(using: config.keybindings)
+        engine.registerAction(
+            pictureInPictureCommandAction(isEnabled: config.experimental.pipEnabled)
+        )
+    }
+
+    func refreshCommandPaletteRuntimeStateIfNeeded(_ config: CocxyConfig) {
+        guard let engine = commandPaletteEngine else { return }
+        refreshCommandPaletteRuntimeState(engine, config: config)
+        commandPaletteViewModel?.refreshResults()
+        if auroraChromeController?.isPaletteVisible == true {
+            auroraChromeController?.setPaletteActions(buildAuroraPaletteActions())
+        }
+    }
+
+    private func pictureInPictureCommandAction(isEnabled: Bool) -> CommandAction {
+        CommandAction(
+            id: "window.pictureInPicture",
+            name: "Float Active Terminal",
+            description: isEnabled
+                ? "Move the active terminal into a floating Picture-in-Picture panel"
+                : "Enable [experimental].pip-enabled to use terminal Picture-in-Picture",
+            shortcut: nil,
+            category: .navigation,
+            handler: { [weak self] in
+                self?.dismissCommandPalette()
+                Task { @MainActor in
+                    _ = self?.detachActiveTerminalToPIP()
+                }
+            }
+        )
     }
 
     /// Creates a CommandPaletteEngine with all actions wired to real handlers.
@@ -696,20 +739,8 @@ extension MainWindowController {
                     }
                 }
             ),
-            CommandAction(
-                id: "window.pictureInPicture",
-                name: "Float Active Terminal",
-                description: (configService?.current.experimental.pipEnabled == true)
-                    ? "Move the active terminal into a floating Picture-in-Picture panel"
-                    : "Enable [experimental].pip-enabled to use terminal Picture-in-Picture",
-                shortcut: nil,
-                category: .navigation,
-                handler: { [weak self] in
-                    self?.dismissCommandPalette()
-                    Task { @MainActor in
-                        _ = self?.detachActiveTerminalToPIP()
-                    }
-                }
+            pictureInPictureCommandAction(
+                isEnabled: configService?.current.experimental.pipEnabled == true
             ),
             CommandAction(
                 id: "worktree.create",

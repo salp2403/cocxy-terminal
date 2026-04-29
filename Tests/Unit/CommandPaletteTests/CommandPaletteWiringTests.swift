@@ -61,11 +61,62 @@ final class CommandPaletteWiringTests: XCTestCase {
             "sidebar.transparency",
             "navigation.quickswitch",
             "navigation.quickterminal",
+            "window.pictureInPicture",
         ]
 
         XCTAssertTrue(
             actionIDs.isSuperset(of: expectedIDs),
             "The runtime command palette must expose every app action and panel that has a live handler"
         )
+    }
+
+    func testPictureInPictureActionDescriptionTracksLiveConfigReload() throws {
+        let provider = CommandPaletteConfigProvider(content: """
+        [experimental]
+        pip-enabled = false
+        pty-daemon = false
+        """)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: service
+        )
+        let engine = controller.createWiredCommandPaletteEngine()
+        controller.commandPaletteEngine = engine
+
+        XCTAssertEqual(
+            engine.allActions.first(where: { $0.id == "window.pictureInPicture" })?.description,
+            "Enable [experimental].pip-enabled to use terminal Picture-in-Picture"
+        )
+
+        provider.content = """
+        [experimental]
+        pip-enabled = true
+        pty-daemon = false
+        """
+        try service.reload()
+        controller.refreshCommandPaletteRuntimeStateIfNeeded(service.current)
+
+        XCTAssertEqual(
+            engine.allActions.first(where: { $0.id == "window.pictureInPicture" })?.description,
+            "Move the active terminal into a floating Picture-in-Picture panel"
+        )
+    }
+}
+
+private final class CommandPaletteConfigProvider: ConfigFileProviding, @unchecked Sendable {
+    var content: String?
+
+    init(content: String?) {
+        self.content = content
+    }
+
+    func readConfigFile() -> String? {
+        content
+    }
+
+    func writeConfigFile(_ content: String) throws {
+        self.content = content
     }
 }

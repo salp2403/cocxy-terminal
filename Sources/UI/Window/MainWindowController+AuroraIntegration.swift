@@ -813,16 +813,16 @@ extension MainWindowController {
     /// classic overlay does this in `showCommandPaletteOverlay()`, so
     /// Aurora has to replicate the refresh or rows would show stale
     /// glyphs after the user edited a binding.
-    private func buildAuroraPaletteActions() -> [Design.AuroraPaletteAction] {
+    func buildAuroraPaletteActions() -> [Design.AuroraPaletteAction] {
         let engine: CommandPaletteEngineImpl
+        let config = configService?.current ?? .defaults
         if let existing = commandPaletteEngine {
             engine = existing
-            let keybindings = configService?.current.keybindings ?? .defaults
-            engine.rebuildBuiltInShortcuts(using: keybindings)
         } else {
             engine = createWiredCommandPaletteEngine()
             commandPaletteEngine = engine
         }
+        refreshCommandPaletteRuntimeState(engine, config: config)
         return engine.allActions.map { action in
             Design.AuroraPaletteAction(
                 id: action.id,
