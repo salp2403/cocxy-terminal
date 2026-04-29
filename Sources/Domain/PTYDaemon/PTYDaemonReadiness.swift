@@ -8,6 +8,7 @@ enum PTYDaemonReadiness: Equatable {
     case disabled
     case helperMissing
     case helperUnhealthy(String)
+    case helperVersionMismatch(actual: String, expected: String)
     case helperHealthyButSurfaceBridgeUnavailable(PTYDaemonHello)
     case terminalSurfaceBridgeAvailable(PTYDaemonHello)
 
@@ -15,7 +16,11 @@ enum PTYDaemonReadiness: Equatable {
         switch self {
         case .terminalSurfaceBridgeAvailable:
             return false
-        case .disabled, .helperMissing, .helperUnhealthy, .helperHealthyButSurfaceBridgeUnavailable:
+        case .disabled,
+             .helperMissing,
+             .helperUnhealthy,
+             .helperVersionMismatch,
+             .helperHealthyButSurfaceBridgeUnavailable:
             return true
         }
     }
@@ -28,6 +33,8 @@ enum PTYDaemonReadiness: Equatable {
             return "PTY daemon requested but bundled helper is missing; using in-process CocxyCore bridge."
         case .helperUnhealthy(let reason):
             return "PTY daemon requested but helper handshake failed (\(reason)); using in-process CocxyCore bridge."
+        case .helperVersionMismatch(let actual, let expected):
+            return "PTY daemon helper version \(actual) does not match app version \(expected); using in-process CocxyCore bridge."
         case .helperHealthyButSurfaceBridgeUnavailable:
             return "PTY daemon helper is healthy but does not expose the complete terminal engine capability set; using in-process CocxyCore bridge."
         case .terminalSurfaceBridgeAvailable:
@@ -42,6 +49,15 @@ struct PTYDaemonHelperLocator {
 
     func executableURL() -> URL? {
         let candidates: [URL?] = [
+            bundle.executableURL?
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("LaunchServices", isDirectory: true)
+                .appendingPathComponent("\(PTYDaemonProtocol.helperName).app", isDirectory: true)
+                .appendingPathComponent("Contents", isDirectory: true)
+                .appendingPathComponent("MacOS", isDirectory: true)
+                .appendingPathComponent(PTYDaemonProtocol.helperName, isDirectory: false),
             bundle.url(forResource: PTYDaemonProtocol.helperName, withExtension: nil),
             bundle.executableURL?
                 .deletingLastPathComponent()
@@ -61,10 +77,15 @@ struct PTYDaemonHelperLocator {
 
 struct PTYDaemonReadinessResolver {
     var handshake: (URL) -> Result<PTYDaemonHello, Error>
+    var expectedHelperVersion: String?
 
-    init(handshake: @escaping (URL) -> Result<PTYDaemonHello, Error> = { url in
-        Result { try PTYDaemonHandshake().probe(executableURL: url) }
-    }) {
+    init(
+        expectedHelperVersion: String? = PTYDaemonReadinessResolver.defaultExpectedHelperVersion(),
+        handshake: @escaping (URL) -> Result<PTYDaemonHello, Error> = { url in
+            Result { try PTYDaemonHandshake().probe(executableURL: url) }
+        }
+    ) {
+        self.expectedHelperVersion = expectedHelperVersion
         self.handshake = handshake
     }
 
@@ -74,6 +95,12 @@ struct PTYDaemonReadinessResolver {
 
         switch handshake(helperURL) {
         case .success(let hello):
+            if let expectedHelperVersion,
+               expectedHelperVersion != "dev",
+               hello.version != expectedHelperVersion
+            {
+                return .helperVersionMismatch(actual: hello.version, expected: expectedHelperVersion)
+            }
             if hello.supportsTerminalEngineAdapter {
                 return .terminalSurfaceBridgeAvailable(hello)
             }
@@ -81,6 +108,11 @@ struct PTYDaemonReadinessResolver {
         case .failure(let error):
             return .helperUnhealthy(String(describing: error))
         }
+    }
+
+    static func defaultExpectedHelperVersion(bundle: Bundle = .main) -> String? {
+        bundle.infoDictionary?["CFBundleShortVersionString"] as? String
+            ?? bundle.infoDictionary?["CFBundleVersion"] as? String
     }
 }
 

@@ -97,11 +97,6 @@ jobs:
             cp ".build/arm64-apple-macosx/release/cocxy" "$RESOURCES_DIR/cocxy"
           fi
 
-          # Copy PTY daemon helper if built (verify-app-bundle.sh requires it)
-          if [ -f ".build/arm64-apple-macosx/release/cocxyd" ]; then
-            cp ".build/arm64-apple-macosx/release/cocxyd" "$RESOURCES_DIR/cocxyd"
-          fi
-
           ./scripts/generate-app-info-plist.sh "$CONTENTS_DIR/Info.plist" \
             --bundle-name "Cocxy Terminal" \
             --display-name "Cocxy Terminal" \
@@ -111,6 +106,15 @@ jobs:
             --short-version "$VERSION" \
             --feed-url "https://cocxy.dev/appcast.xml" \
             --public-key "${{ secrets.SPARKLE_PUBLIC_KEY }}"
+
+          # Embed the PTY daemon both as a signed LSUIElement helper app and as
+          # a legacy Resources/cocxyd probe path. Sparkle replaces the whole app
+          # artifact atomically, so the helper app carries the same version as
+          # the host bundle.
+          if [ -f ".build/arm64-apple-macosx/release/cocxyd" ]; then
+            ./scripts/embed-pty-daemon-helper.sh \
+              "$APP_DIR" ".build/arm64-apple-macosx/release/cocxyd"
+          fi
 
           # Copy resources
           [ -d Resources/Themes ] && cp -R Resources/Themes "$RESOURCES_DIR/" || true
@@ -173,12 +177,16 @@ jobs:
               --sign "$SIGNING_IDENTITY" \
               "$APP_DIR/Contents/Resources/cocxy" || true
 
-          # Sign PTY daemon helper (required for notarization)
+          # Sign PTY daemon helper (required for notarization). Keep the raw
+          # compatibility path and the LaunchServices helper app aligned.
           [ -f "$APP_DIR/Contents/Resources/cocxyd" ] && \
             codesign --force --options runtime --timestamp \
-              --entitlements "$ENTITLEMENTS" \
               --sign "$SIGNING_IDENTITY" \
               "$APP_DIR/Contents/Resources/cocxyd" || true
+          [ -d "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app" ] && \
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app" || true
 
           # Sign QuickLook extension
           [ -d "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex" ] && \

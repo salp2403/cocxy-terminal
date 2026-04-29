@@ -69,6 +69,7 @@ CONTENTS="${APP_BUNDLE}/Contents"
 MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
 PLUGINS="${CONTENTS}/PlugIns"
+LAUNCH_SERVICES="${CONTENTS}/Library/LaunchServices"
 
 echo "==> Building ${BUNDLE_NAME} (${BUILD_MODE})..."
 
@@ -90,6 +91,7 @@ mkdir -p "${MACOS}"
 mkdir -p "${RESOURCES}"
 mkdir -p "${FRAMEWORKS}"
 mkdir -p "${PLUGINS}"
+mkdir -p "${LAUNCH_SERVICES}"
 
 # Step 3: Copy binary.
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS}/${APP_NAME}"
@@ -185,13 +187,14 @@ if [ -f "${BUILD_DIR}/cocxy" ]; then
     echo "    CLI companion: ${RESOURCES}/cocxy"
 fi
 
-# Step 7b: Build and place the local PTY daemon helper in Resources. It is
-# launched only behind the explicit [experimental].pty-daemon gate.
+# Step 7b: Build and embed the local PTY daemon helper. The raw Resources
+# binary stays as a compatibility probe path, while the signed helper app under
+# Contents/Library/LaunchServices is the preferred runtime path for the
+# experimental [experimental].pty-daemon gate.
 echo "==> Building PTY daemon helper..."
 swift build --target cocxyd ${SWIFT_FLAGS} 2>&1 | tail -1
 if [ -f "${BUILD_DIR}/cocxyd" ]; then
-    cp "${BUILD_DIR}/cocxyd" "${RESOURCES}/cocxyd"
-    echo "    PTY daemon helper: ${RESOURCES}/cocxyd"
+    "${PROJECT_ROOT}/scripts/embed-pty-daemon-helper.sh" "${APP_BUNDLE}" "${BUILD_DIR}/cocxyd"
 fi
 
 # Step 8: Ad-hoc code sign (required for local execution on modern macOS).

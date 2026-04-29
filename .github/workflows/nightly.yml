@@ -93,11 +93,6 @@ jobs:
             cp ".build/arm64-apple-macosx/release/cocxy" "$RESOURCES_DIR/cocxy"
           fi
 
-          # Copy PTY daemon helper if built (verify-app-bundle.sh requires it)
-          if [ -f ".build/arm64-apple-macosx/release/cocxyd" ]; then
-            cp ".build/arm64-apple-macosx/release/cocxyd" "$RESOURCES_DIR/cocxyd"
-          fi
-
           ./scripts/generate-app-info-plist.sh "$CONTENTS_DIR/Info.plist" \
             --bundle-name "Cocxy Terminal Nightly" \
             --display-name "Cocxy Terminal Nightly" \
@@ -107,6 +102,11 @@ jobs:
             --short-version "$VERSION" \
             --feed-url "https://cocxy.dev/appcast-nightly.xml" \
             --public-key "${{ secrets.SPARKLE_PUBLIC_KEY }}"
+
+          if [ -f ".build/arm64-apple-macosx/release/cocxyd" ]; then
+            ./scripts/embed-pty-daemon-helper.sh \
+              "$APP_DIR" ".build/arm64-apple-macosx/release/cocxyd"
+          fi
 
           [ -d Resources/Themes ] && cp -R Resources/Themes "$RESOURCES_DIR/" || true
           [ -f Resources/AppIcon.png ] && cp Resources/AppIcon.png "$RESOURCES_DIR/" || true
@@ -159,9 +159,12 @@ jobs:
 
           [ -f "$APP_DIR/Contents/Resources/cocxyd" ] && \
             codesign --force --options runtime --timestamp \
-              --entitlements "$ENTITLEMENTS" \
               --sign "$SIGNING_IDENTITY" \
               "$APP_DIR/Contents/Resources/cocxyd" || true
+          [ -d "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app" ] && \
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app" || true
 
           [ -d "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex" ] && \
             codesign --force --options runtime --timestamp \

@@ -15,6 +15,10 @@ set -euo pipefail
 APP_BUNDLE="${1:-build/CocxyTerminal.app}"
 CONTENTS="${APP_BUNDLE}/Contents"
 RESOURCES="${CONTENTS}/Resources"
+LAUNCH_SERVICES="${CONTENTS}/Library/LaunchServices"
+PTY_DAEMON_APP="${LAUNCH_SERVICES}/cocxyd.app"
+PTY_DAEMON_PLIST="${PTY_DAEMON_APP}/Contents/Info.plist"
+PTY_DAEMON_EXECUTABLE="${PTY_DAEMON_APP}/Contents/MacOS/cocxyd"
 
 ERRORS=0
 
@@ -66,6 +70,31 @@ check_plist_exists() {
         echo "  OK  $label"
     else
         echo "  FAIL  $label  (missing key: $keypath)"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+check_plist_bool_true() {
+    local plist="$1"
+    local keypath="$2"
+    local label="$3"
+    local value
+    value="$(plutil -extract "$keypath" raw -o - "$plist" 2>/dev/null || true)"
+    if [ "$value" = "1" ] || [ "$value" = "true" ]; then
+        echo "  OK  $label"
+    else
+        echo "  FAIL  $label  (expected true, got: ${value:-<missing>})"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+check_codesign_valid() {
+    local path="$1"
+    local label="$2"
+    if codesign --verify --strict "$path" >/dev/null 2>&1; then
+        echo "  OK  $label"
+    else
+        echo "  FAIL  $label  (codesign verification failed)"
         ERRORS=$((ERRORS + 1))
     fi
 }
@@ -134,7 +163,29 @@ check_exists "$RESOURCES/defaults" "defaults directory"
 echo ""
 echo "[CLI]"
 check_exists "$RESOURCES/cocxy" "CLI companion binary"
-check_exists "$RESOURCES/cocxyd" "PTY daemon helper binary"
+check_exists "$RESOURCES/cocxyd" "PTY daemon helper binary (compatibility path)"
+check_codesign_valid "$RESOURCES/cocxyd" "PTY daemon helper binary signature"
+
+# 6b. PTY daemon helper app. Sparkle installs the whole app bundle
+# atomically, so the helper's version must match the host bundle and the
+# runtime path must be a signed LSUIElement app that will not appear in Dock.
+echo ""
+echo "[PTY Daemon Helper App]"
+check_exists "$PTY_DAEMON_APP" "PTY daemon helper app"
+check_exists "$PTY_DAEMON_PLIST" "PTY daemon helper Info.plist"
+check_exists "$PTY_DAEMON_EXECUTABLE" "PTY daemon helper app executable"
+main_bundle_id="$(plutil -extract CFBundleIdentifier raw -o - "$CONTENTS/Info.plist" 2>/dev/null || true)"
+main_short_version="$(plutil -extract CFBundleShortVersionString raw -o - "$CONTENTS/Info.plist" 2>/dev/null || true)"
+main_build_version="$(plutil -extract CFBundleVersion raw -o - "$CONTENTS/Info.plist" 2>/dev/null || true)"
+if [ -f "$PTY_DAEMON_PLIST" ]; then
+    check_plist_string "$PTY_DAEMON_PLIST" "CFBundleIdentifier" "${main_bundle_id}.cocxyd" "PTY daemon helper bundle id"
+    check_plist_string "$PTY_DAEMON_PLIST" "CFBundleExecutable" "cocxyd" "PTY daemon helper executable key"
+    check_plist_string "$PTY_DAEMON_PLIST" "CFBundleShortVersionString" "$main_short_version" "PTY daemon helper short version matches app"
+    check_plist_string "$PTY_DAEMON_PLIST" "CFBundleVersion" "$main_build_version" "PTY daemon helper build version matches app"
+    check_plist_bool_true "$PTY_DAEMON_PLIST" "LSUIElement" "PTY daemon helper hides Dock icon"
+fi
+check_codesign_valid "$PTY_DAEMON_EXECUTABLE" "PTY daemon helper app executable signature"
+check_codesign_valid "$PTY_DAEMON_APP" "PTY daemon helper app signature"
 
 # 7. App icon
 echo ""
