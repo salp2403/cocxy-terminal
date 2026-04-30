@@ -2,6 +2,7 @@
 // Tab.swift - Domain model for a terminal tab.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Tab ID
 

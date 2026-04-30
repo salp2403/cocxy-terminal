@@ -2,6 +2,7 @@
 // SessionRestorer.swift - Restores application state from a saved session.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Session Restorer
 

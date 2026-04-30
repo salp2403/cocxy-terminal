@@ -3,6 +3,7 @@
 
 import AppKit
 import Combine
+import CocxyShared
 import UserNotifications
 
 /// Main application delegate for Cocxy Terminal.

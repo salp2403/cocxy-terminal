@@ -446,6 +446,15 @@ final class PatternMatchingDetector: DetectionLayer, @unchecked Sendable {
     }
 
     private func decodeBufferedUTF8(_ data: Data) -> (text: String, trailingBytes: [UInt8])? {
+        if pendingUTF8Bytes.isEmpty {
+            if data.isEmpty {
+                return ("", [])
+            }
+            if data.allSatisfy({ $0 < 0x80 }) {
+                return (String(decoding: data, as: UTF8.self), [])
+            }
+        }
+
         let combinedBytes: [UInt8]
         if pendingUTF8Bytes.isEmpty {
             combinedBytes = Array(data)

@@ -2,6 +2,7 @@
 // MainWindowController+TabLifecycle.swift - Tab creation, destruction, and switching.
 
 import AppKit
+import CocxyShared
 
 // MARK: - Tab Lifecycle
 

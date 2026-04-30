@@ -2,6 +2,7 @@
 // SessionManaging.swift - Contract for session persistence and restoration.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Session Managing Protocol
 

@@ -2,6 +2,7 @@
 // AppSocketCommandHandler.swift - Production socket command dispatcher.
 
 import AppKit
+import CocxyShared
 import Foundation
 
 // MARK: - Version Constant

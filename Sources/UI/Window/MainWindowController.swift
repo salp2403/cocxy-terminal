@@ -3,6 +3,7 @@
 
 import AppKit
 import Combine
+import CocxyShared
 import SwiftUI
 
 // MARK: - Main Window Controller

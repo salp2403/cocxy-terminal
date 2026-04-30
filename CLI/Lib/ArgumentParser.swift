@@ -660,8 +660,7 @@ public enum CLIArgumentParser {
                     throw CLIError.missingArgument(command: "new-tab", argument: "engine")
                 }
                 let value = arguments[index + 1]
-                guard ["system", "default", "auto", "in-process", "inprocess", "cocxycore", "core", "daemon", "pty-daemon", "ptydaemon"]
-                    .contains(value.lowercased()) else {
+                guard TerminalEnginePreference(cliValue: value) != nil else {
                     throw CLIError.invalidArgument(
                         command: "new-tab",
                         argument: value,
@@ -1376,8 +1375,7 @@ public enum CLIArgumentParser {
                     throw CLIError.missingArgument(command: "window new", argument: "engine")
                 }
                 let value = arguments[index + 1]
-                guard ["system", "default", "auto", "in-process", "inprocess", "cocxycore", "core", "daemon", "pty-daemon", "ptydaemon"]
-                    .contains(value.lowercased()) else {
+                guard TerminalEnginePreference(cliValue: value) != nil else {
                     throw CLIError.invalidArgument(
                         command: "window new",
                         argument: value,
