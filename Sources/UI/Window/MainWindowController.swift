@@ -580,6 +580,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// visible terminal blank after restore/update relaunches.
     var isPerformingProgrammaticTabRestore: Bool = false
 
+    /// Tracks whether the full AppKit/SwiftUI content tree and long-lived
+    /// observers have been installed. Cold start creates a lightweight
+    /// controller shell first, then completes this setup before restoring
+    /// sessions or bootstrapping a fresh terminal surface.
+    private var didCompleteWindowSetup = false
+
     // MARK: - Initialization
 
     /// Creates a MainWindowController with the given bridge and optional config.
@@ -591,7 +597,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         bridge: any TerminalEngine,
         configService: ConfigService? = nil,
         tabManager: TabManager? = nil,
-        terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)? = nil
+        terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)? = nil,
+        deferContentSetup: Bool = false
     ) {
         self.bridge = bridge
         self.terminalEngineFactory = terminalEngineFactory
@@ -623,13 +630,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         super.init(window: window)
         self.lastAppliedConfig = configService?.current
-        configureWindow(window)
-        installWorkspaceWakeObservers()
-        subscribeToConfigChanges()
-        subscribeToActiveTabChanges()
-        subscribeToRateLimitProbeChanges()
-        startProcessMonitor()
-        installInputDropMonitorObserver()
+        if deferContentSetup {
+            configureWindowProperties(window)
+        } else {
+            completeDeferredWindowSetupIfNeeded()
+        }
     }
 
     /// Required initializer for NSCoding. Not used in practice.
@@ -724,6 +729,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             tabSurfaceViews[firstTabID] = surfaceView
             tabViewModels[firstTabID] = terminalViewModel
         }
+    }
+
+    /// Completes the window's heavy UI and observer setup.
+    ///
+    /// Safe to call repeatedly. Launch uses this to keep the socket-ready
+    /// critical path small while preserving the same fully wired window before
+    /// session restore or fresh terminal bootstrap creates terminal surfaces.
+    func completeDeferredWindowSetupIfNeeded() {
+        guard !didCompleteWindowSetup else { return }
+        guard let window else { return }
+        didCompleteWindowSetup = true
+
+        configureWindow(window)
+        installWorkspaceWakeObservers()
+        subscribeToConfigChanges()
+        subscribeToActiveTabChanges()
+        subscribeToRateLimitProbeChanges()
+        startProcessMonitor()
+        installInputDropMonitorObserver()
     }
 
     // MARK: - Window Configuration Helpers

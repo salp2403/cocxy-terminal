@@ -21,6 +21,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
     case agentWiring
     case notifications
     case portScanner
+    case windowWarmup
     case plugins
     case socketServer
     case quickTerminal
@@ -51,6 +52,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         case .agentWiring: return "Agent wiring"
         case .notifications: return "Notifications"
         case .portScanner: return "Port scanner"
+        case .windowWarmup: return "Window warm-up"
         case .plugins: return "Plugins"
         case .socketServer: return "Socket server"
         case .quickTerminal: return "Quick terminal"
@@ -66,6 +68,47 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         case .menuBar: return "Menu bar"
         }
     }
+
+    /// Launch phases that must complete before the CLI socket is ready.
+    ///
+    /// Keep this list minimal. Anything that can run after the first main
+    /// run-loop turn belongs in `deferredWarmupSteps` so app launch remains
+    /// responsive even when session restore or secondary services are slow.
+    static let criticalPathSteps: [AppLaunchStep] = [
+        .themeEngine,
+        .configService,
+        .configWatcher,
+        .sessionManager,
+        .bridge,
+        .agentDetectionEngine,
+        .sessionRegistry,
+        .mainWindow,
+        .agentWiring,
+        .notifications,
+        .socketServer,
+    ]
+
+    /// Launch phases that are required for full functionality but do not
+    /// need to block socket readiness or the first visible window.
+    static let deferredWarmupSteps: [AppLaunchStep] = [
+        .bundledFonts,
+        .menuSetup,
+        .keybindings,
+        .windowWarmup,
+        .sessionRestore,
+        .autoSave,
+        .portScanner,
+        .plugins,
+        .quickTerminal,
+        .appearanceObserver,
+        .remoteWorkspace,
+        .browserPro,
+        .autoUpdate,
+        .appIcon,
+        .firstLaunch,
+        .welcome,
+        .menuBar,
+    ]
 
     var signpostName: StaticString {
         switch self {
@@ -83,6 +126,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         case .agentWiring: return "Agent wiring"
         case .notifications: return "Notifications"
         case .portScanner: return "Port scanner"
+        case .windowWarmup: return "Window warm-up"
         case .plugins: return "Plugins"
         case .socketServer: return "Socket server"
         case .quickTerminal: return "Quick terminal"

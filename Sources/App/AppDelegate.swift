@@ -252,33 +252,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extension (+AutoUpdate) assigns during setup.
     var sparkleUpdater: SparkleUpdater?
 
+    /// Guards launch warm-up so it runs once after the socket-ready
+    /// critical path has returned to the main run loop.
+    private var hasScheduledDeferredLaunchWork = false
+
     // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        AppLaunchSignposts.measure(.bundledFonts) {
-            BundledFontRegistry.ensureRegistered()
-        }
         AppLaunchSignposts.measure(.themeEngine) {
             themeEngine = ThemeEngineImpl()
         }
         AppLaunchSignposts.measure(.configService) { initializeConfigService() }
         AppLaunchSignposts.measure(.configWatcher) { startConfigWatcher() }
         AppLaunchSignposts.measure(.sessionManager) { initializeSessionManager() }
-        AppLaunchSignposts.measure(.menuSetup) { setupMainMenu() }
-        AppLaunchSignposts.measure(.keybindings) {
-            applyKeybindingsToMainMenu()
-            startMenuKeybindingsObserver()
-        }
         AppLaunchSignposts.measure(.bridge) { initializeBridge() }
         AppLaunchSignposts.measure(.agentDetectionEngine) { initializeAgentDetectionEngine() }
         AppLaunchSignposts.measure(.sessionRegistry) { initializeSessionRegistry() }
-        AppLaunchSignposts.measure(.mainWindow) { createMainWindow() }
+        AppLaunchSignposts.measure(.mainWindow) { createMainWindow(deferSurfaceBootstrap: true) }
         AppLaunchSignposts.measure(.agentWiring) { wireAgentDetectionToWindow() }
         AppLaunchSignposts.measure(.notifications) {
             initializeNotificationStack()
             wireAgentDetectionToNotifications()
         }
         AppLaunchSignposts.measure(.socketServer) { initializeSocketServer() }
+        scheduleDeferredLaunchWork()
+    }
+
+    private func scheduleDeferredLaunchWork() {
+        guard !hasScheduledDeferredLaunchWork else { return }
+        hasScheduledDeferredLaunchWork = true
+
+        DispatchQueue.main.async { [weak self] in
+            self?.runDeferredLaunchWork()
+        }
+    }
+
+    private func runDeferredLaunchWork() {
+        AppLaunchSignposts.measure(.bundledFonts) {
+            BundledFontRegistry.ensureRegistered()
+        }
+        AppLaunchSignposts.measure(.menuSetup) { setupMainMenu() }
+        AppLaunchSignposts.measure(.keybindings) {
+            applyKeybindingsToMainMenu()
+            startMenuKeybindingsObserver()
+        }
+        AppLaunchSignposts.measure(.windowWarmup) {
+            if let controller = windowController {
+                controller.completeDeferredWindowSetupIfNeeded()
+                configureSharedServices(for: controller, registerWindow: false)
+            }
+        }
+        AppLaunchSignposts.measure(.sessionRestore) { restoreSessionOnLaunch() }
+        AppLaunchSignposts.measure(.autoSave) {
+            startSessionAutoSaveIfNeeded()
+            observeSessionAutoSaveConfigChanges()
+        }
         AppLaunchSignposts.measure(.portScanner) { initializePortScanner() }
         AppLaunchSignposts.measure(.plugins) { setupPlugins() }
         AppLaunchSignposts.measure(.quickTerminal) { initializeQuickTerminal() }
@@ -286,11 +314,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppLaunchSignposts.measure(.remoteWorkspace) { setupRemoteWorkspace() }
         AppLaunchSignposts.measure(.browserPro) { setupBrowserPro() }
         AppLaunchSignposts.measure(.autoUpdate) { setupAutoUpdate() }
-        AppLaunchSignposts.measure(.sessionRestore) { restoreSessionOnLaunch() }
-        AppLaunchSignposts.measure(.autoSave) {
-            startSessionAutoSaveIfNeeded()
-            observeSessionAutoSaveConfigChanges()
-        }
         AppLaunchSignposts.measure(.appIcon) { applyPlaceholderAppIcon() }
         AppLaunchSignposts.measure(.firstLaunch) { performFirstLaunchSetup() }
         AppLaunchSignposts.measure(.welcome) { showWelcomeOnFirstLaunch() }
@@ -407,7 +430,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Keep long-lived subsystems alive; recreating them here would
                 // tear down app-wide Combine wiring (remote workspace, socket,
                 // notifications, hot reload) and leave features half-disconnected.
-                createMainWindow()
+                createMainWindow(deferSurfaceBootstrap: false)
             }
         }
         return true
@@ -1003,10 +1026,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Window Setup
 
     /// Creates and displays the main application window.
-    private func createMainWindow() {
-        let shouldBootstrapSurface = !hasRestorableSessionOnLaunch()
+    private func createMainWindow(deferSurfaceBootstrap: Bool) {
+        let shouldBootstrapSurface = !deferSurfaceBootstrap
 
-        guard let controller = makeWindowController(registerInitialSession: shouldBootstrapSurface) else {
+        guard let controller = makeWindowController(
+            registerInitialSession: shouldBootstrapSurface,
+            deferContentSetup: deferSurfaceBootstrap
+        ) else {
             // Bridge initialization failed. Show a placeholder window.
             createFallbackWindow()
             return
@@ -1318,7 +1344,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return resolvedSessionID
     }
 
-    func makeWindowController(registerInitialSession: Bool) -> MainWindowController? {
+    func makeWindowController(
+        registerInitialSession: Bool,
+        deferContentSetup: Bool = false
+    ) -> MainWindowController? {
         guard let bridge = bridge else { return nil }
 
         let controller = MainWindowController(
@@ -1326,7 +1355,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             configService: configService,
             terminalEngineFactory: { [weak self] preference in
                 self?.makeInitializedTerminalEngine(preference: preference)
-            }
+            },
+            deferContentSetup: deferContentSetup
         )
         configureSharedServices(for: controller, registerWindow: true)
 

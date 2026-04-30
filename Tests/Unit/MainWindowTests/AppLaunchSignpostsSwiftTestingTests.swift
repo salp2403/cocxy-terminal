@@ -26,6 +26,7 @@ struct AppLaunchSignpostsSwiftTestingTests {
             "Agent wiring",
             "Notifications",
             "Port scanner",
+            "Window warm-up",
             "Plugins",
             "Socket server",
             "Quick terminal",
@@ -47,5 +48,28 @@ struct AppLaunchSignpostsSwiftTestingTests {
         let value = AppLaunchSignposts.measure(.configService) { 42 }
 
         #expect(value == 42)
+    }
+
+    @Test("critical path and deferred warm-up partition the launch catalog")
+    func launchStepPartitionsCoverCatalogExactlyOnce() {
+        let critical = Set(AppLaunchStep.criticalPathSteps)
+        let deferred = Set(AppLaunchStep.deferredWarmupSteps)
+
+        #expect(critical.isDisjoint(with: deferred))
+        #expect(critical.union(deferred) == Set(AppLaunchStep.allCases))
+    }
+
+    @Test("session restore and secondary services stay off the socket-ready critical path")
+    func warmupWorkIsDeferredPastSocketReadiness() {
+        #expect(AppLaunchStep.criticalPathSteps.last == .socketServer)
+        #expect(!AppLaunchStep.criticalPathSteps.contains(.sessionRestore))
+        #expect(!AppLaunchStep.criticalPathSteps.contains(.windowWarmup))
+        #expect(!AppLaunchStep.criticalPathSteps.contains(.bundledFonts))
+        #expect(!AppLaunchStep.criticalPathSteps.contains(.remoteWorkspace))
+        #expect(AppLaunchStep.deferredWarmupSteps.first == .bundledFonts)
+        #expect(AppLaunchStep.deferredWarmupSteps.contains(.windowWarmup))
+        #expect(AppLaunchStep.deferredWarmupSteps.contains(.sessionRestore))
+        #expect(AppLaunchStep.deferredWarmupSteps.contains(.bundledFonts))
+        #expect(AppLaunchStep.deferredWarmupSteps.contains(.remoteWorkspace))
     }
 }

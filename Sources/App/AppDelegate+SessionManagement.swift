@@ -219,9 +219,15 @@ extension AppDelegate {
     /// For multi-window sessions, creates additional window controllers.
     func restoreSessionOnLaunch() {
         let config = configService?.current ?? .defaults
-        guard config.sessions.restoreOnLaunch else { return }
-        guard let sessionManager = sessionManager else { return }
         guard let windowController = windowController else { return }
+        guard config.sessions.restoreOnLaunch else {
+            bootstrapInitialSurfaceIfNeeded(windowController)
+            return
+        }
+        guard let sessionManager = sessionManager else {
+            bootstrapInitialSurfaceIfNeeded(windowController)
+            return
+        }
 
         guard let session = try? sessionManager.loadLastSession() else {
             bootstrapInitialSurfaceIfNeeded(windowController)
