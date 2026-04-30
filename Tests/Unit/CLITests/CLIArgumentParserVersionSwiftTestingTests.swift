@@ -56,6 +56,70 @@ struct CLIArgumentParserVersionSwiftTestingTests {
         return (exePath, cleanup)
     }
 
+    /// Creates a fake SwiftPM checkout where `.build/debug/cocxy` can walk
+    /// upward to `Resources/Info.plist`.
+    private func makeFakeCheckout(
+        version: String
+    ) throws -> (exePath: String, cleanup: () -> Void) {
+        let uniqueID = UUID().uuidString.prefix(8)
+        let root = NSTemporaryDirectory()
+            .appending("cocxy-checkout-version-test-\(uniqueID)")
+        let resourcesDir = root.appending("/Resources")
+        let buildDir = root.appending("/.build/debug")
+        try FileManager.default.createDirectory(
+            atPath: resourcesDir,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            atPath: buildDir,
+            withIntermediateDirectories: true
+        )
+
+        let exePath = buildDir.appending("/cocxy")
+        FileManager.default.createFile(atPath: exePath, contents: Data())
+
+        let plistPath = resourcesDir.appending("/Info.plist")
+        let plist: [String: Any] = ["CFBundleShortVersionString": version]
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: plist,
+            format: .xml,
+            options: 0
+        )
+        try data.write(to: URL(fileURLWithPath: plistPath))
+
+        let cleanup: () -> Void = {
+            try? FileManager.default.removeItem(atPath: root)
+        }
+        return (exePath, cleanup)
+    }
+
+    private func repositoryInfoPlistVersion() throws -> String {
+        var candidate = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let root = URL(fileURLWithPath: "/", isDirectory: true)
+        while true {
+            let plistURL = candidate
+                .appendingPathComponent("Resources")
+                .appendingPathComponent("Info.plist")
+            if FileManager.default.fileExists(atPath: plistURL.path) {
+                let data = try Data(contentsOf: plistURL)
+                let plist = try #require(
+                    PropertyListSerialization.propertyList(
+                        from: data,
+                        options: [],
+                        format: nil
+                    ) as? [String: Any]
+                )
+                let version = try #require(plist["CFBundleShortVersionString"] as? String)
+                return version
+            }
+            if candidate == root {
+                Issue.record("Could not locate repository Resources/Info.plist from \(#filePath)")
+                return ""
+            }
+            candidate.deleteLastPathComponent()
+        }
+    }
+
     // MARK: - Tests
 
     /// Direct invocation through the canonical bundled path must read
@@ -92,6 +156,18 @@ struct CLIArgumentParserVersionSwiftTestingTests {
         )
     }
 
+    /// SwiftPM dev runs execute from `.build/...` without an enclosing app
+    /// bundle. They should still report the checkout's release version
+    /// rather than drifting to the hardcoded last-resort fallback.
+    @Test("resolver reads checkout Resources/Info.plist for SwiftPM executables")
+    func resolvesVersionFromDevelopmentCheckout() throws {
+        let (exePath, cleanup) = try makeFakeCheckout(version: "6.5.4")
+        defer { cleanup() }
+
+        let resolved = CLIArgumentParser.resolveVersion(executablePath: exePath)
+        #expect(resolved == "6.5.4")
+    }
+
     /// A standalone executable (no enclosing `Contents/Info.plist`)
     /// must fall back to the pinned string so dev builds and tests
     /// keep a predictable version. Uses a path under a non-existent
@@ -117,5 +193,13 @@ struct CLIArgumentParserVersionSwiftTestingTests {
         for part in parts {
             #expect(Int(part) != nil, "each segment should parse as int, got: \(part)")
         }
+    }
+
+    /// Release bumps must keep the last-resort fallback aligned with the
+    /// plist shipped by the app bundle.
+    @Test("fallback version matches release Info.plist")
+    func fallbackVersionMatchesReleaseInfoPlist() throws {
+        let releaseVersion = try repositoryInfoPlistVersion()
+        #expect(CLIArgumentParser.fallbackVersion == releaseVersion)
     }
 }
