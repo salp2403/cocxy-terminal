@@ -430,18 +430,19 @@ public enum CLIArgumentParser {
     /// the CLI's `--version` in sync with the GUI version shipped in the
     /// same release without manual bumping.
     ///
-    /// Falls back to `fallbackVersion` for standalone dev builds, tests,
-    /// and any context where the enclosing `.app` cannot be resolved.
+    /// Falls back to `Resources/Info.plist` for standalone SwiftPM dev
+    /// builds, then to `fallbackVersion` when no release metadata is
+    /// reachable.
     public static let version: String = resolveVersion()
 
-    /// Hardcoded fallback. Must be kept in sync with `Resources/Info.plist`
-    /// at release time. Only used when the enclosing `.app` Info.plist
-    /// cannot be read (standalone CLI builds, tests, homebrew direct
-    /// invocation without the GUI app installed).
-    internal static let fallbackVersion = "0.1.82"
+    /// Last-resort fallback. It mirrors `Resources/Info.plist` and is only
+    /// used when neither the enclosing `.app` nor a SwiftPM checkout can be
+    /// resolved.
+    internal static let fallbackVersion = "0.1.91"
 
     /// Resolves the CLI version by preferring the enclosing app bundle's
-    /// `Info.plist`, with a hardcoded fallback for standalone execution.
+    /// `Info.plist`, then the checkout's `Resources/Info.plist`, with a
+    /// hardcoded fallback for fully standalone execution.
     ///
     /// Expected bundled layout:
     /// `Cocxy Terminal.app/Contents/Resources/cocxy` →
@@ -454,8 +455,8 @@ public enum CLIArgumentParser {
     /// and miss the enclosing `.app`. We resolve the symlink first so
     /// the walk lands on the real `Contents/Info.plist`.
     ///
-    /// - Returns: the bundled version when reachable, or `fallbackVersion`
-    ///   for standalone, test, or unresolvable layouts.
+    /// - Returns: the bundled or checkout version when reachable, or
+    ///   `fallbackVersion` for unresolvable standalone layouts.
     internal static func resolveVersion(executablePath: String? = nil) -> String {
         let rawPath = executablePath ?? Bundle.main.executablePath
         guard let exePath = rawPath else {
@@ -473,18 +474,44 @@ public enum CLIArgumentParser {
         let contentsDir = (resourcesDir as NSString).deletingLastPathComponent
         let plistPath = (contentsDir as NSString).appendingPathComponent("Info.plist")
 
+        if let bundledVersion = version(inInfoPlistAt: plistPath) {
+            return bundledVersion
+        }
+        if let checkoutVersion = resolveDevelopmentVersion(startingAt: realPath) {
+            return checkoutVersion
+        }
+        return fallbackVersion
+    }
+
+    private static func resolveDevelopmentVersion(startingAt path: String) -> String? {
+        var candidate = URL(fileURLWithPath: path).deletingLastPathComponent()
+        let root = URL(fileURLWithPath: "/", isDirectory: true)
+        while true {
+            let plistPath = candidate
+                .appendingPathComponent("Resources")
+                .appendingPathComponent("Info.plist")
+                .path
+            if let version = version(inInfoPlistAt: plistPath) {
+                return version
+            }
+            if candidate == root {
+                return nil
+            }
+            candidate.deleteLastPathComponent()
+        }
+    }
+
+    private static func version(inInfoPlistAt plistPath: String) -> String? {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: plistPath)),
               let plist = try? PropertyListSerialization.propertyList(
                 from: data,
                 options: [],
                 format: nil
               ) as? [String: Any],
-              let shortVersion = plist["CFBundleShortVersionString"] as? String,
-              !shortVersion.isEmpty
-        else {
-            return fallbackVersion
-        }
-        return shortVersion
+              let shortVersion = plist["CFBundleShortVersionString"] as? String
+        else { return nil }
+        let trimmed = shortVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Parses command-line arguments into a `ParsedCommand`.
