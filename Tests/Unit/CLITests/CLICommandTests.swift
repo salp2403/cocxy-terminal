@@ -303,6 +303,8 @@ final class CLIArgumentParserTests: XCTestCase {
         XCTAssertTrue(helpText.contains("status"))
         XCTAssertTrue(helpText.contains("--help"))
         XCTAssertTrue(helpText.contains("--version"))
+        XCTAssertTrue(helpText.contains("ENGINE VALUES:"))
+        XCTAssertTrue(helpText.contains("aliases: default, auto, inprocess, core, cocxycore, pty-daemon, ptydaemon"))
     }
 
     // MARK: - 13. Version text

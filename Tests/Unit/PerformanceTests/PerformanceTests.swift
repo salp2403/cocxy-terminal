@@ -41,11 +41,12 @@ final class PerformanceTests: XCTestCase {
             measureAgentDetectionPipeline(chunks: chunks)
         }
 
-        let elapsedMilliseconds = samples.min() ?? .infinity
+        let sortedSamples = samples.sorted()
+        let elapsedMilliseconds = sortedSamples[samples.count / 2]
 
         XCTAssertLessThan(
             elapsedMilliseconds, 1150.0,
-            "Detection pipeline processed 1MB in best-of-3 \(String(format: "%.1f", elapsedMilliseconds))ms (samples: \(samples.map { String(format: "%.1f", $0) }.joined(separator: ", "))), exceeds 1150ms target"
+            "Detection pipeline processed 1MB with median-of-3 \(String(format: "%.1f", elapsedMilliseconds))ms (samples: \(samples.map { String(format: "%.1f", $0) }.joined(separator: ", "))), exceeds 1150ms target"
         )
     }
 
