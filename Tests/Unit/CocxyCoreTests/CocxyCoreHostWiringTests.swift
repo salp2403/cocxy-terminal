@@ -32,6 +32,58 @@ struct CocxyCoreHostWiringTests {
         #expect(daemonView is PTYDaemonHostView)
     }
 
+    @Test("host view factory produces distinct daemon host views for each concurrent surface")
+    func hostViewFactoryProducesDistinctDaemonHostViewsForConcurrentSurfaces() throws {
+        let daemonClient = PTYDaemonClient(connection: FactoryMockPTYDaemonConnection())
+        let viewModelA = TerminalViewModel(engine: daemonClient)
+        let viewModelB = TerminalViewModel(engine: daemonClient)
+        let viewModelC = TerminalViewModel(engine: daemonClient)
+
+        let viewA = TerminalHostViewFactory.make(viewModel: viewModelA, engine: daemonClient)
+        let viewB = TerminalHostViewFactory.make(viewModel: viewModelB, engine: daemonClient)
+        let viewC = TerminalHostViewFactory.make(viewModel: viewModelC, engine: daemonClient)
+
+        #expect(viewA is PTYDaemonHostView)
+        #expect(viewB is PTYDaemonHostView)
+        #expect(viewC is PTYDaemonHostView)
+        #expect(viewA !== viewB)
+        #expect(viewB !== viewC)
+        #expect(viewA !== viewC)
+    }
+
+    @Test("terminal surface creation is centralized through TerminalHostViewFactory")
+    func terminalSurfaceCreationCentralizedInFactory() throws {
+        let projectRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let sourcesDir = projectRoot.appendingPathComponent("Sources", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: sourcesDir.path) else {
+            // Source tree is not available (e.g. running from a binary
+            // distribution); the invariant is enforced at compile time
+            // anyway, so skip rather than fail.
+            return
+        }
+
+        let factoryFile = "TerminalHostViewFactory.swift"
+        var directInstantiations: [String] = []
+        let enumerator = FileManager.default.enumerator(
+            at: sourcesDir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        while let candidate = enumerator?.nextObject() as? URL {
+            guard candidate.pathExtension == "swift" else { continue }
+            guard candidate.lastPathComponent != factoryFile else { continue }
+            let content = (try? String(contentsOf: candidate, encoding: .utf8)) ?? ""
+            if content.contains("CocxyCoreView(viewModel:") {
+                directInstantiations.append(candidate.lastPathComponent)
+            }
+        }
+
+        #expect(
+            directInstantiations.isEmpty,
+            "Surface creation must go through TerminalHostViewFactory; direct CocxyCoreView use found in: \(directInstantiations)"
+        )
+    }
+
     @Test("wireSurfaceHandlers installs an outputBufferProvider on CocxyCoreView")
     func wireSurfaceHandlersInstallsOutputBufferProvider() throws {
         let bridge = try makeBridge()

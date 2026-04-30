@@ -47,11 +47,3 @@ final class SurfaceRegistry: @unchecked Sendable {
         all.forEach { $0.close() }
     }
 }
-
-private extension NSLock {
-    func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try body()
-    }
-}

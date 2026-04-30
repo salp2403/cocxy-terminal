@@ -25,6 +25,203 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         #expect(decoded.hello?.supportsTerminalEngineAdapter == true)
     }
 
+    @Test("daemon spawn strips host NO_COLOR before forking the child shell")
+    func helperSpawnStripsHostNoColor() throws {
+        let helper = try RunningHelperProcess(extraEnvironment: ["NO_COLOR": "1"])
+        defer { helper.shutdownIfNeeded() }
+
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create",
+                command: .surfaceCreate,
+                payload: [
+                    "command": "/bin/sh",
+                    "workingDirectory": "/tmp",
+                    "rows": "8",
+                    "columns": "60",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        // The probe expands `$NO_COLOR` so the resulting line is either
+        // `NOCOLOR_PROBE__END` (variable unset, the success case) or
+        // `NOCOLOR_PROBE_1_END` (the host value leaked through). The literal
+        // command echoed by the PTY contains `${NO_COLOR}` with the dollar
+        // sign and braces, never the post-expansion sentinel, so a substring
+        // match is unambiguous against the executed result.
+        let probeScript = "echo NOCOLOR_PROBE_${NO_COLOR}_END\n"
+        let write = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "write",
+                command: .surfaceWrite,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "bytesBase64": Data(probeScript.utf8).base64EncodedString(),
+                ]
+            )
+        )
+        #expect(write.ok == true)
+
+        let output = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: "NOCOLOR_PROBE__END",
+            timeout: 5
+        )
+        #expect(output.contains("NOCOLOR_PROBE__END"))
+        #expect(output.contains("NOCOLOR_PROBE_1_END") == false)
+
+        _ = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "close",
+                command: .surfaceClose,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+    }
+
+    @Test("daemon isolates output across N concurrent surfaces under one helper process")
+    func helperIsolatesOutputAcrossConcurrentSurfaces() throws {
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+
+        let surfaceCount = 3
+        var live: [(id: String, marker: String)] = []
+        live.reserveCapacity(surfaceCount)
+
+        for index in 0..<surfaceCount {
+            let create = try helper.sendAndWait(
+                PTYDaemonRequest(
+                    id: "create-\(index)",
+                    command: .surfaceCreate,
+                    payload: [
+                        "command": "/bin/sh",
+                        "workingDirectory": "/tmp",
+                        "rows": "8",
+                        "columns": "40",
+                    ]
+                )
+            )
+            let id = try #require(create.surfaceID)
+            let marker = "phase52-\(index)-\(UUID().uuidString.prefix(8))"
+            live.append((id: id, marker: marker))
+        }
+
+        for (id, marker) in live {
+            let subscribe = try helper.sendAndWait(
+                PTYDaemonRequest(
+                    id: "subscribe-\(id)",
+                    command: .surfaceFrameSubscribe,
+                    payload: ["surfaceID": id]
+                )
+            )
+            #expect(subscribe.ok == true)
+
+            let write = try helper.sendAndWait(
+                PTYDaemonRequest(
+                    id: "write-\(id)",
+                    command: .surfaceWrite,
+                    payload: [
+                        "surfaceID": id,
+                        "bytesBase64": Data("printf '\(marker)\\n'\n".utf8).base64EncodedString(),
+                    ]
+                )
+            )
+            #expect(write.ok == true)
+        }
+
+        for (id, marker) in live {
+            let output = try helper.waitForOutputText(
+                surfaceID: id,
+                containingUTF8: marker,
+                timeout: 5
+            )
+            #expect(output.contains(marker))
+            for (otherID, otherMarker) in live where otherID != id {
+                #expect(
+                    output.contains(otherMarker) == false,
+                    "surface \(id) leaked marker from surface \(otherID)"
+                )
+            }
+        }
+
+        for (id, _) in live {
+            let close = try helper.sendAndWait(
+                PTYDaemonRequest(
+                    id: "close-\(id)",
+                    command: .surfaceClose,
+                    payload: ["surfaceID": id]
+                )
+            )
+            #expect(close.ok == true)
+        }
+    }
+
+    @Test("daemon emits a frame event within the SLO budget after a write")
+    func helperFrameLatencyStaysWithinBudget() throws {
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create",
+                command: .surfaceCreate,
+                payload: [
+                    "command": "/bin/sh",
+                    "workingDirectory": "/tmp",
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        let subscribe = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "subscribe",
+                command: .surfaceFrameSubscribe,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        #expect(subscribe.ok == true)
+
+        let marker = "latency-\(UUID().uuidString.prefix(8))"
+        let startedAt = Date()
+        let write = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "write",
+                command: .surfaceWrite,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "bytesBase64": Data("printf '\(marker)\\n'\n".utf8).base64EncodedString(),
+                ]
+            )
+        )
+        #expect(write.ok == true)
+
+        let frameEvent = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceFrame,
+            timeout: 2.0
+        )
+        let elapsed = Date().timeIntervalSince(startedAt)
+
+        #expect(frameEvent.frame != nil)
+        // Budget: 500ms is a generous local upper bound covering JSONL
+        // round-trip, PTY shell echo, and frame build. Real production
+        // p50 should be well below this; the test catches catastrophic
+        // regressions, not micro-fluctuations.
+        #expect(elapsed < 0.5, "frame latency \(elapsed)s exceeded SLO budget")
+
+        _ = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "close",
+                command: .surfaceClose,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+    }
+
     @Test("real helper creates a surface, streams output, serves frames and closes cleanly")
     func helperSurfaceLifecycleStreamsOutputFramesAndClose() throws {
         let helper = try RunningHelperProcess()
@@ -261,22 +458,43 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
     }
 }
 
+/// Long-lived `cocxyd --stdio` process used by the integration tests.
+///
+/// Decodes each newline-delimited message at ingest time into either a
+/// response (keyed by request id) or an event (FIFO order, scanned by
+/// callers). The earlier byte-queue design discarded events whose
+/// `surfaceID` did not match a single waiter, which broke multi-surface
+/// scenarios where output and frame events for several surfaces interleave
+/// over one helper. Decoded queues let waiters inspect events without
+/// removing matches that belong to other surfaces.
 private final class RunningHelperProcess {
+    private struct EventEnvelope: Decodable {
+        let event: PTYDaemonEvent.Kind?
+    }
+
     private let process = Process()
     private let input = Pipe()
     private let output = Pipe()
     private let lock = NSLock()
-    private let lineSemaphore = DispatchSemaphore(value: 0)
+    private let semaphore = DispatchSemaphore(value: 0)
     private var pending = Data()
-    private var lines: [Data] = []
+    private var responses: [String: PTYDaemonResponse] = [:]
+    private var events: [PTYDaemonEvent] = []
     private var isShutdown = false
 
-    init() throws {
+    init(extraEnvironment: [String: String] = [:]) throws {
         process.executableURL = try helperExecutableURL()
         process.arguments = ["--stdio"]
         process.standardInput = input
         process.standardOutput = output
         process.standardError = Pipe()
+        if extraEnvironment.isEmpty == false {
+            var env = ProcessInfo.processInfo.environment
+            for (key, value) in extraEnvironment {
+                env[key] = value
+            }
+            process.environment = env
+        }
         try process.run()
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             self?.ingest(handle.availableData)
@@ -285,6 +503,23 @@ private final class RunningHelperProcess {
 
     deinit {
         shutdownIfNeeded()
+    }
+
+    /// Forcefully kills the helper without sending the graceful `shutdown`
+    /// command. Used by crash-recovery tests to simulate an unexpected
+    /// daemon termination.
+    func killAbruptly() {
+        guard isShutdown == false else { return }
+        isShutdown = true
+        output.fileHandleForReading.readabilityHandler = nil
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+        }
+        try? input.fileHandleForWriting.close()
+    }
+
+    var isRunning: Bool {
+        process.isRunning
     }
 
     func sendAndWait(_ request: PTYDaemonRequest, timeout: TimeInterval = 5) throws -> PTYDaemonResponse {
@@ -297,18 +532,31 @@ private final class RunningHelperProcess {
         kind: PTYDaemonEvent.Kind,
         timeout: TimeInterval
     ) throws -> PTYDaemonEvent {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if let event = popLine().flatMap({ try? PTYDaemonLineCodec.decode(PTYDaemonEvent.self, fromLine: $0) }),
-               event.surfaceID == surfaceID,
-               event.event == kind {
-                return event
-            }
-            _ = lineSemaphore.wait(timeout: .now() + 0.05)
+        try waitForEvent(timeout: timeout) { event in
+            event.surfaceID == surfaceID && event.event == kind
         }
-        throw HelperTestError.timeout("event \(kind.rawValue)")
     }
 
+    /// Removes and returns the first event matching the predicate, blocking
+    /// for new input until `timeout` elapses. Lines that do not match are
+    /// preserved so other surfaces' waiters can still consume them.
+    func waitForEvent(
+        timeout: TimeInterval,
+        matching predicate: (PTYDaemonEvent) -> Bool
+    ) throws -> PTYDaemonEvent {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let event = consumeEvent(matching: predicate) {
+                return event
+            }
+            _ = semaphore.wait(timeout: .now() + 0.05)
+        }
+        throw HelperTestError.timeout("event matching predicate")
+    }
+
+    /// Drains output events for the given surface until `marker` appears in
+    /// the accumulated UTF-8 text. Events for other surfaces stay in the
+    /// queue so concurrent waiters keep working.
     func waitForOutputText(
         surfaceID: String,
         containingUTF8 marker: String,
@@ -317,9 +565,9 @@ private final class RunningHelperProcess {
         let deadline = Date().addingTimeInterval(timeout)
         var accumulated = ""
         while Date() < deadline {
-            if let event = popLine().flatMap({ try? PTYDaemonLineCodec.decode(PTYDaemonEvent.self, fromLine: $0) }),
-               event.surfaceID == surfaceID,
-               event.event == .surfaceOutput,
+            if let event = consumeEvent(matching: { e in
+                e.surfaceID == surfaceID && e.event == .surfaceOutput
+            }),
                let raw = event.bytesBase64,
                let data = Data(base64Encoded: raw),
                let text = String(data: data, encoding: .utf8) {
@@ -327,8 +575,9 @@ private final class RunningHelperProcess {
                 if accumulated.contains(marker) {
                     return accumulated
                 }
+            } else {
+                _ = semaphore.wait(timeout: .now() + 0.05)
             }
-            _ = lineSemaphore.wait(timeout: .now() + 0.05)
         }
         throw HelperTestError.timeout("output containing \(marker)")
     }
@@ -349,36 +598,53 @@ private final class RunningHelperProcess {
     private func waitForResponse(id: String, timeout: TimeInterval) throws -> PTYDaemonResponse {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if let line = popLine() {
-                if let response = try? PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: line),
-                   response.id == id {
-                    return response
-                }
-                lock.withLock { lines.append(line) }
+            if let response = lock.withLock({ responses.removeValue(forKey: id) }) {
+                return response
             }
-            _ = lineSemaphore.wait(timeout: .now() + 0.05)
+            _ = semaphore.wait(timeout: .now() + 0.05)
         }
         throw HelperTestError.timeout("response \(id)")
     }
 
+    private func consumeEvent(matching predicate: (PTYDaemonEvent) -> Bool) -> PTYDaemonEvent? {
+        lock.withLock {
+            for index in events.indices where predicate(events[index]) {
+                return events.remove(at: index)
+            }
+            return nil
+        }
+    }
+
     private func ingest(_ data: Data) {
         guard data.isEmpty == false else { return }
+        var notify = false
         lock.withLock {
             pending.append(data)
             while let newline = pending.firstIndex(of: 0x0A) {
-                lines.append(Data(pending.prefix(through: newline)))
+                let line = Data(pending.prefix(through: newline))
                 pending.removeSubrange(pending.startIndex...newline)
-                lineSemaphore.signal()
+                store(line, &notify)
             }
         }
-    }
-
-    private func popLine() -> Data? {
-        lock.withLock {
-            lines.isEmpty ? nil : lines.removeFirst()
+        if notify {
+            semaphore.signal()
         }
     }
 
+    private func store(_ line: Data, _ notify: inout Bool) {
+        guard let envelope = try? PTYDaemonLineCodec.decode(EventEnvelope.self, fromLine: line) else {
+            return
+        }
+        if envelope.event != nil {
+            if let event = try? PTYDaemonLineCodec.decode(PTYDaemonEvent.self, fromLine: line) {
+                events.append(event)
+                notify = true
+            }
+        } else if let response = try? PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: line) {
+            responses[response.id] = response
+            notify = true
+        }
+    }
 }
 
 private func firstLine(_ data: Data) throws -> Data {

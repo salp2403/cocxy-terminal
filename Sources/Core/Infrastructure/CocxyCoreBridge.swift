@@ -4,6 +4,7 @@
 import AppKit
 import Darwin
 import CocxyCoreKit
+import CocxyShared
 import os.log
 
 // MARK: - Input Diagnostics Logger
@@ -317,10 +318,17 @@ final class CocxyCoreBridge: TerminalEngine {
     private static let searchContextCharacterCount = 20
 
     /// Environment keys inherited from the host process that should not leak
-    /// into user shells. Codex runs with `NO_COLOR=1`, and if Cocxy passes that
-    /// through to the PTY, TUIs such as Claude Code intentionally disable their
-    /// brand/accent colours even though the terminal supports them.
-    static let terminalEnvironmentKeysToUnset: Set<String> = ["NO_COLOR"]
+    /// into user shells. Some interactive CLI agents export `NO_COLOR=1`
+    /// for their own host-side rendering, and if Cocxy passes that variable
+    /// to the PTY unchanged, downstream agent TUIs intentionally disable
+    /// their brand/accent colours even though the terminal supports them.
+    ///
+    /// The list lives in `TerminalSpawnEnvironment` so the daemon helper
+    /// (`PTYDaemonSurface`) can apply the exact same policy when it spawns
+    /// PTYs out-of-process.
+    static var terminalEnvironmentKeysToUnset: Set<String> {
+        TerminalSpawnEnvironment.keysToUnset
+    }
 
     // MARK: - Initialization
 
