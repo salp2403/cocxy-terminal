@@ -20,6 +20,9 @@ jobs:
         with:
           lfs: true
 
+      - name: Install xcodegen
+        run: brew install xcodegen
+
       - name: Build app bundle
         run: ./scripts/build-app.sh debug
 
