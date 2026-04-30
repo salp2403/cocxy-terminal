@@ -4,6 +4,7 @@
 // session save/restore chain: Tab → TabState (Codable) → RestoredTab.
 
 import Foundation
+import CocxyShared
 import Testing
 @testable import CocxyTerminal
 

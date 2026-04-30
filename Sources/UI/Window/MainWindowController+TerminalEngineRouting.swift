@@ -2,6 +2,7 @@
 // MainWindowController+TerminalEngineRouting.swift - Per-tab engine routing.
 
 import Foundation
+import CocxyShared
 
 extension MainWindowController {
     func makeTerminalEngine(for preference: TerminalEnginePreference?) -> any TerminalEngine {

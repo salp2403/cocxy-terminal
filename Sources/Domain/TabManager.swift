@@ -3,6 +3,7 @@
 
 import Foundation
 import Combine
+import CocxyShared
 
 // MARK: - Tab Manager
 

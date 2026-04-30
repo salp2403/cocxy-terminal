@@ -2,6 +2,7 @@
 // CLICommandTests.swift - Tests for CLI argument parsing, request building, and output formatting.
 
 import XCTest
+import CocxyShared
 @testable import CocxyCLILib
 
 // MARK: - Argument Parser Tests
@@ -82,6 +83,29 @@ final class CLIArgumentParserTests: XCTestCase {
     func testNewTabWithEnginePreference() throws {
         let result = try CLIArgumentParser.parse(["new-tab", "--engine", "daemon"])
         XCTAssertEqual(result, .newTab(directory: nil, engine: "daemon"))
+    }
+
+    func testEnginePreferenceAliasesAreAcceptedByEngineCommands() throws {
+        let aliases = [
+            "system", "default", "auto",
+            "in-process", "inprocess", "cocxycore", "core",
+            "daemon", "pty-daemon", "ptydaemon",
+        ]
+
+        for alias in aliases {
+            XCTAssertNotNil(
+                TerminalEnginePreference(cliValue: alias),
+                "Alias \(alias) should stay valid in the shared engine parser"
+            )
+            XCTAssertEqual(
+                try CLIArgumentParser.parse(["new-tab", "--engine", alias]),
+                .newTab(directory: nil, engine: alias)
+            )
+            XCTAssertEqual(
+                try CLIArgumentParser.parse(["window", "new", "--engine", alias]),
+                .windowNew(engine: alias)
+            )
+        }
     }
 
     func testNewTabWithInvalidEngineThrowsInvalidArgument() {

@@ -1,20 +1,20 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// TerminalEnginePreference.swift - Per-tab terminal engine selection.
+// TerminalEnginePreference.swift - Shared terminal engine selection.
 
 import Foundation
 
-/// User-facing engine preference for a tab.
+/// User-facing engine preference for a terminal surface.
 ///
 /// `.system` follows the global configuration and keeps today's default
-/// behaviour. `.inProcess` forces CocxyCore in-process for one tab, while
+/// behavior. `.inProcess` forces CocxyCore in-process for one tab, while
 /// `.daemon` opts that tab into the experimental daemon path when the helper
 /// passes readiness checks.
-enum TerminalEnginePreference: String, Codable, Equatable, Sendable, CaseIterable {
+public enum TerminalEnginePreference: String, Codable, Equatable, Sendable, CaseIterable {
     case system
     case inProcess = "in-process"
     case daemon
 
-    init?(cliValue value: String) {
+    public init?(cliValue value: String) {
         switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "system", "default", "auto":
             self = .system
@@ -27,5 +27,5 @@ enum TerminalEnginePreference: String, Codable, Equatable, Sendable, CaseIterabl
         }
     }
 
-    var socketValue: String { rawValue }
+    public var socketValue: String { rawValue }
 }
