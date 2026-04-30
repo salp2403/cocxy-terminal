@@ -5,6 +5,90 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.92] - 2026-04-30
+
+### Added
+- Real `cocxyd` PTY daemon helper backed by CocxyCore. The helper now owns
+  per-surface terminals and PTYs through a thread-safe registry, serves the
+  full `terminal-surface-v1` command set (create, attach, write, resize,
+  close, frame subscribe, signal, key, preedit, focus, search, scroll,
+  process metadata, hello, shutdown), and pushes `surface_output`,
+  `surface_osc`, `surface_frame`, and `surface_closed` events back to the
+  client. Helper integration tests launch the real `cocxyd` and exercise
+  every command, including concurrent multi-surface isolation, frame-latency
+  budget, and `NO_COLOR` strip parity with the in-process bridge.
+- Per-tab engine opt-in via `cocxy new-tab --engine system|in-process|daemon`
+  and `cocxy window new --engine ...`. The shared `TerminalEnginePreference`
+  parser accepts ten aliases (`system`/`default`/`auto`,
+  `in-process`/`inprocess`/`cocxycore`/`core`,
+  `daemon`/`pty-daemon`/`ptydaemon`) and `cocxy --help` documents them under
+  the new `ENGINE VALUES` block. Engine overrides persist through session
+  restore and are routed by `MainWindowController` for splits, sends,
+  search, focus, process monitor, and scripting bridge calls.
+- Daemon crash recovery: the persistent stdio transport surfaces dropped
+  helpers as throwable errors so the client adapter reconnects, reattaches
+  live surfaces, and marks orphaned ones stalled instead of silently
+  spinning a fresh helper behind stale `liveSurfaces` state. Client restart
+  test boots a brand-new client against a fresh helper without inheriting
+  prior surfaces.
+- Cold-start launch partition. `applicationDidFinishLaunching` now keeps the
+  socket-ready critical path to the eleven essential subsystems and defers
+  fonts, menus, keybindings, window warm-up, session restore, auto-save,
+  port scanner, plugins, Quick Terminal, appearance observers, remote
+  workspace, browser, auto-update, app icon, first-launch, welcome, and
+  menu bar to the next main run-loop turn through
+  `DispatchQueue.main.async`. New `AppLaunchStep.criticalPathSteps` and
+  `deferredWarmupSteps` constants, plus regression tests, prevent future
+  changes from regressing the partition.
+- `MainWindowController.completeDeferredWindowSetupIfNeeded()` and a new
+  `deferContentSetup` initializer flag let the window go visible with the
+  minimum required configuration during the critical path, then install
+  observers, Combine subscriptions, process monitor, and input drop monitor
+  exactly once before session restore or the first surface bootstrap.
+
+### Changed
+- App-readiness budget tightened from 500 ms to 400 ms in
+  `Shared/Performance/ColdStartBudget.swift` and
+  `scripts/bench-cold-start.sh`. The internal critical-path target (50 ms,
+  measured between the first and last launch signpost) is met by the new
+  partition: signpost capture in repo runs measures around 30 ms.
+- `CocxyCoreBridge` now reads its environment-strip policy from the new
+  shared `TerminalSpawnEnvironment.keysToUnset` so the daemon spawn and the
+  in-process bridge cannot drift apart on host environment handling
+  (`NO_COLOR`, etc.).
+- `PTYDaemonSurface` split into focused extensions (Spawn, Frame, Search,
+  Keys, Callbacks) so each file stays readable and the surface state stays
+  centralized.
+- `RunningHelperProcess` test harness decodes JSONL into typed responses
+  and events at ingest time so multi-surface integration tests can wait
+  for one surface's output without discarding events that belong to other
+  surfaces.
+- Performance test for the agent detection pipeline now compares the
+  median of three samples against the 1150 ms budget (previously a single
+  sample) so transient runner noise stops shadowing real regressions.
+
+### Fixed
+- `cocxy --version` invoked from a SwiftPM checkout no longer reports a
+  stale hardcoded fallback. The version resolver walks up to the
+  repository's `Resources/Info.plist` before falling back to the embedded
+  default, and a new test fails if the embedded fallback drifts from the
+  release `Info.plist`.
+- CI pipeline: the Performance workflow now installs `xcodegen` before
+  building the app bundle so the QuickLook extension build no longer fails
+  with an opaque exit code on the GitHub Actions runner.
+- `PatternMatchingDetector.decodeBufferedUTF8` short-circuits the common
+  ASCII-only chunk path so large pure-ASCII bursts skip the buffered
+  combine step. Behavior is preserved for the multi-byte UTF-8 splitting
+  case that the existing tests exercise.
+
+### Security
+- The PTY daemon adapter remains gated behind
+  `[experimental].pty-daemon = false` by default. The triple-AND helper
+  capability gate (`terminal-surface-v1`, `terminal-engine-v1`,
+  `terminal-host-renderer-v1`) plus the version-mismatch check still
+  prevent the experimental adapter from engaging on hosts whose helper
+  cannot fully serve the surface protocol.
+
 ## [0.1.91] - 2026-04-29
 
 ### Added
