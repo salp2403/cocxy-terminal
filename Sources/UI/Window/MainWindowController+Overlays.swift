@@ -1231,7 +1231,7 @@ extension MainWindowController {
         ) else {
             return false
         }
-        bridge.sendText(text, to: surfaceID)
+        terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
         return true
     }
 
@@ -1271,7 +1271,7 @@ extension MainWindowController {
 
     private func preferredCodeReviewSurfaceID(for tabID: TabID) -> SurfaceID? {
         func isLive(_ surfaceID: SurfaceID) -> Bool {
-            guard let cocxyBridge = bridge.cocxyCoreBridge else { return true }
+            guard let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge else { return true }
             return cocxyBridge.withTerminalLock(surfaceID) { _ in true } == true
         }
 
@@ -1334,7 +1334,7 @@ extension MainWindowController {
                 )
 
                 if let surfaceID = self.activeSearchSurfaceID(),
-                   let nativeResults = self.bridge.searchScrollback(
+                   let nativeResults = self.terminalEngine(for: surfaceID).searchScrollback(
                        surfaceID: surfaceID,
                        options: options
                    ) {
@@ -1357,7 +1357,7 @@ extension MainWindowController {
             guard let self, let surfaceID = self.activeSearchSurfaceID() else { return }
             // Scroll to the line containing the search match.
             // Uses the active terminal engine's scrollback navigation API.
-            self.bridge.scrollToSearchResult(
+            self.terminalEngine(for: surfaceID).scrollToSearchResult(
                 surfaceID: surfaceID,
                 lineNumber: result.lineNumber
             )
@@ -1388,7 +1388,7 @@ extension MainWindowController {
 
     private func searchLinesForActiveSurface() -> [String] {
         guard let surfaceID = activeSearchSurfaceID(),
-              let cocxyBridge = bridge.cocxyCoreBridge else {
+              let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge else {
             return terminalOutputBuffer.lines
         }
 
@@ -2266,7 +2266,7 @@ extension MainWindowController {
         )
         view.onNavigateToResult = { [weak self] result in
             guard let self, let surfaceID = self.activeTerminalSurfaceView?.terminalViewModel?.surfaceID else { return }
-            self.bridge.scrollToSearchResult(
+            self.terminalEngine(for: surfaceID).scrollToSearchResult(
                 surfaceID: surfaceID,
                 lineNumber: result.lineNumber
             )

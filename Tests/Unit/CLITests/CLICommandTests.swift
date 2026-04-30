@@ -71,12 +71,36 @@ final class CLIArgumentParserTests: XCTestCase {
 
     func testNewTabWithoutOptions() throws {
         let result = try CLIArgumentParser.parse(["new-tab"])
-        XCTAssertEqual(result, .newTab(directory: nil))
+        XCTAssertEqual(result, .newTab(directory: nil, engine: nil))
     }
 
     func testNewTabWithDirectory() throws {
         let result = try CLIArgumentParser.parse(["new-tab", "--dir", "/tmp/project"])
-        XCTAssertEqual(result, .newTab(directory: "/tmp/project"))
+        XCTAssertEqual(result, .newTab(directory: "/tmp/project", engine: nil))
+    }
+
+    func testNewTabWithEnginePreference() throws {
+        let result = try CLIArgumentParser.parse(["new-tab", "--engine", "daemon"])
+        XCTAssertEqual(result, .newTab(directory: nil, engine: "daemon"))
+    }
+
+    func testNewTabWithInvalidEngineThrowsInvalidArgument() {
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse(["new-tab", "--engine", "invalid"])
+        ) { error in
+            guard let cliError = error as? CLIError else {
+                XCTFail("Expected CLIError, got \(error)")
+                return
+            }
+            XCTAssertEqual(
+                cliError,
+                .invalidArgument(
+                    command: "new-tab",
+                    argument: "invalid",
+                    reason: "Engine must be system, in-process, or daemon"
+                )
+            )
+        }
     }
 
     func testNewTabWithDirFlagButNoValueThrowsMissingArgument() {
@@ -343,6 +367,39 @@ final class CLIArgumentParserTests: XCTestCase {
     func testParseImageClear() throws {
         XCTAssertEqual(try CLIArgumentParser.parse(["image", "clear"]), .imageClear)
     }
+
+    func testParseWindowNewWithoutEngine() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["window", "new"]),
+            .windowNew(engine: nil)
+        )
+    }
+
+    func testParseWindowNewWithEnginePreference() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["window", "new", "--engine", "daemon"]),
+            .windowNew(engine: "daemon")
+        )
+    }
+
+    func testParseWindowNewWithInvalidEngineThrowsInvalidArgument() {
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse(["window", "new", "--engine", "invalid"])
+        ) { error in
+            guard let cliError = error as? CLIError else {
+                XCTFail("Expected CLIError, got \(error)")
+                return
+            }
+            XCTAssertEqual(
+                cliError,
+                .invalidArgument(
+                    command: "window new",
+                    argument: "invalid",
+                    reason: "Engine must be system, in-process, or daemon"
+                )
+            )
+        }
+    }
 }
 
 // MARK: - Request Builder Tests
@@ -368,7 +425,7 @@ final class RequestBuilderTests: XCTestCase {
     // MARK: - 15. New-tab request without directory
 
     func testBuildNewTabRequestWithoutDirectory() {
-        let request = runner.buildRequest(from: .newTab(directory: nil))
+        let request = runner.buildRequest(from: .newTab(directory: nil, engine: nil))
 
         XCTAssertEqual(request.command, "new-tab")
         XCTAssertNil(request.params)
@@ -377,10 +434,25 @@ final class RequestBuilderTests: XCTestCase {
     // MARK: - 16. New-tab request with directory
 
     func testBuildNewTabRequestWithDirectory() {
-        let request = runner.buildRequest(from: .newTab(directory: "/tmp"))
+        let request = runner.buildRequest(from: .newTab(directory: "/tmp", engine: nil))
 
         XCTAssertEqual(request.command, "new-tab")
         XCTAssertEqual(request.params?["dir"], "/tmp")
+    }
+
+    func testBuildNewTabRequestWithEnginePreference() {
+        let request = runner.buildRequest(from: .newTab(directory: "/tmp", engine: "daemon"))
+
+        XCTAssertEqual(request.command, "new-tab")
+        XCTAssertEqual(request.params?["dir"], "/tmp")
+        XCTAssertEqual(request.params?["engine"], "daemon")
+    }
+
+    func testBuildWindowNewRequestWithEnginePreference() {
+        let request = runner.buildRequest(from: .windowNew(engine: "daemon"))
+
+        XCTAssertEqual(request.command, "window-new")
+        XCTAssertEqual(request.params?["engine"], "daemon")
     }
 
     // MARK: - 17. List-tabs request
@@ -566,7 +638,7 @@ final class OutputFormatterTests: XCTestCase {
             id: "r-2", success: true, data: nil, error: nil
         )
         let output = OutputFormatter.formatSuccess(
-            command: .newTab(directory: nil),
+            command: .newTab(directory: nil, engine: nil),
             response: response
         )
         XCTAssertEqual(output, "Tab opened.")

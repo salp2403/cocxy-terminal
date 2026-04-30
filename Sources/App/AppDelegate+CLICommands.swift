@@ -705,10 +705,9 @@ extension AppDelegate {
                 return nil
             }
             if let surfaceID = controller.surfaceIDs(for: tabID).first,
-               let bridge,
-               let bridgeResults = bridge.searchScrollback(surfaceID: surfaceID, options: options) {
+               let bridgeResults = controller.terminalEngine(for: surfaceID).searchScrollback(surfaceID: surfaceID, options: options) {
                 nativeResults = bridgeResults
-                if let cocxyBridge = bridge.cocxyCoreBridge {
+                if let cocxyBridge = controller.terminalEngine(for: surfaceID).cocxyCoreBridge {
                     let historyLines = cocxyBridge.historyLines(for: surfaceID)
                     lines = historyLines.isEmpty ? controller.tabOutputBuffers[tabID]?.lines ?? [] : historyLines
                 } else {
@@ -723,10 +722,9 @@ extension AppDelegate {
             guard let controller = focusedWindowController() ?? windowController else { return nil }
             if let surfaceID = controller.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
                 ?? controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
-               let bridge,
-               let bridgeResults = bridge.searchScrollback(surfaceID: surfaceID, options: options) {
+               let bridgeResults = controller.terminalEngine(for: surfaceID).searchScrollback(surfaceID: surfaceID, options: options) {
                 nativeResults = bridgeResults
-                if let cocxyBridge = bridge.cocxyCoreBridge {
+                if let cocxyBridge = controller.terminalEngine(for: surfaceID).cocxyCoreBridge {
                     let historyLines = cocxyBridge.historyLines(for: surfaceID)
                     lines = historyLines.isEmpty ? controller.terminalOutputBuffer.lines : historyLines
                 } else {

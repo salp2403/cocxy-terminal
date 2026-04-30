@@ -177,7 +177,8 @@ enum SessionRestorer {
             worktreeID: shouldClearWorktreeMetadata ? nil : tabState.worktreeID,
             worktreeRoot: shouldClearWorktreeMetadata ? nil : tabState.worktreeRoot,
             worktreeOriginRepo: shouldClearWorktreeMetadata ? nil : tabState.worktreeOriginRepo,
-            worktreeBranch: shouldClearWorktreeMetadata ? nil : tabState.worktreeBranch
+            worktreeBranch: shouldClearWorktreeMetadata ? nil : tabState.worktreeBranch,
+            terminalEnginePreference: tabState.terminalEnginePreference
         )
     }
 
@@ -322,4 +323,6 @@ struct RestoredTab: Sendable {
     let worktreeOriginRepo: URL?
     /// Cached branch name of the worktree at save time.
     let worktreeBranch: String?
+    /// Optional per-tab engine override restored from the session file.
+    let terminalEnginePreference: TerminalEnginePreference?
 }

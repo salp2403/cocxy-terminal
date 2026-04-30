@@ -1071,9 +1071,10 @@ struct NotesConfig: Codable, Sendable, Equatable {
 ///
 /// These flags default to `false` so risky surface lifecycle features
 /// cannot become reachable until their implementation and smoke matrix
-/// are explicitly complete. They are intentionally global, not
-/// per-project: PIP and daemon mode affect process/window ownership,
-/// not repository behaviour.
+/// are explicitly complete. They are intentionally global, not per-project:
+/// PIP and daemon mode affect process/window ownership, not repository
+/// behaviour. Explicit per-tab daemon dogfood goes through `Tab` metadata
+/// and does not change these defaults.
 struct ExperimentalConfig: Codable, Sendable, Equatable {
     let pipEnabled: Bool
     let ptyDaemonEnabled: Bool

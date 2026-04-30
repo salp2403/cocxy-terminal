@@ -249,24 +249,25 @@ extension MainWindowController {
         let newSplitID = splitTargetLeafID.flatMap { splitManager?.parentSplitID(of: $0) }
 
         // Create new terminal for the second pane.
-        let newViewModel = TerminalViewModel(engine: bridge)
+        let engine = currentTabID.map { terminalEngine(for: $0) } ?? bridge
+        let newViewModel = TerminalViewModel(engine: engine)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         newViewModel.setDefaultFontSize(configuredFontSize)
-        let newSurfaceView = TerminalHostViewFactory.make(viewModel: newViewModel, engine: bridge)
+        let newSurfaceView = TerminalHostViewFactory.make(viewModel: newViewModel, engine: engine)
 
         let workingDirectory = currentTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
             ?? tabManager.activeTab?.workingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
         let surfaceID: SurfaceID
         do {
-            surfaceID = try bridge.createSurface(
+            surfaceID = try engine.createSurface(
                 in: newSurfaceView,
                 workingDirectory: workingDirectory,
                 command: nil
             )
             newViewModel.markRunning(surfaceID: surfaceID)
-            newSurfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+            newSurfaceView.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
             newSurfaceView.syncSizeWithTerminal()
         } catch {
             NSLog("[MainWindowController] Failed to create surface for split: %@",
@@ -278,6 +279,7 @@ extension MainWindowController {
         splitSurfaceViews[surfaceID] = newSurfaceView
         splitViewModels[surfaceID] = newViewModel
         if let activeTabID = currentTabID {
+            registerTerminalEngine(engine, tabID: activeTabID, surfaceID: surfaceID)
             wireSurfaceHandlers(
                 for: surfaceID,
                 tabID: activeTabID,
@@ -398,7 +400,8 @@ extension MainWindowController {
                 // terminal so no stale split state is retained.
                 injectedAgentDetectionEngine?.clearSurface(sid)
                 injectedPerSurfaceStore?.reset(surfaceID: sid)
-                bridge.destroySurface(sid)
+                terminalEngine(for: sid).destroySurface(sid)
+                clearTerminalEngineTracking(surfaceID: sid)
                 splitViewModels[sid]?.markStopped()
                 splitSurfaceViews.removeValue(forKey: sid)
                 splitViewModels.removeValue(forKey: sid)

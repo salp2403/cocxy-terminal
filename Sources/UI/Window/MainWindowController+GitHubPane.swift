@@ -346,7 +346,7 @@ extension MainWindowController {
 
         openInternalBrowser(to: Self.gitHubDeviceLoginURLString)
         let browserOpenerPath = installGitHubAuthBrowserOpenerScript()
-        bridge.sendText(
+        terminalEngine(for: surfaceID).sendText(
             Self.gitHubAuthenticationCommand(browserOpenerPath: browserOpenerPath),
             to: surfaceID
         )

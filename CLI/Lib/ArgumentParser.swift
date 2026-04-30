@@ -17,8 +17,8 @@ public enum ParsedCommand: Equatable {
     /// `cocxy notify <message>`
     case notify(message: String)
 
-    /// `cocxy new-tab [--dir <path>]`
-    case newTab(directory: String?)
+    /// `cocxy new-tab [--dir <path>] [--engine system|in-process|daemon]`
+    case newTab(directory: String?, engine: String?)
 
     /// `cocxy list-tabs`
     case listTabs
@@ -155,8 +155,8 @@ public enum ParsedCommand: Equatable {
 
     // MARK: - Window Management (v3)
 
-    /// `cocxy window new`
-    case windowNew
+    /// `cocxy window new [--engine system|in-process|daemon]`
+    case windowNew(engine: String?)
 
     /// `cocxy window list`
     case windowList
@@ -642,9 +642,10 @@ public enum CLIArgumentParser {
         return .notify(message: fullMessage)
     }
 
-    /// Parses `cocxy new-tab [--dir <path>]`.
+    /// Parses `cocxy new-tab [--dir <path>] [--engine system|in-process|daemon]`.
     private static func parseNewTab(arguments: [String]) throws -> ParsedCommand {
         var directory: String?
+        var engine: String?
 
         var index = 0
         while index < arguments.count {
@@ -654,16 +655,31 @@ public enum CLIArgumentParser {
                 }
                 directory = arguments[index + 1]
                 index += 2
+            } else if arguments[index] == "--engine" {
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "new-tab", argument: "engine")
+                }
+                let value = arguments[index + 1]
+                guard ["system", "default", "auto", "in-process", "inprocess", "cocxycore", "core", "daemon", "pty-daemon", "ptydaemon"]
+                    .contains(value.lowercased()) else {
+                    throw CLIError.invalidArgument(
+                        command: "new-tab",
+                        argument: value,
+                        reason: "Engine must be system, in-process, or daemon"
+                    )
+                }
+                engine = value
+                index += 2
             } else {
                 throw CLIError.invalidArgument(
                     command: "new-tab",
                     argument: arguments[index],
-                    reason: "Unknown flag. Use --dir <path>."
+                    reason: "Unknown flag. Use --dir <path> or --engine system|in-process|daemon."
                 )
             }
         }
 
-        return .newTab(directory: directory)
+        return .newTab(directory: directory, engine: engine)
     }
 
     /// Parses `cocxy focus-tab <id>`.
@@ -1328,7 +1344,7 @@ public enum CLIArgumentParser {
 
         switch subcommand {
         case "new":
-            return .windowNew
+            return try parseWindowNew(arguments: Array(arguments.dropFirst()))
         case "list":
             return .windowList
         case "focus":
@@ -1348,6 +1364,37 @@ public enum CLIArgumentParser {
                 reason: "Unknown subcommand. Use new, list, focus, close, or fullscreen."
             )
         }
+    }
+
+    /// Parses `cocxy window new [--engine system|in-process|daemon]`.
+    private static func parseWindowNew(arguments: [String]) throws -> ParsedCommand {
+        var engine: String?
+        var index = 0
+        while index < arguments.count {
+            if arguments[index] == "--engine" {
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "window new", argument: "engine")
+                }
+                let value = arguments[index + 1]
+                guard ["system", "default", "auto", "in-process", "inprocess", "cocxycore", "core", "daemon", "pty-daemon", "ptydaemon"]
+                    .contains(value.lowercased()) else {
+                    throw CLIError.invalidArgument(
+                        command: "window new",
+                        argument: value,
+                        reason: "Engine must be system, in-process, or daemon"
+                    )
+                }
+                engine = value
+                index += 2
+            } else {
+                throw CLIError.invalidArgument(
+                    command: "window new",
+                    argument: arguments[index],
+                    reason: "Unknown flag. Use --engine system|in-process|daemon."
+                )
+            }
+        }
+        return .windowNew(engine: engine)
     }
 
     /// Parses `cocxy session <subcommand>`.
@@ -2173,7 +2220,7 @@ public enum CLIArgumentParser {
         lines.append("")
         lines.append("EXAMPLES:")
         lines.append("  cocxy notify \"Build complete\"")
-        lines.append("  cocxy new-tab --dir ~/projects")
+        lines.append("  cocxy new-tab --dir ~/projects --engine daemon")
         lines.append("  cocxy split --dir h")
         lines.append("  cocxy list-tabs | jq '.'")
         lines.append("  cocxy tab rename <id> \"My Tab\"")

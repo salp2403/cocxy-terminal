@@ -285,12 +285,19 @@ public struct CommandRunner {
                 command: "notify",
                 params: ["message": message]
             )
-        case .newTab(let directory):
-            var params: [String: String]? = nil
+        case .newTab(let directory, let engine):
+            var params: [String: String] = [:]
             if let directory {
-                params = ["dir": directory]
+                params["dir"] = directory
             }
-            return CLISocketRequest(id: requestID, command: "new-tab", params: params)
+            if let engine {
+                params["engine"] = engine
+            }
+            return CLISocketRequest(
+                id: requestID,
+                command: "new-tab",
+                params: params.isEmpty ? nil : params
+            )
 
         case .listTabs:
             return CLISocketRequest(id: requestID, command: "list-tabs", params: nil)
@@ -481,8 +488,9 @@ public struct CommandRunner {
 
         // MARK: Window Management (v3)
 
-        case .windowNew:
-            return CLISocketRequest(id: requestID, command: "window-new", params: nil)
+        case .windowNew(let engine):
+            let params = engine.map { ["engine": $0] }
+            return CLISocketRequest(id: requestID, command: "window-new", params: params)
 
         case .windowList:
             return CLISocketRequest(id: requestID, command: "window-list", params: nil)

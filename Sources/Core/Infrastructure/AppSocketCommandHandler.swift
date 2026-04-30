@@ -152,6 +152,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Returns the new tab's (id, title) or nil if TabManager is unavailable.
     private let tabCreateProvider: @Sendable (String?) -> (id: String, title: String)?
 
+    /// Closure that creates a tab with an optional per-tab engine preference.
+    /// Existing callers use `tabCreateProvider`; CLI `new-tab --engine ...`
+    /// goes through this path so daemon dogfood can be scoped to one tab.
+    private let tabCreateWithEngineProvider: @Sendable (String?, String?) -> (id: String, title: String)?
+
     /// Closure that renames a tab. Params: (tabID, newName). Returns true on success.
     private let tabRenameProvider: @Sendable (String, String) -> Bool
 
@@ -403,6 +408,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         tabFocusProviderOverride: (@Sendable (String) -> Bool)? = nil,
         tabCloseProviderOverride: (@Sendable (String) -> TabCloseOutcome)? = nil,
         tabCreateProviderOverride: (@Sendable (String?) -> (id: String, title: String)?)? = nil,
+        tabCreateWithEngineProviderOverride: (@Sendable (String?, String?) -> (id: String, title: String)?)? = nil,
         tabRenameProviderOverride: (@Sendable (String, String) -> Bool)? = nil,
         tabMoveProviderOverride: (@Sendable (String, Int) -> Bool)? = nil,
         projectConfigProviderOverride: (@Sendable () -> [String: String]?)? = nil,
@@ -642,6 +648,27 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                         workingDirectory = FileManager.default.homeDirectoryForCurrentUser
                     }
                     let newTab = manager.addTab(workingDirectory: workingDirectory)
+                    return (id: newTab.id.rawValue.uuidString, title: newTab.title)
+                }
+            }
+        }
+        if let tabCreateWithEngineProviderOverride {
+            self.tabCreateWithEngineProvider = tabCreateWithEngineProviderOverride
+        } else {
+            self.tabCreateWithEngineProvider = { directoryPath, engineValue in
+                syncOnMainActor {
+                    guard let manager = tabManagerRef.value else { return nil }
+                    let workingDirectory: URL
+                    if let path = directoryPath {
+                        workingDirectory = URL(fileURLWithPath: path)
+                    } else {
+                        workingDirectory = FileManager.default.homeDirectoryForCurrentUser
+                    }
+                    let preference = engineValue.flatMap(TerminalEnginePreference.init(cliValue:))
+                    let newTab = manager.addTab(
+                        workingDirectory: workingDirectory,
+                        terminalEnginePreference: preference
+                    )
                     return (id: newTab.id.rawValue.uuidString, title: newTab.title)
                 }
             }
@@ -1102,9 +1129,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Creates a new tab with an optional working directory.
     ///
-    /// Optional params: `dir` (filesystem path for the working directory).
+    /// Optional params:
+    /// - `dir` (filesystem path for the working directory)
+    /// - `engine` (`system`, `in-process`, or `daemon`) for per-tab dogfood.
     private func handleNewTab(_ request: SocketRequest) -> SocketResponse {
         let directoryPath = request.params?["dir"]
+        let enginePreference = request.params?["engine"]
 
         // Validate directory exists if provided.
         if let path = directoryPath {
@@ -1114,8 +1144,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 return .failure(id: request.id, error: "Directory does not exist: \(path)")
             }
         }
+        if let enginePreference,
+           TerminalEnginePreference(cliValue: enginePreference) == nil {
+            return .failure(
+                id: request.id,
+                error: "Invalid engine. Use system, in-process, or daemon"
+            )
+        }
 
-        guard let result = tabCreateProvider(directoryPath) else {
+        guard let result = tabCreateWithEngineProvider(directoryPath, enginePreference) else {
             return .failure(id: request.id, error: "Tab manager not available")
         }
 
@@ -2114,9 +2151,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Creates a new tab (single-window architecture).
     ///
-    /// Optional params: `dir` (working directory path).
+    /// Optional params: `dir` (working directory path), `engine` (per-tab engine preference).
     private func handleWindowNew(_ request: SocketRequest) -> SocketResponse {
         let directoryPath = request.params?["dir"]
+        let enginePreference = request.params?["engine"]
 
         if let path = directoryPath {
             var isDir: ObjCBool = false
@@ -2125,8 +2163,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 return .failure(id: request.id, error: "Directory does not exist: \(path)")
             }
         }
+        if let enginePreference,
+           TerminalEnginePreference(cliValue: enginePreference) == nil {
+            return .failure(
+                id: request.id,
+                error: "Invalid engine. Use system, in-process, or daemon"
+            )
+        }
 
-        guard let result = tabCreateProvider(directoryPath) else {
+        guard let result = tabCreateWithEngineProvider(directoryPath, enginePreference) else {
             return .failure(id: request.id, error: "Tab manager not available")
         }
 

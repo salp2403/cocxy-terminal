@@ -179,7 +179,8 @@ extension AppDelegate {
                 worktreeID: tab.worktreeID,
                 worktreeRoot: tab.worktreeRoot,
                 worktreeOriginRepo: tab.worktreeOriginRepo,
-                worktreeBranch: tab.worktreeBranch
+                worktreeBranch: tab.worktreeBranch,
+                terminalEnginePreference: tab.terminalEnginePreference
             ))
         }
 
@@ -348,7 +349,7 @@ extension AppDelegate {
         from result: RestorationResult
     ) {
         guard !result.restoredTabs.isEmpty else { return }
-        guard let bridge = bridge else { return }
+        guard bridge != nil else { return }
         controller.isPerformingProgrammaticTabRestore = true
         defer { controller.isPerformingProgrammaticTabRestore = false }
 
@@ -379,7 +380,8 @@ extension AppDelegate {
                 worktreeID: restoredTab.worktreeID,
                 worktreeRoot: restoredTab.worktreeRoot,
                 worktreeOriginRepo: restoredTab.worktreeOriginRepo,
-                worktreeBranch: restoredTab.worktreeBranch
+                worktreeBranch: restoredTab.worktreeBranch,
+                terminalEnginePreference: restoredTab.terminalEnginePreference
             )
             controller.tabManager.insertExternalTab(restoredModel)
             registerSession(
@@ -406,8 +408,7 @@ extension AppDelegate {
 
             restoreSurfaces(
                 for: restoredTab,
-                in: controller,
-                bridge: bridge
+                in: controller
             )
         }
 
@@ -430,13 +431,13 @@ extension AppDelegate {
 
     private func restoreSurfaces(
         for restoredTab: RestoredTab,
-        in controller: MainWindowController,
-        bridge: any TerminalEngine
+        in controller: MainWindowController
     ) {
         let leafInfos = restoredTab.splitNode.allLeafIDs()
         guard !leafInfos.isEmpty else { return }
 
         let leafDirectories = leafWorkingDirectories(in: restoredTab.splitTreeState)
+        let engine = controller.makeTerminalEngine(for: restoredTab.terminalEnginePreference)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
 
@@ -460,26 +461,31 @@ extension AppDelegate {
                 viewModel.setDefaultFontSize(configuredFontSize)
                 let freshPrimarySurfaceView = TerminalHostViewFactory.make(
                     viewModel: viewModel,
-                    engine: bridge
+                    engine: engine
                 )
                 controller.terminalSurfaceView = freshPrimarySurfaceView
                 surfaceView = freshPrimarySurfaceView
             } else {
-                let newViewModel = TerminalViewModel(engine: bridge)
+                let newViewModel = TerminalViewModel(engine: engine)
                 newViewModel.setDefaultFontSize(configuredFontSize)
                 viewModel = newViewModel
-                surfaceView = TerminalHostViewFactory.make(viewModel: newViewModel, engine: bridge)
+                surfaceView = TerminalHostViewFactory.make(viewModel: newViewModel, engine: engine)
             }
 
             do {
-                let surfaceID = try bridge.createSurface(
+                let surfaceID = try engine.createSurface(
                     in: surfaceView,
                     workingDirectory: workingDirectory,
                     command: nil
                 )
                 viewModel.markRunning(surfaceID: surfaceID)
-                surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+                surfaceView.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
                 surfaceView.syncSizeWithTerminal()
+                controller.registerTerminalEngine(
+                    engine,
+                    tabID: restoredTab.tabID,
+                    surfaceID: surfaceID
+                )
                 controller.wireSurfaceHandlers(
                     for: surfaceID,
                     tabID: restoredTab.tabID,

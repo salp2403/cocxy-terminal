@@ -138,6 +138,12 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// explicitly switched via the CLI.
     var worktreeBranch: String?
 
+    /// Optional per-tab terminal engine override.
+    ///
+    /// Nil means the tab follows the current global engine selected during
+    /// launch. This field is optional so older session JSONs decode as-is.
+    var terminalEnginePreference: TerminalEnginePreference?
+
     /// Whether a command is currently executing.
     var isCommandRunning: Bool {
         lastCommandStartedAt != nil && lastCommandDuration == nil
@@ -176,7 +182,8 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         worktreeID: String? = nil,
         worktreeRoot: URL? = nil,
         worktreeOriginRepo: URL? = nil,
-        worktreeBranch: String? = nil
+        worktreeBranch: String? = nil,
+        terminalEnginePreference: TerminalEnginePreference? = nil
     ) {
         self.id = id
         self.title = title
@@ -197,6 +204,7 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         self.worktreeRoot = worktreeRoot
         self.worktreeOriginRepo = worktreeOriginRepo
         self.worktreeBranch = worktreeBranch
+        self.terminalEnginePreference = terminalEnginePreference
     }
 }
 

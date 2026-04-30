@@ -39,6 +39,23 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         #expect(decoded.worktreeBranch == "cocxy/claude/wt-1")
     }
 
+    @Test("TabState Codable preserves terminal engine preference")
+    func tabStateCodablePreservesTerminalEnginePreference() throws {
+        let root = URL(fileURLWithPath: "/tmp")
+        let tabState = TabState(
+            id: TabID(),
+            title: "Daemon Tab",
+            workingDirectory: root,
+            splitTree: .leaf(workingDirectory: root, command: nil),
+            terminalEnginePreference: .daemon
+        )
+
+        let data = try JSONEncoder().encode(tabState)
+        let decoded = try JSONDecoder().decode(TabState.self, from: data)
+
+        #expect(decoded.terminalEnginePreference == .daemon)
+    }
+
     @Test("legacy TabState JSON without worktree keys decodes with nils")
     func legacyTabStateDecodesWithoutWorktreeKeys() throws {
         // JSON shape corresponds to the v0.1.80 TabState layout: no
@@ -68,6 +85,7 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         #expect(decoded.worktreeRoot == nil)
         #expect(decoded.worktreeOriginRepo == nil)
         #expect(decoded.worktreeBranch == nil)
+        #expect(decoded.terminalEnginePreference == nil)
     }
 
     @Test("TabState Codable roundtrip is nil-preserving for unset worktrees")
@@ -89,6 +107,7 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         #expect(decoded.worktreeRoot == nil)
         #expect(decoded.worktreeOriginRepo == nil)
         #expect(decoded.worktreeBranch == nil)
+        #expect(decoded.terminalEnginePreference == nil)
     }
 
     // MARK: - SessionRestorer walks the worktree fields
@@ -127,7 +146,8 @@ struct SessionRestorerWorktreeSwiftTestingTests {
             worktreeID: "wt-xyz",
             worktreeRoot: worktreeRoot,
             worktreeOriginRepo: originRepo,
-            worktreeBranch: "cocxy/claude/wt-xyz"
+            worktreeBranch: "cocxy/claude/wt-xyz",
+            terminalEnginePreference: .daemon
         )
 
         let windowState = WindowState(
@@ -149,6 +169,7 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         #expect(restored.worktreeRoot == worktreeRoot)
         #expect(restored.worktreeOriginRepo == originRepo)
         #expect(restored.worktreeBranch == "cocxy/claude/wt-xyz")
+        #expect(restored.terminalEnginePreference == .daemon)
     }
 
     @Test("SessionRestorer clears worktree metadata when the worktree root is missing")

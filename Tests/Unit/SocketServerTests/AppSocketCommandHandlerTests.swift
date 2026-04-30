@@ -376,6 +376,40 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     @MainActor
+    func test_newTab_withEnginePreference_persistsPreferenceOnTab() {
+        let tabManager = TabManager()
+        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "nt-engine",
+            command: "new-tab",
+            params: ["engine": "daemon"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(tabManager.tabs.count, 2)
+        XCTAssertEqual(tabManager.tabs.last?.terminalEnginePreference, .daemon)
+    }
+
+    @MainActor
+    func test_newTab_withInvalidEngine_returnsError() {
+        let tabManager = TabManager()
+        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "nt-engine-invalid",
+            command: "new-tab",
+            params: ["engine": "invalid"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Invalid engine. Use system, in-process, or daemon")
+        XCTAssertEqual(tabManager.tabs.count, 1)
+    }
+
+    @MainActor
     func test_newTab_withNilTabManager_returnsError() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "nt-3", command: "new-tab", params: nil)

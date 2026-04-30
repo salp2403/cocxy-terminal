@@ -500,7 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Initializes the terminal engine bridge.
     private func initializeBridge() {
-        let newBridge: any TerminalEngine = makeTerminalEngineBridge()
+        let newBridge: any TerminalEngine = makeTerminalEngineBridge(preference: .system)
 
         let fontFamily = configService?.current.appearance.fontFamily
             ?? AppearanceConfig.defaults.fontFamily
@@ -570,8 +570,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func makeTerminalEngineBridge() -> any TerminalEngine {
-        let experimental = configService?.current.experimental ?? .defaults
+    private func makeTerminalEngineBridge(preference: TerminalEnginePreference = .system) -> any TerminalEngine {
+        let baseExperimental = configService?.current.experimental ?? .defaults
+        let experimental: ExperimentalConfig
+        switch preference {
+        case .system:
+            experimental = baseExperimental
+        case .inProcess:
+            return CocxyCoreBridge()
+        case .daemon:
+            experimental = ExperimentalConfig(
+                pipEnabled: baseExperimental.pipEnabled,
+                ptyDaemonEnabled: true
+            )
+        }
         let helperURL = PTYDaemonHelperLocator().executableURL()
         let readiness = PTYDaemonReadinessResolver().resolve(config: experimental, helperURL: helperURL)
         if readiness != .disabled {
@@ -583,6 +595,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
         return CocxyCoreBridge()
+    }
+
+    private func makeInitializedTerminalEngine(
+        preference: TerminalEnginePreference,
+        themeName overrideThemeName: String? = nil,
+        palette overridePalette: ThemePalette? = nil
+    ) -> (any TerminalEngine)? {
+        let newBridge: any TerminalEngine = makeTerminalEngineBridge(preference: preference)
+        let fontFamily = configService?.current.appearance.fontFamily
+            ?? AppearanceConfig.defaults.fontFamily
+        let fontSize = configService?.current.appearance.fontSize
+            ?? AppearanceConfig.defaults.fontSize
+        let themeName = overrideThemeName
+            ?? configService?.current.appearance.theme
+            ?? AppearanceConfig.defaults.theme
+        let shell = configService?.current.general.shell
+            ?? GeneralConfig.defaults.shell
+        let paddingX = configService?.current.appearance.effectivePaddingX
+            ?? AppearanceConfig.defaults.windowPadding
+        let paddingY = configService?.current.appearance.effectivePaddingY
+            ?? AppearanceConfig.defaults.windowPadding
+
+        let resolvedPalette: ThemePalette?
+        if let overridePalette {
+            resolvedPalette = overridePalette
+        } else if let engine = themeEngine, let resolved = try? engine.themeByName(themeName) {
+            resolvedPalette = resolved.palette
+        } else {
+            resolvedPalette = themeEngine?.activeTheme.palette
+        }
+
+        let engineConfig = TerminalEngineConfig(
+            fontFamily: fontFamily,
+            fontSize: fontSize,
+            themeName: themeName,
+            shell: shell,
+            workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+            themePalette: resolvedPalette,
+            windowPaddingX: paddingX,
+            windowPaddingY: paddingY,
+            clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
+                ?? TerminalConfig.defaults.clipboardReadAccess,
+            ligaturesEnabled: configService?.current.appearance.ligatures
+                ?? AppearanceConfig.defaults.ligatures,
+            fontThickenEnabled: configService?.current.appearance.fontThicken
+                ?? AppearanceConfig.defaults.fontThicken,
+            imageMemoryLimitBytes: UInt64(
+                (configService?.current.terminal.imageMemoryLimitMB
+                    ?? TerminalConfig.defaults.imageMemoryLimitMB) * 1024 * 1024
+            ),
+            imageFileTransferEnabled: configService?.current.terminal.imageFileTransfer
+                ?? TerminalConfig.defaults.imageFileTransfer,
+            sixelImagesEnabled: configService?.current.terminal.enableSixelImages
+                ?? TerminalConfig.defaults.enableSixelImages,
+            kittyImagesEnabled: configService?.current.terminal.enableKittyImages
+                ?? TerminalConfig.defaults.enableKittyImages
+        )
+
+        do {
+            try newBridge.initialize(config: engineConfig)
+            return newBridge
+        } catch {
+            NSLog("[AppDelegate] Failed to initialize %@ engine %@: %@",
+                  preference.rawValue,
+                  String(describing: type(of: newBridge)),
+                  String(describing: error))
+            return nil
+        }
     }
 
     // MARK: - Theme Switching
@@ -743,7 +823,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func createBridgeForTheme(_ themeName: String, palette: ThemePalette) -> (any TerminalEngine)? {
-        let newBridge: any TerminalEngine = makeTerminalEngineBridge()
+        let newBridge: any TerminalEngine = makeTerminalEngineBridge(preference: .system)
         let fontFamily = configService?.current.appearance.fontFamily
             ?? AppearanceConfig.defaults.fontFamily
         let fontSize = configService?.current.appearance.fontSize
@@ -807,6 +887,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         snapshots: [ThemeSwitchTabSnapshot]
     ) {
         wc.bridge = newBridge
+        wc.resetTerminalEngineRouting()
         let tabs = wc.tabManager.tabs
 
         for (index, tab) in tabs.enumerated() {
@@ -814,25 +895,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ? snapshots[index]
                 : ThemeSwitchTabSnapshot(id: tab.id, title: tab.title, workingDirectory: tab.workingDirectory)
 
-            let viewModel = TerminalViewModel(engine: newBridge)
+            let engine = wc.makeTerminalEngine(for: tab.terminalEnginePreference)
+            let viewModel = TerminalViewModel(engine: engine)
             let configuredFontSize = configService?.current.appearance.fontSize
                 ?? AppearanceConfig.defaults.fontSize
             viewModel.setDefaultFontSize(configuredFontSize)
-            let surfaceView = TerminalHostViewFactory.make(viewModel: viewModel, engine: newBridge)
+            let surfaceView = TerminalHostViewFactory.make(viewModel: viewModel, engine: engine)
 
             wc.tabViewModels[tab.id] = viewModel
             wc.tabSurfaceViews[tab.id] = surfaceView
 
             do {
-                let surfaceID = try newBridge.createSurface(
+                let surfaceID = try engine.createSurface(
                     in: surfaceView,
                     workingDirectory: snapshot.workingDirectory,
                     command: nil
                 )
                 viewModel.markRunning(surfaceID: surfaceID)
-                surfaceView.configureSurfaceIfNeeded(bridge: newBridge, surfaceID: surfaceID)
+                surfaceView.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
                 surfaceView.syncSizeWithTerminal()
                 wc.tabSurfaceMap[tab.id] = surfaceID
+                wc.registerTerminalEngine(engine, tabID: tab.id, surfaceID: surfaceID)
                 wc.wireHandlersForRestoredTab(tabID: tab.id, surfaceID: surfaceID)
             } catch {
                 NSLog("[AppDelegate] Failed to create surface for tab %d during theme switch: %@",
@@ -1239,7 +1322,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let controller = MainWindowController(
             bridge: bridge,
-            configService: configService
+            configService: configService,
+            terminalEngineFactory: { [weak self] preference in
+                self?.makeInitializedTerminalEngine(preference: preference)
+            }
         )
         configureSharedServices(for: controller, registerWindow: true)
 
@@ -1547,6 +1633,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let controller = focusedControllerProvider() else { return nil }
                     let workingDirectory = directoryPath.map(URL.init(fileURLWithPath:))
                     controller.createTab(workingDirectory: workingDirectory)
+                    guard let newTabID = controller.tabManager.activeTabID,
+                          let tab = controller.tabManager.tab(for: newTabID) else {
+                        return nil
+                    }
+                    return (id: newTabID.rawValue.uuidString, title: tab.displayTitle)
+                }
+            },
+            tabCreateWithEngineProviderOverride: { directoryPath, engineValue in
+                syncOnMainActor {
+                    guard let controller = focusedControllerProvider() else { return nil }
+                    let workingDirectory = directoryPath.map(URL.init(fileURLWithPath:))
+                    let preference = engineValue.flatMap(TerminalEnginePreference.init(cliValue:))
+                    controller.createTab(
+                        workingDirectory: workingDirectory,
+                        terminalEnginePreference: preference
+                    )
                     guard let newTabID = controller.tabManager.activeTabID,
                           let tab = controller.tabManager.tab(for: newTabID) else {
                         return nil
@@ -1966,21 +2068,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // V4: Send text — write text to the active terminal's PTY.
             sendTextProvider: { text in
                 syncOnMainActor {
-                    guard let delegate = delegateRef.value,
-                          let bridge = delegate.bridge,
-                          let wc = focusedControllerProvider(),
+                    guard let wc = focusedControllerProvider(),
                           let surfaceView = wc.focusedSplitSurfaceView,
                           let surfaceID = surfaceView.terminalViewModel?.surfaceID else { return false }
-                    bridge.sendText(text, to: surfaceID)
+                    wc.terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
                     return true
                 }
             },
             // V4: Send key — send a named key to the active terminal.
             sendKeyProvider: { keyName in
                 syncOnMainActor {
-                    guard let delegate = delegateRef.value,
-                          let bridge = delegate.bridge,
-                          let wc = focusedControllerProvider(),
+                    guard let wc = focusedControllerProvider(),
                           let surfaceView = wc.focusedSplitSurfaceView,
                           let surfaceID = surfaceView.terminalViewModel?.surfaceID else { return false }
                     let sequence: String?
@@ -2012,15 +2110,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     default:                  sequence = nil
                     }
                     guard let seq = sequence else { return false }
-                    bridge.sendText(seq, to: surfaceID)
+                    wc.terminalEngine(for: surfaceID).sendText(seq, to: surfaceID)
                     return true
                 }
             },
             // V4: SSH — open SSH in a new tab.
             sshProvider: { destination, port, identityFile in
                 syncOnMainActor {
-                    guard let delegate = delegateRef.value,
-                          let wc = focusedControllerProvider() else { return nil }
+                    guard let wc = focusedControllerProvider() else { return nil }
                     var sshArgs = ["ssh"]
                     if let port = port { sshArgs += ["-p", "\(port)"] }
                     if let identity = identityFile { sshArgs += ["-i", identity] }
@@ -2034,14 +2131,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     wc.tabManager.setActive(id: newTab.id)
 
                     let targetTabID = newTab.id
-                    Task { @MainActor [weak wc, weak delegate] in
+                    Task { @MainActor [weak wc] in
                         try? await Task.sleep(for: .milliseconds(500))
-                        guard let bridge = delegate?.bridge,
-                              let wc = wc,
+                        guard let wc = wc,
                               wc.tabManager.activeTabID == targetTabID else { return }
                         let surfaceID = wc.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
                         guard let sid = surfaceID else { return }
-                        bridge.sendText("\(sshCommand)\r", to: sid)
+                        wc.terminalEngine(for: sid).sendText("\(sshCommand)\r", to: sid)
                     }
                     return (id: newTab.id.rawValue.uuidString, title: destination)
                 }

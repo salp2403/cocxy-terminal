@@ -42,7 +42,7 @@ final class CocxyMakeTabCommand: NSScriptCommand, @unchecked Sendable {
             if let cmd = commandText, !cmd.isEmpty,
                let activeID = windowController.tabManager.activeTabID,
                let surfaceID = windowController.tabSurfaceMap[activeID] {
-                windowController.bridge.sendText(cmd + "\r", to: surfaceID)
+                windowController.terminalEngine(for: surfaceID).sendText(cmd + "\r", to: surfaceID)
             }
 
             // Return the scriptable tab object for the new tab.
@@ -80,7 +80,7 @@ final class CocxyRunCommandCommand: NSScriptCommand, @unchecked Sendable {
                 return "No active terminal"
             }
 
-            windowController.bridge.sendText(text + "\r", to: surfaceID)
+            windowController.terminalEngine(for: surfaceID).sendText(text + "\r", to: surfaceID)
             return nil
         }
 
