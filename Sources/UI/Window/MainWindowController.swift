@@ -147,6 +147,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// replace it during theme switching.
     var bridge: any TerminalEngine
 
+    /// Factory for explicit per-tab engine overrides. Nil in tests and in
+    /// early bootstrap paths, in which case overrides safely fall back to the
+    /// default bridge.
+    var terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)?
+
     /// Optional reference to the configuration service.
     let configService: ConfigService?
 
@@ -173,6 +178,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Maps tab IDs to their associated surface IDs.
     /// Internal access for session restoration in AppDelegate.
     var tabSurfaceMap: [TabID: SurfaceID] = [:]
+
+    /// Maps tabs and surfaces that use an engine different from `bridge`.
+    /// The default bridge is intentionally not stored here so theme switching
+    /// can replace `bridge` without stale references in background tabs.
+    var tabTerminalEngines: [TabID: any TerminalEngine] = [:]
+    var surfaceTerminalEngines: [SurfaceID: any TerminalEngine] = [:]
 
     /// Maps tab IDs to their terminal host views.
     /// Internal access for session restoration in AppDelegate.
@@ -575,8 +586,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// - Parameters:
     ///   - bridge: The terminal engine bridge used for surface creation.
     ///   - configService: Optional configuration service for reading window settings.
-    init(bridge: any TerminalEngine, configService: ConfigService? = nil, tabManager: TabManager? = nil) {
+    init(
+        bridge: any TerminalEngine,
+        configService: ConfigService? = nil,
+        tabManager: TabManager? = nil,
+        terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)? = nil
+    ) {
         self.bridge = bridge
+        self.terminalEngineFactory = terminalEngineFactory
         self.configService = configService
         self.tabManager = tabManager ?? TabManager()
         self.terminalViewModel = TerminalViewModel(engine: bridge)
@@ -1344,8 +1361,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             tab.sshSession = event.sshSession
             tab.lastActivityAt = Date()
         }
-        if let cocxyBridge = bridge.cocxyCoreBridge,
-           let surfaceID = surfaceIDs(for: event.tabID).first {
+        if let surfaceID = surfaceIDs(for: event.tabID).first,
+           let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge {
             cocxyBridge.syncCurrentStreamWithForegroundProcess(pid: event.pid, for: surfaceID)
         }
         tabBarViewModel?.syncWithManager()
@@ -1744,7 +1761,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// host also notifies the engine explicitly on key-window transitions.
     func synchronizeActiveSurfaceFocusState(focused: Bool) {
         guard let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID else { return }
-        bridge.notifyFocus(focused, for: surfaceID)
+        terminalEngine(for: surfaceID).notifyFocus(focused, for: surfaceID)
     }
 
     /// Returns every terminal view model associated with a tab, including split panes.
@@ -1821,14 +1838,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             viewModel.setCurrentFontSize(size)
         }
 
-        if let cocxyBridge = bridge.cocxyCoreBridge {
-            cocxyBridge.applyFont(
-                family: effective.appearance.fontFamily,
-                size: fontSize,
-                to: surfaceIDs(for: tabID)
-            )
-        } else {
-            for surfaceView in surfaceViewsForTab(tabID) {
+        for surfaceID in surfaceIDs(for: tabID) {
+            if let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge {
+                cocxyBridge.applyFont(
+                    family: effective.appearance.fontFamily,
+                    size: fontSize,
+                    to: [surfaceID]
+                )
+            } else if let surfaceView = surfaceView(for: surfaceID) {
                 surfaceView.updateInteractionMetrics()
                 surfaceView.requestImmediateRedraw()
             }

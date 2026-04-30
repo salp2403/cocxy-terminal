@@ -38,6 +38,7 @@ extension MainWindowController {
                 tabSurfaceViews[firstTabID] = surfaceView
                 tabViewModels[firstTabID] = terminalViewModel
                 displayedTabID = firstTabID
+                registerTerminalEngine(bridge, tabID: firstTabID, surfaceID: surfaceID)
 
                 registerSurfaceWithProcessMonitor(surfaceID, tabID: firstTabID)
                 wireSurfaceHandlers(
@@ -54,7 +55,7 @@ extension MainWindowController {
     }
 
     func registerSurfaceWithProcessMonitor(_ surfaceID: SurfaceID, tabID: TabID) {
-        guard let registration = bridge.processMonitorRegistration(for: surfaceID) else {
+        guard let registration = terminalEngine(for: surfaceID).processMonitorRegistration(for: surfaceID) else {
             return
         }
         processMonitor?.registerTab(
@@ -86,7 +87,9 @@ extension MainWindowController {
         let capturedTabID = tabID
         let capturedSurfaceID = surfaceID
 
-        bridge.setOSCHandler(for: surfaceID) { [weak self] notification in
+        let surfaceEngine = terminalEngine(for: surfaceID)
+
+        surfaceEngine.setOSCHandler(for: surfaceID) { [weak self] notification in
             Task { @MainActor in
                 self?.handleOSCNotification(
                     notification,
@@ -119,7 +122,7 @@ extension MainWindowController {
             engine: engine
         )
 
-        bridge.setOutputHandler(
+        surfaceEngine.setOutputHandler(
             for: surfaceID
         ) { [weak buffer, weak outputDispatcher] data in
             // Fan the chunk to the thread-safe detectors on the per-
@@ -307,7 +310,8 @@ extension MainWindowController {
         // could reuse the slot (unlikely with UUID-based SurfaceIDs, but
         // defensive in case session restore replays the same ID).
         injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
-        bridge.destroySurface(surfaceID)
+        terminalEngine(for: surfaceID).destroySurface(surfaceID)
+        clearTerminalEngineTracking(surfaceID: surfaceID)
         tabViewModels[tabID]?.markStopped()
     }
 
@@ -381,10 +385,12 @@ extension MainWindowController {
             // over a full window teardown.
             injectedAgentDetectionEngine?.clearSurface(surfaceID)
             injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
-            bridge.destroySurface(surfaceID)
+            terminalEngine(for: surfaceID).destroySurface(surfaceID)
+            clearTerminalEngineTracking(surfaceID: surfaceID)
         }
 
         tabSurfaceMap.removeAll()
+        resetTerminalEngineRouting()
         tabSurfaceViews.removeAll()
         tabViewModels.removeAll()
         tabOutputBuffers.removeAll()

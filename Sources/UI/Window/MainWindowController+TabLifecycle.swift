@@ -17,17 +17,24 @@ extension MainWindowController {
     /// - Parameter workingDirectory: Directory for the new terminal.
     ///   Defaults to the active tab's directory or home.
     @discardableResult
-    func createTab(workingDirectory: URL? = nil) -> TabID {
+    func createTab(
+        workingDirectory: URL? = nil,
+        terminalEnginePreference: TerminalEnginePreference? = nil
+    ) -> TabID {
         let dir = workingDirectory
             ?? tabManager.activeTab?.workingDirectory
             ?? FileManager.default.homeDirectoryForCurrentUser
-        let newTab = tabManager.addTab(workingDirectory: dir)
+        let newTab = tabManager.addTab(
+            workingDirectory: dir,
+            terminalEnginePreference: terminalEnginePreference
+        )
+        let engine = makeTerminalEngine(for: terminalEnginePreference)
 
-        let viewModel = TerminalViewModel(engine: bridge)
+        let viewModel = TerminalViewModel(engine: engine)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         viewModel.setDefaultFontSize(configuredFontSize)
-        let surfaceView = TerminalHostViewFactory.make(viewModel: viewModel, engine: bridge)
+        let surfaceView = TerminalHostViewFactory.make(viewModel: viewModel, engine: engine)
 
         tabViewModels[newTab.id] = viewModel
         tabSurfaceViews[newTab.id] = surfaceView
@@ -36,7 +43,8 @@ extension MainWindowController {
             for: newTab.id,
             in: surfaceView,
             viewModel: viewModel,
-            workingDirectory: dir
+            workingDirectory: dir,
+            engine: engine
         )
 
         // Register this session with the multi-window registry so other
@@ -105,7 +113,7 @@ extension MainWindowController {
               let surfaceID = tabSurfaceMap[tabID] else {
             return
         }
-        bridge.sendText(Self.changeDirectoryCommand(for: worktreeRoot), to: surfaceID)
+        terminalEngine(for: surfaceID).sendText(Self.changeDirectoryCommand(for: worktreeRoot), to: surfaceID)
     }
 
     /// Closes the tab with the given ID, showing a confirmation alert
@@ -178,7 +186,8 @@ extension MainWindowController {
             // surface's agent state does not outlive its terminal.
             injectedAgentDetectionEngine?.clearSurface(surfaceID)
             injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
-            bridge.destroySurface(surfaceID)
+            terminalEngine(for: surfaceID).destroySurface(surfaceID)
+            clearTerminalEngineTracking(surfaceID: surfaceID)
         }
         tabViewModels[tabID]?.markStopped()
 
@@ -211,7 +220,8 @@ extension MainWindowController {
             // underlying terminal.
             injectedAgentDetectionEngine?.clearSurface(surfaceID)
             injectedPerSurfaceStore?.reset(surfaceID: surfaceID)
-            bridge.destroySurface(surfaceID)
+            terminalEngine(for: surfaceID).destroySurface(surfaceID)
+            clearTerminalEngineTracking(surfaceID: surfaceID)
             tabSplitVMs[surfaceID]?.markStopped()
         }
 
@@ -227,6 +237,7 @@ extension MainWindowController {
         tabSurfaceViews.removeValue(forKey: tabID)
         tabViewModels.removeValue(forKey: tabID)
         tabSurfaceMap.removeValue(forKey: tabID)
+        clearTerminalEngineTracking(tabID: tabID)
 
         // Clean up per-tab resources to prevent memory leaks.
         tabOutputBuffers.removeValue(forKey: tabID)
@@ -359,18 +370,21 @@ extension MainWindowController {
         for tabID: TabID,
         in surfaceView: TerminalHostView,
         viewModel: TerminalViewModel,
-        workingDirectory: URL?
+        workingDirectory: URL?,
+        engine providedEngine: (any TerminalEngine)? = nil
     ) {
+        let engine = providedEngine ?? terminalEngine(for: tabID)
         do {
-            let surfaceID = try bridge.createSurface(
+            let surfaceID = try engine.createSurface(
                 in: surfaceView,
                 workingDirectory: workingDirectory,
                 command: nil
             )
             viewModel.markRunning(surfaceID: surfaceID)
-            surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+            surfaceView.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
             surfaceView.syncSizeWithTerminal()
             tabSurfaceMap[tabID] = surfaceID
+            registerTerminalEngine(engine, tabID: tabID, surfaceID: surfaceID)
 
             registerSurfaceWithProcessMonitor(surfaceID, tabID: tabID)
             wireSurfaceHandlers(

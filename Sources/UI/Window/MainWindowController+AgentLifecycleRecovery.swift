@@ -120,7 +120,7 @@ extension MainWindowController {
         let initialState = store.state(for: surfaceID).agentState
         guard initialState != .idle else { return }
 
-        guard let registration = bridge.processMonitorRegistration(for: surfaceID) else {
+        guard let registration = terminalEngine(for: surfaceID).processMonitorRegistration(for: surfaceID) else {
             return
         }
 

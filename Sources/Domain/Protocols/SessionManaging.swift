@@ -166,6 +166,8 @@ struct TabState: Codable, Sendable {
     let worktreeOriginRepo: URL?
     /// Cached branch name of the worktree at save time.
     let worktreeBranch: String?
+    /// Optional per-tab engine override used by daemon dogfood tabs.
+    let terminalEnginePreference: TerminalEnginePreference?
 
     init(
         id: TabID,
@@ -176,7 +178,8 @@ struct TabState: Codable, Sendable {
         worktreeID: String? = nil,
         worktreeRoot: URL? = nil,
         worktreeOriginRepo: URL? = nil,
-        worktreeBranch: String? = nil
+        worktreeBranch: String? = nil,
+        terminalEnginePreference: TerminalEnginePreference? = nil
     ) {
         self.id = id
         self.sessionID = sessionID
@@ -187,6 +190,7 @@ struct TabState: Codable, Sendable {
         self.worktreeRoot = worktreeRoot
         self.worktreeOriginRepo = worktreeOriginRepo
         self.worktreeBranch = worktreeBranch
+        self.terminalEnginePreference = terminalEnginePreference
     }
 
     init(from decoder: Decoder) throws {
@@ -204,6 +208,10 @@ struct TabState: Codable, Sendable {
         worktreeRoot = try container.decodeIfPresent(URL.self, forKey: .worktreeRoot)
         worktreeOriginRepo = try container.decodeIfPresent(URL.self, forKey: .worktreeOriginRepo)
         worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
+        terminalEnginePreference = try container.decodeIfPresent(
+            TerminalEnginePreference.self,
+            forKey: .terminalEnginePreference
+        )
     }
 }
 

@@ -117,7 +117,7 @@ extension MainWindowController {
         // terminal handle. Non-Cocxy engines no-op with a UI beep, matching
         // the existing optional-chain failure behavior.
         guard let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
-              let cocxyBridge = bridge.cocxyCoreBridge,
+              let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge,
               let state = cocxyBridge.surfaceState(for: surfaceID) else {
             NSSound.beep()
             return false

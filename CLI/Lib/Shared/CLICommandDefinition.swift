@@ -358,7 +358,7 @@ public enum CLICommand: String, CaseIterable {
         switch self {
         // Original commands
         case .notify: return "cocxy notify <message>"
-        case .newTab: return "cocxy new-tab [--dir <path>]"
+        case .newTab: return "cocxy new-tab [--dir <path>] [--engine system|in-process|daemon]"
         case .listTabs: return "cocxy list-tabs"
         case .focusTab: return "cocxy focus-tab <id>"
         case .closeTab: return "cocxy close-tab <id>"
@@ -435,7 +435,7 @@ public enum CLICommand: String, CaseIterable {
         case .browserListTabs: return "cocxy browser tabs"
 
         // Window Management
-        case .windowNew: return "cocxy window new"
+        case .windowNew: return "cocxy window new [--engine system|in-process|daemon]"
         case .windowList: return "cocxy window list"
         case .windowFocus: return "cocxy window focus <index>"
         case .windowClose: return "cocxy window close [<index>]"

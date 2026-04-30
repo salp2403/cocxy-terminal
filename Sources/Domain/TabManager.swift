@@ -85,7 +85,10 @@ final class TabManager: ObservableObject, TabActivating {
     ///   Defaults to the user's home directory.
     /// - Returns: The newly created tab.
     @discardableResult
-    func addTab(workingDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> Tab {
+    func addTab(
+        workingDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        terminalEnginePreference: TerminalEnginePreference? = nil
+    ) -> Tab {
         // Deactivate the current active tab.
         deactivateCurrentTab()
 
@@ -94,7 +97,8 @@ final class TabManager: ObservableObject, TabActivating {
 
         var newTab = Tab(
             workingDirectory: workingDirectory,
-            gitBranch: branch
+            gitBranch: branch,
+            terminalEnginePreference: terminalEnginePreference
         )
         newTab.isActive = true
 
