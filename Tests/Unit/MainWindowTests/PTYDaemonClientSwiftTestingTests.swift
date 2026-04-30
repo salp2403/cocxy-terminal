@@ -488,6 +488,81 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(frameRevisions.withValue { $0.isEmpty } == false)
     }
 
+    @Test("real helper crash marks the live surface stalled and reconnects under the hood")
+    func realHelperCrashMarksSurfaceStalledAndReconnects() throws {
+        let helperURL = try realHelperExecutableURL()
+        let connection = PTYDaemonProcessConnection(executableURL: helperURL, timeoutSeconds: 3)
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+
+        let surface = try client.createSurface(
+            in: NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 120)),
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            command: "/bin/sh"
+        )
+        let originalPid = connection.underlyingProcessIdentifierForTesting
+        #expect(originalPid != nil)
+
+        // Simulate an unexpected daemon termination (SIGKILL).
+        connection.killUnderlyingProcessForTesting()
+
+        // The next surface request triggers the client's reconnect path.
+        // The new helper has no record of the prior surface, so reattach
+        // returns ok=false and the surface is marked stalled.
+        client.sendText("printf 'after-crash\\n'\n", to: surface)
+
+        #expect(client.isSurfaceStalledForTesting(surface) == true)
+
+        let recoveredPid = connection.underlyingProcessIdentifierForTesting
+        #expect(recoveredPid != nil)
+        #expect(recoveredPid != originalPid)
+
+        // The reconnected helper still serves fresh surface lifecycles.
+        let replacement = try client.createSurface(
+            in: NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 120)),
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            command: "/bin/sh"
+        )
+        #expect(replacement != surface)
+        client.destroySurface(replacement)
+    }
+
+    @Test("client restart spins up a fresh helper without inheriting prior surfaces")
+    func clientRestartConnectsToFreshHelperWithoutPriorSurfaces() throws {
+        let helperURL = try realHelperExecutableURL()
+
+        // First lifecycle: create a surface, then drop the client. Process
+        // connection's deinit terminates the helper.
+        let firstSurface: SurfaceID = try {
+            let connection = PTYDaemonProcessConnection(executableURL: helperURL, timeoutSeconds: 3)
+            let client = PTYDaemonClient(connection: connection)
+            try client.initialize(config: testConfig())
+            let id = try client.createSurface(
+                in: NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 120)),
+                workingDirectory: URL(fileURLWithPath: "/tmp"),
+                command: "/bin/sh"
+            )
+            client.sendText("printf 'phase-one\\n'\n", to: id)
+            // Tear down explicitly so the helper exits before phase two
+            // even if ARC keeps the closure alive briefly.
+            client.destroySurface(id)
+            return id
+        }()
+
+        // Second lifecycle: simulate a relaunched app. The new connection
+        // spawns its own helper subprocess and gets a different surface id.
+        let connection2 = PTYDaemonProcessConnection(executableURL: helperURL, timeoutSeconds: 3)
+        let client2 = PTYDaemonClient(connection: connection2)
+        try client2.initialize(config: testConfig())
+        let secondSurface = try client2.createSurface(
+            in: NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 120)),
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            command: "/bin/sh"
+        )
+        #expect(secondSurface != firstSurface)
+        client2.destroySurface(secondSurface)
+    }
+
     private func terminalSurfaceHello() -> PTYDaemonHello {
         PTYDaemonHello(
             version: "dev",

@@ -148,8 +148,45 @@ final class PTYDaemonProcessConnection: PTYDaemonClientConnection {
         try ensureProcessRunning()
     }
 
+    /// Process identifier of the live helper, or `nil` when the connection
+    /// is not currently bound to a running process. Test-only seam used by
+    /// crash-recovery integration tests; production code never branches on
+    /// this value.
+    var underlyingProcessIdentifierForTesting: Int32? {
+        guard let process, process.isRunning else { return nil }
+        return process.processIdentifier
+    }
+
+    /// Kills the helper process abruptly, leaving the connection in a state
+    /// that mimics an unexpected daemon termination. The next `send` call
+    /// will detect the broken pipe and trigger the connection's reconnect
+    /// flow. Test-only seam.
+    func killUnderlyingProcessForTesting() {
+        guard let pid = underlyingProcessIdentifierForTesting else { return }
+        kill(pid, SIGKILL)
+        // Drain the process exit so subsequent `isRunning` checks reflect
+        // the kill. We deliberately do not call `resetProcess()` here so
+        // tests can observe the half-broken state until the client triggers
+        // reconnect itself.
+        process?.waitUntilExit()
+    }
+
     private func ensureProcessRunning() throws {
         if process?.isRunning == true { return }
+
+        // The connection had a helper before but it died (crash, OOM kill,
+        // user-initiated SIGKILL). Surface the drop to the client instead of
+        // silently relaunching: silent relaunch leaks `liveSurfaces` whose
+        // state lives in the previous helper. The client's
+        // `sendSurfaceRequest` catches this throw and runs the explicit
+        // reconnect-and-reattach path, which marks orphaned surfaces stalled.
+        if process != nil {
+            resetProcess()
+            throw TerminalEngineError.initializationFailed(
+                reason: "PTY daemon transport was dropped"
+            )
+        }
+
         resetProcess()
 
         let process = Process()
