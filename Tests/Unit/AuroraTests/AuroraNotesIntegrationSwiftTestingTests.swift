@@ -26,10 +26,17 @@ struct AuroraNotesIntegrationSwiftTestingTests {
     /// Builds a `MainWindowController` whose `ConfigService` carries the
     /// supplied `[notes]` section. Other sections fall back to defaults
     /// so the test stays focused on the notes wiring.
-    private func makeController(notesEnabled: Bool) -> MainWindowController {
+    private func makeController(
+        notesEnabled: Bool,
+        storageDir: String? = nil
+    ) -> MainWindowController {
+        let storageLine = storageDir.map {
+            #"storage-dir = "\#($0.replacingOccurrences(of: "\"", with: "\\\""))""#
+        } ?? ""
         let toml = """
         [notes]
         enabled = \(notesEnabled)
+        \(storageLine)
         """
         let provider = InMemoryNotesConfigProvider(content: toml)
         let service = ConfigService(fileProvider: provider)
@@ -253,6 +260,43 @@ struct AuroraNotesIntegrationSwiftTestingTests {
         mainController.openNote(workspaceIDRaw: "absent000abc", noteIDRaw: "note")
 
         #expect(mainController.isNotesVisible == false)
+    }
+
+    @Test("openNote selects immediately when the visible overlay already has the target workspace loaded so sidebar taps do not wait on a redundant disk reload")
+    func openNoteSelectsAlreadyLoadedVisibleWorkspaceSynchronously() async throws {
+        let storageRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aurora-open-note-storage-\(UUID().uuidString)", isDirectory: true)
+        let workspaceDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aurora-open-note-workspace-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: storageRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: workspaceDir, withIntermediateDirectories: true)
+
+        let workspaceID = NoteWorkspaceID(workspaceRoot: workspaceDir)
+        let store = NoteStore(storageRoot: storageRoot, autoSaveInterval: 0)
+        let first = try await store.create(in: workspaceID, body: "First note")
+        let second = try await store.create(in: workspaceID, body: "Second note")
+        let viewModel = NotesViewModel(
+            store: store,
+            resolver: DefaultNoteWorkspaceResolver(),
+            searchEngine: NoteSearchGrep(store: store)
+        )
+        await viewModel.load(directory: workspaceDir)
+        viewModel.selectNote(first)
+
+        let mainController = makeController(
+            notesEnabled: true,
+            storageDir: storageRoot.path
+        )
+        _ = mainController.tabManager.addTab(workingDirectory: workspaceDir)
+        mainController.notesViewModel = viewModel
+        mainController.isNotesVisible = true
+
+        mainController.openNote(
+            workspaceIDRaw: workspaceID.rawValue,
+            noteIDRaw: second.id.uuidString
+        )
+
+        #expect(mainController.notesViewModel?.selectedNote?.id == second.id)
     }
 
     private func waitForMap(

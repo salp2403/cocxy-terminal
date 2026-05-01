@@ -314,11 +314,17 @@ extension MainWindowController {
             _ = focusTab(id: targetTab.id)
         }
 
+        let viewModel = resolveNotesViewModel(config: config)
+        if isNotesVisible,
+           viewModel.workspace?.workspaceID.rawValue == workspaceIDRaw,
+           viewModel.selectNote(byRawID: noteIDRaw) {
+            return
+        }
+
         if !isNotesVisible {
             showNotes()
         }
 
-        let viewModel = resolveNotesViewModel(config: config)
         Task { [weak self, weak viewModel] in
             guard let self, let viewModel else { return }
             await self.loadNotesForVisibleTab(using: viewModel)

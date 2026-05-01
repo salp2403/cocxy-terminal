@@ -866,6 +866,9 @@ extension Design {
     /// expansion state, click routing) flows through inputs so the
     /// view stays previewable and unit-testable in isolation.
     struct NotesSectionView: View {
+        static let countBadgeMinimumWidth: CGFloat = 18
+        static let noteRowMinimumHitHeight: CGFloat = 28
+
         let summary: AuroraWorkspaceNotesSummary
         let isExpanded: Bool
         let onToggleExpansion: () -> Void
@@ -899,9 +902,7 @@ extension Design {
                         .tracking(0.6)
                         .textCase(.uppercase)
                         .foregroundStyle(palette.textLow.resolvedColor())
-                    Text(verbatim: "\(summary.count)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(palette.textDim.resolvedColor())
+                    countBadge(summary.count)
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
@@ -915,6 +916,24 @@ extension Design {
             .buttonStyle(.plain)
             .accessibilityLabel("Notes — \(summary.count) note\(summary.count == 1 ? "" : "s")")
             .accessibilityHint(isExpanded ? "Collapse notes list" : "Expand notes list")
+        }
+
+        private func countBadge(_ count: Int) -> some View {
+            Text(verbatim: "\(count)")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(palette.textHigh.resolvedColor())
+                .frame(minWidth: Self.countBadgeMinimumWidth)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(palette.accentSoft.resolvedColor())
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(palette.accent.resolvedColor().opacity(0.30), lineWidth: 0.7)
+                )
+                .accessibilityHidden(true)
         }
 
         private func noteRow(_ row: AuroraNoteRow) -> some View {
@@ -936,11 +955,18 @@ extension Design {
                         .font(.system(size: 9.5, design: .monospaced))
                         .foregroundStyle(palette.textDim.resolvedColor())
                 }
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: Self.noteRowMinimumHitHeight,
+                    alignment: .leading
+                )
                 .padding(.horizontal, Spacing.xSmall)
                 .padding(.vertical, 4)
-                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
             .accessibilityLabel("Open note: \(row.title)")
         }
     }

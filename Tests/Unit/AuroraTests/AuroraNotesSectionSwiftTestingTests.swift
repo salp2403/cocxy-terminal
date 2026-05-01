@@ -116,6 +116,12 @@ struct AuroraNotesSectionSwiftTestingTests {
         #expect(filtered.sessions.isEmpty)
     }
 
+    @Test("sidebar notes rows and count badges keep usable hit and visibility bounds")
+    func notesSectionRowsAndBadgesStayReadableAndClickable() {
+        #expect(Design.NotesSectionView.noteRowMinimumHitHeight >= 28)
+        #expect(Design.NotesSectionView.countBadgeMinimumWidth >= 18)
+    }
+
     // MARK: - Controller publishers
 
     @Test("notesByWorkspace defaults to empty so a fresh controller renders the sidebar without any notes section")

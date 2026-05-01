@@ -18,6 +18,12 @@ struct NotesOverlayViewSwiftTestingTests {
         #expect(NotesOverlayView.maximumPanelWidth <= 900)
     }
 
+    @Test("note rows and count badges keep usable hit and visibility bounds")
+    func noteRowsAndCountBadgesStayReadableAndClickable() {
+        #expect(NotesOverlayView.noteRowMinimumHitHeight >= 44)
+        #expect(NotesOverlayView.countBadgeMinimumWidth >= 20)
+    }
+
     @Test("layout switches to stacked when the panel is compact so list and editor do not crush each other")
     func compactPanelUsesStackedLayout() {
         let compactWidth = NotesOverlayView.compactLayoutThreshold - 1

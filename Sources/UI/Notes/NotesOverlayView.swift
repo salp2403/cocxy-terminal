@@ -14,6 +14,8 @@ struct NotesOverlayView: View {
     static let minimumPanelWidth: CGFloat = 420
     static let maximumPanelWidth: CGFloat = 760
     static let compactLayoutThreshold: CGFloat = 620
+    static let countBadgeMinimumWidth: CGFloat = 22
+    static let noteRowMinimumHitHeight: CGFloat = 52
     /// Corner radius applied to the leading edge of the right-docked
     /// panel. The trailing edge stays flat because the panel hugs the
     /// window's right border; rounding both sides would produce a
@@ -339,14 +341,18 @@ struct NotesOverlayView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: Self.noteRowMinimumHitHeight)
             .padding(.horizontal, 9)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(viewModel.selectedNote?.id == note.id ? Color.accentColor.opacity(0.18) : Color.clear)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .accessibilityLabel(note.derivedTitle)
     }
 
@@ -372,14 +378,19 @@ struct NotesOverlayView: View {
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: Self.noteRowMinimumHitHeight)
             .padding(.horizontal, 9)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color.primary.opacity(0.04))
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .accessibilityLabel(result.title)
     }
 
     private func emptyState(title: String, message: String) -> some View {
@@ -422,13 +433,29 @@ struct NotesOverlayView: View {
                     .controlSize(.small)
                     .scaleEffect(0.7)
             } else {
-                Text(showingSearch ? "\(viewModel.searchResults.count)" : "\(viewModel.notes.count)")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                countBadge(showingSearch ? viewModel.searchResults.count : viewModel.notes.count)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private func countBadge(_ count: Int) -> some View {
+        Text(verbatim: "\(count)")
+            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.primary)
+            .frame(minWidth: Self.countBadgeMinimumWidth)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.primary.opacity(0.08))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.7)
+            )
+            .accessibilityLabel("\(count) notes")
     }
 
     private func stackedListHeight(for availableHeight: CGFloat) -> CGFloat {
