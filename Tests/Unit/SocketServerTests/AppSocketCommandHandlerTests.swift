@@ -1696,6 +1696,36 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: outputURL, encoding: .utf8), "existing")
     }
 
+    func test_skillList_returnsLocalSkillsAsJSONContent() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try writeSkill(id: "review-pr", name: "Review PR", summary: "Review a local diff.", in: directory)
+
+        let registry = SkillRegistry(
+            directories: [SkillDirectory(url: directory, source: .builtIn)]
+        )
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            skillRegistryProvider: { registry }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "skill-list-1",
+            command: "skill-list",
+            params: nil
+        ))
+
+        XCTAssertTrue(response.success)
+        let content = try XCTUnwrap(response.data?["content"])
+        let data = try XCTUnwrap(content.data(using: .utf8))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["count"] as? Int, 1)
+        let skills = try XCTUnwrap(json["skills"] as? [[String: Any]])
+        XCTAssertEqual(skills.first?["id"] as? String, "review-pr")
+        XCTAssertEqual(skills.first?["source"] as? String, "built-in")
+    }
+
     func test_v4Commands_withoutProviders_returnFailure() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let commands = [
@@ -1729,5 +1759,20 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             withIntermediateDirectories: true
         )
         return url
+    }
+
+    private func writeSkill(id: String, name: String, summary: String, in root: URL) throws {
+        let directory = root.appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try """
+        ---
+        id: \(id)
+        name: \(name)
+        description: \(summary)
+        ---
+        # \(name)
+
+        Use only local repository evidence.
+        """.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 }

@@ -60,6 +60,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         processRunner: any AgentProcessRunning = AgentProcessRunner(),
         terminalOutputProvider: (any AgentTerminalOutputProviding)? = nil,
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
+        skillRegistry: SkillRegistry? = nil,
         gitExecutableURL: URL = URL(fileURLWithPath: "/usr/bin/git"),
         shellExecutableURL: URL = URL(fileURLWithPath: "/bin/zsh"),
         maxFileBytes: Int = 1_000_000,
@@ -78,6 +79,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
             processRunner: processRunner,
             terminalOutputProvider: terminalOutputProvider,
             lspDiagnosticsProvider: lspDiagnosticsProvider,
+            skillRegistry: skillRegistry,
             gitExecutableURL: gitExecutableURL,
             maxFileBytes: maxFileBytes
         )
@@ -90,6 +92,8 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                  "list_directory",
                  "search_files",
                  "search_codebase",
+                 "list_skills",
+                 "use_skill",
                  "grep",
                  "git_status",
                  "git_diff",

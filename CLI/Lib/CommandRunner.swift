@@ -786,6 +786,9 @@ public struct CommandRunner {
                 ]
             )
 
+        case .skillList:
+            return CLISocketRequest(id: requestID, command: "skill-list", params: nil)
+
         case .worktreeAdd(let agent, let branch, let baseRef):
             var params: [String: String] = [:]
             if let agent { params["agent"] = agent }

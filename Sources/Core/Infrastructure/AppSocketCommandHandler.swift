@@ -194,6 +194,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Provides the plugin manager for plugin lifecycle commands.
     private let pluginManagerProvider: (() -> PluginManager?)?
 
+    /// Provides the local skill registry for `cocxy skill list`.
+    private let skillRegistryProvider: (@Sendable () -> SkillRegistry)?
+
     /// Dispatches a CLI notification through the notification pipeline.
     /// Called from `handleNotify(_:)` to deliver real notifications instead
     /// of silently returning "acknowledged".
@@ -428,6 +431,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         remoteConnectionManagerProvider: (() -> RemoteConnectionManager?)? = nil,
         remoteProfileStoreProvider: (() -> (any RemoteProfileStoring)?)? = nil,
         pluginManagerProvider: (() -> PluginManager?)? = nil,
+        skillRegistryProvider: (@Sendable () -> SkillRegistry)? = nil,
         notifyDispatcher: (@Sendable (String, String) -> Void)? = nil,
         tabDuplicateProvider: (@Sendable () -> (id: String, title: String)?)? = nil,
         tabPinProvider: (@Sendable (String?) -> (id: String, isPinned: Bool)?)? = nil,
@@ -495,6 +499,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.remoteConnectionManagerProvider = remoteConnectionManagerProvider
         self.remoteProfileStoreProvider = remoteProfileStoreProvider
         self.pluginManagerProvider = pluginManagerProvider
+        self.skillRegistryProvider = skillRegistryProvider
         self.notifyDispatcher = notifyDispatcher ?? { _, _ in }
         self.tabDuplicateProvider = tabDuplicateProvider
         self.tabPinProvider = tabPinProvider
@@ -855,6 +860,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handlePluginEnable(request)
         case .pluginDisable:
             return handlePluginDisable(request)
+        case .skillList:
+            return handleSkillList(request)
 
         // CLI notify: dispatch through the notification pipeline.
         case .notify:
@@ -1912,6 +1919,25 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .ok(id: request.id, data: ["plugin": pluginID, "status": "disabled"])
         }
         return .failure(id: request.id, error: resultMessage)
+    }
+
+    // MARK: - Skill Handlers
+
+    private func handleSkillList(_ request: SocketRequest) -> SocketResponse {
+        let registry = skillRegistryProvider?() ?? SkillRegistry.localDefault()
+        do {
+            let skills = try registry.loadSkills()
+            let snapshot = SkillListSnapshot(skills: skills)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(snapshot)
+            guard let content = String(data: data, encoding: .utf8) else {
+                return .failure(id: request.id, error: "Failed to encode skill list")
+            }
+            return .ok(id: request.id, data: ["content": content])
+        } catch {
+            return .failure(id: request.id, error: "Failed to load skills: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Remote Workspace Handlers

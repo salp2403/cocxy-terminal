@@ -1804,6 +1804,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             },
+            skillRegistryProvider: {
+                syncOnMainActor {
+                    let projectRoot: URL?
+                    if let controller = focusedControllerProvider(),
+                       let activeID = controller.visibleTabID ?? controller.tabManager.activeTabID,
+                       let tab = controller.tabManager.tab(for: activeID) {
+                        projectRoot = tab.worktreeRoot ?? tab.workingDirectory
+                    } else {
+                        projectRoot = nil
+                    }
+                    return SkillRegistry.localDefault(projectRoot: projectRoot)
+                }
+            },
             notifyDispatcher: { title, body in
                 syncOnMainActor {
                     guard let delegate = delegateRef.value,

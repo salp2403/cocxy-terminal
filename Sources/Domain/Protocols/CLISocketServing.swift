@@ -278,6 +278,8 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case notebookImport = "notebook-import"
     /// Export Cocxy notebook markdown to Jupyter nbformat.
     case notebookExport = "notebook-export"
+    /// List local built-in, user, and project skills.
+    case skillList = "skill-list"
 
     // MARK: - Session Management (v3)
 

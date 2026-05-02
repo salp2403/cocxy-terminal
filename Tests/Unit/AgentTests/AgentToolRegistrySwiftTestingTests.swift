@@ -19,18 +19,22 @@ struct AgentToolRegistrySwiftTestingTests {
             "git_status",
             "grep",
             "list_directory",
+            "list_skills",
             "read_file",
             "read_lsp_diagnostics",
             "read_terminal_output",
             "run_command",
             "search_codebase",
             "search_files",
+            "use_skill",
             "write_file",
         ])
         #expect(registry.descriptor(for: "read_file")?.capability == .read)
         #expect(registry.descriptor(for: "write_file")?.capability == .write)
         #expect(registry.descriptor(for: "run_command")?.capability == .command)
         #expect(registry.descriptor(for: "ask_user")?.capability == .userInteraction)
+        #expect(registry.descriptor(for: "list_skills")?.capability == .read)
+        #expect(registry.descriptor(for: "use_skill")?.capability == .read)
 
         let readFileSchema = try #require(registry.descriptor(for: "read_file")?.inputSchema)
         #expect(readFileSchema.required == ["path"])
@@ -46,6 +50,10 @@ struct AgentToolRegistrySwiftTestingTests {
         #expect(searchCodebaseSchema.required == ["query"])
         #expect(searchCodebaseSchema.properties["query"]?.type == .string)
         #expect(searchCodebaseSchema.properties["path"]?.type == .string)
+
+        let useSkillSchema = try #require(registry.descriptor(for: "use_skill")?.inputSchema)
+        #expect(useSkillSchema.required == ["id"])
+        #expect(useSkillSchema.properties["id"]?.type == .string)
     }
 
     @Test("registry rejects duplicate tool identifiers")

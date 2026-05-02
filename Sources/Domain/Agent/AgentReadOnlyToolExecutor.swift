@@ -156,12 +156,14 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
     let maxFileBytes: Int
     let defaultLimit: Int
     let maxLimit: Int
+    let skillRegistry: SkillRegistry
 
     init(
         workspace: AgentWorkspace,
         processRunner: any AgentProcessRunning = AgentProcessRunner(),
         terminalOutputProvider: (any AgentTerminalOutputProviding)? = nil,
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
+        skillRegistry: SkillRegistry? = nil,
         gitExecutableURL: URL = URL(fileURLWithPath: "/usr/bin/git"),
         maxFileBytes: Int = 1_000_000,
         defaultLimit: Int = 50,
@@ -175,6 +177,7 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
         self.maxFileBytes = maxFileBytes
         self.defaultLimit = defaultLimit
         self.maxLimit = maxLimit
+        self.skillRegistry = skillRegistry ?? SkillRegistry.localDefault(projectRoot: workspace.rootURL)
     }
 
     func execute(_ call: AgentToolCall) async throws -> AgentToolResult {
@@ -188,6 +191,10 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
                 return try searchFiles(call)
             case "search_codebase":
                 return try searchCodebase(call)
+            case "list_skills":
+                return try listSkills(call)
+            case "use_skill":
+                return try useSkill(call)
             case "grep":
                 return try grep(call)
             case "git_status":
@@ -209,6 +216,8 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
             return failure(call, code: error.code, message: error.message)
         } catch let error as AgentReadOnlyToolError {
             return failure(call, code: error.code, message: error.message)
+        } catch let error as SkillError {
+            return failure(call, code: "skill_error", message: error.localizedDescription)
         } catch {
             return failure(call, code: "tool_execution_failed", message: String(describing: error))
         }
@@ -319,6 +328,40 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
                 "query": .string(response.query),
                 "mode": .string(response.mode.rawValue),
                 "results": .array(results),
+            ])
+        )
+    }
+
+    private func listSkills(_ call: AgentToolCall) throws -> AgentToolResult {
+        let entries = try skillRegistry.loadSkills().map { skill -> AgentJSONValue in
+            .object([
+                "id": .string(skill.id),
+                "name": .string(skill.name),
+                "description": .string(skill.summary),
+                "source": .string(skill.source.rawValue),
+            ])
+        }
+
+        return .success(
+            callID: call.id,
+            toolID: call.toolID,
+            content: .object([
+                "count": .number(Double(entries.count)),
+                "skills": .array(entries),
+            ])
+        )
+    }
+
+    private func useSkill(_ call: AgentToolCall) throws -> AgentToolResult {
+        let id = try requiredStringArgument("id", in: call).lowercased()
+        let invocation = try SkillInvoker(registry: skillRegistry).makeInvocation(skillIDs: [id])
+
+        return .success(
+            callID: call.id,
+            toolID: call.toolID,
+            content: .object([
+                "skillIDs": .array(invocation.skillIDs.map { .string($0) }),
+                "instructions": .string(invocation.instructions),
             ])
         )
     }

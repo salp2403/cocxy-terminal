@@ -453,6 +453,32 @@ final class CLIArgumentParserTests: XCTestCase {
         }
     }
 
+    func testParseSkillList() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["skill", "list"]),
+            .skillList
+        )
+    }
+
+    func testParseSkillListRejectsUnexpectedArgument() {
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse(["skill", "list", "--remote"])
+        ) { error in
+            guard let cliError = error as? CLIError else {
+                XCTFail("Expected CLIError, got \(error)")
+                return
+            }
+            XCTAssertEqual(
+                cliError,
+                .invalidArgument(
+                    command: "skill list",
+                    argument: "--remote",
+                    reason: "`skill list` takes no arguments."
+                )
+            )
+        }
+    }
+
     func testParseWindowNewWithoutEngine() throws {
         XCTAssertEqual(
             try CLIArgumentParser.parse(["window", "new"]),
@@ -741,6 +767,13 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.params?["output"], "/tmp/result.ipynb")
         XCTAssertEqual(request.params?["force"], "false")
     }
+
+    func testBuildSkillListRequest() {
+        let request = runner.buildRequest(from: .skillList)
+
+        XCTAssertEqual(request.command, "skill-list")
+        XCTAssertNil(request.params)
+    }
 }
 
 // MARK: - Output Formatter Tests
@@ -889,6 +922,22 @@ final class OutputFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(output, "Exported notebook to /tmp/result.ipynb.")
+    }
+
+    func testFormatSkillListResponseAsJSONContent() {
+        let content = """
+        {"count":1,"skills":[{"id":"review-pr","name":"Review PR","description":"Review a local pull request diff.","source":"built-in"}]}
+        """
+        let response = CLISocketResponse(
+            id: "skill-list",
+            success: true,
+            data: ["content": content],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(command: .skillList, response: response)
+        XCTAssertTrue(output.contains("\"id\" : \"review-pr\""))
+        XCTAssertTrue(output.contains("\"source\" : \"built-in\""))
     }
 
     func testFormatStatusIncludesCoreDiagnostics() {

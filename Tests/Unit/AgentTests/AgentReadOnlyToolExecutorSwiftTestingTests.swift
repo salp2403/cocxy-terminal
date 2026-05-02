@@ -283,6 +283,46 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         #expect(!resultPaths.contains("Generated/Ignored.swift"))
     }
 
+    @Test("list_skills and use_skill expose project skills to the agent")
+    func listSkillsAndUseSkillExposeProjectSkillsToAgent() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeProjectSkill(
+            id: "custom-agent-skill",
+            name: "Custom Agent Skill",
+            summary: "Project-specific agent guidance",
+            body: "Prefer project conventions and cite local files.",
+            in: root
+        )
+        let executor = AgentReadOnlyToolExecutor(workspace: AgentWorkspace(rootURL: root))
+
+        let listResult = try await executor.execute(AgentToolCall(
+            id: "call-list-skills",
+            toolID: "list_skills"
+        ))
+        let listContent = try contentObject(listResult)
+        let skills = try arrayValue(listContent["skills"])
+        let customSkill = try #require(skills.first { value in
+            guard case .object(let object) = value else { return false }
+            return object["id"]?.stringValue == "custom-agent-skill"
+        })
+        guard case .object(let customSkillObject) = customSkill else {
+            throw AgentReadOnlyToolExecutorTestError.missingObjectContent
+        }
+        #expect(customSkillObject["source"]?.stringValue == "project")
+
+        let useResult = try await executor.execute(AgentToolCall(
+            id: "call-use-skill",
+            toolID: "use_skill",
+            arguments: ["id": .string("custom-agent-skill")]
+        ))
+        let useContent = try contentObject(useResult)
+
+        #expect(useResult.status == .success)
+        #expect(useContent["skillIDs"] == .array([.string("custom-agent-skill")]))
+        #expect(useContent["instructions"]?.stringValue?.contains("Prefer project conventions") == true)
+    }
+
     @Test("git_status executes read-only git status in workspace")
     func gitStatusExecutesReadOnlyGitStatusInWorkspace() async throws {
         let root = try makeWorkspace()
@@ -462,6 +502,29 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
             withIntermediateDirectories: true
         )
         return root
+    }
+
+    private func writeProjectSkill(
+        id: String,
+        name: String,
+        summary: String,
+        body: String,
+        in root: URL
+    ) throws {
+        let directory = root
+            .appendingPathComponent(".cocxy/skills", isDirectory: true)
+            .appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try """
+        ---
+        id: \(id)
+        name: \(name)
+        description: \(summary)
+        ---
+        # \(name)
+
+        \(body)
+        """.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 
     private func contentObject(_ result: AgentToolResult) throws -> [String: AgentJSONValue] {

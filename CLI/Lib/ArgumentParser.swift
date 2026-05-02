@@ -368,6 +368,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy notebook export <input.cocxynb> --output <output.ipynb> [--force]`
     case notebookExport(inputPath: String, outputPath: String, force: Bool)
 
+    /// `cocxy skill list`
+    case skillList
+
     /// `cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]`
     case worktreeAdd(agent: String?, branch: String?, baseRef: String?)
 
@@ -658,6 +661,9 @@ public enum CLIArgumentParser {
 
         case "notebook":
             return try parseNotebook(arguments: Array(arguments.dropFirst()))
+
+        case "skill", "skills":
+            return try parseSkill(arguments: Array(arguments.dropFirst()))
 
         case "worktree":
             return try parseWorktree(arguments: Array(arguments.dropFirst()))
@@ -2088,6 +2094,36 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: command, argument: "output")
         }
         return (input, output, force)
+    }
+
+    // MARK: - Skill Parser
+
+    private static func parseSkill(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "skill", argument: "list")
+        }
+        if isHelpToken(subcommand) {
+            return .help
+        }
+
+        let rest = Array(arguments.dropFirst())
+        switch subcommand {
+        case "list":
+            guard rest.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "skill list",
+                    argument: rest.first ?? "",
+                    reason: "`skill list` takes no arguments."
+                )
+            }
+            return .skillList
+        default:
+            throw CLIError.invalidArgument(
+                command: "skill",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list."
+            )
+        }
     }
 
     /// Parses `cocxy worktree <subcommand> [...]`.

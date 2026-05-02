@@ -201,6 +201,24 @@ enum AgentBuiltInTools {
             )
         ),
         AgentToolDescriptor(
+            id: "list_skills",
+            displayName: "List Skills",
+            description: "List local built-in, user, and project skills available to the agent.",
+            capability: .read
+        ),
+        AgentToolDescriptor(
+            id: "use_skill",
+            displayName: "Use Skill",
+            description: "Load one local skill and return its reusable instructions.",
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "id": AgentToolInputProperty(.string, description: "Skill identifier to load."),
+                ],
+                required: ["id"]
+            )
+        ),
+        AgentToolDescriptor(
             id: "grep",
             displayName: "Grep",
             description: "Search file contents with a local regex engine.",
