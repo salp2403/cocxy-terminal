@@ -764,6 +764,28 @@ public struct CommandRunner {
         case .imageClear:
             return CLISocketRequest(id: requestID, command: "image-clear", params: nil)
 
+        case .notebookImport(let inputPath, let outputPath, let force):
+            return CLISocketRequest(
+                id: requestID,
+                command: "notebook-import",
+                params: [
+                    "input": inputPath,
+                    "output": outputPath,
+                    "force": force ? "true" : "false"
+                ]
+            )
+
+        case .notebookExport(let inputPath, let outputPath, let force):
+            return CLISocketRequest(
+                id: requestID,
+                command: "notebook-export",
+                params: [
+                    "input": inputPath,
+                    "output": outputPath,
+                    "force": force ? "true" : "false"
+                ]
+            )
+
         case .worktreeAdd(let agent, let branch, let baseRef):
             var params: [String: String] = [:]
             if let agent { params["agent"] = agent }

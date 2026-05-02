@@ -1052,6 +1052,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleImageDelete(request)
         case .imageClear:
             return handleImageClear(request)
+        case .notebookImport:
+            return handleNotebookImport(request)
+        case .notebookExport:
+            return handleNotebookExport(request)
         }
     }
 
@@ -2787,6 +2791,95 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case .processExited(let code): return "process_exited_\(code)"
         case .custom(let name): return "custom_\(name)"
         }
+    }
+
+    // MARK: - Notebook Conversion
+
+    private func handleNotebookImport(_ request: SocketRequest) -> SocketResponse {
+        handleNotebookConversion(
+            request,
+            operationName: "imported",
+            defaultSummaryVerb: "Imported"
+        ) { inputURL, outputURL in
+            let data = try Data(contentsOf: inputURL)
+            let notebook = try JupyterNotebookCodec.importDocument(from: data)
+            let rendered = NotebookMarkdownCodec.render(notebook)
+            try rendered.write(to: outputURL, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func handleNotebookExport(_ request: SocketRequest) -> SocketResponse {
+        handleNotebookConversion(
+            request,
+            operationName: "exported",
+            defaultSummaryVerb: "Exported"
+        ) { inputURL, outputURL in
+            let source = try String(contentsOf: inputURL, encoding: .utf8)
+            let notebook = NotebookDocument.parseMarkdown(source)
+            let data = try JupyterNotebookCodec.exportData(from: notebook)
+            try data.write(to: outputURL, options: [.atomic])
+        }
+    }
+
+    private func handleNotebookConversion(
+        _ request: SocketRequest,
+        operationName: String,
+        defaultSummaryVerb: String,
+        convert: (URL, URL) throws -> Void
+    ) -> SocketResponse {
+        guard let inputPath = request.params?["input"], !inputPath.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: input")
+        }
+        guard let outputPath = request.params?["output"], !outputPath.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: output")
+        }
+
+        let inputURL = fileURL(fromCLIPath: inputPath)
+        let outputURL = fileURL(fromCLIPath: outputPath)
+        guard FileManager.default.fileExists(atPath: inputURL.path) else {
+            return .failure(id: request.id, error: "Input file does not exist: \(inputURL.path)")
+        }
+
+        let force = request.params?["force"] == "true"
+        if !force, FileManager.default.fileExists(atPath: outputURL.path) {
+            return .failure(
+                id: request.id,
+                error: "Output file already exists: \(outputURL.path). Re-run with --force to replace it."
+            )
+        }
+
+        do {
+            try FileManager.default.createDirectory(
+                at: outputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try convert(inputURL, outputURL)
+            return .ok(id: request.id, data: [
+                "status": operationName,
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "summary": "\(defaultSummaryVerb) notebook to \(outputURL.path)."
+            ])
+        } catch {
+            return .failure(
+                id: request.id,
+                error: "Notebook conversion failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func fileURL(fromCLIPath path: String) -> URL {
+        let expandedPath: String
+        if path == "~" {
+            expandedPath = FileManager.default.homeDirectoryForCurrentUser.path
+        } else if path.hasPrefix("~/") {
+            expandedPath = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(String(path.dropFirst(2)))
+                .path
+        } else {
+            expandedPath = path
+        }
+        return URL(fileURLWithPath: expandedPath).standardizedFileURL
     }
 
     // MARK: - TOML Helpers

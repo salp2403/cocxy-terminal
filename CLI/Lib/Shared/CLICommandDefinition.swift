@@ -172,6 +172,8 @@ public enum CLICommand: String, CaseIterable {
     case imageList = "image-list"
     case imageDelete = "image-delete"
     case imageClear = "image-clear"
+    case notebookImport = "notebook-import"
+    case notebookExport = "notebook-export"
 
     // MARK: - Worktree (v0.1.81)
 
@@ -339,6 +341,8 @@ public enum CLICommand: String, CaseIterable {
         case .imageList: return "List inline images stored for the focused surface"
         case .imageDelete: return "Delete a specific inline image from the focused surface"
         case .imageClear: return "Clear inline images from the focused surface"
+        case .notebookImport: return "Import a Jupyter notebook into Cocxy notebook markdown"
+        case .notebookExport: return "Export Cocxy notebook markdown to Jupyter nbformat"
 
         // Worktree v0.1.81
         case .worktreeAdd: return "Create a cocxy-managed git worktree and attach it to the active tab"
@@ -497,6 +501,8 @@ public enum CLICommand: String, CaseIterable {
         case .imageList: return "cocxy image list"
         case .imageDelete: return "cocxy image delete <id>"
         case .imageClear: return "cocxy image clear"
+        case .notebookImport: return "cocxy notebook import <input.ipynb> --output <output.cocxynb> [--force]"
+        case .notebookExport: return "cocxy notebook export <input.cocxynb> --output <output.ipynb> [--force]"
 
         // Worktree v0.1.81
         case .worktreeAdd: return "cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]"

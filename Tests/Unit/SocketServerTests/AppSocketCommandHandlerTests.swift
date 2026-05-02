@@ -1569,6 +1569,133 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["removed"], "3")
     }
 
+    func test_notebookImport_convertsJupyterToCocxyMarkdown() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("source.ipynb")
+        let outputURL = directory.appendingPathComponent("result.cocxynb")
+
+        try """
+        {
+          "nbformat": 4,
+          "nbformat_minor": 5,
+          "metadata": {
+            "kernelspec": {
+              "display_name": "Python 3",
+              "language": "python",
+              "name": "python3"
+            },
+            "cocxy": {
+              "title": "Imported"
+            }
+          },
+          "cells": [
+            {
+              "cell_type": "markdown",
+              "metadata": {},
+              "source": ["# Intro\\n", "Local notebook"]
+            },
+            {
+              "cell_type": "code",
+              "metadata": {},
+              "source": ["print('hello')"],
+              "execution_count": null,
+              "outputs": []
+            }
+          ]
+        }
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "notebook-import-1",
+            command: "notebook-import",
+            params: [
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "force": "false",
+            ]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "imported")
+        XCTAssertEqual(response.data?["input"], inputURL.standardizedFileURL.path)
+        XCTAssertEqual(response.data?["output"], outputURL.standardizedFileURL.path)
+        let rendered = try String(contentsOf: outputURL, encoding: .utf8)
+        XCTAssertTrue(rendered.contains("cocxy-notebook: \"1\""))
+        XCTAssertTrue(rendered.contains("title: \"Imported\""))
+        XCTAssertTrue(rendered.contains("# Intro"))
+        XCTAssertTrue(rendered.contains("```python\nprint('hello')\n```"))
+    }
+
+    func test_notebookExport_convertsCocxyMarkdownToJupyter() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("source.cocxynb")
+        let outputURL = directory.appendingPathComponent("result.ipynb")
+
+        try """
+        ---
+        cocxy-notebook: "1"
+        title: "Round Trip"
+        ---
+
+        # Intro
+
+        ```bash
+        echo hello
+        ```
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "notebook-export-1",
+            command: "notebook-export",
+            params: [
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "force": "false",
+            ]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "exported")
+        let data = try Data(contentsOf: outputURL)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertEqual(json?["nbformat"] as? Int, 4)
+        let cells = try XCTUnwrap(json?["cells"] as? [[String: Any]])
+        XCTAssertEqual(cells.count, 2)
+        XCTAssertEqual(cells[0]["cell_type"] as? String, "markdown")
+        XCTAssertEqual(cells[1]["cell_type"] as? String, "code")
+    }
+
+    func test_notebookImport_refusesExistingOutputWithoutForce() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("source.ipynb")
+        let outputURL = directory.appendingPathComponent("result.cocxynb")
+
+        try """
+        {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+        try "existing".write(to: outputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "notebook-import-2",
+            command: "notebook-import",
+            params: [
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "force": "false",
+            ]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertTrue(response.error?.contains("already exists") == true)
+        XCTAssertEqual(try String(contentsOf: outputURL, encoding: .utf8), "existing")
+    }
+
     func test_v4Commands_withoutProviders_returnFailure() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let commands = [
@@ -1591,5 +1718,16 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 "Command '\(command)' without provider should return failure"
             )
         }
+    }
+
+    private func makeTemporaryDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-notebook-tests")
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: url,
+            withIntermediateDirectories: true
+        )
+        return url
     }
 }

@@ -263,6 +263,10 @@ public enum OutputFormatter {
             return "Inline image deleted."
         case .imageClear:
             return "Inline images cleared."
+        case .notebookImport(_, let outputPath, _):
+            return response.data?["summary"] ?? "Imported notebook to \(outputPath)."
+        case .notebookExport(_, let outputPath, _):
+            return response.data?["summary"] ?? "Exported notebook to \(outputPath)."
         case .worktreeAdd:
             guard let data = response.data,
                   let id = data["id"],

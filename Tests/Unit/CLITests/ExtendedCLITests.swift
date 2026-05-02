@@ -644,13 +644,10 @@ final class EnumParityTests: XCTestCase {
     // MARK: - 34. CLICommand has all expected cases
 
     func testCLICommandHasExpectedCaseCount() {
-        // v0.1.81 added four worktree verbs bringing the total to 97.
-        // v0.1.84 added five GitHub verbs (status/prs/issues/open/refresh)
-        // bringing it to 102. v0.1.86 added github-pr-merge, and
-        // P5 added worktree-focus plus review approve/request-changes.
-        // Local-only commands such as
-        // `cocxy open` intentionally stay out of the socket protocol.
-        XCTAssertEqual(CLICommand.allCases.count, 106)
+        // Local-only commands such as `cocxy open` intentionally stay
+        // out of the socket protocol. Socket-facing additions must keep
+        // this catalog count, help, and formatter coverage in sync.
+        XCTAssertEqual(CLICommand.allCases.count, 111)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription

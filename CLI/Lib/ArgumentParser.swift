@@ -362,6 +362,12 @@ public enum ParsedCommand: Equatable {
     /// `cocxy image clear`
     case imageClear
 
+    /// `cocxy notebook import <input.ipynb> --output <output.cocxynb> [--force]`
+    case notebookImport(inputPath: String, outputPath: String, force: Bool)
+
+    /// `cocxy notebook export <input.cocxynb> --output <output.ipynb> [--force]`
+    case notebookExport(inputPath: String, outputPath: String, force: Bool)
+
     /// `cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]`
     case worktreeAdd(agent: String?, branch: String?, baseRef: String?)
 
@@ -649,6 +655,9 @@ public enum CLIArgumentParser {
 
         case "image":
             return try parseImage(arguments: Array(arguments.dropFirst()))
+
+        case "notebook":
+            return try parseNotebook(arguments: Array(arguments.dropFirst()))
 
         case "worktree":
             return try parseWorktree(arguments: Array(arguments.dropFirst()))
@@ -1991,6 +2000,94 @@ public enum CLIArgumentParser {
                 reason: "Unknown subcommand. Use list, delete, or clear."
             )
         }
+    }
+
+    // MARK: - Notebook Parser
+
+    private static func parseNotebook(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "notebook", argument: "import|export")
+        }
+
+        let rest = Array(arguments.dropFirst())
+        switch subcommand {
+        case "import":
+            let options = try parseNotebookConversionOptions(
+                command: "notebook import",
+                arguments: rest
+            )
+            return .notebookImport(
+                inputPath: options.input,
+                outputPath: options.output,
+                force: options.force
+            )
+        case "export":
+            let options = try parseNotebookConversionOptions(
+                command: "notebook export",
+                arguments: rest
+            )
+            return .notebookExport(
+                inputPath: options.input,
+                outputPath: options.output,
+                force: options.force
+            )
+        default:
+            throw CLIError.invalidArgument(
+                command: "notebook",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use import or export."
+            )
+        }
+    }
+
+    private static func parseNotebookConversionOptions(
+        command: String,
+        arguments: [String]
+    ) throws -> (input: String, output: String, force: Bool) {
+        var input: String?
+        var output: String?
+        var force = false
+        var index = 0
+
+        while index < arguments.count {
+            let token = arguments[index]
+            switch token {
+            case "--output", "-o":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: command, argument: "output")
+                }
+                output = arguments[index + 1]
+                index += 2
+            case "--force":
+                force = true
+                index += 1
+            default:
+                if token.hasPrefix("-") {
+                    throw CLIError.invalidArgument(
+                        command: command,
+                        argument: token,
+                        reason: "Unknown option. Valid flags: --output, -o, --force."
+                    )
+                }
+                guard input == nil else {
+                    throw CLIError.invalidArgument(
+                        command: command,
+                        argument: token,
+                        reason: "Only one input path is accepted."
+                    )
+                }
+                input = token
+                index += 1
+            }
+        }
+
+        guard let input, !input.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: "input")
+        }
+        guard let output, !output.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: "output")
+        }
+        return (input, output, force)
     }
 
     /// Parses `cocxy worktree <subcommand> [...]`.

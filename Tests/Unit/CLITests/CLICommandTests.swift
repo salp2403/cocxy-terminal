@@ -409,6 +409,50 @@ final class CLIArgumentParserTests: XCTestCase {
         XCTAssertEqual(try CLIArgumentParser.parse(["image", "clear"]), .imageClear)
     }
 
+    func testParseNotebookImportWithOutputAndForce() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "notebook", "import", "/tmp/source.ipynb",
+                "--output", "/tmp/result.cocxynb",
+                "--force",
+            ]),
+            .notebookImport(
+                inputPath: "/tmp/source.ipynb",
+                outputPath: "/tmp/result.cocxynb",
+                force: true
+            )
+        )
+    }
+
+    func testParseNotebookExportWithShortOutputFlag() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "notebook", "export", "/tmp/source.cocxynb",
+                "-o", "/tmp/result.ipynb",
+            ]),
+            .notebookExport(
+                inputPath: "/tmp/source.cocxynb",
+                outputPath: "/tmp/result.ipynb",
+                force: false
+            )
+        )
+    }
+
+    func testParseNotebookImportWithoutOutputThrowsMissingArgument() {
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse(["notebook", "import", "/tmp/source.ipynb"])
+        ) { error in
+            guard let cliError = error as? CLIError else {
+                XCTFail("Expected CLIError, got \(error)")
+                return
+            }
+            XCTAssertEqual(
+                cliError,
+                .missingArgument(command: "notebook import", argument: "output")
+            )
+        }
+    }
+
     func testParseWindowNewWithoutEngine() throws {
         XCTAssertEqual(
             try CLIArgumentParser.parse(["window", "new"]),
@@ -671,6 +715,32 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.command, "block-rerun")
         XCTAssertEqual(request.params?["id"], "42")
     }
+
+    func testBuildNotebookImportRequest() {
+        let request = runner.buildRequest(from: .notebookImport(
+            inputPath: "/tmp/source.ipynb",
+            outputPath: "/tmp/result.cocxynb",
+            force: true
+        ))
+
+        XCTAssertEqual(request.command, "notebook-import")
+        XCTAssertEqual(request.params?["input"], "/tmp/source.ipynb")
+        XCTAssertEqual(request.params?["output"], "/tmp/result.cocxynb")
+        XCTAssertEqual(request.params?["force"], "true")
+    }
+
+    func testBuildNotebookExportRequest() {
+        let request = runner.buildRequest(from: .notebookExport(
+            inputPath: "/tmp/source.cocxynb",
+            outputPath: "/tmp/result.ipynb",
+            force: false
+        ))
+
+        XCTAssertEqual(request.command, "notebook-export")
+        XCTAssertEqual(request.params?["input"], "/tmp/source.cocxynb")
+        XCTAssertEqual(request.params?["output"], "/tmp/result.ipynb")
+        XCTAssertEqual(request.params?["force"], "false")
+    }
 }
 
 // MARK: - Output Formatter Tests
@@ -779,6 +849,46 @@ final class OutputFormatterTests: XCTestCase {
             response: response
         )
         XCTAssertEqual(output, "Cocxy Terminal - status unavailable")
+    }
+
+    func testFormatNotebookImportUsesServerSummary() {
+        let response = CLISocketResponse(
+            id: "notebook-1",
+            success: true,
+            data: ["summary": "Imported notebook to /tmp/result.cocxynb."],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .notebookImport(
+                inputPath: "/tmp/source.ipynb",
+                outputPath: "/tmp/result.cocxynb",
+                force: false
+            ),
+            response: response
+        )
+
+        XCTAssertEqual(output, "Imported notebook to /tmp/result.cocxynb.")
+    }
+
+    func testFormatNotebookExportUsesServerSummary() {
+        let response = CLISocketResponse(
+            id: "notebook-2",
+            success: true,
+            data: ["summary": "Exported notebook to /tmp/result.ipynb."],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .notebookExport(
+                inputPath: "/tmp/source.cocxynb",
+                outputPath: "/tmp/result.ipynb",
+                force: false
+            ),
+            response: response
+        )
+
+        XCTAssertEqual(output, "Exported notebook to /tmp/result.ipynb.")
     }
 
     func testFormatStatusIncludesCoreDiagnostics() {
@@ -1113,10 +1223,9 @@ final class CLICommandDefinitionTests: XCTestCase {
     // MARK: - 43. All commands exist (current catalog size)
 
     func testAllCommandsExist() {
-        // v0.1.81 added worktree verbs, v0.1.84 added five GitHub
-        // verbs, v0.1.86 added github-pr-merge, and P5 adds
-        // worktree-focus plus review approve/request-changes.
-        XCTAssertEqual(CLICommand.allCases.count, 106)
+        // Keep this explicit so new socket-facing verbs update help,
+        // descriptions, parser coverage, and formatter coverage together.
+        XCTAssertEqual(CLICommand.allCases.count, 111)
     }
 
     // MARK: - 39. Raw values match server protocol

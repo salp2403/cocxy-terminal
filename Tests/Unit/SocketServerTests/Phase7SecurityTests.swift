@@ -6,7 +6,7 @@
 // - Socket: zero-length payload rejected
 // - Socket: partial header (client closes mid-send)
 // - Socket: rapid successive reconnections
-// - Socket: all 7 commands produce non-error responses
+// - Socket: all known commands produce non-error responses
 // - CLI: buildRequest for .help and .version produces a valid request
 // - CLI: CommandRunner propagates server error response with exit code 1
 // - CLI: notifyWithEmptyStringAfterJoining (edge case multi-word notify)
@@ -258,17 +258,17 @@ final class Phase7SocketSecurityTests: XCTestCase {
                       "Server must still be running after rapid reconnections")
     }
 
-    // MARK: - TEST 6: All 7 known commands produce success responses
+    // MARK: - TEST 6: All known commands produce success responses
 
     @MainActor
-    func testAllSevenCommandsProduceSuccessResponses() throws {
+    func testAllKnownCommandsProduceSuccessResponses() throws {
         let handler = MockSocketCommandHandler()
         let (server, _) = try startServer(handler: handler)
         defer { server.stop() }
 
         let commands = CLICommandName.allCases.map { $0.rawValue }
-        XCTAssertEqual(commands.count, 106,
-                       "There should be exactly 106 commands in CLICommandName after adding the P5 review PR verbs")
+        XCTAssertEqual(commands.count, 111,
+                       "There should be exactly 111 commands in CLICommandName")
 
         for command in commands {
             let request = SocketRequest(id: "all-\(command)", command: command, params: nil)

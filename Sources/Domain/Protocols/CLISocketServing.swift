@@ -274,6 +274,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case imageDelete = "image-delete"
     /// Clear all inline images from the focused surface.
     case imageClear = "image-clear"
+    /// Import a Jupyter notebook into Cocxy notebook markdown.
+    case notebookImport = "notebook-import"
+    /// Export Cocxy notebook markdown to Jupyter nbformat.
+    case notebookExport = "notebook-export"
 
     // MARK: - Session Management (v3)
 
