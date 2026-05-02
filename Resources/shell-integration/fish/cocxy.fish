@@ -46,15 +46,20 @@ end
 
 function __cocxy_fish_preexec --on-event fish_preexec
     set -l command_text "$argv[1]"
+    set -l sanitized_command (string replace -ra '[[:cntrl:]]' '' -- "$command_text")
 
     if string match -q '*title*' -- "$COCXY_SHELL_FEATURES"
-        if test -n "$command_text"
-            __cocxy_fish_print "\e]2;$command_text\a"
+        if test -n "$sanitized_command"
+            __cocxy_fish_print "\e]2;$sanitized_command\a"
         end
     end
 
     __cocxy_fish_print "\e]133;B\a"
-    __cocxy_fish_print "\e]133;C\a"
+    if test -n "$sanitized_command"
+        __cocxy_fish_print "\e]133;C;$sanitized_command\a"
+    else
+        __cocxy_fish_print "\e]133;C\a"
+    end
     set -g __cocxy_fish_executing 1
 end
 

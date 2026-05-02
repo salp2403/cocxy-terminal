@@ -139,9 +139,10 @@ _cocxy_precmd() {
 _cocxy_preexec() {
     emulate -L zsh -o no_aliases -o no_warn_create_global
     local command_text="$1"
+    local sanitized_command="${command_text//[$'\x00'-$'\x1f']/}"
 
-    if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$command_text" ]]; then
-        _cocxy_print $'\e]2;'"${command_text//[$'\x00'-$'\x1f']/}"$'\a'
+    if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$sanitized_command" ]]; then
+        _cocxy_print $'\e]2;'"$sanitized_command"$'\a'
     fi
 
     # OSC 133;B marks the end of the prompt / start of the command.
@@ -156,7 +157,11 @@ _cocxy_preexec() {
     # OSC 133;C marks that the command is actually being executed.
     # Emitted right after ;B so hosts that treat them as a pair (or that
     # prefer ;C over ;B) both see a consistent signal.
-    _cocxy_print $'\e]133;C\a'
+    if [[ -n "$sanitized_command" ]]; then
+        _cocxy_print $'\e]133;C;'"$sanitized_command"$'\a'
+    else
+        _cocxy_print $'\e]133;C\a'
+    fi
     _COCXY_EXECUTING=1
 }
 

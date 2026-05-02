@@ -129,9 +129,10 @@ __cocxy_preexec() {
   _COCXY_PREEXEC_FIRED=1
 
   local command_text="$1"
+  local sanitized_command="${command_text//[$'\x00'-$'\x1f']/}"
 
-  if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$command_text" ]]; then
-    builtin printf '\e]2;%s\a' "${command_text//[$'\x00'-$'\x1f']/}"
+  if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$sanitized_command" ]]; then
+    builtin printf '\e]2;%s\a' "$sanitized_command"
   fi
 
   # OSC 133;B marks the end of the prompt / start of the command.
@@ -145,7 +146,11 @@ __cocxy_preexec() {
   # OSC 133;C marks that the command is actually being executed.
   # Emitted right after ;B so hosts that treat them as a pair (or that
   # prefer ;C over ;B) both see a consistent signal.
-  builtin printf '\e]133;C\a'
+  if [[ -n "$sanitized_command" ]]; then
+    builtin printf '\e]133;C;%s\a' "$sanitized_command"
+  else
+    builtin printf '\e]133;C\a'
+  fi
   _COCXY_EXECUTING=1
 }
 

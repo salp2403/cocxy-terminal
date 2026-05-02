@@ -698,6 +698,31 @@ struct CocxyCoreBridgeTests {
         #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == "/Users/test/.config/zsh")
     }
 
+    @Test("shell integration scripts pass command text in OSC 133 C")
+    func shellIntegrationScriptsPassCommandTextInOSC133C() throws {
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let integrationRoot = packageRoot
+            .appendingPathComponent("Resources/shell-integration", isDirectory: true)
+
+        let scriptPaths = [
+            "zsh/cocxy-integration",
+            "bash/cocxy.bash",
+            "fish/cocxy.fish",
+        ]
+
+        for path in scriptPaths {
+            let scriptURL = integrationRoot.appendingPathComponent(path, isDirectory: false)
+            let script = try String(contentsOf: scriptURL, encoding: .utf8)
+
+            #expect(script.contains("133;C;"))
+            #expect(script.contains("sanitized_command"))
+        }
+    }
+
     @Test("shell integration env routes browser opens through bundled CLI")
     func shellIntegrationEnvRoutesBrowserOpensThroughBundledCLI() throws {
         let bridge = try makeBridge()
