@@ -20,6 +20,10 @@ extension MainWindowController {
         surfaceTerminalEngines[surfaceID] ?? bridge
     }
 
+    func cocxyCoreBridge(forSurface surfaceID: SurfaceID) -> CocxyCoreBridge? {
+        terminalEngine(for: surfaceID).cocxyCoreBridge
+    }
+
     func registerTerminalEngine(
         _ engine: any TerminalEngine,
         tabID: TabID,

@@ -83,4 +83,18 @@ struct TerminalEngineRoutingSwiftTestingTests {
         #expect(defaultEngine.createSurfaceRequests.count == 1)
         #expect(daemonEngine.createSurfaceRequests.isEmpty)
     }
+
+    @Test("surface-scoped CocxyCore bridge lookup uses the routed engine")
+    func surfaceScopedCocxyCoreBridgeLookupUsesRoutedEngine() {
+        let defaultBridge = CocxyCoreBridge()
+        let routedBridge = CocxyCoreBridge()
+        let controller = MainWindowController(bridge: defaultBridge)
+        let tabID = controller.tabManager.tabs.first!.id
+        let routedSurface = SurfaceID()
+
+        controller.registerTerminalEngine(routedBridge, tabID: tabID, surfaceID: routedSurface)
+
+        #expect(controller.cocxyCoreBridge(forSurface: routedSurface) === routedBridge)
+        #expect(controller.cocxyCoreBridge(forSurface: SurfaceID()) === defaultBridge)
+    }
 }
