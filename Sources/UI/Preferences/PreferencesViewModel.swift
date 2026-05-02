@@ -157,6 +157,17 @@ final class PreferencesViewModel: ObservableObject {
     /// Short status for the last conversation encryption secret action.
     @Published var agentConversationMasterPasswordStatus: String?
 
+    // MARK: - MCP Servers
+
+    /// Raw JSON for the user-managed MCP server config file.
+    @Published var mcpConfigText: String = MCPServerConfigLoader.defaultConfigText
+
+    /// Short validation/save status for MCP config editing.
+    @Published var mcpConfigStatus: String?
+
+    /// Parsed preview of the current MCP draft after load, validate, or save.
+    @Published private(set) var mcpConfiguredServers: [MCPServer] = []
+
     // MARK: - Voice Input
 
     /// Master opt-in for local Voice input.
@@ -397,7 +408,16 @@ final class PreferencesViewModel: ObservableObject {
             || notesHasUnsavedChanges(comparedTo: c.notes)
             || lspHasUnsavedChanges(comparedTo: c.lsp)
             || vimHasUnsavedChanges(comparedTo: c.vim)
+            || hasUnsavedMCPConfigChanges
             || (pendingKeybindings != nil && pendingKeybindings != c.keybindings)
+    }
+
+    var hasUnsavedMCPConfigChanges: Bool {
+        mcpConfigText != savedMCPConfigText
+    }
+
+    var mcpConfigPath: String {
+        mcpConfigURL.path
     }
 
     /// Reverts all editable properties to the original config snapshot.
@@ -469,6 +489,7 @@ final class PreferencesViewModel: ObservableObject {
         lspEnabled = c.lsp.enabled
         lspEnabledLanguageIDs = Set(c.lsp.enabledLanguageIDs)
         vimEnabled = c.vim.enabled
+        restoreSavedMCPConfigDraft()
         pendingKeybindings = nil
     }
 
@@ -493,6 +514,15 @@ final class PreferencesViewModel: ObservableObject {
     /// Resolves Voice locale availability without any network fallback.
     private let voiceLocaleResolver: VoiceLocaleResolver
 
+    /// User-managed MCP config file location.
+    private let mcpConfigURL: URL
+
+    /// Parser/writer for `mcp.json`.
+    private let mcpConfigLoader: MCPServerConfigLoader
+
+    /// Last loaded or successfully saved MCP JSON text.
+    private var savedMCPConfigText: String = MCPServerConfigLoader.defaultConfigText
+
     /// Dedicated editor model for the Keybindings preferences tab.
     ///
     /// Constructed lazily on first access so view models used purely for
@@ -512,12 +542,16 @@ final class PreferencesViewModel: ObservableObject {
         config: CocxyConfig,
         fileProvider: ConfigFileProviding = DiskConfigFileProvider(),
         voiceLocaleResolver: VoiceLocaleResolver = .live(),
-        agentSecrets: AgentSecrets = AgentSecrets()
+        agentSecrets: AgentSecrets = AgentSecrets(),
+        mcpConfigURL: URL = MCPServerConfigLoader().defaultConfigURL(),
+        mcpConfigLoader: MCPServerConfigLoader = MCPServerConfigLoader()
     ) {
         self.savedConfig = config
         self.fileProvider = fileProvider
         self.voiceLocaleResolver = voiceLocaleResolver
         self.agentSecrets = agentSecrets
+        self.mcpConfigURL = mcpConfigURL
+        self.mcpConfigLoader = mcpConfigLoader
 
         // General
         self.shell = config.general.shell
@@ -618,6 +652,7 @@ final class PreferencesViewModel: ObservableObject {
         self.bundledFontFamilies = FontFallbackResolver.bundledFamilies
         self.availableLSPLanguages = LSPLanguageRegistry.defaults.servers
         self.availableVoiceLocales = voiceLocaleResolver.supportedLocaleOptions()
+        loadInitialMCPConfig()
     }
 
     // MARK: - Agent Provider Secrets
@@ -650,6 +685,35 @@ final class PreferencesViewModel: ObservableObject {
 
     func hasSavedAgentConversationMasterPassword() -> Bool {
         (try? agentSecrets.hasConversationMasterPassword()) ?? false
+    }
+
+    // MARK: - MCP Config Editing
+
+    func validateMCPConfigDraft() throws {
+        let servers = try mcpConfigLoader.validateConfigText(mcpConfigText)
+        mcpConfiguredServers = servers
+        mcpConfigStatus = mcpStatusMessage(prefix: "Valid", serverCount: servers.count)
+    }
+
+    func reloadMCPConfig() {
+        loadInitialMCPConfig()
+    }
+
+    func saveMCPConfig() throws {
+        let servers = try mcpConfigLoader.writeConfigText(mcpConfigText, to: mcpConfigURL)
+        savedMCPConfigText = mcpConfigText
+        mcpConfiguredServers = servers
+        mcpConfigStatus = mcpStatusMessage(prefix: "Saved", serverCount: servers.count)
+    }
+
+    func mcpServerSummary(for server: MCPServer) -> String {
+        let state = server.enabled ? "Enabled" : "Disabled"
+        switch server.transport {
+        case .stdio:
+            return "\(state) stdio"
+        case .http:
+            return "\(state) HTTP"
+        }
     }
 
     // MARK: - LSP Selection
@@ -732,8 +796,14 @@ final class PreferencesViewModel: ObservableObject {
     /// - Throws: If the file provider cannot write to disk.
     func save() throws {
         normalizeImageSettingsForSave()
+        if hasUnsavedMCPConfigChanges {
+            _ = try mcpConfigLoader.validateConfigText(mcpConfigText)
+        }
         let toml = generateToml()
         try fileProvider.writeConfigFile(toml)
+        if hasUnsavedMCPConfigChanges {
+            try saveMCPConfig()
+        }
         // Update the saved snapshot so hasUnsavedChanges resets to false.
         // This prevents the "unsaved changes" alert from appearing after save.
         updateSavedSnapshot()
@@ -766,6 +836,39 @@ final class PreferencesViewModel: ObservableObject {
         imageDiskCacheDirectory = imageDiskCacheDirectory
             .trimmingCharacters(in: .whitespacesAndNewlines)
         imageDiskCacheLimitMB = min(max(imageDiskCacheLimitMB, 1), 8192)
+    }
+
+    private func loadInitialMCPConfig() {
+        do {
+            let text = try mcpConfigLoader.loadConfigText(from: mcpConfigURL)
+            savedMCPConfigText = text
+            mcpConfigText = text
+            restoreSavedMCPConfigDraft()
+        } catch {
+            savedMCPConfigText = MCPServerConfigLoader.defaultConfigText
+            mcpConfigText = savedMCPConfigText
+            mcpConfiguredServers = []
+            mcpConfigStatus = "Failed to load MCP config: \(error.localizedDescription)"
+        }
+    }
+
+    private func restoreSavedMCPConfigDraft() {
+        mcpConfigText = savedMCPConfigText
+        do {
+            let servers = try mcpConfigLoader.validateConfigText(savedMCPConfigText)
+            mcpConfiguredServers = servers
+            mcpConfigStatus = mcpStatusMessage(prefix: "Loaded", serverCount: servers.count)
+        } catch {
+            mcpConfiguredServers = []
+            mcpConfigStatus = "Invalid MCP config: \(error.localizedDescription)"
+        }
+    }
+
+    private func mcpStatusMessage(prefix: String, serverCount: Int) -> String {
+        if serverCount == 1 {
+            return "\(prefix) 1 MCP server."
+        }
+        return "\(prefix) \(serverCount) MCP servers."
     }
 
     /// Updates the saved config snapshot to match the current editable values.

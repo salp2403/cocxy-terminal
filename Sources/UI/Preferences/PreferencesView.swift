@@ -110,6 +110,8 @@ struct PreferencesView: View {
             EditableAgentDetectionSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .agentMode:
             AgentModePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .mcpServers:
+            MCPServersPreferencesSection(viewModel: viewModel)
         case .voice:
             VoicePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .codeReview:
@@ -147,6 +149,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case appearance
     case agentDetection
     case agentMode
+    case mcpServers
     case voice
     case codeReview
     case notifications
@@ -167,6 +170,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .appearance: return "Appearance"
         case .agentDetection: return "Agent Detection"
         case .agentMode: return "Agent Mode"
+        case .mcpServers: return "MCP Servers"
         case .voice: return "Voice"
         case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
@@ -187,6 +191,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .appearance: return "paintbrush"
         case .agentDetection: return "brain.head.profile"
         case .agentMode: return "sparkles"
+        case .mcpServers: return "link"
         case .voice: return "mic"
         case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
@@ -948,6 +953,105 @@ struct AgentModePreferencesSection: View {
             return "Runs on device when supported. If unavailable, Cocxy asks you to choose another provider instead of falling back silently."
         case .anthropic, .openai, .google:
             return "Uses your provider API key from the macOS Keychain. Requests go directly from this Mac to the selected provider."
+        }
+    }
+}
+
+// MARK: - MCP Servers Section
+
+/// Editable user-managed MCP server configuration.
+struct MCPServersPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+
+    var body: some View {
+        Form {
+            Section("Config File") {
+                LabeledContent("Path") {
+                    Text(viewModel.mcpConfigPath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                HStack {
+                    Button("Reload") {
+                        viewModel.reloadMCPConfig()
+                    }
+
+                    Button("Open Folder") {
+                        let url = URL(fileURLWithPath: viewModel.mcpConfigPath)
+                            .deletingLastPathComponent()
+                        NSWorkspace.shared.open(url)
+                    }
+
+                    Spacer()
+                }
+            }
+
+            Section("Configured Servers") {
+                if viewModel.mcpConfiguredServers.isEmpty {
+                    Text("No MCP servers configured.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(viewModel.mcpConfiguredServers) { server in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(server.displayName)
+                                .font(.headline)
+                            Text(server.id)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                            Text(viewModel.mcpServerSummary(for: server))
+                                .font(.caption)
+                                .foregroundStyle(server.enabled ? .secondary : .tertiary)
+                        }
+                    }
+                }
+            }
+
+            Section("JSON") {
+                TextEditor(text: $viewModel.mcpConfigText)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 240)
+
+                HStack {
+                    Button("Validate") {
+                        validate()
+                    }
+
+                    Button("Save MCP Config") {
+                        save()
+                    }
+                    .disabled(!viewModel.hasUnsavedMCPConfigChanges)
+
+                    Spacer()
+                }
+
+                if let status = viewModel.mcpConfigStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("MCP Servers")
+    }
+
+    private func validate() {
+        do {
+            try viewModel.validateMCPConfigDraft()
+        } catch {
+            viewModel.mcpConfigStatus = "Invalid MCP config: \(error.localizedDescription)"
+        }
+    }
+
+    private func save() {
+        do {
+            try viewModel.saveMCPConfig()
+        } catch {
+            viewModel.mcpConfigStatus = "Failed to save MCP config: \(error.localizedDescription)"
         }
     }
 }

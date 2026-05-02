@@ -61,12 +61,50 @@ extension MCPServerConfigError: LocalizedError {
 }
 
 struct MCPServerConfigLoader: Sendable {
+    static let defaultConfigText = """
+    {
+      "mcpServers": {}
+    }
+    """
+
     func loadServers(from configURL: URL) throws -> [MCPServer] {
         guard FileManager.default.fileExists(atPath: configURL.path) else {
             return []
         }
 
         let data = try Data(contentsOf: configURL)
+        return try loadServers(from: data)
+    }
+
+    func loadConfigText(from configURL: URL) throws -> String {
+        guard FileManager.default.fileExists(atPath: configURL.path) else {
+            return Self.defaultConfigText
+        }
+        return try String(contentsOf: configURL, encoding: .utf8)
+    }
+
+    func validateConfigText(_ text: String) throws -> [MCPServer] {
+        try loadServers(from: Data(text.utf8))
+    }
+
+    @discardableResult
+    func writeConfigText(_ text: String, to configURL: URL) throws -> [MCPServer] {
+        let servers = try validateConfigText(text)
+        try FileManager.default.createDirectory(
+            at: configURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try text.write(to: configURL, atomically: true, encoding: .utf8)
+        return servers
+    }
+
+    func defaultConfigURL(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
+        homeDirectory
+            .appendingPathComponent(".cocxy", isDirectory: true)
+            .appendingPathComponent("mcp.json")
+    }
+
+    private func loadServers(from data: Data) throws -> [MCPServer] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw MCPServerConfigError.invalidRoot
         }
@@ -85,12 +123,6 @@ struct MCPServerConfigLoader: Sendable {
         }
 
         return servers.sorted { $0.id < $1.id }
-    }
-
-    func defaultConfigURL(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
-        homeDirectory
-            .appendingPathComponent(".cocxy", isDirectory: true)
-            .appendingPathComponent("mcp.json")
     }
 
     private func server(id: String, config: [String: Any]) throws -> MCPServer {
