@@ -87,6 +87,9 @@ extension MainWindowController {
             terminalOutputProvider: MainActorAgentTerminalOutputProvider { [weak self] limit in
                 self?.latestAgentModeTerminalOutput(limit: limit) ?? ""
             },
+            lspDiagnosticsProvider: MainActorAgentLSPDiagnosticsProvider { [weak self] limit in
+                self?.currentAgentModeLSPDiagnostics(limit: limit) ?? []
+            },
             mcpManager: MCPConfiguredManager()
         )
         let viewModel = AgentPanelViewModel(
@@ -125,5 +128,80 @@ extension MainWindowController {
             limit: boundedLimit,
             stripANSI: true
         )
+    }
+
+    func currentAgentModeLSPDiagnostics(limit: Int) -> [AgentLSPDiagnostic] {
+        let boundedLimit = max(0, limit)
+        guard boundedLimit > 0,
+              let tabID = visibleTabID ?? tabManager.activeTabID else {
+            return []
+        }
+
+        let workspaceURL = tabManager.tab(for: tabID)?.workingDirectory
+        let diagnostics = lspDocumentTabIDs
+            .filter { _, ownerTabID in ownerTabID == tabID }
+            .flatMap { uri, _ -> [AgentLSPDiagnostic] in
+                guard lspEditorViewsByDocumentURI[uri]?.value != nil,
+                      let coordinator = lspWorkspaceCoordinators[tabID],
+                      let currentDiagnostics = try? coordinator.diagnostics(forURI: uri) else {
+                    return []
+                }
+
+                return currentDiagnostics.map { diagnostic in
+                    AgentLSPDiagnostic(
+                        path: agentModePath(forDocumentURI: uri, workspaceURL: workspaceURL),
+                        line: diagnostic.range.start.line + 1,
+                        column: diagnostic.range.start.character + 1,
+                        severity: agentModeSeverity(for: diagnostic.severity),
+                        message: diagnostic.message,
+                        source: diagnostic.source
+                    )
+                }
+            }
+            .sorted { lhs, rhs in
+                if lhs.path != rhs.path { return lhs.path < rhs.path }
+                if lhs.line != rhs.line { return lhs.line < rhs.line }
+                if lhs.column != rhs.column { return lhs.column < rhs.column }
+                if lhs.severity != rhs.severity { return lhs.severity < rhs.severity }
+                return lhs.message < rhs.message
+            }
+
+        return Array(diagnostics.prefix(boundedLimit))
+    }
+
+    private func agentModePath(forDocumentURI uri: String, workspaceURL: URL?) -> String {
+        guard let documentURL = URL(string: uri), documentURL.isFileURL else {
+            return uri
+        }
+
+        let documentPath = documentURL.standardizedFileURL.path
+        guard let workspaceURL else {
+            return documentPath
+        }
+
+        let workspacePath = workspaceURL.standardizedFileURL.path
+        if documentPath == workspacePath {
+            return "."
+        }
+
+        let workspacePrefix = workspacePath.hasSuffix("/") ? workspacePath : "\(workspacePath)/"
+        guard documentPath.hasPrefix(workspacePrefix) else {
+            return documentPath
+        }
+
+        return String(documentPath.dropFirst(workspacePrefix.count))
+    }
+
+    private func agentModeSeverity(for severity: LSPDiagnosticSeverity) -> String {
+        switch severity {
+        case .error:
+            return "error"
+        case .warning:
+            return "warning"
+        case .information:
+            return "information"
+        case .hint:
+            return "hint"
+        }
     }
 }

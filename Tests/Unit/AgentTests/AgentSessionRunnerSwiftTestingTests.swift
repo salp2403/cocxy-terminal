@@ -275,6 +275,65 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(terminalToolMessage.content.contains("recent command output"))
     }
 
+    @Test("runner wires LSP diagnostics provider into read_lsp_diagnostics tool")
+    func runnerWiresLSPDiagnosticsProvider() async throws {
+        let workspace = temporaryDirectory(named: "lsp-diagnostics-workspace")
+        let conversationRoot = temporaryDirectory(named: "lsp-diagnostics-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(
+                content: "Reading diagnostics.",
+                toolCalls: [
+                    AgentToolCall(
+                        id: "read-lsp-1",
+                        toolID: "read_lsp_diagnostics",
+                        arguments: ["limit": .number(2)]
+                    ),
+                ]
+            ),
+            AgentLLMResponse(content: "I saw the diagnostics.", toolCalls: []),
+        ])
+        let diagnosticsProvider = RecordingSessionLSPDiagnosticsProvider(diagnostics: [
+            AgentLSPDiagnostic(
+                path: "Sources/App.swift",
+                line: 12,
+                column: 8,
+                severity: "error",
+                message: "Cannot find value.",
+                source: "sourcekit"
+            ),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-lsp-diagnostics-test",
+            lspDiagnosticsProvider: diagnosticsProvider
+        )
+
+        let result = try await runner.run(
+            prompt: "Read LSP diagnostics",
+            history: [],
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                maxIterations: 4,
+                conversationStorageDir: conversationRoot.path
+            )
+        )
+        let diagnosticsToolMessage = try #require(result.messages.first { message in
+            message.role == .tool && message.toolName == "read_lsp_diagnostics"
+        })
+
+        #expect(result.stopReason == .completed)
+        #expect(diagnosticsProvider.limits == [2])
+        #expect(diagnosticsToolMessage.content.contains("App.swift"))
+        #expect(diagnosticsToolMessage.content.contains("Cannot find value."))
+    }
+
     @Test("runner approval resumes a pending write and persists the tool result")
     func runnerApprovalResumesPendingWriteAndPersistsToolResult() async throws {
         let workspace = temporaryDirectory(named: "approval-workspace")
@@ -499,5 +558,19 @@ private final class RecordingSessionTerminalOutputProvider: AgentTerminalOutputP
     func latestCommandBlockOutputs(limit: Int) -> String {
         limits.append(limit)
         return output
+    }
+}
+
+private final class RecordingSessionLSPDiagnosticsProvider: AgentLSPDiagnosticsProviding, @unchecked Sendable {
+    private let diagnostics: [AgentLSPDiagnostic]
+    private(set) var limits: [Int] = []
+
+    init(diagnostics: [AgentLSPDiagnostic]) {
+        self.diagnostics = diagnostics
+    }
+
+    func currentDiagnostics(limit: Int) -> [AgentLSPDiagnostic] {
+        limits.append(limit)
+        return Array(diagnostics.prefix(max(0, limit)))
     }
 }

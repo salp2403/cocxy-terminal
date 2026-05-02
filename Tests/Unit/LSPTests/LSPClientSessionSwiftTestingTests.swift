@@ -280,6 +280,49 @@ struct LSPWorkspaceCoordinatorSwiftTestingTests {
         ])
     }
 
+    @Test("workspace exposes diagnostics for opened documents")
+    func workspaceExposesDiagnosticsForOpenedDocuments() throws {
+        let factory = CapturingLSPProcessFactory()
+        let coordinator = LSPWorkspaceCoordinator(
+            manager: makeTypeScriptManager(factory: factory),
+            workspaceURL: URL(fileURLWithPath: "/tmp/project"),
+            processID: nil
+        )
+        let snapshot = LSPDocumentSnapshot(
+            uri: "file:///tmp/project/app.ts",
+            languageID: "typescript",
+            version: 1,
+            text: "const app = missing;\n"
+        )
+        let diagnostic = LSPDiagnostic(
+            range: LSPRange(
+                start: LSPPosition(line: 0, character: 12),
+                end: LSPPosition(line: 0, character: 19)
+            ),
+            severity: .error,
+            message: "Cannot find name 'missing'.",
+            source: "typescript"
+        )
+
+        _ = try coordinator.openDocument(
+            fileURL: URL(fileURLWithPath: "/tmp/project/app.ts"),
+            snapshot: snapshot
+        )
+        let process = try #require(factory.lastProcess)
+        process.emit(try LSPFraming.encode(.notification(
+            method: "textDocument/publishDiagnostics",
+            params: .object([
+                "uri": .string(snapshot.uri),
+                "diagnostics": .array([diagnostic.jsonValue]),
+            ])
+        )))
+
+        #expect(try coordinator.diagnostics(forURI: snapshot.uri) == [diagnostic])
+        #expect(throws: LSPWorkspaceCoordinatorError.unopenedDocument(uri: "file:///tmp/project/other.ts")) {
+            _ = try coordinator.diagnostics(forURI: "file:///tmp/project/other.ts")
+        }
+    }
+
     @Test("workspace closes documents and stops language session after last document")
     func workspaceStopsSessionAfterLastDocumentCloses() throws {
         let factory = CapturingLSPProcessFactory()

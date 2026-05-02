@@ -317,6 +317,69 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
         ])
     }
 
+    func testAgentModeLSPDiagnosticsUseOpenEditorDiagnostics() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-main-window-agent-lsp-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent("Sample.swift")
+        try "let value = missing\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let configService = try makeConfigService(toml: """
+        [lsp]
+        enabled = true
+        enabled-languages = ["swift"]
+        """)
+        let factory = MainWindowCapturingLSPProcessFactory()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        controller.lspServerDiscoveryFactory = {
+            LSPServerDiscovery(
+                executableResolver: { executable in
+                    executable == "sourcekit-lsp" ? "/usr/bin/sourcekit-lsp" : nil
+                },
+                homebrewDetector: { true }
+            )
+        }
+        controller.lspProcessFactory = factory.makeProcess(configuration:)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        controller.tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = directory
+        }
+        let editorView = EditorView(fileURL: fileURL)
+        let diagnostic = LSPDiagnostic(
+            range: LSPRange(
+                start: LSPPosition(line: 2, character: 4),
+                end: LSPPosition(line: 2, character: 11)
+            ),
+            severity: .warning,
+            message: "Cannot find 'missing'.",
+            source: "sourcekit"
+        )
+
+        controller.wireEditorLSPIfNeeded(editorView: editorView, fileURL: fileURL, tabID: tabID)
+        let process = try XCTUnwrap(factory.lastProcess)
+        process.emit(try LSPFraming.encode(.notification(
+            method: "textDocument/publishDiagnostics",
+            params: .object([
+                "uri": .string(fileURL.absoluteString),
+                "diagnostics": .array([diagnostic.jsonValue]),
+            ])
+        )))
+
+        XCTAssertEqual(controller.currentAgentModeLSPDiagnostics(limit: 5), [
+            AgentLSPDiagnostic(
+                path: "Sample.swift",
+                line: 3,
+                column: 5,
+                severity: "warning",
+                message: "Cannot find 'missing'.",
+                source: "sourcekit"
+            ),
+        ])
+    }
+
     func testEditorLSPWiringClosesPreviousDocumentWhenNextFileIsUnsupported() throws {
         let swiftURL = try makeSwiftFile(contents: "let value = 1\n")
         let textURL = try makeFile(name: "Notes.txt", contents: "plain notes\n")
@@ -638,6 +701,10 @@ private final class MainWindowFakeLSPProcess: LSPProcessManaging {
 
     func send(_ frame: Data) throws {
         sentFrames.append(frame)
+    }
+
+    func emit(_ data: Data) {
+        onOutputData?(data)
     }
 
     func decodedMessages() throws -> [LSPMessage] {

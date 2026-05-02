@@ -116,6 +116,10 @@ final class LSPWorkspaceCoordinator {
         pendingDocumentURIByRequestID.removeAll()
     }
 
+    func diagnostics(forURI uri: String) throws -> [LSPDiagnostic] {
+        try session(forDocumentURI: uri).diagnostics(forURI: uri)
+    }
+
     private func session(forDocumentURI uri: String) throws -> LSPClientSession {
         guard let languageID = documentLanguageByURI[uri],
               let session = sessionsByLanguageID[languageID] else {
