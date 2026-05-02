@@ -232,6 +232,195 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
         )
     }
 
+    func testEditorLSPWiringOpensDocumentWhenEnabled() throws {
+        let fileURL = try makeSwiftFile(contents: "func greet() {}\n")
+        let configService = try makeConfigService(toml: """
+        [lsp]
+        enabled = true
+        enabled-languages = ["swift"]
+        """)
+        let factory = MainWindowCapturingLSPProcessFactory()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        controller.lspServerDiscoveryFactory = {
+            LSPServerDiscovery(
+                executableResolver: { executable in
+                    executable == "sourcekit-lsp" ? "/usr/bin/sourcekit-lsp" : nil
+                },
+                homebrewDetector: { true }
+            )
+        }
+        controller.lspProcessFactory = factory.makeProcess(configuration:)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        controller.tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = fileURL.deletingLastPathComponent()
+        }
+        let editorView = EditorView(fileURL: fileURL)
+
+        controller.wireEditorLSPIfNeeded(editorView: editorView, fileURL: fileURL, tabID: tabID)
+
+        XCTAssertEqual(controller.lspWorkspaceCoordinators[tabID]?.activeLanguageIDs, ["swift"])
+        let process = try XCTUnwrap(factory.lastProcess)
+        let methods = try process.decodedMessages().compactMap(\.methodForTest)
+        XCTAssertEqual(methods, ["initialize", "textDocument/didOpen"])
+    }
+
+    func testEditorLSPWiringRoutesEditorRequestsWhenEnabled() throws {
+        let fileURL = try makeSwiftFile(contents: "let value = 1\nprint(value)\n")
+        let configService = try makeConfigService(toml: """
+        [lsp]
+        enabled = true
+        enabled-languages = ["swift"]
+        """)
+        let factory = MainWindowCapturingLSPProcessFactory()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        controller.lspServerDiscoveryFactory = {
+            LSPServerDiscovery(
+                executableResolver: { executable in
+                    executable == "sourcekit-lsp" ? "/usr/bin/sourcekit-lsp" : nil
+                },
+                homebrewDetector: { true }
+            )
+        }
+        controller.lspProcessFactory = factory.makeProcess(configuration:)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        controller.tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = fileURL.deletingLastPathComponent()
+        }
+        let editorView = EditorView(fileURL: fileURL)
+        editorView.setSelection(EditorSelection(ranges: [EditorTextRange(location: 20, length: 0)]))
+
+        controller.wireEditorLSPIfNeeded(editorView: editorView, fileURL: fileURL, tabID: tabID)
+
+        XCTAssertTrue(editorView.isLSPControlsEnabled)
+        XCTAssertTrue(editorView.requestLSPHoverAtSelection())
+        XCTAssertTrue(editorView.requestLSPCompletionAtSelection())
+        XCTAssertTrue(editorView.requestLSPDefinitionAtSelection())
+        XCTAssertTrue(editorView.requestLSPReferencesAtSelection())
+
+        let process = try XCTUnwrap(factory.lastProcess)
+        let methods = try process.decodedMessages().compactMap(\.methodForTest)
+        XCTAssertEqual(methods, [
+            "initialize",
+            "textDocument/didOpen",
+            "textDocument/hover",
+            "textDocument/completion",
+            "textDocument/definition",
+            "textDocument/references",
+        ])
+    }
+
+    func testEditorLSPWiringClosesPreviousDocumentWhenNextFileIsUnsupported() throws {
+        let swiftURL = try makeSwiftFile(contents: "let value = 1\n")
+        let textURL = try makeFile(name: "Notes.txt", contents: "plain notes\n")
+        let configService = try makeConfigService(toml: """
+        [lsp]
+        enabled = true
+        enabled-languages = ["swift"]
+        """)
+        let factory = MainWindowCapturingLSPProcessFactory()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        controller.lspServerDiscoveryFactory = {
+            LSPServerDiscovery(
+                executableResolver: { executable in
+                    executable == "sourcekit-lsp" ? "/usr/bin/sourcekit-lsp" : nil
+                },
+                homebrewDetector: { true }
+            )
+        }
+        controller.lspProcessFactory = factory.makeProcess(configuration:)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        controller.tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = swiftURL.deletingLastPathComponent()
+        }
+        let editorView = EditorView(fileURL: swiftURL)
+
+        controller.wireEditorLSPIfNeeded(editorView: editorView, fileURL: swiftURL, tabID: tabID)
+        let process = try XCTUnwrap(factory.lastProcess)
+        XCTAssertTrue(editorView.isLSPControlsEnabled)
+        XCTAssertEqual(controller.lspWorkspaceCoordinators[tabID]?.activeLanguageIDs, ["swift"])
+
+        editorView.loadFile(textURL)
+        controller.wireEditorLSPIfNeeded(editorView: editorView, fileURL: textURL, tabID: tabID)
+
+        XCTAssertFalse(editorView.isLSPControlsEnabled)
+        XCTAssertFalse(editorView.requestLSPCompletionAtSelection())
+        XCTAssertNil(controller.lspWorkspaceCoordinators[tabID])
+        XCTAssertTrue(controller.lspEditorViewsByDocumentURI.isEmpty)
+        XCTAssertTrue(controller.lspDocumentTabIDs.isEmpty)
+        XCTAssertEqual(process.stopCount, 1)
+    }
+
+    func testEditorLSPWiringDoesNothingWhenDisabled() throws {
+        let fileURL = try makeSwiftFile(contents: "func greet() {}\n")
+        let configService = try makeConfigService(toml: """
+        [lsp]
+        enabled = false
+        enabled-languages = ["swift"]
+        """)
+        let factory = MainWindowCapturingLSPProcessFactory()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        controller.lspProcessFactory = factory.makeProcess(configuration:)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let editorView = EditorView(fileURL: fileURL)
+
+        controller.wireEditorLSPIfNeeded(editorView: editorView, fileURL: fileURL, tabID: tabID)
+
+        XCTAssertNil(controller.lspWorkspaceCoordinators[tabID])
+        XCTAssertNil(factory.lastProcess)
+    }
+
+    func testEditorVimWiringUsesEffectiveConfig() throws {
+        let configService = try makeConfigService(toml: """
+        [vim]
+        enabled = true
+        """)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let editorView = EditorView(text: "abc")
+
+        controller.wireEditorVimMode(editorView: editorView, tabID: tabID)
+
+        XCTAssertTrue(editorView.isVimModeEnabled)
+    }
+
+    func testEditorVimWiringDefaultsOff() throws {
+        let configService = try makeConfigService(toml: """
+        [appearance]
+        theme = "catppuccin-mocha"
+        """)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let editorView = EditorView(text: "abc")
+
+        controller.wireEditorVimMode(editorView: editorView, tabID: tabID)
+
+        XCTAssertFalse(editorView.isVimModeEnabled)
+    }
+
     func testTopTabPositionUsesTopLevelStripOnlyWhenAuroraDisabled() throws {
         let toml = """
         [appearance]
@@ -407,5 +596,72 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
         )
         XCTAssertEqual(controller.tabManager.tabs.count, tabCountBefore)
         XCTAssertEqual(controller.tabManager.activeTabID, activeTabID)
+    }
+
+    private func makeConfigService(toml: String) throws -> ConfigService {
+        let provider = InMemoryConfigFileProvider(content: toml)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        return service
+    }
+
+    private func makeSwiftFile(contents: String) throws -> URL {
+        try makeFile(name: "Sample.swift", contents: contents)
+    }
+
+    private func makeFile(name: String, contents: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-main-window-lsp-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent(name)
+        try contents.write(to: fileURL, atomically: true, encoding: .utf8)
+        return fileURL
+    }
+}
+
+private final class MainWindowFakeLSPProcess: LSPProcessManaging {
+    var onOutputData: ((Data) -> Void)?
+    private(set) var sentFrames: [Data] = []
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+    private(set) var isRunning = false
+
+    func start() throws {
+        startCount += 1
+        isRunning = true
+    }
+
+    func stop() {
+        stopCount += 1
+        isRunning = false
+    }
+
+    func send(_ frame: Data) throws {
+        sentFrames.append(frame)
+    }
+
+    func decodedMessages() throws -> [LSPMessage] {
+        try sentFrames.flatMap { try LSPFraming.decodeMessages(from: $0) }
+    }
+}
+
+private final class MainWindowCapturingLSPProcessFactory {
+    private(set) var lastProcess: MainWindowFakeLSPProcess?
+
+    func makeProcess(configuration: LSPProcessConfiguration) -> LSPProcessManaging {
+        let process = MainWindowFakeLSPProcess()
+        lastProcess = process
+        return process
+    }
+}
+
+private extension LSPMessage {
+    var methodForTest: String? {
+        switch self {
+        case let .request(_, method, _), let .notification(method, _):
+            return method
+        case .response:
+            return nil
+        }
     }
 }

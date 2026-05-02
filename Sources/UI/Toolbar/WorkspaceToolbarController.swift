@@ -29,6 +29,7 @@ struct PanelTabInfo: Equatable {
         case .terminal: return "terminal"
         case .browser: return "globe"
         case .markdown: return "doc.text"
+        case .editor: return "doc.plaintext"
         case .subagent: return "person.2"
         }
     }
@@ -110,6 +111,7 @@ final class WorkspaceToolbarController: NSObject {
             case .terminal: title = "Terminal \(index + 1)"
             case .browser: title = "Browser"
             case .markdown: title = "Markdown"
+            case .editor: title = "Editor"
             case .subagent: title = "Agent"
             }
             return PanelTabInfo(

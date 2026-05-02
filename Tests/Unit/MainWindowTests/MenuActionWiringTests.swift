@@ -149,6 +149,23 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testOpenTextEditorPanelHasAction() {
+        let editor = viewMenu.items.first(where: { $0.title == "Open Text Editor Panel" })
+        XCTAssertNotNil(
+            editor?.action,
+            "Open Text Editor Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenTextEditorPanelActionPointsToCorrectSelector() {
+        let editor = viewMenu.items.first(where: { $0.title == "Open Text Editor Panel" })
+        XCTAssertEqual(
+            editor?.action,
+            #selector(MainWindowController.splitWithEditorAction(_:)),
+            "Open Text Editor Panel must create the real editor split panel"
+        )
+    }
+
     // MARK: - New Window
 
     func testNewWindowHasAction() {

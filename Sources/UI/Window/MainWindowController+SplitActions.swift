@@ -78,6 +78,24 @@ extension MainWindowController {
         performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true, focusNewPanel: true)
     }
 
+    /// Opens a general text editor panel appended at the end of the split tree.
+    @objc func splitWithEditorAction(_ sender: Any?) {
+        let dir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+            ?? tabManager.activeTab?.workingDirectory
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        let candidate = defaultEditorFile(in: dir)
+        openEditorPanel(fileURL: candidate)
+    }
+
+    func openEditorPanel(fileURL: URL?) {
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .editor(path: fileURL),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
+    }
+
     // MARK: - Split with Panel
 
     /// Creates a visual split with a non-terminal panel.
@@ -147,6 +165,20 @@ extension MainWindowController {
                 ?? tabManager.activeTab?.workingDirectory
             let mdView = MarkdownContentView(filePath: panel.filePath, workspaceDirectory: workspaceDir)
             panelView = mdView
+        case .editor:
+            let editorView = EditorView(fileURL: panel.filePath)
+            wireEditorVimMode(editorView: editorView, tabID: currentTabID)
+            wireEditorSyntaxIfAvailable(editorView: editorView)
+            editorView.onQuitRequested = { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            editorView.onFileLoaded = { [weak self, weak editorView] url in
+                guard let editorView else { return }
+                self?.wireEditorVimMode(editorView: editorView, tabID: currentTabID)
+                self?.wireEditorLSPIfNeeded(editorView: editorView, fileURL: url, tabID: currentTabID)
+            }
+            wireEditorLSPIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: currentTabID)
+            panelView = editorView
         case .subagent:
             guard let dashboardVM = injectedDashboardViewModel,
                   let subagentId = panel.subagentId,
@@ -212,10 +244,33 @@ extension MainWindowController {
         // terminal as first responder so the tab strip highlights the new panel.
         if !focusNewPanel {
             window?.makeFirstResponder(focusedSurface)
+        } else {
+            focusPanelView(panelView)
         }
 
         // Update toolbar to show panel tabs.
         updateWorkspaceToolbar()
+    }
+
+    func focusPanelView(_ panelView: NSView) {
+        if let editorView = panelView as? EditorView {
+            editorView.focusTextView()
+            return
+        }
+        window?.makeFirstResponder(panelView)
+    }
+
+    private func defaultEditorFile(in directory: URL) -> URL? {
+        let preferredNames = ["README.md", "Package.swift", "main.swift"]
+        for name in preferredNames {
+            let candidate = directory.appendingPathComponent(name)
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
+               !isDirectory.boolValue {
+                return candidate
+            }
+        }
+        return nil
     }
 
     // MARK: - Terminal Split
@@ -351,6 +406,7 @@ extension MainWindowController {
         guard activeSplitView != nil else { return }
 
         guard let focusedPane = focusedPaneSnapshot() else { return }
+        let currentTabID = visibleTabID ?? tabManager.activeTabID
         var promotedRemainingView: NSView?
 
         // Check if the pane being closed is a non-terminal panel.
@@ -377,6 +433,9 @@ extension MainWindowController {
         let viewToRemove: NSView
         if let panelView = closingPanelView {
             viewToRemove = panelView
+            if let editorView = panelView as? EditorView {
+                closeEditorLSPIfNeeded(editorView: editorView, tabID: currentTabID)
+            }
             // Clean up the panel content view entry.
             panelContentViews.removeValue(forKey: focusedPane.contentID)
         } else if let focusedSurface = focusedPane.view as? TerminalHostView {

@@ -29,6 +29,16 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertNil(strip.onOpenMarkdown)
     }
 
+    func testOnAddEditorCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onAddEditor)
+    }
+
+    func testOnOpenEditorCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onOpenEditor)
+    }
+
     func testOnReloadCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onReload)
@@ -88,6 +98,22 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertTrue(called)
     }
 
+    func testOnAddEditorCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onAddEditor = { called = true }
+        strip.onAddEditor?()
+        XCTAssertTrue(called)
+    }
+
+    func testOnOpenEditorCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onOpenEditor = { called = true }
+        strip.onOpenEditor?()
+        XCTAssertTrue(called)
+    }
+
     func testOnReloadCallbackFires() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         var called = false
@@ -141,22 +167,22 @@ final class HorizontalTabStripActionTests: XCTestCase {
 
     // MARK: - Action Icons Update
 
-    func testUpdateActionIconsForTerminalPanelShowsFourActions() {
+    func testUpdateActionIconsForTerminalPanelShowsFiveActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
         let actionButtons = findActionButtons(in: strip)
-        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown
-        XCTAssertEqual(actionButtons.count, 4)
+        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor
+        XCTAssertEqual(actionButtons.count, 5)
     }
 
-    func testUpdateActionIconsForTerminalWithCloseShowsFiveActions() {
+    func testUpdateActionIconsForTerminalWithCloseShowsSixActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: true)
 
         let actionButtons = findActionButtons(in: strip)
-        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Close
-        XCTAssertEqual(actionButtons.count, 5)
+        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Close
+        XCTAssertEqual(actionButtons.count, 6)
     }
 
     func testUpdateActionIconsForBrowserPanelShowsFiveActions() {
@@ -195,12 +221,31 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertEqual(actionButtons.count, 3)
     }
 
+    func testUpdateActionIconsForEditorPanelShowsTwoActions() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(panelType: .editor, canClose: false)
+
+        let actionButtons = findActionButtons(in: strip)
+        XCTAssertEqual(actionButtons.count, 2)
+    }
+
+    func testTerminalActionIconsIncludeEditorButton() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(panelType: .terminal, canClose: false)
+
+        let editorButton = findActionButtons(in: strip).first {
+            $0.accessibilityLabel() == "action:openEditor"
+        }
+
+        XCTAssertEqual(editorButton?.toolTip, "Open Text Editor")
+    }
+
     func testUpdateActionIconsReplacesOldButtons() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
 
         strip.updateActionIcons(panelType: .terminal, canClose: true)
         let terminalButtons = findActionButtons(in: strip)
-        XCTAssertEqual(terminalButtons.count, 5)
+        XCTAssertEqual(terminalButtons.count, 6)
 
         strip.updateActionIcons(panelType: .browser, canClose: false)
         let browserButtons = findActionButtons(in: strip)

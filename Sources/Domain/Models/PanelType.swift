@@ -23,6 +23,9 @@ enum PanelType: String, Codable, Sendable, Equatable {
     /// A markdown document viewer.
     case markdown
 
+    /// A general-purpose local text editor.
+    case editor
+
     /// A live subagent activity panel.
     case subagent
 }
@@ -40,7 +43,7 @@ struct PanelInfo: Equatable, Sendable {
     /// Optional initial URL for browser panels.
     let initialURL: URL?
 
-    /// Optional file path for markdown panels.
+    /// Optional file path for markdown and editor panels.
     let filePath: URL?
 
     /// Subagent identifier for linking the panel to dashboard data.
@@ -64,6 +67,9 @@ struct PanelInfo: Equatable, Sendable {
     }
     static func markdown(path: URL) -> PanelInfo {
         PanelInfo(type: .markdown, filePath: path)
+    }
+    static func editor(path: URL? = nil) -> PanelInfo {
+        PanelInfo(type: .editor, filePath: path)
     }
     static func subagent(id: String, sessionId: String) -> PanelInfo {
         PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)

@@ -43,6 +43,9 @@ final class HorizontalTabStripView: NSView {
     /// Callback when "Markdown" is selected from the add menu.
     var onAddMarkdown: (() -> Void)?
 
+    /// Callback when "Editor" is selected from the add menu.
+    var onAddEditor: (() -> Void)?
+
     /// Callback when the close button is clicked on a tab by index.
     var onCloseTab: ((Int) -> Void)?
 
@@ -63,6 +66,9 @@ final class HorizontalTabStripView: NSView {
 
     /// Callback when the "Open Markdown" action icon is clicked.
     var onOpenMarkdown: (() -> Void)?
+
+    /// Callback when the "Open Text Editor" action icon is clicked.
+    var onOpenEditor: (() -> Void)?
 
     /// Callback when the "Reload" action icon is clicked.
     var onReload: (() -> Void)?
@@ -568,6 +574,13 @@ final class HorizontalTabStripView: NSView {
         }
         menu.addItem(markdownItem)
 
+        let editorItem = NSMenuItem(title: "Text Editor", action: #selector(addEditor), keyEquivalent: "")
+        editorItem.target = self
+        if let img = NSImage(systemSymbolName: "doc.plaintext", accessibilityDescription: nil) {
+            editorItem.image = img
+        }
+        menu.addItem(editorItem)
+
         let point = NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 4)
         menu.popUp(positioning: nil, at: point, in: button)
     }
@@ -576,6 +589,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func addStackedTerminal() { onAddStackedTerminal?() }
     @objc private func addBrowser() { onAddBrowser?() }
     @objc private func addMarkdown() { onAddMarkdown?() }
+    @objc private func addEditor() { onAddEditor?() }
 
     // MARK: - Contextual Action Icons
 
@@ -628,6 +642,14 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleOpenMarkdown)
                 )
             )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "doc.plaintext",
+                    tooltip: "Open Text Editor",
+                    accessibilityID: "action:openEditor",
+                    action: #selector(handleOpenEditor)
+                )
+            )
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
@@ -653,7 +675,7 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .subagent:
+        case .markdown, .editor, .subagent:
             break
         }
 
@@ -701,6 +723,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleSplitStacked() { onSplitStacked?() }
     @objc private func handleOpenBrowser() { onOpenBrowser?() }
     @objc private func handleOpenMarkdown() { onOpenMarkdown?() }
+    @objc private func handleOpenEditor() { onOpenEditor?() }
     @objc private func handleReload() { onReload?() }
     @objc private func handleGoBack() { onGoBack?() }
     @objc private func handleGoForward() { onGoForward?() }

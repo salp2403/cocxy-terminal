@@ -15,6 +15,7 @@ final class PanelTypeTests: XCTestCase {
         XCTAssertEqual(PanelType.terminal.rawValue, "terminal")
         XCTAssertEqual(PanelType.browser.rawValue, "browser")
         XCTAssertEqual(PanelType.markdown.rawValue, "markdown")
+        XCTAssertEqual(PanelType.editor.rawValue, "editor")
     }
 
     func testPanelTypeCodable() throws {
@@ -54,6 +55,13 @@ final class PanelTypeTests: XCTestCase {
         let path = URL(fileURLWithPath: "/tmp/README.md")
         let info = PanelInfo.markdown(path: path)
         XCTAssertEqual(info.type, .markdown)
+        XCTAssertEqual(info.filePath, path)
+    }
+
+    func testPanelInfoEditorWithPath() {
+        let path = URL(fileURLWithPath: "/tmp/App.swift")
+        let info = PanelInfo.editor(path: path)
+        XCTAssertEqual(info.type, .editor)
         XCTAssertEqual(info.filePath, path)
     }
 }
@@ -105,6 +113,20 @@ final class SplitManagerPanelTests: XCTestCase {
 
         XCTAssertNotNil(newID)
         XCTAssertEqual(manager.panelType(for: newID!), .markdown)
+        let info = manager.panelInfo(for: newID!)
+        XCTAssertEqual(info.filePath, path)
+    }
+
+    func testSplitFocusedWithEditorTracksType() {
+        let manager = SplitManager()
+        let path = URL(fileURLWithPath: "/tmp/App.swift")
+        let newID = manager.splitFocusedWithPanel(
+            direction: .vertical,
+            panel: .editor(path: path)
+        )
+
+        XCTAssertNotNil(newID)
+        XCTAssertEqual(manager.panelType(for: newID!), .editor)
         let info = manager.panelInfo(for: newID!)
         XCTAssertEqual(info.filePath, path)
     }

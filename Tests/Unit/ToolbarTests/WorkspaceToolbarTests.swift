@@ -33,6 +33,14 @@ final class WorkspaceToolbarTests: XCTestCase {
         XCTAssertEqual(tab.symbolName, "doc.text")
     }
 
+    func testPanelTabInfoEditorSymbol() {
+        let tab = PanelTabInfo(
+            leafID: UUID(), contentID: UUID(),
+            panelType: .editor, title: "Editor", isFocused: false
+        )
+        XCTAssertEqual(tab.symbolName, "doc.plaintext")
+    }
+
     // MARK: - Toolbar Visibility
 
     func testToolbarVisibleWithSinglePane() {
@@ -120,6 +128,19 @@ final class WorkspaceToolbarTests: XCTestCase {
         let titles = controller.panelTabs.map { $0.title }
         XCTAssertTrue(titles.contains("Terminal 1"))
         XCTAssertTrue(titles.contains("Browser"))
+    }
+
+    func testEditorPanelTabTitle() {
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window)
+        let manager = SplitManager()
+        manager.splitFocusedWithPanel(direction: .horizontal, panel: .editor())
+
+        controller.update(splitManager: manager)
+
+        let editorTabs = controller.panelTabs.filter { $0.panelType == .editor }
+        XCTAssertEqual(editorTabs.count, 1)
+        XCTAssertEqual(editorTabs.first?.title, "Editor")
     }
 
     // MARK: - Callbacks

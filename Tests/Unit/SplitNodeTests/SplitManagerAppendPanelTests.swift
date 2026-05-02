@@ -97,6 +97,18 @@ final class SplitManagerAppendPanelTests: XCTestCase {
                        "Panel type should be registered as browser")
     }
 
+    func testAppendEditorPanelRegistersPanelType() {
+        let manager = SplitManager()
+        let url = URL(fileURLWithPath: "/tmp/App.swift")
+
+        let contentID = manager.appendPanel(panel: .editor(path: url))
+
+        XCTAssertNotNil(contentID)
+        XCTAssertEqual(manager.panelType(for: contentID!), .editor,
+                       "Panel type should be registered as editor")
+        XCTAssertEqual(manager.panelInfo(for: contentID!).filePath, url)
+    }
+
     func testAppendPanelFocusNewPanelMoveFocusToNewLeaf() {
         let manager = SplitManager()
         _ = manager.splitFocused(direction: .horizontal)

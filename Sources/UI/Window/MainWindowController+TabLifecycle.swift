@@ -241,6 +241,14 @@ extension MainWindowController {
         clearTerminalEngineTracking(tabID: tabID)
 
         // Clean up per-tab resources to prevent memory leaks.
+        lspWorkspaceCoordinators.removeValue(forKey: tabID)?.stopAll()
+        let closingDocumentURIs = lspDocumentTabIDs.compactMap { uri, ownerTabID in
+            ownerTabID == tabID ? uri : nil
+        }
+        for uri in closingDocumentURIs {
+            lspEditorViewsByDocumentURI.removeValue(forKey: uri)
+            lspDocumentTabIDs.removeValue(forKey: uri)
+        }
         tabOutputBuffers.removeValue(forKey: tabID)
         tabCommandTrackers.removeValue(forKey: tabID)
         tabSplitCoordinator.removeSplitManager(for: tabID)

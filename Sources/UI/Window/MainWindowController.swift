@@ -156,6 +156,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Optional reference to the configuration service.
     let configService: ConfigService?
 
+    var lspServerDiscoveryFactory: () -> LSPServerDiscovery = {
+        LSPServerDiscovery()
+    }
+
+    var lspProcessFactory: LSPManager.ProcessFactory = { configuration in
+        LSPProcess(configuration: configuration)
+    }
+
+    var lspWorkspaceCoordinators: [TabID: LSPWorkspaceCoordinator] = [:]
+    var lspEditorViewsByDocumentURI: [String: WeakReference<EditorView>] = [:]
+    var lspDocumentTabIDs: [String: TabID] = [:]
+
     /// Snapshot of the last applied config, used to detect which properties
     /// changed and whether a bridge restart is needed.
     var lastAppliedConfig: CocxyConfig?
@@ -895,10 +907,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onAddStackedTerminal = { [weak self] in self?.performVisualSplit(isVertical: false) }
         strip.onAddBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
         strip.onAddMarkdown = { [weak self] in self?.splitWithMarkdownAction(nil) }
+        strip.onAddEditor = { [weak self] in self?.splitWithEditorAction(nil) }
         strip.onSplitSideBySide = { [weak self] in self?.performVisualSplit(isVertical: true) }
         strip.onSplitStacked = { [weak self] in self?.performVisualSplit(isVertical: false) }
         strip.onOpenBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
         strip.onOpenMarkdown = { [weak self] in self?.splitWithMarkdownAction(nil) }
+        strip.onOpenEditor = { [weak self] in self?.splitWithEditorAction(nil) }
         strip.onReload = { [weak self] in self?.reloadFocusedBrowserPanel() }
         strip.onGoBack = { [weak self] in self?.goBackFocusedBrowserPanel() }
         strip.onGoForward = { [weak self] in self?.goForwardFocusedBrowserPanel() }
@@ -1019,7 +1033,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         let contentID = leaf.terminalID
         if let panelView = panelContentViews[contentID] {
-            window?.makeFirstResponder(panelView)
+            focusPanelView(panelView)
         } else {
             let leafViews = collectLeafViews()
             if index < leafViews.count {
@@ -1116,6 +1130,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             paneName = "browser panel"
         case .markdown:
             paneName = "markdown panel"
+        case .editor:
+            paneName = "editor panel"
         case .subagent:
             paneName = "subagent panel"
         }
@@ -1464,11 +1480,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             strip.onAddTab = nil
             strip.onAddBrowser = nil
             strip.onAddMarkdown = nil
+            strip.onAddEditor = nil
             strip.onAddStackedTerminal = nil
             strip.onSplitSideBySide = nil
             strip.onSplitStacked = nil
             strip.onOpenBrowser = nil
             strip.onOpenMarkdown = nil
+            strip.onOpenEditor = nil
             strip.onReload = nil
             strip.onGoBack = nil
             strip.onGoForward = nil

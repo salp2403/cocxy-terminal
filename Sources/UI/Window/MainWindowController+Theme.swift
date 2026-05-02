@@ -154,6 +154,10 @@ extension MainWindowController {
         if old?.notes != config.notes {
             handleNotesConfigChanged(config.notes)
         }
+
+        if old?.lsp != config.lsp {
+            resetLSPWorkspaceCoordinators()
+        }
     }
 
     // MARK: - Tab Position

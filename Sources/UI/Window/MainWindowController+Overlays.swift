@@ -503,6 +503,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "workspace.editor",
+                name: "Open Text Editor Panel",
+                description: "Open a local text editor alongside the terminal",
+                shortcut: nil,
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.splitWithEditorAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "remote.toggle",
                 name: "Toggle Remote Workspaces",
                 description: "Show or hide the remote workspace panel",

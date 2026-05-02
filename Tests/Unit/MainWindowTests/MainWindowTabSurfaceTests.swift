@@ -1088,6 +1088,45 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertFalse(bridge.destroyedSurfaces.contains(originalPrimarySurfaceID))
     }
 
+    func testEditorPanelQuitRequestClosesOnlyThatPanel() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-editor-quit-\(UUID().uuidString).txt")
+        try "clean\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        controller.openEditorPanel(fileURL: fileURL)
+
+        guard let entry = controller.panelContentViews.first(where: { $0.value is EditorView }),
+              let editorView = entry.value as? EditorView else {
+            XCTFail("Expected openEditorPanel to install an EditorView panel")
+            return
+        }
+        let editorTextView: EditorTextView? = firstDescendant(in: editorView)
+        XCTAssertNotNil(editorTextView)
+        XCTAssertTrue(
+            controller.window?.firstResponder === editorTextView,
+            "Opening an editor panel should focus the editable text view, not leave keyboard input on the terminal"
+        )
+
+        editorView.onQuitRequested?()
+
+        XCTAssertNil(
+            controller.panelContentViews[entry.key],
+            "The editor panel's quit request must close the editor panel through the window controller"
+        )
+        XCTAssertNotNil(
+            controller.terminalSurfaceView,
+            "Closing the editor panel must leave the terminal surface alive"
+        )
+    }
+
     func testStripSwapTabsRebuildsNestedVisualHierarchyWhenLeavesHaveDifferentParents() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -1509,5 +1548,17 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             savedView.redrawCallCount, 0,
             "Saved detached split views must only refresh their anchor, not redraw as visible surfaces"
         )
+    }
+
+    private func firstDescendant<T: NSView>(in root: NSView) -> T? {
+        if let match = root as? T {
+            return match
+        }
+        for subview in root.subviews {
+            if let match: T = firstDescendant(in: subview) {
+                return match
+            }
+        }
+        return nil
     }
 }
