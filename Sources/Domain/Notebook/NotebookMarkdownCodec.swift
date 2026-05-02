@@ -5,6 +5,8 @@ import Foundation
 import CocxyMarkdownLib
 
 enum NotebookMarkdownCodec {
+    private static let outputFenceInfoPrefix = "cocxy-output"
+
     private static let executableLanguages: Set<String> = [
         "bash",
         "python",
@@ -63,9 +65,13 @@ enum NotebookMarkdownCodec {
                     index += 1
                 }
 
+                let outputParse = parseAttachedOutputs(from: lines, startingAt: index)
+                index = outputParse.nextIndex
+
                 cells.append(.code(
                     language: fence.language,
-                    source: trimBoundaryNewlines(codeLines.joined(separator: "\n"))
+                    source: trimBoundaryNewlines(codeLines.joined(separator: "\n")),
+                    outputs: outputParse.outputs
                 ))
             } else {
                 markdownLines.append(line)
@@ -100,12 +106,23 @@ enum NotebookMarkdownCodec {
             return trimBoundaryNewlines(cell.source)
         case .code:
             let language = cell.language ?? "bash"
-            return """
+            var parts = ["""
             ```\(language)
             \(trimBoundaryNewlines(cell.source))
             ```
-            """
+            """]
+            parts.append(contentsOf: cell.outputs.map(renderOutput))
+            return parts.joined(separator: "\n\n")
         }
+    }
+
+    private static func renderOutput(_ output: NotebookCellOutput) -> String {
+        let finalNewlineFlag = output.text.hasSuffix("\n") ? "" : " no-final-newline"
+        let closingSeparator = output.text.hasSuffix("\n") ? "" : "\n"
+        return """
+        ```\(outputFenceInfoPrefix) \(output.kind.rawValue)\(finalNewlineFlag)
+        \(output.text)\(closingSeparator)```
+        """
     }
 
     private static func parseExecutableFenceStart(_ line: String) -> (marker: String, language: String)? {
@@ -129,6 +146,91 @@ enum NotebookMarkdownCodec {
         }
 
         return (marker, language)
+    }
+
+    private static func parseAttachedOutputs(
+        from lines: [String],
+        startingAt startingIndex: Int
+    ) -> (outputs: [NotebookCellOutput], nextIndex: Int) {
+        var cursor = startingIndex
+        var outputs: [NotebookCellOutput] = []
+
+        while cursor < lines.count {
+            let blankStart = cursor
+            while cursor < lines.count,
+                  lines[cursor].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                cursor += 1
+            }
+
+            guard cursor < lines.count,
+                  let fence = parseOutputFenceStart(lines[cursor])
+            else {
+                return (outputs, outputs.isEmpty ? startingIndex : blankStart)
+            }
+
+            cursor += 1
+            var outputLines: [String] = []
+            while cursor < lines.count, !isFenceClose(lines[cursor], marker: fence.marker) {
+                outputLines.append(lines[cursor])
+                cursor += 1
+            }
+
+            if cursor < lines.count {
+                cursor += 1
+            }
+
+            outputs.append(NotebookCellOutput(
+                kind: fence.kind,
+                text: outputText(
+                    from: outputLines,
+                    preservesFinalNewline: fence.preservesFinalNewline
+                )
+            ))
+        }
+
+        return (outputs, cursor)
+    }
+
+    private static func parseOutputFenceStart(
+        _ line: String
+    ) -> (marker: String, kind: NotebookCellOutputKind, preservesFinalNewline: Bool)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let marker: String
+        if trimmed.hasPrefix("```") {
+            marker = "```"
+        } else if trimmed.hasPrefix("~~~") {
+            marker = "~~~"
+        } else {
+            return nil
+        }
+
+        let info = trimmed.dropFirst(marker.count)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var parts = info.split(separator: " ").map(String.init)
+        guard parts.first == outputFenceInfoPrefix else {
+            return nil
+        }
+        parts.removeFirst()
+        guard let rawKind = parts.first else {
+            return nil
+        }
+
+        let normalizedKind = rawKind.replacingOccurrences(of: "_", with: "-")
+        guard let kind = NotebookCellOutputKind(rawValue: normalizedKind) else {
+            return nil
+        }
+        return (marker, kind, !parts.contains("no-final-newline"))
+    }
+
+    private static func outputText(
+        from lines: [String],
+        preservesFinalNewline: Bool
+    ) -> String {
+        let body = lines.joined(separator: "\n")
+        guard preservesFinalNewline, !lines.isEmpty else {
+            return body
+        }
+        return body + "\n"
     }
 
     private static func isFenceClose(_ line: String, marker: String) -> Bool {

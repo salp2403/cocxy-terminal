@@ -1624,7 +1624,13 @@ final class AppSocketCommandHandlerTests: XCTestCase {
               "metadata": {},
               "source": ["print('hello')"],
               "execution_count": null,
-              "outputs": []
+              "outputs": [
+                {
+                  "output_type": "stream",
+                  "name": "stdout",
+                  "text": ["done\\n"]
+                }
+              ]
             }
           ]
         }
@@ -1650,6 +1656,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(rendered.contains("title: \"Imported\""))
         XCTAssertTrue(rendered.contains("# Intro"))
         XCTAssertTrue(rendered.contains("```python\nprint('hello')\n```"))
+        XCTAssertTrue(rendered.contains("```cocxy-output stdout\ndone\n```"))
     }
 
     func test_notebookExport_convertsCocxyMarkdownToJupyter() throws {
@@ -1668,6 +1675,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
         ```bash
         echo hello
+        ```
+
+        ```cocxy-output stdout
+        hello
         ```
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
@@ -1691,6 +1702,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(cells.count, 2)
         XCTAssertEqual(cells[0]["cell_type"] as? String, "markdown")
         XCTAssertEqual(cells[1]["cell_type"] as? String, "code")
+        let outputs = try XCTUnwrap(cells[1]["outputs"] as? [[String: Any]])
+        XCTAssertEqual(outputs.first?["output_type"] as? String, "stream")
+        XCTAssertEqual(outputs.first?["name"] as? String, "stdout")
+        XCTAssertEqual((outputs.first?["text"] as? [String])?.joined(), "hello\n")
     }
 
     func test_notebookImport_refusesExistingOutputWithoutForce() throws {

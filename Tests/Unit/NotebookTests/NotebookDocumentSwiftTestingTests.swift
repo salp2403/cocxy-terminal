@@ -64,6 +64,32 @@ struct NotebookDocumentSwiftTestingTests {
         #expect(reparsed.cells == original.cells)
     }
 
+    @Test("renders code outputs so Jupyter imports round-trip without data loss")
+    func rendersCodeOutputsWithoutDataLoss() {
+        let original = NotebookDocument(
+            metadata: NotebookMetadata(title: "Output Demo"),
+            cells: [
+                .code(
+                    language: "python",
+                    source: "print('ok')",
+                    outputs: [
+                        NotebookCellOutput(kind: .stdout, text: "ok\n"),
+                        NotebookCellOutput(kind: .stderr, text: "warn\n"),
+                        NotebookCellOutput(kind: .displayData, text: "inline"),
+                    ]
+                ),
+            ]
+        )
+
+        let rendered = NotebookMarkdownCodec.render(original)
+        let reparsed = NotebookDocument.parseMarkdown(rendered)
+
+        #expect(rendered.contains("```cocxy-output stdout\nok\n```"))
+        #expect(rendered.contains("```cocxy-output stderr\nwarn\n```"))
+        #expect(rendered.contains("```cocxy-output display-data no-final-newline\ninline\n```"))
+        #expect(reparsed.cells == original.cells)
+    }
+
     @Test("non executable fences remain inside markdown cells")
     func nonExecutableFencesRemainMarkdown() {
         let notebook = NotebookDocument.parseMarkdown("""
