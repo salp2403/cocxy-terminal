@@ -142,6 +142,12 @@ final class PreferencesViewModel: ObservableObject {
     /// Local conversation history storage directory.
     @Published var agentConversationStorageDir: String
 
+    /// Draft API key for the currently selected remote provider.
+    @Published var agentAPIKeyDraft: String
+
+    /// Short status for the last provider-key save/delete action.
+    @Published var agentAPIKeyStatus: String?
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -444,6 +450,10 @@ final class PreferencesViewModel: ObservableObject {
     /// persisted. When `nil` the writer emits `savedConfig.keybindings`.
     private var pendingKeybindings: KeybindingsConfig?
 
+    /// Local secret facade for provider API keys. Production uses Keychain;
+    /// tests inject an in-memory store.
+    private let agentSecrets: AgentSecrets
+
     /// Dedicated editor model for the Keybindings preferences tab.
     ///
     /// Constructed lazily on first access so view models used purely for
@@ -459,9 +469,14 @@ final class PreferencesViewModel: ObservableObject {
     /// - Parameters:
     ///   - config: The current configuration snapshot.
     ///   - fileProvider: Destination for writes. Defaults to disk.
-    init(config: CocxyConfig, fileProvider: ConfigFileProviding = DiskConfigFileProvider()) {
+    init(
+        config: CocxyConfig,
+        fileProvider: ConfigFileProviding = DiskConfigFileProvider(),
+        agentSecrets: AgentSecrets = AgentSecrets()
+    ) {
         self.savedConfig = config
         self.fileProvider = fileProvider
+        self.agentSecrets = agentSecrets
 
         // General
         self.shell = config.general.shell
@@ -497,6 +512,8 @@ final class PreferencesViewModel: ObservableObject {
         self.agentAutoMode = config.agent.autoMode
         self.agentMaxIterations = config.agent.maxIterations
         self.agentConversationStorageDir = config.agent.conversationStorageDir
+        self.agentAPIKeyDraft = ""
+        self.agentAPIKeyStatus = nil
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -549,6 +566,23 @@ final class PreferencesViewModel: ObservableObject {
         self.recommendedFontFamilies = FontFallbackResolver.recommendedFamilies()
         self.bundledFontFamilies = FontFallbackResolver.bundledFamilies
         self.availableLSPLanguages = LSPLanguageRegistry.defaults.servers
+    }
+
+    // MARK: - Agent Provider Secrets
+
+    func saveAgentAPIKeyDraft(for provider: AgentProviderKind) throws {
+        try agentSecrets.saveAPIKey(agentAPIKeyDraft, for: provider)
+        agentAPIKeyDraft = ""
+        agentAPIKeyStatus = "\(Self.agentProviderDisplayName(provider)) API key saved."
+    }
+
+    func deleteAgentAPIKey(for provider: AgentProviderKind) throws {
+        try agentSecrets.deleteAPIKey(for: provider)
+        agentAPIKeyStatus = "\(Self.agentProviderDisplayName(provider)) API key deleted."
+    }
+
+    func hasSavedAgentAPIKey(for provider: AgentProviderKind) -> Bool {
+        (try? agentSecrets.hasAPIKey(for: provider)) ?? false
     }
 
     // MARK: - LSP Selection
@@ -761,6 +795,19 @@ final class PreferencesViewModel: ObservableObject {
             || agentAutoMode != config.autoMode
             || agentMaxIterations != config.maxIterations
             || agentConversationStorageDir != config.conversationStorageDir
+    }
+
+    private static func agentProviderDisplayName(_ provider: AgentProviderKind) -> String {
+        switch provider {
+        case .foundationModelsOnDevice:
+            return "Foundation Models"
+        case .anthropic:
+            return "Anthropic"
+        case .openai:
+            return "OpenAI"
+        case .google:
+            return "Google"
+        }
     }
 
     /// Builds a `WorktreeConfig` value from the editable view-model

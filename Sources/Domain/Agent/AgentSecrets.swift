@@ -34,6 +34,40 @@ enum AgentSecretError: Error, Sendable, Equatable {
     case dataConversionFailed
 }
 
+extension AgentSecretError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .emptyAPIKey:
+            return "API key cannot be empty."
+        case .providerDoesNotUseAPIKey(let provider):
+            return "\(provider.displayName) does not use an API key."
+        case .saveFailed(let status):
+            return "Could not save API key to Keychain (status \(status))."
+        case .loadFailed(let status):
+            return "Could not read API key from Keychain (status \(status))."
+        case .deleteFailed(let status):
+            return "Could not delete API key from Keychain (status \(status))."
+        case .dataConversionFailed:
+            return "Saved API key could not be decoded."
+        }
+    }
+}
+
+private extension AgentProviderKind {
+    var displayName: String {
+        switch self {
+        case .foundationModelsOnDevice:
+            return "Foundation Models"
+        case .anthropic:
+            return "Anthropic"
+        case .openai:
+            return "OpenAI"
+        case .google:
+            return "Google"
+        }
+    }
+}
+
 /// Validating facade for Agent provider secrets.
 struct AgentSecrets: Sendable {
     private let store: any AgentSecretStoring

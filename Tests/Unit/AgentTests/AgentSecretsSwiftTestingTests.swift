@@ -45,6 +45,13 @@ struct AgentSecretsSwiftTestingTests {
         #expect(try secrets.apiKey(for: .foundationModelsOnDevice) == nil)
     }
 
+    @Test("secret errors expose user-safe localized descriptions")
+    func secretErrorsExposeUserSafeDescriptions() {
+        let error = AgentSecretError.providerDoesNotUseAPIKey(.foundationModelsOnDevice)
+
+        #expect(error.localizedDescription == "Foundation Models does not use an API key.")
+    }
+
     @Test("provider keys are isolated by keychain account")
     func providerKeysAreIsolated() throws {
         let secrets = AgentSecrets(store: InMemoryAgentSecretStore())

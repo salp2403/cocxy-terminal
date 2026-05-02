@@ -22,6 +22,19 @@ struct AgentModePreferencesSwiftTestingTests {
         return (vm, provider)
     }
 
+    private func makeViewModelWithSecrets(
+        config: CocxyConfig = .defaults
+    ) -> (PreferencesViewModel, InMemoryProvider, AgentSecrets) {
+        let provider = InMemoryProvider()
+        let secrets = AgentSecrets(store: InMemoryAgentSecretStore())
+        let vm = PreferencesViewModel(
+            config: config,
+            fileProvider: provider,
+            agentSecrets: secrets
+        )
+        return (vm, provider, secrets)
+    }
+
     @Test("init populates Agent Mode fields from the saved config")
     func initPopulatesFromConfig() {
         let config = CocxyConfig(
@@ -138,6 +151,56 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(service.current.agent.conversationStorageDir == AgentModeConfig.defaults.conversationStorageDir)
         #expect(vm.agentConversationStorageDir == AgentModeConfig.defaults.conversationStorageDir)
         #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test("saving Agent provider key stores trimmed value outside config dirty state")
+    func savingProviderKeyStoresTrimmedValueOutsideConfigDirtyState() throws {
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            agent: AgentModeConfig(preferredProvider: .openai),
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let (vm, _, secrets) = makeViewModelWithSecrets(config: config)
+
+        vm.agentAPIKeyDraft = "  user-openai-key  "
+        try vm.saveAgentAPIKeyDraft(for: .openai)
+
+        #expect(try secrets.apiKey(for: .openai) == "user-openai-key")
+        #expect(vm.agentAPIKeyDraft.isEmpty)
+        #expect(vm.agentAPIKeyStatus == "OpenAI API key saved.")
+        #expect(vm.hasSavedAgentAPIKey(for: .openai) == true)
+        #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test("Foundation Models never exposes API key storage from Preferences")
+    func foundationModelsNeverExposesAPIKeyStorage() {
+        let (vm, _, _) = makeViewModelWithSecrets()
+
+        vm.agentAPIKeyDraft = "not-needed"
+
+        #expect(throws: AgentSecretError.providerDoesNotUseAPIKey(.foundationModelsOnDevice)) {
+            try vm.saveAgentAPIKeyDraft(for: .foundationModelsOnDevice)
+        }
+        #expect(vm.hasSavedAgentAPIKey(for: .foundationModelsOnDevice) == false)
+    }
+
+    @Test("deleting Agent provider key removes it from local secrets")
+    func deletingProviderKeyRemovesLocalSecret() throws {
+        let (vm, _, secrets) = makeViewModelWithSecrets()
+        try secrets.saveAPIKey("user-google-key", for: .google)
+        #expect(vm.hasSavedAgentAPIKey(for: .google) == true)
+
+        try vm.deleteAgentAPIKey(for: .google)
+
+        #expect(try secrets.apiKey(for: .google) == nil)
+        #expect(vm.agentAPIKeyStatus == "Google API key deleted.")
+        #expect(vm.hasSavedAgentAPIKey(for: .google) == false)
     }
 
     @Test("generated TOML writes the Agent Mode section")

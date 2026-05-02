@@ -776,6 +776,46 @@ struct AgentModePreferencesSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section("API Key") {
+                if viewModel.agentPreferredProvider.requiresAPIKey {
+                    SecureField("API key", text: $viewModel.agentAPIKeyDraft)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack {
+                        Button("Save API Key") {
+                            saveAPIKey()
+                        }
+                        .disabled(trimmedAPIKeyDraft.isEmpty)
+
+                        Button("Delete Saved Key") {
+                            deleteAPIKey()
+                        }
+                        .disabled(!viewModel.hasSavedAgentAPIKey(for: viewModel.agentPreferredProvider))
+
+                        Spacer()
+                    }
+
+                    Text(
+                        viewModel.hasSavedAgentAPIKey(for: viewModel.agentPreferredProvider)
+                            ? "A key is saved in the macOS Keychain for this provider."
+                            : "No key is saved for this provider."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text("Foundation Models does not use an API key.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let status = viewModel.agentAPIKeyStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
             Section("Limits") {
                 Stepper(
                     "Max iterations: \(viewModel.agentMaxIterations)",
@@ -793,6 +833,26 @@ struct AgentModePreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Agent Mode")
+    }
+
+    private var trimmedAPIKeyDraft: String {
+        viewModel.agentAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func saveAPIKey() {
+        do {
+            try viewModel.saveAgentAPIKeyDraft(for: viewModel.agentPreferredProvider)
+        } catch {
+            viewModel.agentAPIKeyStatus = "Failed to save API key: \(error.localizedDescription)"
+        }
+    }
+
+    private func deleteAPIKey() {
+        do {
+            try viewModel.deleteAgentAPIKey(for: viewModel.agentPreferredProvider)
+        } catch {
+            viewModel.agentAPIKeyStatus = "Failed to delete API key: \(error.localizedDescription)"
+        }
     }
 
     private func providerTitle(_ provider: AgentProviderKind) -> String {
