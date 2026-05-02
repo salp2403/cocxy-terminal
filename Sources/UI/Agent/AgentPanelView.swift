@@ -92,6 +92,10 @@ struct AgentPanelView: View {
                 .lineLimit(2)
                 .textSelection(.enabled)
 
+            if !viewModel.availableSkills.isEmpty {
+                skillPicker
+            }
+
             if let approval = viewModel.pendingApproval {
                 approvalCard(approval)
             }
@@ -116,6 +120,31 @@ struct AgentPanelView: View {
             }
         }
         .padding(12)
+    }
+
+    private var skillPicker: some View {
+        Menu {
+            ForEach(viewModel.availableSkills) { skill in
+                Button(action: {
+                    viewModel.setSkill(skill.id, selected: !viewModel.isSkillSelected(skill.id))
+                }) {
+                    Label(
+                        skillMenuTitle(skill),
+                        systemImage: viewModel.isSkillSelected(skill.id)
+                            ? "checkmark.circle.fill"
+                            : "circle"
+                    )
+                }
+            }
+        } label: {
+            Label(skillPickerTitle, systemImage: "wand.and.stars")
+                .lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .disabled(viewModel.state == .running)
+        .help("Select local skills for the next Agent prompt")
+        .accessibilityLabel(skillPickerTitle)
     }
 
     private func approvalCard(_ request: AgentToolApprovalRequest) -> some View {
@@ -178,6 +207,20 @@ struct AgentPanelView: View {
         case .idle, .failed:
             return true
         }
+    }
+
+    private var skillPickerTitle: String {
+        if viewModel.selectedSkillsCount == 0 {
+            return "Skills"
+        }
+        if viewModel.selectedSkillsCount == 1 {
+            return "1 Skill"
+        }
+        return "\(viewModel.selectedSkillsCount) Skills"
+    }
+
+    private func skillMenuTitle(_ skill: AgentPanelSkillOption) -> String {
+        "\(skill.name) (\(skill.source.rawValue))"
     }
 
     private var statusColor: Color {

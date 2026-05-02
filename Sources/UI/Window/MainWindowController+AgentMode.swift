@@ -76,6 +76,7 @@ extension MainWindowController {
         let configuration = configService?.current.agent ?? .defaults
         if let agentPanelViewModel {
             agentPanelViewModel.updateConfiguration(configuration)
+            agentPanelViewModel.updateSkillRegistry(currentAgentModeSkillRegistry())
             return agentPanelViewModel
         }
 
@@ -94,10 +95,15 @@ extension MainWindowController {
         )
         let viewModel = AgentPanelViewModel(
             configuration: configuration,
-            runner: runner
+            runner: runner,
+            skillRegistry: currentAgentModeSkillRegistry()
         )
         agentPanelViewModel = viewModel
         return viewModel
+    }
+
+    func currentAgentModeSkillRegistry() -> SkillRegistry {
+        SkillRegistry.localDefault(projectRoot: currentAgentModeWorkingDirectory())
     }
 
     func currentAgentModeWorkingDirectory() -> URL? {

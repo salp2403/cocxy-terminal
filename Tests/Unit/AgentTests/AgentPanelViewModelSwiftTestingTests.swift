@@ -54,6 +54,42 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(await runner.prompts == ["What changed?"])
     }
 
+    @Test("selected skills are passed as system context without changing user prompt")
+    func selectedSkillsArePassedAsSystemContext() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeSkill(
+            id: "review-pr",
+            name: "Review PR",
+            summary: "Review risks first.",
+            body: "Lead with correctness risks.",
+            in: root
+        )
+        let runner = RecordingAgentPromptRunner(result: AgentLoopResult(
+            messages: [],
+            stopReason: .completed
+        ))
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true),
+            runner: runner,
+            skillRegistry: SkillRegistry(directories: [SkillDirectory(url: root, source: .project)])
+        )
+
+        #expect(viewModel.availableSkills.map(\.id) == ["review-pr"])
+
+        viewModel.setSkill("review-pr", selected: true)
+        viewModel.promptDraft = "  Inspect this change.  "
+        await viewModel.submitPrompt()
+
+        let histories = await runner.histories
+        #expect(await runner.prompts == ["Inspect this change."])
+        #expect(histories.count == 1)
+        #expect(histories.first?.count == 1)
+        #expect(histories.first?.first?.role == .system)
+        #expect(histories.first?.first?.content.contains("Selected local skills:") == true)
+        #expect(histories.first?.first?.content.contains("Lead with correctness risks.") == true)
+    }
+
     @Test("permission stop reason becomes approval state")
     func permissionStopReasonBecomesApprovalState() async throws {
         let request = AgentToolApprovalRequest(
@@ -246,6 +282,7 @@ struct AgentPanelViewModelSwiftTestingTests {
 private actor RecordingAgentPromptRunner: AgentPromptRunning {
     private let result: AgentLoopResult
     private(set) var prompts: [String] = []
+    private(set) var histories: [[AgentMessage]] = []
 
     init(result: AgentLoopResult) {
         self.result = result
@@ -257,6 +294,7 @@ private actor RecordingAgentPromptRunner: AgentPromptRunning {
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
         prompts.append(prompt)
+        histories.append(history)
         return result
     }
 }
@@ -300,4 +338,32 @@ private struct ThrowingAgentPromptRunner: AgentPromptRunning {
     ) async throws -> AgentLoopResult {
         throw AgentPanelViewModelError.providerUnavailable
     }
+}
+
+private func makeTemporaryDirectory() throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("cocxy-agent-panel-tests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+}
+
+private func writeSkill(
+    id: String,
+    name: String,
+    summary: String,
+    body: String,
+    in root: URL
+) throws {
+    let directory = root.appendingPathComponent(id, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try """
+    ---
+    id: \(id)
+    name: \(name)
+    description: \(summary)
+    ---
+    # \(name)
+
+    \(body)
+    """.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
 }

@@ -25,9 +25,18 @@ extension AgentPanelViewModelError: LocalizedError {
     }
 }
 
+struct AgentPanelSkillOption: Identifiable, Sendable, Equatable {
+    let id: String
+    let name: String
+    let summary: String
+    let source: SkillSource
+}
+
 @MainActor
 final class AgentPanelViewModel: ObservableObject {
     @Published var promptDraft: String = ""
+    @Published private(set) var availableSkills: [AgentPanelSkillOption] = []
+    @Published private(set) var selectedSkillIDs: Set<String> = []
     @Published private(set) var messages: [AgentMessage] = []
     @Published private(set) var state: AgentPanelState = .idle
     @Published private(set) var statusText: String = "Ready."
@@ -36,10 +45,17 @@ final class AgentPanelViewModel: ObservableObject {
 
     private var configuration: AgentModeConfig
     private let runner: any AgentPromptRunning
+    private var skillRegistry: SkillRegistry
 
-    init(configuration: AgentModeConfig, runner: any AgentPromptRunning) {
+    init(
+        configuration: AgentModeConfig,
+        runner: any AgentPromptRunning,
+        skillRegistry: SkillRegistry = .localDefault()
+    ) {
         self.configuration = configuration
         self.runner = runner
+        self.skillRegistry = skillRegistry
+        refreshSkills()
         if !configuration.enabled {
             state = .disabled
             statusText = "Agent Mode is disabled."
@@ -69,6 +85,10 @@ final class AgentPanelViewModel: ObservableObject {
         return true
     }
 
+    var selectedSkillsCount: Int {
+        selectedSkillIDs.count
+    }
+
     func updateConfiguration(_ configuration: AgentModeConfig) {
         self.configuration = configuration
         if configuration.enabled {
@@ -84,6 +104,24 @@ final class AgentPanelViewModel: ObservableObject {
         }
     }
 
+    func updateSkillRegistry(_ skillRegistry: SkillRegistry) {
+        self.skillRegistry = skillRegistry
+        refreshSkills()
+    }
+
+    func isSkillSelected(_ skillID: String) -> Bool {
+        selectedSkillIDs.contains(skillID)
+    }
+
+    func setSkill(_ skillID: String, selected: Bool) {
+        guard availableSkills.contains(where: { $0.id == skillID }) else { return }
+        if selected {
+            selectedSkillIDs.insert(skillID)
+        } else {
+            selectedSkillIDs.remove(skillID)
+        }
+    }
+
     func submitPrompt() async {
         let prompt = promptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return }
@@ -96,6 +134,16 @@ final class AgentPanelViewModel: ObservableObject {
 
         guard state != .running else { return }
 
+        let effectiveHistory: [AgentMessage]
+        do {
+            effectiveHistory = try historyWithSelectedSkills()
+        } catch {
+            let description = error.localizedDescription
+            state = .failed(description)
+            statusText = description
+            return
+        }
+
         promptDraft = ""
         pendingApproval = nil
         pendingApprovalResponseDraft = ""
@@ -105,7 +153,7 @@ final class AgentPanelViewModel: ObservableObject {
         do {
             let result = try await runner.run(
                 prompt: prompt,
-                history: messages,
+                history: effectiveHistory,
                 configuration: configuration
             )
             messages = result.messages
@@ -164,6 +212,48 @@ final class AgentPanelViewModel: ObservableObject {
         pendingApprovalResponseDraft = ""
         state = configuration.enabled ? .idle : .disabled
         statusText = configuration.enabled ? "Request rejected." : "Agent Mode is disabled."
+    }
+
+    private func refreshSkills() {
+        do {
+            let loadedSkills = try skillRegistry.loadSkills()
+            availableSkills = loadedSkills.map {
+                AgentPanelSkillOption(
+                    id: $0.id,
+                    name: $0.name,
+                    summary: $0.summary,
+                    source: $0.source
+                )
+            }
+            let availableIDs = Set(availableSkills.map(\.id))
+            selectedSkillIDs = selectedSkillIDs.intersection(availableIDs)
+        } catch {
+            availableSkills = []
+            selectedSkillIDs = []
+            if configuration.enabled {
+                statusText = "Failed to load skills: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func historyWithSelectedSkills() throws -> [AgentMessage] {
+        guard !selectedSkillIDs.isEmpty else {
+            return messages
+        }
+
+        let invocation = try SkillInvoker(registry: skillRegistry)
+            .makeInvocation(skillIDs: Array(selectedSkillIDs))
+        let context = """
+        Selected local skills:
+        \(invocation.instructions)
+        """
+        return messages + [
+            AgentMessage(
+                id: "agent-panel-selected-skills-\(invocation.skillIDs.joined(separator: "-"))",
+                role: .system,
+                content: context
+            ),
+        ]
     }
 
     private func applyStopReason(_ stopReason: AgentLoopStopReason) {
