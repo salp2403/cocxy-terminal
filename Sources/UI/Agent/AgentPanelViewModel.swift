@@ -4,10 +4,6 @@
 import Combine
 import Foundation
 
-protocol AgentPromptRunning: Sendable {
-    func run(prompt: String, history: [AgentMessage]) async throws -> AgentLoopResult
-}
-
 enum AgentPanelState: Sendable, Equatable {
     case idle
     case running
@@ -84,7 +80,11 @@ final class AgentPanelViewModel: ObservableObject {
         statusText = "Running..."
 
         do {
-            let result = try await runner.run(prompt: prompt, history: messages)
+            let result = try await runner.run(
+                prompt: prompt,
+                history: messages,
+                configuration: configuration
+            )
             messages = result.messages
             applyStopReason(result.stopReason)
         } catch {

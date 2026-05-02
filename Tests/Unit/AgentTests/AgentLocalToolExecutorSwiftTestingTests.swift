@@ -285,7 +285,7 @@ private enum AgentLocalToolExecutorTestError: Error {
     case missingObjectContent
 }
 
-private final class RecordingLocalAgentProcessRunner: AgentProcessRunning {
+private final class RecordingLocalAgentProcessRunner: AgentProcessRunning, @unchecked Sendable {
     private(set) var calls: [AgentProcessCall] = []
     private var results: [AgentProcessResult]
 

@@ -113,14 +113,22 @@ private actor RecordingAgentPromptRunner: AgentPromptRunning {
         self.result = result
     }
 
-    func run(prompt: String, history: [AgentMessage]) async throws -> AgentLoopResult {
+    func run(
+        prompt: String,
+        history: [AgentMessage],
+        configuration: AgentModeConfig
+    ) async throws -> AgentLoopResult {
         prompts.append(prompt)
         return result
     }
 }
 
 private struct ThrowingAgentPromptRunner: AgentPromptRunning {
-    func run(prompt: String, history: [AgentMessage]) async throws -> AgentLoopResult {
+    func run(
+        prompt: String,
+        history: [AgentMessage],
+        configuration: AgentModeConfig
+    ) async throws -> AgentLoopResult {
         throw AgentPanelViewModelError.providerUnavailable
     }
 }

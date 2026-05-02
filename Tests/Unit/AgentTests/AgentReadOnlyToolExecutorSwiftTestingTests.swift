@@ -442,7 +442,7 @@ private enum AgentReadOnlyToolExecutorTestError: Error {
     case missingArrayContent
 }
 
-private final class RecordingAgentProcessRunner: AgentProcessRunning {
+private final class RecordingAgentProcessRunner: AgentProcessRunning, @unchecked Sendable {
     private(set) var calls: [AgentProcessCall] = []
     private var results: [AgentProcessResult]
 
@@ -487,7 +487,7 @@ private struct AgentProcessCall: Equatable {
     }
 }
 
-private final class RecordingTerminalOutputProvider: AgentTerminalOutputProviding {
+private final class RecordingTerminalOutputProvider: AgentTerminalOutputProviding, @unchecked Sendable {
     private(set) var requestedLimits: [Int] = []
     private let output: String
 

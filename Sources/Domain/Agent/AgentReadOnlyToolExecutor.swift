@@ -10,7 +10,7 @@ struct AgentProcessResult: Sendable, Equatable {
     let stderr: String
 }
 
-protocol AgentProcessRunning {
+protocol AgentProcessRunning: Sendable {
     func run(
         executableURL: URL,
         arguments: [String],
@@ -34,7 +34,7 @@ extension AgentProcessRunning {
     }
 }
 
-protocol AgentTerminalOutputProviding {
+protocol AgentTerminalOutputProviding: Sendable {
     func latestCommandBlockOutputs(limit: Int) -> String
 }
 
@@ -47,7 +47,7 @@ struct AgentLSPDiagnostic: Sendable, Equatable {
     let source: String?
 }
 
-protocol AgentLSPDiagnosticsProviding {
+protocol AgentLSPDiagnosticsProviding: Sendable {
     func currentDiagnostics(limit: Int) -> [AgentLSPDiagnostic]
 }
 
