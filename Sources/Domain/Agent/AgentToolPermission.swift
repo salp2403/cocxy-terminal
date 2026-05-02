@@ -22,9 +22,44 @@ enum AgentToolPromptReason: Sendable, Equatable {
     case userInputRequired(toolID: String)
 }
 
+enum AgentToolApprovalPreviewKind: String, Sendable, Equatable {
+    case diff
+    case command
+    case userInput
+}
+
+struct AgentToolApprovalPreview: Sendable, Equatable {
+    let kind: AgentToolApprovalPreviewKind
+    let title: String
+    let body: String
+}
+
+struct AgentToolApprovalRequest: Identifiable, Sendable, Equatable {
+    let id: String
+    let call: AgentToolCall
+    let reason: AgentToolPromptReason
+    let preview: AgentToolApprovalPreview
+
+    init(
+        call: AgentToolCall,
+        reason: AgentToolPromptReason,
+        preview: AgentToolApprovalPreview
+    ) {
+        self.id = call.id
+        self.call = call
+        self.reason = reason
+        self.preview = preview
+    }
+}
+
+protocol AgentToolPreviewing {
+    func preview(for call: AgentToolCall) async throws -> AgentToolApprovalPreview
+}
+
 enum AgentToolDenyReason: Sendable, Equatable {
     case missingCommand(toolID: String)
     case dangerousCommand(command: String)
+    case previewUnavailable(toolID: String)
 }
 
 enum AgentToolPermissionDecision: Sendable, Equatable {

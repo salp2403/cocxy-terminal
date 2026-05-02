@@ -88,6 +88,71 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(factory.configurations.isEmpty)
     }
 
+    @Test("runner approval resumes a pending write and persists the tool result")
+    func runnerApprovalResumesPendingWriteAndPersistsToolResult() async throws {
+        let workspace = temporaryDirectory(named: "approval-workspace")
+        let conversationRoot = temporaryDirectory(named: "approval-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(
+            at: workspace.appendingPathComponent("Sources", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let target = workspace.appendingPathComponent("Sources/App.swift")
+        try "let value = 1\n".write(to: target, atomically: true, encoding: .utf8)
+
+        let call = AgentToolCall(
+            id: "call-write",
+            toolID: "write_file",
+            arguments: [
+                "path": .string("Sources/App.swift"),
+                "content": .string("let value = 2\n"),
+            ]
+        )
+        let request = AgentToolApprovalRequest(
+            call: call,
+            reason: .diffPreviewRequired(toolID: "write_file"),
+            preview: AgentToolApprovalPreview(
+                kind: .diff,
+                title: "Review changes to Sources/App.swift",
+                body: "--- a/Sources/App.swift\n+++ b/Sources/App.swift\n"
+            )
+        )
+        let history = [
+            AgentMessage(id: "u1", role: .user, content: "Update the file"),
+            AgentMessage(id: "a1", role: .assistant, content: "I need to edit Sources/App.swift."),
+        ]
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Updated Sources/App.swift.", toolCalls: []),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-approval-test"
+        )
+
+        let result = try await runner.approve(
+            request: request,
+            history: history,
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                maxIterations: 4,
+                conversationStorageDir: conversationRoot.path
+            )
+        )
+        let persisted = try AgentConversationStore(rootDirectory: conversationRoot)
+            .load(conversationID: "agent-approval-test")
+
+        #expect(result.stopReason == .completed)
+        #expect(try String(contentsOf: target, encoding: .utf8) == "let value = 2\n")
+        #expect(result.messages.map(\.role) == [.user, .assistant, .tool, .assistant])
+        #expect(result.messages.last?.content == "Updated Sources/App.swift.")
+        #expect(persisted.map(\.role) == [.tool, .assistant])
+    }
+
     private func temporaryDirectory(named name: String) -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-runner-\(name)-\(UUID().uuidString)", isDirectory: true)

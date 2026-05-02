@@ -11,6 +11,14 @@ protocol AgentPromptRunning: Sendable {
     ) async throws -> AgentLoopResult
 }
 
+protocol AgentApprovalRunning: AgentPromptRunning {
+    func approve(
+        request: AgentToolApprovalRequest,
+        history: [AgentMessage],
+        configuration: AgentModeConfig
+    ) async throws -> AgentLoopResult
+}
+
 protocol AgentLLMClientMaking: Sendable {
     func makeClient(configuration: AgentModeConfig) throws -> any AgentLLMClient
 }
@@ -30,7 +38,7 @@ extension AgentSessionRunnerError: LocalizedError {
     }
 }
 
-struct AgentSessionRunner: AgentPromptRunning {
+struct AgentSessionRunner: AgentApprovalRunning {
     private let clientFactory: any AgentLLMClientMaking
     private let workspaceRootProvider: @MainActor @Sendable () -> URL?
     private let conversationID: String
@@ -67,28 +75,9 @@ struct AgentSessionRunner: AgentPromptRunning {
         history: [AgentMessage],
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
-        guard let workspaceRoot = await workspaceRootProvider() else {
-            throw AgentSessionRunnerError.workspaceUnavailable
-        }
-
-        let provider = try clientFactory.makeClient(configuration: configuration)
-        let workspace = AgentWorkspace(rootURL: workspaceRoot)
-        let executor = AgentLocalToolExecutor(
-            workspace: workspace,
-            approvals: AgentToolApprovalContext(),
-            processRunner: processRunner,
-            terminalOutputProvider: terminalOutputProvider,
-            lspDiagnosticsProvider: lspDiagnosticsProvider
-        )
-        let store = AgentConversationStore(
-            rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir)
-        )
-        let loop = AgentLoop(
-            provider: provider,
-            toolExecutor: executor,
-            registry: registry,
-            permissionPolicy: permissionPolicy,
-            conversationStore: store
+        let loop = try await makeLoop(
+            configuration: configuration,
+            approvals: AgentToolApprovalContext()
         )
 
         return try await loop.run(
@@ -97,6 +86,66 @@ struct AgentSessionRunner: AgentPromptRunning {
             configuration: configuration,
             history: history
         )
+    }
+
+    func approve(
+        request: AgentToolApprovalRequest,
+        history: [AgentMessage],
+        configuration: AgentModeConfig
+    ) async throws -> AgentLoopResult {
+        let loop = try await makeLoop(
+            configuration: configuration,
+            approvals: approvalContext(for: request)
+        )
+
+        return try await loop.resume(
+            conversationID: conversationID,
+            approvedRequest: request,
+            configuration: configuration,
+            history: history
+        )
+    }
+
+    private func makeLoop(
+        configuration: AgentModeConfig,
+        approvals: AgentToolApprovalContext
+    ) async throws -> AgentLoop {
+        guard let workspaceRoot = await workspaceRootProvider() else {
+            throw AgentSessionRunnerError.workspaceUnavailable
+        }
+
+        let provider = try clientFactory.makeClient(configuration: configuration)
+        let workspace = AgentWorkspace(rootURL: workspaceRoot)
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: approvals,
+            processRunner: processRunner,
+            terminalOutputProvider: terminalOutputProvider,
+            lspDiagnosticsProvider: lspDiagnosticsProvider
+        )
+        let store = AgentConversationStore(
+            rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir)
+        )
+
+        return AgentLoop(
+            provider: provider,
+            toolExecutor: executor,
+            toolPreviewer: executor,
+            registry: registry,
+            permissionPolicy: permissionPolicy,
+            conversationStore: store
+        )
+    }
+
+    private func approvalContext(for request: AgentToolApprovalRequest) -> AgentToolApprovalContext {
+        switch request.call.toolID {
+        case "write_file", "apply_diff":
+            return AgentToolApprovalContext(approvedWriteCallIDs: [request.call.id])
+        case "run_command":
+            return AgentToolApprovalContext(approvedCommandCallIDs: [request.call.id])
+        default:
+            return AgentToolApprovalContext()
+        }
     }
 
     private static func conversationRootDirectory(from rawPath: String) -> URL {

@@ -24,7 +24,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
     }
 }
 
-struct AgentLocalToolExecutor: AgentToolExecuting {
+struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
     let workspace: AgentWorkspace
     let approvals: AgentToolApprovalContext
     let processRunner: any AgentProcessRunning
@@ -97,6 +97,25 @@ struct AgentLocalToolExecutor: AgentToolExecuting {
         }
     }
 
+    func preview(for call: AgentToolCall) async throws -> AgentToolApprovalPreview {
+        switch call.toolID {
+        case "write_file":
+            return try writeFilePreview(call)
+        case "apply_diff":
+            return try applyDiffPreview(call)
+        case "run_command":
+            return try runCommandPreview(call)
+        case "ask_user":
+            return AgentToolApprovalPreview(
+                kind: .userInput,
+                title: "Agent requested input",
+                body: call.arguments["prompt"]?.stringValue ?? "The agent requested user input."
+            )
+        default:
+            throw AgentLocalToolError.unsupportedTool(call.toolID)
+        }
+    }
+
     private func writeFile(_ call: AgentToolCall) throws -> AgentToolResult {
         guard approvals.approvesWrite(callID: call.id) else {
             throw AgentLocalToolError.approvalRequired(toolID: call.toolID)
@@ -119,6 +138,21 @@ struct AgentLocalToolExecutor: AgentToolExecuting {
                 "bytes": .number(Double(Data(content.utf8).count)),
                 "diff": .string(unifiedDiff(path: relativePath, oldContent: oldContent, newContent: content)),
             ])
+        )
+    }
+
+    private func writeFilePreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreview {
+        let path = try requiredStringArgument("path", in: call)
+        let content = try stringArgument("content", in: call, allowEmpty: true)
+        let create = call.arguments["create"]?.boolValue ?? false
+        let url = try workspace.resolveWritableFile(path, allowCreate: create)
+        let relativePath = workspace.relativePath(for: url)
+        let oldContent = try existingTextContent(at: url, relativePath: relativePath)
+
+        return AgentToolApprovalPreview(
+            kind: .diff,
+            title: "Review changes to \(relativePath)",
+            body: unifiedDiff(path: relativePath, oldContent: oldContent, newContent: content)
         )
     }
 
@@ -157,6 +191,31 @@ struct AgentLocalToolExecutor: AgentToolExecuting {
         )
     }
 
+    private func applyDiffPreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreview {
+        let path = try requiredStringArgument("path", in: call)
+        let oldText = try requiredStringArgument("oldText", in: call)
+        let newText = try stringArgument("newText", in: call, allowEmpty: true)
+        let url = try workspace.requireRegularFile(path)
+        let relativePath = workspace.relativePath(for: url)
+        let oldContent = try existingTextContent(at: url, relativePath: relativePath)
+        let ranges = matchingRanges(of: oldText, in: oldContent)
+
+        guard !ranges.isEmpty else {
+            throw AgentLocalToolError.oldTextNotFound(path: relativePath)
+        }
+        guard ranges.count == 1, let range = ranges.first else {
+            throw AgentLocalToolError.ambiguousOldText(path: relativePath)
+        }
+
+        var nextContent = oldContent
+        nextContent.replaceSubrange(range, with: newText)
+        return AgentToolApprovalPreview(
+            kind: .diff,
+            title: "Review changes to \(relativePath)",
+            body: unifiedDiff(path: relativePath, oldContent: oldContent, newContent: nextContent)
+        )
+    }
+
     private func runCommand(_ call: AgentToolCall) throws -> AgentToolResult {
         let command = try requiredStringArgument("command", in: call)
         guard !AgentShellCommandSafety.isDangerous(command) else {
@@ -186,6 +245,27 @@ struct AgentLocalToolExecutor: AgentToolExecuting {
                 "stderr": .string(result.stderr),
                 "timeoutSeconds": .number(timeout),
             ])
+        )
+    }
+
+    private func runCommandPreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreview {
+        let command = try requiredStringArgument("command", in: call)
+        guard !AgentShellCommandSafety.isDangerous(command) else {
+            throw AgentLocalToolError.dangerousCommand(command)
+        }
+        let cwd = try workspace.requireDirectory(call.arguments["cwd"]?.stringValue ?? ".")
+        let timeout = boundedTimeout(from: call)
+        let timeoutText = timeout.rounded(.down) == timeout
+            ? "\(Int(timeout))"
+            : "\(timeout)"
+        return AgentToolApprovalPreview(
+            kind: .command,
+            title: "Approve command",
+            body: [
+                "command: \(command)",
+                "cwd: \(workspace.relativePath(for: cwd))",
+                "timeout: \(timeoutText)s",
+            ].joined(separator: "\n")
         )
     }
 
@@ -252,6 +332,7 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
     case oldTextNotFound(path: String)
     case ambiguousOldText(path: String)
     case dangerousCommand(String)
+    case unsupportedTool(String)
 
     var code: String {
         switch self {
@@ -265,6 +346,8 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
             return "edit_ambiguous_old_text"
         case .dangerousCommand:
             return "dangerous_command"
+        case .unsupportedTool:
+            return "unsupported_tool"
         }
     }
 
@@ -280,6 +363,8 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
             return "Text to replace matched more than once in \(path)"
         case .dangerousCommand(let command):
             return "Command is blocked by the Agent safety policy: \(command)"
+        case .unsupportedTool(let toolID):
+            return "Local preview does not support tool: \(toolID)"
         }
     }
 }

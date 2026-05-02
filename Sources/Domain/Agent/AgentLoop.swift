@@ -39,7 +39,7 @@ struct UUIDAgentMessageIDGenerator: AgentMessageIDGenerating {
 enum AgentLoopStopReason: Sendable, Equatable {
     case completed
     case maxIterationsReached
-    case permissionRequired(AgentToolPromptReason)
+    case permissionRequired(AgentToolApprovalRequest)
     case denied(AgentToolDenyReason)
     case protocolFailure(AgentToolProtocolError)
 }
@@ -52,6 +52,7 @@ struct AgentLoopResult: Sendable, Equatable {
 struct AgentLoop {
     let provider: any AgentLLMClient
     let toolExecutor: any AgentToolExecuting
+    let toolPreviewer: (any AgentToolPreviewing)?
     let registry: AgentToolRegistry
     let permissionPolicy: AgentToolPermissionPolicy
     let conversationStore: (any AgentConversationRecording)?
@@ -60,6 +61,7 @@ struct AgentLoop {
     init(
         provider: any AgentLLMClient,
         toolExecutor: any AgentToolExecuting,
+        toolPreviewer: (any AgentToolPreviewing)? = nil,
         registry: AgentToolRegistry = .minimumBuiltIns(),
         permissionPolicy: AgentToolPermissionPolicy = AgentToolPermissionPolicy(),
         conversationStore: (any AgentConversationRecording)? = nil,
@@ -67,6 +69,7 @@ struct AgentLoop {
     ) {
         self.provider = provider
         self.toolExecutor = toolExecutor
+        self.toolPreviewer = toolPreviewer
         self.registry = registry
         self.permissionPolicy = permissionPolicy
         self.conversationStore = conversationStore
@@ -90,6 +93,45 @@ struct AgentLoop {
             messages: &messages
         )
 
+        return try await continueRun(
+            conversationID: conversationID,
+            configuration: configuration,
+            messages: &messages
+        )
+    }
+
+    func resume(
+        conversationID: String,
+        approvedRequest: AgentToolApprovalRequest,
+        configuration: AgentModeConfig,
+        history: [AgentMessage]
+    ) async throws -> AgentLoopResult {
+        var messages = history
+        let toolResult = try await toolExecutor.execute(approvedRequest.call)
+        try append(
+            AgentMessage(
+                id: idGenerator.nextMessageID(role: .tool),
+                role: .tool,
+                content: try Self.encodedToolResult(toolResult),
+                toolName: toolResult.toolID,
+                toolCallID: toolResult.callID
+            ),
+            conversationID: conversationID,
+            messages: &messages
+        )
+
+        return try await continueRun(
+            conversationID: conversationID,
+            configuration: configuration,
+            messages: &messages
+        )
+    }
+
+    private func continueRun(
+        conversationID: String,
+        configuration: AgentModeConfig,
+        messages: inout [AgentMessage]
+    ) async throws -> AgentLoopResult {
         let activePermissionPolicy = AgentToolPermissionPolicy(
             autoModeEnabled: configuration.autoMode,
             commandAllowRules: permissionPolicy.commandAllowRules
@@ -134,7 +176,13 @@ struct AgentLoop {
                         messages: &messages
                     )
                 case .prompt(let reason):
-                    return AgentLoopResult(messages: messages, stopReason: .permissionRequired(reason))
+                    guard let request = await approvalRequest(for: call, reason: reason) else {
+                        return AgentLoopResult(
+                            messages: messages,
+                            stopReason: .denied(.previewUnavailable(toolID: call.toolID))
+                        )
+                    }
+                    return AgentLoopResult(messages: messages, stopReason: .permissionRequired(request))
                 case .deny(let reason):
                     return AgentLoopResult(messages: messages, stopReason: .denied(reason))
                 }
@@ -142,6 +190,49 @@ struct AgentLoop {
         }
 
         return AgentLoopResult(messages: messages, stopReason: .maxIterationsReached)
+    }
+
+    private func approvalRequest(
+        for call: AgentToolCall,
+        reason: AgentToolPromptReason
+    ) async -> AgentToolApprovalRequest? {
+        let preview: AgentToolApprovalPreview
+        if let toolPreviewer {
+            do {
+                preview = try await toolPreviewer.preview(for: call)
+            } catch {
+                return nil
+            }
+        } else {
+            preview = defaultPreview(for: call, reason: reason)
+        }
+        return AgentToolApprovalRequest(call: call, reason: reason, preview: preview)
+    }
+
+    private func defaultPreview(
+        for call: AgentToolCall,
+        reason: AgentToolPromptReason
+    ) -> AgentToolApprovalPreview {
+        switch reason {
+        case .commandApprovalRequired(let command):
+            return AgentToolApprovalPreview(
+                kind: .command,
+                title: "Approve command",
+                body: command
+            )
+        case .diffPreviewRequired(let toolID):
+            return AgentToolApprovalPreview(
+                kind: .diff,
+                title: "Review changes for \(toolID)",
+                body: "Diff preview is unavailable for call \(call.id)."
+            )
+        case .userInputRequired(let toolID):
+            return AgentToolApprovalPreview(
+                kind: .userInput,
+                title: "Agent requested input",
+                body: "The agent requested input for \(toolID)."
+            )
+        }
     }
 
     private func append(

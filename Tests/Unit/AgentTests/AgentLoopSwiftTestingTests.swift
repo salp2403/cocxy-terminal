@@ -89,11 +89,105 @@ struct AgentLoopSwiftTestingTests {
         )
         let calls = await executor.calls
 
-        #expect(result.stopReason == .permissionRequired(.commandApprovalRequired(
+        guard case .permissionRequired(let request) = result.stopReason else {
+            Issue.record("Expected command approval request")
+            return
+        }
+        #expect(request.id == "call-run")
+        #expect(request.call.toolID == "run_command")
+        #expect(request.reason == .commandApprovalRequired(
             command: "swift test --filter AgentLoopSwiftTestingTests"
-        )))
+        ))
+        #expect(request.preview.kind == .command)
+        #expect(request.preview.body.contains("swift test --filter AgentLoopSwiftTestingTests"))
         #expect(calls.isEmpty)
         #expect(result.messages.map(\.role) == [.user, .assistant])
+    }
+
+    @Test("loop resumes after an approved request by executing the pending tool")
+    func loopResumesAfterApprovedRequest() async throws {
+        let pendingCall = AgentToolCall(
+            id: "call-run",
+            toolID: "run_command",
+            arguments: ["command": .string("swift test --filter AgentLoopSwiftTestingTests")]
+        )
+        let request = AgentToolApprovalRequest(
+            call: pendingCall,
+            reason: .commandApprovalRequired(command: "swift test --filter AgentLoopSwiftTestingTests"),
+            preview: AgentToolApprovalPreview(
+                kind: .command,
+                title: "Run command",
+                body: "swift test --filter AgentLoopSwiftTestingTests"
+            )
+        )
+        let history = [
+            AgentMessage(id: "u1", role: .user, content: "Run tests"),
+            AgentMessage(id: "a1", role: .assistant, content: "I need to run tests."),
+        ]
+        let provider = ScriptedAgentLLMClient(responses: [
+            AgentLLMResponse(content: "Tests finished.", toolCalls: []),
+        ])
+        let executor = RecordingAgentToolExecutor(results: [
+            AgentToolResult.success(
+                callID: "call-run",
+                toolID: "run_command",
+                content: .object(["exitCode": .number(0)])
+            ),
+        ])
+        let loop = AgentLoop(
+            provider: provider,
+            toolExecutor: executor,
+            idGenerator: StableAgentIDGenerator(prefix: "resume")
+        )
+
+        let result = try await loop.resume(
+            conversationID: "conv",
+            approvedRequest: request,
+            configuration: AgentModeConfig(maxIterations: 4),
+            history: history
+        )
+        let calls = await executor.calls
+
+        #expect(result.stopReason == .completed)
+        #expect(calls == [pendingCall])
+        #expect(result.messages.map(\.role) == [.user, .assistant, .tool, .assistant])
+        #expect(result.messages.last?.content == "Tests finished.")
+    }
+
+    @Test("loop denies approval when preview cannot be generated")
+    func loopDeniesApprovalWhenPreviewCannotBeGenerated() async throws {
+        let provider = ScriptedAgentLLMClient(responses: [
+            AgentLLMResponse(
+                content: "I need to write a file.",
+                toolCalls: [
+                    AgentToolCall(
+                        id: "call-write",
+                        toolID: "write_file",
+                        arguments: [
+                            "path": .string("Sources/App.swift"),
+                            "content": .string("let value = 2\n"),
+                        ]
+                    ),
+                ]
+            ),
+        ])
+        let executor = RecordingAgentToolExecutor(results: [])
+        let loop = AgentLoop(
+            provider: provider,
+            toolExecutor: executor,
+            toolPreviewer: ThrowingAgentToolPreviewer(),
+            idGenerator: StableAgentIDGenerator(prefix: "preview")
+        )
+
+        let result = try await loop.run(
+            conversationID: "conv",
+            userPrompt: "Update a file",
+            configuration: AgentModeConfig(maxIterations: 4)
+        )
+        let calls = await executor.calls
+
+        #expect(result.stopReason == .denied(.previewUnavailable(toolID: "write_file")))
+        #expect(calls.isEmpty)
     }
 
     @Test("loop denies dangerous commands before executor is called")
@@ -167,6 +261,16 @@ struct AgentLoopSwiftTestingTests {
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-loop-\(UUID().uuidString)", isDirectory: true)
+    }
+}
+
+private struct ThrowingAgentToolPreviewer: AgentToolPreviewing {
+    func preview(for call: AgentToolCall) async throws -> AgentToolApprovalPreview {
+        throw PreviewError.failed
+    }
+
+    private enum PreviewError: Error {
+        case failed
     }
 }
 

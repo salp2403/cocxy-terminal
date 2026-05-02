@@ -92,6 +92,10 @@ struct AgentPanelView: View {
                 .lineLimit(2)
                 .textSelection(.enabled)
 
+            if let approval = viewModel.pendingApproval {
+                approvalCard(approval)
+            }
+
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Ask Agent Mode", text: $viewModel.promptDraft, axis: .vertical)
                     .lineLimit(1...4)
@@ -112,6 +116,49 @@ struct AgentPanelView: View {
             }
         }
         .padding(12)
+    }
+
+    private func approvalCard(_ request: AgentToolApprovalRequest) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: approvalIcon(for: request.preview.kind))
+                    .foregroundStyle(statusColor)
+                Text(request.preview.title)
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+            }
+
+            ScrollView(.vertical, showsIndicators: true) {
+                Text(request.preview.body)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 140)
+
+            HStack(spacing: 8) {
+                Button(action: approvePendingTool) {
+                    Label("Approve", systemImage: "checkmark")
+                }
+                .disabled(!viewModel.canApprovePendingTool)
+
+                Button(role: .cancel, action: viewModel.rejectPendingTool) {
+                    Label("Reject", systemImage: "xmark")
+                }
+
+                Spacer()
+            }
+            .controlSize(.small)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: CocxyColors.surface0).opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: CocxyColors.overlay0).opacity(0.45), lineWidth: 1)
+        )
     }
 
     private var inputEnabled: Bool {
@@ -139,6 +186,23 @@ struct AgentPanelView: View {
     private func submit() {
         Task {
             await viewModel.submitPrompt()
+        }
+    }
+
+    private func approvePendingTool() {
+        Task {
+            await viewModel.approvePendingTool()
+        }
+    }
+
+    private func approvalIcon(for kind: AgentToolApprovalPreviewKind) -> String {
+        switch kind {
+        case .diff:
+            return "doc.text.magnifyingglass"
+        case .command:
+            return "terminal"
+        case .userInput:
+            return "questionmark.bubble"
         }
     }
 }
