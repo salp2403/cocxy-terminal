@@ -32,6 +32,7 @@ final class AgentPanelViewModel: ObservableObject {
     @Published private(set) var state: AgentPanelState = .idle
     @Published private(set) var statusText: String = "Ready."
     @Published private(set) var pendingApproval: AgentToolApprovalRequest?
+    @Published var pendingApprovalResponseDraft: String = ""
 
     private var configuration: AgentModeConfig
     private let runner: any AgentPromptRunning
@@ -52,10 +53,20 @@ final class AgentPanelViewModel: ObservableObject {
     }
 
     var canApprovePendingTool: Bool {
-        configuration.enabled
-            && state != .running
-            && pendingApproval != nil
-            && runner is any AgentApprovalRunning
+        guard configuration.enabled,
+              state != .running,
+              let pendingApproval,
+              runner is any AgentApprovalRunning
+        else {
+            return false
+        }
+
+        if pendingApproval.preview.kind == .userInput {
+            return !pendingApprovalResponseDraft
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+        }
+        return true
     }
 
     func updateConfiguration(_ configuration: AgentModeConfig) {
@@ -69,6 +80,7 @@ final class AgentPanelViewModel: ObservableObject {
             state = .disabled
             statusText = "Agent Mode is disabled."
             pendingApproval = nil
+            pendingApprovalResponseDraft = ""
         }
     }
 
@@ -86,6 +98,7 @@ final class AgentPanelViewModel: ObservableObject {
 
         promptDraft = ""
         pendingApproval = nil
+        pendingApprovalResponseDraft = ""
         state = .running
         statusText = "Running..."
 
@@ -106,10 +119,15 @@ final class AgentPanelViewModel: ObservableObject {
 
     func approvePendingTool() async {
         guard let request = pendingApproval else { return }
+        let response = pendingApprovalResponseDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if request.preview.kind == .userInput, response.isEmpty {
+            return
+        }
         guard configuration.enabled else {
             state = .disabled
             statusText = "Agent Mode is disabled."
             pendingApproval = nil
+            pendingApprovalResponseDraft = ""
             return
         }
         guard let approvalRunner = runner as? any AgentApprovalRunning else {
@@ -125,10 +143,12 @@ final class AgentPanelViewModel: ObservableObject {
         do {
             let result = try await approvalRunner.approve(
                 request: request,
+                userInput: request.preview.kind == .userInput ? response : nil,
                 history: messages,
                 configuration: configuration
             )
             pendingApproval = nil
+            pendingApprovalResponseDraft = ""
             messages = result.messages
             applyStopReason(result.stopReason)
         } catch {
@@ -141,6 +161,7 @@ final class AgentPanelViewModel: ObservableObject {
     func rejectPendingTool() {
         guard pendingApproval != nil else { return }
         pendingApproval = nil
+        pendingApprovalResponseDraft = ""
         state = configuration.enabled ? .idle : .disabled
         statusText = configuration.enabled ? "Request rejected." : "Agent Mode is disabled."
     }
@@ -149,24 +170,29 @@ final class AgentPanelViewModel: ObservableObject {
         switch stopReason {
         case .completed:
             pendingApproval = nil
+            pendingApprovalResponseDraft = ""
             state = .idle
             statusText = "Completed."
         case .maxIterationsReached:
             pendingApproval = nil
+            pendingApprovalResponseDraft = ""
             state = .failed("Stopped at max iterations.")
             statusText = "Stopped at max iterations."
         case .permissionRequired(let request):
             pendingApproval = request
+            pendingApprovalResponseDraft = ""
             let text = approvalText(for: request.reason)
             state = .awaitingApproval(text)
             statusText = text
         case .denied(let reason):
             pendingApproval = nil
+            pendingApprovalResponseDraft = ""
             let text = deniedText(for: reason)
             state = .failed(text)
             statusText = text
         case .protocolFailure(let error):
             pendingApproval = nil
+            pendingApprovalResponseDraft = ""
             let text = "Tool protocol error: \(error)"
             state = .failed(text)
             statusText = text

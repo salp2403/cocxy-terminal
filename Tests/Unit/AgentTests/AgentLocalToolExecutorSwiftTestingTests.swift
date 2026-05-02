@@ -263,6 +263,35 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         #expect(runner.calls.isEmpty)
     }
 
+    @Test("ask_user returns approved human answer as a tool result")
+    func askUserReturnsApprovedHumanAnswer() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let call = AgentToolCall(
+            id: "call-ask",
+            toolID: "ask_user",
+            arguments: ["prompt": .string("Which branch should I use?")]
+        )
+        let pending = try await AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root)
+        ).execute(call)
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            approvals: AgentToolApprovalContext(userInputResponsesByCallID: [
+                "call-ask": "Use main.",
+            ])
+        )
+
+        let result = try await executor.execute(call)
+        let content = try contentObject(result)
+
+        #expect(pending.status == .failure)
+        #expect(pending.error?.code == "user_input_required")
+        #expect(result.status == .success)
+        #expect(content["prompt"]?.stringValue == "Which branch should I use?")
+        #expect(content["answer"]?.stringValue == "Use main.")
+    }
+
     private func makeWorkspace() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-local-tools-\(UUID().uuidString)", isDirectory: true)

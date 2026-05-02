@@ -6,13 +6,16 @@ import Foundation
 struct AgentToolApprovalContext: Sendable, Equatable {
     let approvedWriteCallIDs: Set<String>
     let approvedCommandCallIDs: Set<String>
+    let userInputResponsesByCallID: [String: String]
 
     init(
         approvedWriteCallIDs: Set<String> = [],
-        approvedCommandCallIDs: Set<String> = []
+        approvedCommandCallIDs: Set<String> = [],
+        userInputResponsesByCallID: [String: String] = [:]
     ) {
         self.approvedWriteCallIDs = approvedWriteCallIDs
         self.approvedCommandCallIDs = approvedCommandCallIDs
+        self.userInputResponsesByCallID = userInputResponsesByCallID
     }
 
     func approvesWrite(callID: String) -> Bool {
@@ -21,6 +24,10 @@ struct AgentToolApprovalContext: Sendable, Equatable {
 
     func approvesCommand(callID: String) -> Bool {
         approvedCommandCallIDs.contains(callID)
+    }
+
+    func userInputResponse(callID: String) -> String? {
+        userInputResponsesByCallID[callID]
     }
 }
 
@@ -81,6 +88,8 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                 return try applyDiff(call)
             case "run_command":
                 return try runCommand(call)
+            case "ask_user":
+                return try askUser(call)
             default:
                 return failure(
                     call,
@@ -269,6 +278,24 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         )
     }
 
+    private func askUser(_ call: AgentToolCall) throws -> AgentToolResult {
+        let prompt = call.arguments["prompt"]?.stringValue ?? "The agent requested user input."
+        guard let answer = approvals.userInputResponse(callID: call.id),
+              !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            throw AgentLocalToolError.userInputRequired(toolID: call.toolID)
+        }
+
+        return .success(
+            callID: call.id,
+            toolID: call.toolID,
+            content: .object([
+                "prompt": .string(prompt),
+                "answer": .string(answer),
+            ])
+        )
+    }
+
     private func existingTextContent(at url: URL, relativePath: String) throws -> String {
         guard FileManager.default.fileExists(atPath: url.path) else {
             return ""
@@ -333,6 +360,7 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
     case ambiguousOldText(path: String)
     case dangerousCommand(String)
     case unsupportedTool(String)
+    case userInputRequired(toolID: String)
 
     var code: String {
         switch self {
@@ -348,6 +376,8 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
             return "dangerous_command"
         case .unsupportedTool:
             return "unsupported_tool"
+        case .userInputRequired:
+            return "user_input_required"
         }
     }
 
@@ -365,6 +395,8 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
             return "Command is blocked by the Agent safety policy: \(command)"
         case .unsupportedTool(let toolID):
             return "Local preview does not support tool: \(toolID)"
+        case .userInputRequired(let toolID):
+            return "Tool requires a user response before execution: \(toolID)"
         }
     }
 }

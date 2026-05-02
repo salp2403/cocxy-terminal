@@ -136,9 +136,19 @@ struct AgentPanelView: View {
             }
             .frame(maxHeight: 140)
 
+            if request.preview.kind == .userInput {
+                TextField("Response", text: $viewModel.pendingApprovalResponseDraft, axis: .vertical)
+                    .lineLimit(1...4)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+            }
+
             HStack(spacing: 8) {
                 Button(action: approvePendingTool) {
-                    Label("Approve", systemImage: "checkmark")
+                    Label(
+                        request.preview.kind == .userInput ? "Send" : "Approve",
+                        systemImage: request.preview.kind == .userInput ? "paperplane" : "checkmark"
+                    )
                 }
                 .disabled(!viewModel.canApprovePendingTool)
 

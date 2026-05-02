@@ -153,6 +153,68 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(persisted.map(\.role) == [.tool, .assistant])
     }
 
+    @Test("runner approval resumes a pending user question with the human answer")
+    func runnerApprovalResumesPendingUserQuestion() async throws {
+        let workspace = temporaryDirectory(named: "ask-user-workspace")
+        let conversationRoot = temporaryDirectory(named: "ask-user-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let call = AgentToolCall(
+            id: "call-ask",
+            toolID: "ask_user",
+            arguments: ["prompt": .string("Which branch should I use?")]
+        )
+        let request = AgentToolApprovalRequest(
+            call: call,
+            reason: .userInputRequired(toolID: "ask_user"),
+            preview: AgentToolApprovalPreview(
+                kind: .userInput,
+                title: "Agent requested input",
+                body: "Which branch should I use?"
+            )
+        )
+        let history = [
+            AgentMessage(id: "u1", role: .user, content: "Prepare the change"),
+            AgentMessage(id: "a1", role: .assistant, content: "I need clarification."),
+        ]
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "I will use main.", toolCalls: []),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-ask-user-test"
+        )
+
+        let result = try await runner.approve(
+            request: request,
+            userInput: "Use main.",
+            history: history,
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                maxIterations: 4,
+                conversationStorageDir: conversationRoot.path
+            )
+        )
+        let toolMessage = try #require(result.messages.first { $0.role == .tool })
+        let decodedToolResult = try JSONDecoder().decode(
+            AgentToolResult.self,
+            from: Data(toolMessage.content.utf8)
+        )
+
+        #expect(result.stopReason == .completed)
+        #expect(decodedToolResult.status == .success)
+        #expect(decodedToolResult.content == AgentJSONValue.object([
+            "prompt": AgentJSONValue.string("Which branch should I use?"),
+            "answer": AgentJSONValue.string("Use main."),
+        ]))
+        #expect(result.messages.last?.content == "I will use main.")
+    }
+
     private func temporaryDirectory(named name: String) -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-runner-\(name)-\(UUID().uuidString)", isDirectory: true)

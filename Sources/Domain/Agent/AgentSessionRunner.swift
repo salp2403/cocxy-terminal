@@ -14,6 +14,7 @@ protocol AgentPromptRunning: Sendable {
 protocol AgentApprovalRunning: AgentPromptRunning {
     func approve(
         request: AgentToolApprovalRequest,
+        userInput: String?,
         history: [AgentMessage],
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult
@@ -90,12 +91,13 @@ struct AgentSessionRunner: AgentApprovalRunning {
 
     func approve(
         request: AgentToolApprovalRequest,
+        userInput: String? = nil,
         history: [AgentMessage],
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
         let loop = try await makeLoop(
             configuration: configuration,
-            approvals: approvalContext(for: request)
+            approvals: approvalContext(for: request, userInput: userInput)
         )
 
         return try await loop.resume(
@@ -137,12 +139,21 @@ struct AgentSessionRunner: AgentApprovalRunning {
         )
     }
 
-    private func approvalContext(for request: AgentToolApprovalRequest) -> AgentToolApprovalContext {
+    private func approvalContext(
+        for request: AgentToolApprovalRequest,
+        userInput: String?
+    ) -> AgentToolApprovalContext {
         switch request.call.toolID {
         case "write_file", "apply_diff":
             return AgentToolApprovalContext(approvedWriteCallIDs: [request.call.id])
         case "run_command":
             return AgentToolApprovalContext(approvedCommandCallIDs: [request.call.id])
+        case "ask_user":
+            let trimmedInput = userInput?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !trimmedInput.isEmpty else {
+                return AgentToolApprovalContext()
+            }
+            return AgentToolApprovalContext(userInputResponsesByCallID: [request.call.id: trimmedInput])
         default:
             return AgentToolApprovalContext()
         }

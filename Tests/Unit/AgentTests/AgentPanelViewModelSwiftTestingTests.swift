@@ -134,6 +134,54 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(viewModel.state == .idle)
         #expect(viewModel.statusText == "Completed.")
         #expect(await runner.approvedRequests == [request])
+        #expect(await runner.approvedUserInputs == [nil])
+    }
+
+    @Test("answering pending user question resumes runner with typed response")
+    func answeringPendingUserQuestionResumesRunnerWithTypedResponse() async throws {
+        let request = AgentToolApprovalRequest(
+            call: AgentToolCall(
+                id: "call-ask",
+                toolID: "ask_user",
+                arguments: ["prompt": .string("Which branch should I use?")]
+            ),
+            reason: .userInputRequired(toolID: "ask_user"),
+            preview: AgentToolApprovalPreview(
+                kind: .userInput,
+                title: "Agent requested input",
+                body: "Which branch should I use?"
+            )
+        )
+        let waitingMessages = [
+            AgentMessage(id: "u1", role: .user, content: "Prepare the change"),
+            AgentMessage(id: "a1", role: .assistant, content: "I need clarification."),
+        ]
+        let completedMessages = waitingMessages + [
+            AgentMessage(id: "t1", role: .tool, content: "{}", toolName: "ask_user", toolCallID: "call-ask"),
+            AgentMessage(id: "a2", role: .assistant, content: "Using main."),
+        ]
+        let runner = RecordingApprovalAgentPromptRunner(
+            result: AgentLoopResult(messages: waitingMessages, stopReason: .permissionRequired(request)),
+            approvedResult: AgentLoopResult(messages: completedMessages, stopReason: .completed)
+        )
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true),
+            runner: runner
+        )
+
+        viewModel.promptDraft = "Prepare the change"
+        await viewModel.submitPrompt()
+        #expect(!viewModel.canApprovePendingTool)
+
+        viewModel.pendingApprovalResponseDraft = "  Use main.  "
+        await viewModel.approvePendingTool()
+
+        #expect(viewModel.pendingApproval == nil)
+        #expect(viewModel.pendingApprovalResponseDraft.isEmpty)
+        #expect(viewModel.messages == completedMessages)
+        #expect(viewModel.state == .idle)
+        #expect(await runner.approvedRequests == [request])
+        #expect(await runner.approvedUserInputs == ["Use main."])
     }
 
     @Test("rejecting pending tool clears approval without invoking runner")
@@ -217,6 +265,7 @@ private actor RecordingApprovalAgentPromptRunner: AgentApprovalRunning {
     private let result: AgentLoopResult
     private let approvedResult: AgentLoopResult
     private(set) var approvedRequests: [AgentToolApprovalRequest] = []
+    private(set) var approvedUserInputs: [String?] = []
 
     init(result: AgentLoopResult, approvedResult: AgentLoopResult) {
         self.result = result
@@ -233,10 +282,12 @@ private actor RecordingApprovalAgentPromptRunner: AgentApprovalRunning {
 
     func approve(
         request: AgentToolApprovalRequest,
+        userInput: String?,
         history: [AgentMessage],
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
         approvedRequests.append(request)
+        approvedUserInputs.append(userInput)
         return approvedResult
     }
 }
