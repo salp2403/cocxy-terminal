@@ -94,6 +94,45 @@ struct SkillRegistrySwiftTestingTests {
         #expect(invocation.instructions.contains("Keep behavior unchanged"))
     }
 
+    @Test("app bundle scripts copy and verify bundled skills")
+    func appBundleScriptsCopyAndVerifyBundledSkills() throws {
+        let root = repositoryRoot()
+        let buildScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/build-app.sh"),
+            encoding: .utf8
+        )
+        let verifyScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/verify-app-bundle.sh"),
+            encoding: .utf8
+        )
+        let skillsRoot = root.appendingPathComponent("Resources/Skills", isDirectory: true)
+        let expectedSkillIDs = [
+            "debug-systematic",
+            "dependency-audit",
+            "document",
+            "fix-error",
+            "git-blame-explain",
+            "refactor-extract",
+            "release-checklist",
+            "review-pr",
+            "triage-issue",
+            "write-tests",
+        ]
+
+        #expect(buildScript.contains("Resources/Skills"))
+        #expect(verifyScript.contains("[Skills]"))
+        #expect(verifyScript.contains("$RESOURCES/Skills"))
+        for skillID in expectedSkillIDs {
+            #expect(FileManager.default.fileExists(
+                atPath: skillsRoot
+                    .appendingPathComponent(skillID, isDirectory: true)
+                    .appendingPathComponent("SKILL.md")
+                    .path
+            ))
+            #expect(verifyScript.contains("Skills/\(skillID)/SKILL.md"))
+        }
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-skills-tests-\(UUID().uuidString)", isDirectory: true)
@@ -133,5 +172,13 @@ struct SkillRegistrySwiftTestingTests {
         ---
         Bad body.
         """.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+
+    private func repositoryRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 }

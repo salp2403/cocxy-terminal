@@ -242,6 +242,21 @@ echo "[Browser JS]"
 check_exists "$RESOURCES/JS" "Browser JS resources directory"
 check_exists "$RESOURCES/JS/dom-grab.js" "DOM grab JS"
 
+# 9c. Bundled skills for local Agent guidance.
+echo ""
+echo "[Skills]"
+check_exists "$RESOURCES/Skills" "Skills resources directory"
+check_exists "$RESOURCES/Skills/debug-systematic/SKILL.md" "debug-systematic skill"
+check_exists "$RESOURCES/Skills/dependency-audit/SKILL.md" "dependency-audit skill"
+check_exists "$RESOURCES/Skills/document/SKILL.md" "document skill"
+check_exists "$RESOURCES/Skills/fix-error/SKILL.md" "fix-error skill"
+check_exists "$RESOURCES/Skills/git-blame-explain/SKILL.md" "git-blame-explain skill"
+check_exists "$RESOURCES/Skills/refactor-extract/SKILL.md" "refactor-extract skill"
+check_exists "$RESOURCES/Skills/release-checklist/SKILL.md" "release-checklist skill"
+check_exists "$RESOURCES/Skills/review-pr/SKILL.md" "review-pr skill"
+check_exists "$RESOURCES/Skills/triage-issue/SKILL.md" "triage-issue skill"
+check_exists "$RESOURCES/Skills/write-tests/SKILL.md" "write-tests skill"
+
 # 10. QuickLook extension
 echo ""
 echo "[QuickLook]"
