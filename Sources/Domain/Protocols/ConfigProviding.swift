@@ -51,6 +51,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
     let agent: AgentModeConfig
+    let voice: VoiceConfig
     let codeReview: CodeReviewConfig
     let notifications: NotificationConfig
     let quickTerminal: QuickTerminalConfig
@@ -69,6 +70,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         terminal: TerminalConfig,
         agentDetection: AgentDetectionConfig,
         agent: AgentModeConfig = .defaults,
+        voice: VoiceConfig = .defaults,
         codeReview: CodeReviewConfig = .defaults,
         notifications: NotificationConfig,
         quickTerminal: QuickTerminalConfig,
@@ -86,6 +88,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = terminal
         self.agentDetection = agentDetection
         self.agent = agent
+        self.voice = voice
         self.codeReview = codeReview
         self.notifications = notifications
         self.quickTerminal = quickTerminal
@@ -107,6 +110,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             terminal: .defaults,
             agentDetection: .defaults,
             agent: .defaults,
+            voice: .defaults,
             codeReview: .defaults,
             notifications: .defaults,
             quickTerminal: .defaults,
@@ -129,7 +133,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, agent, codeReview
+        case general, appearance, terminal, agentDetection, agent, voice, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -141,6 +145,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
         self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
+            ?? .defaults
+        self.voice = try container.decodeIfPresent(VoiceConfig.self, forKey: .voice)
             ?? .defaults
         self.codeReview = try container.decodeIfPresent(CodeReviewConfig.self, forKey: .codeReview)
             ?? .defaults
@@ -253,6 +259,9 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // overrides must not enable an LLM provider or auto-mode from
             // repository-local config.
             agent: agent,
+            // Voice input is a global user preference because microphone
+            // access and locale selection must never be toggled by a repo.
+            voice: voice,
             codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
@@ -786,6 +795,45 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
 
     private static func clampedMaxIterations(_ value: Int) -> Int {
         min(max(value, minMaxIterations), maxMaxIterations)
+    }
+}
+
+// MARK: - Voice Config
+
+/// `[voice]` section for local Voice input.
+///
+/// Disabled by default and locale-aware without introducing a backend
+/// dependency. The `"system"` sentinel means Cocxy resolves against the
+/// user's current macOS locale and the locales supported by Speech on the
+/// current machine; any explicit locale is a manual override.
+struct VoiceConfig: Codable, Sendable, Equatable {
+    static let systemLocaleIdentifier = "system"
+
+    let enabled: Bool
+    let localeIdentifier: String
+
+    static var defaults: VoiceConfig {
+        VoiceConfig(enabled: false, localeIdentifier: systemLocaleIdentifier)
+    }
+
+    init(
+        enabled: Bool = false,
+        localeIdentifier: String = systemLocaleIdentifier
+    ) {
+        self.enabled = enabled
+        self.localeIdentifier = Self.normalizedLocaleIdentifier(localeIdentifier)
+    }
+
+    static func normalizedLocaleIdentifier(_ rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return systemLocaleIdentifier }
+        guard trimmed.caseInsensitiveCompare(systemLocaleIdentifier) != .orderedSame else {
+            return systemLocaleIdentifier
+        }
+
+        let foundationIdentifier = trimmed.replacingOccurrences(of: "-", with: "_")
+        return Locale(identifier: foundationIdentifier).identifier
+            .replacingOccurrences(of: "_", with: "-")
     }
 }
 

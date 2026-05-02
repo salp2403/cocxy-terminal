@@ -110,6 +110,8 @@ struct PreferencesView: View {
             EditableAgentDetectionSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .agentMode:
             AgentModePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .voice:
+            VoicePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .codeReview:
             CodeReviewPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .notifications:
@@ -145,6 +147,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case appearance
     case agentDetection
     case agentMode
+    case voice
     case codeReview
     case notifications
     case terminal
@@ -164,6 +167,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .appearance: return "Appearance"
         case .agentDetection: return "Agent Detection"
         case .agentMode: return "Agent Mode"
+        case .voice: return "Voice"
         case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
         case .terminal: return "Terminal"
@@ -183,6 +187,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .appearance: return "paintbrush"
         case .agentDetection: return "brain.head.profile"
         case .agentMode: return "sparkles"
+        case .voice: return "mic"
         case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
         case .terminal: return "terminal"
@@ -875,6 +880,72 @@ struct AgentModePreferencesSection: View {
         case .anthropic, .openai, .google:
             return "Uses your provider API key from the macOS Keychain. Requests go directly from this Mac to the selected provider."
         }
+    }
+}
+
+// MARK: - Voice Section
+
+/// Editable local Voice input preferences.
+struct VoicePreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Feature") {
+                Toggle("Enable Voice input", isOn: $viewModel.voiceEnabled)
+                    .help("Enables local dictation entry points when supported by macOS.")
+            }
+
+            Section("Locale") {
+                Picker("Recognition locale", selection: $viewModel.voiceLocaleIdentifier) {
+                    Text(systemLocaleTitle).tag(VoiceConfig.systemLocaleIdentifier)
+                    ForEach(viewModel.availableVoiceLocales) { option in
+                        Text(optionTitle(option)).tag(option.identifier)
+                    }
+                }
+
+                Text(resolutionDetail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Voice")
+    }
+
+    private var systemLocaleTitle: String {
+        let resolution = viewModel.resolvedVoiceLocale
+        guard viewModel.voiceLocaleIdentifier == VoiceConfig.systemLocaleIdentifier,
+              let localeIdentifier = resolution.localeIdentifier
+        else {
+            return "System"
+        }
+        return "System (\(localeIdentifier))"
+    }
+
+    private var resolutionDetail: String {
+        switch viewModel.resolvedVoiceLocale.source {
+        case .systemExact:
+            return "Using the current system locale."
+        case .systemLanguageFallback:
+            return "Using the nearest supported locale for the current system language."
+        case .systemUnsupportedFallback:
+            return "The current system language is not listed by Speech; using the first supported local recognizer."
+        case .manualOverride:
+            return "Using the selected locale override."
+        case .manualUnsupportedSystemFallback(let requested):
+            return "\(requested) is not listed by Speech; using the system locale fallback."
+        case .unavailable:
+            return "macOS did not report any local Speech recognition locales."
+        }
+    }
+
+    private func optionTitle(_ option: VoiceLocaleOption) -> String {
+        "\(option.localizedName) (\(option.identifier))"
     }
 }
 

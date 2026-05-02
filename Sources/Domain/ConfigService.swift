@@ -245,6 +245,14 @@ final class ConfigService: ConfigProviding {
         max-iterations = \(defaults.agent.maxIterations)
         conversation-storage-dir = "\(defaults.agent.conversationStorageDir)"
 
+        [voice]
+        # Local voice input. Disabled by default. "system" resolves to
+        # the current macOS locale when Speech supports it, with a
+        # same-language fallback when only another region is available.
+        # Set a BCP-47 locale such as "es-ES" to override manually.
+        enabled = \(defaults.voice.enabled)
+        locale = "\(defaults.voice.localeIdentifier)"
+
         [code-review]
         auto-show-on-session-end = \(defaults.codeReview.autoShowOnSessionEnd)
 
@@ -422,6 +430,7 @@ final class ConfigService: ConfigProviding {
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
+        let voice = parseVoiceConfig(from: parsed)
         let codeReview = parseCodeReviewConfig(from: parsed)
         let notifications = parseNotificationConfig(from: parsed)
         let quickTerminal = parseQuickTerminalConfig(from: parsed)
@@ -444,6 +453,7 @@ final class ConfigService: ConfigProviding {
             terminal: terminal,
             agentDetection: agentDetection,
             agent: agent,
+            voice: voice,
             codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
@@ -651,7 +661,20 @@ final class ConfigService: ConfigProviding {
         )
     }
 
-    /// Parses the `[notifications]` section.
+    /// Parses the `[voice]` section. Missing or malformed values stay
+    /// disabled and system-locale-first; locale strings are normalized to a
+    /// stable BCP-47-ish form while empty values fall back to `"system"`.
+    private func parseVoiceConfig(from parsed: [String: TOMLValue]) -> VoiceConfig {
+        let table = extractTable("voice", from: parsed)
+        let defaults = VoiceConfig.defaults
+
+        return VoiceConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier
+        )
+    }
+
+    /// Parses the `[code-review]` section.
     private func parseCodeReviewConfig(from parsed: [String: TOMLValue]) -> CodeReviewConfig {
         let table = extractTable("code-review", from: parsed)
         let defaults = CodeReviewConfig.defaults

@@ -148,6 +148,14 @@ final class PreferencesViewModel: ObservableObject {
     /// Short status for the last provider-key save/delete action.
     @Published var agentAPIKeyStatus: String?
 
+    // MARK: - Voice Input
+
+    /// Master opt-in for local Voice input.
+    @Published var voiceEnabled: Bool
+
+    /// `"system"` or a normalized locale identifier selected by the user.
+    @Published var voiceLocaleIdentifier: String
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -316,6 +324,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Local language-server metadata exposed in Preferences.
     let availableLSPLanguages: [LSPServerConfiguration]
 
+    /// Local Speech locales exposed in Preferences.
+    let availableVoiceLocales: [VoiceLocaleOption]
+
     /// Callback invoked after a successful save.
     var onSave: (() -> Void)?
 
@@ -356,6 +367,7 @@ final class PreferencesViewModel: ObservableObject {
             || timingHeuristics != c.agentDetection.timingHeuristics
             || idleTimeoutSeconds != c.agentDetection.idleTimeoutSeconds
             || agentModeHasUnsavedChanges(comparedTo: c.agent)
+            || voiceHasUnsavedChanges(comparedTo: c.voice)
             || codeReviewAutoShowOnSessionEnd != c.codeReview.autoShowOnSessionEnd
             || macosNotifications != c.notifications.macosNotifications
             || sound != c.notifications.sound
@@ -402,6 +414,8 @@ final class PreferencesViewModel: ObservableObject {
         agentAutoMode = c.agent.autoMode
         agentMaxIterations = c.agent.maxIterations
         agentConversationStorageDir = c.agent.conversationStorageDir
+        voiceEnabled = c.voice.enabled
+        voiceLocaleIdentifier = c.voice.localeIdentifier
         codeReviewAutoShowOnSessionEnd = c.codeReview.autoShowOnSessionEnd
         macosNotifications = c.notifications.macosNotifications
         sound = c.notifications.sound
@@ -454,6 +468,9 @@ final class PreferencesViewModel: ObservableObject {
     /// tests inject an in-memory store.
     private let agentSecrets: AgentSecrets
 
+    /// Resolves Voice locale availability without any network fallback.
+    private let voiceLocaleResolver: VoiceLocaleResolver
+
     /// Dedicated editor model for the Keybindings preferences tab.
     ///
     /// Constructed lazily on first access so view models used purely for
@@ -472,10 +489,12 @@ final class PreferencesViewModel: ObservableObject {
     init(
         config: CocxyConfig,
         fileProvider: ConfigFileProviding = DiskConfigFileProvider(),
+        voiceLocaleResolver: VoiceLocaleResolver = .live(),
         agentSecrets: AgentSecrets = AgentSecrets()
     ) {
         self.savedConfig = config
         self.fileProvider = fileProvider
+        self.voiceLocaleResolver = voiceLocaleResolver
         self.agentSecrets = agentSecrets
 
         // General
@@ -514,6 +533,10 @@ final class PreferencesViewModel: ObservableObject {
         self.agentConversationStorageDir = config.agent.conversationStorageDir
         self.agentAPIKeyDraft = ""
         self.agentAPIKeyStatus = nil
+
+        // Voice Input
+        self.voiceEnabled = config.voice.enabled
+        self.voiceLocaleIdentifier = config.voice.localeIdentifier
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -566,6 +589,7 @@ final class PreferencesViewModel: ObservableObject {
         self.recommendedFontFamilies = FontFallbackResolver.recommendedFamilies()
         self.bundledFontFamilies = FontFallbackResolver.bundledFamilies
         self.availableLSPLanguages = LSPLanguageRegistry.defaults.servers
+        self.availableVoiceLocales = voiceLocaleResolver.supportedLocaleOptions()
     }
 
     // MARK: - Agent Provider Secrets
@@ -603,6 +627,12 @@ final class PreferencesViewModel: ObservableObject {
             next.remove(normalized)
         }
         lspEnabledLanguageIDs = next
+    }
+
+    // MARK: - Voice Locale Resolution
+
+    var resolvedVoiceLocale: VoiceLocaleResolution {
+        voiceLocaleResolver.resolve(config: buildVoiceConfigFromViewModel())
     }
 
     // MARK: - Font Resolution
@@ -693,6 +723,7 @@ final class PreferencesViewModel: ObservableObject {
     private func updateSavedSnapshot() {
         let clampedOpacity = min(max(backgroundOpacity, 0.3), 1.0)
         let agent = buildAgentModeConfigFromViewModel()
+        let voice = buildVoiceConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
             .applyingFallbackShortcut(
@@ -745,6 +776,7 @@ final class PreferencesViewModel: ObservableObject {
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
             agent: agent,
+            voice: voice,
             codeReview: buildCodeReviewConfigFromViewModel(),
             notifications: NotificationConfig(
                 macosNotifications: macosNotifications,
@@ -768,6 +800,7 @@ final class PreferencesViewModel: ObservableObject {
         )
         agentMaxIterations = agent.maxIterations
         agentConversationStorageDir = agent.conversationStorageDir
+        voiceLocaleIdentifier = voice.localeIdentifier
         pendingKeybindings = nil
     }
 
@@ -795,6 +828,18 @@ final class PreferencesViewModel: ObservableObject {
             || agentAutoMode != config.autoMode
             || agentMaxIterations != config.maxIterations
             || agentConversationStorageDir != config.conversationStorageDir
+    }
+
+    private func buildVoiceConfigFromViewModel() -> VoiceConfig {
+        VoiceConfig(
+            enabled: voiceEnabled,
+            localeIdentifier: voiceLocaleIdentifier
+        )
+    }
+
+    private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
+        voiceEnabled != config.enabled
+            || VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier) != config.localeIdentifier
     }
 
     private static func agentProviderDisplayName(_ provider: AgentProviderKind) -> String {
@@ -973,6 +1018,7 @@ final class PreferencesViewModel: ObservableObject {
         let keybindings = pendingKeybindings ?? defaults.keybindings
         let notes = buildNotesConfigFromViewModel()
         let agent = buildAgentModeConfigFromViewModel()
+        let voice = buildVoiceConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
@@ -1035,6 +1081,10 @@ final class PreferencesViewModel: ObservableObject {
         auto-mode = \(agent.autoMode)
         max-iterations = \(agent.maxIterations)
         conversation-storage-dir = "\(agent.conversationStorageDir)"
+
+        [voice]
+        enabled = \(voice.enabled)
+        locale = "\(voice.localeIdentifier)"
 
         [code-review]
         auto-show-on-session-end = \(codeReviewAutoShowOnSessionEnd)
