@@ -103,7 +103,10 @@ struct MCPHTTPTransport: MCPTransport {
         let body = try AgentToolProtocolCodec.encode(request)
         let response = try await httpTransport.send(AgentHTTPRequest(
             url: url,
-            headers: ["Content-Type": "application/json"].merging(headers) { _, override in override },
+            headers: [
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+            ].merging(headers) { _, override in override },
             body: body
         ))
         guard (200..<300).contains(response.statusCode) else {

@@ -75,3 +75,76 @@ actor MCPManager: MCPManaging {
         return MCPToolBridge.agentJSONValue(from: result)
     }
 }
+
+struct MCPClientTransportFactory: Sendable {
+    let httpTransport: any AgentHTTPTransport
+    let stdioTransport: any MCPTransport
+
+    init(
+        httpTransport: any AgentHTTPTransport = URLSessionAgentHTTPTransport(),
+        stdioTransport: any MCPTransport = MCPStdioTransport()
+    ) {
+        self.httpTransport = httpTransport
+        self.stdioTransport = stdioTransport
+    }
+
+    func transport(for server: MCPServer) -> any MCPTransport {
+        switch server.transport {
+        case .stdio:
+            return stdioTransport
+        case .http:
+            return MCPHTTPTransport(httpTransport: httpTransport)
+        }
+    }
+}
+
+actor MCPConfiguredManager: MCPManaging {
+    private let configURL: URL
+    private let configLoader: MCPServerConfigLoader
+    private let transportFactory: MCPClientTransportFactory
+    private var cachedManager: MCPManager?
+
+    init(
+        configURL: URL = MCPServerConfigLoader().defaultConfigURL(),
+        configLoader: MCPServerConfigLoader = MCPServerConfigLoader(),
+        transportFactory: MCPClientTransportFactory = MCPClientTransportFactory()
+    ) {
+        self.configURL = configURL
+        self.configLoader = configLoader
+        self.transportFactory = transportFactory
+    }
+
+    func listToolDescriptors() async throws -> [AgentToolDescriptor] {
+        try await manager().listToolDescriptors()
+    }
+
+    func executeTool(
+        agentToolID: String,
+        arguments: [String: AgentJSONValue]
+    ) async throws -> AgentJSONValue {
+        try await manager().executeTool(agentToolID: agentToolID, arguments: arguments)
+    }
+
+    func reload() {
+        cachedManager = nil
+    }
+
+    private func manager() async throws -> MCPManager {
+        if let cachedManager {
+            return cachedManager
+        }
+
+        let servers = try configLoader
+            .loadServers(from: configURL)
+            .filter(\.enabled)
+        let clients = servers.map { server in
+            MCPClient(
+                server: server,
+                transport: transportFactory.transport(for: server)
+            )
+        }
+        let manager = await MCPManager(clients: clients)
+        cachedManager = manager
+        return manager
+    }
+}

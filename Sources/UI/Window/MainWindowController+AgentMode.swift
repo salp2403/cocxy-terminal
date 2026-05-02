@@ -83,7 +83,8 @@ extension MainWindowController {
             workspaceRootProvider: { [weak self] in
                 self?.currentAgentModeWorkingDirectory()
             },
-            conversationID: "window-\(windowID.rawValue.uuidString)"
+            conversationID: "window-\(windowID.rawValue.uuidString)",
+            mcpManager: MCPConfiguredManager()
         )
         let viewModel = AgentPanelViewModel(
             configuration: configuration,

@@ -406,6 +406,158 @@ struct MCPFoundationSwiftTestingTests {
             RecordingMCPCall(toolID: "mcp__github__list_prs", arguments: ["state": .string("open")]),
         ])
     }
+
+    @Test("HTTP transport sends MCP JSON headers")
+    func httpTransportSendsMCPJSONHeaders() async throws {
+        let httpTransport = RecordingMCPHTTPTransport { request in
+            #expect(request.method == "POST")
+            #expect(request.headers["Content-Type"] == "application/json")
+            #expect(request.headers["Accept"] == "application/json, text/event-stream")
+            return AgentHTTPResponse(
+                statusCode: 200,
+                data: try AgentToolProtocolCodec.encode(MCPJSONRPCResponse(
+                    id: "1",
+                    result: .object(["ok": .bool(true)])
+                ))
+            )
+        }
+        let transport = MCPHTTPTransport(httpTransport: httpTransport)
+        let server = MCPServer(
+            id: "docs",
+            transport: .http(url: URL(string: "http://127.0.0.1:8765/mcp")!)
+        )
+
+        let response = try await transport.send(
+            MCPJSONRPCRequest(id: "1", method: "ping"),
+            to: server
+        )
+
+        #expect(response.result == .object(["ok": .bool(true)]))
+    }
+
+    @Test("stdio transport sends newline JSON and reconnects after process exit")
+    func stdioTransportSendsNewlineJSONAndReconnectsAfterProcessExit() async throws {
+        let launcher = ScriptedMCPStdioProcessLauncher(processes: [
+            ScriptedMCPStdioProcess(responseLines: [
+                #"{"id":"1","jsonrpc":"2.0","result":{"server":"first"}}"#,
+            ]),
+            ScriptedMCPStdioProcess(responseLines: [
+                #"{"id":"2","jsonrpc":"2.0","result":{"server":"second"}}"#,
+            ]),
+        ])
+        let transport = MCPStdioTransport(processLauncher: launcher)
+        let server = MCPServer(
+            id: "local",
+            transport: .stdio(command: "mcp-server", arguments: ["--stdio"])
+        )
+
+        let first = try await transport.send(MCPJSONRPCRequest(id: "1", method: "tools/list"), to: server)
+        let second = try await transport.send(MCPJSONRPCRequest(id: "2", method: "tools/list"), to: server)
+        let processes = launcher.launchedProcesses
+        let sentLines = processes.flatMap(\.sentPayloads).map { data in
+            String(data: data, encoding: .utf8) ?? ""
+        }
+        let decodedRequests = try sentLines.map { line in
+            try JSONDecoder().decode(MCPJSONRPCRequest.self, from: Data(line.dropLast().utf8))
+        }
+
+        #expect(first.result == .object(["server": .string("first")]))
+        #expect(second.result == .object(["server": .string("second")]))
+        #expect(processes.count == 2)
+        #expect(sentLines.allSatisfy { line in
+            line.hasSuffix("\n") && !line.dropLast().contains("\n")
+        })
+        #expect(decodedRequests.map(\.method) == ["tools/list", "tools/list"])
+    }
+
+    @Test("stdio transport skips notifications until the matching response")
+    func stdioTransportSkipsNotificationsUntilMatchingResponse() async throws {
+        let launcher = ScriptedMCPStdioProcessLauncher(processes: [
+            ScriptedMCPStdioProcess(responseLines: [
+                #"{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"}}"#,
+                #"{"id":"1","jsonrpc":"2.0","result":{"ok":true}}"#,
+            ]),
+        ])
+        let transport = MCPStdioTransport(processLauncher: launcher)
+        let server = MCPServer(
+            id: "local",
+            transport: .stdio(command: "mcp-server")
+        )
+
+        let response = try await transport.send(MCPJSONRPCRequest(id: "1", method: "tools/list"), to: server)
+
+        #expect(response.result == .object(["ok": .bool(true)]))
+    }
+
+    @Test("configured manager loads enabled MCP servers from the user config")
+    func configuredManagerLoadsEnabledMCPServersFromUserConfig() async throws {
+        let root = temporaryDirectory(named: "mcp-configured-manager")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let configURL = root.appendingPathComponent("mcp.json")
+        try """
+        {
+          "mcpServers": {
+            "github": {
+              "command": "github-mcp-server",
+              "args": ["stdio"]
+            },
+            "disabled_docs": {
+              "url": "http://127.0.0.1:8765/mcp",
+              "enabled": false
+            }
+          }
+        }
+        """.write(to: configURL, atomically: true, encoding: .utf8)
+        let stdioTransport = RecordingMCPTransport { request in
+            switch request.method {
+            case "tools/list":
+                return MCPJSONRPCResponse(
+                    id: request.id,
+                    result: .object([
+                        "tools": .array([
+                            .object([
+                                "name": .string("list_prs"),
+                                "description": .string("List pull requests"),
+                                "inputSchema": .object(["type": .string("object")]),
+                            ]),
+                        ]),
+                    ])
+                )
+            case "tools/call":
+                return MCPJSONRPCResponse(
+                    id: request.id,
+                    result: .object([
+                        "content": .array([
+                            .object([
+                                "type": .string("text"),
+                                "text": .string("PR #1"),
+                            ]),
+                        ]),
+                    ])
+                )
+            default:
+                return MCPJSONRPCResponse(id: request.id, result: .object([:]))
+            }
+        }
+        let manager = MCPConfiguredManager(
+            configURL: configURL,
+            transportFactory: MCPClientTransportFactory(stdioTransport: stdioTransport)
+        )
+
+        let descriptors = try await manager.listToolDescriptors()
+        let result = try await manager.executeTool(
+            agentToolID: "mcp__github__list_prs",
+            arguments: [:]
+        )
+        let requests = await stdioTransport.requests
+
+        #expect(descriptors.map(\.id) == ["mcp__github__list_prs"])
+        #expect(result == .object([
+            "isError": .bool(false),
+            "content": .array([.string("PR #1")]),
+        ]))
+        #expect(requests.map(\.method) == ["tools/list", "tools/list", "tools/call"])
+    }
 }
 
 private actor RecordingMCPTransport: MCPTransport {
@@ -420,6 +572,95 @@ private actor RecordingMCPTransport: MCPTransport {
         _ = server
         requests.append(request)
         return try await handler(request)
+    }
+}
+
+private actor RecordingMCPHTTPTransport: AgentHTTPTransport {
+    private let handler: @Sendable (AgentHTTPRequest) async throws -> AgentHTTPResponse
+
+    init(handler: @escaping @Sendable (AgentHTTPRequest) async throws -> AgentHTTPResponse) {
+        self.handler = handler
+    }
+
+    func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
+        try await handler(request)
+    }
+}
+
+private final class ScriptedMCPStdioProcessLauncher: MCPStdioProcessLaunching, @unchecked Sendable {
+    private let lock = NSLock()
+    private var pendingProcesses: [ScriptedMCPStdioProcess]
+    private var launchedStorage: [ScriptedMCPStdioProcess] = []
+
+    var launchedProcesses: [ScriptedMCPStdioProcess] {
+        lock.lock()
+        defer { lock.unlock() }
+        return launchedStorage
+    }
+
+    init(processes: [ScriptedMCPStdioProcess]) {
+        self.pendingProcesses = processes
+    }
+
+    func launch(server: MCPServer) throws -> any MCPStdioProcess {
+        _ = server
+        lock.lock()
+        defer { lock.unlock() }
+        guard !pendingProcesses.isEmpty else {
+            throw MCPStdioTransportError.processUnavailable(serverID: server.id)
+        }
+        let process = pendingProcesses.removeFirst()
+        launchedStorage.append(process)
+        return process
+    }
+}
+
+private final class ScriptedMCPStdioProcess: MCPStdioProcess, @unchecked Sendable {
+    private let lock = NSLock()
+    private var responseLines: [String]
+    private var runningStorage = true
+    private var sentPayloadStorage: [Data] = []
+
+    var isRunning: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return runningStorage
+    }
+
+    var sentPayloads: [Data] {
+        lock.lock()
+        defer { lock.unlock() }
+        return sentPayloadStorage
+    }
+
+    init(responseLines: [String]) {
+        self.responseLines = responseLines
+    }
+
+    func write(_ data: Data) throws {
+        lock.lock()
+        sentPayloadStorage.append(data)
+        lock.unlock()
+    }
+
+    func readLine() throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !responseLines.isEmpty else {
+            runningStorage = false
+            throw MCPStdioTransportError.processExited(serverID: "test")
+        }
+        let line = responseLines.removeFirst()
+        if responseLines.isEmpty {
+            runningStorage = false
+        }
+        return line
+    }
+
+    func terminate() {
+        lock.lock()
+        runningStorage = false
+        lock.unlock()
     }
 }
 
