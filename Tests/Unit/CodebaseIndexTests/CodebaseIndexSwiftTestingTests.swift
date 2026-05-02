@@ -88,6 +88,62 @@ struct CodebaseIndexSwiftTestingTests {
         #expect(third.removedFiles(comparedTo: second) == ["Sources/App.swift"])
     }
 
+    @Test("sync service reports incremental changes from Merkle snapshots")
+    func syncServiceReportsIncrementalChangesFromSnapshots() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let appURL = root.appendingPathComponent("Sources/App.swift")
+        let testURL = root.appendingPathComponent("Tests/AppTests.swift")
+        try "let value = 1\n".write(to: appURL, atomically: true, encoding: .utf8)
+
+        var emittedChanges: [CodebaseIndexChangeSet] = []
+        let service = CodebaseIndexSyncService(workspace: AgentWorkspace(rootURL: root)) {
+            emittedChanges.append($0)
+        }
+
+        let initial = try service.refresh()
+        #expect(initial.changedFiles == ["Sources/App.swift"])
+        #expect(initial.removedFiles.isEmpty)
+
+        try "let value = 2\n".write(to: appURL, atomically: true, encoding: .utf8)
+        try "func testValue() {}\n".write(to: testURL, atomically: true, encoding: .utf8)
+        let changed = try service.handleFileSystemEvent()
+        #expect(changed.changedFiles == ["Sources/App.swift", "Tests/AppTests.swift"])
+        #expect(changed.removedFiles.isEmpty)
+
+        try FileManager.default.removeItem(at: appURL)
+        let removed = try service.handleFileSystemEvent()
+        #expect(removed.changedFiles.isEmpty)
+        #expect(removed.removedFiles == ["Sources/App.swift"])
+        #expect(emittedChanges.map(\.changedFiles) == [
+            ["Sources/App.swift", "Tests/AppTests.swift"],
+            [],
+        ])
+        #expect(emittedChanges.map(\.removedFiles) == [
+            [],
+            ["Sources/App.swift"],
+        ])
+    }
+
+    @Test("sync service ignores protected and ignored files")
+    func syncServiceIgnoresProtectedAndIgnoredFiles() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "Generated/\n*.log\n".write(to: root.appendingPathComponent(".cocxyindexignore"), atomically: true, encoding: .utf8)
+        try "private=1\n".write(to: root.appendingPathComponent(".env"), atomically: true, encoding: .utf8)
+        try "ignored\n".write(to: root.appendingPathComponent("debug.log"), atomically: true, encoding: .utf8)
+        try "generated\n".write(to: root.appendingPathComponent("Generated/File.swift"), atomically: true, encoding: .utf8)
+        try "indexed\n".write(to: root.appendingPathComponent("Sources/App.swift"), atomically: true, encoding: .utf8)
+
+        let service = CodebaseIndexSyncService(workspace: AgentWorkspace(rootURL: root))
+        let initial = try service.refresh()
+
+        #expect(initial.changedFiles == ["Sources/App.swift"])
+        #expect(!initial.changedFiles.contains(".env"))
+        #expect(!initial.changedFiles.contains("debug.log"))
+        #expect(!initial.changedFiles.contains("Generated/File.swift"))
+    }
+
     private func makeWorkspace() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-codebase-index-\(UUID().uuidString)", isDirectory: true)
