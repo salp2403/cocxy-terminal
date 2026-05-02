@@ -232,6 +232,19 @@ final class ConfigService: ConfigProviding {
         timing-heuristics = \(defaults.agentDetection.timingHeuristics)
         idle-timeout-seconds = \(defaults.agentDetection.idleTimeoutSeconds)
 
+        [agent]
+        # Built-in Agent Mode. Disabled by default; enabling this never
+        # enables auto-mode. Foundation Models is preferred on supported
+        # macOS releases because it is local-only. On unsupported systems,
+        # Cocxy requires the user to pick another provider explicitly
+        # instead of silently routing prompts to a network API.
+        enabled = \(defaults.agent.enabled)
+        preferred-provider = "\(defaults.agent.preferredProvider.rawValue)"
+        foundation-models-fallback = "\(defaults.agent.foundationModelsFallback.rawValue)"
+        auto-mode = \(defaults.agent.autoMode)
+        max-iterations = \(defaults.agent.maxIterations)
+        conversation-storage-dir = "\(defaults.agent.conversationStorageDir)"
+
         [code-review]
         auto-show-on-session-end = \(defaults.codeReview.autoShowOnSessionEnd)
 
@@ -364,6 +377,22 @@ final class ConfigService: ConfigProviding {
         # [0.1, 60] at parse time so a typo cannot disable saving.
         auto-save-interval-seconds = \(defaults.notes.autoSaveIntervalSeconds)
 
+        [lsp]
+        # Native local Language Server Protocol support. Disabled by
+        # default because language servers receive opened document text
+        # and workspace URIs. Cocxy never auto-installs servers; enable
+        # this only after installing and trusting the local server.
+        enabled = \(defaults.lsp.enabled)
+        # Language IDs to allow when enabled is true. Examples:
+        # ["swift", "rust", "typescript", "python", "go"].
+        enabled-languages = []
+
+        [vim]
+        # Editor-only Vim mode. Disabled by default so existing text
+        # editing remains unchanged after upgrade. Terminal panes never
+        # read this flag.
+        enabled = \(defaults.vim.enabled)
+
         [experimental]
         # Architecture-heavy developer features guarded by ADRs. Keep
         # disabled unless you are explicitly testing the matching
@@ -392,6 +421,7 @@ final class ConfigService: ConfigProviding {
         let appearance = parseAppearanceConfig(from: parsed)
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
+        let agent = parseAgentModeConfig(from: parsed)
         let codeReview = parseCodeReviewConfig(from: parsed)
         let notifications = parseNotificationConfig(from: parsed)
         let quickTerminal = parseQuickTerminalConfig(from: parsed)
@@ -399,6 +429,8 @@ final class ConfigService: ConfigProviding {
         let worktree = parseWorktreeConfig(from: parsed)
         let github = parseGitHubConfig(from: parsed)
         let notes = parseNotesConfig(from: parsed)
+        let lsp = parseLSPConfig(from: parsed)
+        let vim = parseVimConfig(from: parsed)
         let experimental = parseExperimentalConfig(from: parsed)
         let keybindings = parseKeybindingsConfig(from: parsed)
             .applyingFallbackShortcut(
@@ -411,6 +443,7 @@ final class ConfigService: ConfigProviding {
             appearance: appearance,
             terminal: terminal,
             agentDetection: agentDetection,
+            agent: agent,
             codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
@@ -419,6 +452,8 @@ final class ConfigService: ConfigProviding {
             worktree: worktree,
             github: github,
             notes: notes,
+            lsp: lsp,
+            vim: vim,
             experimental: experimental
         )
     }
@@ -586,6 +621,33 @@ final class ConfigService: ConfigProviding {
             patternMatching: boolValue(table["pattern-matching"]) ?? defaults.patternMatching,
             timingHeuristics: boolValue(table["timing-heuristics"]) ?? defaults.timingHeuristics,
             idleTimeoutSeconds: validatedTimeout
+        )
+    }
+
+    /// Parses the `[agent]` section for built-in Agent Mode. Missing or
+    /// malformed values fall back to disabled, local-first defaults.
+    /// `max-iterations` is clamped so a config typo cannot create an
+    /// unbounded tool loop.
+    private func parseAgentModeConfig(from parsed: [String: TOMLValue]) -> AgentModeConfig {
+        let table = extractTable("agent", from: parsed)
+        let defaults = AgentModeConfig.defaults
+
+        let preferredProvider = stringValue(table["preferred-provider"])
+            .flatMap { AgentProviderKind(rawValue: $0) }
+            ?? defaults.preferredProvider
+        let foundationModelsFallback = stringValue(table["foundation-models-fallback"])
+            .flatMap { FoundationModelsFallbackPolicy(rawValue: $0) }
+            ?? defaults.foundationModelsFallback
+        let rawMaxIterations = intValue(table["max-iterations"]) ?? defaults.maxIterations
+
+        return AgentModeConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            preferredProvider: preferredProvider,
+            foundationModelsFallback: foundationModelsFallback,
+            autoMode: boolValue(table["auto-mode"]) ?? defaults.autoMode,
+            maxIterations: rawMaxIterations,
+            conversationStorageDir: stringValue(table["conversation-storage-dir"])
+                ?? defaults.conversationStorageDir
         )
     }
 
@@ -844,6 +906,27 @@ final class ConfigService: ConfigProviding {
         return parsed.canonical
     }
 
+    /// Parses `[lsp]` privacy gates. Missing and malformed values fall
+    /// back to disabled defaults; malformed arrays keep only string
+    /// language ids so one bad entry does not discard a user's valid
+    /// opt-ins.
+    private func parseLSPConfig(from parsed: [String: TOMLValue]) -> LSPConfig {
+        let table = extractTable("lsp", from: parsed)
+        let defaults = LSPConfig.defaults
+        return LSPConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            enabledLanguageIDs: stringArrayValue(table["enabled-languages"]) ?? defaults.enabledLanguageIDs
+        )
+    }
+
+    /// Parses `[vim]` as a defensive editor-only opt-in. Missing or malformed
+    /// values stay disabled so normal typing is preserved on upgrade.
+    private func parseVimConfig(from parsed: [String: TOMLValue]) -> VimConfig {
+        let table = extractTable("vim", from: parsed)
+        let defaults = VimConfig.defaults
+        return VimConfig(enabled: boolValue(table["enabled"]) ?? defaults.enabled)
+    }
+
     /// Parses `[experimental]` feature gates. Missing or malformed values
     /// stay disabled so unfinished architecture-heavy features cannot be
     /// reached accidentally.
@@ -890,6 +973,14 @@ final class ConfigService: ConfigProviding {
         default:
             return nil
         }
+    }
+
+    /// Extracts string elements from a TOML array. Non-string entries
+    /// are ignored so one malformed language id cannot discard the rest
+    /// of the user's explicit opt-ins.
+    private func stringArrayValue(_ value: TOMLValue?) -> [String]? {
+        guard case .array(let values) = value else { return nil }
+        return values.compactMap { stringValue($0) }
     }
 
     // MARK: - Validation Helpers

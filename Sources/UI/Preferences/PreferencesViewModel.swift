@@ -167,6 +167,19 @@ final class PreferencesViewModel: ObservableObject {
     /// Inline image memory limit in MiB.
     @Published var imageMemoryLimitMB: Int
 
+    // MARK: - Language Servers
+
+    /// Master opt-in for local Language Server Protocol clients.
+    @Published var lspEnabled: Bool
+
+    /// Normalized language IDs that may start LSP clients when LSP is enabled.
+    @Published var lspEnabledLanguageIDs: Set<String>
+
+    // MARK: - Editor
+
+    /// Master opt-in for editor-only Vim key handling.
+    @Published var vimEnabled: Bool
+
     // MARK: - Worktree (v0.1.81)
 
     /// Master toggle for the per-agent worktree feature. When `false`,
@@ -277,6 +290,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Curated fonts shipped directly inside the app bundle.
     let bundledFontFamilies: [String]
 
+    /// Local language-server metadata exposed in Preferences.
+    let availableLSPLanguages: [LSPServerConfiguration]
+
     /// Callback invoked after a successful save.
     var onSave: (() -> Void)?
 
@@ -325,6 +341,8 @@ final class PreferencesViewModel: ObservableObject {
             || worktreeHasUnsavedChanges(comparedTo: c.worktree)
             || githubHasUnsavedChanges(comparedTo: c.github)
             || notesHasUnsavedChanges(comparedTo: c.notes)
+            || lspHasUnsavedChanges(comparedTo: c.lsp)
+            || vimHasUnsavedChanges(comparedTo: c.vim)
             || (pendingKeybindings != nil && pendingKeybindings != c.keybindings)
     }
 
@@ -383,6 +401,9 @@ final class PreferencesViewModel: ObservableObject {
         notesShortcut = c.notes.shortcut
         notesAutoSave = c.notes.autoSave
         notesAutoSaveIntervalSeconds = c.notes.autoSaveIntervalSeconds
+        lspEnabled = c.lsp.enabled
+        lspEnabledLanguageIDs = Set(c.lsp.enabledLanguageIDs)
+        vimEnabled = c.vim.enabled
         pendingKeybindings = nil
     }
 
@@ -488,12 +509,36 @@ final class PreferencesViewModel: ObservableObject {
         self.notesShortcut = config.notes.shortcut
         self.notesAutoSave = config.notes.autoSave
         self.notesAutoSaveIntervalSeconds = config.notes.autoSaveIntervalSeconds
+        self.lspEnabled = config.lsp.enabled
+        self.lspEnabledLanguageIDs = Set(config.lsp.enabledLanguageIDs)
+        self.vimEnabled = config.vim.enabled
 
         // Available themes from built-in list.
         self.availableThemes = Self.defaultThemeNames()
         self.availableFontFamilies = FontFallbackResolver.availableFixedPitchFamilies()
         self.recommendedFontFamilies = FontFallbackResolver.recommendedFamilies()
         self.bundledFontFamilies = FontFallbackResolver.bundledFamilies
+        self.availableLSPLanguages = LSPLanguageRegistry.defaults.servers
+    }
+
+    // MARK: - LSP Selection
+
+    func isLSPLanguageEnabled(_ languageID: String) -> Bool {
+        let normalized = Self.normalizedLSPLanguageID(languageID)
+        return !normalized.isEmpty && lspEnabledLanguageIDs.contains(normalized)
+    }
+
+    func setLSPLanguage(_ languageID: String, enabled: Bool) {
+        let normalized = Self.normalizedLSPLanguageID(languageID)
+        guard !normalized.isEmpty else { return }
+
+        var next = lspEnabledLanguageIDs
+        if enabled {
+            next.insert(normalized)
+        } else {
+            next.remove(normalized)
+        }
+        lspEnabledLanguageIDs = next
     }
 
     // MARK: - Font Resolution
@@ -651,6 +696,8 @@ final class PreferencesViewModel: ObservableObject {
             worktree: buildWorktreeConfigFromViewModel(),
             github: buildGitHubConfigFromViewModel(),
             notes: notes,
+            lsp: buildLSPConfigFromViewModel(),
+            vim: buildVimConfigFromViewModel(),
             experimental: savedConfig.experimental
         )
         pendingKeybindings = nil
@@ -785,6 +832,26 @@ final class PreferencesViewModel: ObservableObject {
             || notesAutoSaveIntervalSeconds != config.autoSaveIntervalSeconds
     }
 
+    private func buildLSPConfigFromViewModel() -> LSPConfig {
+        LSPConfig(
+            enabled: lspEnabled,
+            enabledLanguageIDs: Self.sortedLSPLanguageIDs(from: lspEnabledLanguageIDs)
+        )
+    }
+
+    private func lspHasUnsavedChanges(comparedTo config: LSPConfig) -> Bool {
+        lspEnabled != config.enabled
+            || Self.sortedLSPLanguageIDs(from: lspEnabledLanguageIDs) != config.enabledLanguageIDs
+    }
+
+    private func buildVimConfigFromViewModel() -> VimConfig {
+        VimConfig(enabled: vimEnabled)
+    }
+
+    private func vimHasUnsavedChanges(comparedTo config: VimConfig) -> Bool {
+        vimEnabled != config.enabled
+    }
+
     // MARK: - TOML Generation
 
     /// Generates a complete TOML configuration string from the current values.
@@ -803,6 +870,8 @@ final class PreferencesViewModel: ObservableObject {
         let defaults = savedConfig
         let keybindings = pendingKeybindings ?? defaults.keybindings
         let notes = buildNotesConfigFromViewModel()
+        let lsp = buildLSPConfigFromViewModel()
+        let vim = buildVimConfigFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
             "window-padding-x = \(Self.tomlNumber($0))\n"
         } ?? ""
@@ -914,6 +983,13 @@ final class PreferencesViewModel: ObservableObject {
         auto-save = \(notes.autoSave)
         auto-save-interval-seconds = \(Self.tomlNumber(notes.autoSaveIntervalSeconds))
 
+        [lsp]
+        enabled = \(lsp.enabled)
+        enabled-languages = \(Self.tomlStringArray(lsp.enabledLanguageIDs))
+
+        [vim]
+        enabled = \(vim.enabled)
+
         [experimental]
         pip-enabled = \(defaults.experimental.pipEnabled)
         pty-daemon = \(defaults.experimental.ptyDaemonEnabled)
@@ -980,6 +1056,24 @@ final class PreferencesViewModel: ObservableObject {
             .replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: "_", with: "")
             .replacingOccurrences(of: " ", with: "")
+    }
+
+    private static func normalizedLSPLanguageID(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func sortedLSPLanguageIDs(from ids: Set<String>) -> [String] {
+        Array(ids.map(normalizedLSPLanguageID).filter { !$0.isEmpty }).sorted()
+    }
+
+    private static func tomlStringArray(_ values: [String]) -> String {
+        guard !values.isEmpty else { return "[]" }
+        let items = values.map { value in
+            let escaped = value.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            return "\"\(escaped)\""
+        }
+        return "[\(items.joined(separator: ", "))]"
     }
 
     private static func tomlNumber(_ value: Double) -> String {

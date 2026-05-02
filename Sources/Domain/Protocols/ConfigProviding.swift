@@ -50,6 +50,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let appearance: AppearanceConfig
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
+    let agent: AgentModeConfig
     let codeReview: CodeReviewConfig
     let notifications: NotificationConfig
     let quickTerminal: QuickTerminalConfig
@@ -58,6 +59,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let worktree: WorktreeConfig
     let github: GitHubConfig
     let notes: NotesConfig
+    let lsp: LSPConfig
+    let vim: VimConfig
     let experimental: ExperimentalConfig
 
     init(
@@ -65,6 +68,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         appearance: AppearanceConfig,
         terminal: TerminalConfig,
         agentDetection: AgentDetectionConfig,
+        agent: AgentModeConfig = .defaults,
         codeReview: CodeReviewConfig = .defaults,
         notifications: NotificationConfig,
         quickTerminal: QuickTerminalConfig,
@@ -73,12 +77,15 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         worktree: WorktreeConfig = .defaults,
         github: GitHubConfig = .defaults,
         notes: NotesConfig = .defaults,
+        lsp: LSPConfig = .defaults,
+        vim: VimConfig = .defaults,
         experimental: ExperimentalConfig = .defaults
     ) {
         self.general = general
         self.appearance = appearance
         self.terminal = terminal
         self.agentDetection = agentDetection
+        self.agent = agent
         self.codeReview = codeReview
         self.notifications = notifications
         self.quickTerminal = quickTerminal
@@ -87,6 +94,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.worktree = worktree
         self.github = github
         self.notes = notes
+        self.lsp = lsp
+        self.vim = vim
         self.experimental = experimental
     }
 
@@ -97,6 +106,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             appearance: .defaults,
             terminal: .defaults,
             agentDetection: .defaults,
+            agent: .defaults,
             codeReview: .defaults,
             notifications: .defaults,
             quickTerminal: .defaults,
@@ -105,6 +115,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             worktree: .defaults,
             github: .defaults,
             notes: .defaults,
+            lsp: .defaults,
+            vim: .defaults,
             experimental: .defaults
         )
     }
@@ -112,16 +124,13 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     // MARK: - Codable — tolerant decoding for backward compatibility
 
     /// Explicit `Codable` conformance so legacy config JSONs written
-    /// before v0.1.81 (which do not carry the `worktree` key) decode
-    /// cleanly. Every other field preserves its strict requirement — if
-    /// any of them is missing, the decode fails and we fall back to
-    /// defaults higher up the call chain. `worktree` and `github` are
-    /// the only newly introduced fields and therefore use
-    /// `decodeIfPresent` so users upgrading from older releases never
-    /// hit a decode failure.
+    /// before v0.1.81 (which do not carry newer keys) decode cleanly.
+    /// Core legacy fields preserve their strict requirement; newly
+    /// introduced sections use `decodeIfPresent` so users upgrading
+    /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, codeReview
-        case notifications, quickTerminal, keybindings, sessions, worktree, github, notes
+        case general, appearance, terminal, agentDetection, agent, codeReview
+        case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
 
@@ -131,6 +140,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.appearance = try container.decode(AppearanceConfig.self, forKey: .appearance)
         self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
         self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
+        self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
+            ?? .defaults
         self.codeReview = try container.decodeIfPresent(CodeReviewConfig.self, forKey: .codeReview)
             ?? .defaults
         self.notifications = try container.decode(NotificationConfig.self, forKey: .notifications)
@@ -142,6 +153,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.github = try container.decodeIfPresent(GitHubConfig.self, forKey: .github)
             ?? .defaults
         self.notes = try container.decodeIfPresent(NotesConfig.self, forKey: .notes)
+            ?? .defaults
+        self.lsp = try container.decodeIfPresent(LSPConfig.self, forKey: .lsp)
+            ?? .defaults
+        self.vim = try container.decodeIfPresent(VimConfig.self, forKey: .vim)
             ?? .defaults
         self.experimental = try container.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental)
             ?? .defaults
@@ -234,6 +249,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             appearance: mergedAppearance,
             terminal: terminal,
             agentDetection: agentDetection,
+            // Built-in Agent Mode is a global user preference. Project
+            // overrides must not enable an LLM provider or auto-mode from
+            // repository-local config.
+            agent: agent,
             codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
@@ -247,6 +266,14 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // the project-overrides merge so a `.cocxy.toml` cannot
             // accidentally clobber them.
             notes: notes,
+            // LSP is also global/user-level. A project can have its own
+            // language-server path later, but the privacy opt-in remains
+            // the user's explicit choice.
+            lsp: lsp,
+            // Vim mode is a global editor preference. Project-level Vim
+            // defaults can be added later, but terminal panes must never
+            // infer Vim behavior from a repository file.
+            vim: vim,
             experimental: experimental
         )
     }
@@ -624,6 +651,141 @@ struct AgentDetectionConfig: Codable, Sendable, Equatable {
             timingHeuristics: true,
             idleTimeoutSeconds: 5
         )
+    }
+}
+
+// MARK: - Agent Mode Config
+
+/// Provider identifiers for built-in Agent Mode.
+///
+/// Raw values are the TOML contract for `[agent].preferred-provider`.
+/// Foundation Models is intentionally first and default because it is the
+/// only zero-cloud option; API providers are selected only when the user
+/// explicitly configures them and stores their own key locally.
+enum AgentProviderKind: String, Codable, Sendable, Equatable, CaseIterable {
+    case foundationModelsOnDevice = "foundation-models-on-device"
+    case anthropic
+    case openai
+    case google
+}
+
+/// Fallback behavior when the configured provider is Foundation Models
+/// but the current OS/hardware cannot use it.
+///
+/// The initial policy is deliberately frictional: require the user to
+/// choose another provider rather than silently routing prompts to a
+/// cloud API.
+enum FoundationModelsFallbackPolicy: String, Codable, Sendable, Equatable, CaseIterable {
+    case requireExplicitChoice = "require-explicit-choice"
+}
+
+/// Runtime provider selection after applying platform capability checks.
+enum AgentProviderResolution: Sendable, Equatable {
+    case provider(AgentProviderKind)
+    case explicitChoiceRequired
+}
+
+/// `[agent]` section for built-in Agent Mode.
+///
+/// This is a configuration foundation only. It does not make Agent Mode
+/// reachable by itself: `enabled` defaults to false, `autoMode` defaults
+/// to false, and Foundation Models fallback never selects a remote
+/// provider implicitly.
+struct AgentModeConfig: Codable, Sendable, Equatable {
+    static let minMaxIterations = 1
+    static let maxMaxIterations = 50
+
+    let enabled: Bool
+    let preferredProvider: AgentProviderKind
+    let foundationModelsFallback: FoundationModelsFallbackPolicy
+    let autoMode: Bool
+    let maxIterations: Int
+    let conversationStorageDir: String
+
+    static var defaults: AgentModeConfig {
+        AgentModeConfig(
+            enabled: false,
+            preferredProvider: .foundationModelsOnDevice,
+            foundationModelsFallback: .requireExplicitChoice,
+            autoMode: false,
+            maxIterations: 8,
+            conversationStorageDir: "~/.config/cocxy/agent/conversations"
+        )
+    }
+
+    init(
+        enabled: Bool = false,
+        preferredProvider: AgentProviderKind = .foundationModelsOnDevice,
+        foundationModelsFallback: FoundationModelsFallbackPolicy = .requireExplicitChoice,
+        autoMode: Bool = false,
+        maxIterations: Int = 8,
+        conversationStorageDir: String = "~/.config/cocxy/agent/conversations"
+    ) {
+        self.enabled = enabled
+        self.preferredProvider = preferredProvider
+        self.foundationModelsFallback = foundationModelsFallback
+        self.autoMode = autoMode
+        self.maxIterations = Self.clampedMaxIterations(maxIterations)
+        let trimmedStorageDir = conversationStorageDir.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.conversationStorageDir = trimmedStorageDir.isEmpty
+            ? Self.defaultConversationStorageDir
+            : conversationStorageDir
+    }
+
+    /// Resolves the configured provider without importing platform-only
+    /// Foundation Models symbols into common configuration code.
+    func effectiveProvider(foundationModelsAvailable: Bool) -> AgentProviderResolution {
+        guard preferredProvider == .foundationModelsOnDevice else {
+            return .provider(preferredProvider)
+        }
+
+        if foundationModelsAvailable {
+            return .provider(.foundationModelsOnDevice)
+        }
+
+        switch foundationModelsFallback {
+        case .requireExplicitChoice:
+            return .explicitChoiceRequired
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case preferredProvider
+        case foundationModelsFallback
+        case autoMode
+        case maxIterations
+        case conversationStorageDir
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AgentModeConfig.defaults
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+            ?? defaults.enabled
+        self.preferredProvider = try container.decodeIfPresent(AgentProviderKind.self, forKey: .preferredProvider)
+            ?? defaults.preferredProvider
+        self.foundationModelsFallback = try container.decodeIfPresent(
+            FoundationModelsFallbackPolicy.self,
+            forKey: .foundationModelsFallback
+        ) ?? defaults.foundationModelsFallback
+        self.autoMode = try container.decodeIfPresent(Bool.self, forKey: .autoMode)
+            ?? defaults.autoMode
+        let rawMaxIterations = try container.decodeIfPresent(Int.self, forKey: .maxIterations)
+            ?? defaults.maxIterations
+        self.maxIterations = Self.clampedMaxIterations(rawMaxIterations)
+        let rawStorageDir = try container.decodeIfPresent(String.self, forKey: .conversationStorageDir)
+            ?? defaults.conversationStorageDir
+        let trimmedStorageDir = rawStorageDir.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.conversationStorageDir = trimmedStorageDir.isEmpty
+            ? defaults.conversationStorageDir
+            : rawStorageDir
+    }
+
+    private static let defaultConversationStorageDir = "~/.config/cocxy/agent/conversations"
+
+    private static func clampedMaxIterations(_ value: Int) -> Int {
+        min(max(value, minMaxIterations), maxMaxIterations)
     }
 }
 
@@ -1062,6 +1224,77 @@ struct NotesConfig: Codable, Sendable, Equatable {
             ?? defaults.autoSave
         self.autoSaveIntervalSeconds = try container.decodeIfPresent(Double.self, forKey: .autoSaveIntervalSeconds)
             ?? defaults.autoSaveIntervalSeconds
+    }
+}
+
+// MARK: - LSP Config
+
+/// `[lsp]` section of the configuration.
+///
+/// LSP is opt-in because language servers receive local document text and
+/// workspace URIs. The master `enabled` switch must be true and each language
+/// must appear in `enabledLanguageIDs` before `LSPManager` will plan a client.
+struct LSPConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let enabledLanguageIDs: [String]
+
+    static let defaults = LSPConfig(enabled: false, enabledLanguageIDs: [])
+
+    init(enabled: Bool = false, enabledLanguageIDs: [String] = []) {
+        self.enabled = enabled
+        self.enabledLanguageIDs = LSPConfig.normalizedLanguageIDs(enabledLanguageIDs)
+    }
+
+    var managerConfiguration: LSPManager.Configuration {
+        guard enabled else { return .defaults }
+        return LSPManager.Configuration(enabledLanguageIDs: Set(enabledLanguageIDs))
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case enabledLanguageIDs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = LSPConfig.defaults
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+            ?? defaults.enabled
+        let rawLanguageIDs = try container.decodeIfPresent([String].self, forKey: .enabledLanguageIDs)
+            ?? defaults.enabledLanguageIDs
+        self.enabledLanguageIDs = LSPConfig.normalizedLanguageIDs(rawLanguageIDs)
+    }
+
+    private static func normalizedLanguageIDs(_ rawLanguageIDs: [String]) -> [String] {
+        Array(Set(rawLanguageIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty })).sorted()
+    }
+}
+
+// MARK: - Vim Config
+
+/// `[vim]` section of the configuration.
+///
+/// Vim mode is editor-only and defaults off so existing editor typing remains
+/// unchanged after upgrade. Enabling this flag does not affect terminal panes.
+struct VimConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+
+    static let defaults = VimConfig(enabled: false)
+
+    init(enabled: Bool = false) {
+        self.enabled = enabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = VimConfig.defaults
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+            ?? defaults.enabled
     }
 }
 

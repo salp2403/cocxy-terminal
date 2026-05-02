@@ -178,9 +178,10 @@ struct WorktreeConfigRoundTripTests {
     @Test("generated default TOML toggled on disk round-trips the enabled flag")
     func generatedTomlWithEnabledToggleRoundTrips() throws {
         // Simulates Preferences writing an opt-in config back to disk.
-        // `enabled = false` appears only in the [worktree] section of the
-        // default template — all other sections with an `enabled` key
-        // default to true — so a global replace is safe and targeted.
+        // Flip every disabled feature gate in the default template, then
+        // assert the worktree section still round-trips its own fields.
+        // Other disabled-by-default sections, such as [lsp], are allowed
+        // to opt in as part of this broad generated-template smoke.
         let base = ConfigService.generateDefaultToml()
         let toggled = base.replacingOccurrences(
             of: "enabled = false",

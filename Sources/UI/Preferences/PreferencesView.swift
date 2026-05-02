@@ -15,6 +15,7 @@ import AppKit
 /// - Code Review: review panel visibility behaviour
 /// - Notifications: toggles for each notification type
 /// - Terminal: runtime protocol settings such as inline images
+/// - Editor: editor-only input preferences
 /// - Keybindings: read-only display of keyboard shortcuts
 /// - About: version, license
 ///
@@ -112,6 +113,10 @@ struct PreferencesView: View {
             EditableNotificationsSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .terminal:
             TerminalPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .languageServers:
+            LanguageServersPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .editor:
+            EditorPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .keybindings:
             KeybindingsEditorView(viewModel: viewModel.keybindingsEditor)
         case .worktrees:
@@ -139,6 +144,8 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case codeReview
     case notifications
     case terminal
+    case languageServers
+    case editor
     case keybindings
     case worktrees
     case github
@@ -155,6 +162,8 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
         case .terminal: return "Terminal"
+        case .languageServers: return "Language Servers"
+        case .editor: return "Editor"
         case .keybindings: return "Keybindings"
         case .worktrees: return "Worktrees"
         case .github: return "GitHub"
@@ -171,6 +180,8 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
         case .terminal: return "terminal"
+        case .languageServers: return "curlybraces.square"
+        case .editor: return "text.cursor"
         case .keybindings: return "keyboard"
         case .worktrees: return "arrow.triangle.branch"
         case .github: return "arrow.triangle.pull"
@@ -823,6 +834,104 @@ struct TerminalPreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Terminal")
+    }
+}
+
+// MARK: - Language Servers Section
+
+/// Editable opt-in gates for local Language Server Protocol clients.
+struct LanguageServersPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Feature") {
+                Toggle("Enable language servers", isOn: $viewModel.lspEnabled)
+                    .help("Starts only the local language servers selected below.")
+                Text(
+                    "Cocxy never auto-installs language servers. Enabled servers run locally and receive opened document text plus workspace URIs."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Languages") {
+                ForEach(viewModel.availableLSPLanguages, id: \.languageID) { server in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle(
+                            isOn: Binding(
+                                get: {
+                                    viewModel.isLSPLanguageEnabled(server.languageID)
+                                },
+                                set: { enabled in
+                                    viewModel.setLSPLanguage(
+                                        server.languageID,
+                                        enabled: enabled
+                                    )
+                                }
+                            )
+                        ) {
+                            Text(server.displayName)
+                        }
+
+                        Text(languageDetail(for: server))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(installDetail(for: server))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Language Servers")
+    }
+
+    private func languageDetail(for server: LSPServerConfiguration) -> String {
+        let extensions = server.fileExtensions.map { ".\($0)" }.joined(separator: ", ")
+        return "\(server.languageID) - \(extensions)"
+    }
+
+    private func installDetail(for server: LSPServerConfiguration) -> String {
+        if let command = server.installSuggestion.command {
+            return command
+        }
+        return server.installSuggestion.message
+    }
+}
+
+// MARK: - Editor Section
+
+/// Editable editor-only preferences.
+struct EditorPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Input") {
+                Toggle("Enable Vim mode", isOn: $viewModel.vimEnabled)
+                    .help("Routes editor text input through the Vim state machine.")
+                Text("Applies only to editor tabs. Terminal panes keep standard shell input.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Editor")
     }
 }
 
