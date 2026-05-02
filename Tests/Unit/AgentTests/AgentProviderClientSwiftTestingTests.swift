@@ -50,7 +50,17 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(request.url.absoluteString == "https://api.openai.com/v1/chat/completions")
         #expect(request.headers["Authorization"] == "Bearer openai-key")
         #expect(body["model"] as? String == "test-openai-model")
-        #expect((body["tools"] as? [[String: Any]])?.isEmpty == false)
+        let tools = try #require(body["tools"] as? [[String: Any]])
+        let readFileTool = try #require(tools.first { tool in
+            (tool["function"] as? [String: Any])?["name"] as? String == "read_file"
+        })
+        let function = try #require(readFileTool["function"] as? [String: Any])
+        let parameters = try #require(function["parameters"] as? [String: Any])
+        let properties = try #require(parameters["properties"] as? [String: Any])
+        let pathProperty = try #require(properties["path"] as? [String: Any])
+        #expect(parameters["additionalProperties"] as? Bool == false)
+        #expect(parameters["required"] as? [String] == ["path"])
+        #expect(pathProperty["type"] as? String == "string")
         #expect(response.content == "I will inspect the file.")
         #expect(response.toolCalls == [
             AgentToolCall(
@@ -141,7 +151,14 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(request.headers["anthropic-version"] == "2023-06-01")
         #expect(body["model"] as? String == "test-anthropic-model")
         #expect(body["system"] as? String == "Be careful.")
-        #expect((body["tools"] as? [[String: Any]])?.isEmpty == false)
+        let tools = try #require(body["tools"] as? [[String: Any]])
+        let runCommandTool = try #require(tools.first { $0["name"] as? String == "run_command" })
+        let inputSchema = try #require(runCommandTool["input_schema"] as? [String: Any])
+        let properties = try #require(inputSchema["properties"] as? [String: Any])
+        let commandProperty = try #require(properties["command"] as? [String: Any])
+        #expect(inputSchema["additionalProperties"] as? Bool == false)
+        #expect(inputSchema["required"] as? [String] == ["command"])
+        #expect(commandProperty["type"] as? String == "string")
         #expect(response.content == "I will check git.")
         #expect(response.toolCalls == [
             AgentToolCall(id: "toolu_1", toolID: "git_status"),
@@ -233,7 +250,15 @@ struct AgentProviderClientSwiftTestingTests {
 
         #expect(request.url.absoluteString == "https://generativelanguage.googleapis.com/v1beta/models/test-google-model:generateContent")
         #expect(request.headers["x-goog-api-key"] == "google-key")
-        #expect((body["tools"] as? [[String: Any]])?.isEmpty == false)
+        let tools = try #require(body["tools"] as? [[String: Any]])
+        let functionDeclarations = try #require(tools.first?["functionDeclarations"] as? [[String: Any]])
+        let grepDeclaration = try #require(functionDeclarations.first { $0["name"] as? String == "grep" })
+        let parameters = try #require(grepDeclaration["parameters"] as? [String: Any])
+        let properties = try #require(parameters["properties"] as? [String: Any])
+        let patternProperty = try #require(properties["pattern"] as? [String: Any])
+        #expect(parameters["type"] as? String == "OBJECT")
+        #expect(parameters["required"] as? [String] == ["pattern"])
+        #expect(patternProperty["type"] as? String == "STRING")
         #expect(response.content == "I will search.")
         #expect(response.toolCalls == [
             AgentToolCall(

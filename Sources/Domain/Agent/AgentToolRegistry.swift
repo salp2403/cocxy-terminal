@@ -17,17 +17,49 @@ struct AgentToolDescriptor: Codable, Sendable, Equatable {
     let displayName: String
     let description: String
     let capability: AgentToolCapability
+    let inputSchema: AgentToolInputSchema
 
     init(
         id: String,
         displayName: String,
         description: String,
-        capability: AgentToolCapability
+        capability: AgentToolCapability,
+        inputSchema: AgentToolInputSchema = .empty
     ) {
         self.id = Self.normalizedID(id)
         self.displayName = displayName
         self.description = description
         self.capability = capability
+        self.inputSchema = inputSchema
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case displayName
+        case description
+        case capability
+        case inputSchema
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = Self.normalizedID(try container.decode(String.self, forKey: .id))
+        self.displayName = try container.decode(String.self, forKey: .displayName)
+        self.description = try container.decode(String.self, forKey: .description)
+        self.capability = try container.decode(AgentToolCapability.self, forKey: .capability)
+        self.inputSchema = try container.decodeIfPresent(
+            AgentToolInputSchema.self,
+            forKey: .inputSchema
+        ) ?? .empty
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(description, forKey: .description)
+        try container.encode(capability, forKey: .capability)
+        try container.encode(inputSchema, forKey: .inputSchema)
     }
 
     static func normalizedID(_ rawID: String) -> String {
@@ -59,7 +91,8 @@ struct AgentToolRegistry: Sendable, Equatable {
                 id: id,
                 displayName: descriptor.displayName,
                 description: descriptor.description,
-                capability: descriptor.capability
+                capability: descriptor.capability,
+                inputSchema: descriptor.inputSchema
             )
         }
 
@@ -93,49 +126,105 @@ enum AgentBuiltInTools {
             id: "read_file",
             displayName: "Read File",
             description: "Read a repository file after path validation.",
-            capability: .read
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "path": AgentToolInputProperty(.string, description: "Repository-relative file path to read."),
+                ],
+                required: ["path"]
+            )
         ),
         AgentToolDescriptor(
             id: "write_file",
             displayName: "Write File",
             description: "Write a repository file through mandatory diff preview.",
-            capability: .write
+            capability: .write,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "path": AgentToolInputProperty(.string, description: "Repository-relative file path to write."),
+                    "content": AgentToolInputProperty(.string, description: "Complete UTF-8 file contents to write."),
+                    "create": AgentToolInputProperty(.boolean, description: "Whether a missing target file may be created."),
+                ],
+                required: ["path", "content"]
+            )
         ),
         AgentToolDescriptor(
             id: "apply_diff",
             displayName: "Apply Diff",
             description: "Apply a structured diff after user approval.",
-            capability: .write
+            capability: .write,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "path": AgentToolInputProperty(.string, description: "Repository-relative file path to modify."),
+                    "oldText": AgentToolInputProperty(.string, description: "Exact existing text to replace once."),
+                    "newText": AgentToolInputProperty(.string, description: "Replacement text, which may be empty."),
+                ],
+                required: ["path", "oldText", "newText"]
+            )
         ),
         AgentToolDescriptor(
             id: "list_directory",
             displayName: "List Directory",
             description: "List a directory while respecting workspace boundaries.",
-            capability: .read
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "path": AgentToolInputProperty(.string, description: "Repository-relative directory path. Defaults to the workspace root."),
+                ]
+            )
         ),
         AgentToolDescriptor(
             id: "search_files",
             displayName: "Search Files",
             description: "Find files by glob or fuzzy path query.",
-            capability: .read
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "pattern": AgentToolInputProperty(.string, description: "Glob pattern or file-name pattern to match."),
+                    "limit": AgentToolInputProperty(.number, description: "Maximum number of paths to return."),
+                ],
+                required: ["pattern"]
+            )
         ),
         AgentToolDescriptor(
             id: "grep",
             displayName: "Grep",
             description: "Search file contents with a local regex engine.",
-            capability: .read
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "pattern": AgentToolInputProperty(.string, description: "Regular expression to search for."),
+                    "path": AgentToolInputProperty(.string, description: "Repository-relative directory path. Defaults to the workspace root."),
+                    "caseSensitive": AgentToolInputProperty(.boolean, description: "Whether matching should be case-sensitive."),
+                    "limit": AgentToolInputProperty(.number, description: "Maximum number of matches to return."),
+                ],
+                required: ["pattern"]
+            )
         ),
         AgentToolDescriptor(
             id: "run_command",
             displayName: "Run Command",
             description: "Run a shell command through the Agent permission gate.",
-            capability: .command
+            capability: .command,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "command": AgentToolInputProperty(.string, description: "Shell command to run after policy and approval checks."),
+                    "cwd": AgentToolInputProperty(.string, description: "Repository-relative working directory. Defaults to the workspace root."),
+                    "timeoutSeconds": AgentToolInputProperty(.number, description: "Command timeout in seconds."),
+                ],
+                required: ["command"]
+            )
         ),
         AgentToolDescriptor(
             id: "read_terminal_output",
             displayName: "Read Terminal Output",
             description: "Read the last clean command blocks from CocxyCore.",
-            capability: .read
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "limit": AgentToolInputProperty(.number, description: "Maximum number of recent command blocks to read."),
+                ]
+            )
         ),
         AgentToolDescriptor(
             id: "git_status",
@@ -147,19 +236,35 @@ enum AgentBuiltInTools {
             id: "git_diff",
             displayName: "Git Diff",
             description: "Read git diff for the active repository.",
-            capability: .read
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "path": AgentToolInputProperty(.string, description: "Optional repository-relative path to diff."),
+                ]
+            )
         ),
         AgentToolDescriptor(
             id: "read_lsp_diagnostics",
             displayName: "Read LSP Diagnostics",
             description: "Read local language-server diagnostics already visible to Cocxy.",
-            capability: .read
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "limit": AgentToolInputProperty(.number, description: "Maximum number of diagnostics to return."),
+                ]
+            )
         ),
         AgentToolDescriptor(
             id: "ask_user",
             displayName: "Ask User",
             description: "Pause the Agent loop for an explicit user answer.",
-            capability: .userInteraction
+            capability: .userInteraction,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "prompt": AgentToolInputProperty(.string, description: "Question to show the user before the agent continues."),
+                ],
+                required: ["prompt"]
+            )
         ),
     ]
 }

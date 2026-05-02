@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // AgentToolRegistrySwiftTestingTests.swift - Phase F built-in tool catalog.
 
+import Foundation
 import Testing
 @testable import CocxyTerminal
 
@@ -29,6 +30,16 @@ struct AgentToolRegistrySwiftTestingTests {
         #expect(registry.descriptor(for: "write_file")?.capability == .write)
         #expect(registry.descriptor(for: "run_command")?.capability == .command)
         #expect(registry.descriptor(for: "ask_user")?.capability == .userInteraction)
+
+        let readFileSchema = try #require(registry.descriptor(for: "read_file")?.inputSchema)
+        #expect(readFileSchema.required == ["path"])
+        #expect(readFileSchema.properties["path"]?.type == .string)
+        #expect(readFileSchema.additionalProperties == false)
+
+        let runCommandSchema = try #require(registry.descriptor(for: "run_command")?.inputSchema)
+        #expect(runCommandSchema.required == ["command"])
+        #expect(runCommandSchema.properties["command"]?.type == .string)
+        #expect(runCommandSchema.properties["timeoutSeconds"]?.type == .number)
     }
 
     @Test("registry rejects duplicate tool identifiers")
@@ -54,5 +65,22 @@ struct AgentToolRegistrySwiftTestingTests {
 
         #expect(registry.toolIDs == ["alpha.tool", "zed.tool"])
         #expect(registry.descriptor(for: "ZED.TOOL")?.displayName == "Zed")
+    }
+
+    @Test("descriptor decoding keeps legacy descriptors schema-compatible")
+    func descriptorDecodingKeepsLegacyDescriptorsSchemaCompatible() throws {
+        let data = Data("""
+        {
+          "id": "  Legacy.Tool  ",
+          "displayName": "Legacy",
+          "description": "Old descriptor without schema",
+          "capability": "read"
+        }
+        """.utf8)
+
+        let descriptor = try JSONDecoder().decode(AgentToolDescriptor.self, from: data)
+
+        #expect(descriptor.id == "legacy.tool")
+        #expect(descriptor.inputSchema == AgentToolInputSchema.empty)
     }
 }

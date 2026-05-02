@@ -449,7 +449,7 @@ private func openAITools(from descriptors: [AgentToolDescriptor]) -> [[String: A
             "function": [
                 "name": descriptor.id,
                 "description": descriptor.description,
-                "parameters": genericJSONSchema(),
+                "parameters": jsonSchema(from: descriptor.inputSchema),
             ],
         ]
     }
@@ -460,7 +460,7 @@ private func anthropicTools(from descriptors: [AgentToolDescriptor]) -> [[String
         [
             "name": descriptor.id,
             "description": descriptor.description,
-            "input_schema": genericJSONSchema(),
+            "input_schema": jsonSchema(from: descriptor.inputSchema),
         ]
     }
 }
@@ -472,25 +472,84 @@ private func googleTools(from descriptors: [AgentToolDescriptor]) -> [[String: A
                 [
                     "name": descriptor.id,
                     "description": descriptor.description,
-                    "parameters": genericGoogleSchema(),
+                    "parameters": googleSchema(from: descriptor.inputSchema),
                 ]
             },
         ],
     ]
 }
 
-private func genericJSONSchema() -> [String: Any] {
-    [
+private func jsonSchema(from schema: AgentToolInputSchema) -> [String: Any] {
+    var result: [String: Any] = [
         "type": "object",
-        "additionalProperties": true,
+        "properties": jsonSchemaProperties(from: schema.properties),
+        "additionalProperties": schema.additionalProperties,
     ]
+    if !schema.required.isEmpty {
+        result["required"] = schema.required
+    }
+    return result
 }
 
-private func genericGoogleSchema() -> [String: Any] {
-    [
+private func jsonSchemaProperties(
+    from properties: [String: AgentToolInputProperty]
+) -> [String: Any] {
+    properties.reduce(into: [:]) { result, entry in
+        var property: [String: Any] = [
+            "type": jsonSchemaType(entry.value.type),
+        ]
+        if !entry.value.description.isEmpty {
+            property["description"] = entry.value.description
+        }
+        result[entry.key] = property
+    }
+}
+
+private func jsonSchemaType(_ type: AgentToolInputProperty.ValueType) -> String {
+    switch type {
+    case .boolean:
+        return "boolean"
+    case .number:
+        return "number"
+    case .string:
+        return "string"
+    }
+}
+
+private func googleSchema(from schema: AgentToolInputSchema) -> [String: Any] {
+    var result: [String: Any] = [
         "type": "OBJECT",
-        "properties": [:],
+        "properties": googleSchemaProperties(from: schema.properties),
     ]
+    if !schema.required.isEmpty {
+        result["required"] = schema.required
+    }
+    return result
+}
+
+private func googleSchemaProperties(
+    from properties: [String: AgentToolInputProperty]
+) -> [String: Any] {
+    properties.reduce(into: [:]) { result, entry in
+        var property: [String: Any] = [
+            "type": googleSchemaType(entry.value.type),
+        ]
+        if !entry.value.description.isEmpty {
+            property["description"] = entry.value.description
+        }
+        result[entry.key] = property
+    }
+}
+
+private func googleSchemaType(_ type: AgentToolInputProperty.ValueType) -> String {
+    switch type {
+    case .boolean:
+        return "BOOLEAN"
+    case .number:
+        return "NUMBER"
+    case .string:
+        return "STRING"
+    }
 }
 
 private func parseOpenAIResponse(_ data: Data) throws -> AgentLLMResponse {
