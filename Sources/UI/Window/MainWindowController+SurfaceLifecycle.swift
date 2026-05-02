@@ -713,6 +713,7 @@ extension MainWindowController {
                 tab.lastCommandStartedAt = nil
                 tab.lastActivityAt = Date()
             }
+            persistLatestCommandBlockIfAvailable(tabID: tabID, surfaceID: sourceSurfaceID)
             refreshStatusBar()
 
         case .inlineImage(let payload):
@@ -766,6 +767,25 @@ extension MainWindowController {
             updateAgentProgressOverlay()
             updateNotificationRing(for: tabID, agentState: .idle)
             auroraChromeController?.refreshSources()
+        }
+    }
+
+    private func persistLatestCommandBlockIfAvailable(tabID: TabID, surfaceID sourceSurfaceID: SurfaceID?) {
+        let fallbackSurfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+        guard let surfaceID = sourceSurfaceID ?? fallbackSurfaceID,
+              let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge,
+              let block = cocxyBridge.commandBlocks(for: surfaceID, limit: 1).last else {
+            return
+        }
+
+        (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
+
+        let key = "\(surfaceID.rawValue.uuidString)#\(block.id)"
+        guard persistedCommandBlockKeys.insert(key).inserted else { return }
+
+        let sessionID = sessionIDForTab(tabID).rawValue.uuidString
+        Task.detached(priority: .utility) {
+            try? TerminalBlockStore().append(block, sessionID: sessionID)
         }
     }
 

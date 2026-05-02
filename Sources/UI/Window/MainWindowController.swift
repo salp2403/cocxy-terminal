@@ -383,6 +383,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Internal setter: extensions (+SurfaceLifecycle) swap buffers during tab switch.
     var terminalOutputBuffer = TerminalOutputBuffer()
 
+    /// Blocks already persisted from live OSC 133 command-finished events.
+    ///
+    /// The key is `<surface-id>#<block-id>`. This keeps persistence
+    /// append-only while preventing duplicate JSONL rows if the same
+    /// semantic finish event is delivered through more than one path.
+    var persistedCommandBlockKeys: Set<String> = []
+
     /// Per-tab output buffers keyed by tab ID.
     var tabOutputBuffers: [TabID: TerminalOutputBuffer] = [:]
 
