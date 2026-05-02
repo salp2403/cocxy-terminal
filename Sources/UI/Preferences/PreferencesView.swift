@@ -1031,11 +1031,18 @@ struct TerminalPreferencesSection: View {
             Section("Inline Images") {
                 Toggle("Enable Sixel images", isOn: $viewModel.enableSixelImages)
                 Toggle("Enable Kitty images", isOn: $viewModel.enableKittyImages)
+                Toggle("Enable iTerm2 images", isOn: $viewModel.enableITerm2Images)
                 Toggle("Enable file transfer", isOn: $viewModel.imageFileTransfer)
                 Stepper(
                     "Image memory budget: \(viewModel.imageMemoryLimitMB) MiB",
                     value: $viewModel.imageMemoryLimitMB,
                     in: 1...4096
+                )
+                TextField("Disk cache directory", text: $viewModel.imageDiskCacheDirectory)
+                Stepper(
+                    "Disk cache budget: \(viewModel.imageDiskCacheLimitMB) MiB",
+                    value: $viewModel.imageDiskCacheLimitMB,
+                    in: 1...8192
                 )
             }
 

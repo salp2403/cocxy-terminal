@@ -195,8 +195,14 @@ final class PreferencesViewModel: ObservableObject {
     @Published var enableSixelImages: Bool
     /// Whether kitty images are enabled.
     @Published var enableKittyImages: Bool
+    /// Whether iTerm2 OSC 1337 images are enabled.
+    @Published var enableITerm2Images: Bool
     /// Inline image memory limit in MiB.
     @Published var imageMemoryLimitMB: Int
+    /// Optional directory for persistent inline-image cache data.
+    @Published var imageDiskCacheDirectory: String
+    /// Inline image disk cache limit in MiB.
+    @Published var imageDiskCacheLimitMB: Int
 
     // MARK: - Language Servers
 
@@ -360,7 +366,10 @@ final class PreferencesViewModel: ObservableObject {
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
+            || enableITerm2Images != c.terminal.enableITerm2Images
             || imageMemoryLimitMB != c.terminal.imageMemoryLimitMB
+            || imageDiskCacheDirectory != c.terminal.imageDiskCacheDirectory
+            || imageDiskCacheLimitMB != c.terminal.imageDiskCacheLimitMB
             || agentDetectionEnabled != c.agentDetection.enabled
             || oscNotifications != c.agentDetection.oscNotifications
             || patternMatching != c.agentDetection.patternMatching
@@ -403,7 +412,10 @@ final class PreferencesViewModel: ObservableObject {
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
+        enableITerm2Images = c.terminal.enableITerm2Images
         imageMemoryLimitMB = c.terminal.imageMemoryLimitMB
+        imageDiskCacheDirectory = c.terminal.imageDiskCacheDirectory
+        imageDiskCacheLimitMB = c.terminal.imageDiskCacheLimitMB
         agentDetectionEnabled = c.agentDetection.enabled
         oscNotifications = c.agentDetection.oscNotifications
         patternMatching = c.agentDetection.patternMatching
@@ -550,7 +562,10 @@ final class PreferencesViewModel: ObservableObject {
         self.imageFileTransfer = config.terminal.imageFileTransfer
         self.enableSixelImages = config.terminal.enableSixelImages
         self.enableKittyImages = config.terminal.enableKittyImages
+        self.enableITerm2Images = config.terminal.enableITerm2Images
         self.imageMemoryLimitMB = config.terminal.imageMemoryLimitMB
+        self.imageDiskCacheDirectory = config.terminal.imageDiskCacheDirectory
+        self.imageDiskCacheLimitMB = config.terminal.imageDiskCacheLimitMB
 
         // Worktree (v0.1.81)
         self.worktreeEnabled = config.worktree.enabled
@@ -688,6 +703,7 @@ final class PreferencesViewModel: ObservableObject {
     ///
     /// - Throws: If the file provider cannot write to disk.
     func save() throws {
+        normalizeImageSettingsForSave()
         let toml = generateToml()
         try fileProvider.writeConfigFile(toml)
         // Update the saved snapshot so hasUnsavedChanges resets to false.
@@ -716,12 +732,24 @@ final class PreferencesViewModel: ObservableObject {
         pendingKeybindings ?? savedConfig.keybindings
     }
 
+    /// Normalizes free-form image settings before persisting them.
+    private func normalizeImageSettingsForSave() {
+        imageMemoryLimitMB = min(max(imageMemoryLimitMB, 1), 4096)
+        imageDiskCacheDirectory = imageDiskCacheDirectory
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        imageDiskCacheLimitMB = min(max(imageDiskCacheLimitMB, 1), 8192)
+    }
+
     /// Updates the saved config snapshot to match the current editable values.
     ///
     /// Called after a successful save so that `hasUnsavedChanges` returns false
     /// until the user makes further edits.
     private func updateSavedSnapshot() {
         let clampedOpacity = min(max(backgroundOpacity, 0.3), 1.0)
+        let clampedImageMemoryLimitMB = min(max(imageMemoryLimitMB, 1), 4096)
+        let clampedImageDiskCacheLimitMB = min(max(imageDiskCacheLimitMB, 1), 8192)
+        let normalizedImageDiskCacheDirectory = imageDiskCacheDirectory
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let agent = buildAgentModeConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
@@ -763,10 +791,13 @@ final class PreferencesViewModel: ObservableObject {
                 copyOnSelect: savedConfig.terminal.copyOnSelect,
                 clipboardPasteProtection: savedConfig.terminal.clipboardPasteProtection,
                 clipboardReadAccess: savedConfig.terminal.clipboardReadAccess,
-                imageMemoryLimitMB: imageMemoryLimitMB,
+                imageMemoryLimitMB: clampedImageMemoryLimitMB,
                 imageFileTransfer: imageFileTransfer,
                 enableSixelImages: enableSixelImages,
-                enableKittyImages: enableKittyImages
+                enableKittyImages: enableKittyImages,
+                enableITerm2Images: enableITerm2Images,
+                imageDiskCacheDirectory: normalizedImageDiskCacheDirectory,
+                imageDiskCacheLimitMB: clampedImageDiskCacheLimitMB
             ),
             agentDetection: AgentDetectionConfig(
                 enabled: agentDetectionEnabled,
@@ -1013,6 +1044,9 @@ final class PreferencesViewModel: ObservableObject {
         let clampedOpacity = min(max(backgroundOpacity, 0.3), 1.0)
         let clampedTimeout = min(max(idleTimeoutSeconds, 1), 300)
         let clampedImageMemoryLimitMB = min(max(imageMemoryLimitMB, 1), 4096)
+        let clampedImageDiskCacheLimitMB = min(max(imageDiskCacheLimitMB, 1), 8192)
+        let normalizedImageDiskCacheDirectory = imageDiskCacheDirectory
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         let defaults = savedConfig
         let keybindings = pendingKeybindings ?? defaults.keybindings
@@ -1066,6 +1100,9 @@ final class PreferencesViewModel: ObservableObject {
         image-file-transfer = \(imageFileTransfer)
         enable-sixel-images = \(enableSixelImages)
         enable-kitty-images = \(enableKittyImages)
+        enable-iterm2-images = \(enableITerm2Images)
+        image-disk-cache-directory = \(Self.tomlString(normalizedImageDiskCacheDirectory))
+        image-disk-cache-limit-mb = \(clampedImageDiskCacheLimitMB)
 
         [agent-detection]
         enabled = \(agentDetectionEnabled)
@@ -1230,11 +1267,15 @@ final class PreferencesViewModel: ObservableObject {
     private static func tomlStringArray(_ values: [String]) -> String {
         guard !values.isEmpty else { return "[]" }
         let items = values.map { value in
-            let escaped = value.replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
-            return "\"\(escaped)\""
+            tomlString(value)
         }
         return "[\(items.joined(separator: ", "))]"
+    }
+
+    private static func tomlString(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     private static func tomlNumber(_ value: Double) -> String {

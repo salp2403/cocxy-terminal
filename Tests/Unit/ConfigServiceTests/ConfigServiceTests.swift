@@ -42,6 +42,9 @@ final class ConfigServiceDefaultTests: XCTestCase {
         XCTAssertFalse(config.terminal.imageFileTransfer)
         XCTAssertTrue(config.terminal.enableSixelImages)
         XCTAssertTrue(config.terminal.enableKittyImages)
+        XCTAssertTrue(config.terminal.enableITerm2Images)
+        XCTAssertEqual(config.terminal.imageDiskCacheDirectory, "")
+        XCTAssertEqual(config.terminal.imageDiskCacheLimitMB, 512)
         XCTAssertTrue(config.agentDetection.enabled)
         XCTAssertTrue(config.agentDetection.oscNotifications)
         XCTAssertEqual(config.agentDetection.idleTimeoutSeconds, 5)
@@ -112,6 +115,9 @@ final class ConfigServiceFullParsingTests: XCTestCase {
         image-file-transfer = true
         enable-sixel-images = false
         enable-kitty-images = true
+        enable-iterm2-images = false
+        image-disk-cache-directory = "/tmp/cocxy-image-cache"
+        image-disk-cache-limit-mb = 768
 
         [agent-detection]
         enabled = false
@@ -170,6 +176,9 @@ final class ConfigServiceFullParsingTests: XCTestCase {
         XCTAssertTrue(config.terminal.imageFileTransfer)
         XCTAssertFalse(config.terminal.enableSixelImages)
         XCTAssertTrue(config.terminal.enableKittyImages)
+        XCTAssertFalse(config.terminal.enableITerm2Images)
+        XCTAssertEqual(config.terminal.imageDiskCacheDirectory, "/tmp/cocxy-image-cache")
+        XCTAssertEqual(config.terminal.imageDiskCacheLimitMB, 768)
 
         XCTAssertFalse(config.agentDetection.enabled)
         XCTAssertFalse(config.agentDetection.oscNotifications)

@@ -244,6 +244,9 @@ final class PreferencesViewModelTests: XCTestCase {
         viewModel.imageFileTransfer = true
         viewModel.enableSixelImages = false
         viewModel.enableKittyImages = true
+        viewModel.enableITerm2Images = false
+        viewModel.imageDiskCacheDirectory = "/tmp/cocxy-image-cache"
+        viewModel.imageDiskCacheLimitMB = 768
 
         let toml = viewModel.generateToml()
 
@@ -251,6 +254,29 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertTrue(toml.contains("image-file-transfer = true"))
         XCTAssertTrue(toml.contains("enable-sixel-images = false"))
         XCTAssertTrue(toml.contains("enable-kitty-images = true"))
+        XCTAssertTrue(toml.contains("enable-iterm2-images = false"))
+        XCTAssertTrue(toml.contains("image-disk-cache-directory = \"/tmp/cocxy-image-cache\""))
+        XCTAssertTrue(toml.contains("image-disk-cache-limit-mb = 768"))
+    }
+
+    func testSaveNormalizesImageCacheSettingsAndClearsDirty() throws {
+        let fileProvider = InMemoryConfigFileProvider(content: nil)
+        let viewModel = PreferencesViewModel(config: .defaults, fileProvider: fileProvider)
+
+        viewModel.imageMemoryLimitMB = 0
+        viewModel.imageDiskCacheDirectory = "  /tmp/cocxy-image-cache  "
+        viewModel.imageDiskCacheLimitMB = 0
+        XCTAssertTrue(viewModel.hasUnsavedChanges)
+
+        try viewModel.save()
+
+        XCTAssertEqual(viewModel.imageMemoryLimitMB, 1)
+        XCTAssertEqual(viewModel.imageDiskCacheDirectory, "/tmp/cocxy-image-cache")
+        XCTAssertEqual(viewModel.imageDiskCacheLimitMB, 1)
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
+        XCTAssertTrue(fileProvider.writtenContent?.contains("image-memory-limit-mb = 1") ?? false)
+        XCTAssertTrue(fileProvider.writtenContent?.contains("image-disk-cache-directory = \"/tmp/cocxy-image-cache\"") ?? false)
+        XCTAssertTrue(fileProvider.writtenContent?.contains("image-disk-cache-limit-mb = 1") ?? false)
     }
 
     func testGenerateTomlUsesEditableCodeReviewAutoShowSetting() {

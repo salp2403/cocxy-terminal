@@ -120,7 +120,10 @@ extension MainWindowController {
             old?.terminal.imageMemoryLimitMB != config.terminal.imageMemoryLimitMB ||
             old?.terminal.imageFileTransfer != config.terminal.imageFileTransfer ||
             old?.terminal.enableSixelImages != config.terminal.enableSixelImages ||
-            old?.terminal.enableKittyImages != config.terminal.enableKittyImages
+            old?.terminal.enableKittyImages != config.terminal.enableKittyImages ||
+            old?.terminal.enableITerm2Images != config.terminal.enableITerm2Images ||
+            old?.terminal.imageDiskCacheDirectory != config.terminal.imageDiskCacheDirectory ||
+            old?.terminal.imageDiskCacheLimitMB != config.terminal.imageDiskCacheLimitMB
 
         lastAppliedConfig = config
 

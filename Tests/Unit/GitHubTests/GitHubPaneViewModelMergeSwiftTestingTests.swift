@@ -9,7 +9,7 @@ import Testing
 @testable import CocxyTerminal
 
 @MainActor
-@Suite("GitHubPaneViewModel.merge")
+@Suite("GitHubPaneViewModel.merge", .serialized)
 struct GitHubPaneViewModelMergeSwiftTestingTests {
 
     // MARK: - Fixtures
@@ -356,7 +356,7 @@ private final class Box<T>: @unchecked Sendable {
 /// suite so the two flows can be audited side-by-side.
 @MainActor
 private func waitForGitHubPaneCondition(
-    timeoutNanoseconds: UInt64 = 3_000_000_000,
+    timeoutNanoseconds: UInt64 = 10_000_000_000,
     pollNanoseconds: UInt64 = 20_000_000,
     _ condition: () -> Bool
 ) async throws {

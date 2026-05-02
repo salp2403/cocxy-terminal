@@ -5,7 +5,7 @@ import Testing
 @testable import CocxyTerminal
 @testable import CocxyMarkdownLib
 
-@Suite("MarkdownSyntaxHighlighter")
+@Suite("MarkdownSyntaxHighlighter", .serialized)
 @MainActor
 struct MarkdownSyntaxHighlighterTests {
 

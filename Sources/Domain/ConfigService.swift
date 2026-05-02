@@ -224,6 +224,9 @@ final class ConfigService: ConfigProviding {
         image-file-transfer = \(defaults.terminal.imageFileTransfer)
         enable-sixel-images = \(defaults.terminal.enableSixelImages)
         enable-kitty-images = \(defaults.terminal.enableKittyImages)
+        enable-iterm2-images = \(defaults.terminal.enableITerm2Images)
+        image-disk-cache-directory = "\(defaults.terminal.imageDiskCacheDirectory)"
+        image-disk-cache-limit-mb = \(defaults.terminal.imageDiskCacheLimitMB)
 
         [agent-detection]
         enabled = \(defaults.agentDetection.enabled)
@@ -611,6 +614,9 @@ final class ConfigService: ConfigProviding {
         let validatedScrollback = max(0, rawScrollback)
         let rawImageMemoryLimit = intValue(table["image-memory-limit-mb"]) ?? defaults.imageMemoryLimitMB
         let validatedImageMemoryLimit = max(1, rawImageMemoryLimit)
+        let rawImageDiskCacheLimit = intValue(table["image-disk-cache-limit-mb"])
+            ?? defaults.imageDiskCacheLimitMB
+        let validatedImageDiskCacheLimit = max(1, rawImageDiskCacheLimit)
 
         let cursorStyleStr = stringValue(table["cursor-style"])
         let cursorStyle = cursorStyleStr.flatMap { CursorStyle(rawValue: $0) } ?? defaults.cursorStyle
@@ -632,7 +638,12 @@ final class ConfigService: ConfigProviding {
             imageMemoryLimitMB: validatedImageMemoryLimit,
             imageFileTransfer: boolValue(table["image-file-transfer"]) ?? defaults.imageFileTransfer,
             enableSixelImages: boolValue(table["enable-sixel-images"]) ?? defaults.enableSixelImages,
-            enableKittyImages: boolValue(table["enable-kitty-images"]) ?? defaults.enableKittyImages
+            enableKittyImages: boolValue(table["enable-kitty-images"]) ?? defaults.enableKittyImages,
+            enableITerm2Images: boolValue(table["enable-iterm2-images"]) ?? defaults.enableITerm2Images,
+            imageDiskCacheDirectory: stringValue(table["image-disk-cache-directory"])?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                ?? defaults.imageDiskCacheDirectory,
+            imageDiskCacheLimitMB: validatedImageDiskCacheLimit
         )
     }
 

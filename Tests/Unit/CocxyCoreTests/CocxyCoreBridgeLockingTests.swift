@@ -453,6 +453,9 @@ struct CocxyCoreBridgeLockingTests {
                 fileTransferEnabled: true,
                 sixelEnabled: false,
                 kittyEnabled: true,
+                iterm2Enabled: true,
+                diskCacheDirectory: nil,
+                diskCacheLimitBytes: 64 * 1024 * 1024,
                 to: surfaceID
             )
         }

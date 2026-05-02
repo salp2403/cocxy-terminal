@@ -10,18 +10,19 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasThirteenCases() {
+    func test_allSections_hasFourteenCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
         // Code Review config as an editable section, bringing it to 10;
         // v0.2.0 surfaces the opt-in LSP gates and editor Vim mode,
-        // bringing it to 12; Agent Mode settings bring it to 13.
+        // bringing it to 12; Agent Mode settings bring it to 13; Voice
+        // settings bring it to 14.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 13)
+        XCTAssertEqual(PreferencesSection.allCases.count, 14)
     }
 
     func test_worktreesSection_hasTitleAndIcon() {
@@ -70,6 +71,12 @@ final class PreferencesSectionTests: XCTestCase {
         let section = PreferencesSection.agentMode
         XCTAssertEqual(section.title, "Agent Mode")
         XCTAssertEqual(section.iconName, "sparkles")
+    }
+
+    func test_voiceSection_hasTitleAndIcon() {
+        let section = PreferencesSection.voice
+        XCTAssertEqual(section.title, "Voice")
+        XCTAssertEqual(section.iconName, "mic")
     }
 
     func test_codeReviewSection_hasTitleAndIcon() {
@@ -156,17 +163,19 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertLessThan(editorIndex, keybindingsIndex)
     }
 
-    func test_agentModeAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
+    func test_agentModeVoiceAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
         let allCases = PreferencesSection.allCases
         guard let agentIndex = allCases.firstIndex(of: .agentDetection),
               let agentModeIndex = allCases.firstIndex(of: .agentMode),
+              let voiceIndex = allCases.firstIndex(of: .voice),
               let codeReviewIndex = allCases.firstIndex(of: .codeReview),
               let notificationsIndex = allCases.firstIndex(of: .notifications) else {
-            XCTFail("agent detection, agent mode, code review, and notifications sections must exist")
+            XCTFail("agent detection, agent mode, voice, code review, and notifications sections must exist")
             return
         }
-        XCTAssertLessThan(agentIndex, codeReviewIndex)
         XCTAssertLessThan(agentIndex, agentModeIndex)
+        XCTAssertLessThan(agentModeIndex, voiceIndex)
+        XCTAssertLessThan(voiceIndex, codeReviewIndex)
         XCTAssertLessThan(agentModeIndex, codeReviewIndex)
         XCTAssertLessThan(codeReviewIndex, notificationsIndex)
     }

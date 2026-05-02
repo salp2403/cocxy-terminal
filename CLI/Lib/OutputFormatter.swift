@@ -465,11 +465,20 @@ public enum OutputFormatter {
             let budget = data["image_memory_limit_mib"] ?? "0"
             let sixel = data["image_sixel_enabled"] ?? "false"
             let kitty = data["image_kitty_enabled"] ?? "false"
+            let iterm2 = data["image_iterm2_enabled"] ?? "false"
+            let diskCacheEnabled = data["image_disk_cache_enabled"] ?? "false"
+            let diskCacheUsed = data["image_disk_cache_used_mib"] ?? "0"
+            let diskCacheLimit = data["image_disk_cache_limit_mib"] ?? "0"
             let atlasWidth = data["image_atlas_width"] ?? "0"
             let atlasHeight = data["image_atlas_height"] ?? "0"
             let atlasGeneration = data["image_atlas_generation"] ?? "0"
             let atlasDirty = data["image_atlas_dirty"] ?? "false"
-            lines.append("Images: \(imageCount) loaded (\(memory)/\(budget) MiB, sixel \(boolText(sixel)), kitty \(boolText(kitty)))")
+            let diskCache = diskCacheEnabled == "true"
+                ? "disk \(diskCacheUsed)/\(diskCacheLimit) MiB"
+                : "disk off"
+            lines.append(
+                "Images: \(imageCount) loaded (\(memory)/\(budget) MiB, sixel \(boolText(sixel)), kitty \(boolText(kitty)), iTerm2 \(boolText(iterm2)), \(diskCache))"
+            )
             lines.append("Image atlas: \(atlasWidth)x\(atlasHeight) gen \(atlasGeneration), dirty \(boolText(atlasDirty))")
         }
 

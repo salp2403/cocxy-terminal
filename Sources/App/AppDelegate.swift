@@ -522,6 +522,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Bridge Initialization
 
+    private func imageDiskCacheDirectoryURL(from path: String) -> URL? {
+        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else { return nil }
+        return URL(fileURLWithPath: (trimmedPath as NSString).expandingTildeInPath, isDirectory: true)
+    }
+
+    private func bytesFromMiB(_ value: Int) -> UInt64 {
+        UInt64(max(1, value)) * 1024 * 1024
+    }
+
     /// Initializes the terminal engine bridge.
     private func initializeBridge() {
         let newBridge: any TerminalEngine = makeTerminalEngineBridge(preference: .system)
@@ -570,16 +580,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? AppearanceConfig.defaults.ligatures,
             fontThickenEnabled: configService?.current.appearance.fontThicken
                 ?? AppearanceConfig.defaults.fontThicken,
-            imageMemoryLimitBytes: UInt64(
-                (configService?.current.terminal.imageMemoryLimitMB
-                    ?? TerminalConfig.defaults.imageMemoryLimitMB) * 1024 * 1024
+            imageMemoryLimitBytes: bytesFromMiB(
+                configService?.current.terminal.imageMemoryLimitMB
+                    ?? TerminalConfig.defaults.imageMemoryLimitMB
             ),
             imageFileTransferEnabled: configService?.current.terminal.imageFileTransfer
                 ?? TerminalConfig.defaults.imageFileTransfer,
             sixelImagesEnabled: configService?.current.terminal.enableSixelImages
                 ?? TerminalConfig.defaults.enableSixelImages,
             kittyImagesEnabled: configService?.current.terminal.enableKittyImages
-                ?? TerminalConfig.defaults.enableKittyImages
+                ?? TerminalConfig.defaults.enableKittyImages,
+            iterm2ImagesEnabled: configService?.current.terminal.enableITerm2Images
+                ?? TerminalConfig.defaults.enableITerm2Images,
+            imageDiskCacheDirectory: imageDiskCacheDirectoryURL(
+                from: configService?.current.terminal.imageDiskCacheDirectory
+                    ?? TerminalConfig.defaults.imageDiskCacheDirectory
+            ),
+            imageDiskCacheLimitBytes: bytesFromMiB(
+                configService?.current.terminal.imageDiskCacheLimitMB
+                    ?? TerminalConfig.defaults.imageDiskCacheLimitMB
+            )
         )
 
         do {
@@ -665,16 +685,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? AppearanceConfig.defaults.ligatures,
             fontThickenEnabled: configService?.current.appearance.fontThicken
                 ?? AppearanceConfig.defaults.fontThicken,
-            imageMemoryLimitBytes: UInt64(
-                (configService?.current.terminal.imageMemoryLimitMB
-                    ?? TerminalConfig.defaults.imageMemoryLimitMB) * 1024 * 1024
+            imageMemoryLimitBytes: bytesFromMiB(
+                configService?.current.terminal.imageMemoryLimitMB
+                    ?? TerminalConfig.defaults.imageMemoryLimitMB
             ),
             imageFileTransferEnabled: configService?.current.terminal.imageFileTransfer
                 ?? TerminalConfig.defaults.imageFileTransfer,
             sixelImagesEnabled: configService?.current.terminal.enableSixelImages
                 ?? TerminalConfig.defaults.enableSixelImages,
             kittyImagesEnabled: configService?.current.terminal.enableKittyImages
-                ?? TerminalConfig.defaults.enableKittyImages
+                ?? TerminalConfig.defaults.enableKittyImages,
+            iterm2ImagesEnabled: configService?.current.terminal.enableITerm2Images
+                ?? TerminalConfig.defaults.enableITerm2Images,
+            imageDiskCacheDirectory: imageDiskCacheDirectoryURL(
+                from: configService?.current.terminal.imageDiskCacheDirectory
+                    ?? TerminalConfig.defaults.imageDiskCacheDirectory
+            ),
+            imageDiskCacheLimitBytes: bytesFromMiB(
+                configService?.current.terminal.imageDiskCacheLimitMB
+                    ?? TerminalConfig.defaults.imageDiskCacheLimitMB
+            )
         )
 
         do {
@@ -754,6 +784,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let cocxyBridge = bridge?.cocxyCoreBridge else { return }
 
         let resolvedTheme = try? themeEngine?.themeByName(newConfig.appearance.theme)
+        let imageDiskCacheDirectory = imageDiskCacheDirectoryURL(
+            from: newConfig.terminal.imageDiskCacheDirectory
+        )
         cocxyBridge.updateDefaults(
             fontFamily: newConfig.appearance.fontFamily,
             fontSize: newConfig.appearance.fontSize,
@@ -765,10 +798,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clipboardReadAccess: newConfig.terminal.clipboardReadAccess,
             ligaturesEnabled: newConfig.appearance.ligatures,
             fontThickenEnabled: newConfig.appearance.fontThicken,
-            imageMemoryLimitBytes: UInt64(newConfig.terminal.imageMemoryLimitMB) * 1024 * 1024,
+            imageMemoryLimitBytes: bytesFromMiB(newConfig.terminal.imageMemoryLimitMB),
             imageFileTransferEnabled: newConfig.terminal.imageFileTransfer,
             sixelImagesEnabled: newConfig.terminal.enableSixelImages,
-            kittyImagesEnabled: newConfig.terminal.enableKittyImages
+            kittyImagesEnabled: newConfig.terminal.enableKittyImages,
+            iterm2ImagesEnabled: newConfig.terminal.enableITerm2Images,
+            imageDiskCacheDirectory: imageDiskCacheDirectory,
+            clearsImageDiskCacheDirectory: imageDiskCacheDirectory == nil,
+            imageDiskCacheLimitBytes: bytesFromMiB(newConfig.terminal.imageDiskCacheLimitMB)
         )
 
         let fontChanged =
@@ -783,7 +820,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             oldConfig?.terminal.imageMemoryLimitMB != newConfig.terminal.imageMemoryLimitMB ||
             oldConfig?.terminal.imageFileTransfer != newConfig.terminal.imageFileTransfer ||
             oldConfig?.terminal.enableSixelImages != newConfig.terminal.enableSixelImages ||
-            oldConfig?.terminal.enableKittyImages != newConfig.terminal.enableKittyImages
+            oldConfig?.terminal.enableKittyImages != newConfig.terminal.enableKittyImages ||
+            oldConfig?.terminal.enableITerm2Images != newConfig.terminal.enableITerm2Images ||
+            oldConfig?.terminal.imageDiskCacheDirectory != newConfig.terminal.imageDiskCacheDirectory ||
+            oldConfig?.terminal.imageDiskCacheLimitMB != newConfig.terminal.imageDiskCacheLimitMB
         let themeChanged = oldConfig?.appearance.theme != newConfig.appearance.theme
 
         if fontChanged {
@@ -809,10 +849,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if imageSettingsChanged {
             cocxyBridge.applyImageSettings(
-                memoryLimitBytes: UInt64(newConfig.terminal.imageMemoryLimitMB) * 1024 * 1024,
+                memoryLimitBytes: bytesFromMiB(newConfig.terminal.imageMemoryLimitMB),
                 fileTransferEnabled: newConfig.terminal.imageFileTransfer,
                 sixelEnabled: newConfig.terminal.enableSixelImages,
-                kittyEnabled: newConfig.terminal.enableKittyImages
+                kittyEnabled: newConfig.terminal.enableKittyImages,
+                iterm2Enabled: newConfig.terminal.enableITerm2Images,
+                diskCacheDirectory: imageDiskCacheDirectory,
+                diskCacheLimitBytes: bytesFromMiB(newConfig.terminal.imageDiskCacheLimitMB)
             )
         }
 
@@ -875,16 +918,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? AppearanceConfig.defaults.ligatures,
             fontThickenEnabled: configService?.current.appearance.fontThicken
                 ?? AppearanceConfig.defaults.fontThicken,
-            imageMemoryLimitBytes: UInt64(
-                (configService?.current.terminal.imageMemoryLimitMB
-                    ?? TerminalConfig.defaults.imageMemoryLimitMB) * 1024 * 1024
+            imageMemoryLimitBytes: bytesFromMiB(
+                configService?.current.terminal.imageMemoryLimitMB
+                    ?? TerminalConfig.defaults.imageMemoryLimitMB
             ),
             imageFileTransferEnabled: configService?.current.terminal.imageFileTransfer
                 ?? TerminalConfig.defaults.imageFileTransfer,
             sixelImagesEnabled: configService?.current.terminal.enableSixelImages
                 ?? TerminalConfig.defaults.enableSixelImages,
             kittyImagesEnabled: configService?.current.terminal.enableKittyImages
-                ?? TerminalConfig.defaults.enableKittyImages
+                ?? TerminalConfig.defaults.enableKittyImages,
+            iterm2ImagesEnabled: configService?.current.terminal.enableITerm2Images
+                ?? TerminalConfig.defaults.enableITerm2Images,
+            imageDiskCacheDirectory: imageDiskCacheDirectoryURL(
+                from: configService?.current.terminal.imageDiskCacheDirectory
+                    ?? TerminalConfig.defaults.imageDiskCacheDirectory
+            ),
+            imageDiskCacheLimitBytes: bytesFromMiB(
+                configService?.current.terminal.imageDiskCacheLimitMB
+                    ?? TerminalConfig.defaults.imageDiskCacheLimitMB
+            )
         )
 
         do {

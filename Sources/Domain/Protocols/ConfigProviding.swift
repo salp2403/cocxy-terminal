@@ -581,6 +581,13 @@ struct TerminalConfig: Codable, Sendable, Equatable {
     let enableSixelImages: Bool
     /// Whether Kitty inline images are enabled.
     let enableKittyImages: Bool
+    /// Whether iTerm2 OSC 1337 inline images are enabled.
+    let enableITerm2Images: Bool
+    /// Optional directory for persistent inline-image cache data.
+    /// Empty string disables disk persistence.
+    let imageDiskCacheDirectory: String
+    /// Maximum inline-image disk cache budget in MiB.
+    let imageDiskCacheLimitMB: Int
 
     init(
         scrollbackLines: Int,
@@ -594,7 +601,10 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         imageMemoryLimitMB: Int = 256,
         imageFileTransfer: Bool = false,
         enableSixelImages: Bool = true,
-        enableKittyImages: Bool = true
+        enableKittyImages: Bool = true,
+        enableITerm2Images: Bool = true,
+        imageDiskCacheDirectory: String = "",
+        imageDiskCacheLimitMB: Int = 512
     ) {
         self.scrollbackLines = scrollbackLines
         self.cursorStyle = cursorStyle
@@ -608,6 +618,9 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         self.imageFileTransfer = imageFileTransfer
         self.enableSixelImages = enableSixelImages
         self.enableKittyImages = enableKittyImages
+        self.enableITerm2Images = enableITerm2Images
+        self.imageDiskCacheDirectory = imageDiskCacheDirectory
+        self.imageDiskCacheLimitMB = imageDiskCacheLimitMB
     }
 
     static var defaults: TerminalConfig {
@@ -623,7 +636,65 @@ struct TerminalConfig: Codable, Sendable, Equatable {
             imageMemoryLimitMB: 256,
             imageFileTransfer: false,
             enableSixelImages: true,
-            enableKittyImages: true
+            enableKittyImages: true,
+            enableITerm2Images: true,
+            imageDiskCacheDirectory: "",
+            imageDiskCacheLimitMB: 512
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case scrollbackLines
+        case cursorStyle
+        case cursorBlink
+        case cursorOpacity
+        case mouseHideWhileTyping
+        case copyOnSelect
+        case clipboardPasteProtection
+        case clipboardReadAccess
+        case imageMemoryLimitMB
+        case imageFileTransfer
+        case enableSixelImages
+        case enableKittyImages
+        case enableITerm2Images
+        case imageDiskCacheDirectory
+        case imageDiskCacheLimitMB
+    }
+
+    init(from decoder: Decoder) throws {
+        let defaults = Self.defaults
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            scrollbackLines: try container.decodeIfPresent(Int.self, forKey: .scrollbackLines)
+                ?? defaults.scrollbackLines,
+            cursorStyle: try container.decodeIfPresent(CursorStyle.self, forKey: .cursorStyle)
+                ?? defaults.cursorStyle,
+            cursorBlink: try container.decodeIfPresent(Bool.self, forKey: .cursorBlink)
+                ?? defaults.cursorBlink,
+            cursorOpacity: try container.decodeIfPresent(Double.self, forKey: .cursorOpacity)
+                ?? defaults.cursorOpacity,
+            mouseHideWhileTyping: try container.decodeIfPresent(Bool.self, forKey: .mouseHideWhileTyping)
+                ?? defaults.mouseHideWhileTyping,
+            copyOnSelect: try container.decodeIfPresent(Bool.self, forKey: .copyOnSelect)
+                ?? defaults.copyOnSelect,
+            clipboardPasteProtection: try container.decodeIfPresent(Bool.self, forKey: .clipboardPasteProtection)
+                ?? defaults.clipboardPasteProtection,
+            clipboardReadAccess: try container.decodeIfPresent(ClipboardReadAccess.self, forKey: .clipboardReadAccess)
+                ?? defaults.clipboardReadAccess,
+            imageMemoryLimitMB: try container.decodeIfPresent(Int.self, forKey: .imageMemoryLimitMB)
+                ?? defaults.imageMemoryLimitMB,
+            imageFileTransfer: try container.decodeIfPresent(Bool.self, forKey: .imageFileTransfer)
+                ?? defaults.imageFileTransfer,
+            enableSixelImages: try container.decodeIfPresent(Bool.self, forKey: .enableSixelImages)
+                ?? defaults.enableSixelImages,
+            enableKittyImages: try container.decodeIfPresent(Bool.self, forKey: .enableKittyImages)
+                ?? defaults.enableKittyImages,
+            enableITerm2Images: try container.decodeIfPresent(Bool.self, forKey: .enableITerm2Images)
+                ?? defaults.enableITerm2Images,
+            imageDiskCacheDirectory: try container.decodeIfPresent(String.self, forKey: .imageDiskCacheDirectory)
+                ?? defaults.imageDiskCacheDirectory,
+            imageDiskCacheLimitMB: try container.decodeIfPresent(Int.self, forKey: .imageDiskCacheLimitMB)
+                ?? defaults.imageDiskCacheLimitMB
         )
     }
 }

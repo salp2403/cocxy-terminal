@@ -40,7 +40,9 @@ struct TerminalImageDiagnostics: Equatable, Sendable {
     let sixelEnabled: Bool
     let kittyEnabled: Bool
     let iterm2Enabled: Bool
+    let diskCacheEnabled: Bool
     let diskCacheBytes: UInt64
+    let diskCacheLimitBytes: UInt64
     let atlasWidth: UInt32
     let atlasHeight: UInt32
     let atlasGeneration: UInt32
@@ -259,6 +261,9 @@ final class CocxyCoreBridge: TerminalEngine {
         var protocolV2CapabilitiesRequested: Bool = false
         var configuredImageMemoryLimitBytes: UInt64 = 256 * 1024 * 1024
         var configuredImageFileTransferEnabled: Bool = false
+        var configuredImageITerm2Enabled: Bool = true
+        var configuredImageDiskCacheDirectory: URL?
+        var configuredImageDiskCacheLimitBytes: UInt64 = 512 * 1024 * 1024
 
         var outputHandler: (@Sendable (Data) -> Void)?
         var oscHandler: (@Sendable (OSCNotification) -> Void)?
@@ -478,7 +483,10 @@ final class CocxyCoreBridge: TerminalEngine {
             lastKnownWorkingDirectory: (workingDirectory ?? config.workingDirectory).standardizedFileURL,
             lastReportedFocus: nil,
             configuredImageMemoryLimitBytes: config.imageMemoryLimitBytes,
-            configuredImageFileTransferEnabled: config.imageFileTransferEnabled
+            configuredImageFileTransferEnabled: config.imageFileTransferEnabled,
+            configuredImageITerm2Enabled: config.iterm2ImagesEnabled,
+            configuredImageDiskCacheDirectory: config.imageDiskCacheDirectory,
+            configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes
         )
 
         applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
@@ -1161,7 +1169,9 @@ final class CocxyCoreBridge: TerminalEngine {
             sixelEnabled: cocxycore_image_sixel_enabled(state.terminal),
             kittyEnabled: cocxycore_image_kitty_enabled(state.terminal),
             iterm2Enabled: cocxycore_image_iterm2_enabled(state.terminal),
+            diskCacheEnabled: state.configuredImageDiskCacheDirectory != nil,
             diskCacheBytes: UInt64(cocxycore_image_cache_disk_size_bytes(state.terminal)),
+            diskCacheLimitBytes: state.configuredImageDiskCacheLimitBytes,
             atlasWidth: hasAtlasInfo ? atlasInfo.width : 0,
             atlasHeight: hasAtlasInfo ? atlasInfo.height : 0,
             atlasGeneration: hasAtlasInfo ? atlasInfo.generation : 0,
@@ -1205,17 +1215,38 @@ final class CocxyCoreBridge: TerminalEngine {
         return snapshots.sorted { $0.imageID < $1.imageID }
     }
 
+    private func applyImageDiskCacheSettings(
+        terminal: OpaquePointer,
+        directory: URL?,
+        limitBytes: UInt64
+    ) {
+        let path = directory?.path ?? ""
+        let limitedBytes = min(limitBytes, UInt64(Int.max))
+        path.withCString { cachePath in
+            _ = cocxycore_image_set_cache_directory(terminal, cachePath)
+        }
+        cocxycore_image_set_cache_disk_limit_bytes(terminal, Int(limitedBytes))
+        cocxycore_image_cache_evict_now(terminal)
+    }
+
     func applyImageSettings(
         memoryLimitBytes: UInt64,
         fileTransferEnabled: Bool,
         sixelEnabled: Bool,
-        kittyEnabled: Bool
+        kittyEnabled: Bool,
+        iterm2Enabled: Bool,
+        diskCacheDirectory: URL?,
+        diskCacheLimitBytes: UInt64
     ) {
         updateDefaults(
             imageMemoryLimitBytes: memoryLimitBytes,
             imageFileTransferEnabled: fileTransferEnabled,
             sixelImagesEnabled: sixelEnabled,
-            kittyImagesEnabled: kittyEnabled
+            kittyImagesEnabled: kittyEnabled,
+            iterm2ImagesEnabled: iterm2Enabled,
+            imageDiskCacheDirectory: diskCacheDirectory,
+            clearsImageDiskCacheDirectory: diskCacheDirectory == nil,
+            imageDiskCacheLimitBytes: diskCacheLimitBytes
         )
         for surface in surfaces.keys {
             applyImageSettings(
@@ -1223,6 +1254,9 @@ final class CocxyCoreBridge: TerminalEngine {
                 fileTransferEnabled: fileTransferEnabled,
                 sixelEnabled: sixelEnabled,
                 kittyEnabled: kittyEnabled,
+                iterm2Enabled: iterm2Enabled,
+                diskCacheDirectory: diskCacheDirectory,
+                diskCacheLimitBytes: diskCacheLimitBytes,
                 to: surface
             )
         }
@@ -1233,6 +1267,9 @@ final class CocxyCoreBridge: TerminalEngine {
         fileTransferEnabled: Bool,
         sixelEnabled: Bool,
         kittyEnabled: Bool,
+        iterm2Enabled: Bool,
+        diskCacheDirectory: URL?,
+        diskCacheLimitBytes: UInt64,
         to surface: SurfaceID
     ) {
         guard var state = surfaces[surface] else { return }
@@ -1246,7 +1283,12 @@ final class CocxyCoreBridge: TerminalEngine {
             cocxycore_image_set_file_transfer(lockedState.terminal, fileTransferEnabled)
             cocxycore_image_enable_sixel(lockedState.terminal, sixelEnabled)
             cocxycore_image_enable_kitty(lockedState.terminal, kittyEnabled)
-            _ = cocxycore_image_iterm2_enable(lockedState.terminal, false)
+            _ = cocxycore_image_iterm2_enable(lockedState.terminal, iterm2Enabled)
+            applyImageDiskCacheSettings(
+                terminal: lockedState.terminal,
+                directory: diskCacheDirectory,
+                limitBytes: diskCacheLimitBytes
+            )
             if let webState = lockedState.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -1254,6 +1296,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
         state.configuredImageMemoryLimitBytes = memoryLimitBytes
         state.configuredImageFileTransferEnabled = fileTransferEnabled
+        state.configuredImageITerm2Enabled = iterm2Enabled
+        state.configuredImageDiskCacheDirectory = diskCacheDirectory
+        state.configuredImageDiskCacheLimitBytes = diskCacheLimitBytes
         surfaces[surface] = state
         (state.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
@@ -1997,7 +2042,11 @@ final class CocxyCoreBridge: TerminalEngine {
         imageMemoryLimitBytes: UInt64? = nil,
         imageFileTransferEnabled: Bool? = nil,
         sixelImagesEnabled: Bool? = nil,
-        kittyImagesEnabled: Bool? = nil
+        kittyImagesEnabled: Bool? = nil,
+        iterm2ImagesEnabled: Bool? = nil,
+        imageDiskCacheDirectory: URL? = nil,
+        clearsImageDiskCacheDirectory: Bool = false,
+        imageDiskCacheLimitBytes: UInt64? = nil
     ) {
         guard let currentConfig = config else { return }
         config = currentConfig.replacing(
@@ -2014,7 +2063,11 @@ final class CocxyCoreBridge: TerminalEngine {
             imageMemoryLimitBytes: imageMemoryLimitBytes,
             imageFileTransferEnabled: imageFileTransferEnabled,
             sixelImagesEnabled: sixelImagesEnabled,
-            kittyImagesEnabled: kittyImagesEnabled
+            kittyImagesEnabled: kittyImagesEnabled,
+            iterm2ImagesEnabled: iterm2ImagesEnabled,
+            imageDiskCacheDirectory: imageDiskCacheDirectory,
+            clearsImageDiskCacheDirectory: clearsImageDiskCacheDirectory,
+            imageDiskCacheLimitBytes: imageDiskCacheLimitBytes
         )
     }
 
@@ -2142,7 +2195,12 @@ final class CocxyCoreBridge: TerminalEngine {
         cocxycore_image_set_file_transfer(terminal, config.imageFileTransferEnabled)
         cocxycore_image_enable_sixel(terminal, config.sixelImagesEnabled)
         cocxycore_image_enable_kitty(terminal, config.kittyImagesEnabled)
-        _ = cocxycore_image_iterm2_enable(terminal, false)
+        _ = cocxycore_image_iterm2_enable(terminal, config.iterm2ImagesEnabled)
+        applyImageDiskCacheSettings(
+            terminal: terminal,
+            directory: config.imageDiskCacheDirectory,
+            limitBytes: config.imageDiskCacheLimitBytes
+        )
 
         // Theme (if palette provided)
         if let palette = config.themePalette {

@@ -341,6 +341,12 @@ struct TerminalEngineConfig: Sendable {
     let sixelImagesEnabled: Bool
     /// Whether Kitty inline images are enabled.
     let kittyImagesEnabled: Bool
+    /// Whether iTerm2 OSC 1337 inline images are enabled.
+    let iterm2ImagesEnabled: Bool
+    /// Optional directory for persistent inline-image cache data.
+    let imageDiskCacheDirectory: URL?
+    /// Maximum inline-image disk cache budget in bytes.
+    let imageDiskCacheLimitBytes: UInt64
 
     init(
         fontFamily: String,
@@ -357,7 +363,10 @@ struct TerminalEngineConfig: Sendable {
         imageMemoryLimitBytes: UInt64 = 256 * 1024 * 1024,
         imageFileTransferEnabled: Bool = false,
         sixelImagesEnabled: Bool = true,
-        kittyImagesEnabled: Bool = true
+        kittyImagesEnabled: Bool = true,
+        iterm2ImagesEnabled: Bool = true,
+        imageDiskCacheDirectory: URL? = nil,
+        imageDiskCacheLimitBytes: UInt64 = 512 * 1024 * 1024
     ) {
         self.fontFamily = fontFamily
         self.fontSize = fontSize
@@ -374,6 +383,9 @@ struct TerminalEngineConfig: Sendable {
         self.imageFileTransferEnabled = imageFileTransferEnabled
         self.sixelImagesEnabled = sixelImagesEnabled
         self.kittyImagesEnabled = kittyImagesEnabled
+        self.iterm2ImagesEnabled = iterm2ImagesEnabled
+        self.imageDiskCacheDirectory = imageDiskCacheDirectory
+        self.imageDiskCacheLimitBytes = imageDiskCacheLimitBytes
     }
 
     func replacing(
@@ -391,7 +403,11 @@ struct TerminalEngineConfig: Sendable {
         imageMemoryLimitBytes: UInt64? = nil,
         imageFileTransferEnabled: Bool? = nil,
         sixelImagesEnabled: Bool? = nil,
-        kittyImagesEnabled: Bool? = nil
+        kittyImagesEnabled: Bool? = nil,
+        iterm2ImagesEnabled: Bool? = nil,
+        imageDiskCacheDirectory: URL? = nil,
+        clearsImageDiskCacheDirectory: Bool = false,
+        imageDiskCacheLimitBytes: UInt64? = nil
     ) -> TerminalEngineConfig {
         TerminalEngineConfig(
             fontFamily: fontFamily ?? self.fontFamily,
@@ -408,7 +424,12 @@ struct TerminalEngineConfig: Sendable {
             imageMemoryLimitBytes: imageMemoryLimitBytes ?? self.imageMemoryLimitBytes,
             imageFileTransferEnabled: imageFileTransferEnabled ?? self.imageFileTransferEnabled,
             sixelImagesEnabled: sixelImagesEnabled ?? self.sixelImagesEnabled,
-            kittyImagesEnabled: kittyImagesEnabled ?? self.kittyImagesEnabled
+            kittyImagesEnabled: kittyImagesEnabled ?? self.kittyImagesEnabled,
+            iterm2ImagesEnabled: iterm2ImagesEnabled ?? self.iterm2ImagesEnabled,
+            imageDiskCacheDirectory: clearsImageDiskCacheDirectory
+                ? nil
+                : (imageDiskCacheDirectory ?? self.imageDiskCacheDirectory),
+            imageDiskCacheLimitBytes: imageDiskCacheLimitBytes ?? self.imageDiskCacheLimitBytes
         )
     }
 }

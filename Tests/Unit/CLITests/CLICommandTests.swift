@@ -996,6 +996,10 @@ final class OutputFormatterTests: XCTestCase {
                 "image_memory_limit_mib": "256",
                 "image_sixel_enabled": "true",
                 "image_kitty_enabled": "true",
+                "image_iterm2_enabled": "true",
+                "image_disk_cache_enabled": "true",
+                "image_disk_cache_used_mib": "2",
+                "image_disk_cache_limit_mib": "512",
                 "image_atlas_width": "1024",
                 "image_atlas_height": "1024",
                 "image_atlas_generation": "7",
@@ -1020,7 +1024,7 @@ final class OutputFormatterTests: XCTestCase {
         XCTAssertTrue(output.contains("Semantic: state command_running, current command_output, prompt 3, input 2, output 5, error 1, tool 4, agent 2"))
         XCTAssertTrue(output.contains("Shell integration: preexec avg 120000000ns, max 180000000ns, warnings 1, stale cwd retries 2, p10k on, tmux on, screen on"))
         XCTAssertTrue(output.contains("Ligatures: on (hits 12, misses 2)"))
-        XCTAssertTrue(output.contains("Images: 4 loaded (8/256 MiB, sixel on, kitty on)"))
+        XCTAssertTrue(output.contains("Images: 4 loaded (8/256 MiB, sixel on, kitty on, iTerm2 on, disk 2/512 MiB)"))
         XCTAssertTrue(output.contains("Image atlas: 1024x1024 gen 7, dirty off"))
         XCTAssertTrue(output.contains("Streams: 2"))
         XCTAssertTrue(output.contains("Web terminal: running on 127.0.0.1:7770 (1 clients)"))

@@ -424,6 +424,9 @@ private func waitForScenarioOutput(
         }
         try await Task.sleep(nanoseconds: pollNanoseconds)
     }
+    if await MainActor.run(body: condition) {
+        return
+    }
 
     throw ScenarioTimeoutError(
         scenarioName: scenarioName,

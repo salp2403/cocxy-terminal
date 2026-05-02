@@ -330,6 +330,10 @@ struct CocxyCoreBridgeTests {
             fileTransferEnabled: true,
             sixelEnabled: false,
             kittyEnabled: true,
+            iterm2Enabled: true,
+            diskCacheDirectory: URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("cocxy-image-cache-test"),
+            diskCacheLimitBytes: 64 * 1024 * 1024,
             to: surfaceID
         )
 
@@ -338,7 +342,9 @@ struct CocxyCoreBridgeTests {
         #expect(diagnostics.fileTransferEnabled == true)
         #expect(diagnostics.sixelEnabled == false)
         #expect(diagnostics.kittyEnabled == true)
-        #expect(diagnostics.iterm2Enabled == false)
+        #expect(diagnostics.iterm2Enabled == true)
+        #expect(diagnostics.diskCacheEnabled == true)
+        #expect(diagnostics.diskCacheLimitBytes == 64 * 1024 * 1024)
     }
 
     @Test("image snapshots enumerate live image metadata in a stable order")

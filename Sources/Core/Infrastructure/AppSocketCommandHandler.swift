@@ -1502,6 +1502,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.terminal.enableSixelImages)"
         case "terminal.enable-kitty-images":
             return "\(config.terminal.enableKittyImages)"
+        case "terminal.enable-iterm2-images":
+            return "\(config.terminal.enableITerm2Images)"
+        case "terminal.image-disk-cache-directory":
+            return config.terminal.imageDiskCacheDirectory
+        case "terminal.image-disk-cache-limit-mb":
+            return "\(config.terminal.imageDiskCacheLimitMB)"
 
         // Agent detection
         case "agent-detection.enabled":
@@ -2780,6 +2786,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "terminal.clipboard-paste-protection", "terminal.clipboard-read-access",
             "terminal.image-memory-limit-mb", "terminal.image-file-transfer",
             "terminal.enable-sixel-images", "terminal.enable-kitty-images",
+            "terminal.enable-iterm2-images", "terminal.image-disk-cache-directory",
+            "terminal.image-disk-cache-limit-mb",
             "agent-detection.enabled", "agent-detection.osc-notifications",
             "agent-detection.pattern-matching", "agent-detection.timing-heuristics",
             "agent-detection.idle-timeout-seconds",

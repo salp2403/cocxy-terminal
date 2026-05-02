@@ -18,9 +18,10 @@ import Testing
 /// in parallel and many other `@MainActor` tests share the main queue, the
 /// work item can miss a tight deadline while other main-actor tests hold
 /// the queue. Serializing keeps the deadlines deterministic. Timeouts are
-/// generous (`0.20s` trigger, `1.50s` sleep) to absorb residual jitter
-/// from simulator-level scheduling without resorting to retry wrappers —
-/// see `feedback_no_retry_for_timeouts` for the rationale.
+/// generous (`0.20s` trigger, up to `20s` polling windows where the
+/// handler must actually run) to absorb residual jitter from simulator-level
+/// scheduling without resorting to retry wrappers — see
+/// `feedback_no_retry_for_timeouts` for the rationale.
 @MainActor
 @Suite("AgentLaunchedWatchdog", .serialized)
 struct AgentLaunchedWatchdogSwiftTestingTests {
@@ -44,7 +45,7 @@ struct AgentLaunchedWatchdogSwiftTestingTests {
         // scheduler breathe and keeps the assertion deterministic
         // without a retry wrapper. See `feedback_no_retry_for_timeouts`
         // for why we prefer polling a real outcome over retrying.
-        let deadline = Date().addingTimeInterval(5.0)
+        let deadline = Date().addingTimeInterval(20.0)
         while fireCount == 0, Date() < deadline {
             try await Task.sleep(nanoseconds: 50_000_000) // 50ms per tick
         }
@@ -104,7 +105,7 @@ struct AgentLaunchedWatchdogSwiftTestingTests {
         // must never fire (work item cancelled), but the second must
         // fire exactly once. Polling protects against main-queue
         // contention from other suites without masking real bugs.
-        let deadline = Date().addingTimeInterval(5.0)
+        let deadline = Date().addingTimeInterval(20.0)
         while secondCount == 0, Date() < deadline {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
@@ -137,7 +138,7 @@ struct AgentLaunchedWatchdogSwiftTestingTests {
         // cancelled. Waiting for firedB rather than a fixed sleep keeps
         // the test robust under main-queue contention from parallel
         // suites.
-        let deadline = Date().addingTimeInterval(5.0)
+        let deadline = Date().addingTimeInterval(20.0)
         while firedB == false, Date() < deadline {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
