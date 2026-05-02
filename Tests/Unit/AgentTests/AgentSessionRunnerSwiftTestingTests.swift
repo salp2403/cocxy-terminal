@@ -224,6 +224,57 @@ struct AgentSessionRunnerSwiftTestingTests {
         ])
     }
 
+    @Test("runner wires terminal output provider into read_terminal_output tool")
+    func runnerWiresTerminalOutputProvider() async throws {
+        let workspace = temporaryDirectory(named: "terminal-output-workspace")
+        let conversationRoot = temporaryDirectory(named: "terminal-output-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(
+                content: "Reading terminal context.",
+                toolCalls: [
+                    AgentToolCall(
+                        id: "read-terminal-1",
+                        toolID: "read_terminal_output",
+                        arguments: ["limit": .number(3)]
+                    ),
+                ]
+            ),
+            AgentLLMResponse(content: "I saw the recent command output.", toolCalls: []),
+        ])
+        let terminalOutputProvider = RecordingSessionTerminalOutputProvider(
+            output: "recent command output\n"
+        )
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-terminal-output-test",
+            terminalOutputProvider: terminalOutputProvider
+        )
+
+        let result = try await runner.run(
+            prompt: "Read terminal output",
+            history: [],
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                maxIterations: 4,
+                conversationStorageDir: conversationRoot.path
+            )
+        )
+        let terminalToolMessage = try #require(result.messages.first { message in
+            message.role == .tool && message.toolName == "read_terminal_output"
+        })
+
+        #expect(result.stopReason == .completed)
+        #expect(terminalOutputProvider.limits == [3])
+        #expect(terminalToolMessage.content.contains("recent command output"))
+    }
+
     @Test("runner approval resumes a pending write and persists the tool result")
     func runnerApprovalResumesPendingWriteAndPersistsToolResult() async throws {
         let workspace = temporaryDirectory(named: "approval-workspace")
@@ -435,4 +486,18 @@ private struct AgentSessionProcessCall: Equatable {
     let arguments: [String]
     let workingDirectory: URL
     let timeoutSeconds: TimeInterval?
+}
+
+private final class RecordingSessionTerminalOutputProvider: AgentTerminalOutputProviding, @unchecked Sendable {
+    private let output: String
+    private(set) var limits: [Int] = []
+
+    init(output: String) {
+        self.output = output
+    }
+
+    func latestCommandBlockOutputs(limit: Int) -> String {
+        limits.append(limit)
+        return output
+    }
 }

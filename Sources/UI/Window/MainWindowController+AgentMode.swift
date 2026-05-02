@@ -84,6 +84,9 @@ extension MainWindowController {
                 self?.currentAgentModeWorkingDirectory()
             },
             conversationID: "window-\(windowID.rawValue.uuidString)",
+            terminalOutputProvider: MainActorAgentTerminalOutputProvider { [weak self] limit in
+                self?.latestAgentModeTerminalOutput(limit: limit) ?? ""
+            },
             mcpManager: MCPConfiguredManager()
         )
         let viewModel = AgentPanelViewModel(
@@ -107,5 +110,20 @@ extension MainWindowController {
 
         guard let tabID = visibleTabID ?? tabManager.activeTabID else { return nil }
         return tabManager.tab(for: tabID)?.workingDirectory
+    }
+
+    func latestAgentModeTerminalOutput(limit: Int) -> String {
+        let boundedLimit = UInt32(min(max(limit, 1), 64))
+        guard let surfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+                ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
+              let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge else {
+            return ""
+        }
+
+        return cocxyBridge.latestCommandBlockOutputs(
+            for: surfaceID,
+            limit: boundedLimit,
+            stripANSI: true
+        )
     }
 }
