@@ -2345,6 +2345,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     delegateRef.value?.commandBlocksForCLI(limit: limit)
                 }
             },
+            blockOutputsProvider: { limit in
+                syncOnMainActor {
+                    delegateRef.value?.commandBlockOutputsForCLI(limit: limit)
+                }
+            },
             blockCopyProvider: { blockID, field in
                 syncOnMainActor {
                     delegateRef.value?.copyCommandBlockForCLI(blockID: blockID, field: field)

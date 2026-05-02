@@ -381,6 +381,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Returns recent command-scoped blocks for the focused surface.
     let blockListProvider: (@Sendable (UInt32) -> [String: String]?)?
 
+    /// Returns recent clean command-scoped output for the focused surface.
+    let blockOutputsProvider: (@Sendable (UInt32) -> [String: String]?)?
+
     /// Copies one command block field to the pasteboard.
     let blockCopyProvider: (@Sendable (UInt64, String) -> [String: String]?)?
 
@@ -485,6 +488,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         corePreeditProvider: (@Sendable () -> [String: String]?)? = nil,
         coreSemanticProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         blockListProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
+        blockOutputsProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         blockCopyProvider: (@Sendable (UInt64, String) -> [String: String]?)? = nil,
         blockRerunProvider: (@Sendable (UInt64) -> [String: String]?)? = nil,
         imageListProvider: (@Sendable () -> [String: String]?)? = nil,
@@ -552,6 +556,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.corePreeditProvider = corePreeditProvider
         self.coreSemanticProvider = coreSemanticProvider
         self.blockListProvider = blockListProvider
+        self.blockOutputsProvider = blockOutputsProvider
         self.blockCopyProvider = blockCopyProvider
         self.blockRerunProvider = blockRerunProvider
         self.imageListProvider = imageListProvider
@@ -1049,6 +1054,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleCoreSemantic(request)
         case .blockList:
             return handleBlockList(request)
+        case .blockOutputs:
+            return handleBlockOutputs(request)
         case .blockCopy:
             return handleBlockCopy(request)
         case .blockRerun:

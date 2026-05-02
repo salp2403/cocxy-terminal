@@ -253,6 +253,8 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .blockList:
             return formatDataOrJSON(response: response)
+        case .blockOutputs:
+            return response.data?["output"] ?? formatDataOrJSON(response: response)
         case .blockCopy(let id, _):
             return "Block \(response.data?["id"] ?? "\(id)") copied."
         case .blockRerun(let id):

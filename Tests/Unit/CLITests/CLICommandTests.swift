@@ -280,6 +280,11 @@ final class CLIArgumentParserTests: XCTestCase {
         XCTAssertEqual(result, .blockList(limit: 5))
     }
 
+    func testBlockOutputsParsesLimit() throws {
+        let result = try CLIArgumentParser.parse(["block", "outputs", "--limit", "5"])
+        XCTAssertEqual(result, .blockOutputs(limit: 5))
+    }
+
     func testBlockCopyParsesField() throws {
         let result = try CLIArgumentParser.parse(["block", "copy", "42", "--field", "both"])
         XCTAssertEqual(result, .blockCopy(id: 42, field: "both"))
@@ -729,6 +734,12 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.params?["limit"], "6")
     }
 
+    func testBuildBlockOutputsRequest() {
+        let request = runner.buildRequest(from: .blockOutputs(limit: 6))
+        XCTAssertEqual(request.command, "block-outputs")
+        XCTAssertEqual(request.params?["limit"], "6")
+    }
+
     func testBuildBlockCopyRequest() {
         let request = runner.buildRequest(from: .blockCopy(id: 42, field: "command"))
         XCTAssertEqual(request.command, "block-copy")
@@ -1115,6 +1126,20 @@ final class OutputFormatterTests: XCTestCase {
         XCTAssertTrue(output.contains("\"command\""))
     }
 
+    func testFormatBlockOutputsPrintsCleanOutput() {
+        let response = CLISocketResponse(
+            id: "r-block-outputs",
+            success: true,
+            data: ["output": "first block\nsecond block"],
+            error: nil
+        )
+        let output = OutputFormatter.formatSuccess(
+            command: .blockOutputs(limit: 5),
+            response: response
+        )
+        XCTAssertEqual(output, "first block\nsecond block")
+    }
+
     func testFormatBlockCopyAndRerunSuccess() {
         XCTAssertEqual(
             OutputFormatter.formatSuccess(
@@ -1278,7 +1303,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 112)
+        XCTAssertEqual(CLICommand.allCases.count, 113)
     }
 
     // MARK: - 39. Raw values match server protocol

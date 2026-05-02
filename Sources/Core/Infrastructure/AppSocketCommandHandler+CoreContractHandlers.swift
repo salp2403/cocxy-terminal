@@ -196,6 +196,19 @@ extension AppSocketCommandHandler {
         return .ok(id: request.id, data: data)
     }
 
+    func handleBlockOutputs(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = blockOutputsProvider else {
+            return .failure(id: request.id, error: "Command block output context is not available")
+        }
+
+        let requestedLimit = request.params?["limit"].flatMap(UInt32.init) ?? 5
+        let limit = min(max(requestedLimit, 1), 64)
+        guard let data = provider(limit) else {
+            return .failure(id: request.id, error: "Failed to read command block outputs")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
     func handleBlockCopy(_ request: SocketRequest) -> SocketResponse {
         guard let provider = blockCopyProvider else {
             return .failure(id: request.id, error: "Command block copy is not available")

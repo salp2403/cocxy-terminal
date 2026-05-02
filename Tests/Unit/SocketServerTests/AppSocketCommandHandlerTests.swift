@@ -234,6 +234,30 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["content"], "{\"count\":0,\"blocks\":[]}")
     }
 
+    func test_blockOutputs_routesToOutputProviderWithClampedLimit() {
+        let capturedLimit = LockedBox<UInt32?>(nil)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            blockOutputsProvider: { limit in
+                capturedLimit.withValue { value in
+                    value = limit
+                }
+                return ["output": "recent output", "limit": "\(limit)"]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "block-outputs-1",
+            command: "block-outputs",
+            params: ["limit": "500"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(capturedLimit.withValue { $0 }, 64)
+        XCTAssertEqual(response.data?["output"], "recent output")
+    }
+
     func test_blockCopy_routesToBlockProvider() {
         let captured = LockedBox<(id: UInt64?, field: String?)>((nil, nil))
         let handler = AppSocketCommandHandler(

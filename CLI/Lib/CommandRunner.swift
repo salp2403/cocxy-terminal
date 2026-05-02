@@ -741,6 +741,10 @@ public struct CommandRunner {
             let params = limit.map { ["limit": "\($0)"] }
             return CLISocketRequest(id: requestID, command: "block-list", params: params)
 
+        case .blockOutputs(let limit):
+            let params = limit.map { ["limit": "\($0)"] }
+            return CLISocketRequest(id: requestID, command: "block-outputs", params: params)
+
         case .blockCopy(let id, let field):
             return CLISocketRequest(
                 id: requestID,

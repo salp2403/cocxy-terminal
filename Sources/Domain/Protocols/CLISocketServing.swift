@@ -264,6 +264,8 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case coreSemantic = "core-semantic"
     /// List recent command blocks for the focused surface.
     case blockList = "block-list"
+    /// Return recent clean command block output for the focused surface.
+    case blockOutputs = "block-outputs"
     /// Copy a command block's command, output, or both.
     case blockCopy = "block-copy"
     /// Send a command block's command back to the focused terminal.

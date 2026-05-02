@@ -455,6 +455,20 @@ extension AppDelegate {
     }
 
     @MainActor
+    func commandBlockOutputsForCLI(limit: UInt32) -> [String: String]? {
+        guard let (_, surfaceID, cocxyBridge) = activeCocxyCoreSurfaceForCLI() else {
+            return nil
+        }
+
+        let output = cocxyBridge.latestCommandBlockOutputs(for: surfaceID, limit: limit, stripANSI: true)
+        return [
+            "limit": "\(limit)",
+            "bytes": "\(output.utf8.count)",
+            "output": output
+        ]
+    }
+
+    @MainActor
     func copyCommandBlockForCLI(blockID: UInt64, field: String) -> [String: String]? {
         guard let block = commandBlockForCLI(blockID: blockID) else {
             return nil

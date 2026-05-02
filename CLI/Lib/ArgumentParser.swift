@@ -347,6 +347,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy block list [--limit <n>]`
     case blockList(limit: Int?)
 
+    /// `cocxy block outputs [--limit <n>]`
+    case blockOutputs(limit: Int?)
+
     /// `cocxy block copy <id> [--field command|output|both]`
     case blockCopy(id: UInt64, field: String)
 
@@ -1898,7 +1901,7 @@ public enum CLIArgumentParser {
 
     private static func parseBlock(arguments: [String]) throws -> ParsedCommand {
         guard let subcommand = arguments.first else {
-            throw CLIError.missingArgument(command: "block", argument: "list|copy|rerun")
+            throw CLIError.missingArgument(command: "block", argument: "list|outputs|copy|rerun")
         }
 
         switch subcommand {
@@ -1927,6 +1930,32 @@ public enum CLIArgumentParser {
                 }
             }
             return .blockList(limit: limit)
+
+        case "outputs":
+            let rest = Array(arguments.dropFirst())
+            var limit: Int?
+            var index = 0
+            while index < rest.count {
+                switch rest[index] {
+                case "--limit" where index + 1 < rest.count:
+                    guard let parsed = Int(rest[index + 1]), parsed > 0 else {
+                        throw CLIError.invalidArgument(
+                            command: "block outputs",
+                            argument: rest[index + 1],
+                            reason: "limit must be a positive integer"
+                        )
+                    }
+                    limit = parsed
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "block outputs",
+                        argument: rest[index],
+                        reason: "unknown option"
+                    )
+                }
+            }
+            return .blockOutputs(limit: limit)
 
         case "copy":
             guard arguments.count >= 2, let blockID = UInt64(arguments[1]), blockID > 0 else {
@@ -1977,7 +2006,7 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "block",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use list, copy, or rerun."
+                reason: "Unknown subcommand. Use list, outputs, copy, or rerun."
             )
         }
     }
