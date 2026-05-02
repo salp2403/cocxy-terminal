@@ -9,6 +9,7 @@ import Testing
 @Suite("MarkdownContentView", .serialized)
 @MainActor
 struct MarkdownContentViewTests {
+    private static let testMarkdownDirectoryPrefix = "cocxy-markdown-test-"
 
     // MARK: - Initialization
 
@@ -208,7 +209,12 @@ struct MarkdownContentViewTests {
 
     private func createTempMarkdownFile(content: String) -> URL {
         let tempDir = FileManager.default.temporaryDirectory
-        let url = tempDir.appendingPathComponent("test-\(UUID().uuidString).md")
+        let directory = tempDir.appendingPathComponent(
+            "\(Self.testMarkdownDirectoryPrefix)\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("test.md")
         try? content.write(to: url, atomically: true, encoding: .utf8)
         return url
     }
@@ -499,7 +505,12 @@ struct MarkdownContentViewTests {
     }
 
     private func cleanup(_ url: URL) {
-        try? FileManager.default.removeItem(at: url)
+        let parent = url.deletingLastPathComponent()
+        if parent.lastPathComponent.hasPrefix(Self.testMarkdownDirectoryPrefix) {
+            try? FileManager.default.removeItem(at: parent)
+        } else {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     private func makeKeyEvent(

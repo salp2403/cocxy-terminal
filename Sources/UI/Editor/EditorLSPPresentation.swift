@@ -1,0 +1,76 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// EditorLSPPresentation.swift - UI-facing state for local LSP editor responses.
+
+import Foundation
+
+struct EditorLSPPresentation: Equatable {
+    var hoverText: String?
+    var completionItems: [LSPCompletionItem] = []
+    var definitionLocations: [LSPLocation] = []
+    var referenceLocations: [LSPLocation] = []
+
+    var accessoryText: String? {
+        if let completion = completionItems.first {
+            return completionTitle(completion)
+        }
+        if let hoverText, !hoverText.isEmpty {
+            return hoverText
+        }
+        if let definition = definitionLocations.first {
+            return locationSummary(definition)
+        }
+        if !referenceLocations.isEmpty {
+            return "\(referenceLocations.count) references"
+        }
+        return nil
+    }
+
+    var resultItemTitles: [String] {
+        if !completionItems.isEmpty {
+            return completionItems.map(completionTitle)
+        }
+        if !definitionLocations.isEmpty {
+            return definitionLocations.map(locationSummary)
+        }
+        if !referenceLocations.isEmpty {
+            return referenceLocations.map(locationSummary)
+        }
+        return []
+    }
+
+    mutating func apply(_ event: LSPClientEvent) {
+        switch event {
+        case let .hover(_, hover):
+            hoverText = hover?.contents
+        case let .completion(_, items):
+            completionItems = items
+        case let .definition(_, locations):
+            definitionLocations = locations
+        case let .references(_, locations):
+            referenceLocations = locations
+        case .diagnostics:
+            break
+        }
+    }
+
+    mutating func clearDocumentScopedState() {
+        hoverText = nil
+        completionItems = []
+        definitionLocations = []
+        referenceLocations = []
+    }
+
+    private func locationSummary(_ location: LSPLocation) -> String {
+        let name = URL(string: location.uri)?.lastPathComponent ?? location.uri
+        return "\(name):\(location.range.start.line + 1)"
+    }
+
+    private func completionTitle(_ completion: LSPCompletionItem) -> String {
+        [completion.label, completion.detail]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " - ")
+    }
+}
