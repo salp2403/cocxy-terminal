@@ -435,11 +435,15 @@ extension AppDelegate {
     @MainActor
     func commandBlocksForCLI(limit: UInt32) -> [String: String]? {
         guard let cocxyBridge = bridge?.cocxyCoreBridge,
-              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+              let (controller, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
 
-        let blocks = cocxyBridge.commandBlocks(for: surfaceID, limit: limit)
+        let blocks = controller.availableCommandBlocks(
+            surfaceID: surfaceID,
+            liveBlocks: cocxyBridge.commandBlocks(for: surfaceID, limit: limit),
+            limit: limit
+        )
         let payload = CommandBlockListPayload(
             count: blocks.count,
             blocks: blocks.map(commandBlockPayload)
@@ -504,10 +508,14 @@ extension AppDelegate {
     @MainActor
     private func commandBlockForCLI(blockID: UInt64) -> TerminalCommandBlock? {
         guard let cocxyBridge = bridge?.cocxyCoreBridge,
-              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+              let (controller, surfaceID) = activeTerminalSurfaceForCLI() else {
             return nil
         }
-        return cocxyBridge.commandBlock(for: surfaceID, blockID: blockID)
+        return controller.availableCommandBlock(
+            surfaceID: surfaceID,
+            liveBlock: cocxyBridge.commandBlock(for: surfaceID, blockID: blockID),
+            blockID: blockID
+        )
     }
 
     @MainActor

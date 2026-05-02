@@ -503,6 +503,11 @@ extension AppDelegate {
                     controller.tabSurfaceMap[restoredTab.tabID] = surfaceID
                     controller.tabSurfaceViews[restoredTab.tabID] = surfaceView
                     controller.tabViewModels[restoredTab.tabID] = viewModel
+                    controller.attachRestoredCommandBlocksIfAvailable(
+                        tabID: restoredTab.tabID,
+                        surfaceID: surfaceID,
+                        in: surfaceView
+                    )
                 } else {
                     storedSplitSurfaces[surfaceID] = surfaceView
                     storedSplitViewModels[surfaceID] = viewModel

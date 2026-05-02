@@ -27,6 +27,13 @@ function __cocxy_fish_report_pwd --on-variable PWD
     end
 end
 
+function __cocxy_fish_encode_command_payload
+    # URL escaping keeps OSC 133;C payload printable; newlines become %0A
+    # and literal percent signs become %25.
+    set -l encoded_command (string escape --style=url -- "$argv[1]")
+    printf 'cocxy-percent-v1:%s' "$encoded_command"
+end
+
 function __cocxy_fish_prompt --on-event fish_prompt
     set -l __cocxy_last_status $status
     if test "$__cocxy_fish_executing" = "1"
@@ -47,6 +54,10 @@ end
 function __cocxy_fish_preexec --on-event fish_preexec
     set -l command_text "$argv[1]"
     set -l sanitized_command (string replace -ra '[[:cntrl:]]' '' -- "$command_text")
+    set -l encoded_command ""
+    if test -n "$command_text"
+        set encoded_command (__cocxy_fish_encode_command_payload "$command_text")
+    end
 
     if string match -q '*title*' -- "$COCXY_SHELL_FEATURES"
         if test -n "$sanitized_command"
@@ -55,8 +66,8 @@ function __cocxy_fish_preexec --on-event fish_preexec
     end
 
     __cocxy_fish_print "\e]133;B\a"
-    if test -n "$sanitized_command"
-        __cocxy_fish_print "\e]133;C;$sanitized_command\a"
+    if test -n "$encoded_command"
+        __cocxy_fish_print "\e]133;C;$encoded_command\a"
     else
         __cocxy_fish_print "\e]133;C\a"
     end

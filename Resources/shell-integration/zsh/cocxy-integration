@@ -97,6 +97,21 @@ _cocxy_uri_encode_path() {
     print -rn -- "$output"
 }
 
+_cocxy_encode_command_payload() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+    local input="$1"
+    local encoded="${input//\%/%25}"
+
+    encoded="${encoded//$'\r'/%0A}"
+    encoded="${encoded//$'\n'/%0A}"
+    encoded="${encoded//$'\t'/%09}"
+    encoded="${encoded//[$'\x00'-$'\x08']/}"
+    encoded="${encoded//[$'\x0b'-$'\x1f']/}"
+    encoded="${encoded//[$'\x7f']/}"
+
+    print -rn -- "cocxy-percent-v1:$encoded"
+}
+
 _cocxy_report_pwd() {
     emulate -L zsh -o no_aliases -o no_warn_create_global
     if [[ "$_COCXY_LAST_REPORTED_CWD" != "$PWD" ]]; then
@@ -140,6 +155,10 @@ _cocxy_preexec() {
     emulate -L zsh -o no_aliases -o no_warn_create_global
     local command_text="$1"
     local sanitized_command="${command_text//[$'\x00'-$'\x1f']/}"
+    local encoded_command=""
+    if [[ -n "$command_text" ]]; then
+        encoded_command="$(_cocxy_encode_command_payload "$command_text")"
+    fi
 
     if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$sanitized_command" ]]; then
         _cocxy_print $'\e]2;'"$sanitized_command"$'\a'
@@ -157,8 +176,8 @@ _cocxy_preexec() {
     # OSC 133;C marks that the command is actually being executed.
     # Emitted right after ;B so hosts that treat them as a pair (or that
     # prefer ;C over ;B) both see a consistent signal.
-    if [[ -n "$sanitized_command" ]]; then
-        _cocxy_print $'\e]133;C;'"$sanitized_command"$'\a'
+    if [[ -n "$encoded_command" ]]; then
+        _cocxy_print $'\e]133;C;'"$encoded_command"$'\a'
     else
         _cocxy_print $'\e]133;C\a'
     fi

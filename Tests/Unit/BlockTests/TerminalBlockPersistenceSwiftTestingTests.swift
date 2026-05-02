@@ -54,6 +54,93 @@ struct TerminalBlockPersistenceSwiftTestingTests {
         #expect(store.fileURL(forSessionID: "").lastPathComponent == "default.jsonl")
     }
 
+    @Test("restoration supplies persisted blocks only until live blocks exist")
+    func restorationSuppliesPersistedBlocksOnlyUntilLiveBlocksExist() {
+        let restored = [sampleBlock(id: 1, command: "echo restored")]
+        let live = [sampleBlock(id: 2, command: "echo live")]
+
+        #expect(
+            TerminalBlockRestoration.blocksForDisplay(
+                live: [],
+                restored: restored,
+                limit: 32
+            ) == restored
+        )
+        #expect(
+            TerminalBlockRestoration.blocksForDisplay(
+                live: live,
+                restored: restored,
+                limit: 32
+            ) == live
+        )
+    }
+
+    @Test("restoration keeps the most recent blocks when applying limits")
+    func restorationKeepsMostRecentBlocksWhenApplyingLimits() {
+        let restored = (1...5).map { sampleBlock(id: UInt64($0)) }
+
+        let limited = TerminalBlockRestoration.blocksForDisplay(
+            live: [],
+            restored: restored,
+            limit: 3
+        )
+
+        #expect(limited.map(\.id) == [3, 4, 5])
+    }
+
+    @Test("restoration deduplicates persisted block IDs using the newest record")
+    func restorationDeduplicatesPersistedBlockIDsUsingNewestRecord() {
+        let restored = [
+            sampleBlock(id: 1, command: "echo first"),
+            sampleBlock(id: 2, command: "echo second"),
+            sampleBlock(id: 1, command: "echo newest")
+        ]
+
+        let blocks = TerminalBlockRestoration.blocksForDisplay(
+            live: [],
+            restored: restored,
+            limit: 32
+        )
+
+        #expect(blocks.map(\.id) == [2, 1])
+        #expect(blocks.last?.command == "echo newest")
+        #expect(
+            TerminalBlockRestoration.block(
+                id: 1,
+                live: nil,
+                restored: restored
+            )?.command == "echo newest"
+        )
+    }
+
+    @Test("restoration lookup falls back to persisted blocks")
+    func restorationLookupFallsBackToPersistedBlocks() {
+        let restored = [sampleBlock(id: 10), sampleBlock(id: 11)]
+        let live = sampleBlock(id: 11, command: "echo live")
+
+        #expect(
+            TerminalBlockRestoration.block(
+                id: 11,
+                live: nil,
+                restored: restored
+            )?.id == 11
+        )
+        #expect(
+            TerminalBlockRestoration.block(
+                id: 11,
+                live: live,
+                restored: restored
+            )?.command == "echo live"
+        )
+        #expect(
+            TerminalBlockRestoration.block(
+                id: 99,
+                live: nil,
+                restored: restored
+            ) == nil
+        )
+    }
+
     private func sampleBlock(
         id: UInt64,
         command: String = "echo hi",

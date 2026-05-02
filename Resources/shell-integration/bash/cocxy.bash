@@ -94,6 +94,20 @@ __cocxy_uri_encode_path() {
   builtin printf '%s' "$output"
 }
 
+__cocxy_encode_command_payload() {
+  local input="$1"
+  local encoded="${input//%/%25}"
+
+  encoded="${encoded//$'\r'/%0A}"
+  encoded="${encoded//$'\n'/%0A}"
+  encoded="${encoded//$'\t'/%09}"
+  encoded="${encoded//[$'\x00'-$'\x08']/}"
+  encoded="${encoded//[$'\x0b'-$'\x1f']/}"
+  encoded="${encoded//[$'\x7f']/}"
+
+  builtin printf 'cocxy-percent-v1:%s' "$encoded"
+}
+
 __cocxy_precmd() {
   # Capture $? FIRST so it reports the user's last command exit status,
   # not the success status of any helper we run inside this function.
@@ -130,6 +144,10 @@ __cocxy_preexec() {
 
   local command_text="$1"
   local sanitized_command="${command_text//[$'\x00'-$'\x1f']/}"
+  local encoded_command=""
+  if [[ -n "$command_text" ]]; then
+    encoded_command="$(__cocxy_encode_command_payload "$command_text")"
+  fi
 
   if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$sanitized_command" ]]; then
     builtin printf '\e]2;%s\a' "$sanitized_command"
@@ -146,8 +164,8 @@ __cocxy_preexec() {
   # OSC 133;C marks that the command is actually being executed.
   # Emitted right after ;B so hosts that treat them as a pair (or that
   # prefer ;C over ;B) both see a consistent signal.
-  if [[ -n "$sanitized_command" ]]; then
-    builtin printf '\e]133;C;%s\a' "$sanitized_command"
+  if [[ -n "$encoded_command" ]]; then
+    builtin printf '\e]133;C;%s\a' "$encoded_command"
   else
     builtin printf '\e]133;C\a'
   fi

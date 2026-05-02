@@ -144,6 +144,45 @@ struct CocxyCoreBlockAPISwiftTestingTests {
         #expect(String(cString: try #require(metadata.command)) == "echo swift-payload")
     }
 
+    @Test("vendored CocxyCore decodes encoded multiline OSC 133 command payload metadata")
+    func vendoredCocxyCoreDecodesEncodedMultilineOSC133CommandPayloadMetadata() throws {
+        let terminal = try #require(cocxycore_terminal_create(24, 80))
+        defer { cocxycore_terminal_destroy(terminal) }
+
+        #expect(cocxycore_terminal_enable_semantic(terminal, 8) == true)
+
+        let expectedCommand = "for x in alpha beta; do\n  echo multi-$x\ndone"
+        let sequence = "\u{001B}]133;A\u{0007}" +
+            "\u{001B}]133;B\u{0007}" +
+            "\u{001B}]133;C;cocxy-percent-v1:for x in alpha beta; do%0A  echo multi-$x%0Adone\u{0007}" +
+            "multi-alpha\r\n" +
+            "multi-beta\r\n" +
+            "\u{001B}]133;D;0\u{0007}"
+        let bytes = Array(sequence.utf8)
+        cocxycore_terminal_feed(terminal, bytes, bytes.count)
+
+        let iterator = try #require(cocxycore_block_iterator_create(terminal))
+        defer { cocxycore_block_iterator_destroy(iterator) }
+
+        var outputBlockID: UInt64 = 0
+        while cocxycore_block_iterator_next(iterator) {
+            let blockID = cocxycore_block_iterator_current_id(iterator)
+            var metadata = cocxycore_block_metadata()
+            if cocxycore_block_get_metadata(terminal, blockID, &metadata),
+               metadata.block_type == 2 {
+                outputBlockID = blockID
+                break
+            }
+        }
+
+        #expect(outputBlockID != 0)
+
+        var metadata = cocxycore_block_metadata()
+        #expect(cocxycore_block_get_metadata(terminal, outputBlockID, &metadata) == true)
+        #expect(metadata.command_len == expectedCommand.utf8.count)
+        #expect(String(cString: try #require(metadata.command)) == expectedCommand)
+    }
+
     @Test("vendored CocxyCore exposes CC-5 plugin extension symbols")
     func vendoredCocxyCoreExposesPluginExtensions() throws {
         let terminal = try #require(cocxycore_terminal_create(24, 80))

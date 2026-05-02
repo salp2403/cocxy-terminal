@@ -71,6 +71,10 @@ final class CocxyCoreView: NSView {
     /// hook preserves feature wiring for host-driven actions.
     var outputBufferProvider: (() -> [String])?
 
+    /// Persisted command blocks for a restored tab before CocxyCore has
+    /// produced new live block metadata in the current process.
+    var restoredCommandBlocksProvider: (() -> [TerminalCommandBlock])?
+
     /// IDE-like cursor positioning support for shell prompts.
     private(set) lazy var ideCursorController = IDECursorController(
         hostView: self,
@@ -1074,7 +1078,11 @@ final class CocxyCoreView: NSView {
 
         let scale = currentBackingScale()
         let cellHeight = CGFloat(snapshot.cellHeight) / scale
-        let blocks = bridge.commandBlocks(for: sid, limit: 32)
+        let blocks = TerminalBlockRestoration.blocksForDisplay(
+            live: bridge.commandBlocks(for: sid, limit: 32),
+            restored: restoredCommandBlocksProvider?() ?? [],
+            limit: 32
+        )
         overlay.update(
             blocks: blocks,
             visibleStartRow: snapshot.visibleStartRow,

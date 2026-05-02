@@ -407,6 +407,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// semantic finish event is delivered through more than one path.
     var persistedCommandBlockKeys: Set<String> = []
 
+    /// Persisted command blocks reattached to restored primary surfaces.
+    ///
+    /// CocxyCore owns live block state for the current process. This map
+    /// only fills the reopen gap before the restored terminal produces a
+    /// new live block list.
+    var restoredCommandBlocksBySurfaceID: [SurfaceID: [TerminalCommandBlock]] = [:]
+
     /// Per-tab output buffers keyed by tab ID.
     var tabOutputBuffers: [TabID: TerminalOutputBuffer] = [:]
 

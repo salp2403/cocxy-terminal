@@ -65,3 +65,39 @@ enum TerminalBlockSerializer {
         return try decoder.decode(TerminalCommandBlock.self, from: data)
     }
 }
+
+enum TerminalBlockRestoration {
+    static func blocksForDisplay(
+        live: [TerminalCommandBlock],
+        restored: [TerminalCommandBlock],
+        limit: Int
+    ) -> [TerminalCommandBlock] {
+        guard limit > 0 else { return [] }
+
+        let source = live.isEmpty ? newestRestoredBlocksByID(restored) : live
+        guard source.count > limit else { return source }
+        return Array(source.suffix(limit))
+    }
+
+    static func block(
+        id: UInt64,
+        live: TerminalCommandBlock?,
+        restored: [TerminalCommandBlock]
+    ) -> TerminalCommandBlock? {
+        if let live { return live }
+        return restored.last { $0.id == id }
+    }
+
+    private static func newestRestoredBlocksByID(
+        _ restored: [TerminalCommandBlock]
+    ) -> [TerminalCommandBlock] {
+        var seenIDs = Set<UInt64>()
+        var newestReversed: [TerminalCommandBlock] = []
+
+        for block in restored.reversed() where seenIDs.insert(block.id).inserted {
+            newestReversed.append(block)
+        }
+
+        return newestReversed.reversed()
+    }
+}

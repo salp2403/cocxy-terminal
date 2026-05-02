@@ -47,6 +47,11 @@ extension MainWindowController {
                     in: surfaceView,
                     initialWorkingDirectory: tabManager.tab(for: firstTabID)?.workingDirectory
                 )
+                attachRestoredCommandBlocksIfAvailable(
+                    tabID: firstTabID,
+                    surfaceID: surfaceID,
+                    in: surfaceView
+                )
             }
         } catch {
             NSLog("[MainWindowController] Failed to create terminal surface: %@",
@@ -770,6 +775,52 @@ extension MainWindowController {
         }
     }
 
+    func attachRestoredCommandBlocksIfAvailable(
+        tabID: TabID,
+        surfaceID: SurfaceID,
+        in surfaceView: TerminalHostView
+    ) {
+        let sessionID = sessionIDForTab(tabID).rawValue.uuidString
+        let restored = (try? TerminalBlockStore().load(sessionID: sessionID)) ?? []
+        let blocks = TerminalBlockRestoration.blocksForDisplay(
+            live: [],
+            restored: restored,
+            limit: 32
+        )
+        guard !blocks.isEmpty else { return }
+
+        restoredCommandBlocksBySurfaceID[surfaceID] = blocks
+        guard let coreView = surfaceView as? CocxyCoreView else { return }
+        coreView.restoredCommandBlocksProvider = { [weak self] in
+            self?.restoredCommandBlocksBySurfaceID[surfaceID] ?? []
+        }
+        coreView.refreshCommandBlockOverlay()
+    }
+
+    func availableCommandBlocks(
+        surfaceID: SurfaceID,
+        liveBlocks: [TerminalCommandBlock],
+        limit: UInt32
+    ) -> [TerminalCommandBlock] {
+        TerminalBlockRestoration.blocksForDisplay(
+            live: liveBlocks,
+            restored: restoredCommandBlocksBySurfaceID[surfaceID] ?? [],
+            limit: Int(limit)
+        )
+    }
+
+    func availableCommandBlock(
+        surfaceID: SurfaceID,
+        liveBlock: TerminalCommandBlock?,
+        blockID: UInt64
+    ) -> TerminalCommandBlock? {
+        TerminalBlockRestoration.block(
+            id: blockID,
+            live: liveBlock,
+            restored: restoredCommandBlocksBySurfaceID[surfaceID] ?? []
+        )
+    }
+
     private func persistLatestCommandBlockIfAvailable(tabID: TabID, surfaceID sourceSurfaceID: SurfaceID?) {
         let fallbackSurfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID
         guard let surfaceID = sourceSurfaceID ?? fallbackSurfaceID,
@@ -778,6 +829,7 @@ extension MainWindowController {
             return
         }
 
+        restoredCommandBlocksBySurfaceID.removeValue(forKey: surfaceID)
         (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
 
         let key = "\(surfaceID.rawValue.uuidString)#\(block.id)"

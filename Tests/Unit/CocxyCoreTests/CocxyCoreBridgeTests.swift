@@ -698,8 +698,8 @@ struct CocxyCoreBridgeTests {
         #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == "/Users/test/.config/zsh")
     }
 
-    @Test("shell integration scripts pass command text in OSC 133 C")
-    func shellIntegrationScriptsPassCommandTextInOSC133C() throws {
+    @Test("shell integration scripts encode command text in OSC 133 C")
+    func shellIntegrationScriptsEncodeCommandTextInOSC133C() throws {
         let packageRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -720,6 +720,12 @@ struct CocxyCoreBridgeTests {
 
             #expect(script.contains("133;C;"))
             #expect(script.contains("sanitized_command"))
+            #expect(script.contains("cocxy-percent-v1:"))
+            #expect(script.contains("%0A"))
+            #expect(script.contains("%25"))
+            if path.hasPrefix("zsh/") {
+                #expect(script.contains("//\\%/%25"))
+            }
         }
     }
 
