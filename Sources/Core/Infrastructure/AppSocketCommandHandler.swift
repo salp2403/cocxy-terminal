@@ -375,6 +375,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Returns semantic diagnostics and recent blocks for the focused surface.
     let coreSemanticProvider: (@Sendable (UInt32) -> [String: String]?)?
 
+    /// Returns recent command-scoped blocks for the focused surface.
+    let blockListProvider: (@Sendable (UInt32) -> [String: String]?)?
+
+    /// Copies one command block field to the pasteboard.
+    let blockCopyProvider: (@Sendable (UInt64, String) -> [String: String]?)?
+
+    /// Sends one command block's command back to the focused terminal.
+    let blockRerunProvider: (@Sendable (UInt64) -> [String: String]?)?
+
     /// Returns stored inline images for the focused surface.
     let imageListProvider: (@Sendable () -> [String: String]?)?
 
@@ -471,6 +480,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         coreFontMetricsProvider: (@Sendable () -> [String: String]?)? = nil,
         corePreeditProvider: (@Sendable () -> [String: String]?)? = nil,
         coreSemanticProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
+        blockListProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
+        blockCopyProvider: (@Sendable (UInt64, String) -> [String: String]?)? = nil,
+        blockRerunProvider: (@Sendable (UInt64) -> [String: String]?)? = nil,
         imageListProvider: (@Sendable () -> [String: String]?)? = nil,
         imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         imageClearProvider: (@Sendable () -> [String: String]?)? = nil,
@@ -534,6 +546,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.coreFontMetricsProvider = coreFontMetricsProvider
         self.corePreeditProvider = corePreeditProvider
         self.coreSemanticProvider = coreSemanticProvider
+        self.blockListProvider = blockListProvider
+        self.blockCopyProvider = blockCopyProvider
+        self.blockRerunProvider = blockRerunProvider
         self.imageListProvider = imageListProvider
         self.imageDeleteProvider = imageDeleteProvider
         self.imageClearProvider = imageClearProvider
@@ -1025,6 +1040,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleCorePreedit(request)
         case .coreSemantic:
             return handleCoreSemantic(request)
+        case .blockList:
+            return handleBlockList(request)
+        case .blockCopy:
+            return handleBlockCopy(request)
+        case .blockRerun:
+            return handleBlockRerun(request)
         case .imageList:
             return handleImageList(request)
         case .imageDelete:

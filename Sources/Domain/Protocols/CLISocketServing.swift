@@ -262,6 +262,12 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case corePreedit = "core-preedit"
     /// Return semantic diagnostics and recent blocks for the focused surface.
     case coreSemantic = "core-semantic"
+    /// List recent command blocks for the focused surface.
+    case blockList = "block-list"
+    /// Copy a command block's command, output, or both.
+    case blockCopy = "block-copy"
+    /// Send a command block's command back to the focused terminal.
+    case blockRerun = "block-rerun"
     /// List stored inline images for the focused surface.
     case imageList = "image-list"
     /// Delete a specific inline image from the focused surface.

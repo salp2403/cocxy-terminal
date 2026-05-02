@@ -344,6 +344,15 @@ public enum ParsedCommand: Equatable {
     /// `cocxy core semantic [--limit <n>]`
     case coreSemantic(limit: Int?)
 
+    /// `cocxy block list [--limit <n>]`
+    case blockList(limit: Int?)
+
+    /// `cocxy block copy <id> [--field command|output|both]`
+    case blockCopy(id: UInt64, field: String)
+
+    /// `cocxy block rerun <id>`
+    case blockRerun(id: UInt64)
+
     /// `cocxy image list`
     case imageList
 
@@ -634,6 +643,9 @@ public enum CLIArgumentParser {
 
         case "core":
             return try parseCore(arguments: Array(arguments.dropFirst()))
+
+        case "block", "blocks":
+            return try parseBlock(arguments: Array(arguments.dropFirst()))
 
         case "image":
             return try parseImage(arguments: Array(arguments.dropFirst()))
@@ -1863,6 +1875,94 @@ public enum CLIArgumentParser {
                 command: "core",
                 argument: subcommand,
                 reason: "Unknown subcommand. Use reset, signal, process, modes, search, ligatures, protocol, selection, font, preedit, or semantic."
+            )
+        }
+    }
+
+    // MARK: - Block Parser
+
+    private static func parseBlock(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "block", argument: "list|copy|rerun")
+        }
+
+        switch subcommand {
+        case "list":
+            let rest = Array(arguments.dropFirst())
+            var limit: Int?
+            var index = 0
+            while index < rest.count {
+                switch rest[index] {
+                case "--limit" where index + 1 < rest.count:
+                    guard let parsed = Int(rest[index + 1]), parsed > 0 else {
+                        throw CLIError.invalidArgument(
+                            command: "block list",
+                            argument: rest[index + 1],
+                            reason: "limit must be a positive integer"
+                        )
+                    }
+                    limit = parsed
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "block list",
+                        argument: rest[index],
+                        reason: "unknown option"
+                    )
+                }
+            }
+            return .blockList(limit: limit)
+
+        case "copy":
+            guard arguments.count >= 2, let blockID = UInt64(arguments[1]), blockID > 0 else {
+                throw CLIError.missingArgument(command: "block copy", argument: "id")
+            }
+            let rest = Array(arguments.dropFirst(2))
+            var field = "output"
+            var index = 0
+            while index < rest.count {
+                switch rest[index] {
+                case "--field" where index + 1 < rest.count:
+                    let parsedField = rest[index + 1].lowercased()
+                    guard parsedField == "command"
+                        || parsedField == "output"
+                        || parsedField == "both" else {
+                        throw CLIError.invalidArgument(
+                            command: "block copy",
+                            argument: parsedField,
+                            reason: "field must be command, output, or both"
+                        )
+                    }
+                    field = parsedField
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "block copy",
+                        argument: rest[index],
+                        reason: "unknown option"
+                    )
+                }
+            }
+            return .blockCopy(id: blockID, field: field)
+
+        case "rerun":
+            guard arguments.count >= 2, let blockID = UInt64(arguments[1]), blockID > 0 else {
+                throw CLIError.missingArgument(command: "block rerun", argument: "id")
+            }
+            if arguments.count > 2 {
+                throw CLIError.invalidArgument(
+                    command: "block rerun",
+                    argument: arguments.dropFirst(2).joined(separator: " "),
+                    reason: "unknown option"
+                )
+            }
+            return .blockRerun(id: blockID)
+
+        default:
+            throw CLIError.invalidArgument(
+                command: "block",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list, copy, or rerun."
             )
         }
     }

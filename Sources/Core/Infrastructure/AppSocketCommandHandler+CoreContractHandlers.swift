@@ -183,6 +183,52 @@ extension AppSocketCommandHandler {
         return .ok(id: request.id, data: data)
     }
 
+    func handleBlockList(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = blockListProvider else {
+            return .failure(id: request.id, error: "Command blocks are not available")
+        }
+
+        let requestedLimit = request.params?["limit"].flatMap(UInt32.init) ?? 20
+        let limit = min(max(requestedLimit, 1), 64)
+        guard let data = provider(limit) else {
+            return .failure(id: request.id, error: "Failed to list command blocks")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleBlockCopy(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = blockCopyProvider else {
+            return .failure(id: request.id, error: "Command block copy is not available")
+        }
+        guard let rawID = request.params?["id"], let blockID = UInt64(rawID), blockID > 0 else {
+            return .failure(id: request.id, error: "Missing or invalid block id")
+        }
+
+        let field = request.params?["field"]?.lowercased() ?? "output"
+        guard field == "command" || field == "output" || field == "both" else {
+            return .failure(id: request.id, error: "Invalid block copy field")
+        }
+
+        guard let data = provider(blockID, field) else {
+            return .failure(id: request.id, error: "Command block not found or no active terminal surface")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    func handleBlockRerun(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = blockRerunProvider else {
+            return .failure(id: request.id, error: "Command block rerun is not available")
+        }
+        guard let rawID = request.params?["id"], let blockID = UInt64(rawID), blockID > 0 else {
+            return .failure(id: request.id, error: "Missing or invalid block id")
+        }
+
+        guard let data = provider(blockID) else {
+            return .failure(id: request.id, error: "Command block not found or no active terminal surface")
+        }
+        return .ok(id: request.id, data: data)
+    }
+
     func handleImageList(_ request: SocketRequest) -> SocketResponse {
         guard let provider = imageListProvider else {
             return .failure(id: request.id, error: "Image management is not available")

@@ -251,6 +251,12 @@ public enum OutputFormatter {
         case .coreProcess, .coreModes, .coreSearch, .coreLigatures, .coreProtocol,
              .coreSelection, .coreFontMetrics, .corePreedit, .coreSemantic:
             return formatDataOrJSON(response: response)
+        case .blockList:
+            return formatDataOrJSON(response: response)
+        case .blockCopy(let id, _):
+            return "Block \(response.data?["id"] ?? "\(id)") copied."
+        case .blockRerun(let id):
+            return "Block \(response.data?["id"] ?? "\(id)") sent to terminal."
         case .imageList:
             return formatDataOrJSON(response: response)
         case .imageDelete:
@@ -428,6 +434,18 @@ public enum OutputFormatter {
                 "prompt \(promptBlocks), input \(commandInputBlocks), output \(commandOutputBlocks), error \(errorBlocks), tool \(toolBlocks), agent \(agentBlocks)"
             )
             lines.append(parts.joined(separator: ", "))
+        }
+
+        if let avgPreexec = data["shell_preexec_avg_ns"] {
+            let maxPreexec = data["shell_preexec_max_ns"] ?? "0"
+            let warnings = data["shell_preexec_warnings"] ?? "0"
+            let retries = data["shell_osc7_retries"] ?? "0"
+            let p10k = data["shell_detected_p10k"] ?? "false"
+            let tmux = data["shell_detected_tmux"] ?? "false"
+            let screen = data["shell_detected_screen"] ?? "false"
+            lines.append(
+                "Shell integration: preexec avg \(avgPreexec)ns, max \(maxPreexec)ns, warnings \(warnings), stale cwd retries \(retries), p10k \(boolText(p10k)), tmux \(boolText(tmux)), screen \(boolText(screen))"
+            )
         }
 
         if let ligatures = data["ligatures_enabled"] {

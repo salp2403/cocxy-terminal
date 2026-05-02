@@ -737,6 +737,24 @@ public struct CommandRunner {
             let params = limit.map { ["limit": "\($0)"] }
             return CLISocketRequest(id: requestID, command: "core-semantic", params: params)
 
+        case .blockList(let limit):
+            let params = limit.map { ["limit": "\($0)"] }
+            return CLISocketRequest(id: requestID, command: "block-list", params: params)
+
+        case .blockCopy(let id, let field):
+            return CLISocketRequest(
+                id: requestID,
+                command: "block-copy",
+                params: ["id": "\(id)", "field": field]
+            )
+
+        case .blockRerun(let id):
+            return CLISocketRequest(
+                id: requestID,
+                command: "block-rerun",
+                params: ["id": "\(id)"]
+            )
+
         case .imageList:
             return CLISocketRequest(id: requestID, command: "image-list", params: nil)
 

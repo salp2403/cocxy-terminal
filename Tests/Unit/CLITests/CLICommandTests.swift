@@ -275,6 +275,21 @@ final class CLIArgumentParserTests: XCTestCase {
         XCTAssertEqual(result, .coreSemantic(limit: 7))
     }
 
+    func testBlockListParsesLimit() throws {
+        let result = try CLIArgumentParser.parse(["block", "list", "--limit", "5"])
+        XCTAssertEqual(result, .blockList(limit: 5))
+    }
+
+    func testBlockCopyParsesField() throws {
+        let result = try CLIArgumentParser.parse(["block", "copy", "42", "--field", "both"])
+        XCTAssertEqual(result, .blockCopy(id: 42, field: "both"))
+    }
+
+    func testBlockRerunParsesID() throws {
+        let result = try CLIArgumentParser.parse(["block", "rerun", "42"])
+        XCTAssertEqual(result, .blockRerun(id: 42))
+    }
+
     // MARK: - 11. Unknown command
 
     func testUnknownCommandThrowsError() {
@@ -637,6 +652,25 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.command, "core-semantic")
         XCTAssertEqual(request.params?["limit"], "6")
     }
+
+    func testBuildBlockListRequest() {
+        let request = runner.buildRequest(from: .blockList(limit: 6))
+        XCTAssertEqual(request.command, "block-list")
+        XCTAssertEqual(request.params?["limit"], "6")
+    }
+
+    func testBuildBlockCopyRequest() {
+        let request = runner.buildRequest(from: .blockCopy(id: 42, field: "command"))
+        XCTAssertEqual(request.command, "block-copy")
+        XCTAssertEqual(request.params?["id"], "42")
+        XCTAssertEqual(request.params?["field"], "command")
+    }
+
+    func testBuildBlockRerunRequest() {
+        let request = runner.buildRequest(from: .blockRerun(id: 42))
+        XCTAssertEqual(request.command, "block-rerun")
+        XCTAssertEqual(request.params?["id"], "42")
+    }
 }
 
 // MARK: - Output Formatter Tests
@@ -788,6 +822,13 @@ final class OutputFormatterTests: XCTestCase {
                 "semantic_error_blocks": "1",
                 "semantic_tool_blocks": "4",
                 "semantic_agent_blocks": "2",
+                "shell_preexec_avg_ns": "120000000",
+                "shell_preexec_max_ns": "180000000",
+                "shell_preexec_warnings": "1",
+                "shell_osc7_retries": "2",
+                "shell_detected_p10k": "true",
+                "shell_detected_tmux": "true",
+                "shell_detected_screen": "true",
                 "ligatures_enabled": "true",
                 "ligature_cache_hits": "12",
                 "ligature_cache_misses": "2",
@@ -818,6 +859,7 @@ final class OutputFormatterTests: XCTestCase {
         XCTAssertTrue(output.contains("Font: cell 8.50x17.00, ascent 12.20, descent 3.10, leading 1.70"))
         XCTAssertTrue(output.contains("Selection: on (10:2 -> 10:7, 5 bytes)"))
         XCTAssertTrue(output.contains("Semantic: state command_running, current command_output, prompt 3, input 2, output 5, error 1, tool 4, agent 2"))
+        XCTAssertTrue(output.contains("Shell integration: preexec avg 120000000ns, max 180000000ns, warnings 1, stale cwd retries 2, p10k on, tmux on, screen on"))
         XCTAssertTrue(output.contains("Ligatures: on (hits 12, misses 2)"))
         XCTAssertTrue(output.contains("Images: 4 loaded (8/256 MiB, sixel on, kitty on)"))
         XCTAssertTrue(output.contains("Image atlas: 1024x1024 gen 7, dirty off"))
@@ -893,6 +935,39 @@ final class OutputFormatterTests: XCTestCase {
         )
         XCTAssertTrue(output.contains("\"count\""))
         XCTAssertTrue(output.contains("\"image_0_id\""))
+    }
+
+    func testFormatBlockListSuccessFallsBackToStructuredData() {
+        let response = CLISocketResponse(
+            id: "r-block-list",
+            success: true,
+            data: ["content": "{\"count\":1,\"blocks\":[{\"id\":42,\"command\":\"echo hi\"}]}"],
+            error: nil
+        )
+        let output = OutputFormatter.formatSuccess(
+            command: .blockList(limit: 5),
+            response: response
+        )
+        XCTAssertTrue(output.contains("\"blocks\""))
+        XCTAssertTrue(output.contains("\"command\""))
+    }
+
+    func testFormatBlockCopyAndRerunSuccess() {
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(
+                command: .blockCopy(id: 42, field: "output"),
+                response: CLISocketResponse(id: "r-copy", success: true, data: ["id": "42"], error: nil)
+            ),
+            "Block 42 copied."
+        )
+
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(
+                command: .blockRerun(id: 42),
+                response: CLISocketResponse(id: "r-rerun", success: true, data: ["id": "42"], error: nil)
+            ),
+            "Block 42 sent to terminal."
+        )
     }
 
     // MARK: - 30. List-tabs formatting with no data

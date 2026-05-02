@@ -39,6 +39,8 @@ struct TerminalImageDiagnostics: Equatable, Sendable {
     let fileTransferEnabled: Bool
     let sixelEnabled: Bool
     let kittyEnabled: Bool
+    let iterm2Enabled: Bool
+    let diskCacheBytes: UInt64
     let atlasWidth: UInt32
     let atlasHeight: UInt32
     let atlasGeneration: UInt32
@@ -52,6 +54,7 @@ struct TerminalImageSnapshot: Equatable, Sendable {
     let byteSize: UInt32
     let source: UInt8
     let placementCount: UInt16
+    let altText: String
 }
 
 struct TerminalSearchDiagnostics: Equatable, Sendable, Encodable {
@@ -93,6 +96,14 @@ struct TerminalFontMetricsSnapshot: Equatable, Sendable, Encodable {
     let strikethroughPosition: Float
 }
 
+struct TerminalViewportSnapshot: Equatable, Sendable, Encodable {
+    let visibleStartRow: UInt32
+    let visibleRowCount: UInt16
+    let cellWidth: Float
+    let cellHeight: Float
+    let isAltScreen: Bool
+}
+
 struct TerminalSelectionSnapshot: Equatable, Sendable, Encodable {
     let active: Bool
     let startRow: UInt32?
@@ -120,6 +131,16 @@ struct TerminalSemanticDiagnostics: Equatable, Sendable, Encodable {
     let errorBlockCount: UInt32
     let toolBlockCount: UInt32
     let agentBlockCount: UInt32
+}
+
+struct TerminalShellDiagnostics: Equatable, Sendable, Encodable {
+    let avgPreexecLatencyNs: UInt64
+    let maxPreexecLatencyNs: UInt64
+    let preexecWarningCount: UInt32
+    let osc7RetryCount: UInt32
+    let detectedP10K: Bool
+    let detectedTmux: Bool
+    let detectedScreen: Bool
 }
 
 struct TerminalSemanticBlockSnapshot: Equatable, Sendable, Encodable {
@@ -294,8 +315,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
     // MARK: - Constants
 
-    /// PTY read buffer size (64 KB — large enough to avoid frequent reads).
-    private static let readBufferSize = 65536
+    /// PTY read buffer size (256 KB — reduces callback overhead during
+    /// sustained output while keeping interactive reads responsive).
+    private static let readBufferSize = 262144
 
     /// DSR/DECRQSS response buffer size.
     private static let responseBufferSize = 256
@@ -1138,6 +1160,8 @@ final class CocxyCoreBridge: TerminalEngine {
             fileTransferEnabled: state.configuredImageFileTransferEnabled,
             sixelEnabled: cocxycore_image_sixel_enabled(state.terminal),
             kittyEnabled: cocxycore_image_kitty_enabled(state.terminal),
+            iterm2Enabled: cocxycore_image_iterm2_enabled(state.terminal),
+            diskCacheBytes: UInt64(cocxycore_image_cache_disk_size_bytes(state.terminal)),
             atlasWidth: hasAtlasInfo ? atlasInfo.width : 0,
             atlasHeight: hasAtlasInfo ? atlasInfo.height : 0,
             atlasGeneration: hasAtlasInfo ? atlasInfo.generation : 0,
@@ -1155,6 +1179,17 @@ final class CocxyCoreBridge: TerminalEngine {
         for index in 0..<count {
             var info = cocxycore_image_info()
             guard cocxycore_image_get_info_at(state.terminal, index, &info) else { continue }
+            var altBuffer = [CChar](repeating: 0, count: 513)
+            let requiredAltBytes = cocxycore_image_get_alt_text(
+                state.terminal,
+                info.image_id,
+                &altBuffer,
+                altBuffer.count - 1
+            )
+            let copiedAltBytes = min(Int(requiredAltBytes), altBuffer.count - 1)
+            let altText = copiedAltBytes > 0
+                ? String(decoding: altBuffer.prefix(copiedAltBytes).map { UInt8(bitPattern: $0) }, as: UTF8.self)
+                : ""
             snapshots.append(
                 TerminalImageSnapshot(
                     imageID: info.image_id,
@@ -1162,7 +1197,8 @@ final class CocxyCoreBridge: TerminalEngine {
                     height: info.height,
                     byteSize: info.byte_size,
                     source: info.source,
-                    placementCount: info.placement_count
+                    placementCount: info.placement_count,
+                    altText: altText
                 )
             )
         }
@@ -1210,6 +1246,7 @@ final class CocxyCoreBridge: TerminalEngine {
             cocxycore_image_set_file_transfer(lockedState.terminal, fileTransferEnabled)
             cocxycore_image_enable_sixel(lockedState.terminal, sixelEnabled)
             cocxycore_image_enable_kitty(lockedState.terminal, kittyEnabled)
+            _ = cocxycore_image_iterm2_enable(lockedState.terminal, false)
             if let webState = lockedState.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -1295,6 +1332,25 @@ final class CocxyCoreBridge: TerminalEngine {
                 underlinePosition: metrics.underline_position,
                 underlineThickness: metrics.underline_thickness,
                 strikethroughPosition: metrics.strikethrough_position
+            )
+        } ?? nil
+    }
+
+    func terminalViewportSnapshot(for surface: SurfaceID) -> TerminalViewportSnapshot? {
+        withTerminalLock(surface) { state -> TerminalViewportSnapshot? in
+            var metrics = cocxycore_font_metrics()
+            guard cocxycore_terminal_get_font_metrics(state.terminal, &metrics),
+                  metrics.cell_width > 0,
+                  metrics.cell_height > 0 else {
+                return nil
+            }
+
+            return TerminalViewportSnapshot(
+                visibleStartRow: cocxycore_terminal_history_visible_start(state.terminal),
+                visibleRowCount: cocxycore_terminal_rows(state.terminal),
+                cellWidth: metrics.cell_width,
+                cellHeight: metrics.cell_height,
+                isAltScreen: cocxycore_terminal_is_alt_screen(state.terminal)
             )
         } ?? nil
     }
@@ -1401,6 +1457,24 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    func shellDiagnostics(for surface: SurfaceID) -> TerminalShellDiagnostics? {
+        withTerminalLock(surface) { state -> TerminalShellDiagnostics? in
+            var diagnostics = cocxycore_shell_diagnostics()
+            guard cocxycore_shell_get_diagnostics(state.terminal, &diagnostics) else {
+                return nil
+            }
+            return TerminalShellDiagnostics(
+                avgPreexecLatencyNs: diagnostics.avg_preexec_latency_ns,
+                maxPreexecLatencyNs: diagnostics.max_preexec_latency_ns,
+                preexecWarningCount: diagnostics.preexec_warning_count,
+                osc7RetryCount: diagnostics.osc7_retry_count,
+                detectedP10K: diagnostics.detected_p10k,
+                detectedTmux: diagnostics.detected_tmux,
+                detectedScreen: diagnostics.detected_screen
+            )
+        } ?? nil
+    }
+
     func semanticBlocks(for surface: SurfaceID, limit: UInt32) -> [TerminalSemanticBlockSnapshot] {
         withTerminalLock(surface) { state in
             let blockCount = cocxycore_terminal_semantic_block_count(state.terminal)
@@ -1428,6 +1502,131 @@ final class CocxyCoreBridge: TerminalEngine {
                 )
             }
         } ?? []
+    }
+
+    func commandBlocks(for surface: SurfaceID, limit: UInt32) -> [TerminalCommandBlock] {
+        withTerminalLock(surface) { state in
+            guard limit > 0, let iterator = cocxycore_block_iterator_create(state.terminal) else {
+                return []
+            }
+            defer { cocxycore_block_iterator_destroy(iterator) }
+
+            var blocks: [TerminalCommandBlock] = []
+            while cocxycore_block_iterator_next(iterator) {
+                let blockID = cocxycore_block_iterator_current_id(iterator)
+                guard blockID != 0 else { continue }
+                guard let block = Self.commandBlock(from: state.terminal, blockID: blockID) else { continue }
+                blocks.append(block)
+            }
+
+            let maxCount = Int(limit)
+            return blocks.count > maxCount ? Array(blocks.suffix(maxCount)) : blocks
+        } ?? []
+    }
+
+    func commandBlock(for surface: SurfaceID, blockID: UInt64) -> TerminalCommandBlock? {
+        let block: TerminalCommandBlock?? = withTerminalLock(surface) { state in
+            Self.commandBlock(from: state.terminal, blockID: blockID)
+        }
+        return block ?? nil
+    }
+
+    func latestCommandBlockOutputs(
+        for surface: SurfaceID,
+        limit: UInt32,
+        stripANSI: Bool = true
+    ) -> String {
+        guard limit > 0 else { return "" }
+        return withTerminalLock(surface) { state in
+            Self.latestBlockOutputs(
+                from: state.terminal,
+                limit: min(limit, 64),
+                stripANSI: stripANSI
+            )
+        } ?? ""
+    }
+
+    private static func commandBlock(from terminal: OpaquePointer, blockID: UInt64) -> TerminalCommandBlock? {
+        var metadata = cocxycore_block_metadata()
+        guard cocxycore_block_get_metadata(terminal, blockID, &metadata) else {
+            return nil
+        }
+
+        let blockType = metadata.block_type
+        let isCommandBlock = blockType == UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue)
+            || blockType == UInt8(COCXYCORE_BLOCK_ERROR_OUTPUT.rawValue)
+        guard isCommandBlock else { return nil }
+
+        return TerminalCommandBlock(
+            id: metadata.id,
+            command: string(from: metadata.command, length: metadata.command_len),
+            output: blockOutput(from: terminal, blockID: blockID),
+            exitCode: metadata.exit_code >= 0 ? metadata.exit_code : nil,
+            pwd: optionalString(from: metadata.pwd, length: metadata.pwd_len),
+            startTimeNs: metadata.start_time_ns,
+            endTimeNs: metadata.end_time_ns,
+            durationNs: metadata.duration_ns,
+            startRow: metadata.start_row,
+            endRow: metadata.end_row,
+            streamID: metadata.stream_id,
+            blockType: blockType
+        )
+    }
+
+    private static func optionalString(from pointer: UnsafePointer<CChar>?, length: Int) -> String? {
+        guard length > 0 else { return nil }
+        return string(from: pointer, length: length)
+    }
+
+    private static func string(from pointer: UnsafePointer<CChar>?, length: Int) -> String {
+        guard let pointer, length > 0 else { return "" }
+        let buffer = UnsafeBufferPointer(start: pointer, count: length)
+        return String(decoding: buffer.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
+    private static func blockOutput(from terminal: OpaquePointer, blockID: UInt64) -> String {
+        let required = cocxycore_block_get_output(terminal, blockID, nil, 0, true)
+        guard required > 0 else { return "" }
+
+        var buffer = [CChar](repeating: 0, count: required)
+        let copied = cocxycore_block_get_output(
+            terminal,
+            blockID,
+            &buffer,
+            buffer.count,
+            true
+        )
+        return string(from: buffer, count: copied)
+    }
+
+    private static func latestBlockOutputs(
+        from terminal: OpaquePointer,
+        limit: UInt32,
+        stripANSI: Bool
+    ) -> String {
+        let required = cocxycore_get_last_n_block_outputs(
+            terminal,
+            Int(limit),
+            nil,
+            0,
+            stripANSI
+        )
+        guard required > 0 else { return "" }
+
+        var buffer = [CChar](repeating: 0, count: required)
+        let copied = cocxycore_get_last_n_block_outputs(
+            terminal,
+            Int(limit),
+            &buffer,
+            buffer.count,
+            stripANSI
+        )
+        return string(from: buffer, count: copied)
+    }
+
+    private static func string(from buffer: [CChar], count: Int) -> String {
+        guard count > 0 else { return "" }
+        return String(decoding: buffer.prefix(count).map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
     @discardableResult
@@ -1943,6 +2142,7 @@ final class CocxyCoreBridge: TerminalEngine {
         cocxycore_image_set_file_transfer(terminal, config.imageFileTransferEnabled)
         cocxycore_image_enable_sixel(terminal, config.sixelImagesEnabled)
         cocxycore_image_enable_kitty(terminal, config.kittyImagesEnabled)
+        _ = cocxycore_image_iterm2_enable(terminal, false)
 
         // Theme (if palette provided)
         if let palette = config.themePalette {

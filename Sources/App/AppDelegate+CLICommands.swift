@@ -34,6 +34,29 @@ extension AppDelegate {
         let recentBlocks: [SemanticBlockPayload]
     }
 
+    private struct CommandBlockPayload: Encodable {
+        let id: UInt64
+        let command: String
+        let outputPreview: String
+        let outputBytes: Int
+        let outputTruncated: Bool
+        let exitCode: Int32?
+        let pwd: String?
+        let startTimeNs: UInt64
+        let endTimeNs: UInt64
+        let durationNs: UInt64
+        let startRow: UInt32
+        let endRow: UInt32
+        let streamID: UInt32
+        let blockType: UInt8
+        let blockTypeName: String
+    }
+
+    private struct CommandBlockListPayload: Encodable {
+        let count: Int
+        let blocks: [CommandBlockPayload]
+    }
+
     @MainActor
     private func activeTerminalSurfaceForCLI() -> (controller: MainWindowController, surfaceID: SurfaceID)? {
         guard let controller = focusedWindowController() ?? windowController else { return nil }
@@ -126,6 +149,16 @@ extension AppDelegate {
             data["semantic_error_blocks"] = "\(semantic.errorBlockCount)"
             data["semantic_tool_blocks"] = "\(semantic.toolBlockCount)"
             data["semantic_agent_blocks"] = "\(semantic.agentBlockCount)"
+        }
+
+        if let shell = cocxyBridge.shellDiagnostics(for: surfaceID) {
+            data["shell_preexec_avg_ns"] = "\(shell.avgPreexecLatencyNs)"
+            data["shell_preexec_max_ns"] = "\(shell.maxPreexecLatencyNs)"
+            data["shell_preexec_warnings"] = "\(shell.preexecWarningCount)"
+            data["shell_osc7_retries"] = "\(shell.osc7RetryCount)"
+            data["shell_detected_p10k"] = shell.detectedP10K ? "true" : "false"
+            data["shell_detected_tmux"] = shell.detectedTmux ? "true" : "false"
+            data["shell_detected_screen"] = shell.detectedScreen ? "true" : "false"
         }
 
         if let ligatures = cocxyBridge.ligatureDiagnostics(for: surfaceID) {
@@ -400,6 +433,84 @@ extension AppDelegate {
     }
 
     @MainActor
+    func commandBlocksForCLI(limit: UInt32) -> [String: String]? {
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        let blocks = cocxyBridge.commandBlocks(for: surfaceID, limit: limit)
+        let payload = CommandBlockListPayload(
+            count: blocks.count,
+            blocks: blocks.map(commandBlockPayload)
+        )
+        guard let content = encodeCLIJSON(payload) else { return nil }
+        return ["content": content]
+    }
+
+    @MainActor
+    func copyCommandBlockForCLI(blockID: UInt64, field: String) -> [String: String]? {
+        guard let block = commandBlockForCLI(blockID: blockID) else {
+            return nil
+        }
+
+        let text: String
+        switch field {
+        case "command":
+            text = block.command
+        case "both":
+            text = "\(block.command)\n\n\(block.output)"
+        default:
+            text = block.output
+        }
+
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(text, forType: .string) else {
+            return nil
+        }
+
+        return [
+            "status": "copied",
+            "id": "\(block.id)",
+            "field": field,
+            "bytes": "\(text.utf8.count)"
+        ]
+    }
+
+    @MainActor
+    func rerunCommandBlockForCLI(blockID: UInt64) -> [String: String]? {
+        guard let block = commandBlockForCLI(blockID: blockID) else {
+            return nil
+        }
+
+        let command = block.command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty,
+              let (controller, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+
+        controller.terminalEngine(for: surfaceID).sendText(command + "\r", to: surfaceID)
+        var data: [String: String] = [
+            "status": "sent",
+            "id": "\(block.id)",
+            "command": command
+        ]
+        if let pwd = block.pwd {
+            data["pwd"] = pwd
+        }
+        return data
+    }
+
+    @MainActor
+    private func commandBlockForCLI(blockID: UInt64) -> TerminalCommandBlock? {
+        guard let cocxyBridge = bridge?.cocxyCoreBridge,
+              let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
+            return nil
+        }
+        return cocxyBridge.commandBlock(for: surfaceID, blockID: blockID)
+    }
+
+    @MainActor
     func setCurrentStreamForCLI(_ streamID: UInt32) -> [String: String]? {
         guard let cocxyBridge = bridge?.cocxyCoreBridge,
               let (_, surfaceID) = activeTerminalSurfaceForCLI() else {
@@ -530,6 +641,27 @@ extension AppDelegate {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(value) else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    private func commandBlockPayload(_ block: TerminalCommandBlock) -> CommandBlockPayload {
+        let previewLimit = 160
+        return CommandBlockPayload(
+            id: block.id,
+            command: block.command,
+            outputPreview: String(block.output.prefix(previewLimit)),
+            outputBytes: block.output.utf8.count,
+            outputTruncated: block.output.count > previewLimit,
+            exitCode: block.exitCode,
+            pwd: block.pwd,
+            startTimeNs: block.startTimeNs,
+            endTimeNs: block.endTimeNs,
+            durationNs: block.durationNs,
+            startRow: block.startRow,
+            endRow: block.endRow,
+            streamID: block.streamID,
+            blockType: block.blockType,
+            blockTypeName: semanticBlockTypeName(block.blockType)
+        )
     }
 
     private func formattedFloat(_ value: Float) -> String {

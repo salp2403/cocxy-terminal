@@ -59,7 +59,7 @@ struct CocxyCorePerformanceBenchmarks {
         let warmup = "__COCXYCORE_WARMUP__"
         bridge.sendText("\(warmup)\n", to: surfaceID)
         try await waitUntil {
-            recorder.output.contains(warmup)
+            recorder.contains(warmup)
         }
 
         let marker = "__COCXYCORE_ECHO__\(UUID().uuidString)"
@@ -67,7 +67,7 @@ struct CocxyCorePerformanceBenchmarks {
         bridge.sendText("\(marker)\n", to: surfaceID)
 
         try await waitUntil(pollNanoseconds: 1_000_000) {
-            recorder.output.contains(marker)
+            recorder.contains(marker)
         }
 
         let latency = secondsSince(startedAt)
@@ -126,7 +126,7 @@ struct CocxyCorePerformanceBenchmarks {
         }
 
         try await waitUntil(timeoutNanoseconds: 5_000_000_000, pollNanoseconds: 1_000_000) {
-            recorder.output.contains("READY")
+            recorder.contains("READY")
         }
         recorder.reset()
 
@@ -134,7 +134,7 @@ struct CocxyCorePerformanceBenchmarks {
         bridge.sendText("go\n", to: surfaceID)
 
         try await waitUntil(timeoutNanoseconds: 8_000_000_000, pollNanoseconds: 1_000_000) {
-            recorder.output.contains("__COCXYCORE_THROUGHPUT_DONE__")
+            recorder.contains("__COCXYCORE_THROUGHPUT_DONE__")
         }
 
         let elapsed = secondsSince(startedAt)
@@ -304,21 +304,38 @@ private func currentResidentSize() -> UInt64 {
 }
 
 private final class OutputRecorder: @unchecked Sendable {
+    private static let retainedOutputLimit = 256 * 1024
+
     private let lock = NSLock()
-    private(set) var output = ""
+    private var outputTail = Data()
     private(set) var byteCount = 0
+
+    var output: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return String(decoding: outputTail, as: UTF8.self)
+    }
 
     func append(_ data: Data) {
         lock.lock()
         defer { lock.unlock() }
-        output.append(String(decoding: data, as: UTF8.self))
+        outputTail.append(data)
+        if outputTail.count > Self.retainedOutputLimit {
+            outputTail.removeFirst(outputTail.count - Self.retainedOutputLimit)
+        }
         byteCount += data.count
+    }
+
+    func contains(_ marker: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return outputTail.range(of: Data(marker.utf8)) != nil
     }
 
     func reset() {
         lock.lock()
         defer { lock.unlock() }
-        output = ""
+        outputTail.removeAll(keepingCapacity: true)
         byteCount = 0
     }
 }

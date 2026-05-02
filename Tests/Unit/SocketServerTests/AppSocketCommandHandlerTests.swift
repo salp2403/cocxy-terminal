@@ -210,6 +210,101 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["summary"], "Review changes requested for PR #42.")
     }
 
+    func test_blockList_routesToBlockProviderWithClampedLimit() {
+        let capturedLimit = LockedBox<UInt32?>(nil)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            blockListProvider: { limit in
+                capturedLimit.withValue { value in
+                    value = limit
+                }
+                return ["content": "{\"count\":0,\"blocks\":[]}"]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "block-list-1",
+            command: "block-list",
+            params: ["limit": "500"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(capturedLimit.withValue { $0 }, 64)
+        XCTAssertEqual(response.data?["content"], "{\"count\":0,\"blocks\":[]}")
+    }
+
+    func test_blockCopy_routesToBlockProvider() {
+        let captured = LockedBox<(id: UInt64?, field: String?)>((nil, nil))
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            blockCopyProvider: { id, field in
+                captured.withValue { value in
+                    value = (id, field)
+                }
+                return ["status": "copied", "id": "\(id)", "field": field]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "block-copy-1",
+            command: "block-copy",
+            params: ["id": "42", "field": "command"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(captured.withValue { $0.id }, 42)
+        XCTAssertEqual(captured.withValue { $0.field }, "command")
+        XCTAssertEqual(response.data?["status"], "copied")
+    }
+
+    func test_blockRerun_routesToBlockProvider() {
+        let capturedID = LockedBox<UInt64?>(nil)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            blockRerunProvider: { id in
+                capturedID.withValue { value in
+                    value = id
+                }
+                return ["status": "sent", "id": "\(id)"]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "block-rerun-1",
+            command: "block-rerun",
+            params: ["id": "42"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(capturedID.withValue { $0 }, 42)
+        XCTAssertEqual(response.data?["status"], "sent")
+    }
+
+    func test_blockCopyRejectsInvalidFieldBeforeProvider() {
+        let called = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            blockCopyProvider: { _, _ in
+                called.withValue { $0 = true }
+                return ["status": "copied"]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "block-copy-invalid-1",
+            command: "block-copy",
+            params: ["id": "42", "field": "env"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertFalse(called.withValue { $0 })
+        XCTAssertTrue(response.error?.contains("field") == true)
+    }
+
     // MARK: - Group 1: Tab Operations
 
     // MARK: focus-tab

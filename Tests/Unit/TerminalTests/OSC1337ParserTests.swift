@@ -76,6 +76,16 @@ final class OSC1337ParserTests: XCTestCase {
         let result = OSC1337Parser.parse(payload)
 
         XCTAssertEqual(result?.filename, "photo.png")
+        XCTAssertEqual(result?.altText, "photo.png")
+    }
+
+    func testParsesAltText() {
+        let tinyPNG = createTinyPNGBase64()
+        let payload = "File=alt=red-dot;inline=1:\(tinyPNG)"
+
+        let result = OSC1337Parser.parse(payload)
+
+        XCTAssertEqual(result?.altText, "red-dot")
     }
 
     func testNonInlineImageHasInlineFalse() {

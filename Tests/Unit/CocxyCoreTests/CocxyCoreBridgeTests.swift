@@ -338,6 +338,7 @@ struct CocxyCoreBridgeTests {
         #expect(diagnostics.fileTransferEnabled == true)
         #expect(diagnostics.sixelEnabled == false)
         #expect(diagnostics.kittyEnabled == true)
+        #expect(diagnostics.iterm2Enabled == false)
     }
 
     @Test("image snapshots enumerate live image metadata in a stable order")
@@ -349,12 +350,15 @@ struct CocxyCoreBridgeTests {
 
         feed("\u{1B}_Ga=T,f=32,s=1,v=1,i=7;/wAA/w==\u{1B}\\", to: state.terminal)
         feed("\u{1B}_Ga=T,f=32,s=1,v=1,i=11;AP8A/w==\u{1B}\\", to: state.terminal)
+        #expect(cocxycore_image_set_alt_text(state.terminal, 7, "red dot") == true)
 
         try await waitUntil {
             bridge.imageSnapshots(for: surfaceID).count == 2
         }
 
-        #expect(bridge.imageSnapshots(for: surfaceID).map(\.imageID) == [7, 11])
+        let snapshots = bridge.imageSnapshots(for: surfaceID)
+        #expect(snapshots.map(\.imageID) == [7, 11])
+        #expect(snapshots.first?.altText == "red dot")
     }
 
     @Test("deleteImage removes a specific inline image")
@@ -444,6 +448,24 @@ struct CocxyCoreBridgeTests {
         #expect(font.cellHeight > 0)
     }
 
+    @Test("terminal viewport snapshot exposes row mapping and font metrics atomically")
+    func terminalViewportSnapshotExposesRowMapping() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(numberedLines(40), to: state.terminal)
+
+        let snapshot = try #require(bridge.terminalViewportSnapshot(for: surfaceID))
+        #expect(snapshot.visibleStartRow == cocxycore_terminal_history_visible_start(state.terminal))
+        #expect(snapshot.visibleRowCount == cocxycore_terminal_rows(state.terminal))
+        #expect(snapshot.cellWidth > 0)
+        #expect(snapshot.cellHeight > 0)
+        #expect(snapshot.isAltScreen == false)
+        #expect(bridge.terminalViewportSnapshot(for: SurfaceID()) == nil)
+    }
+
     @Test("preedit snapshot exposes text, cursor, and anchor")
     func preeditSnapshotExposesTextCursorAndAnchor() throws {
         let bridge = try makeBridge()
@@ -467,6 +489,26 @@ struct CocxyCoreBridgeTests {
         let diagnostics = try #require(bridge.semanticDiagnostics(for: surfaceID))
         #expect(diagnostics.totalBlockCount == 0)
         #expect(bridge.semanticBlocks(for: surfaceID, limit: 5).isEmpty)
+    }
+
+    @Test("shell diagnostics expose CocxyCore timing and multiplexer state")
+    func shellDiagnosticsExposeCoreState() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        cocxycore_shell_set_preexec_warning_threshold_ns(state.terminal, 1)
+        feed("\u{1B}]133;B\u{07}", to: state.terminal)
+        Thread.sleep(forTimeInterval: 0.001)
+        feed("\u{1B}]133;C\u{07}", to: state.terminal)
+        feed("\u{1B}Pp\u{1B}]133;A\u{07}\u{1B}\\", to: state.terminal)
+
+        let diagnostics = try #require(bridge.shellDiagnostics(for: surfaceID))
+        #expect(diagnostics.avgPreexecLatencyNs > 0)
+        #expect(diagnostics.maxPreexecLatencyNs >= diagnostics.avgPreexecLatencyNs)
+        #expect(diagnostics.preexecWarningCount == 1)
+        #expect(diagnostics.detectedScreen == true)
     }
 
     @Test("native agent patterns are registered into CocxyCore semantics")
@@ -570,6 +612,65 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.parseWorkingDirectoryURL("file://localhost/Users/test/project")?.path == "/Users/test/project")
         #expect(bridge.parseWorkingDirectoryURL("file:///Users/test/My%20Project")?.path == "/Users/test/My Project")
         #expect(bridge.parseWorkingDirectoryURL("/Users/test/project")?.path == "/Users/test/project")
+    }
+
+    @Test("commandBlocks maps CocxyCore block metadata and output")
+    func commandBlocksMapsCocxyCoreMetadataAndOutput() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(
+            "\u{1B}]7;file://localhost/Users/dev/My%20Project\u{7}" +
+            "\u{1B}]133;A\u{7}" +
+            "$ " +
+            "\u{1B}]133;B\u{7}" +
+            "echo hello\r\n" +
+            "\u{1B}]133;C\u{7}" +
+            "hello\r\n" +
+            "\u{1B}]133;D;0\u{7}",
+            to: state.terminal
+        )
+
+        let blocks = bridge.commandBlocks(for: surfaceID, limit: 10)
+
+        #expect(blocks.count == 1)
+        let block = try #require(blocks.first)
+        #expect(block.command == "echo hello")
+        #expect(block.output == "hello")
+        #expect(block.exitCode == 0)
+        #expect(block.pwd == "/Users/dev/My Project")
+        #expect(block.durationNs > 0)
+        #expect(block.blockType == UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue))
+
+        let lookup = try #require(bridge.commandBlock(for: surfaceID, blockID: block.id))
+        #expect(lookup == block)
+        #expect(bridge.commandBlock(for: surfaceID, blockID: block.id + 1) == nil)
+    }
+
+    @Test("latestCommandBlockOutputs exposes clean chronological context")
+    func latestCommandBlockOutputsExposesCleanChronologicalContext() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        for index in 0..<4 {
+            feed(
+                "\u{1B}]133;A\u{7}" +
+                "\u{1B}]133;C\u{7}" +
+                "\u{1B}[32mline-\(index)\u{1B}[0m\r\n" +
+                "\u{1B}]133;D;0\u{7}",
+                to: state.terminal
+            )
+        }
+
+        let output = bridge.latestCommandBlockOutputs(for: surfaceID, limit: 3)
+
+        #expect(output == "line-1\nline-2\nline-3")
+        #expect(bridge.latestCommandBlockOutputs(for: surfaceID, limit: 0) == "")
+        #expect(bridge.latestCommandBlockOutputs(for: SurfaceID(), limit: 3) == "")
     }
 
     @Test("shell integration env injects zsh wrapper when resources are available")

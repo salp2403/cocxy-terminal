@@ -30,6 +30,9 @@ struct InlineImageData: Sendable {
 
     /// Original filename if provided in the sequence (base64-decoded).
     let filename: String?
+
+    /// Accessibility description exposed to assistive technologies.
+    let altText: String?
 }
 
 // MARK: - OSC 1337 Parser
@@ -87,6 +90,7 @@ enum OSC1337Parser {
            let decoded = String(data: nameData, encoding: .utf8) {
             filename = decoded
         }
+        let altText = params["alt"] ?? filename
 
         return InlineImageData(
             imageData: imageData,
@@ -94,7 +98,8 @@ enum OSC1337Parser {
             height: height,
             preserveAspectRatio: preserveAR,
             inline: isInline,
-            filename: filename
+            filename: filename,
+            altText: altText
         )
     }
 
@@ -181,6 +186,10 @@ final class InlineImageRenderer {
         imageView.imageScaling = data.preserveAspectRatio
             ? .scaleProportionallyUpOrDown
             : .scaleAxesIndependently
+        imageView.setAccessibilityRole(.image)
+        if let accessibilityLabel = data.altText, !accessibilityLabel.isEmpty {
+            imageView.setAccessibilityLabel(accessibilityLabel)
+        }
         imageView.wantsLayer = true
         imageView.layer?.cornerRadius = 4
 

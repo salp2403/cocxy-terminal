@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.13.5 (glyph-id overflow guards in Metal pipeline raster paths)
+ * Version: 0.14.7 (block metadata command/pwd snapshots)
  */
 
 #ifndef COCXYCORE_H
@@ -23,9 +23,9 @@
 
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
-#define COCXYCORE_VERSION_MINOR 13
-#define COCXYCORE_VERSION_PATCH 5
-#define COCXYCORE_VERSION_STRING "0.13.5"
+#define COCXYCORE_VERSION_MINOR 14
+#define COCXYCORE_VERSION_PATCH 7
+#define COCXYCORE_VERSION_STRING "0.14.7"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -613,6 +613,68 @@ bool cocxycore_gpu_search_is_gpu_active(const cocxycore_gpu_search* engine);
 /** Get the number of rows currently indexed in the search buffer. */
 uint32_t cocxycore_gpu_search_indexed_rows(const cocxycore_gpu_search* engine);
 
+/* -- Search enhancements (global search, captures, saved searches) -- */
+
+/** Opaque handle returned by global search APIs. */
+typedef struct cocxycore_search_handle cocxycore_search_handle;
+
+/** Regex capture span in row byte coordinates. */
+typedef struct {
+    size_t capture_index;
+    size_t start;
+    size_t length;
+} cocxycore_search_capture;
+
+/** Destroy a search handle and release result metadata. */
+void cocxycore_search_destroy(cocxycore_search_handle* handle);
+
+/**
+ * Copy regex captures for one result in a global search handle.
+ * Returns the total capture count for the result; output is truncated to
+ * max_captures when captures is non-NULL.
+ */
+size_t cocxycore_search_get_captures(
+    cocxycore_search_handle* handle,
+    size_t result_index,
+    cocxycore_search_capture* captures,
+    size_t max_captures
+);
+
+/** Save or replace a named local search in ~/.cocxy/searches.toml. */
+bool cocxycore_search_save(
+    cocxycore_terminal* term,
+    const char* name,
+    const char* pattern,
+    bool is_regex
+);
+
+/**
+ * List saved local searches as compact JSON.
+ * Returns required bytes; output is truncated to buffer_size.
+ */
+size_t cocxycore_search_list_saved(
+    cocxycore_terminal* term,
+    char* buffer,
+    size_t buffer_size
+);
+
+/** Delete a named saved local search. */
+bool cocxycore_search_delete_saved(cocxycore_terminal* term, const char* name);
+
+/** Create a synchronous search handle across currently live terminal instances. */
+cocxycore_search_handle* cocxycore_search_global_create(const char* pattern, bool is_regex);
+
+/**
+ * Copy global search results as compact JSON:
+ * [{"terminal_id":1,"block_id":0,"row":0,"start_col":0,"end_col":4}, ...]
+ * Returns required bytes; output is truncated to buffer_size.
+ */
+size_t cocxycore_search_global_results(
+    cocxycore_search_handle* handle,
+    char* buffer,
+    size_t buffer_size
+);
+
 /* -- Preedit / IME -- */
 
 /** Check whether host-provided preedit text is active. */
@@ -1088,6 +1150,149 @@ uint8_t cocxycore_terminal_semantic_state(const cocxycore_terminal* term);
  */
 uint8_t cocxycore_terminal_semantic_current_block_type(const cocxycore_terminal* term);
 
+/* -- Block API -- */
+
+/** Opaque iterator over completed semantic blocks. */
+typedef struct cocxycore_block_iterator cocxycore_block_iterator;
+
+/**
+ * Rich block metadata returned by stable block ID.
+ * command and pwd pointers are owned by CocxyCore and valid until the next
+ * mutating terminal/block API call on the same terminal.
+ */
+typedef struct {
+    uint64_t id;               /**< Stable block ID (never 0 for stored blocks) */
+    uint64_t start_time_ns;    /**< When block started (ns) */
+    uint64_t end_time_ns;      /**< When block ended (ns, 0 = still running) */
+    uint64_t duration_ns;      /**< end - start, or 0 if still running/unknown */
+    const char* command;       /**< Null-terminated detail/command text, or NULL */
+    size_t command_len;        /**< Byte length of command/detail text */
+    const char* pwd;           /**< Working directory, or NULL if unavailable */
+    size_t pwd_len;            /**< Byte length of pwd */
+    int32_t exit_code;         /**< Exit code (-1 = unknown/still running) */
+    uint32_t exit_status;      /**< Raw status bits if available (0 otherwise) */
+    uint32_t start_row;        /**< Absolute start row (inclusive) */
+    uint32_t end_row;          /**< Absolute end row (inclusive) */
+    uint32_t stream_id;        /**< Stream ID (0 = primary/untagged) */
+    uint8_t block_type;        /**< cocxycore_block_type */
+} cocxycore_block_metadata;
+
+/** Block lifecycle event kind. */
+typedef enum {
+    COCXYCORE_BLOCK_EVENT_STARTED = 1,
+    COCXYCORE_BLOCK_EVENT_OUTPUT_CHUNK = 2,
+    COCXYCORE_BLOCK_EVENT_FINISHED = 3,
+} cocxycore_block_event_kind;
+
+/** Block lifecycle callback type. */
+typedef void (*cocxycore_block_event_callback)(
+    cocxycore_block_event_kind kind,
+    uint64_t block_id,
+    void* user_data
+);
+
+/** Structured terminal stream event kind. */
+typedef enum {
+    COCXYCORE_STREAM_OSC_CWD = 1,
+    COCXYCORE_STREAM_OSC_TITLE = 2,
+    COCXYCORE_STREAM_OSC_133_PROMPT = 10,
+    COCXYCORE_STREAM_OSC_133_PREEXEC = 11,
+    COCXYCORE_STREAM_OSC_133_FINISHED = 12,
+    COCXYCORE_STREAM_OUTPUT_CHUNK = 100,
+    COCXYCORE_STREAM_BELL = 200,
+    COCXYCORE_STREAM_CLIPBOARD = 201,
+    COCXYCORE_STREAM_HYPERLINK = 202,
+} cocxycore_stream_event_kind;
+
+/**
+ * Structured terminal stream event.
+ * payload is owned by CocxyCore and valid only during the callback.
+ */
+typedef struct {
+    cocxycore_stream_event_kind kind;
+    uint64_t timestamp_ns;
+    uint64_t block_id;          /**< 0 when the event is not block-scoped */
+    const char* payload;        /**< Null-terminated payload, or NULL */
+    size_t payload_len;         /**< Byte length excluding the terminator */
+} cocxycore_stream_event;
+
+/** Structured stream callback type. */
+typedef void (*cocxycore_stream_callback)(
+    const cocxycore_stream_event* event,
+    void* user_data
+);
+
+/** Create an iterator over completed blocks, oldest to newest. */
+cocxycore_block_iterator* cocxycore_block_iterator_create(const cocxycore_terminal* term);
+
+/** Advance a block iterator. Returns false when exhausted or invalid. */
+bool cocxycore_block_iterator_next(cocxycore_block_iterator* it);
+
+/** Return the stable ID for the iterator's current block, or 0 if invalid. */
+uint64_t cocxycore_block_iterator_current_id(const cocxycore_block_iterator* it);
+
+/** Destroy a block iterator. NULL-safe. */
+void cocxycore_block_iterator_destroy(cocxycore_block_iterator* it);
+
+/** Look up block metadata by stable block ID. */
+bool cocxycore_block_get_metadata(
+    const cocxycore_terminal* term,
+    uint64_t block_id,
+    cocxycore_block_metadata* out
+);
+
+/**
+ * Serialize a block as compact JSON. Returns required bytes, or 0 if missing.
+ * If buffer is NULL, buffer_size is ignored and the required size is returned.
+ */
+size_t cocxycore_block_serialize_json(
+    const cocxycore_terminal* term,
+    uint64_t block_id,
+    char* buffer,
+    size_t buffer_size
+);
+
+/**
+ * Copy the captured output for one block ID. Returns required bytes, or 0 if
+ * the block is unknown or no output was captured.
+ */
+size_t cocxycore_block_get_output(
+    const cocxycore_terminal* term,
+    uint64_t block_id,
+    char* buffer,
+    size_t buffer_size,
+    bool strip_ansi
+);
+
+/** Set the block lifecycle callback. Pass NULL to disable. */
+void cocxycore_block_set_event_callback(
+    cocxycore_terminal* term,
+    cocxycore_block_event_callback cb,
+    void* user_data
+);
+
+/**
+ * Set the structured stream callback. Delivery is queued so slow callbacks do
+ * not block terminal feed processing.
+ */
+void cocxycore_set_stream_callback(
+    cocxycore_terminal* term,
+    cocxycore_stream_callback cb,
+    void* user_data
+);
+
+/**
+ * Copy the newest N captured block outputs in chronological order.
+ * Returns required bytes. If buffer is NULL, buffer_size is ignored.
+ */
+size_t cocxycore_get_last_n_block_outputs(
+    const cocxycore_terminal* term,
+    size_t n,
+    char* buffer,
+    size_t buffer_size,
+    bool strip_ansi
+);
+
 /* ====================================================================
  * Process Tracking API — Multi-stream PTY
  * ==================================================================== */
@@ -1393,16 +1598,41 @@ void cocxycore_image_delete_all(cocxycore_terminal* term);
 uint64_t cocxycore_image_memory_used(const cocxycore_terminal* term);
 /** Set the maximum in-memory budget for stored image payloads. */
 void cocxycore_image_set_memory_limit(cocxycore_terminal* term, uint64_t max_bytes);
+/** Alias for the in-memory cache budget, matching the CC-4 cache API. */
+void cocxycore_image_set_cache_limit_bytes(cocxycore_terminal* term, size_t memory_limit);
+/** Current in-memory image cache payload size. */
+size_t cocxycore_image_cache_size_bytes(cocxycore_terminal* term);
+/** Configure the file-backed image cache directory. Empty path disables disk persistence. */
+bool cocxycore_image_set_cache_directory(cocxycore_terminal* term, const char* path);
+/** Set the on-disk image cache budget. */
+void cocxycore_image_set_cache_disk_limit_bytes(cocxycore_terminal* term, size_t disk_limit);
+/** Current on-disk image cache size. */
+size_t cocxycore_image_cache_disk_size_bytes(cocxycore_terminal* term);
+/** Enforce image memory/disk cache eviction immediately. */
+void cocxycore_image_cache_evict_now(cocxycore_terminal* term);
 /** Enable or disable Kitty file/temp-file transfers. */
 void cocxycore_image_set_file_transfer(cocxycore_terminal* term, bool enabled);
 /** Enable or disable Sixel decoding. */
 void cocxycore_image_enable_sixel(cocxycore_terminal* term, bool enabled);
 /** Enable or disable Kitty graphics decoding. */
 void cocxycore_image_enable_kitty(cocxycore_terminal* term, bool enabled);
+/** Enable or disable iTerm2 OSC 1337 inline image decoding. */
+bool cocxycore_image_iterm2_enable(cocxycore_terminal* term, bool enabled);
 /** Whether Sixel decoding is currently enabled. */
 bool cocxycore_image_sixel_enabled(const cocxycore_terminal* term);
 /** Whether Kitty graphics decoding is currently enabled. */
 bool cocxycore_image_kitty_enabled(const cocxycore_terminal* term);
+/** Whether iTerm2 OSC 1337 inline image decoding is currently enabled. */
+bool cocxycore_image_iterm2_enabled(const cocxycore_terminal* term);
+/** Store accessibility alt text for an inline image. */
+bool cocxycore_image_set_alt_text(cocxycore_terminal* term, uint32_t image_id, const char* alt);
+/** Copy accessibility alt text. Returns the required byte count. */
+size_t cocxycore_image_get_alt_text(
+    const cocxycore_terminal* term,
+    uint32_t image_id,
+    char* buf,
+    size_t buf_size
+);
 /** Query the image atlas dimensions, generation, and dirty state. */
 bool cocxycore_image_get_atlas_info(
     const cocxycore_terminal* term,
@@ -1596,6 +1826,33 @@ size_t cocxycore_shell_integration_env_name(uint32_t index, uint8_t* buf, size_t
 /** Copy a shell integration env var value by index. */
 size_t cocxycore_shell_integration_env_value(uint32_t index, uint8_t* buf, size_t buf_len);
 
+/** Shell integration diagnostics snapshot. */
+typedef struct {
+    uint64_t avg_preexec_latency_ns;
+    uint64_t max_preexec_latency_ns;
+    uint32_t preexec_warning_count;
+    uint32_t osc7_retry_count;
+    bool detected_p10k;
+    bool detected_tmux;
+    bool detected_screen;
+    uint8_t _pad;
+} cocxycore_shell_diagnostics;
+
+/** Configure the feed-driven stale OSC 7 retry timeout. */
+void cocxycore_shell_set_osc7_retry_timeout_ns(cocxycore_terminal* term, uint64_t timeout_ns);
+
+/** Configure the shell preexec latency warning threshold. */
+void cocxycore_shell_set_preexec_warning_threshold_ns(cocxycore_terminal* term, uint64_t threshold_ns);
+
+/** Enable or disable narrow tmux DCS passthrough unwrapping for shell OSC. */
+void cocxycore_shell_enable_tmux_passthrough(cocxycore_terminal* term, bool enabled);
+
+/** Copy the current shell integration diagnostics into out. */
+bool cocxycore_shell_get_diagnostics(
+    cocxycore_terminal* term,
+    cocxycore_shell_diagnostics* out
+);
+
 /* ====================================================================
  * Terminal Protocol v2 (OSC 7770/7771)
  * ==================================================================== */
@@ -1666,6 +1923,9 @@ size_t cocxycore_terminal_generate_viewport(
 
 /** Plugin API version. Increment on breaking changes. */
 #define COCXYCORE_PLUGIN_API_VERSION 1
+
+/** Opaque handle for CC-5 plugin extension registrations. 0 is invalid. */
+typedef uint32_t cocxycore_plugin_handle;
 
 /* -- Tagged patterns (plugin-owned pattern registration) -- */
 
@@ -1816,6 +2076,92 @@ bool cocxycore_terminal_inject_semantic_event(
  * @param focused True if the terminal gained focus.
  */
 void cocxycore_terminal_notify_focus(cocxycore_terminal* term, bool focused);
+
+/* -- CC-5 handle-based plugin extensions -- */
+
+/** Result returned by a block intercept callback. */
+typedef struct {
+    const char* modified_command; /**< NULL means no text replacement; callback-lifetime only */
+    bool prevent_default_render;
+} cocxycore_block_intercept_result;
+
+/** Block intercept callback. Returned strings must be null-terminated. */
+typedef cocxycore_block_intercept_result (*cocxycore_block_intercept_cb)(
+    uint64_t block_id,
+    void* user_data
+);
+
+/** Register a block intercept callback. Returns 0 on failure. */
+cocxycore_plugin_handle cocxycore_plugin_register_block_intercept(
+    cocxycore_terminal* term,
+    cocxycore_block_intercept_cb callback,
+    void* user_data
+);
+
+/**
+ * Evaluate registered block intercept callbacks for a stable block ID.
+ * Returns the required byte count for modified_command, or 0 when no
+ * replacement exists. prevent_default_render is set when any callback requests
+ * it, even if no replacement text is returned.
+ */
+size_t cocxycore_plugin_apply_block_intercepts(
+    cocxycore_terminal* term,
+    uint64_t block_id,
+    char* buffer,
+    size_t buffer_size,
+    bool* prevent_default_render
+);
+
+/** Private OSC handler callback for codes in the 90000-99999 range. */
+typedef bool (*cocxycore_osc_handler_cb)(
+    uint32_t code,
+    const char* payload,
+    size_t len,
+    void* user_data
+);
+
+/** Register a custom private OSC handler. Returns 0 on invalid range/failure. */
+cocxycore_plugin_handle cocxycore_plugin_register_osc_handler(
+    cocxycore_terminal* term,
+    uint32_t code_min,
+    uint32_t code_max,
+    cocxycore_osc_handler_cb callback,
+    void* user_data
+);
+
+/** Complete runtime theme produced by a plugin. */
+typedef struct {
+    cocxycore_rgba foreground;
+    cocxycore_rgba background;
+    cocxycore_rgba cursor;
+    cocxycore_rgba selection;
+    cocxycore_rgba base16[16];
+} cocxycore_theme;
+
+/** Dynamic theme generator callback. */
+typedef bool (*cocxycore_theme_generator_cb)(
+    cocxycore_theme* out,
+    void* user_data
+);
+
+/** Register a dynamic theme generator. Returns 0 on failure. */
+cocxycore_plugin_handle cocxycore_plugin_register_theme_generator(
+    cocxycore_terminal* term,
+    cocxycore_theme_generator_cb callback,
+    void* user_data
+);
+
+/** Invoke and apply a registered theme generator. */
+bool cocxycore_plugin_apply_theme_generator(
+    cocxycore_terminal* term,
+    cocxycore_plugin_handle handle
+);
+
+/** Unregister any CC-5 extension associated with the handle. NULL/unknown-safe. */
+void cocxycore_plugin_unregister(
+    cocxycore_terminal* term,
+    cocxycore_plugin_handle handle
+);
 
 /* ===================================================================== */
 /* Web Terminal API (Phase 8F)                                           */

@@ -93,6 +93,10 @@ final class CocxyCoreView: NSView {
     private var notificationRingLayer: CAShapeLayer?
     private(set) var isNotificationRingActive: Bool = false
 
+    // MARK: - Command Block Overlay
+
+    private(set) var commandBlockOverlayView: TerminalBlockOverlayView?
+
     // MARK: - Display Link
 
     private var displayLink: CVDisplayLink?
@@ -218,6 +222,7 @@ final class CocxyCoreView: NSView {
             assertionFailure("MetalTerminalRenderer init failed: \(error)")
         }
 
+        installCommandBlockOverlayIfNeeded()
         refreshBackingConfiguration(forceGridSync: true)
         startDisplayLink()
     }
@@ -319,6 +324,8 @@ final class CocxyCoreView: NSView {
 
         refreshIDECursorMetrics()
         updateNotificationRingFrame()
+        commandBlockOverlayView?.frame = bounds
+        refreshCommandBlockOverlay()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -870,6 +877,7 @@ final class CocxyCoreView: NSView {
         let steps = max(1, Int(abs(scaledDelta.rounded(.towardZero))))
         let signedSteps = scaledDelta > 0 ? steps : -steps
         bridge.scrollViewport(surfaceID: sid, deltaRows: signedSteps)
+        refreshCommandBlockOverlay()
     }
 
     // MARK: - Drag and Drop
@@ -1034,6 +1042,61 @@ final class CocxyCoreView: NSView {
             return nil
         }
         return characters
+    }
+
+    // MARK: - Command Block Overlay
+
+    private func installCommandBlockOverlayIfNeeded() {
+        guard commandBlockOverlayView == nil else { return }
+
+        let overlay = TerminalBlockOverlayView(frame: bounds)
+        overlay.autoresizingMask = [.width, .height]
+        overlay.onCopyBlockOutput = { [weak self] block in
+            self?.copyBlockOutputFromOverlay(block)
+        }
+        overlay.onRerunBlock = { [weak self] block in
+            self?.rerunBlockFromOverlay(block)
+        }
+        addSubview(overlay)
+        commandBlockOverlayView = overlay
+    }
+
+    func refreshCommandBlockOverlay() {
+        guard let overlay = commandBlockOverlayView else { return }
+        overlay.frame = bounds
+
+        guard let bridge, let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid),
+              !snapshot.isAltScreen else {
+            overlay.clear()
+            return
+        }
+
+        let scale = currentBackingScale()
+        let cellHeight = CGFloat(snapshot.cellHeight) / scale
+        let blocks = bridge.commandBlocks(for: sid, limit: 32)
+        overlay.update(
+            blocks: blocks,
+            visibleStartRow: snapshot.visibleStartRow,
+            visibleRowCount: snapshot.visibleRowCount,
+            cellHeight: cellHeight,
+            padding: CGPoint(x: contentPadding.x, y: contentPadding.y)
+        )
+    }
+
+    private func copyBlockOutputFromOverlay(_ block: TerminalCommandBlock) {
+        let text = block.output.isEmpty ? block.command : block.output
+        guard !text.isEmpty else { return }
+        clipboardService.write(text)
+    }
+
+    private func rerunBlockFromOverlay(_ block: TerminalCommandBlock) {
+        guard !block.command.isEmpty,
+              let bridge,
+              let sid = surfaceID else {
+            return
+        }
+        bridge.sendText(block.command + "\r", to: sid)
     }
 }
 

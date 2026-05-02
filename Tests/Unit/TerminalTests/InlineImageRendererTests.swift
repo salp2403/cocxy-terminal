@@ -43,6 +43,15 @@ final class InlineImageRendererTests: XCTestCase {
         XCTAssertEqual(hostView.subviews.count, 1)
     }
 
+    func testRenderInlineImageAppliesAccessibilityAltText() {
+        let imageData = createInlineImageData(inline: true, altText: "red dot")
+
+        renderer.renderImage(imageData, at: 100)
+
+        let imageView = hostView.subviews.first as? NSImageView
+        XCTAssertEqual(imageView?.accessibilityLabel(), "red dot")
+    }
+
     func testRenderMultipleImagesAssignsSequentialIDs() {
         let imageData = createInlineImageData(inline: true)
 
@@ -135,7 +144,8 @@ final class InlineImageRendererTests: XCTestCase {
         width: CGFloat? = nil,
         height: CGFloat? = nil,
         preserveAspectRatio: Bool = true,
-        filename: String? = nil
+        filename: String? = nil,
+        altText: String? = nil
     ) -> InlineImageData {
         // Minimal 1x1 pixel red PNG.
         let pngBytes: [UInt8] = [
@@ -156,7 +166,8 @@ final class InlineImageRendererTests: XCTestCase {
             height: height,
             preserveAspectRatio: preserveAspectRatio,
             inline: inline,
-            filename: filename
+            filename: filename,
+            altText: altText
         )
     }
 }

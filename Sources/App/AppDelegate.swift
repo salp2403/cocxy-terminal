@@ -2274,6 +2274,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     delegateRef.value?.semanticSummaryForCLI(limit: limit)
                 }
             },
+            blockListProvider: { limit in
+                syncOnMainActor {
+                    delegateRef.value?.commandBlocksForCLI(limit: limit)
+                }
+            },
+            blockCopyProvider: { blockID, field in
+                syncOnMainActor {
+                    delegateRef.value?.copyCommandBlockForCLI(blockID: blockID, field: field)
+                }
+            },
+            blockRerunProvider: { blockID in
+                syncOnMainActor {
+                    delegateRef.value?.rerunCommandBlockForCLI(blockID: blockID)
+                }
+            },
             imageListProvider: {
                 syncOnMainActor {
                     delegateRef.value?.listImagesForCLI()

@@ -19,6 +19,16 @@ struct CocxyCoreViewTests {
         #expect(harness.view.terminalViewModel === harness.viewModel)
     }
 
+    @Test("configureSurfaceIfNeeded installs the command block overlay above the terminal")
+    func configureSurfaceIfNeededInstallsCommandBlockOverlay() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+
+        let overlay = try #require(harness.view.commandBlockOverlayView)
+        #expect(overlay.superview === harness.view)
+        #expect(overlay.frame == harness.view.bounds)
+    }
+
     @Test("configureSurfaceIfNeeded ignores non-CocxyCore bridges")
     func configureSurfaceIfNeededIgnoresOtherBridges() {
         let viewModel = TerminalViewModel()
