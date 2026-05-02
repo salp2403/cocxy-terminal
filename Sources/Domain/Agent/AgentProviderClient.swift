@@ -53,6 +53,95 @@ enum AgentProviderClientError: Error, Sendable, Equatable {
     case missingResponseChoice
 }
 
+struct AgentProviderModelCatalog: Sendable, Equatable {
+    let openAI: String
+    let anthropic: String
+    let google: String
+
+    static let defaults = AgentProviderModelCatalog(
+        openAI: "gpt-5.1",
+        anthropic: "claude-sonnet-4-20250514",
+        google: "gemini-2.5-flash"
+    )
+}
+
+enum AgentProviderClientFactoryError: Error, Sendable, Equatable {
+    case agentModeDisabled
+    case explicitProviderChoiceRequired
+    case missingAPIKey(AgentProviderKind)
+    case foundationModelsClientUnavailable
+}
+
+struct AgentProviderClientFactory: Sendable {
+    let secrets: AgentSecrets
+    let foundationModelsAvailable: Bool
+    let transport: any AgentHTTPTransport
+    let modelCatalog: AgentProviderModelCatalog
+
+    init(
+        secrets: AgentSecrets = AgentSecrets(),
+        foundationModelsAvailable: Bool,
+        transport: any AgentHTTPTransport = URLSessionAgentHTTPTransport(),
+        modelCatalog: AgentProviderModelCatalog = .defaults
+    ) {
+        self.secrets = secrets
+        self.foundationModelsAvailable = foundationModelsAvailable
+        self.transport = transport
+        self.modelCatalog = modelCatalog
+    }
+
+    func makeClient(configuration: AgentModeConfig) throws -> any AgentLLMClient {
+        guard configuration.enabled else {
+            throw AgentProviderClientFactoryError.agentModeDisabled
+        }
+
+        switch configuration.effectiveProvider(foundationModelsAvailable: foundationModelsAvailable) {
+        case .explicitChoiceRequired:
+            throw AgentProviderClientFactoryError.explicitProviderChoiceRequired
+        case .provider(let provider):
+            return try makeClient(provider: provider)
+        }
+    }
+
+    private func makeClient(provider: AgentProviderKind) throws -> any AgentLLMClient {
+        switch provider {
+        case .foundationModelsOnDevice:
+            return FoundationModelsAgentLLMClient()
+        case .openai:
+            return OpenAIAgentLLMClient(
+                apiKey: try requiredAPIKey(for: provider),
+                model: modelCatalog.openAI,
+                transport: transport
+            )
+        case .anthropic:
+            return AnthropicAgentLLMClient(
+                apiKey: try requiredAPIKey(for: provider),
+                model: modelCatalog.anthropic,
+                transport: transport
+            )
+        case .google:
+            return GoogleAgentLLMClient(
+                apiKey: try requiredAPIKey(for: provider),
+                model: modelCatalog.google,
+                transport: transport
+            )
+        }
+    }
+
+    private func requiredAPIKey(for provider: AgentProviderKind) throws -> String {
+        guard let apiKey = try secrets.apiKey(for: provider) else {
+            throw AgentProviderClientFactoryError.missingAPIKey(provider)
+        }
+        return apiKey
+    }
+}
+
+struct FoundationModelsAgentLLMClient: AgentLLMClient {
+    func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        throw AgentProviderClientFactoryError.foundationModelsClientUnavailable
+    }
+}
+
 struct OpenAIAgentLLMClient: AgentLLMClient {
     let apiKey: String
     let model: String
