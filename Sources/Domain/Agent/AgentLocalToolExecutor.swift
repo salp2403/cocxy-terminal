@@ -6,15 +6,18 @@ import Foundation
 struct AgentToolApprovalContext: Sendable, Equatable {
     let approvedWriteCallIDs: Set<String>
     let approvedCommandCallIDs: Set<String>
+    let commandAllowRules: [AgentCommandAllowRule]
     let userInputResponsesByCallID: [String: String]
 
     init(
         approvedWriteCallIDs: Set<String> = [],
         approvedCommandCallIDs: Set<String> = [],
+        commandAllowRules: [AgentCommandAllowRule] = [],
         userInputResponsesByCallID: [String: String] = [:]
     ) {
         self.approvedWriteCallIDs = approvedWriteCallIDs
         self.approvedCommandCallIDs = approvedCommandCallIDs
+        self.commandAllowRules = commandAllowRules
         self.userInputResponsesByCallID = userInputResponsesByCallID
     }
 
@@ -22,12 +25,22 @@ struct AgentToolApprovalContext: Sendable, Equatable {
         approvedWriteCallIDs.contains(callID)
     }
 
-    func approvesCommand(callID: String) -> Bool {
+    func approvesCommand(callID: String, command: String) -> Bool {
         approvedCommandCallIDs.contains(callID)
+            || commandAllowRules.contains { $0.matches(command) }
     }
 
     func userInputResponse(callID: String) -> String? {
         userInputResponsesByCallID[callID]
+    }
+
+    func addingCommandAllowRules(_ rules: [AgentCommandAllowRule]) -> AgentToolApprovalContext {
+        AgentToolApprovalContext(
+            approvedWriteCallIDs: approvedWriteCallIDs,
+            approvedCommandCallIDs: approvedCommandCallIDs,
+            commandAllowRules: commandAllowRules + rules,
+            userInputResponsesByCallID: userInputResponsesByCallID
+        )
     }
 }
 
@@ -230,7 +243,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         guard !AgentShellCommandSafety.isDangerous(command) else {
             throw AgentLocalToolError.dangerousCommand(command)
         }
-        guard approvals.approvesCommand(callID: call.id) else {
+        guard approvals.approvesCommand(callID: call.id, command: command) else {
             throw AgentLocalToolError.approvalRequired(toolID: call.toolID)
         }
 

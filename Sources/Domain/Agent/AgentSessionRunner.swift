@@ -48,6 +48,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
     private let processRunner: any AgentProcessRunning
     private let terminalOutputProvider: (any AgentTerminalOutputProviding)?
     private let lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)?
+    private let commandAllowlist: any AgentCommandAllowlistLoading
 
     init(
         clientFactory: any AgentLLMClientMaking = AgentProviderClientFactory(
@@ -59,7 +60,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
         permissionPolicy: AgentToolPermissionPolicy = AgentToolPermissionPolicy(),
         processRunner: any AgentProcessRunning = AgentProcessRunner(),
         terminalOutputProvider: (any AgentTerminalOutputProviding)? = nil,
-        lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil
+        lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
+        commandAllowlist: any AgentCommandAllowlistLoading = AgentCommandAllowlist()
     ) {
         self.clientFactory = clientFactory
         self.workspaceRootProvider = workspaceRootProvider
@@ -69,6 +71,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         self.processRunner = processRunner
         self.terminalOutputProvider = terminalOutputProvider
         self.lspDiagnosticsProvider = lspDiagnosticsProvider
+        self.commandAllowlist = commandAllowlist
     }
 
     func run(
@@ -117,10 +120,13 @@ struct AgentSessionRunner: AgentApprovalRunning {
         }
 
         let provider = try clientFactory.makeClient(configuration: configuration)
+        let commandAllowRules = permissionPolicy.commandAllowRules
+            + ((try? commandAllowlist.loadRules()) ?? [])
+        let effectiveApprovals = approvals.addingCommandAllowRules(commandAllowRules)
         let workspace = AgentWorkspace(rootURL: workspaceRoot)
         let executor = AgentLocalToolExecutor(
             workspace: workspace,
-            approvals: approvals,
+            approvals: effectiveApprovals,
             processRunner: processRunner,
             terminalOutputProvider: terminalOutputProvider,
             lspDiagnosticsProvider: lspDiagnosticsProvider
@@ -128,13 +134,17 @@ struct AgentSessionRunner: AgentApprovalRunning {
         let store = AgentConversationStore(
             rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir)
         )
+        let effectivePermissionPolicy = AgentToolPermissionPolicy(
+            autoModeEnabled: permissionPolicy.autoModeEnabled,
+            commandAllowRules: commandAllowRules
+        )
 
         return AgentLoop(
             provider: provider,
             toolExecutor: executor,
             toolPreviewer: executor,
             registry: registry,
-            permissionPolicy: permissionPolicy,
+            permissionPolicy: effectivePermissionPolicy,
             conversationStore: store
         )
     }

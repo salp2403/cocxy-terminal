@@ -88,6 +88,59 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(factory.configurations.isEmpty)
     }
 
+    @Test("runner applies local command allowlist before prompting")
+    func runnerAppliesCommandAllowlistBeforePrompting() async throws {
+        let workspace = temporaryDirectory(named: "allowlist-workspace")
+        let conversationRoot = temporaryDirectory(named: "allowlist-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(
+                content: "I will run focused tests.",
+                toolCalls: [
+                    AgentToolCall(
+                        id: "call-run",
+                        toolID: "run_command",
+                        arguments: ["command": .string("swift test --filter AgentSessionRunner")]
+                    ),
+                ]
+            ),
+            AgentLLMResponse(content: "Tests passed.", toolCalls: []),
+        ])
+        let processRunner = RecordingSessionProcessRunner(results: [
+            AgentProcessResult(exitCode: 0, stdout: "ok\n", stderr: ""),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-allowlist-test",
+            processRunner: processRunner,
+            commandAllowlist: StaticAgentCommandAllowlist(rules: [
+                .prefix("swift test --filter"),
+            ])
+        )
+
+        let result = try await runner.run(
+            prompt: "Run focused tests",
+            history: [],
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                maxIterations: 4,
+                conversationStorageDir: conversationRoot.path
+            )
+        )
+
+        #expect(result.stopReason == .completed)
+        #expect(result.messages.map(\.role) == [.user, .assistant, .tool, .assistant])
+        #expect(processRunner.calls.map(\.arguments) == [
+            ["-lc", "swift test --filter AgentSessionRunner"],
+        ])
+    }
+
     @Test("runner approval resumes a pending write and persists the tool result")
     func runnerApprovalResumesPendingWriteAndPersistsToolResult() async throws {
         let workspace = temporaryDirectory(named: "approval-workspace")
@@ -258,4 +311,45 @@ private final class RecordingSessionRunnerClientFactory: AgentLLMClientMaking, @
         lock.unlock()
         return client
     }
+}
+
+private struct StaticAgentCommandAllowlist: AgentCommandAllowlistLoading {
+    let rules: [AgentCommandAllowRule]
+
+    func loadRules() throws -> [AgentCommandAllowRule] {
+        rules
+    }
+}
+
+private final class RecordingSessionProcessRunner: AgentProcessRunning, @unchecked Sendable {
+    private(set) var calls: [AgentSessionProcessCall] = []
+    private var results: [AgentProcessResult]
+
+    init(results: [AgentProcessResult]) {
+        self.results = results
+    }
+
+    func run(
+        executableURL: URL,
+        arguments: [String],
+        workingDirectory: URL,
+        timeoutSeconds: TimeInterval?
+    ) throws -> AgentProcessResult {
+        calls.append(AgentSessionProcessCall(
+            executableURL: executableURL,
+            arguments: arguments,
+            workingDirectory: workingDirectory,
+            timeoutSeconds: timeoutSeconds
+        ))
+        return results.isEmpty
+            ? AgentProcessResult(exitCode: 0, stdout: "", stderr: "")
+            : results.removeFirst()
+    }
+}
+
+private struct AgentSessionProcessCall: Equatable {
+    let executableURL: URL
+    let arguments: [String]
+    let workingDirectory: URL
+    let timeoutSeconds: TimeInterval?
 }
