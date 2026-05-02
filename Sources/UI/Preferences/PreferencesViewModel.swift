@@ -125,6 +125,23 @@ final class PreferencesViewModel: ObservableObject {
     /// Idle timeout in seconds. Clamped to 1...300 on save.
     @Published var idleTimeoutSeconds: Int
 
+    // MARK: - Agent Mode
+
+    /// Master opt-in for built-in local Agent Mode.
+    @Published var agentModeEnabled: Bool
+
+    /// Preferred provider for built-in Agent Mode.
+    @Published var agentPreferredProvider: AgentProviderKind
+
+    /// Whether Agent Mode may continue approved actions automatically.
+    @Published var agentAutoMode: Bool
+
+    /// Maximum provider/tool iterations for one Agent Mode turn.
+    @Published var agentMaxIterations: Int
+
+    /// Local conversation history storage directory.
+    @Published var agentConversationStorageDir: String
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -332,6 +349,7 @@ final class PreferencesViewModel: ObservableObject {
             || patternMatching != c.agentDetection.patternMatching
             || timingHeuristics != c.agentDetection.timingHeuristics
             || idleTimeoutSeconds != c.agentDetection.idleTimeoutSeconds
+            || agentModeHasUnsavedChanges(comparedTo: c.agent)
             || codeReviewAutoShowOnSessionEnd != c.codeReview.autoShowOnSessionEnd
             || macosNotifications != c.notifications.macosNotifications
             || sound != c.notifications.sound
@@ -373,6 +391,11 @@ final class PreferencesViewModel: ObservableObject {
         patternMatching = c.agentDetection.patternMatching
         timingHeuristics = c.agentDetection.timingHeuristics
         idleTimeoutSeconds = c.agentDetection.idleTimeoutSeconds
+        agentModeEnabled = c.agent.enabled
+        agentPreferredProvider = c.agent.preferredProvider
+        agentAutoMode = c.agent.autoMode
+        agentMaxIterations = c.agent.maxIterations
+        agentConversationStorageDir = c.agent.conversationStorageDir
         codeReviewAutoShowOnSessionEnd = c.codeReview.autoShowOnSessionEnd
         macosNotifications = c.notifications.macosNotifications
         sound = c.notifications.sound
@@ -467,6 +490,13 @@ final class PreferencesViewModel: ObservableObject {
         self.patternMatching = config.agentDetection.patternMatching
         self.timingHeuristics = config.agentDetection.timingHeuristics
         self.idleTimeoutSeconds = config.agentDetection.idleTimeoutSeconds
+
+        // Agent Mode
+        self.agentModeEnabled = config.agent.enabled
+        self.agentPreferredProvider = config.agent.preferredProvider
+        self.agentAutoMode = config.agent.autoMode
+        self.agentMaxIterations = config.agent.maxIterations
+        self.agentConversationStorageDir = config.agent.conversationStorageDir
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -628,6 +658,7 @@ final class PreferencesViewModel: ObservableObject {
     /// until the user makes further edits.
     private func updateSavedSnapshot() {
         let clampedOpacity = min(max(backgroundOpacity, 0.3), 1.0)
+        let agent = buildAgentModeConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
             .applyingFallbackShortcut(
@@ -679,6 +710,7 @@ final class PreferencesViewModel: ObservableObject {
                 timingHeuristics: timingHeuristics,
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
+            agent: agent,
             codeReview: buildCodeReviewConfigFromViewModel(),
             notifications: NotificationConfig(
                 macosNotifications: macosNotifications,
@@ -700,12 +732,35 @@ final class PreferencesViewModel: ObservableObject {
             vim: buildVimConfigFromViewModel(),
             experimental: savedConfig.experimental
         )
+        agentMaxIterations = agent.maxIterations
+        agentConversationStorageDir = agent.conversationStorageDir
         pendingKeybindings = nil
     }
 
     /// Builds the `[code-review]` section from editable preferences.
     private func buildCodeReviewConfigFromViewModel() -> CodeReviewConfig {
         CodeReviewConfig(autoShowOnSessionEnd: codeReviewAutoShowOnSessionEnd)
+    }
+
+    /// Builds the `[agent]` section from editable preferences while keeping
+    /// the fallback policy pinned to the saved local-first policy.
+    private func buildAgentModeConfigFromViewModel() -> AgentModeConfig {
+        AgentModeConfig(
+            enabled: agentModeEnabled,
+            preferredProvider: agentPreferredProvider,
+            foundationModelsFallback: savedConfig.agent.foundationModelsFallback,
+            autoMode: agentAutoMode,
+            maxIterations: agentMaxIterations,
+            conversationStorageDir: agentConversationStorageDir
+        )
+    }
+
+    private func agentModeHasUnsavedChanges(comparedTo config: AgentModeConfig) -> Bool {
+        agentModeEnabled != config.enabled
+            || agentPreferredProvider != config.preferredProvider
+            || agentAutoMode != config.autoMode
+            || agentMaxIterations != config.maxIterations
+            || agentConversationStorageDir != config.conversationStorageDir
     }
 
     /// Builds a `WorktreeConfig` value from the editable view-model
@@ -870,6 +925,7 @@ final class PreferencesViewModel: ObservableObject {
         let defaults = savedConfig
         let keybindings = pendingKeybindings ?? defaults.keybindings
         let notes = buildNotesConfigFromViewModel()
+        let agent = buildAgentModeConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
@@ -924,6 +980,14 @@ final class PreferencesViewModel: ObservableObject {
         pattern-matching = \(patternMatching)
         timing-heuristics = \(timingHeuristics)
         idle-timeout-seconds = \(clampedTimeout)
+
+        [agent]
+        enabled = \(agent.enabled)
+        preferred-provider = "\(agent.preferredProvider.rawValue)"
+        foundation-models-fallback = "\(agent.foundationModelsFallback.rawValue)"
+        auto-mode = \(agent.autoMode)
+        max-iterations = \(agent.maxIterations)
+        conversation-storage-dir = "\(agent.conversationStorageDir)"
 
         [code-review]
         auto-show-on-session-end = \(codeReviewAutoShowOnSessionEnd)

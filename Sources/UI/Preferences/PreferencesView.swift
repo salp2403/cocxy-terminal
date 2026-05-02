@@ -12,6 +12,7 @@ import AppKit
 /// - General: shell path, working directory, confirm close
 /// - Appearance: theme picker, font family, ligatures, font size slider, padding
 /// - Agent Detection: toggles for each detection layer, idle timeout
+/// - Agent Mode: local-first built-in agent provider and safety settings
 /// - Code Review: review panel visibility behaviour
 /// - Notifications: toggles for each notification type
 /// - Terminal: runtime protocol settings such as inline images
@@ -107,6 +108,8 @@ struct PreferencesView: View {
             EditableAppearanceSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .agentDetection:
             EditableAgentDetectionSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .agentMode:
+            AgentModePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .codeReview:
             CodeReviewPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .notifications:
@@ -141,6 +144,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case general
     case appearance
     case agentDetection
+    case agentMode
     case codeReview
     case notifications
     case terminal
@@ -159,6 +163,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .appearance: return "Appearance"
         case .agentDetection: return "Agent Detection"
+        case .agentMode: return "Agent Mode"
         case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
         case .terminal: return "Terminal"
@@ -177,6 +182,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .general: return "gear"
         case .appearance: return "paintbrush"
         case .agentDetection: return "brain.head.profile"
+        case .agentMode: return "sparkles"
         case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
         case .terminal: return "terminal"
@@ -737,6 +743,78 @@ struct EditableAgentDetectionSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Agent Detection")
+    }
+}
+
+// MARK: - Agent Mode Section
+
+/// Editable built-in Agent Mode preferences.
+struct AgentModePreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Feature") {
+                Toggle("Enable Agent Mode", isOn: $viewModel.agentModeEnabled)
+                    .help("Enables the built-in local Agent Mode entry points.")
+
+                Toggle("Auto mode", isOn: $viewModel.agentAutoMode)
+                    .help("Allows the agent loop to continue after approved actions without changing write or command approval rules.")
+            }
+
+            Section("Provider") {
+                Picker("Preferred provider", selection: $viewModel.agentPreferredProvider) {
+                    ForEach(AgentProviderKind.allCases, id: \.self) { provider in
+                        Text(providerTitle(provider)).tag(provider)
+                    }
+                }
+
+                Text(providerDetail(viewModel.agentPreferredProvider))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Limits") {
+                Stepper(
+                    "Max iterations: \(viewModel.agentMaxIterations)",
+                    value: $viewModel.agentMaxIterations,
+                    in: AgentModeConfig.minMaxIterations...AgentModeConfig.maxMaxIterations
+                )
+            }
+
+            Section("Storage") {
+                TextField("Conversation storage", text: $viewModel.agentConversationStorageDir)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Agent Mode")
+    }
+
+    private func providerTitle(_ provider: AgentProviderKind) -> String {
+        switch provider {
+        case .foundationModelsOnDevice:
+            return "Foundation Models"
+        case .anthropic:
+            return "Anthropic"
+        case .openai:
+            return "OpenAI"
+        case .google:
+            return "Google"
+        }
+    }
+
+    private func providerDetail(_ provider: AgentProviderKind) -> String {
+        switch provider {
+        case .foundationModelsOnDevice:
+            return "Runs on device when supported. If unavailable, Cocxy asks you to choose another provider instead of falling back silently."
+        case .anthropic, .openai, .google:
+            return "Uses your provider API key from the macOS Keychain. Requests go directly from this Mac to the selected provider."
+        }
     }
 }
 
