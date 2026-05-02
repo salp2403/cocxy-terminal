@@ -18,6 +18,7 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
     let createdAt: Date
     let toolName: String?
     let toolCallID: String?
+    let toolCalls: [AgentToolCall]
 
     init(
         id: String,
@@ -25,7 +26,8 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         content: String,
         createdAt: Date = Date(),
         toolName: String? = nil,
-        toolCallID: String? = nil
+        toolCallID: String? = nil,
+        toolCalls: [AgentToolCall] = []
     ) {
         self.id = id
         self.role = role
@@ -33,6 +35,41 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.toolName = toolName
         self.toolCallID = toolCallID
+        self.toolCalls = toolCalls
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case role
+        case content
+        case createdAt
+        case toolName
+        case toolCallID
+        case toolCalls
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.role = try container.decode(AgentMessageRole.self, forKey: .role)
+        self.content = try container.decode(String.self, forKey: .content)
+        self.createdAt = try container.decode(Date.self, forKey: .createdAt)
+        self.toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
+        self.toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
+        self.toolCalls = try container.decodeIfPresent([AgentToolCall].self, forKey: .toolCalls) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(role, forKey: .role)
+        try container.encode(content, forKey: .content)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(toolName, forKey: .toolName)
+        try container.encodeIfPresent(toolCallID, forKey: .toolCallID)
+        if !toolCalls.isEmpty {
+            try container.encode(toolCalls, forKey: .toolCalls)
+        }
     }
 }
 

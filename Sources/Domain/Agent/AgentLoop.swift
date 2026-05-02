@@ -143,7 +143,8 @@ struct AgentLoop {
                 AgentMessage(
                     id: idGenerator.nextMessageID(role: .assistant),
                     role: .assistant,
-                    content: response.content
+                    content: response.content,
+                    toolCalls: response.toolCalls
                 ),
                 conversationID: conversationID,
                 messages: &messages

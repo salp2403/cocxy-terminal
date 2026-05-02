@@ -45,6 +45,9 @@ struct AgentLoopSwiftTestingTests {
         #expect(calls.map(\.toolID) == ["git_status"])
         #expect(snapshots.count == 2)
         let secondProviderSnapshot = try #require(snapshots.dropFirst().first)
+        #expect(result.messages.first { $0.role == .assistant }?.toolCalls == [
+            AgentToolCall(id: "call-1", toolID: "git_status"),
+        ])
         let toolMessage = try #require(secondProviderSnapshot.first { message in
             message.role == .tool
                 && message.toolName == "git_status"

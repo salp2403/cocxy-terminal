@@ -61,6 +61,50 @@ struct AgentProviderClientSwiftTestingTests {
         ])
     }
 
+    @Test("OpenAI transcript preserves assistant tool calls before tool results")
+    func openAITranscriptPreservesAssistantToolCalls() async throws {
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"choices":[{"message":{"role":"assistant","content":"Done."}}]}"#.utf8)
+        ))
+        let call = AgentToolCall(
+            id: "call-openai-1",
+            toolID: "read_file",
+            arguments: ["path": .string("Sources/App.swift")]
+        )
+        let client = OpenAIAgentLLMClient(
+            apiKey: "openai-key",
+            model: "test-openai-model",
+            transport: transport
+        )
+
+        _ = try await client.nextResponse(for: [
+            AgentMessage(id: "u1", role: .user, content: "Read the app file"),
+            AgentMessage(id: "a1", role: .assistant, content: "I will inspect it.", toolCalls: [call]),
+            AgentMessage(
+                id: "t1",
+                role: .tool,
+                content: #"{"status":"success"}"#,
+                toolName: "read_file",
+                toolCallID: "call-openai-1"
+            ),
+        ])
+        let request = try await onlyRequest(from: transport)
+        let body = try jsonObject(request.body)
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        let assistant = try #require(messages.first { $0["role"] as? String == "assistant" })
+        let toolMessage = try #require(messages.first { $0["role"] as? String == "tool" })
+        let toolCalls = try #require(assistant["tool_calls"] as? [[String: Any]])
+        let function = try #require(toolCalls.first?["function"] as? [String: Any])
+        let argumentString = try #require(function["arguments"] as? String)
+        let arguments = try jsonObject(Data(argumentString.utf8))
+
+        #expect(toolCalls.first?["id"] as? String == "call-openai-1")
+        #expect(function["name"] as? String == "read_file")
+        #expect(arguments["path"] as? String == "Sources/App.swift")
+        #expect(toolMessage["tool_call_id"] as? String == "call-openai-1")
+    }
+
     @Test("Anthropic client sends messages tools and parses tool_use blocks")
     func anthropicClientSendsToolsAndParsesToolUse() async throws {
         let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
@@ -102,6 +146,50 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(response.toolCalls == [
             AgentToolCall(id: "toolu_1", toolID: "git_status"),
         ])
+    }
+
+    @Test("Anthropic transcript preserves tool_use and tool_result blocks")
+    func anthropicTranscriptPreservesToolUseAndToolResultBlocks() async throws {
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"content":[{"type":"text","text":"Done."}]}"#.utf8)
+        ))
+        let call = AgentToolCall(
+            id: "toolu_1",
+            toolID: "git_status",
+            arguments: [:]
+        )
+        let client = AnthropicAgentLLMClient(
+            apiKey: "anthropic-key",
+            model: "test-anthropic-model",
+            transport: transport
+        )
+
+        _ = try await client.nextResponse(for: [
+            AgentMessage(id: "u1", role: .user, content: "Check status"),
+            AgentMessage(id: "a1", role: .assistant, content: "I will check git.", toolCalls: [call]),
+            AgentMessage(
+                id: "t1",
+                role: .tool,
+                content: #"{"status":"success"}"#,
+                toolName: "git_status",
+                toolCallID: "toolu_1"
+            ),
+        ])
+        let request = try await onlyRequest(from: transport)
+        let body = try jsonObject(request.body)
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        let assistant = try #require(messages.first { $0["role"] as? String == "assistant" })
+        let toolResult = try #require(messages.last)
+        let assistantBlocks = try #require(assistant["content"] as? [[String: Any]])
+        let toolUse = try #require(assistantBlocks.first { $0["type"] as? String == "tool_use" })
+        let toolResultBlocks = try #require(toolResult["content"] as? [[String: Any]])
+        let toolResultBlock = try #require(toolResultBlocks.first)
+
+        #expect(toolUse["id"] as? String == "toolu_1")
+        #expect(toolUse["name"] as? String == "git_status")
+        #expect(toolResultBlock["type"] as? String == "tool_result")
+        #expect(toolResultBlock["tool_use_id"] as? String == "toolu_1")
     }
 
     @Test("Google client sends generateContent tools and parses function calls")
@@ -157,6 +245,58 @@ struct AgentProviderClientSwiftTestingTests {
                 ]
             ),
         ])
+    }
+
+    @Test("Google transcript preserves functionCall and functionResponse parts")
+    func googleTranscriptPreservesFunctionCallAndFunctionResponseParts() async throws {
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"candidates":[{"content":{"parts":[{"text":"Done."}]}}]}"#.utf8)
+        ))
+        let call = AgentToolCall(
+            id: "google-call-1-grep",
+            toolID: "grep",
+            arguments: [
+                "pattern": .string("AgentLoop"),
+                "path": .string("Sources"),
+            ]
+        )
+        let client = GoogleAgentLLMClient(
+            apiKey: "google-key",
+            model: "test-google-model",
+            transport: transport
+        )
+
+        _ = try await client.nextResponse(for: [
+            AgentMessage(id: "u1", role: .user, content: "Find AgentLoop"),
+            AgentMessage(id: "a1", role: .assistant, content: "I will search.", toolCalls: [call]),
+            AgentMessage(
+                id: "t1",
+                role: .tool,
+                content: #"{"status":"success","matches":2}"#,
+                toolName: "grep",
+                toolCallID: "google-call-1-grep"
+            ),
+        ])
+        let request = try await onlyRequest(from: transport)
+        let body = try jsonObject(request.body)
+        let contents = try #require(body["contents"] as? [[String: Any]])
+        let modelMessage = try #require(contents.first { $0["role"] as? String == "model" })
+        let toolMessage = try #require(contents.last)
+        let modelParts = try #require(modelMessage["parts"] as? [[String: Any]])
+        let functionCallPart = try #require(modelParts.first { $0["functionCall"] != nil })
+        let functionCall = try #require(functionCallPart["functionCall"] as? [String: Any])
+        let args = try #require(functionCall["args"] as? [String: Any])
+        let toolParts = try #require(toolMessage["parts"] as? [[String: Any]])
+        let functionResponsePart = try #require(toolParts.first)
+        let functionResponse = try #require(functionResponsePart["functionResponse"] as? [String: Any])
+        let response = try #require(functionResponse["response"] as? [String: Any])
+
+        #expect(functionCall["name"] as? String == "grep")
+        #expect(args["pattern"] as? String == "AgentLoop")
+        #expect(functionResponse["name"] as? String == "grep")
+        #expect(response["status"] as? String == "success")
+        #expect((response["matches"] as? NSNumber)?.intValue == 2)
     }
 
     @Test("provider clients surface non-success HTTP responses without leaking API keys")

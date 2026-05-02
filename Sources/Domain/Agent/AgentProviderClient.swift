@@ -318,11 +318,25 @@ private func openAIMessages(from messages: [AgentMessage]) -> [[String: Any]] {
             "role": openAIRole(message.role),
             "content": message.content,
         ]
+        if message.role == .assistant, !message.toolCalls.isEmpty {
+            result["tool_calls"] = message.toolCalls.map(openAIToolCall)
+        }
         if message.role == .tool, let toolCallID = message.toolCallID {
             result["tool_call_id"] = toolCallID
         }
         return result
     }
+}
+
+private func openAIToolCall(_ call: AgentToolCall) -> [String: Any] {
+    [
+        "id": call.id,
+        "type": "function",
+        "function": [
+            "name": call.toolID,
+            "arguments": jsonString(from: call.arguments),
+        ],
+    ]
 }
 
 private func openAIRole(_ role: AgentMessageRole) -> String {
@@ -346,24 +360,86 @@ private func anthropicMessages(from messages: [AgentMessage]) -> [[String: Any]]
         case .user:
             return ["role": "user", "content": message.content]
         case .assistant:
-            return ["role": "assistant", "content": message.content]
+            guard !message.toolCalls.isEmpty else {
+                return ["role": "assistant", "content": message.content]
+            }
+            var blocks: [[String: Any]] = []
+            if !message.content.isEmpty {
+                blocks.append(["type": "text", "text": message.content])
+            }
+            blocks.append(contentsOf: message.toolCalls.map(anthropicToolUseBlock))
+            return ["role": "assistant", "content": blocks]
         case .tool:
             return [
                 "role": "user",
-                "content": "Tool \(message.toolName ?? "unknown") result:\n\(message.content)",
+                "content": [
+                    [
+                        "type": "tool_result",
+                        "tool_use_id": message.toolCallID ?? message.id,
+                        "content": message.content,
+                    ],
+                ],
             ]
         }
     }
 }
 
+private func anthropicToolUseBlock(_ call: AgentToolCall) -> [String: Any] {
+    [
+        "type": "tool_use",
+        "id": call.id,
+        "name": call.toolID,
+        "input": agentJSONObject(from: call.arguments),
+    ]
+}
+
 private func googleContents(from messages: [AgentMessage]) -> [[String: Any]] {
     messages.compactMap { message in
         guard message.role != .system else { return nil }
-        return [
-            "role": message.role == .assistant ? "model" : "user",
-            "parts": [["text": message.content]],
-        ]
+        switch message.role {
+        case .assistant:
+            var parts: [[String: Any]] = []
+            if !message.content.isEmpty {
+                parts.append(["text": message.content])
+            }
+            parts.append(contentsOf: message.toolCalls.map(googleFunctionCallPart))
+            return ["role": "model", "parts": parts]
+        case .tool:
+            return [
+                "role": "user",
+                "parts": [
+                    [
+                        "functionResponse": [
+                            "name": message.toolName ?? "unknown",
+                            "response": googleFunctionResponse(from: message.content),
+                        ],
+                    ],
+                ],
+            ]
+        case .user:
+            return ["role": "user", "parts": [["text": message.content]]]
+        case .system:
+            return nil
+        }
     }
+}
+
+private func googleFunctionCallPart(_ call: AgentToolCall) -> [String: Any] {
+    [
+        "functionCall": [
+            "name": call.toolID,
+            "args": agentJSONObject(from: call.arguments),
+        ],
+    ]
+}
+
+private func googleFunctionResponse(from content: String) -> [String: Any] {
+    guard let data = content.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+        return ["content": content]
+    }
+    return object
 }
 
 private func openAITools(from descriptors: [AgentToolDescriptor]) -> [[String: Any]] {
@@ -510,6 +586,16 @@ private func jsonData(_ object: [String: Any]) throws -> Data {
     return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
 }
 
+private func jsonString(from arguments: [String: AgentJSONValue]) -> String {
+    let object = agentJSONObject(from: arguments)
+    guard let data = try? jsonData(object),
+          let string = String(data: data, encoding: .utf8)
+    else {
+        return "{}"
+    }
+    return string
+}
+
 private func jsonDictionary(from data: Data) throws -> [String: Any] {
     guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         throw AgentProviderClientError.invalidResponseBody
@@ -529,6 +615,29 @@ private func agentArguments(fromJSONString json: String) throws -> [String: Agen
 private func agentArguments(fromJSONObject object: [String: Any]) -> [String: AgentJSONValue] {
     object.reduce(into: [:]) { result, entry in
         result[entry.key] = agentJSONValue(from: entry.value)
+    }
+}
+
+private func agentJSONObject(from arguments: [String: AgentJSONValue]) -> [String: Any] {
+    arguments.reduce(into: [:]) { result, entry in
+        result[entry.key] = agentAnyValue(from: entry.value)
+    }
+}
+
+private func agentAnyValue(from value: AgentJSONValue) -> Any {
+    switch value {
+    case .null:
+        return NSNull()
+    case .bool(let bool):
+        return bool
+    case .number(let number):
+        return number
+    case .string(let string):
+        return string
+    case .array(let array):
+        return array.map(agentAnyValue(from:))
+    case .object(let object):
+        return agentJSONObject(from: object)
     }
 }
 

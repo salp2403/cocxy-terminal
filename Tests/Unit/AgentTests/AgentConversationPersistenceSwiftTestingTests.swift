@@ -15,7 +15,14 @@ struct AgentConversationPersistenceSwiftTestingTests {
             role: .assistant,
             content: "Use `swift test` next.",
             toolName: "grep",
-            toolCallID: "tool-1"
+            toolCallID: "tool-1",
+            toolCalls: [
+                AgentToolCall(
+                    id: "tool-1",
+                    toolID: "grep",
+                    arguments: ["pattern": .string("AgentLoop")]
+                ),
+            ]
         )
 
         let line = try AgentMessageSerializer.encodeLine(message)
@@ -23,6 +30,16 @@ struct AgentConversationPersistenceSwiftTestingTests {
 
         #expect(line.hasSuffix("\n"))
         #expect(decoded == message)
+    }
+
+    @Test("legacy JSONL messages decode with empty tool calls")
+    func legacyJSONLMessagesDecodeWithEmptyToolCalls() throws {
+        let decoded = try AgentMessageSerializer.decodeLine("""
+        {"content":"Hello","createdAt":1776000000,"id":"legacy","role":"assistant"}
+        """)
+
+        #expect(decoded.toolCalls.isEmpty)
+        #expect(decoded.content == "Hello")
     }
 
     @Test("store appends and loads messages for one conversation")
@@ -83,7 +100,8 @@ struct AgentConversationPersistenceSwiftTestingTests {
         role: AgentMessageRole,
         content: String,
         toolName: String? = nil,
-        toolCallID: String? = nil
+        toolCallID: String? = nil,
+        toolCalls: [AgentToolCall] = []
     ) -> AgentMessage {
         AgentMessage(
             id: id,
@@ -91,7 +109,8 @@ struct AgentConversationPersistenceSwiftTestingTests {
             content: content,
             createdAt: Date(timeIntervalSince1970: 1_776_000_000),
             toolName: toolName,
-            toolCallID: toolCallID
+            toolCallID: toolCallID,
+            toolCalls: toolCalls
         )
     }
 
