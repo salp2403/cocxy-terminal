@@ -453,12 +453,14 @@ private final class RecordingAgentProcessRunner: AgentProcessRunning {
     func run(
         executableURL: URL,
         arguments: [String],
-        workingDirectory: URL
+        workingDirectory: URL,
+        timeoutSeconds: TimeInterval?
     ) throws -> AgentProcessResult {
         calls.append(AgentProcessCall(
             executableURL: executableURL,
             arguments: arguments,
-            workingDirectory: workingDirectory
+            workingDirectory: workingDirectory,
+            timeoutSeconds: timeoutSeconds
         ))
         return results.isEmpty
             ? AgentProcessResult(exitCode: 0, stdout: "", stderr: "")
@@ -470,6 +472,19 @@ private struct AgentProcessCall: Equatable {
     let executableURL: URL
     let arguments: [String]
     let workingDirectory: URL
+    let timeoutSeconds: TimeInterval?
+
+    init(
+        executableURL: URL,
+        arguments: [String],
+        workingDirectory: URL,
+        timeoutSeconds: TimeInterval? = nil
+    ) {
+        self.executableURL = executableURL
+        self.arguments = arguments
+        self.workingDirectory = workingDirectory
+        self.timeoutSeconds = timeoutSeconds
+    }
 }
 
 private final class RecordingTerminalOutputProvider: AgentTerminalOutputProviding {

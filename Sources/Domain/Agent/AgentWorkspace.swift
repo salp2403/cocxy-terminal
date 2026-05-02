@@ -116,6 +116,56 @@ struct AgentWorkspace {
         return url
     }
 
+    func resolveWritableFile(_ rawPath: String, allowCreate: Bool) throws -> URL {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw AgentWorkspaceError.emptyPath
+        }
+
+        let candidate = trimmed.hasPrefix("/")
+            ? URL(fileURLWithPath: trimmed)
+            : rootURL.appendingPathComponent(trimmed)
+        let standardized = candidate.standardizedFileURL
+        let resolvedParent = standardized
+            .deletingLastPathComponent()
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+
+        guard contains(resolvedParent) else {
+            throw AgentWorkspaceError.outsideRoot(rawPath)
+        }
+
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: resolvedParent.path, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else {
+            throw AgentWorkspaceError.notDirectory(relativePath(for: resolvedParent))
+        }
+
+        let candidateAtResolvedParent = resolvedParent.appendingPathComponent(standardized.lastPathComponent)
+        let exists = fileManager.fileExists(atPath: candidateAtResolvedParent.path, isDirectory: &isDirectory)
+        let resolved = exists
+            ? candidateAtResolvedParent.standardizedFileURL.resolvingSymlinksInPath()
+            : candidateAtResolvedParent.standardizedFileURL
+
+        guard contains(resolved) else {
+            throw AgentWorkspaceError.outsideRoot(rawPath)
+        }
+        let relativePath = relativePath(for: resolved)
+        guard !AgentSensitivePathPolicy.isProtected(relativePath: relativePath) else {
+            throw AgentWorkspaceError.protectedSensitivePath(relativePath)
+        }
+        if exists {
+            guard !isDirectory.boolValue else {
+                throw AgentWorkspaceError.notRegularFile(relativePath)
+            }
+        } else if !allowCreate {
+            throw AgentWorkspaceError.notFound(relativePath)
+        }
+
+        return resolved
+    }
+
     func relativePath(for url: URL) -> String {
         let resolvedPath = url.standardizedFileURL.resolvingSymlinksInPath().path
         guard resolvedPath != normalizedRootPath else { return "." }

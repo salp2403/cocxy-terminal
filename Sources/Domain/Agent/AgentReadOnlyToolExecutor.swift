@@ -14,8 +14,24 @@ protocol AgentProcessRunning {
     func run(
         executableURL: URL,
         arguments: [String],
-        workingDirectory: URL
+        workingDirectory: URL,
+        timeoutSeconds: TimeInterval?
     ) throws -> AgentProcessResult
+}
+
+extension AgentProcessRunning {
+    func run(
+        executableURL: URL,
+        arguments: [String],
+        workingDirectory: URL
+    ) throws -> AgentProcessResult {
+        try run(
+            executableURL: executableURL,
+            arguments: arguments,
+            workingDirectory: workingDirectory,
+            timeoutSeconds: nil
+        )
+    }
 }
 
 protocol AgentTerminalOutputProviding {
@@ -39,7 +55,8 @@ struct AgentProcessRunner: AgentProcessRunning {
     func run(
         executableURL: URL,
         arguments: [String],
-        workingDirectory: URL
+        workingDirectory: URL,
+        timeoutSeconds: TimeInterval?
     ) throws -> AgentProcessResult {
         let process = Process()
         process.executableURL = executableURL
@@ -68,14 +85,47 @@ struct AgentProcessRunner: AgentProcessRunning {
         }
 
         try process.run()
-        process.waitUntilExit()
+        let timedOut = wait(for: process, timeoutSeconds: timeoutSeconds)
+        if timedOut {
+            terminate(process)
+        }
         group.wait()
 
+        var stderr = String(data: stderrBuffer.data(), encoding: .utf8) ?? ""
+        if timedOut {
+            if !stderr.isEmpty, !stderr.hasSuffix("\n") {
+                stderr.append("\n")
+            }
+            stderr.append("Command timed out after \(Int(timeoutSeconds ?? 0)) seconds.\n")
+        }
+
         return AgentProcessResult(
-            exitCode: process.terminationStatus,
+            exitCode: timedOut ? 124 : process.terminationStatus,
             stdout: String(data: stdoutBuffer.data(), encoding: .utf8) ?? "",
-            stderr: String(data: stderrBuffer.data(), encoding: .utf8) ?? ""
+            stderr: stderr
         )
+    }
+
+    private func wait(for process: Process, timeoutSeconds: TimeInterval?) -> Bool {
+        guard let timeoutSeconds else {
+            process.waitUntilExit()
+            return false
+        }
+
+        let deadline = Date().addingTimeInterval(max(timeoutSeconds, 0))
+        while process.isRunning, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return process.isRunning
+    }
+
+    private func terminate(_ process: Process) {
+        process.terminate()
+        Thread.sleep(forTimeInterval: 0.05)
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+        }
+        process.waitUntilExit()
     }
 }
 
