@@ -19,12 +19,14 @@ struct AgentToolInvocation: Sendable, Equatable {
 enum AgentToolPromptReason: Sendable, Equatable {
     case diffPreviewRequired(toolID: String)
     case commandApprovalRequired(command: String)
+    case externalToolApprovalRequired(toolID: String)
     case userInputRequired(toolID: String)
 }
 
 enum AgentToolApprovalPreviewKind: String, Sendable, Equatable {
     case diff
     case command
+    case externalTool
     case userInput
 }
 
@@ -105,6 +107,8 @@ struct AgentToolPermissionPolicy: Sendable, Equatable {
             return .prompt(.diffPreviewRequired(toolID: invocation.toolID))
         case .command:
             return commandDecision(for: invocation)
+        case .external:
+            return .prompt(.externalToolApprovalRequired(toolID: invocation.toolID))
         case .userInteraction:
             return .prompt(.userInputRequired(toolID: invocation.toolID))
         }

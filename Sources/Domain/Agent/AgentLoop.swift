@@ -221,6 +221,12 @@ struct AgentLoop {
                 title: "Approve command",
                 body: command
             )
+        case .externalToolApprovalRequired(let toolID):
+            return AgentToolApprovalPreview(
+                kind: .externalTool,
+                title: "Approve external tool",
+                body: "Allow \(toolID) to call a configured local MCP server."
+            )
         case .diffPreviewRequired(let toolID):
             return AgentToolApprovalPreview(
                 kind: .diff,

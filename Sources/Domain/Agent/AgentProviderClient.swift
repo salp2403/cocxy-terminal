@@ -109,6 +109,13 @@ struct AgentProviderClientFactory: Sendable {
     }
 
     func makeClient(configuration: AgentModeConfig) throws -> any AgentLLMClient {
+        try makeClient(configuration: configuration, toolRegistry: .minimumBuiltIns())
+    }
+
+    func makeClient(
+        configuration: AgentModeConfig,
+        toolRegistry: AgentToolRegistry
+    ) throws -> any AgentLLMClient {
         guard configuration.enabled else {
             throw AgentProviderClientFactoryError.agentModeDisabled
         }
@@ -117,11 +124,14 @@ struct AgentProviderClientFactory: Sendable {
         case .explicitChoiceRequired:
             throw AgentProviderClientFactoryError.explicitProviderChoiceRequired
         case .provider(let provider):
-            return try makeClient(provider: provider)
+            return try makeClient(provider: provider, toolRegistry: toolRegistry)
         }
     }
 
-    private func makeClient(provider: AgentProviderKind) throws -> any AgentLLMClient {
+    private func makeClient(
+        provider: AgentProviderKind,
+        toolRegistry: AgentToolRegistry
+    ) throws -> any AgentLLMClient {
         switch provider {
         case .foundationModelsOnDevice:
             return FoundationModelsAgentLLMClient()
@@ -129,19 +139,22 @@ struct AgentProviderClientFactory: Sendable {
             return OpenAIAgentLLMClient(
                 apiKey: try requiredAPIKey(for: provider),
                 model: modelCatalog.openAI,
-                transport: transport
+                transport: transport,
+                toolRegistry: toolRegistry
             )
         case .anthropic:
             return AnthropicAgentLLMClient(
                 apiKey: try requiredAPIKey(for: provider),
                 model: modelCatalog.anthropic,
-                transport: transport
+                transport: transport,
+                toolRegistry: toolRegistry
             )
         case .google:
             return GoogleAgentLLMClient(
                 apiKey: try requiredAPIKey(for: provider),
                 model: modelCatalog.google,
-                transport: transport
+                transport: transport,
+                toolRegistry: toolRegistry
             )
         }
     }

@@ -6,17 +6,20 @@ import Foundation
 struct AgentToolApprovalContext: Sendable, Equatable {
     let approvedWriteCallIDs: Set<String>
     let approvedCommandCallIDs: Set<String>
+    let approvedExternalToolCallIDs: Set<String>
     let commandAllowRules: [AgentCommandAllowRule]
     let userInputResponsesByCallID: [String: String]
 
     init(
         approvedWriteCallIDs: Set<String> = [],
         approvedCommandCallIDs: Set<String> = [],
+        approvedExternalToolCallIDs: Set<String> = [],
         commandAllowRules: [AgentCommandAllowRule] = [],
         userInputResponsesByCallID: [String: String] = [:]
     ) {
         self.approvedWriteCallIDs = approvedWriteCallIDs
         self.approvedCommandCallIDs = approvedCommandCallIDs
+        self.approvedExternalToolCallIDs = approvedExternalToolCallIDs
         self.commandAllowRules = commandAllowRules
         self.userInputResponsesByCallID = userInputResponsesByCallID
     }
@@ -30,6 +33,10 @@ struct AgentToolApprovalContext: Sendable, Equatable {
             || commandAllowRules.contains { $0.matches(command) }
     }
 
+    func approvesExternalTool(callID: String) -> Bool {
+        approvedExternalToolCallIDs.contains(callID)
+    }
+
     func userInputResponse(callID: String) -> String? {
         userInputResponsesByCallID[callID]
     }
@@ -38,6 +45,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
         AgentToolApprovalContext(
             approvedWriteCallIDs: approvedWriteCallIDs,
             approvedCommandCallIDs: approvedCommandCallIDs,
+            approvedExternalToolCallIDs: approvedExternalToolCallIDs,
             commandAllowRules: commandAllowRules + rules,
             userInputResponsesByCallID: userInputResponsesByCallID
         )
@@ -50,6 +58,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
     let processRunner: any AgentProcessRunning
     let shellExecutableURL: URL
     let readOnlyExecutor: AgentReadOnlyToolExecutor
+    let mcpManager: (any MCPManaging)?
     let maxFileBytes: Int
     let defaultCommandTimeoutSeconds: TimeInterval
     let maxCommandTimeoutSeconds: TimeInterval
@@ -61,6 +70,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         terminalOutputProvider: (any AgentTerminalOutputProviding)? = nil,
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
         skillRegistry: SkillRegistry? = nil,
+        mcpManager: (any MCPManaging)? = nil,
         gitExecutableURL: URL = URL(fileURLWithPath: "/usr/bin/git"),
         shellExecutableURL: URL = URL(fileURLWithPath: "/bin/zsh"),
         maxFileBytes: Int = 1_000_000,
@@ -74,6 +84,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         self.maxFileBytes = maxFileBytes
         self.defaultCommandTimeoutSeconds = defaultCommandTimeoutSeconds
         self.maxCommandTimeoutSeconds = maxCommandTimeoutSeconds
+        self.mcpManager = mcpManager
         self.readOnlyExecutor = AgentReadOnlyToolExecutor(
             workspace: workspace,
             processRunner: processRunner,
@@ -109,6 +120,9 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
             case "ask_user":
                 return try askUser(call)
             default:
+                if MCPToolBridge.parseToolID(call.toolID) != nil {
+                    return try await callMCPTool(call)
+                }
                 return failure(
                     call,
                     code: "unsupported_tool",
@@ -139,6 +153,13 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                 body: call.arguments["prompt"]?.stringValue ?? "The agent requested user input."
             )
         default:
+            if MCPToolBridge.parseToolID(call.toolID) != nil {
+                return AgentToolApprovalPreview(
+                    kind: .externalTool,
+                    title: "Approve external MCP tool",
+                    body: "Allow \(call.toolID) to call a configured local MCP server."
+                )
+            }
             throw AgentLocalToolError.unsupportedTool(call.toolID)
         }
     }
@@ -296,6 +317,21 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         )
     }
 
+    private func callMCPTool(_ call: AgentToolCall) async throws -> AgentToolResult {
+        guard approvals.approvesExternalTool(callID: call.id) else {
+            throw AgentLocalToolError.approvalRequired(toolID: call.toolID)
+        }
+        guard let mcpManager else {
+            throw AgentLocalToolError.mcpUnavailable(toolID: call.toolID)
+        }
+
+        let content = try await mcpManager.executeTool(
+            agentToolID: call.toolID,
+            arguments: call.arguments
+        )
+        return .success(callID: call.id, toolID: call.toolID, content: content)
+    }
+
     private func askUser(_ call: AgentToolCall) throws -> AgentToolResult {
         let prompt = call.arguments["prompt"]?.stringValue ?? "The agent requested user input."
         guard let answer = approvals.userInputResponse(callID: call.id),
@@ -379,6 +415,7 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
     case dangerousCommand(String)
     case unsupportedTool(String)
     case userInputRequired(toolID: String)
+    case mcpUnavailable(toolID: String)
 
     var code: String {
         switch self {
@@ -396,6 +433,8 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
             return "unsupported_tool"
         case .userInputRequired:
             return "user_input_required"
+        case .mcpUnavailable:
+            return "mcp_unavailable"
         }
     }
 
@@ -415,6 +454,8 @@ private enum AgentLocalToolError: Error, Sendable, Equatable {
             return "Local preview does not support tool: \(toolID)"
         case .userInputRequired(let toolID):
             return "Tool requires a user response before execution: \(toolID)"
+        case .mcpUnavailable(let toolID):
+            return "No MCP manager is available for tool: \(toolID)"
         }
     }
 }

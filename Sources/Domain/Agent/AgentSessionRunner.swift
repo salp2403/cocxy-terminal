@@ -22,9 +22,23 @@ protocol AgentApprovalRunning: AgentPromptRunning {
 
 protocol AgentLLMClientMaking: Sendable {
     func makeClient(configuration: AgentModeConfig) throws -> any AgentLLMClient
+    func makeClient(
+        configuration: AgentModeConfig,
+        toolRegistry: AgentToolRegistry
+    ) throws -> any AgentLLMClient
 }
 
 extension AgentProviderClientFactory: AgentLLMClientMaking {}
+
+extension AgentLLMClientMaking {
+    func makeClient(
+        configuration: AgentModeConfig,
+        toolRegistry: AgentToolRegistry
+    ) throws -> any AgentLLMClient {
+        _ = toolRegistry
+        return try makeClient(configuration: configuration)
+    }
+}
 
 enum AgentSessionRunnerError: Error, Sendable, Equatable {
     case workspaceUnavailable
@@ -48,6 +62,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
     private let processRunner: any AgentProcessRunning
     private let terminalOutputProvider: (any AgentTerminalOutputProviding)?
     private let lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)?
+    private let mcpManager: (any MCPManaging)?
     private let commandAllowlist: any AgentCommandAllowlistLoading
 
     init(
@@ -59,6 +74,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         processRunner: any AgentProcessRunning = AgentProcessRunner(),
         terminalOutputProvider: (any AgentTerminalOutputProviding)? = nil,
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
+        mcpManager: (any MCPManaging)? = nil,
         commandAllowlist: any AgentCommandAllowlistLoading = AgentCommandAllowlist()
     ) {
         self.clientFactory = clientFactory
@@ -69,6 +85,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         self.processRunner = processRunner
         self.terminalOutputProvider = terminalOutputProvider
         self.lspDiagnosticsProvider = lspDiagnosticsProvider
+        self.mcpManager = mcpManager
         self.commandAllowlist = commandAllowlist
     }
 
@@ -117,7 +134,11 @@ struct AgentSessionRunner: AgentApprovalRunning {
             throw AgentSessionRunnerError.workspaceUnavailable
         }
 
-        let provider = try clientFactory.makeClient(configuration: configuration)
+        let effectiveRegistry = await effectiveToolRegistry()
+        let provider = try clientFactory.makeClient(
+            configuration: configuration,
+            toolRegistry: effectiveRegistry
+        )
         let commandAllowRules = permissionPolicy.commandAllowRules
             + ((try? commandAllowlist.loadRules()) ?? [])
         let effectiveApprovals = approvals.addingCommandAllowRules(commandAllowRules)
@@ -127,7 +148,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
             approvals: effectiveApprovals,
             processRunner: processRunner,
             terminalOutputProvider: terminalOutputProvider,
-            lspDiagnosticsProvider: lspDiagnosticsProvider
+            lspDiagnosticsProvider: lspDiagnosticsProvider,
+            mcpManager: mcpManager
         )
         let store = AgentConversationStore(
             rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir)
@@ -141,10 +163,22 @@ struct AgentSessionRunner: AgentApprovalRunning {
             provider: provider,
             toolExecutor: executor,
             toolPreviewer: executor,
-            registry: registry,
+            registry: effectiveRegistry,
             permissionPolicy: effectivePermissionPolicy,
             conversationStore: store
         )
+    }
+
+    private func effectiveToolRegistry() async -> AgentToolRegistry {
+        guard let mcpManager else {
+            return registry
+        }
+        do {
+            let descriptors = try await mcpManager.listToolDescriptors()
+            return try registry.merging(descriptors)
+        } catch {
+            return registry
+        }
     }
 
     private func approvalContext(
@@ -163,6 +197,9 @@ struct AgentSessionRunner: AgentApprovalRunning {
             }
             return AgentToolApprovalContext(userInputResponsesByCallID: [request.call.id: trimmedInput])
         default:
+            if MCPToolBridge.parseToolID(request.call.toolID) != nil {
+                return AgentToolApprovalContext(approvedExternalToolCallIDs: [request.call.id])
+            }
             return AgentToolApprovalContext()
         }
     }

@@ -211,6 +211,8 @@ struct AgentPanelView: View {
             return "doc.text.magnifyingglass"
         case .command:
             return "terminal"
+        case .externalTool:
+            return "point.3.connected.trianglepath.dotted"
         case .userInput:
             return "questionmark.bubble"
         }

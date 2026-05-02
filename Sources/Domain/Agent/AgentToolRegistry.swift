@@ -8,6 +8,7 @@ enum AgentToolCapability: String, Codable, Sendable, Equatable, CaseIterable {
     case read
     case write
     case command
+    case external
     case userInteraction = "user-interaction"
 }
 
@@ -109,6 +110,10 @@ struct AgentToolRegistry: Sendable, Equatable {
 
     func descriptor(for rawID: String) -> AgentToolDescriptor? {
         descriptorsByID[AgentToolDescriptor.normalizedID(rawID)]
+    }
+
+    func merging(_ descriptors: [AgentToolDescriptor]) throws -> AgentToolRegistry {
+        try AgentToolRegistry(descriptors: self.descriptors + descriptors)
     }
 
     static func minimumBuiltIns() -> AgentToolRegistry {
