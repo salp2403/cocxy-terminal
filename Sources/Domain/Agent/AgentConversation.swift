@@ -104,13 +104,16 @@ enum AgentMessageSerializer {
 struct AgentConversationStore {
     let rootDirectory: URL
     private let fileManager: FileManager
+    private let lineCodec: AgentConversationLineCodec
 
     init(
         rootDirectory: URL = AgentConversationStore.defaultRootDirectory(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        lineCodec: AgentConversationLineCodec = .plaintext
     ) {
         self.rootDirectory = rootDirectory
         self.fileManager = fileManager
+        self.lineCodec = lineCodec
     }
 
     static func defaultRootDirectory() -> URL {
@@ -121,9 +124,8 @@ struct AgentConversationStore {
 
     func append(_ message: AgentMessage, conversationID: String) throws {
         try ensureRootDirectory()
-        let line = try AgentMessageSerializer.encodeLine(message)
         let fileURL = fileURL(forConversationID: conversationID)
-        let data = Data(line.utf8)
+        let data = try lineCodec.encodeLine(message)
 
         if fileManager.fileExists(atPath: fileURL.path) {
             let handle = try FileHandle(forWritingTo: fileURL)
@@ -148,7 +150,7 @@ struct AgentConversationStore {
         return content
             .split(separator: "\n", omittingEmptySubsequences: true)
             .compactMap { line in
-                try? AgentMessageSerializer.decodeLine(String(line))
+                try? lineCodec.decodeLine(String(line))
             }
     }
 

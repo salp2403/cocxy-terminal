@@ -95,6 +95,118 @@ struct AgentConversationPersistenceSwiftTestingTests {
         #expect(filePermissions == 0o600)
     }
 
+    @Test("encrypted store round-trips messages without plaintext on disk")
+    func encryptedStoreRoundTripsWithoutPlaintextOnDisk() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let codec = try AgentConversationLineCodec.encrypted(
+            passphrase: "local-master-password",
+            saltGenerator: { Self.fixedSalt() }
+        )
+        let store = AgentConversationStore(rootDirectory: root, lineCodec: codec)
+        let message = sampleMessage(
+            id: "msg-secret",
+            role: .user,
+            content: "secret prompt with local context",
+            toolCalls: [
+                AgentToolCall(
+                    id: "tool-1",
+                    toolID: "read_file",
+                    arguments: ["path": .string("Sources/App.swift")]
+                ),
+            ]
+        )
+
+        try store.append(message, conversationID: "encrypted")
+
+        let raw = try String(contentsOf: store.fileURL(forConversationID: "encrypted"), encoding: .utf8)
+        #expect(raw.hasPrefix(AgentConversationEncryptionCodec.linePrefix))
+        #expect(!raw.contains("secret prompt"))
+        #expect(!raw.contains("read_file"))
+        #expect(try store.load(conversationID: "encrypted") == [message])
+    }
+
+    @Test("encrypted store skips unreadable lines without exposing other messages")
+    func encryptedStoreSkipsUnreadableLines() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let codec = try AgentConversationLineCodec.encrypted(
+            passphrase: "local-master-password",
+            saltGenerator: { Self.fixedSalt() }
+        )
+        let store = AgentConversationStore(rootDirectory: root, lineCodec: codec)
+        let message = sampleMessage(id: "msg-good", role: .assistant, content: "Valid encrypted reply")
+
+        try store.append(message, conversationID: "encrypted")
+        let fileURL = store.fileURL(forConversationID: "encrypted")
+        let validContent = try String(contentsOf: fileURL, encoding: .utf8)
+        try "\(AgentConversationEncryptionCodec.linePrefix)not-base64\n\(validContent)"
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        #expect(try store.load(conversationID: "encrypted") == [message])
+    }
+
+    @Test("encrypted store requires the same passphrase to load")
+    func encryptedStoreRequiresSamePassphraseToLoad() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let writeCodec = try AgentConversationLineCodec.encrypted(
+            passphrase: "local-master-password",
+            saltGenerator: { Self.fixedSalt() }
+        )
+        let readCodec = try AgentConversationLineCodec.encrypted(
+            passphrase: "different-password",
+            saltGenerator: { Self.fixedSalt() }
+        )
+        let writeStore = AgentConversationStore(rootDirectory: root, lineCodec: writeCodec)
+        let readStore = AgentConversationStore(rootDirectory: root, lineCodec: readCodec)
+
+        try writeStore.append(
+            sampleMessage(id: "msg-1", role: .user, content: "private prompt"),
+            conversationID: "encrypted"
+        )
+
+        #expect(try readStore.load(conversationID: "encrypted").isEmpty)
+    }
+
+    @Test("encrypted codec default salt generator round-trips unique envelopes")
+    func encryptedCodecDefaultSaltGeneratorRoundTripsUniqueEnvelopes() throws {
+        let codec = try AgentConversationLineCodec.encrypted(passphrase: "local-master-password")
+        let message = sampleMessage(id: "msg-1", role: .assistant, content: "private reply")
+
+        let firstLine = try #require(String(data: codec.encodeLine(message), encoding: .utf8))
+        let secondLine = try #require(String(data: codec.encodeLine(message), encoding: .utf8))
+
+        #expect(firstLine.hasPrefix(AgentConversationEncryptionCodec.linePrefix))
+        #expect(secondLine.hasPrefix(AgentConversationEncryptionCodec.linePrefix))
+        #expect(firstLine != secondLine)
+        #expect(
+            try codec.decodeLine(firstLine.trimmingCharacters(in: .newlines)) == message
+        )
+        #expect(
+            try codec.decodeLine(secondLine.trimmingCharacters(in: .newlines)) == message
+        )
+    }
+
+    @Test("encrypted codec rejects empty passphrases")
+    func encryptedCodecRejectsEmptyPassphrases() {
+        #expect(throws: AgentConversationEncryptionError.emptyPassphrase) {
+            try AgentConversationLineCodec.encrypted(passphrase: "")
+        }
+    }
+
+    @Test("encrypted codec rejects invalid salt generator output")
+    func encryptedCodecRejectsInvalidSaltGeneratorOutput() throws {
+        let codec = try AgentConversationLineCodec.encrypted(
+            passphrase: "local-master-password",
+            saltGenerator: { Data([0x01, 0x02]) }
+        )
+
+        #expect(throws: AgentConversationEncryptionError.invalidSaltLength) {
+            try codec.encodeLine(sampleMessage(id: "msg-1", role: .user, content: "private prompt"))
+        }
+    }
+
     private func sampleMessage(
         id: String,
         role: AgentMessageRole,
@@ -123,5 +235,9 @@ struct AgentConversationPersistenceSwiftTestingTests {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
         return permissions.intValue & 0o777
+    }
+
+    private static func fixedSalt() -> Data {
+        Data((0..<AgentConversationEncryptionCodec.saltByteCount).map { UInt8($0) })
     }
 }
