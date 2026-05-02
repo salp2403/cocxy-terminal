@@ -332,6 +332,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
             ("navigation.splitUp", KeybindingActionCatalog.navigateSplitUp.id),
             ("navigation.splitDown", KeybindingActionCatalog.navigateSplitDown.id),
             ("dashboard.toggle", KeybindingActionCatalog.reviewDashboard.id),
+            ("agent.mode", KeybindingActionCatalog.reviewAgentMode.id),
             ("agent.review", KeybindingActionCatalog.reviewCodeReview.id),
             ("github.toggle", KeybindingActionCatalog.windowGitHubPane.id),
             ("notes.toggle", KeybindingActionCatalog.windowNotes.id),

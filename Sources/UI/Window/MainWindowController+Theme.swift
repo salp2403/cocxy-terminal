@@ -155,6 +155,10 @@ extension MainWindowController {
             handleNotesConfigChanged(config.notes)
         }
 
+        if old?.agent != config.agent {
+            agentPanelViewModel?.updateConfiguration(config.agent)
+        }
+
         if old?.lsp != config.lsp {
             resetLSPWorkspaceCoordinators()
         }

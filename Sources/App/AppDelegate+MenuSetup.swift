@@ -206,6 +206,14 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(dashboardItem, with: KeybindingActionCatalog.reviewDashboard)
         viewMenu.addItem(dashboardItem)
 
+        let agentModeItem = NSMenuItem(
+            title: "Agent Mode",
+            action: #selector(MainWindowController.toggleAgentModeAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(agentModeItem, with: KeybindingActionCatalog.reviewAgentMode)
+        viewMenu.addItem(agentModeItem)
+
         let codeReviewItem = NSMenuItem(
             title: "Agent Code Review",
             action: #selector(MainWindowController.toggleCodeReviewAction(_:)),

@@ -160,4 +160,12 @@ struct KeybindingActionCatalogTests {
             #expect(catalogIds.contains(actionId), "Legacy mapping -> \(actionId) is not in catalog")
         }
     }
+
+    @Test func agentModeUsesDedicatedShortcutThatDoesNotReplaceDashboard() {
+        #expect(KeybindingActionCatalog.reviewAgentMode.defaultShortcut.canonical == "cmd+alt+m")
+        #expect(
+            KeybindingActionCatalog.reviewAgentMode.defaultShortcut
+                != KeybindingActionCatalog.reviewDashboard.defaultShortcut
+        )
+    }
 }

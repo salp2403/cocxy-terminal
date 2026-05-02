@@ -53,7 +53,7 @@ extension AgentSecretError: LocalizedError {
     }
 }
 
-private extension AgentProviderKind {
+extension AgentProviderKind {
     var displayName: String {
         switch self {
         case .foundationModelsOnDevice:

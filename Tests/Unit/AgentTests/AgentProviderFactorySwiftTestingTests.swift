@@ -17,6 +17,18 @@ struct AgentProviderFactorySwiftTestingTests {
         #expect(catalog.google == "gemini-2.5-flash")
     }
 
+    @Test("factory errors expose user-readable descriptions")
+    func factoryErrorsExposeUserReadableDescriptions() {
+        #expect(
+            AgentProviderClientFactoryError.explicitProviderChoiceRequired.localizedDescription
+                == "Choose an Agent Mode provider in Settings."
+        )
+        #expect(
+            AgentProviderClientFactoryError.missingAPIKey(.openai).localizedDescription
+                == "Add an API key for OpenAI in Settings."
+        )
+    }
+
     @Test("factory refuses to create clients when Agent Mode is disabled")
     func factoryRefusesWhenDisabled() async throws {
         let factory = AgentProviderClientFactory(

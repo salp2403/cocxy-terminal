@@ -271,6 +271,19 @@ final class ViewMenuItemTests: XCTestCase {
             "Smart Routing remains available from the View menu but no longer captures Cmd+Shift+U."
         )
     }
+
+    func testViewMenuHasAgentModeItemWithDedicatedAction() {
+        guard let agentMode = viewMenu.items.first(where: { $0.title == "Agent Mode" }) else {
+            XCTFail("View menu must expose Agent Mode")
+            return
+        }
+
+        XCTAssertEqual(agentMode.action, #selector(MainWindowController.toggleAgentModeAction(_:)))
+        XCTAssertEqual(
+            MenuKeybindingsBinder.actionId(of: agentMode),
+            KeybindingActionCatalog.reviewAgentMode.id
+        )
+    }
 }
 
 // MARK: - Window Menu Tests

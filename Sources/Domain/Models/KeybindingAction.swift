@@ -405,6 +405,14 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresOption: true, baseKey: "a")
     )
 
+    static let reviewAgentMode = KeybindingAction(
+        id: "review.agentMode",
+        displayName: "Toggle Agent Mode",
+        summary: "Show or hide the built-in Agent Mode panel.",
+        category: .review,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresOption: true, baseKey: "m")
+    )
+
     static let reviewCodeReview = KeybindingAction(
         id: "review.codeReview",
         displayName: "Toggle Code Review",
@@ -489,6 +497,7 @@ enum KeybindingActionCatalog {
         editorResetZoom,
         // Review
         reviewDashboard,
+        reviewAgentMode,
         reviewCodeReview,
         reviewTimeline,
         reviewNotifications,

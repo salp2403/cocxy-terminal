@@ -100,6 +100,57 @@ final class DashboardIntegrationTests: XCTestCase {
     }
 }
 
+// MARK: - Agent Mode Integration Tests
+
+/// Tests that the built-in Agent Mode panel can be toggled on the main window.
+@MainActor
+final class AgentModeIntegrationTests: XCTestCase {
+
+    func testToggleAgentModeCreatesPanel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.toggleAgentMode()
+
+        XCTAssertTrue(
+            controller.isAgentModeVisible,
+            "Agent Mode must be visible after first toggle"
+        )
+        XCTAssertNotNil(
+            controller.agentPanelViewModel,
+            "Agent Mode must create its panel view model"
+        )
+    }
+
+    func testToggleAgentModeTwiceHidesPanel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.toggleAgentMode()
+        controller.toggleAgentMode()
+
+        XCTAssertFalse(
+            controller.isAgentModeVisible,
+            "Agent Mode must be hidden after second toggle"
+        )
+    }
+
+    func testAgentModeActionIsObjCCallable() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.toggleAgentModeAction(nil)
+
+        XCTAssertTrue(
+            controller.isAgentModeVisible,
+            "toggleAgentModeAction must toggle Agent Mode"
+        )
+    }
+}
+
 // MARK: - Search Bar Integration Tests
 
 /// Tests that the scrollback search bar can be toggled on the main window.
@@ -361,6 +412,19 @@ final class OverlayTerminalCoexistenceTests: XCTestCase {
         )
     }
 
+    func testTerminalHostViewRemainsAfterAgentModeToggle() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.toggleAgentMode()
+
+        XCTAssertNotNil(
+            controller.terminalSurfaceView,
+            "Terminal host view must remain after Agent Mode toggle"
+        )
+    }
+
     func testTerminalHostViewRemainsAfterSearchBarToggle() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -381,6 +445,7 @@ final class OverlayTerminalCoexistenceTests: XCTestCase {
 
         controller.toggleCommandPalette()
         controller.toggleDashboard()
+        controller.toggleAgentMode()
         controller.toggleSearchBar()
         controller.showSmartRouting()
 

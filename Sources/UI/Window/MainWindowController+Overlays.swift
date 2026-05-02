@@ -111,6 +111,7 @@ extension MainWindowController {
         "navigation.splitUp": KeybindingActionCatalog.navigateSplitUp.id,
         "navigation.splitDown": KeybindingActionCatalog.navigateSplitDown.id,
         "dashboard.toggle": KeybindingActionCatalog.reviewDashboard.id,
+        "agent.mode": KeybindingActionCatalog.reviewAgentMode.id,
         "agent.review": KeybindingActionCatalog.reviewCodeReview.id,
         "github.toggle": KeybindingActionCatalog.windowGitHubPane.id,
         "notes.toggle": KeybindingActionCatalog.windowNotes.id,
@@ -324,6 +325,17 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleDashboard() }
+                }
+            ),
+            CommandAction(
+                id: "agent.mode",
+                name: "Toggle Agent Mode",
+                description: "Show or hide the built-in Agent Mode panel",
+                shortcut: paletteShortcutLabel("agent.mode", fallback: nil),
+                category: .agent,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.toggleAgentMode() }
                 }
             ),
             CommandAction(
@@ -1600,6 +1612,7 @@ extension MainWindowController {
         let visiblePanels: [DockedPanel] = [
             isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!, avoidsStatusBar: false) : nil,
             isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!, avoidsStatusBar: false) : nil,
+            isAgentModeVisible ? DockedPanel(width: AgentPanelView.panelWidth, view: agentModeHostingView!, avoidsStatusBar: true) : nil,
             isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!, avoidsStatusBar: true) : nil,
             isGitHubPaneVisible ? DockedPanel(width: gitHubPanePanelWidth, view: gitHubPaneHostingView!, avoidsStatusBar: true) : nil,
             isNotesVisible ? DockedPanel(width: clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width), view: notesHostingView!, avoidsStatusBar: true) : nil
@@ -1672,7 +1685,8 @@ extension MainWindowController {
         let effectiveContainerWidth = containerWidth ?? overlayContainerView?.bounds.width ?? CodeReviewPanelView.defaultPanelWidth
         let occupiedSiblingWidth =
             (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
-            (isDashboardVisible ? DashboardPanelView.panelWidth : 0)
+            (isDashboardVisible ? DashboardPanelView.panelWidth : 0) +
+            (isAgentModeVisible ? AgentPanelView.panelWidth : 0)
         let reservedTerminalWidth: CGFloat = 280
         let adaptiveMinimum = max(360, effectiveContainerWidth - occupiedSiblingWidth - reservedTerminalWidth)
         return min(CodeReviewPanelView.minimumPanelWidth, adaptiveMinimum)
@@ -1682,7 +1696,8 @@ extension MainWindowController {
         let effectiveContainerWidth = containerWidth ?? overlayContainerView?.bounds.width ?? CodeReviewPanelView.defaultPanelWidth
         let occupiedSiblingWidth =
             (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
-            (isDashboardVisible ? DashboardPanelView.panelWidth : 0)
+            (isDashboardVisible ? DashboardPanelView.panelWidth : 0) +
+            (isAgentModeVisible ? AgentPanelView.panelWidth : 0)
         let reservedTerminalWidth: CGFloat = 280
         let minimumWidth = minimumCodeReviewPanelWidth(containerWidth: effectiveContainerWidth)
         let adaptiveMaximum = effectiveContainerWidth - occupiedSiblingWidth - reservedTerminalWidth
@@ -2097,6 +2112,8 @@ extension MainWindowController {
             dismissCodeReviewSuggestion()
         } else if isCodeReviewVisible {
             dismissCodeReview()
+        } else if isAgentModeVisible {
+            dismissAgentMode()
         } else if isDashboardVisible {
             dismissDashboard()
         } else if isTimelineVisible {

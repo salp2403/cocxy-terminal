@@ -72,6 +72,21 @@ enum AgentProviderClientFactoryError: Error, Sendable, Equatable {
     case foundationModelsClientUnavailable
 }
 
+extension AgentProviderClientFactoryError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .agentModeDisabled:
+            return "Agent Mode is disabled."
+        case .explicitProviderChoiceRequired:
+            return "Choose an Agent Mode provider in Settings."
+        case .missingAPIKey(let provider):
+            return "Add an API key for \(provider.displayName) in Settings."
+        case .foundationModelsClientUnavailable:
+            return "On-device Foundation Models are unavailable in this build."
+        }
+    }
+}
+
 struct AgentProviderClientFactory: Sendable {
     let secrets: AgentSecrets
     let foundationModelsAvailable: Bool
