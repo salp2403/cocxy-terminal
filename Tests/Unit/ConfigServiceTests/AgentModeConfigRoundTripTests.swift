@@ -35,6 +35,7 @@ struct AgentModeConfigRoundTripTests {
         #expect(defaults.autoMode == false)
         #expect(defaults.maxIterations == 8)
         #expect(defaults.conversationStorageDir == "~/.config/cocxy/agent/conversations")
+        #expect(defaults.conversationEncryption == .disabled)
         #expect(defaults.effectiveProvider(foundationModelsAvailable: true) == .provider(.foundationModelsOnDevice))
         #expect(defaults.effectiveProvider(foundationModelsAvailable: false) == .explicitChoiceRequired)
     }
@@ -48,6 +49,7 @@ struct AgentModeConfigRoundTripTests {
         #expect(toml.contains("foundation-models-fallback = \"require-explicit-choice\""))
         #expect(toml.contains("auto-mode = false"))
         #expect(toml.contains("max-iterations = 8"))
+        #expect(toml.contains("conversation-encryption = \"disabled\""))
     }
 
     @Test("TOML opt-in preserves provider policy and limits")
@@ -60,6 +62,7 @@ struct AgentModeConfigRoundTripTests {
         auto-mode = true
         max-iterations = 12
         conversation-storage-dir = "~/.config/cocxy/custom-agent"
+        conversation-encryption = "master-password"
         """)
 
         #expect(config.agent.enabled == true)
@@ -68,6 +71,7 @@ struct AgentModeConfigRoundTripTests {
         #expect(config.agent.autoMode == true)
         #expect(config.agent.maxIterations == 12)
         #expect(config.agent.conversationStorageDir == "~/.config/cocxy/custom-agent")
+        #expect(config.agent.conversationEncryption == .masterPassword)
         #expect(config.agent.effectiveProvider(foundationModelsAvailable: false) == .provider(.anthropic))
     }
 
@@ -85,6 +89,7 @@ struct AgentModeConfigRoundTripTests {
         auto-mode = "always"
         max-iterations = 500
         conversation-storage-dir = 42
+        conversation-encryption = "cloud"
         """)
 
         #expect(missing.agent == .defaults)
@@ -94,6 +99,7 @@ struct AgentModeConfigRoundTripTests {
         #expect(malformed.agent.autoMode == false)
         #expect(malformed.agent.maxIterations == AgentModeConfig.maxMaxIterations)
         #expect(malformed.agent.conversationStorageDir == AgentModeConfig.defaults.conversationStorageDir)
+        #expect(malformed.agent.conversationEncryption == .disabled)
     }
 
     @Test("legacy Codable payloads decode with Agent Mode disabled")

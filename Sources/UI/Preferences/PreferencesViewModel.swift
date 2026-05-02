@@ -142,11 +142,20 @@ final class PreferencesViewModel: ObservableObject {
     /// Local conversation history storage directory.
     @Published var agentConversationStorageDir: String
 
+    /// Local conversation history encryption policy.
+    @Published var agentConversationEncryption: AgentConversationEncryptionMode
+
     /// Draft API key for the currently selected remote provider.
     @Published var agentAPIKeyDraft: String
 
     /// Short status for the last provider-key save/delete action.
     @Published var agentAPIKeyStatus: String?
+
+    /// Draft master password for optional conversation encryption.
+    @Published var agentConversationMasterPasswordDraft: String
+
+    /// Short status for the last conversation encryption secret action.
+    @Published var agentConversationMasterPasswordStatus: String?
 
     // MARK: - Voice Input
 
@@ -426,6 +435,7 @@ final class PreferencesViewModel: ObservableObject {
         agentAutoMode = c.agent.autoMode
         agentMaxIterations = c.agent.maxIterations
         agentConversationStorageDir = c.agent.conversationStorageDir
+        agentConversationEncryption = c.agent.conversationEncryption
         voiceEnabled = c.voice.enabled
         voiceLocaleIdentifier = c.voice.localeIdentifier
         codeReviewAutoShowOnSessionEnd = c.codeReview.autoShowOnSessionEnd
@@ -543,8 +553,11 @@ final class PreferencesViewModel: ObservableObject {
         self.agentAutoMode = config.agent.autoMode
         self.agentMaxIterations = config.agent.maxIterations
         self.agentConversationStorageDir = config.agent.conversationStorageDir
+        self.agentConversationEncryption = config.agent.conversationEncryption
         self.agentAPIKeyDraft = ""
         self.agentAPIKeyStatus = nil
+        self.agentConversationMasterPasswordDraft = ""
+        self.agentConversationMasterPasswordStatus = nil
 
         // Voice Input
         self.voiceEnabled = config.voice.enabled
@@ -622,6 +635,21 @@ final class PreferencesViewModel: ObservableObject {
 
     func hasSavedAgentAPIKey(for provider: AgentProviderKind) -> Bool {
         (try? agentSecrets.hasAPIKey(for: provider)) ?? false
+    }
+
+    func saveAgentConversationMasterPasswordDraft() throws {
+        try agentSecrets.saveConversationMasterPassword(agentConversationMasterPasswordDraft)
+        agentConversationMasterPasswordDraft = ""
+        agentConversationMasterPasswordStatus = "Conversation master password saved."
+    }
+
+    func deleteAgentConversationMasterPassword() throws {
+        try agentSecrets.deleteConversationMasterPassword()
+        agentConversationMasterPasswordStatus = "Conversation master password deleted."
+    }
+
+    func hasSavedAgentConversationMasterPassword() -> Bool {
+        (try? agentSecrets.hasConversationMasterPassword()) ?? false
     }
 
     // MARK: - LSP Selection
@@ -831,6 +859,7 @@ final class PreferencesViewModel: ObservableObject {
         )
         agentMaxIterations = agent.maxIterations
         agentConversationStorageDir = agent.conversationStorageDir
+        agentConversationEncryption = agent.conversationEncryption
         voiceLocaleIdentifier = voice.localeIdentifier
         pendingKeybindings = nil
     }
@@ -849,7 +878,8 @@ final class PreferencesViewModel: ObservableObject {
             foundationModelsFallback: savedConfig.agent.foundationModelsFallback,
             autoMode: agentAutoMode,
             maxIterations: agentMaxIterations,
-            conversationStorageDir: agentConversationStorageDir
+            conversationStorageDir: agentConversationStorageDir,
+            conversationEncryption: agentConversationEncryption
         )
     }
 
@@ -859,6 +889,7 @@ final class PreferencesViewModel: ObservableObject {
             || agentAutoMode != config.autoMode
             || agentMaxIterations != config.maxIterations
             || agentConversationStorageDir != config.conversationStorageDir
+            || agentConversationEncryption != config.conversationEncryption
     }
 
     private func buildVoiceConfigFromViewModel() -> VoiceConfig {
@@ -1118,6 +1149,7 @@ final class PreferencesViewModel: ObservableObject {
         auto-mode = \(agent.autoMode)
         max-iterations = \(agent.maxIterations)
         conversation-storage-dir = "\(agent.conversationStorageDir)"
+        conversation-encryption = "\(agent.conversationEncryption.rawValue)"
 
         [voice]
         enabled = \(voice.enabled)

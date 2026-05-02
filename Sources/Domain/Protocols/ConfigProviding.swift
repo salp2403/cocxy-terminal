@@ -775,6 +775,12 @@ enum AgentProviderResolution: Sendable, Equatable {
     case explicitChoiceRequired
 }
 
+/// Local conversation history encryption policy.
+enum AgentConversationEncryptionMode: String, Codable, Sendable, Equatable, CaseIterable {
+    case disabled
+    case masterPassword = "master-password"
+}
+
 /// `[agent]` section for built-in Agent Mode.
 ///
 /// This is a configuration foundation only. It does not make Agent Mode
@@ -791,6 +797,7 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
     let autoMode: Bool
     let maxIterations: Int
     let conversationStorageDir: String
+    let conversationEncryption: AgentConversationEncryptionMode
 
     static var defaults: AgentModeConfig {
         AgentModeConfig(
@@ -799,7 +806,8 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
             foundationModelsFallback: .requireExplicitChoice,
             autoMode: false,
             maxIterations: 8,
-            conversationStorageDir: "~/.config/cocxy/agent/conversations"
+            conversationStorageDir: "~/.config/cocxy/agent/conversations",
+            conversationEncryption: .disabled
         )
     }
 
@@ -809,7 +817,8 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
         foundationModelsFallback: FoundationModelsFallbackPolicy = .requireExplicitChoice,
         autoMode: Bool = false,
         maxIterations: Int = 8,
-        conversationStorageDir: String = "~/.config/cocxy/agent/conversations"
+        conversationStorageDir: String = "~/.config/cocxy/agent/conversations",
+        conversationEncryption: AgentConversationEncryptionMode = .disabled
     ) {
         self.enabled = enabled
         self.preferredProvider = preferredProvider
@@ -820,6 +829,7 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
         self.conversationStorageDir = trimmedStorageDir.isEmpty
             ? Self.defaultConversationStorageDir
             : conversationStorageDir
+        self.conversationEncryption = conversationEncryption
     }
 
     /// Resolves the configured provider without importing platform-only
@@ -846,6 +856,7 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
         case autoMode
         case maxIterations
         case conversationStorageDir
+        case conversationEncryption
     }
 
     init(from decoder: Decoder) throws {
@@ -870,6 +881,10 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
         self.conversationStorageDir = trimmedStorageDir.isEmpty
             ? defaults.conversationStorageDir
             : rawStorageDir
+        self.conversationEncryption = try container.decodeIfPresent(
+            AgentConversationEncryptionMode.self,
+            forKey: .conversationEncryption
+        ) ?? defaults.conversationEncryption
     }
 
     private static let defaultConversationStorageDir = "~/.config/cocxy/agent/conversations"

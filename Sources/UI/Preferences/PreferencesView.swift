@@ -832,6 +832,46 @@ struct AgentModePreferencesSection: View {
             Section("Storage") {
                 TextField("Conversation storage", text: $viewModel.agentConversationStorageDir)
                     .textFieldStyle(.roundedBorder)
+
+                Picker("Conversation encryption", selection: $viewModel.agentConversationEncryption) {
+                    ForEach(AgentConversationEncryptionMode.allCases, id: \.self) { mode in
+                        Text(conversationEncryptionTitle(mode)).tag(mode)
+                    }
+                }
+
+                if viewModel.agentConversationEncryption == .masterPassword {
+                    SecureField("Master password", text: $viewModel.agentConversationMasterPasswordDraft)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack {
+                        Button("Save Master Password") {
+                            saveConversationMasterPassword()
+                        }
+                        .disabled(trimmedConversationMasterPasswordDraft.isEmpty)
+
+                        Button("Delete Saved Password") {
+                            deleteConversationMasterPassword()
+                        }
+                        .disabled(!viewModel.hasSavedAgentConversationMasterPassword())
+
+                        Spacer()
+                    }
+
+                    Text(
+                        viewModel.hasSavedAgentConversationMasterPassword()
+                            ? "A master password is saved in the macOS Keychain."
+                            : "No master password is saved."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    if let status = viewModel.agentConversationMasterPasswordStatus {
+                        Text(status)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
             }
 
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
@@ -842,6 +882,10 @@ struct AgentModePreferencesSection: View {
 
     private var trimmedAPIKeyDraft: String {
         viewModel.agentAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedConversationMasterPasswordDraft: String {
+        viewModel.agentConversationMasterPasswordDraft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func saveAPIKey() {
@@ -857,6 +901,31 @@ struct AgentModePreferencesSection: View {
             try viewModel.deleteAgentAPIKey(for: viewModel.agentPreferredProvider)
         } catch {
             viewModel.agentAPIKeyStatus = "Failed to delete API key: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveConversationMasterPassword() {
+        do {
+            try viewModel.saveAgentConversationMasterPasswordDraft()
+        } catch {
+            viewModel.agentConversationMasterPasswordStatus = "Failed to save master password: \(error.localizedDescription)"
+        }
+    }
+
+    private func deleteConversationMasterPassword() {
+        do {
+            try viewModel.deleteAgentConversationMasterPassword()
+        } catch {
+            viewModel.agentConversationMasterPasswordStatus = "Failed to delete master password: \(error.localizedDescription)"
+        }
+    }
+
+    private func conversationEncryptionTitle(_ mode: AgentConversationEncryptionMode) -> String {
+        switch mode {
+        case .disabled:
+            return "Disabled"
+        case .masterPassword:
+            return "Master Password"
         }
     }
 

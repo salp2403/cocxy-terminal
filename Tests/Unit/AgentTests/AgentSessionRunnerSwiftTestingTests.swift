@@ -88,6 +88,89 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(factory.configurations.isEmpty)
     }
 
+    @Test("runner requires saved master password when conversation encryption is enabled")
+    func runnerRequiresSavedMasterPasswordForConversationEncryption() async throws {
+        let workspace = temporaryDirectory(named: "encrypted-missing-password-workspace")
+        let conversationRoot = temporaryDirectory(named: "encrypted-missing-password-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let factory = RecordingSessionRunnerClientFactory(
+            client: ScriptedSessionRunnerClient(responses: [])
+        )
+        let runner = AgentSessionRunner(
+            clientFactory: factory,
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-encrypted-missing-password",
+            agentSecrets: AgentSecrets(store: InMemoryAgentSecretStore())
+        )
+
+        await #expect(throws: AgentSessionRunnerError.conversationMasterPasswordUnavailable) {
+            _ = try await runner.run(
+                prompt: "Persist securely",
+                history: [],
+                configuration: AgentModeConfig(
+                    enabled: true,
+                    preferredProvider: .openai,
+                    conversationStorageDir: conversationRoot.path,
+                    conversationEncryption: .masterPassword
+                )
+            )
+        }
+        #expect(factory.configurations.isEmpty)
+    }
+
+    @Test("runner persists encrypted conversations when master password is configured")
+    func runnerPersistsEncryptedConversations() async throws {
+        let workspace = temporaryDirectory(named: "encrypted-workspace")
+        let conversationRoot = temporaryDirectory(named: "encrypted-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let secretStore = InMemoryAgentSecretStore()
+        let secrets = AgentSecrets(store: secretStore)
+        try secrets.saveConversationMasterPassword("local-master-password")
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Stored locally.", toolCalls: []),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-encrypted-test",
+            agentSecrets: secrets
+        )
+
+        let result = try await runner.run(
+            prompt: "Persist this secret prompt",
+            history: [],
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                maxIterations: 4,
+                conversationStorageDir: conversationRoot.path,
+                conversationEncryption: .masterPassword
+            )
+        )
+        let fileURL = AgentConversationStore(rootDirectory: conversationRoot)
+            .fileURL(forConversationID: "agent-encrypted-test")
+        let raw = try String(contentsOf: fileURL, encoding: .utf8)
+        let decrypted = try AgentConversationStore(
+            rootDirectory: conversationRoot,
+            lineCodec: try AgentConversationLineCodec.encrypted(passphrase: "local-master-password")
+        )
+        .load(conversationID: "agent-encrypted-test")
+
+        #expect(result.stopReason == .completed)
+        #expect(raw.hasPrefix(AgentConversationEncryptionCodec.linePrefix))
+        #expect(!raw.contains("Persist this secret prompt"))
+        #expect(!raw.contains("Stored locally."))
+        #expect(decrypted.map(\.role) == [.user, .assistant])
+        #expect(decrypted.map(\.content) == ["Persist this secret prompt", "Stored locally."])
+    }
+
     @Test("runner applies local command allowlist before prompting")
     func runnerAppliesCommandAllowlistBeforePrompting() async throws {
         let workspace = temporaryDirectory(named: "allowlist-workspace")

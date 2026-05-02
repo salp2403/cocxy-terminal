@@ -23,10 +23,14 @@ protocol AgentSecretStoring: Sendable {
     func saveAPIKey(_ apiKey: String, for provider: AgentProviderKind) throws
     func apiKey(for provider: AgentProviderKind) throws -> String?
     func deleteAPIKey(for provider: AgentProviderKind) throws
+    func saveSecret(_ secret: String, account: String) throws
+    func secret(account: String) throws -> String?
+    func deleteSecret(account: String) throws
 }
 
 enum AgentSecretError: Error, Sendable, Equatable {
     case emptyAPIKey
+    case emptyMasterPassword
     case providerDoesNotUseAPIKey(AgentProviderKind)
     case saveFailed(OSStatus)
     case loadFailed(OSStatus)
@@ -39,6 +43,8 @@ extension AgentSecretError: LocalizedError {
         switch self {
         case .emptyAPIKey:
             return "API key cannot be empty."
+        case .emptyMasterPassword:
+            return "Master password cannot be empty."
         case .providerDoesNotUseAPIKey(let provider):
             return "\(provider.displayName) does not use an API key."
         case .saveFailed(let status):
@@ -70,6 +76,8 @@ extension AgentProviderKind {
 
 /// Validating facade for Agent provider secrets.
 struct AgentSecrets: Sendable {
+    private static let conversationMasterPasswordAccount = "conversation-master-password"
+
     private let store: any AgentSecretStoring
 
     init(store: any AgentSecretStoring = KeychainAgentSecretStore()) {
@@ -102,6 +110,26 @@ struct AgentSecrets: Sendable {
         guard provider.requiresAPIKey else { return }
         try store.deleteAPIKey(for: provider)
     }
+
+    func saveConversationMasterPassword(_ password: String) throws {
+        let trimmed = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw AgentSecretError.emptyMasterPassword
+        }
+        try store.saveSecret(trimmed, account: Self.conversationMasterPasswordAccount)
+    }
+
+    func conversationMasterPassword() throws -> String? {
+        try store.secret(account: Self.conversationMasterPasswordAccount)
+    }
+
+    func hasConversationMasterPassword() throws -> Bool {
+        try conversationMasterPassword() != nil
+    }
+
+    func deleteConversationMasterPassword() throws {
+        try store.deleteSecret(account: Self.conversationMasterPasswordAccount)
+    }
 }
 
 /// Production implementation backed by the macOS Keychain.
@@ -109,13 +137,24 @@ final class KeychainAgentSecretStore: AgentSecretStoring {
     static let service = "com.cocxy.agent"
 
     func saveAPIKey(_ apiKey: String, for provider: AgentProviderKind) throws {
-        try? deleteAPIKey(for: provider)
+        try saveSecret(apiKey, account: provider.keychainAccount)
+    }
 
+    func apiKey(for provider: AgentProviderKind) throws -> String? {
+        try secret(account: provider.keychainAccount)
+    }
+
+    func deleteAPIKey(for provider: AgentProviderKind) throws {
+        try deleteSecret(account: provider.keychainAccount)
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
+        try? deleteSecret(account: account)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: provider.keychainAccount,
-            kSecValueData as String: Data(apiKey.utf8),
+            kSecAttrAccount as String: account,
+            kSecValueData as String: Data(secret.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
@@ -125,11 +164,11 @@ final class KeychainAgentSecretStore: AgentSecretStoring {
         }
     }
 
-    func apiKey(for provider: AgentProviderKind) throws -> String? {
+    func secret(account: String) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: provider.keychainAccount,
+            kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -150,11 +189,11 @@ final class KeychainAgentSecretStore: AgentSecretStoring {
         return value
     }
 
-    func deleteAPIKey(for provider: AgentProviderKind) throws {
+    func deleteSecret(account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: provider.keychainAccount,
+            kSecAttrAccount as String: account,
         ]
 
         let status = SecItemDelete(query as CFDictionary)
@@ -170,20 +209,32 @@ final class InMemoryAgentSecretStore: AgentSecretStoring, @unchecked Sendable {
     private let lock = NSLock()
 
     func saveAPIKey(_ apiKey: String, for provider: AgentProviderKind) throws {
-        lock.lock()
-        defer { lock.unlock() }
-        storage[provider.keychainAccount] = apiKey
+        try saveSecret(apiKey, account: provider.keychainAccount)
     }
 
     func apiKey(for provider: AgentProviderKind) throws -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage[provider.keychainAccount]
+        try secret(account: provider.keychainAccount)
     }
 
     func deleteAPIKey(for provider: AgentProviderKind) throws {
+        try deleteSecret(account: provider.keychainAccount)
+    }
+
+    func saveSecret(_ secret: String, account: String) throws {
         lock.lock()
         defer { lock.unlock() }
-        storage.removeValue(forKey: provider.keychainAccount)
+        storage[account] = secret
+    }
+
+    func secret(account: String) throws -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage[account]
+    }
+
+    func deleteSecret(account: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.removeValue(forKey: account)
     }
 }

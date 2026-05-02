@@ -50,6 +50,30 @@ struct AgentSecretsSwiftTestingTests {
         let error = AgentSecretError.providerDoesNotUseAPIKey(.foundationModelsOnDevice)
 
         #expect(error.localizedDescription == "Foundation Models does not use an API key.")
+        #expect(AgentSecretError.emptyMasterPassword.localizedDescription == "Master password cannot be empty.")
+    }
+
+    @Test("conversation master password save load and delete through injected store")
+    func conversationMasterPasswordSaveLoadAndDelete() throws {
+        let secrets = AgentSecrets(store: InMemoryAgentSecretStore())
+
+        try secrets.saveConversationMasterPassword("  local-password\n")
+
+        #expect(try secrets.conversationMasterPassword() == "local-password")
+        #expect(try secrets.hasConversationMasterPassword())
+
+        try secrets.deleteConversationMasterPassword()
+        #expect(try secrets.conversationMasterPassword() == nil)
+        #expect(try !secrets.hasConversationMasterPassword())
+    }
+
+    @Test("conversation master password rejects empty values")
+    func conversationMasterPasswordRejectsEmptyValues() throws {
+        let secrets = AgentSecrets(store: InMemoryAgentSecretStore())
+
+        #expect(throws: AgentSecretError.emptyMasterPassword) {
+            try secrets.saveConversationMasterPassword(" \n\t ")
+        }
     }
 
     @Test("provider keys are isolated by keychain account")
@@ -63,6 +87,9 @@ struct AgentSecretsSwiftTestingTests {
         #expect(try secrets.apiKey(for: .anthropic) == "sk-ant")
         #expect(try secrets.apiKey(for: .openai) == "sk-openai")
         #expect(try secrets.apiKey(for: .google) == "sk-google")
+        try secrets.saveConversationMasterPassword("master")
+        #expect(try secrets.conversationMasterPassword() == "master")
+        #expect(try secrets.apiKey(for: .openai) == "sk-openai")
         #expect(AgentProviderKind.anthropic.keychainAccount == "anthropic")
         #expect(AgentProviderKind.openai.keychainAccount == "openai")
         #expect(AgentProviderKind.google.keychainAccount == "google")

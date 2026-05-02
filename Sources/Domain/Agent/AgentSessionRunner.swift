@@ -42,6 +42,7 @@ extension AgentLLMClientMaking {
 
 enum AgentSessionRunnerError: Error, Sendable, Equatable {
     case workspaceUnavailable
+    case conversationMasterPasswordUnavailable
 }
 
 extension AgentSessionRunnerError: LocalizedError {
@@ -49,6 +50,8 @@ extension AgentSessionRunnerError: LocalizedError {
         switch self {
         case .workspaceUnavailable:
             return "No active workspace is available for Agent Mode."
+        case .conversationMasterPasswordUnavailable:
+            return "Agent conversation encryption is enabled, but no master password is saved."
         }
     }
 }
@@ -64,6 +67,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
     private let lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)?
     private let mcpManager: (any MCPManaging)?
     private let commandAllowlist: any AgentCommandAllowlistLoading
+    private let agentSecrets: AgentSecrets
 
     init(
         clientFactory: any AgentLLMClientMaking = AgentProviderClientFactory(),
@@ -75,7 +79,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
         terminalOutputProvider: (any AgentTerminalOutputProviding)? = nil,
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
         mcpManager: (any MCPManaging)? = nil,
-        commandAllowlist: any AgentCommandAllowlistLoading = AgentCommandAllowlist()
+        commandAllowlist: any AgentCommandAllowlistLoading = AgentCommandAllowlist(),
+        agentSecrets: AgentSecrets = AgentSecrets()
     ) {
         self.clientFactory = clientFactory
         self.workspaceRootProvider = workspaceRootProvider
@@ -87,6 +92,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         self.lspDiagnosticsProvider = lspDiagnosticsProvider
         self.mcpManager = mcpManager
         self.commandAllowlist = commandAllowlist
+        self.agentSecrets = agentSecrets
     }
 
     func run(
@@ -135,6 +141,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         }
 
         let effectiveRegistry = await effectiveToolRegistry()
+        let lineCodec = try conversationLineCodec(from: configuration)
         let provider = try clientFactory.makeClient(
             configuration: configuration,
             toolRegistry: effectiveRegistry
@@ -152,7 +159,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
             mcpManager: mcpManager
         )
         let store = AgentConversationStore(
-            rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir)
+            rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir),
+            lineCodec: lineCodec
         )
         let effectivePermissionPolicy = AgentToolPermissionPolicy(
             autoModeEnabled: permissionPolicy.autoModeEnabled,
@@ -218,5 +226,17 @@ struct AgentSessionRunner: AgentApprovalRunning {
         return FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent(expandedPath, isDirectory: true)
+    }
+
+    private func conversationLineCodec(from configuration: AgentModeConfig) throws -> AgentConversationLineCodec {
+        switch configuration.conversationEncryption {
+        case .disabled:
+            return .plaintext
+        case .masterPassword:
+            guard let password = try agentSecrets.conversationMasterPassword() else {
+                throw AgentSessionRunnerError.conversationMasterPasswordUnavailable
+            }
+            return try AgentConversationLineCodec.encrypted(passphrase: password)
+        }
     }
 }

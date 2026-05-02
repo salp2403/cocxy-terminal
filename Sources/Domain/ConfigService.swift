@@ -247,6 +247,7 @@ final class ConfigService: ConfigProviding {
         auto-mode = \(defaults.agent.autoMode)
         max-iterations = \(defaults.agent.maxIterations)
         conversation-storage-dir = "\(defaults.agent.conversationStorageDir)"
+        conversation-encryption = "\(defaults.agent.conversationEncryption.rawValue)"
 
         [voice]
         # Local voice input. Disabled by default. "system" resolves to
@@ -679,6 +680,9 @@ final class ConfigService: ConfigProviding {
             .flatMap { FoundationModelsFallbackPolicy(rawValue: $0) }
             ?? defaults.foundationModelsFallback
         let rawMaxIterations = intValue(table["max-iterations"]) ?? defaults.maxIterations
+        let conversationEncryption = stringValue(table["conversation-encryption"])
+            .flatMap { AgentConversationEncryptionMode(rawValue: $0) }
+            ?? defaults.conversationEncryption
 
         return AgentModeConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
@@ -687,7 +691,8 @@ final class ConfigService: ConfigProviding {
             autoMode: boolValue(table["auto-mode"]) ?? defaults.autoMode,
             maxIterations: rawMaxIterations,
             conversationStorageDir: stringValue(table["conversation-storage-dir"])
-                ?? defaults.conversationStorageDir
+                ?? defaults.conversationStorageDir,
+            conversationEncryption: conversationEncryption
         )
     }
 

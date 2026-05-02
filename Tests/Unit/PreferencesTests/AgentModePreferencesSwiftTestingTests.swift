@@ -47,7 +47,8 @@ struct AgentModePreferencesSwiftTestingTests {
                 preferredProvider: .openai,
                 autoMode: true,
                 maxIterations: 14,
-                conversationStorageDir: "~/.config/cocxy/custom-agent"
+                conversationStorageDir: "~/.config/cocxy/custom-agent",
+                conversationEncryption: .masterPassword
             ),
             notifications: .defaults,
             quickTerminal: .defaults,
@@ -62,6 +63,7 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(vm.agentAutoMode == true)
         #expect(vm.agentMaxIterations == 14)
         #expect(vm.agentConversationStorageDir == "~/.config/cocxy/custom-agent")
+        #expect(vm.agentConversationEncryption == .masterPassword)
         #expect(vm.hasUnsavedChanges == false)
     }
 
@@ -73,6 +75,7 @@ struct AgentModePreferencesSwiftTestingTests {
         vm.agentModeEnabled = true
         vm.agentPreferredProvider = .google
         vm.agentMaxIterations = 10
+        vm.agentConversationEncryption = .masterPassword
 
         #expect(vm.hasUnsavedChanges == true)
     }
@@ -100,6 +103,7 @@ struct AgentModePreferencesSwiftTestingTests {
         vm.agentPreferredProvider = .openai
         vm.agentAutoMode = true
         vm.agentMaxIterations = 3
+        vm.agentConversationEncryption = .masterPassword
         #expect(vm.hasUnsavedChanges == true)
 
         vm.discardChanges()
@@ -108,6 +112,7 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(vm.agentPreferredProvider == .anthropic)
         #expect(vm.agentAutoMode == false)
         #expect(vm.agentMaxIterations == 12)
+        #expect(vm.agentConversationEncryption == .disabled)
         #expect(vm.hasUnsavedChanges == false)
     }
 
@@ -120,6 +125,7 @@ struct AgentModePreferencesSwiftTestingTests {
         vm.agentAutoMode = true
         vm.agentMaxIterations = 15
         vm.agentConversationStorageDir = "~/.config/cocxy/agent/custom"
+        vm.agentConversationEncryption = .masterPassword
         try vm.save()
 
         let written = try #require(provider.content)
@@ -131,6 +137,7 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(service.current.agent.autoMode == true)
         #expect(service.current.agent.maxIterations == 15)
         #expect(service.current.agent.conversationStorageDir == "~/.config/cocxy/agent/custom")
+        #expect(service.current.agent.conversationEncryption == .masterPassword)
         #expect(vm.hasUnsavedChanges == false)
     }
 
@@ -178,6 +185,33 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(vm.hasUnsavedChanges == false)
     }
 
+    @Test("saving conversation master password stores trimmed value outside config dirty state")
+    func savingConversationMasterPasswordStoresTrimmedValueOutsideConfigDirtyState() throws {
+        let (vm, _, secrets) = makeViewModelWithSecrets()
+
+        vm.agentConversationMasterPasswordDraft = "  local-password  "
+        try vm.saveAgentConversationMasterPasswordDraft()
+
+        #expect(try secrets.conversationMasterPassword() == "local-password")
+        #expect(vm.agentConversationMasterPasswordDraft.isEmpty)
+        #expect(vm.agentConversationMasterPasswordStatus == "Conversation master password saved.")
+        #expect(vm.hasSavedAgentConversationMasterPassword() == true)
+        #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test("deleting conversation master password removes it from local secrets")
+    func deletingConversationMasterPasswordRemovesLocalSecret() throws {
+        let (vm, _, secrets) = makeViewModelWithSecrets()
+        try secrets.saveConversationMasterPassword("local-password")
+        #expect(vm.hasSavedAgentConversationMasterPassword() == true)
+
+        try vm.deleteAgentConversationMasterPassword()
+
+        #expect(try secrets.conversationMasterPassword() == nil)
+        #expect(vm.agentConversationMasterPasswordStatus == "Conversation master password deleted.")
+        #expect(vm.hasSavedAgentConversationMasterPassword() == false)
+    }
+
     @Test("Foundation Models never exposes API key storage from Preferences")
     func foundationModelsNeverExposesAPIKeyStorage() {
         let (vm, _, _) = makeViewModelWithSecrets()
@@ -212,11 +246,13 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(defaultToml.contains("enabled = false"))
         #expect(defaultToml.contains("preferred-provider = \"foundation-models-on-device\""))
         #expect(defaultToml.contains("auto-mode = false"))
+        #expect(defaultToml.contains("conversation-encryption = \"disabled\""))
 
         vm.agentModeEnabled = true
         vm.agentPreferredProvider = .openai
         vm.agentAutoMode = true
         vm.agentMaxIterations = 200
+        vm.agentConversationEncryption = .masterPassword
 
         let toml = vm.generateToml()
         #expect(toml.contains("[agent]"))
@@ -224,5 +260,6 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(toml.contains("preferred-provider = \"openai\""))
         #expect(toml.contains("auto-mode = true"))
         #expect(toml.contains("max-iterations = 50"))
+        #expect(toml.contains("conversation-encryption = \"master-password\""))
     }
 }
