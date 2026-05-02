@@ -38,11 +38,12 @@ let package = Package(
             dependencies: [
                 "CocxyShared",
                 "CocxyMarkdownLib",
+                "CocxyTreeSitterABI",
                 "CocxyCoreKit",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources",
-            exclude: ["Domain/Markdown"],
+            exclude: ["Domain/Markdown", "CocxyTreeSitterABI"],
             resources: [
                 .process("App/Assets.xcassets"),
             ],
@@ -70,6 +71,11 @@ let package = Package(
         .binaryTarget(
             name: "CocxyCoreKit",
             path: "libs/CocxyCoreKit.xcframework"
+        ),
+        .target(
+            name: "CocxyTreeSitterABI",
+            path: "Sources/CocxyTreeSitterABI",
+            publicHeadersPath: "include"
         ),
 
         // MARK: - CLI Companion

@@ -195,6 +195,38 @@ check_exists "$RESOURCES/CocxyTerminal.sdef" "AppleScript definition"
 
 # 8. Markdown preview resources (Mermaid, KaTeX)
 echo ""
+echo "[Syntax Grammars]"
+check_exists "$RESOURCES/TreeSitter" "Tree-sitter core resources directory"
+check_exists "$RESOURCES/TreeSitter/libtree-sitter.dylib" "Tree-sitter core dylib"
+check_codesign_valid "$RESOURCES/TreeSitter/libtree-sitter.dylib" "Tree-sitter core dylib signature"
+check_exists "$RESOURCES/Grammars" "Syntax grammars resources directory"
+check_exists "$RESOURCES/Grammars/manifest.json" "Syntax grammar manifest"
+check_exists "$RESOURCES/Grammars/LICENSES" "Syntax grammar license records"
+check_exists "$RESOURCES/Grammars/LICENSES/tree-sitter-core-LICENSE.txt" "Tree-sitter core license"
+check_exists "$RESOURCES/Grammars/LICENSES/tree-sitter-core-unicode-LICENSE.txt" "Tree-sitter Unicode license"
+check_exists "$RESOURCES/Grammars/LICENSES/tree-sitter-swift-LICENSE.txt" "Swift grammar license"
+check_exists "$RESOURCES/Grammars/LICENSES/tree-sitter-rust-LICENSE.txt" "Rust grammar license"
+check_exists "$RESOURCES/Grammars/LICENSES/tree-sitter-python-LICENSE.txt" "Python grammar license"
+check_exists "$RESOURCES/Grammars/LICENSES/tree-sitter-typescript-LICENSE.txt" "TypeScript grammar license"
+check_exists "$RESOURCES/Grammars/LICENSES/tree-sitter-go-LICENSE.txt" "Go grammar license"
+check_exists "$RESOURCES/Grammars/swift/highlights.scm" "Swift highlight query"
+check_exists "$RESOURCES/Grammars/swift/parser.dylib" "Swift parser dylib"
+check_codesign_valid "$RESOURCES/Grammars/swift/parser.dylib" "Swift parser dylib signature"
+check_exists "$RESOURCES/Grammars/rust/highlights.scm" "Rust highlight query"
+check_exists "$RESOURCES/Grammars/rust/parser.dylib" "Rust parser dylib"
+check_codesign_valid "$RESOURCES/Grammars/rust/parser.dylib" "Rust parser dylib signature"
+check_exists "$RESOURCES/Grammars/python/highlights.scm" "Python highlight query"
+check_exists "$RESOURCES/Grammars/python/parser.dylib" "Python parser dylib"
+check_codesign_valid "$RESOURCES/Grammars/python/parser.dylib" "Python parser dylib signature"
+check_exists "$RESOURCES/Grammars/typescript/highlights.scm" "TypeScript highlight query"
+check_exists "$RESOURCES/Grammars/typescript/parser.dylib" "TypeScript parser dylib"
+check_codesign_valid "$RESOURCES/Grammars/typescript/parser.dylib" "TypeScript parser dylib signature"
+check_exists "$RESOURCES/Grammars/go/highlights.scm" "Go highlight query"
+check_exists "$RESOURCES/Grammars/go/parser.dylib" "Go parser dylib"
+check_codesign_valid "$RESOURCES/Grammars/go/parser.dylib" "Go parser dylib signature"
+
+# 9. Markdown preview resources (Mermaid, KaTeX)
+echo ""
 echo "[Markdown Preview]"
 check_exists "$RESOURCES/Markdown" "Markdown resources directory"
 check_exists "$RESOURCES/Markdown/mermaid.min.js" "Mermaid JS"
@@ -204,13 +236,13 @@ check_exists "$RESOURCES/Markdown/katex-auto-render.min.js" "KaTeX auto-render"
 check_exists "$RESOURCES/Markdown/highlight.min.js" "Highlight.js"
 check_exists "$RESOURCES/Markdown/highlight-cocxy.css" "Highlight.js theme"
 
-# 8b. Browser panel JS bundles (DOM grab and future browser-side features)
+# 9b. Browser panel JS bundles (DOM grab and future browser-side features)
 echo ""
 echo "[Browser JS]"
 check_exists "$RESOURCES/JS" "Browser JS resources directory"
 check_exists "$RESOURCES/JS/dom-grab.js" "DOM grab JS"
 
-# 9. QuickLook extension
+# 10. QuickLook extension
 echo ""
 echo "[QuickLook]"
 check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex" "QuickLook extension"
@@ -224,7 +256,7 @@ check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Resources/Markdown
 check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Resources/Markdown/mermaid.min.js" "QuickLook Mermaid JS"
 check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Resources/Markdown/highlight.min.js" "QuickLook Highlight.js"
 
-# 10. Themes (optional but expected)
+# 11. Themes (optional but expected)
 echo ""
 echo "[Themes]"
 if [ -d "$RESOURCES/Themes" ]; then

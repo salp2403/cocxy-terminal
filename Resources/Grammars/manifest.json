@@ -1,0 +1,54 @@
+{
+  "languages": [
+    {
+      "languageID": "swift",
+      "displayName": "Swift",
+      "fileExtensions": ["swift"],
+      "parserResource": "Grammars/swift/parser.dylib",
+      "highlightQueryResource": "Grammars/swift/highlights.scm",
+      "upstreamVersion": "tree-sitter-swift@c354345348cf8079e6794fa1b1324d8d44b6807b",
+      "license": "MIT",
+      "checksum": "sha256:bd56634202feda1dfb5ded3df3aad831fe02ebd7751a87721d88aadf1d4aac54"
+    },
+    {
+      "languageID": "rust",
+      "displayName": "Rust",
+      "fileExtensions": ["rs"],
+      "parserResource": "Grammars/rust/parser.dylib",
+      "highlightQueryResource": "Grammars/rust/highlights.scm",
+      "upstreamVersion": "tree-sitter-rust@77a3747266f4d621d0757825e6b11edcbf991ca5",
+      "license": "MIT",
+      "checksum": "sha256:e5ed4760141c35ccefef7afa514f0f5c546d9411002b6024586ffd20885b3791"
+    },
+    {
+      "languageID": "python",
+      "displayName": "Python",
+      "fileExtensions": ["py", "pyw"],
+      "parserResource": "Grammars/python/parser.dylib",
+      "highlightQueryResource": "Grammars/python/highlights.scm",
+      "upstreamVersion": "tree-sitter-python@293fdc02038ee2bf0e2e206711b69c90ac0d413f",
+      "license": "MIT",
+      "checksum": "sha256:8a25f6b2e8149e0d0589508d7aae9eeb54b3c86c21b3de5dde75ee5837fcfd19"
+    },
+    {
+      "languageID": "typescript",
+      "displayName": "TypeScript",
+      "fileExtensions": ["ts", "tsx"],
+      "parserResource": "Grammars/typescript/parser.dylib",
+      "highlightQueryResource": "Grammars/typescript/highlights.scm",
+      "upstreamVersion": "tree-sitter-typescript@f975a621f4e7f532fe322e13c4f79495e0a7b2e7",
+      "license": "MIT",
+      "checksum": "sha256:dd879f81f8213303d3656506e0656ee46e89418aa79165b15225a31bd8eb9802"
+    },
+    {
+      "languageID": "go",
+      "displayName": "Go",
+      "fileExtensions": ["go"],
+      "parserResource": "Grammars/go/parser.dylib",
+      "highlightQueryResource": "Grammars/go/highlights.scm",
+      "upstreamVersion": "tree-sitter-go@1547678a9da59885853f5f5cc8a99cc203fa2e2c",
+      "license": "MIT",
+      "checksum": "sha256:4bee4e9c2d63ab71aee3b4d6fa031b3bf1e5c1d56a638fa82d50e01fd0a52fb8"
+    }
+  ]
+}
