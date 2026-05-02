@@ -186,6 +186,8 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
                 return try listDirectory(call)
             case "search_files":
                 return try searchFiles(call)
+            case "search_codebase":
+                return try searchCodebase(call)
             case "grep":
                 return try grep(call)
             case "git_status":
@@ -285,6 +287,39 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
             callID: call.id,
             toolID: call.toolID,
             content: .object(["paths": .array(paths)])
+        )
+    }
+
+    private func searchCodebase(_ call: AgentToolCall) throws -> AgentToolResult {
+        let query = try requiredStringArgument("query", in: call)
+        let index = CodebaseIndex(workspace: workspace, maxFileBytes: maxFileBytes)
+        let response = try index.search(CodebaseSearchRequest(
+            query: query,
+            scopePath: call.arguments["path"]?.stringValue,
+            limit: boundedLimit(from: call)
+        ))
+
+        let results = response.results.map { result -> AgentJSONValue in
+            var payload: [String: AgentJSONValue] = [
+                "path": .string(result.path),
+                "preview": .string(result.preview),
+                "score": .number(result.score),
+                "matchKind": .string(result.matchKind.rawValue),
+            ]
+            if let line = result.line {
+                payload["line"] = .number(Double(line))
+            }
+            return .object(payload)
+        }
+
+        return .success(
+            callID: call.id,
+            toolID: call.toolID,
+            content: .object([
+                "query": .string(response.query),
+                "mode": .string(response.mode.rawValue),
+                "results": .array(results),
+            ])
         )
     }
 

@@ -89,6 +89,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
             case "read_file",
                  "list_directory",
                  "search_files",
+                 "search_codebase",
                  "grep",
                  "git_status",
                  "git_diff",

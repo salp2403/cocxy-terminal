@@ -241,6 +241,48 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         ])
     }
 
+    @Test("search_codebase returns local lexical fallback results")
+    func searchCodebaseReturnsLocalLexicalFallbackResults() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "session restoration generated\n".write(
+            to: root.appendingPathComponent("Generated/Ignored.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "Generated/\n".write(
+            to: root.appendingPathComponent(".cocxyindexignore"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try """
+        struct SessionRestorer {
+            func restoreSessionSnapshot() {}
+        }
+        """.write(to: root.appendingPathComponent("Sources/SessionRestorer.swift"), atomically: true, encoding: .utf8)
+        let executor = AgentReadOnlyToolExecutor(workspace: AgentWorkspace(rootURL: root))
+
+        let result = try await executor.execute(AgentToolCall(
+            id: "call-codebase",
+            toolID: "search_codebase",
+            arguments: [
+                "query": .string("session restoration"),
+                "limit": .number(5),
+            ]
+        ))
+        let resultContent = try contentObject(result)
+        let results = try arrayValue(resultContent["results"])
+
+        #expect(result.status == AgentToolResultStatus.success)
+        #expect(resultContent["mode"]?.stringValue == "lexical-fallback")
+        let resultPaths = results.compactMap { value -> String? in
+            guard case .object(let object) = value else { return nil }
+            return object["path"]?.stringValue
+        }
+        #expect(resultPaths.first == "Sources/SessionRestorer.swift")
+        #expect(!resultPaths.contains("Generated/Ignored.swift"))
+    }
+
     @Test("git_status executes read-only git status in workspace")
     func gitStatusExecutesReadOnlyGitStatusInWorkspace() async throws {
         let root = try makeWorkspace()

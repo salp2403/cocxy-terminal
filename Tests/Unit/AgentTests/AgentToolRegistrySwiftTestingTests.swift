@@ -8,7 +8,7 @@ import Testing
 @Suite("AgentToolRegistry")
 struct AgentToolRegistrySwiftTestingTests {
 
-    @Test("built-in minimum registry exposes the 12 Phase F tools")
+    @Test("built-in minimum registry exposes Phase F tools plus local codebase search")
     func builtInMinimumRegistryExposesPhaseFTools() throws {
         let registry = AgentToolRegistry.minimumBuiltIns()
 
@@ -23,6 +23,7 @@ struct AgentToolRegistrySwiftTestingTests {
             "read_lsp_diagnostics",
             "read_terminal_output",
             "run_command",
+            "search_codebase",
             "search_files",
             "write_file",
         ])
@@ -40,6 +41,11 @@ struct AgentToolRegistrySwiftTestingTests {
         #expect(runCommandSchema.required == ["command"])
         #expect(runCommandSchema.properties["command"]?.type == .string)
         #expect(runCommandSchema.properties["timeoutSeconds"]?.type == .number)
+
+        let searchCodebaseSchema = try #require(registry.descriptor(for: "search_codebase")?.inputSchema)
+        #expect(searchCodebaseSchema.required == ["query"])
+        #expect(searchCodebaseSchema.properties["query"]?.type == .string)
+        #expect(searchCodebaseSchema.properties["path"]?.type == .string)
     }
 
     @Test("registry rejects duplicate tool identifiers")

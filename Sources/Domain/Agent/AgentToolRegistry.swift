@@ -187,6 +187,20 @@ enum AgentBuiltInTools {
             )
         ),
         AgentToolDescriptor(
+            id: "search_codebase",
+            displayName: "Search Codebase",
+            description: "Search the local codebase with lexical fallback when semantic indexing is unavailable.",
+            capability: .read,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "query": AgentToolInputProperty(.string, description: "Natural-language or keyword query to search locally."),
+                    "path": AgentToolInputProperty(.string, description: "Optional repository-relative directory scope."),
+                    "limit": AgentToolInputProperty(.number, description: "Maximum number of results to return."),
+                ],
+                required: ["query"]
+            )
+        ),
+        AgentToolDescriptor(
             id: "grep",
             displayName: "Grep",
             description: "Search file contents with a local regex engine.",
