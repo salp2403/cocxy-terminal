@@ -55,6 +55,19 @@ struct AgentProviderFactorySwiftTestingTests {
         }
     }
 
+    @Test("factory creates on-device client when Foundation Models are available")
+    func factoryCreatesOnDeviceClientWhenFoundationModelsAreAvailable() throws {
+        let factory = AgentProviderClientFactory(
+            secrets: AgentSecrets(store: InMemoryAgentSecretStore()),
+            foundationModelsAvailable: true,
+            transport: RecordingFactoryHTTPTransport()
+        )
+
+        let client = try factory.makeClient(configuration: AgentModeConfig(enabled: true))
+
+        #expect(client is FoundationModelsAgentLLMClient)
+    }
+
     @Test("factory refuses remote providers without a saved user API key")
     func factoryRequiresUserAPIKeyForRemoteProviders() async throws {
         let factory = AgentProviderClientFactory(

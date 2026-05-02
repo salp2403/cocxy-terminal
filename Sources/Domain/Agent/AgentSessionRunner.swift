@@ -51,9 +51,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
     private let commandAllowlist: any AgentCommandAllowlistLoading
 
     init(
-        clientFactory: any AgentLLMClientMaking = AgentProviderClientFactory(
-            foundationModelsAvailable: false
-        ),
+        clientFactory: any AgentLLMClientMaking = AgentProviderClientFactory(),
         workspaceRootProvider: @escaping @MainActor @Sendable () -> URL?,
         conversationID: String = "agent-\(UUID().uuidString)",
         registry: AgentToolRegistry = .minimumBuiltIns(),

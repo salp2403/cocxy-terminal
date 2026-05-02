@@ -2,6 +2,9 @@
 // AgentProviderClient.swift - User-keyed Agent LLM provider clients.
 
 import Foundation
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 struct AgentHTTPRequest: Sendable, Equatable {
     let url: URL
@@ -95,7 +98,7 @@ struct AgentProviderClientFactory: Sendable {
 
     init(
         secrets: AgentSecrets = AgentSecrets(),
-        foundationModelsAvailable: Bool,
+        foundationModelsAvailable: Bool = FoundationModelsAgentLLMClient.isAvailable,
         transport: any AgentHTTPTransport = URLSessionAgentHTTPTransport(),
         modelCatalog: AgentProviderModelCatalog = .defaults
     ) {
@@ -152,10 +155,81 @@ struct AgentProviderClientFactory: Sendable {
 }
 
 struct FoundationModelsAgentLLMClient: AgentLLMClient {
+    static var isAvailable: Bool {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            return FoundationModelsAgentRuntime.isAvailable
+        }
+        #endif
+        return false
+    }
+
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            return try await FoundationModelsAgentRuntime.nextResponse(for: messages)
+        }
+        #endif
         throw AgentProviderClientFactoryError.foundationModelsClientUnavailable
     }
 }
+
+#if canImport(FoundationModels)
+@available(macOS 26.0, *)
+private enum FoundationModelsAgentRuntime {
+    static var isAvailable: Bool {
+        SystemLanguageModel.default.isAvailable
+    }
+
+    static func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        guard SystemLanguageModel.default.isAvailable else {
+            throw AgentProviderClientFactoryError.foundationModelsClientUnavailable
+        }
+
+        let session = LanguageModelSession(
+            model: .default,
+            instructions: foundationModelsInstructions(from: messages)
+        )
+        let response = try await session.respond(to: foundationModelsPrompt(from: messages))
+        return AgentLLMResponse(content: response.content, toolCalls: [])
+    }
+
+    private static func foundationModelsInstructions(from messages: [AgentMessage]) -> String {
+        let systemMessages = messages
+            .filter { $0.role == .system }
+            .map(\.content)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        return (systemMessages + [
+            "You are Cocxy Agent Mode running fully on this Mac.",
+            "Use the conversation and local tool results already provided in the prompt.",
+            "When a repository change or command is needed, explain the next local action clearly instead of inventing unavailable tool output.",
+        ]).joined(separator: "\n\n")
+    }
+
+    private static func foundationModelsPrompt(from messages: [AgentMessage]) -> String {
+        let transcript = messages
+            .filter { $0.role != .system }
+            .map { message -> String in
+                switch message.role {
+                case .user:
+                    return "User:\n\(message.content)"
+                case .assistant:
+                    return "Assistant:\n\(message.content)"
+                case .tool:
+                    let name = message.toolName ?? "tool"
+                    return "Local tool result (\(name)):\n\(message.content)"
+                case .system:
+                    return ""
+                }
+            }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+
+        return transcript.isEmpty ? "User:\nHello" : transcript
+    }
+}
+#endif
 
 struct OpenAIAgentLLMClient: AgentLLMClient {
     let apiKey: String
