@@ -52,6 +52,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let agentDetection: AgentDetectionConfig
     let agent: AgentModeConfig
     let voice: VoiceConfig
+    let completions: CompletionConfig
     let codeReview: CodeReviewConfig
     let notifications: NotificationConfig
     let quickTerminal: QuickTerminalConfig
@@ -71,6 +72,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         agentDetection: AgentDetectionConfig,
         agent: AgentModeConfig = .defaults,
         voice: VoiceConfig = .defaults,
+        completions: CompletionConfig = .defaults,
         codeReview: CodeReviewConfig = .defaults,
         notifications: NotificationConfig,
         quickTerminal: QuickTerminalConfig,
@@ -89,6 +91,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agentDetection = agentDetection
         self.agent = agent
         self.voice = voice
+        self.completions = completions
         self.codeReview = codeReview
         self.notifications = notifications
         self.quickTerminal = quickTerminal
@@ -111,6 +114,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             agentDetection: .defaults,
             agent: .defaults,
             voice: .defaults,
+            completions: .defaults,
             codeReview: .defaults,
             notifications: .defaults,
             quickTerminal: .defaults,
@@ -133,7 +137,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, agent, voice, codeReview
+        case general, appearance, terminal, agentDetection, agent, voice, completions, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -147,6 +151,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
             ?? .defaults
         self.voice = try container.decodeIfPresent(VoiceConfig.self, forKey: .voice)
+            ?? .defaults
+        self.completions = try container.decodeIfPresent(CompletionConfig.self, forKey: .completions)
             ?? .defaults
         self.codeReview = try container.decodeIfPresent(CodeReviewConfig.self, forKey: .codeReview)
             ?? .defaults
@@ -262,6 +268,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // Voice input is a global user preference because microphone
             // access and locale selection must never be toggled by a repo.
             voice: voice,
+            // Inline completions are a global user opt-in because the
+            // provider can read local source text. Repository config must
+            // not enable or route completions on the user's behalf.
+            completions: completions,
             codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
@@ -795,6 +805,126 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
 
     private static func clampedMaxIterations(_ value: Int) -> Int {
         min(max(value, minMaxIterations), maxMaxIterations)
+    }
+}
+
+// MARK: - Completion Config
+
+enum CompletionProviderKind: String, Codable, Sendable, Equatable, CaseIterable {
+    case foundationModelsOnDevice = "foundation-models-on-device"
+}
+
+/// `[completions]` section for inline editor completions.
+///
+/// Inline AI completions default off. The only v1 foundation provider is
+/// Foundation Models on-device; unsupported systems should leave the feature
+/// inert rather than falling back to a network provider implicitly.
+struct CompletionConfig: Codable, Sendable, Equatable {
+    static let minIdleDelaySeconds = 0.05
+    static let maxIdleDelaySeconds = 2.0
+    static let minContextUTF16Length = 256
+    static let maxContextUTF16Length = 20_000
+
+    let inlineAIEnabled: Bool
+    let provider: CompletionProviderKind
+    let idleDelaySeconds: Double
+    let maxContextUTF16Length: Int
+    let enabledLanguageIDs: [String]
+
+    static var defaults: CompletionConfig {
+        CompletionConfig(
+            inlineAIEnabled: false,
+            provider: .foundationModelsOnDevice,
+            idleDelaySeconds: 0.2,
+            maxContextUTF16Length: 4_000,
+            enabledLanguageIDs: [
+                "c",
+                "cpp",
+                "go",
+                "javascript",
+                "python",
+                "rust",
+                "swift",
+                "typescript",
+                "zig",
+            ]
+        )
+    }
+
+    init(
+        inlineAIEnabled: Bool = false,
+        provider: CompletionProviderKind = .foundationModelsOnDevice,
+        idleDelaySeconds: Double = 0.2,
+        maxContextUTF16Length: Int = 4_000,
+        enabledLanguageIDs: [String] = CompletionConfig.defaults.enabledLanguageIDs
+    ) {
+        self.inlineAIEnabled = inlineAIEnabled
+        self.provider = provider
+        self.idleDelaySeconds = Self.clampedIdleDelay(idleDelaySeconds)
+        self.maxContextUTF16Length = Self.clampedContextLength(maxContextUTF16Length)
+        self.enabledLanguageIDs = Self.normalizedLanguageIDs(enabledLanguageIDs)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inlineAIEnabled
+        case provider
+        case idleDelaySeconds
+        case maxContextUTF16Length
+        case enabledLanguageIDs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = CompletionConfig.defaults
+        self.inlineAIEnabled = try container.decodeIfPresent(Bool.self, forKey: .inlineAIEnabled)
+            ?? defaults.inlineAIEnabled
+        self.provider = try container.decodeIfPresent(CompletionProviderKind.self, forKey: .provider)
+            ?? defaults.provider
+        self.idleDelaySeconds = Self.clampedIdleDelay(
+            try container.decodeIfPresent(Double.self, forKey: .idleDelaySeconds)
+                ?? defaults.idleDelaySeconds
+        )
+        self.maxContextUTF16Length = Self.clampedContextLength(
+            try container.decodeIfPresent(Int.self, forKey: .maxContextUTF16Length)
+                ?? defaults.maxContextUTF16Length
+        )
+        self.enabledLanguageIDs = Self.normalizedLanguageIDs(
+            try container.decodeIfPresent([String].self, forKey: .enabledLanguageIDs)
+                ?? defaults.enabledLanguageIDs
+        )
+    }
+
+    func allows(languageID: String?) -> Bool {
+        guard let normalized = languageID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !normalized.isEmpty,
+              !Self.markupLanguageIDs.contains(normalized)
+        else {
+            return false
+        }
+        return enabledLanguageIDs.contains(normalized)
+    }
+
+    private static let markupLanguageIDs: Set<String> = [
+        "markdown",
+        "md",
+        "plaintext",
+        "text",
+    ]
+
+    private static func clampedIdleDelay(_ value: Double) -> Double {
+        min(max(value, minIdleDelaySeconds), maxIdleDelaySeconds)
+    }
+
+    private static func clampedContextLength(_ value: Int) -> Int {
+        min(max(value, minContextUTF16Length), maxContextUTF16Length)
+    }
+
+    private static func normalizedLanguageIDs(_ rawLanguageIDs: [String]) -> [String] {
+        Array(Set(rawLanguageIDs.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }.filter { !$0.isEmpty })).sorted()
     }
 }
 

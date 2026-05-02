@@ -253,6 +253,16 @@ final class ConfigService: ConfigProviding {
         enabled = \(defaults.voice.enabled)
         locale = "\(defaults.voice.localeIdentifier)"
 
+        [completions]
+        # Inline AI completions for the reusable editor. Disabled by
+        # default and local-only: the v1 provider is Foundation Models
+        # on-device, with no silent network fallback.
+        inline-ai = \(defaults.completions.inlineAIEnabled)
+        provider = "\(defaults.completions.provider.rawValue)"
+        idle-delay-seconds = \(defaults.completions.idleDelaySeconds)
+        max-context-utf16-length = \(defaults.completions.maxContextUTF16Length)
+        enabled-languages = \(tomlStringArray(defaults.completions.enabledLanguageIDs))
+
         [code-review]
         auto-show-on-session-end = \(defaults.codeReview.autoShowOnSessionEnd)
 
@@ -410,6 +420,13 @@ final class ConfigService: ConfigProviding {
         """
     }
 
+    private static func tomlStringArray(_ values: [String]) -> String {
+        let encoded = values.map { value in
+            "\"\(value.replacingOccurrences(of: "\"", with: "\\\""))\""
+        }
+        return "[\(encoded.joined(separator: ", "))]"
+    }
+
     // MARK: - Parsing and Validation
 
     /// Parses TOML content and validates all values, using defaults for missing
@@ -431,6 +448,7 @@ final class ConfigService: ConfigProviding {
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
         let voice = parseVoiceConfig(from: parsed)
+        let completions = parseCompletionConfig(from: parsed)
         let codeReview = parseCodeReviewConfig(from: parsed)
         let notifications = parseNotificationConfig(from: parsed)
         let quickTerminal = parseQuickTerminalConfig(from: parsed)
@@ -454,6 +472,7 @@ final class ConfigService: ConfigProviding {
             agentDetection: agentDetection,
             agent: agent,
             voice: voice,
+            completions: completions,
             codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
@@ -671,6 +690,29 @@ final class ConfigService: ConfigProviding {
         return VoiceConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
             localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier
+        )
+    }
+
+    /// Parses `[completions]` as an opt-in, local-only editor feature.
+    /// Invalid scalar values fall back to defaults; language arrays keep
+    /// only valid string entries and are normalized by `CompletionConfig`.
+    private func parseCompletionConfig(from parsed: [String: TOMLValue]) -> CompletionConfig {
+        let table = extractTable("completions", from: parsed)
+        let defaults = CompletionConfig.defaults
+
+        let provider = stringValue(table["provider"])
+            .flatMap { CompletionProviderKind(rawValue: $0) }
+            ?? defaults.provider
+        let idleDelay = doubleValue(table["idle-delay-seconds"]) ?? defaults.idleDelaySeconds
+        let maxContext = intValue(table["max-context-utf16-length"]) ?? defaults.maxContextUTF16Length
+        let languages = strictStringArrayValue(table["enabled-languages"]) ?? defaults.enabledLanguageIDs
+
+        return CompletionConfig(
+            inlineAIEnabled: boolValue(table["inline-ai"]) ?? defaults.inlineAIEnabled,
+            provider: provider,
+            idleDelaySeconds: idleDelay,
+            maxContextUTF16Length: maxContext,
+            enabledLanguageIDs: languages
         )
     }
 
@@ -1004,6 +1046,18 @@ final class ConfigService: ConfigProviding {
     private func stringArrayValue(_ value: TOMLValue?) -> [String]? {
         guard case .array(let values) = value else { return nil }
         return values.compactMap { stringValue($0) }
+    }
+
+    private func strictStringArrayValue(_ value: TOMLValue?) -> [String]? {
+        guard case .array(let values) = value else { return nil }
+        var strings: [String] = []
+        for value in values {
+            guard let string = stringValue(value) else {
+                return nil
+            }
+            strings.append(string)
+        }
+        return strings
     }
 
     // MARK: - Validation Helpers
