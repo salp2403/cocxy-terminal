@@ -526,12 +526,77 @@ struct CocxyCoreBridgeTests {
         #expect(diagnostics.cursorVisible == true)
         #expect(diagnostics.appCursorMode == false)
         #expect(diagnostics.bracketedPasteMode == false)
+        #expect(diagnostics.bracketedPasteActive == false)
         #expect(diagnostics.mouseTrackingMode == 0)
         #expect(diagnostics.kittyKeyboardMode == 0)
         #expect(diagnostics.altScreen == false)
         #expect(diagnostics.preeditActive == false)
         #expect((0...5).contains(Int(diagnostics.cursorShape)))
         #expect(diagnostics.semanticBlockCount == 0)
+    }
+
+    @Test("ux polish bridge maps bell cursor paste and theme settings")
+    func uxPolishBridgeMapsBellCursorPasteAndThemeSettings() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+
+        #expect(bridge.bellMode(for: surfaceID) == .systemDefault)
+        bridge.setBellMode(.muted, for: surfaceID)
+        #expect(bridge.bellMode(for: surfaceID) == .muted)
+
+        let genericBellURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("cocxy-bridge-bell.wav")
+        #expect(bridge.setBellAudioFile(genericBellURL, for: surfaceID))
+        #expect(bridge.bellAudioFile(for: surfaceID) == genericBellURL.path)
+
+        let eventBellURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("cocxy-agent-waiting.aif")
+        #expect(bridge.setBellAudioFile(eventBellURL, event: .agentWaiting, for: surfaceID))
+        #expect(bridge.bellAudioFile(event: .agentWaiting, for: surfaceID) == eventBellURL.path)
+
+        #expect(bridge.bracketedPasteActive(for: surfaceID) == false)
+        bridge.withTerminalLock(surfaceID) { state in
+            feed("\u{001B}[?2004h", to: state.terminal)
+        }
+        #expect(bridge.bracketedPasteActive(for: surfaceID) == true)
+
+        bridge.setBracketedPasteForce(-1, for: surfaceID)
+        let forcedDiagnostics = try #require(bridge.modeDiagnostics(for: surfaceID))
+        #expect(forcedDiagnostics.bracketedPasteMode == true)
+        #expect(forcedDiagnostics.bracketedPasteActive == false)
+
+        bridge.setCursorShape(.outline, for: surfaceID)
+        bridge.setCursorBlinkRateMs(225, for: surfaceID)
+        bridge.setCursorColorOverride(0x10203040, for: surfaceID)
+        #expect(bridge.cursorBlinkRateMs(for: surfaceID) == 225)
+
+        let cursor = try #require(bridge.withTerminalLock(surfaceID) { state in
+            var cursor = cocxycore_render_cursor()
+            cocxycore_terminal_frame_cursor(state.terminal, &cursor)
+            return cursor
+        })
+        #expect(cursor.shape == 6)
+        #expect(cursor.color.r == 0x10)
+        #expect(cursor.color.g == 0x20)
+        #expect(cursor.color.b == 0x30)
+        #expect(cursor.color.a == 0x40)
+
+        bridge.applyTheme(makeUXPolishPalette(), to: surfaceID, transitionMs: 120)
+        #expect(bridge.themeTransitionActive(for: surfaceID) == true)
+        #expect(bridge.themeTransitionDurationMs(for: surfaceID) == 120)
+
+        bridge.advanceThemeTransitionMs(120, for: surfaceID)
+        #expect(bridge.themeTransitionActive(for: surfaceID) == false)
+
+        let foreground = try #require(bridge.withTerminalLock(surfaceID) { state in
+            var foreground = cocxycore_rgba()
+            cocxycore_terminal_resolve_cell_colors(state.terminal, 0, 0, &foreground, nil)
+            return foreground
+        })
+        #expect(foreground.r == 0x11)
+        #expect(foreground.g == 0x22)
+        #expect(foreground.b == 0x33)
     }
 
     @Test("process and font diagnostics expose live runtime state")
@@ -956,6 +1021,30 @@ private func makeConfig() -> TerminalEngineConfig {
         workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
         windowPaddingX: 8,
         windowPaddingY: 4
+    )
+}
+
+private func makeUXPolishPalette() -> ThemePalette {
+    ThemePalette(
+        background: "#010203",
+        foreground: "#112233",
+        cursor: "#445566",
+        selectionBackground: "#778899",
+        selectionForeground: "#ffffff",
+        tabActiveBackground: "#202020",
+        tabActiveForeground: "#f8f8f8",
+        tabInactiveBackground: "#101010",
+        tabInactiveForeground: "#a0a0a0",
+        badgeAttention: "#ffaa00",
+        badgeCompleted: "#00aa66",
+        badgeError: "#cc2222",
+        badgeWorking: "#2277cc",
+        ansiColors: [
+            "#000000", "#aa0000", "#00aa00", "#aa5500",
+            "#0000aa", "#aa00aa", "#00aaaa", "#aaaaaa",
+            "#555555", "#ff5555", "#55ff55", "#ffff55",
+            "#5555ff", "#ff55ff", "#55ffff", "#ffffff"
+        ]
     )
 }
 

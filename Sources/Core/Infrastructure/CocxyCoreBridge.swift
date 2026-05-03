@@ -74,12 +74,35 @@ struct TerminalModeDiagnostics: Equatable, Sendable, Encodable {
     let cursorVisible: Bool
     let appCursorMode: Bool
     let bracketedPasteMode: Bool
+    let bracketedPasteActive: Bool
     let mouseTrackingMode: UInt8
     let kittyKeyboardMode: UInt8
     let altScreen: Bool
     let cursorShape: UInt8
     let preeditActive: Bool
     let semanticBlockCount: UInt32
+}
+
+enum TerminalBellMode: UInt8, Sendable {
+    case systemDefault = 0
+    case visualFlash = 1
+    case customAudio = 2
+    case muted = 3
+}
+
+enum TerminalBellEvent: UInt8, Sendable {
+    case generic = 0
+    case blockError = 1
+    case agentWaiting = 2
+    case notification = 3
+}
+
+enum TerminalCursorShapeKind: UInt8, Sendable {
+    case block = 0
+    case bar = 1
+    case underline = 2
+    case outline = 3
+    case customOverlay = 4
 }
 
 struct TerminalProcessDiagnostics: Equatable, Sendable, Encodable {
@@ -1380,18 +1403,106 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func modeDiagnostics(for surface: SurfaceID) -> TerminalModeDiagnostics? {
-        guard let state = surfaces[surface] else { return nil }
-        return TerminalModeDiagnostics(
-            cursorVisible: cocxycore_terminal_cursor_visible(state.terminal),
-            appCursorMode: cocxycore_terminal_mode_app_cursor(state.terminal),
-            bracketedPasteMode: cocxycore_terminal_mode_bracketed_paste(state.terminal),
-            mouseTrackingMode: cocxycore_terminal_mode_mouse(state.terminal),
-            kittyKeyboardMode: cocxycore_terminal_mode_kitty_keyboard(state.terminal),
-            altScreen: cocxycore_terminal_is_alt_screen(state.terminal),
-            cursorShape: cocxycore_terminal_cursor_shape(state.terminal),
-            preeditActive: cocxycore_terminal_preedit_active(state.terminal),
-            semanticBlockCount: cocxycore_terminal_semantic_block_count(state.terminal)
-        )
+        return withTerminalLock(surface) { state in
+            TerminalModeDiagnostics(
+                cursorVisible: cocxycore_terminal_cursor_visible(state.terminal),
+                appCursorMode: cocxycore_terminal_mode_app_cursor(state.terminal),
+                bracketedPasteMode: cocxycore_terminal_mode_bracketed_paste(state.terminal),
+                bracketedPasteActive: cocxycore_terminal_get_bracketed_paste_active(state.terminal),
+                mouseTrackingMode: cocxycore_terminal_mode_mouse(state.terminal),
+                kittyKeyboardMode: cocxycore_terminal_mode_kitty_keyboard(state.terminal),
+                altScreen: cocxycore_terminal_is_alt_screen(state.terminal),
+                cursorShape: cocxycore_terminal_cursor_shape(state.terminal),
+                preeditActive: cocxycore_terminal_preedit_active(state.terminal),
+                semanticBlockCount: cocxycore_terminal_semantic_block_count(state.terminal)
+            )
+        }
+    }
+
+    func setBellMode(_ mode: TerminalBellMode, for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_bell_mode(state.terminal, mode.rawValue)
+        }
+    }
+
+    func bellMode(for surface: SurfaceID) -> TerminalBellMode? {
+        guard let rawMode = withTerminalLock(surface, body: { state in
+            cocxycore_terminal_bell_mode(state.terminal)
+        }) else { return nil }
+        return TerminalBellMode(rawValue: rawMode)
+    }
+
+    func setBellAudioFile(_ url: URL, for surface: SurfaceID) -> Bool {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_bell_audio_file(state.terminal, url.path)
+        } ?? false
+    }
+
+    func bellAudioFile(for surface: SurfaceID) -> String? {
+        guard let path = withTerminalLock(surface, body: { state -> String? in
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            let copied = cocxycore_terminal_bell_audio_file(state.terminal, &buffer, buffer.count)
+            guard copied > 0 else { return nil }
+            return String(decoding: buffer.prefix(copied), as: UTF8.self)
+        }) else { return nil }
+        return path
+    }
+
+    func setBellAudioFile(_ url: URL, event: TerminalBellEvent, for surface: SurfaceID) -> Bool {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_bell_audio_for_event(state.terminal, event.rawValue, url.path)
+        } ?? false
+    }
+
+    func bellAudioFile(event: TerminalBellEvent, for surface: SurfaceID) -> String? {
+        guard let path = withTerminalLock(surface, body: { state -> String? in
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            let copied = cocxycore_terminal_bell_audio_for_event(
+                state.terminal,
+                event.rawValue,
+                &buffer,
+                buffer.count
+            )
+            guard copied > 0 else { return nil }
+            return String(decoding: buffer.prefix(copied), as: UTF8.self)
+        }) else { return nil }
+        return path
+    }
+
+    func setBracketedPasteForce(_ force: Int32, for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_bracketed_paste_force(state.terminal, force)
+        }
+    }
+
+    func bracketedPasteActive(for surface: SurfaceID) -> Bool? {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_get_bracketed_paste_active(state.terminal)
+        }
+    }
+
+    func setCursorShape(_ shape: TerminalCursorShapeKind, for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_cursor_shape(state.terminal, shape.rawValue)
+        }
+    }
+
+    func setCursorBlinkRateMs(_ ms: UInt32, for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_cursor_blink_rate_ms(state.terminal, ms)
+        }
+    }
+
+    func cursorBlinkRateMs(for surface: SurfaceID) -> UInt32? {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_cursor_blink_rate_ms(state.terminal)
+        }
+    }
+
+    func setCursorColorOverride(_ rgba: UInt32, for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_cursor_color_override(state.terminal, rgba)
+        }
     }
 
     func processDiagnostics(for surface: SurfaceID) -> TerminalProcessDiagnostics? {
@@ -2149,6 +2260,46 @@ final class CocxyCoreBridge: TerminalEngine {
         // Redraw OUTSIDE the lock — main-thread AppKit work that is unsafe
         // to invoke from inside the critical section.
         (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    func applyTheme(_ palette: ThemePalette, to surface: SurfaceID, transitionMs: UInt32) {
+        guard transitionMs > 0 else {
+            applyTheme(palette, to: surface)
+            return
+        }
+
+        var theme = Self.runtimeTheme(from: palette)
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_theme_with_transition_ms(state.terminal, &theme, transitionMs)
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+        }
+
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    func advanceThemeTransitionMs(_ deltaMs: UInt32, for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_advance_theme_transition_ms(state.terminal, deltaMs)
+            if let webState = state.webServer {
+                cocxycore_web_force_full_frame(webState.handle)
+            }
+        }
+
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+    }
+
+    func themeTransitionActive(for surface: SurfaceID) -> Bool? {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_theme_transition_active(state.terminal)
+        }
+    }
+
+    func themeTransitionDurationMs(for surface: SurfaceID) -> UInt32? {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_theme_transition_duration_ms(state.terminal)
+        }
     }
 
     /// Updates the stored defaults used for newly created surfaces.
@@ -3308,6 +3459,30 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     // MARK: - Private: Color Parsing
+
+    static func runtimeTheme(from palette: ThemePalette) -> cocxycore_theme {
+        let fg = parseHexColor(palette.foreground)
+        let bg = parseHexColor(palette.background)
+        let cur = parseHexColor(palette.cursor)
+        let sel = parseHexColor(palette.selectionBackground)
+
+        var theme = cocxycore_theme()
+        theme.foreground = cocxycore_rgba(r: fg.r, g: fg.g, b: fg.b, a: 255)
+        theme.background = cocxycore_rgba(r: bg.r, g: bg.g, b: bg.b, a: 255)
+        theme.cursor = cocxycore_rgba(r: cur.r, g: cur.g, b: cur.b, a: 255)
+        theme.selection = cocxycore_rgba(r: sel.r, g: sel.g, b: sel.b, a: 128)
+
+        withUnsafeMutableBytes(of: &theme.base16) { rawBuffer in
+            let colors = rawBuffer.bindMemory(to: cocxycore_rgba.self)
+            for index in 0..<min(colors.count, 16) {
+                let source = index < palette.ansiColors.count ? palette.ansiColors[index] : palette.foreground
+                let color = parseHexColor(source)
+                colors[index] = cocxycore_rgba(r: color.r, g: color.g, b: color.b, a: 255)
+            }
+        }
+
+        return theme
+    }
 
     /// Parse a hex color string ("#RRGGBB" or "RRGGBB") to RGB components.
     static func parseHexColor(_ hex: String) -> (r: UInt8, g: UInt8, b: UInt8) {

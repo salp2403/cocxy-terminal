@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.14.9 (session recording and replay)
+ * Version: 0.14.10 (UX polish core APIs)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 14
-#define COCXYCORE_VERSION_PATCH 9
-#define COCXYCORE_VERSION_STRING "0.14.9"
+#define COCXYCORE_VERSION_PATCH 10
+#define COCXYCORE_VERSION_STRING "0.14.10"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -47,6 +47,9 @@ typedef struct cocxycore_parser cocxycore_parser;
 
 /** Opaque PTY handle. Created with cocxycore_pty_spawn(). */
 typedef struct cocxycore_pty cocxycore_pty;
+
+/** Complete runtime theme, shared by theme generators and transitions. */
+typedef struct cocxycore_theme cocxycore_theme;
 
 /** Parser states (matches types.State in Zig). */
 typedef enum {
@@ -303,9 +306,22 @@ bool cocxycore_terminal_cursor_visible(const cocxycore_terminal* term);
 /**
  * Get the cursor shape.
  * 0=block_blink, 1=block_steady, 2=underline_blink,
- * 3=underline_steady, 4=bar_blink, 5=bar_steady.
+ * 3=underline_steady, 4=bar_blink, 5=bar_steady,
+ * 6=outline, 7=custom overlay.
  */
 uint8_t cocxycore_terminal_cursor_shape(const cocxycore_terminal* term);
+
+/** Expanded cursor shape setter: 0=block, 1=bar, 2=underline, 3=outline, 4=custom overlay. */
+void cocxycore_terminal_set_cursor_shape(cocxycore_terminal* term, uint8_t shape);
+
+/** Set cursor blink rate in milliseconds. Zero is allowed for steady cursors. */
+void cocxycore_terminal_set_cursor_blink_rate_ms(cocxycore_terminal* term, uint32_t ms);
+
+/** Get cursor blink rate in milliseconds. */
+uint32_t cocxycore_terminal_cursor_blink_rate_ms(const cocxycore_terminal* term);
+
+/** Override cursor color with packed 0xRRGGBBAA. */
+void cocxycore_terminal_set_cursor_color_override(cocxycore_terminal* term, uint32_t rgba);
 
 /* -- Cell access -- */
 
@@ -821,6 +837,12 @@ bool cocxycore_terminal_mode_app_cursor(const cocxycore_terminal* term);
 /** Check if bracketed paste mode is active. */
 bool cocxycore_terminal_mode_bracketed_paste(const cocxycore_terminal* term);
 
+/** Check if bracketed paste is effectively active after force overrides. */
+bool cocxycore_terminal_get_bracketed_paste_active(const cocxycore_terminal* term);
+
+/** Set bracketed paste force: 0=auto, 1=force on, -1=force off. */
+void cocxycore_terminal_set_bracketed_paste_force(cocxycore_terminal* term, int force);
+
 /**
  * Get the current mouse tracking mode.
  * 0=none, 1=x10, 2=normal, 3=highlight,
@@ -854,6 +876,20 @@ typedef void (*cocxycore_cwd_callback)(
 
 /** Bell callback type. */
 typedef void (*cocxycore_bell_callback)(void* context);
+
+typedef enum {
+    COCXYCORE_BELL_DEFAULT = 0,
+    COCXYCORE_BELL_VISUAL_FLASH = 1,
+    COCXYCORE_BELL_CUSTOM_AUDIO = 2,
+    COCXYCORE_BELL_MUTED = 3,
+} cocxycore_bell_mode;
+
+typedef enum {
+    COCXYCORE_BELL_EVENT_GENERIC = 0,
+    COCXYCORE_BELL_EVENT_BLOCK_ERROR = 1,
+    COCXYCORE_BELL_EVENT_AGENT_WAITING = 2,
+    COCXYCORE_BELL_EVENT_NOTIFICATION = 3,
+} cocxycore_bell_event;
 
 /** Clipboard event payload delivered for OSC 52 traffic. */
 typedef struct {
@@ -889,6 +925,33 @@ void cocxycore_terminal_set_bell_callback(
     cocxycore_terminal* term,
     cocxycore_bell_callback callback,
     void* context
+);
+
+/** Set bell handling mode. */
+void cocxycore_terminal_set_bell_mode(cocxycore_terminal* term, uint8_t mode);
+
+/** Get bell handling mode. */
+uint8_t cocxycore_terminal_bell_mode(const cocxycore_terminal* term);
+
+/** Store a local custom audio file path for generic bells. */
+bool cocxycore_terminal_set_bell_audio_file(cocxycore_terminal* term, const char* path);
+
+/** Copy the local custom audio file path for generic bells. */
+size_t cocxycore_terminal_bell_audio_file(cocxycore_terminal* term, uint8_t* buf, size_t buf_len);
+
+/** Store a local custom audio file path for a specific bell event. */
+bool cocxycore_terminal_set_bell_audio_for_event(
+    cocxycore_terminal* term,
+    uint8_t event,
+    const char* path
+);
+
+/** Copy the local custom audio file path for a specific bell event. */
+size_t cocxycore_terminal_bell_audio_for_event(
+    cocxycore_terminal* term,
+    uint8_t event,
+    uint8_t* buf,
+    size_t buf_len
 );
 
 /** Set the OSC 52 clipboard callback. Pass NULL to disable. */
@@ -1531,6 +1594,22 @@ void cocxycore_terminal_set_theme(
     uint8_t bg_r, uint8_t bg_g, uint8_t bg_b,
     uint8_t cursor_r, uint8_t cursor_g, uint8_t cursor_b
 );
+
+/** Apply a complete theme through a deterministic transition. Duration 0 is instant. */
+void cocxycore_terminal_set_theme_with_transition_ms(
+    cocxycore_terminal* term,
+    const cocxycore_theme* theme,
+    uint32_t duration_ms
+);
+
+/** Advance an active theme transition by a deterministic millisecond delta. */
+void cocxycore_terminal_advance_theme_transition_ms(cocxycore_terminal* term, uint32_t delta_ms);
+
+/** Whether a theme transition is currently active. */
+bool cocxycore_terminal_theme_transition_active(const cocxycore_terminal* term);
+
+/** Duration of the current or most recently configured theme transition. */
+uint32_t cocxycore_terminal_theme_transition_duration_ms(const cocxycore_terminal* term);
 
 /** Set a single base16 palette color (index 0-15). */
 void cocxycore_terminal_set_theme_base16(
@@ -2215,13 +2294,13 @@ cocxycore_plugin_handle cocxycore_plugin_register_osc_handler(
 );
 
 /** Complete runtime theme produced by a plugin. */
-typedef struct {
+struct cocxycore_theme {
     cocxycore_rgba foreground;
     cocxycore_rgba background;
     cocxycore_rgba cursor;
     cocxycore_rgba selection;
     cocxycore_rgba base16[16];
-} cocxycore_theme;
+};
 
 /** Dynamic theme generator callback. */
 typedef bool (*cocxycore_theme_generator_cb)(

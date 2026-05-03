@@ -103,6 +103,7 @@ extension AppDelegate {
             data["cursor_visible"] = modeDetails.cursorVisible ? "true" : "false"
             data["app_cursor_mode"] = modeDetails.appCursorMode ? "true" : "false"
             data["bracketed_paste_mode"] = modeDetails.bracketedPasteMode ? "true" : "false"
+            data["bracketed_paste_active"] = modeDetails.bracketedPasteActive ? "true" : "false"
             data["mouse_tracking_mode"] = "\(modeDetails.mouseTrackingMode)"
             data["kitty_keyboard_mode"] = "\(modeDetails.kittyKeyboardMode)"
             data["alt_screen"] = modeDetails.altScreen ? "true" : "false"
