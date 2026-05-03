@@ -59,6 +59,7 @@ enum TerminalBlockOverlayLayout {
 @MainActor
 final class TerminalBlockOverlayView: NSView {
     var onCopyBlockOutput: ((TerminalCommandBlock) -> Void)?
+    var onCopySelectedBlockOutputs: (([TerminalCommandBlock]) -> Void)?
     var onRerunBlock: ((TerminalCommandBlock) -> Void)?
     var onShareBlock: ((TerminalCommandBlock, NSView) -> Void)?
     var onToggleBookmark: ((TerminalCommandBlock) -> Void)?
@@ -68,6 +69,7 @@ final class TerminalBlockOverlayView: NSView {
     private var visibleRowCount: UInt16 = 0
     private var cellHeight: CGFloat = 0
     private var contentPadding: CGPoint = .zero
+    private var selectionMode = BlockSelectionMode()
 
     override var isFlipped: Bool { true }
 
@@ -93,11 +95,13 @@ final class TerminalBlockOverlayView: NSView {
         self.visibleRowCount = visibleRowCount
         self.cellHeight = cellHeight
         self.contentPadding = padding
+        selectionMode.prune(validIDs: Set(blocks.map(\.id)))
         rebuildRows()
     }
 
     func clear() {
         blocks = []
+        selectionMode = BlockSelectionMode()
         subviews.forEach { $0.removeFromSuperview() }
     }
 
@@ -131,11 +135,15 @@ final class TerminalBlockOverlayView: NSView {
             rail.autoresizingMask = [.height]
             addSubview(rail)
 
-            let row = TerminalBlockHeaderView(block: entry.block)
+            let row = TerminalBlockHeaderView(
+                block: entry.block,
+                isSelected: selectionMode.contains(entry.block.id),
+                selectedCount: selectionMode.selectedCount
+            )
             row.frame = entry.frame
             row.autoresizingMask = [.width]
             row.onCopy = { [weak self] block in
-                self?.onCopyBlockOutput?(block)
+                self?.copy(block)
             }
             row.onRerun = { [weak self] block in
                 self?.onRerunBlock?(block)
@@ -145,6 +153,9 @@ final class TerminalBlockOverlayView: NSView {
             }
             row.onBookmark = { [weak self] block in
                 self?.onToggleBookmark?(block)
+            }
+            row.onSelectionToggle = { [weak self] block in
+                self?.toggleSelection(block)
             }
             addSubview(row)
             row.layoutSubtreeIfNeeded()
@@ -163,6 +174,20 @@ final class TerminalBlockOverlayView: NSView {
             }
         }
         return nil
+    }
+
+    private func copy(_ block: TerminalCommandBlock) {
+        let selectedBlocks = selectionMode.selectedBlocks(in: blocks)
+        if selectedBlocks.count > 1, selectionMode.contains(block.id) {
+            onCopySelectedBlockOutputs?(selectedBlocks)
+        } else {
+            onCopyBlockOutput?(block)
+        }
+    }
+
+    private func toggleSelection(_ block: TerminalCommandBlock) {
+        selectionMode.toggle(block.id)
+        rebuildRows()
     }
 }
 
@@ -192,10 +217,14 @@ private final class TerminalBlockHeaderView: NSView {
     var onRerun: ((TerminalCommandBlock) -> Void)?
     var onShare: ((TerminalCommandBlock, NSView) -> Void)?
     var onBookmark: ((TerminalCommandBlock) -> Void)?
+    var onSelectionToggle: ((TerminalCommandBlock) -> Void)?
 
     private let block: TerminalCommandBlock
+    private let isSelected: Bool
+    private let selectedCount: Int
     private let commandLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
+    private let selectButton = NSButton()
     private let bookmarkButton = NSButton()
     private let shareButton = NSButton()
     private let copyButton = NSButton()
@@ -203,8 +232,10 @@ private final class TerminalBlockHeaderView: NSView {
 
     override var isFlipped: Bool { true }
 
-    init(block: TerminalCommandBlock) {
+    init(block: TerminalCommandBlock, isSelected: Bool, selectedCount: Int) {
         self.block = block
+        self.isSelected = isSelected
+        self.selectedCount = selectedCount
         super.init(frame: .zero)
         wantsLayer = true
         configureLayer()
@@ -226,10 +257,12 @@ private final class TerminalBlockHeaderView: NSView {
         let copyX = rerunX - buttonSize.width - 4
         let shareX = copyX - buttonSize.width - 4
         let bookmarkX = shareX - buttonSize.width - 4
+        let selectX = bookmarkX - buttonSize.width - 4
         rerunButton.frame = NSRect(origin: CGPoint(x: rerunX, y: y), size: buttonSize)
         copyButton.frame = NSRect(origin: CGPoint(x: copyX, y: y), size: buttonSize)
         shareButton.frame = NSRect(origin: CGPoint(x: shareX, y: y), size: buttonSize)
         bookmarkButton.frame = NSRect(origin: CGPoint(x: bookmarkX, y: y), size: buttonSize)
+        selectButton.frame = NSRect(origin: CGPoint(x: selectX, y: y), size: buttonSize)
 
         let statusWidth: CGFloat = 46
         statusLabel.frame = NSRect(
@@ -241,7 +274,7 @@ private final class TerminalBlockHeaderView: NSView {
         commandLabel.frame = NSRect(
             x: statusLabel.frame.maxX + 8,
             y: 4,
-            width: max(0, bookmarkButton.frame.minX - statusLabel.frame.maxX - 16),
+            width: max(0, selectButton.frame.minX - statusLabel.frame.maxX - 16),
             height: bounds.height - 8
         )
     }
@@ -250,7 +283,9 @@ private final class TerminalBlockHeaderView: NSView {
         layer?.cornerRadius = 6
         layer?.borderWidth = 1
         layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.88).cgColor
-        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.32).cgColor
+        layer?.borderColor = isSelected
+            ? NSColor.controlAccentColor.withAlphaComponent(0.72).cgColor
+            : NSColor.separatorColor.withAlphaComponent(0.32).cgColor
         layer?.shadowColor = NSColor.black.cgColor
         layer?.shadowOpacity = 0.18
         layer?.shadowRadius = 4
@@ -278,6 +313,13 @@ private final class TerminalBlockHeaderView: NSView {
 
     private func configureButtons() {
         configureIconButton(
+            selectButton,
+            symbolName: isSelected ? "checkmark.circle.fill" : "circle",
+            accessibilityLabel: isSelected ? "Deselect command block" : "Select command block",
+            identifier: "command-block-select-\(block.id)",
+            action: #selector(toggleSelection)
+        )
+        configureIconButton(
             bookmarkButton,
             symbolName: block.isBookmarked ? "bookmark.fill" : "bookmark",
             accessibilityLabel: block.isBookmarked ? "Remove block bookmark" : "Bookmark command block",
@@ -298,6 +340,10 @@ private final class TerminalBlockHeaderView: NSView {
             identifier: "command-block-copy-\(block.id)",
             action: #selector(copyBlockOutput)
         )
+        copyButton.toolTip = selectedCount > 1 && isSelected
+            ? "Copy selected block outputs"
+            : "Copy block output"
+        copyButton.setAccessibilityLabel(copyButton.toolTip ?? "Copy block output")
         configureIconButton(
             rerunButton,
             symbolName: "arrow.clockwise",
@@ -305,6 +351,7 @@ private final class TerminalBlockHeaderView: NSView {
             identifier: "command-block-rerun-\(block.id)",
             action: #selector(rerunBlock)
         )
+        addSubview(selectButton)
         addSubview(bookmarkButton)
         addSubview(shareButton)
         addSubview(copyButton)
@@ -345,5 +392,9 @@ private final class TerminalBlockHeaderView: NSView {
 
     @objc private func toggleBookmark() {
         onBookmark?(block)
+    }
+
+    @objc private func toggleSelection() {
+        onSelectionToggle?(block)
     }
 }

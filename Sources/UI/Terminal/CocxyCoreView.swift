@@ -1061,6 +1061,9 @@ final class CocxyCoreView: NSView {
         overlay.onCopyBlockOutput = { [weak self] block in
             self?.copyBlockOutputFromOverlay(block)
         }
+        overlay.onCopySelectedBlockOutputs = { [weak self] blocks in
+            self?.copySelectedBlockOutputsFromOverlay(blocks)
+        }
         overlay.onRerunBlock = { [weak self] block in
             self?.rerunBlockFromOverlay(block)
         }
@@ -1103,6 +1106,12 @@ final class CocxyCoreView: NSView {
 
     private func copyBlockOutputFromOverlay(_ block: TerminalCommandBlock) {
         let text = block.output.isEmpty ? block.command : block.output
+        guard !text.isEmpty else { return }
+        clipboardService.write(text)
+    }
+
+    private func copySelectedBlockOutputsFromOverlay(_ blocks: [TerminalCommandBlock]) {
+        let text = BlockSelectionCopyFormatter.outputText(for: blocks)
         guard !text.isEmpty else { return }
         clipboardService.write(text)
     }

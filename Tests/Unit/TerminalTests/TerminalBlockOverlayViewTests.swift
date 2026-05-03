@@ -128,6 +128,33 @@ final class TerminalBlockOverlayViewTests: XCTestCase {
         XCTAssertEqual(bookmarked, [8])
     }
 
+    func testSelectingMultipleBlocksCopiesTheSelectedBlocks() {
+        let overlay = TerminalBlockOverlayView(frame: NSRect(x: 0, y: 0, width: 560, height: 260))
+        var singleCopied: [UInt64] = []
+        var multiCopied: [[UInt64]] = []
+        overlay.onCopyBlockOutput = { singleCopied.append($0.id) }
+        overlay.onCopySelectedBlockOutputs = { multiCopied.append($0.map(\.id)) }
+
+        overlay.update(
+            blocks: [
+                sampleBlock(id: 10, command: "pwd", startRow: 3, endRow: 4),
+                sampleBlock(id: 11, command: "whoami", startRow: 6, endRow: 7)
+            ],
+            visibleStartRow: 0,
+            visibleRowCount: 24,
+            cellHeight: 11,
+            padding: CGPoint(x: 8, y: 4)
+        )
+        overlay.layoutSubtreeIfNeeded()
+
+        overlay.descendantButton(withIdentifier: "command-block-select-10")?.performClick(nil)
+        overlay.descendantButton(withIdentifier: "command-block-select-11")?.performClick(nil)
+        overlay.descendantButton(withIdentifier: "command-block-copy-10")?.performClick(nil)
+
+        XCTAssertEqual(singleCopied, [])
+        XCTAssertEqual(multiCopied, [[10, 11]])
+    }
+
     func testBookmarkedBlocksUseFilledBookmarkIcon() {
         let overlay = TerminalBlockOverlayView(frame: NSRect(x: 0, y: 0, width: 480, height: 260))
         overlay.update(
