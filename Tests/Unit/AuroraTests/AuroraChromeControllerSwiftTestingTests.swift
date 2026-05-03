@@ -258,6 +258,46 @@ struct AuroraChromeControllerSwiftTestingTests {
     }
 
     @Test
+    func moveSessionBeforeReordersUnderlyingTabs() {
+        let harness = makeHarness()
+        let first = harness.tabManager.tabs[0]
+        let second = harness.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/aurora-reorder-second")
+        )
+        let third = harness.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/aurora-reorder-third")
+        )
+        harness.controller.refreshSources()
+
+        let moved = harness.controller.moveSession(
+            third.id.rawValue.uuidString,
+            before: first.id.rawValue.uuidString
+        )
+
+        #expect(moved == true)
+        #expect(harness.tabManager.tabs.map(\.id) == [third.id, first.id, second.id])
+        #expect(
+            harness.controller.workspaces.flatMap(\.sessions).map(\.id)
+                .contains(third.id.rawValue.uuidString)
+        )
+    }
+
+    @Test
+    func moveSessionBeforeRejectsSelfAndUnknownSessionIDs() {
+        let harness = makeHarness()
+        let first = harness.tabManager.tabs[0]
+        let second = harness.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/aurora-reorder-invalid")
+        )
+        harness.controller.refreshSources()
+
+        #expect(harness.controller.moveSession(first.id.rawValue.uuidString, before: first.id.rawValue.uuidString) == false)
+        #expect(harness.controller.moveSession("missing", before: second.id.rawValue.uuidString) == false)
+        #expect(harness.controller.moveSession(first.id.rawValue.uuidString, before: "missing") == false)
+        #expect(harness.tabManager.tabs.map(\.id) == [first.id, second.id])
+    }
+
+    @Test
     func togglePaletteCallbackFiresFromSidebar() {
         let harness = makeHarness()
         var invoked = false

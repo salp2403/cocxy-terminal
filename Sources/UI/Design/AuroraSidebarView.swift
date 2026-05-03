@@ -21,6 +21,7 @@
 // `AuroraSourceBuilder` / `AuroraWorkspaceAdapter`.
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 extension Design {
 
@@ -60,6 +61,7 @@ extension Design {
         var onCloseOtherSessions: ((String) -> Void)? = nil
         var onMoveSessionUp: ((String) -> Void)? = nil
         var onMoveSessionDown: ((String) -> Void)? = nil
+        var onMoveSessionBefore: ((String, String) -> Void)? = nil
         /// Optional callback for the notification tray button. Stays
         /// optional so tests and previews that do not care about the
         /// notification center can omit it; the header renders the
@@ -362,6 +364,11 @@ extension Design {
                                 onMoveDown: onMoveSessionDown.map { handler in
                                     { handler(session.id) }
                                 },
+                                onMoveSessionBefore: onMoveSessionBefore.map { handler in
+                                    { sourceSessionID in
+                                        handler(sourceSessionID, session.id)
+                                    }
+                                },
                                 onHoverChange: { hovering in
                                     if hovering {
                                         hoveredSession = HoveredSessionContext(
@@ -504,10 +511,12 @@ extension Design {
         var onCloseOthers: (() -> Void)? = nil
         var onMoveUp: (() -> Void)? = nil
         var onMoveDown: (() -> Void)? = nil
+        var onMoveSessionBefore: ((String) -> Void)? = nil
         var onHoverChange: (Bool) -> Void = { _ in }
 
         @Environment(\.designThemePalette) private var palette
         @State private var isHovered = false
+        @State private var isDropTargeted = false
 
         var body: some View {
             VStack(alignment: .leading, spacing: displayMode == .compact ? 0 : 4) {
@@ -573,6 +582,12 @@ extension Design {
             .background(SessionFrameReporter(sessionID: session.id))
             .overlay(borderView)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .onDrag {
+                NSItemProvider(object: session.id as NSString)
+            }
+            .onDrop(of: [UTType.text], isTargeted: $isDropTargeted) { providers in
+                handleSessionDrop(providers)
+            }
             .onTapGesture(perform: onActivate)
             .onHover { hovering in
                 isHovered = hovering
@@ -596,11 +611,32 @@ extension Design {
         private var borderView: some View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(
-                    isActive
+                    isDropTargeted
+                        ? palette.accent.resolvedColor()
+                        : isActive
                         ? session.agent.token.withAlpha(0.55).resolvedColor()
                         : Color.clear,
-                    lineWidth: isActive ? 1.5 : 1
+                    lineWidth: isDropTargeted || isActive ? 1.5 : 1
                 )
+        }
+
+        private func handleSessionDrop(_ providers: [NSItemProvider]) -> Bool {
+            guard let provider = providers.first(where: {
+                $0.canLoadObject(ofClass: NSString.self)
+            }) else {
+                return false
+            }
+
+            provider.loadObject(ofClass: NSString.self) { object, _ in
+                guard let sourceSessionID = object as? String,
+                      sourceSessionID != session.id else {
+                    return
+                }
+                Task { @MainActor in
+                    onMoveSessionBefore?(sourceSessionID)
+                }
+            }
+            return true
         }
 
         @ViewBuilder

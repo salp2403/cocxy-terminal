@@ -585,6 +585,30 @@ final class AuroraChromeController: ObservableObject {
             $0.id.rawValue.uuidString == sessionID
         }?.id
     }
+
+    /// Reorders the underlying tabs so the source Aurora session lands
+    /// immediately before the target session. Used by the vertical
+    /// sidebar's drag-and-drop path and kept on the controller so SwiftUI
+    /// never mutates `TabManager` directly.
+    @discardableResult
+    func moveSession(_ sourceSessionID: String, before targetSessionID: String) -> Bool {
+        guard sourceSessionID != targetSessionID,
+              let tabManager,
+              let sourceIndex = tabManager.tabs.firstIndex(where: {
+                  $0.id.rawValue.uuidString == sourceSessionID
+              }),
+              let targetIndex = tabManager.tabs.firstIndex(where: {
+                  $0.id.rawValue.uuidString == targetSessionID
+              }) else {
+            return false
+        }
+
+        let destinationIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+        guard destinationIndex != sourceIndex else { return false }
+        tabManager.moveTab(from: sourceIndex, to: destinationIndex)
+        refreshSources()
+        return true
+    }
 }
 
 // MARK: - SwiftUI host wrappers
@@ -636,6 +660,9 @@ struct AuroraSidebarHost: View {
                 if let tabID = controller.tabID(forSessionID: sessionID) {
                     controller.onMoveSessionDown?(tabID)
                 }
+            },
+            onMoveSessionBefore: { sourceSessionID, targetSessionID in
+                _ = controller.moveSession(sourceSessionID, before: targetSessionID)
             },
             onToggleNotifications: controller.onToggleNotifications.map { handler in
                 { handler() }
