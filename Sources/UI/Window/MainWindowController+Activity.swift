@@ -174,6 +174,13 @@ extension MainWindowController {
             sessionID: sessionID,
             metadata: metadata
         )
+        recordLocalActivity(
+            kind: .blockFinished,
+            summary: "Block finished: \(summary)",
+            workingDirectory: workingDirectory,
+            sessionID: sessionID,
+            metadata: metadata
+        )
         if let exitCode = block.exitCode, exitCode != 0 {
             recordLocalActivity(
                 kind: .errorEncountered,
@@ -183,6 +190,38 @@ extension MainWindowController {
                 metadata: metadata
             )
         }
+    }
+
+    func recordAgentInvokedActivity(
+        agentName: String?,
+        displayName: String?,
+        launchCommand: String?,
+        tabID: TabID,
+        surfaceID: SurfaceID?
+    ) {
+        var metadata: [String: String] = [:]
+        if let agentName = trimmedNonEmpty(agentName) {
+            metadata["agent_name"] = agentName
+        }
+        if let launchCommand = trimmedNonEmpty(launchCommand) {
+            metadata["launch_command"] = launchCommand
+        }
+        if let surfaceID {
+            metadata["surface_id"] = surfaceID.rawValue.uuidString
+        }
+
+        let workingDirectory = surfaceID.flatMap(workingDirectory(for:))
+            ?? tabManager.tab(for: tabID)?.workingDirectory
+        let summary = trimmedNonEmpty(displayName)
+            ?? trimmedNonEmpty(agentName)
+            ?? "Agent invoked"
+        recordLocalActivity(
+            kind: .agentInvoked,
+            summary: summary,
+            workingDirectory: workingDirectory,
+            sessionID: sessionIDForTab(tabID).rawValue.uuidString,
+            metadata: metadata
+        )
     }
 
     private func resolveActivityStore() throws -> ActivityStoring {
@@ -219,6 +258,12 @@ extension MainWindowController {
         guard !trimmed.isEmpty else { return "Command finished" }
         if trimmed.count <= 240 { return trimmed }
         return String(trimmed.prefix(237)) + "..."
+    }
+
+    private func trimmedNonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     func projectSwitchActivitySummary(_ directory: URL) -> String {

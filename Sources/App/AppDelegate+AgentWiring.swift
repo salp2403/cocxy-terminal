@@ -327,6 +327,16 @@ extension AppDelegate {
                         }
                     }
 
+                    if case .agentDetected(let agentName) = context.transitionEvent {
+                        controller.recordAgentInvokedActivity(
+                            agentName: agentName,
+                            displayName: displayName,
+                            launchCommand: agentName,
+                            tabID: tabID,
+                            surfaceID: targetSurfaceID
+                        )
+                    }
+
                     // Arm or cancel the `.launched` watchdog based on
                     // the new state. Surfaces that enter `.launched`
                     // and never progress (agent crashed before output,

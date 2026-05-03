@@ -66,13 +66,15 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
             surfaceID: SurfaceID()
         )
 
-        let event = try XCTUnwrap(try store.events().first)
-        XCTAssertEqual(event.kind, .commandExecuted)
-        XCTAssertEqual(event.summary, "swift test")
-        XCTAssertEqual(event.project?.name, "cocxy-test")
-        XCTAssertEqual(event.metadata["exit_code"], "0")
-        XCTAssertEqual(event.metadata["duration_ms"], "1500")
-        XCTAssertEqual(event.metadata["block_id"], "42")
+        let events = try store.events()
+        XCTAssertEqual(events.map(\.kind), [.commandExecuted, .blockFinished])
+        let commandEvent = try XCTUnwrap(events.first)
+        XCTAssertEqual(commandEvent.summary, "swift test")
+        XCTAssertEqual(commandEvent.project?.name, "cocxy-test")
+        XCTAssertEqual(commandEvent.metadata["exit_code"], "0")
+        XCTAssertEqual(commandEvent.metadata["duration_ms"], "1500")
+        XCTAssertEqual(commandEvent.metadata["block_id"], "42")
+        XCTAssertEqual(events.last?.summary, "Block finished: swift test")
     }
 
     func testFailedCommandBlockRecordsErrorEventLocally() throws {
@@ -89,9 +91,32 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         )
 
         let events = try store.events()
-        XCTAssertEqual(events.map(\.kind), [.commandExecuted, .errorEncountered])
+        XCTAssertEqual(events.map(\.kind), [.commandExecuted, .blockFinished, .errorEncountered])
         XCTAssertEqual(events.last?.summary, "Command failed: swift test")
         XCTAssertEqual(events.last?.metadata["exit_code"], "127")
+    }
+
+    func testEnabledConfigRecordsAgentInvokedLocally() throws {
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store)
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        try store.deleteAll()
+
+        controller.recordAgentInvokedActivity(
+            agentName: "codex",
+            displayName: "Codex CLI",
+            launchCommand: "codex",
+            tabID: tabID,
+            surfaceID: SurfaceID()
+        )
+
+        let event = try XCTUnwrap(try store.events().first)
+        XCTAssertEqual(event.kind, .agentInvoked)
+        XCTAssertEqual(event.summary, "Codex CLI")
+        XCTAssertEqual(event.metadata["agent_name"], "codex")
+        XCTAssertEqual(event.metadata["launch_command"], "codex")
+        XCTAssertNotNil(event.metadata["surface_id"])
     }
 
     func testEnabledConfigRecordsProjectSwitchesOnlyWhenDirectoryChanges() throws {
