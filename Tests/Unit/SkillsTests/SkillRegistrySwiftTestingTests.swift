@@ -112,9 +112,11 @@ struct SkillRegistrySwiftTestingTests {
             "document",
             "fix-error",
             "git-blame-explain",
+            "performance-profile",
             "refactor-extract",
             "release-checklist",
             "review-pr",
+            "security-review",
             "triage-issue",
             "write-tests",
         ]

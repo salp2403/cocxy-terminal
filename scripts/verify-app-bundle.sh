@@ -254,9 +254,11 @@ check_exists "$RESOURCES/Skills/dependency-audit/SKILL.md" "dependency-audit ski
 check_exists "$RESOURCES/Skills/document/SKILL.md" "document skill"
 check_exists "$RESOURCES/Skills/fix-error/SKILL.md" "fix-error skill"
 check_exists "$RESOURCES/Skills/git-blame-explain/SKILL.md" "git-blame-explain skill"
+check_exists "$RESOURCES/Skills/performance-profile/SKILL.md" "performance-profile skill"
 check_exists "$RESOURCES/Skills/refactor-extract/SKILL.md" "refactor-extract skill"
 check_exists "$RESOURCES/Skills/release-checklist/SKILL.md" "release-checklist skill"
 check_exists "$RESOURCES/Skills/review-pr/SKILL.md" "review-pr skill"
+check_exists "$RESOURCES/Skills/security-review/SKILL.md" "security-review skill"
 check_exists "$RESOURCES/Skills/triage-issue/SKILL.md" "triage-issue skill"
 check_exists "$RESOURCES/Skills/write-tests/SKILL.md" "write-tests skill"
 
