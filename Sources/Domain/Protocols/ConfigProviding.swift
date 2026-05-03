@@ -52,6 +52,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let agentDetection: AgentDetectionConfig
     let agent: AgentModeConfig
     let activity: ActivityConfig
+    let sessionReplay: SessionReplayConfig
     let voice: VoiceConfig
     let iCloudSync: ICloudSyncConfig
     let completions: CompletionConfig
@@ -74,6 +75,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         agentDetection: AgentDetectionConfig,
         agent: AgentModeConfig = .defaults,
         activity: ActivityConfig = .defaults,
+        sessionReplay: SessionReplayConfig = .defaults,
         voice: VoiceConfig = .defaults,
         iCloudSync: ICloudSyncConfig = .defaults,
         completions: CompletionConfig = .defaults,
@@ -95,6 +97,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agentDetection = agentDetection
         self.agent = agent
         self.activity = activity
+        self.sessionReplay = sessionReplay
         self.voice = voice
         self.iCloudSync = iCloudSync
         self.completions = completions
@@ -120,6 +123,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             agentDetection: .defaults,
             agent: .defaults,
             activity: .defaults,
+            sessionReplay: .defaults,
             voice: .defaults,
             iCloudSync: .defaults,
             completions: .defaults,
@@ -145,7 +149,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, agent, activity, voice, iCloudSync, completions, codeReview
+        case general, appearance, terminal, agentDetection, agent, activity, sessionReplay, voice, iCloudSync, completions, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -159,6 +163,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
             ?? .defaults
         self.activity = try container.decodeIfPresent(ActivityConfig.self, forKey: .activity)
+            ?? .defaults
+        self.sessionReplay = try container.decodeIfPresent(SessionReplayConfig.self, forKey: .sessionReplay)
             ?? .defaults
         self.voice = try container.decodeIfPresent(VoiceConfig.self, forKey: .voice)
             ?? .defaults
@@ -281,6 +287,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // repository must not be able to enable local activity recording
             // or token cost tracking on behalf of the user.
             activity: activity,
+            // Session replay writes local terminal output recordings. It is a
+            // global user privacy preference and project config must never
+            // turn on automatic recording or grant consent.
+            sessionReplay: sessionReplay,
             // Voice input is a global user preference because microphone
             // access and locale selection must never be toggled by a repo.
             voice: voice,
@@ -1153,6 +1163,97 @@ struct ActivityConfig: Codable, Sendable, Equatable {
             inputMicrosPerMillionTokens: inputCostMicrosPerMillionTokens,
             outputMicrosPerMillionTokens: outputCostMicrosPerMillionTokens
         )
+    }
+}
+
+// MARK: - Session Replay Config
+
+/// `[session-replay]` section for local terminal session recordings.
+///
+/// Disabled by default. Automatic recording requires three explicit user
+/// choices: the feature enabled, auto-record enabled, and first-run consent
+/// granted. Repository-local config is not allowed to override this section.
+struct SessionReplayConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let autoRecord: Bool
+    let consentGranted: Bool
+    let storageDirectory: String
+    let maxRecordingBytes: Int
+
+    static var defaults: SessionReplayConfig {
+        SessionReplayConfig(
+            enabled: false,
+            autoRecord: false,
+            consentGranted: false,
+            storageDirectory: "~/Library/Application Support/Cocxy/Recordings",
+            maxRecordingBytes: 512 * 1024 * 1024
+        )
+    }
+
+    init(
+        enabled: Bool = false,
+        autoRecord: Bool = false,
+        consentGranted: Bool = false,
+        storageDirectory: String = "~/Library/Application Support/Cocxy/Recordings",
+        maxRecordingBytes: Int = 512 * 1024 * 1024
+    ) {
+        self.enabled = enabled
+        self.autoRecord = autoRecord
+        self.consentGranted = consentGranted
+        let trimmedStorage = storageDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.storageDirectory = trimmedStorage.isEmpty
+            ? Self.defaults.storageDirectory
+            : trimmedStorage
+        self.maxRecordingBytes = maxRecordingBytes > 0
+            ? maxRecordingBytes
+            : Self.defaults.maxRecordingBytes
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case autoRecord
+        case consentGranted
+        case storageDirectory
+        case maxRecordingBytes
+    }
+
+    init(from decoder: Decoder) throws {
+        let defaults = Self.defaults
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled,
+            autoRecord: try container.decodeIfPresent(Bool.self, forKey: .autoRecord) ?? defaults.autoRecord,
+            consentGranted: try container.decodeIfPresent(Bool.self, forKey: .consentGranted)
+                ?? defaults.consentGranted,
+            storageDirectory: try container.decodeIfPresent(String.self, forKey: .storageDirectory)
+                ?? defaults.storageDirectory,
+            maxRecordingBytes: try container.decodeIfPresent(Int.self, forKey: .maxRecordingBytes)
+                ?? defaults.maxRecordingBytes
+        )
+    }
+
+    var policy: SessionReplayPolicy {
+        SessionReplayPolicy(
+            enabled: enabled,
+            autoRecordEnabled: autoRecord,
+            consentGranted: consentGranted
+        )
+    }
+}
+
+struct SessionReplayPolicy: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let autoRecordEnabled: Bool
+    let consentGranted: Bool
+
+    static let disabled = SessionReplayPolicy(
+        enabled: false,
+        autoRecordEnabled: false,
+        consentGranted: false
+    )
+
+    var canAutoRecord: Bool {
+        enabled && autoRecordEnabled && consentGranted
     }
 }
 

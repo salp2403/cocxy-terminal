@@ -345,6 +345,16 @@ final class ConfigService: ConfigProviding {
         input-cost-micros-per-million-tokens = \(defaults.activity.inputCostMicrosPerMillionTokens)
         output-cost-micros-per-million-tokens = \(defaults.activity.outputCostMicrosPerMillionTokens)
 
+        [session-replay]
+        # Local terminal session recording and replay. Disabled by default.
+        # Auto-record requires explicit first-run consent and records stay
+        # on this Mac unless the user exports a .cast file manually.
+        enabled = \(defaults.sessionReplay.enabled)
+        auto-record = \(defaults.sessionReplay.autoRecord)
+        consent-granted = \(defaults.sessionReplay.consentGranted)
+        storage-directory = "\(defaults.sessionReplay.storageDirectory)"
+        max-recording-bytes = \(defaults.sessionReplay.maxRecordingBytes)
+
         [icloud-sync]
         # Optional iCloud Drive sync for local Cocxy artifacts. Disabled by
         # default and encrypted when enabled. Cocxy never uses a backend
@@ -551,6 +561,7 @@ final class ConfigService: ConfigProviding {
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
         let activity = parseActivityConfig(from: parsed)
+        let sessionReplay = parseSessionReplayConfig(from: parsed)
         let voice = parseVoiceConfig(from: parsed)
         let iCloudSync = parseICloudSyncConfig(from: parsed)
         let completions = parseCompletionConfig(from: parsed)
@@ -577,6 +588,7 @@ final class ConfigService: ConfigProviding {
             agentDetection: agentDetection,
             agent: agent,
             activity: activity,
+            sessionReplay: sessionReplay,
             voice: voice,
             iCloudSync: iCloudSync,
             completions: completions,
@@ -852,6 +864,22 @@ final class ConfigService: ConfigProviding {
                 intValue(table["output-cost-micros-per-million-tokens"])
                     ?? Int(defaults.outputCostMicrosPerMillionTokens)
             )
+        )
+    }
+
+    /// Parses `[session-replay]` as an explicit local recording opt-in.
+    /// Missing or malformed values keep recording disabled and require a
+    /// separate consent flag before any future auto-record path can start.
+    private func parseSessionReplayConfig(from parsed: [String: TOMLValue]) -> SessionReplayConfig {
+        let table = extractTable("session-replay", from: parsed)
+        let defaults = SessionReplayConfig.defaults
+
+        return SessionReplayConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            autoRecord: boolValue(table["auto-record"]) ?? defaults.autoRecord,
+            consentGranted: boolValue(table["consent-granted"]) ?? defaults.consentGranted,
+            storageDirectory: stringValue(table["storage-directory"]) ?? defaults.storageDirectory,
+            maxRecordingBytes: intValue(table["max-recording-bytes"]) ?? defaults.maxRecordingBytes
         )
     }
 
