@@ -484,6 +484,46 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
         XCTAssertFalse(editorView.isVimModeEnabled)
     }
 
+    func testEditorCompletionWiringUsesEffectiveConfig() throws {
+        let fileURL = try makeSwiftFile(contents: "let value = ")
+        let configService = try makeConfigService(toml: """
+        [completions]
+        inline-ai = true
+        provider = "foundation-models-on-device"
+        enabled-languages = ["swift"]
+        """)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let editorView = EditorView(fileURL: fileURL)
+
+        controller.wireEditorCompletionIfNeeded(editorView: editorView, fileURL: fileURL, tabID: tabID)
+
+        XCTAssertTrue(editorView.isInlineCompletionEnabled)
+    }
+
+    func testEditorCompletionWiringDefaultsOff() throws {
+        let fileURL = try makeSwiftFile(contents: "let value = ")
+        let configService = try makeConfigService(toml: """
+        [appearance]
+        theme = "catppuccin-mocha"
+        """)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let editorView = EditorView(fileURL: fileURL)
+
+        controller.wireEditorCompletionIfNeeded(editorView: editorView, fileURL: fileURL, tabID: tabID)
+
+        XCTAssertFalse(editorView.isInlineCompletionEnabled)
+    }
+
     func testTopTabPositionUsesTopLevelStripOnlyWhenAuroraDisabled() throws {
         let toml = """
         [appearance]

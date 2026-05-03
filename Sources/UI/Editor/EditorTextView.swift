@@ -3,6 +3,11 @@
 
 import AppKit
 
+enum EditorTextKeyCommand: Equatable {
+    case tab
+    case escape
+}
+
 @MainActor
 final class EditorTextView: NSTextView {
     var saveHandler: (() -> Void)?
@@ -10,6 +15,7 @@ final class EditorTextView: NSTextView {
     var insertTextHandler: ((String) -> Bool)?
     var deleteBackwardHandler: (() -> Bool)?
     var additiveCursorHandler: ((Int) -> Bool)?
+    var inlineCompletionKeyHandler: ((EditorTextKeyCommand) -> Bool)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
@@ -21,6 +27,10 @@ final class EditorTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
+        if let command = inlineCompletionCommand(for: event),
+           inlineCompletionKeyHandler?(command) == true {
+            return
+        }
         if let input = vimInput(for: event),
            keyDownHandler?(input) == true {
             return
@@ -86,6 +96,17 @@ final class EditorTextView: NSTextView {
     private func requestsAdditiveCursor(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         return flags.contains(.command) || flags.contains(.option)
+    }
+
+    private func inlineCompletionCommand(for event: NSEvent) -> EditorTextKeyCommand? {
+        switch event.keyCode {
+        case 48:
+            return .tab
+        case 53:
+            return .escape
+        default:
+            return nil
+        }
     }
 
     private func vimInput(for event: NSEvent) -> VimInput? {

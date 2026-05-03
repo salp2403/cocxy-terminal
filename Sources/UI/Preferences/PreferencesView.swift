@@ -1379,6 +1379,55 @@ struct EditorPreferencesSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section("Inline Completions") {
+                Toggle("Enable inline AI completions", isOn: $viewModel.completionInlineAIEnabled)
+                    .help("Uses the local Foundation Models provider when available.")
+
+                HStack {
+                    Text("Provider")
+                    Spacer()
+                    Text("Foundation Models")
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Text("Idle delay")
+                    Slider(
+                        value: $viewModel.completionIdleDelaySeconds,
+                        in: CompletionConfig.minIdleDelaySeconds...CompletionConfig.maxIdleDelaySeconds,
+                        step: 0.05
+                    )
+                    Text("\(viewModel.completionIdleDelaySeconds, specifier: "%.2f")s")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 48, alignment: .trailing)
+                }
+
+                Stepper(
+                    value: $viewModel.completionMaxContextUTF16Length,
+                    in: CompletionConfig.minContextUTF16Length...CompletionConfig.maxContextUTF16Length,
+                    step: 256
+                ) {
+                    Text("Context window: \(viewModel.completionMaxContextUTF16Length) UTF-16")
+                }
+            }
+
+            Section("Completion Languages") {
+                ForEach(viewModel.availableCompletionLanguageIDs, id: \.self) { languageID in
+                    Toggle(
+                        languageID,
+                        isOn: Binding(
+                            get: {
+                                viewModel.isCompletionLanguageEnabled(languageID)
+                            },
+                            set: { enabled in
+                                viewModel.setCompletionLanguage(languageID, enabled: enabled)
+                            }
+                        )
+                    )
+                }
+            }
+
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)

@@ -169,6 +169,7 @@ extension MainWindowController {
             let editorView = EditorView(fileURL: panel.filePath)
             wireEditorVimMode(editorView: editorView, tabID: currentTabID)
             wireEditorSyntaxIfAvailable(editorView: editorView)
+            wireEditorCompletionIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: currentTabID)
             editorView.onQuitRequested = { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
@@ -176,6 +177,7 @@ extension MainWindowController {
                 guard let editorView else { return }
                 self?.wireEditorVimMode(editorView: editorView, tabID: currentTabID)
                 self?.wireEditorLSPIfNeeded(editorView: editorView, fileURL: url, tabID: currentTabID)
+                self?.wireEditorCompletionIfNeeded(editorView: editorView, fileURL: url, tabID: currentTabID)
             }
             wireEditorLSPIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: currentTabID)
             panelView = editorView
@@ -443,6 +445,7 @@ extension MainWindowController {
             viewToRemove = panelView
             if let editorView = panelView as? EditorView {
                 closeEditorLSPIfNeeded(editorView: editorView, tabID: currentTabID)
+                closeEditorCompletionIfNeeded(editorView: editorView)
             }
             // Clean up the panel content view entry.
             panelContentViews.removeValue(forKey: focusedPane.contentID)

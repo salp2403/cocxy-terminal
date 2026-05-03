@@ -92,6 +92,20 @@ struct CompletionDomainSwiftTestingTests {
         )))
     }
 
+    @Test("trigger policy suppresses native text-change callbacks immediately after newlines")
+    func triggerPolicySuppressesTextChangeAfterNewline() {
+        let document = EditorDocument(text: "func total() -> Int {\n")
+        let selection = EditorSelection.caret(at: document.buffer.utf16Length)
+        let enabled = CompletionConfig(inlineAIEnabled: true, enabledLanguageIDs: ["swift"])
+
+        #expect(!CompletionTriggerPolicy(config: enabled).shouldTrigger(CompletionTriggerInput(
+            document: document,
+            selection: selection,
+            languageID: "swift",
+            idleDuration: 1.0
+        )))
+    }
+
     @Test("completion engine returns provider suggestions only when trigger and context are valid")
     func completionEngineReturnsProviderSuggestionsOnlyWhenValid() async throws {
         let document = EditorDocument(text: "func sum(a: Int, b: Int) -> Int { ")
@@ -126,6 +140,50 @@ struct CompletionDomainSwiftTestingTests {
         #expect(suggestion?.text == "a + b }")
         #expect(requests.count == 1)
         #expect(requests.first?.prefix.hasSuffix("-> Int { ") == true)
+    }
+
+    @Test("completion ranking prefers caret-matched local suggestions deterministically")
+    func completionRankingPrefersCaretMatchedLocalSuggestions() throws {
+        let document = EditorDocument(text: "let value = ")
+        let selection = EditorSelection.caret(at: document.buffer.utf16Length)
+        let context = try #require(CompletionContextBuilder().context(
+            document: document,
+            selection: selection,
+            languageID: "swift"
+        ))
+        let ranking = CompletionRanking()
+
+        let best = ranking.bestSuggestion(from: [
+            InlineCompletion(
+                text: "remote",
+                replacementRange: EditorTextRange(location: 0, length: 0),
+                source: .foundationModelsOnDevice
+            ),
+            InlineCompletion(
+                text: "42",
+                replacementRange: context.caretRange,
+                source: .foundationModelsOnDevice
+            ),
+            InlineCompletion(
+                text: "   ",
+                replacementRange: context.caretRange,
+                source: .foundationModelsOnDevice
+            ),
+        ], context: context)
+
+        #expect(best?.text == "42")
+    }
+
+    @Test("Foundation Models completion sanitizer strips wrappers without inventing text")
+    func foundationModelsCompletionSanitizerStripsWrappers() throws {
+        #expect(InlineCompletionResponseSanitizer.sanitizedText("""
+        ```swift
+        return a + b
+        ```
+        """) == "return a + b")
+        #expect(InlineCompletionResponseSanitizer.sanitizedText("Completion: value + 1") == "value + 1")
+        #expect(InlineCompletionResponseSanitizer.sanitizedText("\"done\"") == "done")
+        #expect(InlineCompletionResponseSanitizer.sanitizedText("   ") == nil)
     }
 }
 

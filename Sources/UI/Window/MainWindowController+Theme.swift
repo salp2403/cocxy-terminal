@@ -169,6 +169,10 @@ extension MainWindowController {
         if old?.lsp != config.lsp {
             resetLSPWorkspaceCoordinators()
         }
+
+        if old?.completions != config.completions {
+            rewireVisibleEditorCompletions()
+        }
     }
 
     // MARK: - Tab Position

@@ -45,10 +45,17 @@ final class EditorView: NSView, NSTextViewDelegate {
     private var vimRedoStack: [EditorUndoEntry] = []
     private var pendingVimUndoStart: EditorUndoSnapshot?
     private var pendingVimUndoChanged = false
+    private var inlineCompletionEngine: CompletionEngine?
+    private var inlineCompletionTask: Task<Void, Never>?
+    private let inlineGhostText = InlineGhostText()
+    private var activeInlineCompletion: InlineCompletion?
+    private var inlineCompletionRequestID = 0
 
     private(set) var isSoftWrapEnabled = true
     private(set) var isLSPControlsEnabled = false
     private(set) var isVimModeEnabled = false
+    var isInlineCompletionEnabled: Bool { inlineCompletionEngine != nil }
+    var inlineCompletionText: String? { activeInlineCompletion?.text }
     var vimMode: VimMode { vimController.mode }
     var currentText: String { textView.string }
     var statusText: String { statusLabel.stringValue }
@@ -103,6 +110,11 @@ final class EditorView: NSView, NSTextViewDelegate {
     override func layout() {
         super.layout()
         applySoftWrapConfiguration()
+        inlineGhostText.layout()
+    }
+
+    deinit {
+        inlineCompletionTask?.cancel()
     }
 
     @available(*, unavailable)
@@ -118,6 +130,7 @@ final class EditorView: NSView, NSTextViewDelegate {
             statusOverride = nil
             resetVimUndoState()
             clearLSPPresentation()
+            dismissInlineCompletion()
             applyText(text, preserveSelection: false)
             refreshSyntaxDecorations()
             onFileLoaded?(url)
@@ -126,6 +139,7 @@ final class EditorView: NSView, NSTextViewDelegate {
             statusOverride = "Load failed"
             resetVimUndoState()
             clearLSPPresentation()
+            dismissInlineCompletion()
             applyText("", preserveSelection: false)
             refreshSyntaxDecorations()
         }
@@ -133,12 +147,14 @@ final class EditorView: NSView, NSTextViewDelegate {
     }
 
     func replaceText(_ text: String) {
+        dismissInlineCompletion()
         applyText(text, preserveSelection: true)
         syncSessionFromTextView()
         resetVimUndoState()
     }
 
     func setSelection(_ selection: EditorSelection) {
+        dismissInlineCompletion()
         let maximumLength = (textView.string as NSString).length
         let clamped = selection.clamped(to: maximumLength)
         session.setSelection(clamped)
@@ -151,6 +167,7 @@ final class EditorView: NSView, NSTextViewDelegate {
     }
 
     func insertTextAtSelections(_ text: String) {
+        dismissInlineCompletion()
         let change = session.replaceSelection(with: text)
         statusOverride = nil
         applyText(change.afterText, preserveSelection: false)
@@ -200,6 +217,101 @@ final class EditorView: NSView, NSTextViewDelegate {
 
     func setVimModeEnabled(_ enabled: Bool) {
         isVimModeEnabled = enabled
+    }
+
+    func setInlineCompletionEngine(_ engine: CompletionEngine?) {
+        cancelInlineCompletionTask()
+        inlineCompletionEngine = engine
+        dismissInlineCompletion()
+    }
+
+    @discardableResult
+    func requestInlineCompletion(idleDuration: TimeInterval? = nil, insertedText: String? = nil) -> Bool {
+        guard let engine = inlineCompletionEngine,
+              let languageID = currentCompletionLanguageID()
+        else {
+            return false
+        }
+
+        let requestID = nextInlineCompletionRequestID()
+        let input = CompletionTriggerInput(
+            document: session.document,
+            selection: session.selection,
+            languageID: languageID,
+            idleDuration: idleDuration ?? engine.config.idleDelaySeconds,
+            insertedText: insertedText
+        )
+
+        inlineCompletionTask?.cancel()
+        inlineCompletionTask = Task { [weak self] in
+            do {
+                let suggestion = try await engine.suggestion(for: input)
+                await MainActor.run {
+                    self?.applyInlineCompletionResult(suggestion, requestID: requestID)
+                }
+            } catch {
+                await MainActor.run {
+                    self?.applyInlineCompletionResult(nil, requestID: requestID)
+                }
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    func showInlineCompletion(_ completion: InlineCompletion) -> Bool {
+        let clampedRange = completion.replacementRange.clamped(to: session.document.buffer.utf16Length)
+        guard !completion.text.isEmpty,
+              session.selection.ranges.count == 1,
+              session.selection.primaryRange.isCaret,
+              session.selection.primaryRange.location == clampedRange.location
+        else {
+            dismissInlineCompletion()
+            return false
+        }
+
+        let normalized = InlineCompletion(
+            text: completion.text,
+            replacementRange: clampedRange,
+            source: completion.source
+        )
+        activeInlineCompletion = normalized
+        inlineGhostText.show(
+            text: normalized.text,
+            atUTF16Location: normalized.replacementRange.location,
+            in: textView
+        )
+        return true
+    }
+
+    @discardableResult
+    func dismissInlineCompletion() -> Bool {
+        cancelInlineCompletionTask()
+        let hadCompletion = activeInlineCompletion != nil
+        activeInlineCompletion = nil
+        inlineGhostText.hide()
+        return hadCompletion
+    }
+
+    @discardableResult
+    func acceptInlineCompletion() -> Bool {
+        guard let completion = activeInlineCompletion,
+              let replacement = CompletionAcceptHandler().replacement(
+                for: completion,
+                document: session.document
+              )
+        else {
+            return false
+        }
+
+        dismissInlineCompletion()
+        let change = session.apply(replacement)
+        statusOverride = nil
+        applyText(change.afterText, preserveSelection: false)
+        setSelection(change.selectionAfter)
+        refreshSyntaxDecorations()
+        updateHeader()
+        return true
     }
 
     @discardableResult
@@ -502,11 +614,14 @@ final class EditorView: NSView, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         guard !isApplyingProgrammaticUpdate else { return }
+        dismissInlineCompletion()
         syncSessionFromTextView()
+        scheduleInlineCompletion(insertedText: nil)
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
         guard !isApplyingProgrammaticUpdate else { return }
+        dismissInlineCompletion()
         session.setSelection(EditorSelectionLayer.selection(from: textView))
     }
 
@@ -600,6 +715,9 @@ final class EditorView: NSView, NSTextViewDelegate {
         }
         textView.additiveCursorHandler = { [weak self] offset in
             self?.handleAdditiveCursor(atUTF16Offset: offset) ?? false
+        }
+        textView.inlineCompletionKeyHandler = { [weak self] command in
+            self?.handleInlineCompletionCommand(command) ?? false
         }
     }
 
@@ -787,6 +905,82 @@ final class EditorView: NSView, NSTextViewDelegate {
         session.replaceAllText(with: textView.string)
         updateHeader()
         refreshSyntaxDecorations()
+    }
+
+    private func handleInlineCompletionCommand(_ command: EditorTextKeyCommand) -> Bool {
+        switch command {
+        case .tab:
+            return acceptInlineCompletion()
+        case .escape:
+            return dismissInlineCompletion()
+        }
+    }
+
+    private func scheduleInlineCompletion(insertedText: String?) {
+        guard let engine = inlineCompletionEngine else { return }
+        cancelInlineCompletionTask()
+        let delay = max(0, engine.config.idleDelaySeconds)
+        inlineCompletionTask = Task { [weak self] in
+            let nanoseconds = UInt64(delay * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                _ = self?.requestInlineCompletion(
+                    idleDuration: delay,
+                    insertedText: insertedText
+                )
+            }
+        }
+    }
+
+    private func applyInlineCompletionResult(_ completion: InlineCompletion?, requestID: Int) {
+        guard requestID == inlineCompletionRequestID else { return }
+        guard let completion else {
+            dismissInlineCompletion()
+            return
+        }
+        _ = showInlineCompletion(completion)
+    }
+
+    private func nextInlineCompletionRequestID() -> Int {
+        inlineCompletionRequestID += 1
+        return inlineCompletionRequestID
+    }
+
+    private func cancelInlineCompletionTask() {
+        inlineCompletionRequestID += 1
+        inlineCompletionTask?.cancel()
+        inlineCompletionTask = nil
+    }
+
+    private func currentCompletionLanguageID() -> String? {
+        guard let fileURL else { return nil }
+        if let server = LSPLanguageRegistry.defaults.server(forFileURL: fileURL) {
+            return server.languageID
+        }
+
+        switch fileURL.pathExtension.lowercased() {
+        case "c", "h":
+            return "c"
+        case "cc", "cpp", "cxx", "hpp", "hxx":
+            return "cpp"
+        case "go":
+            return "go"
+        case "js", "jsx", "mjs", "cjs":
+            return "javascript"
+        case "py":
+            return "python"
+        case "rs":
+            return "rust"
+        case "swift":
+            return "swift"
+        case "ts", "tsx":
+            return "typescript"
+        case "zig":
+            return "zig"
+        default:
+            return nil
+        }
     }
 
     private func refreshSyntaxDecorations() {

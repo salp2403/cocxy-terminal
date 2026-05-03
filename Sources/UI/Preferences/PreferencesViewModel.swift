@@ -176,6 +176,20 @@ final class PreferencesViewModel: ObservableObject {
     /// `"system"` or a normalized locale identifier selected by the user.
     @Published var voiceLocaleIdentifier: String
 
+    // MARK: - Inline Completions
+
+    /// Master opt-in for local inline AI completions in editor tabs.
+    @Published var completionInlineAIEnabled: Bool
+
+    /// Idle delay before the editor asks the local provider for a suggestion.
+    @Published var completionIdleDelaySeconds: Double
+
+    /// Maximum UTF-16 context window sent to the local completion provider.
+    @Published var completionMaxContextUTF16Length: Int
+
+    /// Normalized language IDs eligible for inline completions.
+    @Published var completionEnabledLanguageIDs: Set<String>
+
     // MARK: - Activity
 
     /// Master opt-in for local activity dashboard persistence.
@@ -367,6 +381,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Local Speech locales exposed in Preferences.
     let availableVoiceLocales: [VoiceLocaleOption]
 
+    /// Local code languages exposed for inline completion opt-in.
+    let availableCompletionLanguageIDs: [String]
+
     /// Callback invoked after a successful save.
     var onSave: (() -> Void)?
 
@@ -411,6 +428,7 @@ final class PreferencesViewModel: ObservableObject {
             || idleTimeoutSeconds != c.agentDetection.idleTimeoutSeconds
             || agentModeHasUnsavedChanges(comparedTo: c.agent)
             || voiceHasUnsavedChanges(comparedTo: c.voice)
+            || completionHasUnsavedChanges(comparedTo: c.completions)
             || activityHasUnsavedChanges(comparedTo: c.activity)
             || codeReviewAutoShowOnSessionEnd != c.codeReview.autoShowOnSessionEnd
             || macosNotifications != c.notifications.macosNotifications
@@ -473,6 +491,10 @@ final class PreferencesViewModel: ObservableObject {
         agentConversationEncryption = c.agent.conversationEncryption
         voiceEnabled = c.voice.enabled
         voiceLocaleIdentifier = c.voice.localeIdentifier
+        completionInlineAIEnabled = c.completions.inlineAIEnabled
+        completionIdleDelaySeconds = c.completions.idleDelaySeconds
+        completionMaxContextUTF16Length = c.completions.maxContextUTF16Length
+        completionEnabledLanguageIDs = Set(c.completions.enabledLanguageIDs)
         activityTrackingEnabled = c.activity.enabled
         activityCostTrackingEnabled = c.activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = c.activity.inputCostMicrosPerMillionTokens
@@ -616,6 +638,12 @@ final class PreferencesViewModel: ObservableObject {
         self.voiceEnabled = config.voice.enabled
         self.voiceLocaleIdentifier = config.voice.localeIdentifier
 
+        // Inline Completions
+        self.completionInlineAIEnabled = config.completions.inlineAIEnabled
+        self.completionIdleDelaySeconds = config.completions.idleDelaySeconds
+        self.completionMaxContextUTF16Length = config.completions.maxContextUTF16Length
+        self.completionEnabledLanguageIDs = Set(config.completions.enabledLanguageIDs)
+
         // Activity
         self.activityTrackingEnabled = config.activity.enabled
         self.activityCostTrackingEnabled = config.activity.costTrackingEnabled
@@ -677,6 +705,7 @@ final class PreferencesViewModel: ObservableObject {
         self.bundledFontFamilies = FontFallbackResolver.bundledFamilies
         self.availableLSPLanguages = LSPLanguageRegistry.defaults.servers
         self.availableVoiceLocales = voiceLocaleResolver.supportedLocaleOptions()
+        self.availableCompletionLanguageIDs = CompletionConfig.defaults.enabledLanguageIDs
         loadInitialMCPConfig()
     }
 
@@ -909,6 +938,7 @@ final class PreferencesViewModel: ObservableObject {
         let agent = buildAgentModeConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
+        let completions = buildCompletionConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
             .applyingFallbackShortcut(
@@ -966,6 +996,7 @@ final class PreferencesViewModel: ObservableObject {
             agent: agent,
             activity: activity,
             voice: voice,
+            completions: completions,
             codeReview: buildCodeReviewConfigFromViewModel(),
             notifications: NotificationConfig(
                 macosNotifications: macosNotifications,
@@ -994,6 +1025,9 @@ final class PreferencesViewModel: ObservableObject {
         activityInputCostMicrosPerMillionTokens = activity.inputCostMicrosPerMillionTokens
         activityOutputCostMicrosPerMillionTokens = activity.outputCostMicrosPerMillionTokens
         voiceLocaleIdentifier = voice.localeIdentifier
+        completionIdleDelaySeconds = completions.idleDelaySeconds
+        completionMaxContextUTF16Length = completions.maxContextUTF16Length
+        completionEnabledLanguageIDs = Set(completions.enabledLanguageIDs)
         pendingKeybindings = nil
     }
 
@@ -1035,6 +1069,43 @@ final class PreferencesViewModel: ObservableObject {
     private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
         voiceEnabled != config.enabled
             || VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier) != config.localeIdentifier
+    }
+
+    private func buildCompletionConfigFromViewModel() -> CompletionConfig {
+        CompletionConfig(
+            inlineAIEnabled: completionInlineAIEnabled,
+            provider: .foundationModelsOnDevice,
+            idleDelaySeconds: completionIdleDelaySeconds,
+            maxContextUTF16Length: completionMaxContextUTF16Length,
+            enabledLanguageIDs: Array(completionEnabledLanguageIDs)
+        )
+    }
+
+    private func completionHasUnsavedChanges(comparedTo config: CompletionConfig) -> Bool {
+        let completions = buildCompletionConfigFromViewModel()
+        return completions.inlineAIEnabled != config.inlineAIEnabled
+            || completions.provider != config.provider
+            || completions.idleDelaySeconds != config.idleDelaySeconds
+            || completions.maxContextUTF16Length != config.maxContextUTF16Length
+            || completions.enabledLanguageIDs != config.enabledLanguageIDs
+    }
+
+    func isCompletionLanguageEnabled(_ languageID: String) -> Bool {
+        let normalized = Self.normalizedCompletionLanguageID(languageID)
+        return !normalized.isEmpty && completionEnabledLanguageIDs.contains(normalized)
+    }
+
+    func setCompletionLanguage(_ languageID: String, enabled: Bool) {
+        let normalized = Self.normalizedCompletionLanguageID(languageID)
+        guard !normalized.isEmpty else { return }
+
+        var next = completionEnabledLanguageIDs
+        if enabled {
+            next.insert(normalized)
+        } else {
+            next.remove(normalized)
+        }
+        completionEnabledLanguageIDs = next
     }
 
     private func buildActivityConfigFromViewModel() -> ActivityConfig {
@@ -1236,6 +1307,7 @@ final class PreferencesViewModel: ObservableObject {
         let agent = buildAgentModeConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
+        let completions = buildCompletionConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
@@ -1306,6 +1378,13 @@ final class PreferencesViewModel: ObservableObject {
         [voice]
         enabled = \(voice.enabled)
         locale = "\(voice.localeIdentifier)"
+
+        [completions]
+        inline-ai = \(completions.inlineAIEnabled)
+        provider = "\(completions.provider.rawValue)"
+        idle-delay-seconds = \(Self.tomlNumber(completions.idleDelaySeconds))
+        max-context-utf16-length = \(completions.maxContextUTF16Length)
+        enabled-languages = \(Self.tomlStringArray(completions.enabledLanguageIDs))
 
         [activity]
         enabled = \(activity.enabled)
@@ -1448,6 +1527,10 @@ final class PreferencesViewModel: ObservableObject {
     }
 
     private static func normalizedLSPLanguageID(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func normalizedCompletionLanguageID(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 

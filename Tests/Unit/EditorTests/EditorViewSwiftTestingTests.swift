@@ -290,6 +290,66 @@ struct EditorViewSwiftTestingTests {
         #expect(view.currentText == "abc")
     }
 
+    @Test("inline completion ghost text accepts with Tab")
+    func inlineCompletionAcceptsWithTab() throws {
+        let view = EditorView(text: "let value = ")
+        let textView: EditorTextView = try #require(findSubview(in: view))
+        let caret = (view.currentText as NSString).length
+
+        view.setSelection(.caret(at: caret))
+        #expect(view.showInlineCompletion(InlineCompletion(
+            text: "42",
+            replacementRange: EditorTextRange(location: caret, length: 0),
+            source: .foundationModelsOnDevice
+        )))
+
+        textView.keyDown(with: try makeTabKeyDownEvent())
+
+        #expect(view.currentText == "let value = 42")
+        #expect(view.inlineCompletionText == nil)
+        #expect(view.session.selection == .caret(at: caret + 2))
+    }
+
+    @Test("inline completion ghost text dismisses with Escape")
+    func inlineCompletionDismissesWithEscape() throws {
+        let view = EditorView(text: "let value = ")
+        let textView: EditorTextView = try #require(findSubview(in: view))
+        let caret = (view.currentText as NSString).length
+
+        view.setSelection(.caret(at: caret))
+        #expect(view.showInlineCompletion(InlineCompletion(
+            text: "42",
+            replacementRange: EditorTextRange(location: caret, length: 0),
+            source: .foundationModelsOnDevice
+        )))
+
+        textView.keyDown(with: try makeEscapeKeyDownEvent())
+
+        #expect(view.currentText == "let value = ")
+        #expect(view.inlineCompletionText == nil)
+        #expect(view.session.selection == .caret(at: caret))
+    }
+
+    @Test("inline completion engine requests suggestions only when enabled and language is code")
+    func inlineCompletionEngineRequestsSuggestions() async throws {
+        let fileURL = try makeTemporaryFile(named: "Sample.swift", contents: "let value = ")
+        let view = EditorView(fileURL: fileURL)
+        let caret = (view.currentText as NSString).length
+        let provider = ImmediateInlineCompletionProvider(text: "42")
+
+        view.setSelection(.caret(at: caret))
+        view.setInlineCompletionEngine(CompletionEngine(
+            provider: provider,
+            config: CompletionConfig(inlineAIEnabled: true, enabledLanguageIDs: ["swift"])
+        ))
+
+        #expect(view.requestInlineCompletion(idleDuration: 1.0))
+        try await waitForInlineCompletion(in: view)
+
+        #expect(view.inlineCompletionText == "42")
+        #expect(await provider.requestCount == 1)
+    }
+
     @Test("vim mode is disabled by default and does not intercept editor input")
     func vimModeIsDisabledByDefault() {
         let view = EditorView(text: "abc")
@@ -781,6 +841,13 @@ struct EditorViewSwiftTestingTests {
         return SyntaxTreeService(registry: registry, parser: parser)
     }
 
+    private func waitForInlineCompletion(in view: EditorView) async throws {
+        let deadline = Date().addingTimeInterval(1.0)
+        while view.inlineCompletionText == nil && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -846,6 +913,21 @@ struct EditorViewSwiftTestingTests {
         ))
     }
 
+    private func makeTabKeyDownEvent() throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "\t",
+            charactersIgnoringModifiers: "\t",
+            isARepeat: false,
+            keyCode: 48
+        ))
+    }
+
     private func makeReturnKeyDownEvent() throws -> NSEvent {
         try #require(NSEvent.keyEvent(
             with: .keyDown,
@@ -859,5 +941,23 @@ struct EditorViewSwiftTestingTests {
             isARepeat: false,
             keyCode: 36
         ))
+    }
+}
+
+private actor ImmediateInlineCompletionProvider: InlineCompletionProviding {
+    let text: String
+    private(set) var requestCount = 0
+
+    init(text: String) {
+        self.text = text
+    }
+
+    func completion(for context: CompletionContext) async throws -> InlineCompletion? {
+        requestCount += 1
+        return InlineCompletion(
+            text: text,
+            replacementRange: context.caretRange,
+            source: .foundationModelsOnDevice
+        )
     }
 }

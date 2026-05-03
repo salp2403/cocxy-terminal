@@ -51,7 +51,23 @@ struct CompletionTriggerPolicy: Sendable {
            insertedText.rangeOfCharacter(from: .newlines) != nil {
             return false
         }
+        if input.insertedText == nil,
+           characterBeforePrimaryCaret(in: input.document, selection: selection)
+            .rangeOfCharacter(from: .newlines) != nil {
+            return false
+        }
 
         return true
+    }
+
+    private func characterBeforePrimaryCaret(
+        in document: EditorDocument,
+        selection: EditorSelection
+    ) -> String {
+        let range = selection.primaryRange
+        guard range.location > 0 else { return "" }
+        let nsText = document.text as NSString
+        let composed = nsText.rangeOfComposedCharacterSequence(at: range.location - 1)
+        return nsText.substring(with: composed)
     }
 }

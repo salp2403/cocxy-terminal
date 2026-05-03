@@ -61,6 +61,19 @@ struct EditorSession: EditorProviding, Equatable {
         return change
     }
 
+    @discardableResult
+    mutating func apply(_ replacement: EditorReplacement) -> EditorChange {
+        let change = document.apply(replacement)
+        selection = change.selectionAfter.clamped(to: document.buffer.utf16Length)
+        pendingEvents.append(.documentChanged(
+            documentID: document.id,
+            version: document.version,
+            ranges: change.changedRanges
+        ))
+        pendingEvents.append(.selectionChanged(documentID: document.id, selection: selection))
+        return change
+    }
+
     mutating func setSelection(_ selection: EditorSelection) {
         self.selection = selection.clamped(to: document.buffer.utf16Length)
         pendingEvents.append(.selectionChanged(documentID: document.id, selection: self.selection))
