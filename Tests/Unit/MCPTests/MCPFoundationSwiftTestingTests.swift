@@ -489,6 +489,84 @@ struct MCPFoundationSwiftTestingTests {
         #expect(response.result == .object(["ok": .bool(true)]))
     }
 
+    @Test("stdio transport executes a real external MCP server process")
+    func stdioTransportExecutesRealExternalMCPServerProcess() async throws {
+        let pythonURL = try #require(Self.python3URL())
+        let root = temporaryDirectory(named: "mcp-real-process")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scriptURL = root.appendingPathComponent("server.py")
+        try writeMCPServerScript(to: scriptURL)
+
+        let transport = MCPStdioTransport()
+        do {
+            let server = MCPServer(
+                id: "local",
+                displayName: "Local",
+                transport: .stdio(command: pythonURL.path, arguments: [scriptURL.path])
+            )
+            let manager = await MCPManager(clients: [MCPClient(server: server, transport: transport)])
+
+            let descriptors = try await manager.listToolDescriptors()
+            let result = try await manager.executeTool(
+                agentToolID: "mcp__local__echo",
+                arguments: ["message": .string("hello")]
+            )
+
+            #expect(descriptors.map(\.id) == ["mcp__local__echo"])
+            #expect(result == .object([
+                "isError": .bool(false),
+                "content": .array([.string("echo:hello")]),
+            ]))
+            await transport.shutdownAll()
+        } catch {
+            await transport.shutdownAll()
+            throw error
+        }
+    }
+
+    @Test("stdio transport reconnects after a real MCP server process exits")
+    func stdioTransportReconnectsAfterRealMCPServerProcessExits() async throws {
+        let pythonURL = try #require(Self.python3URL())
+        let root = temporaryDirectory(named: "mcp-real-reconnect")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scriptURL = root.appendingPathComponent("server.py")
+        let markerURL = root.appendingPathComponent("crashed-once")
+        try writeMCPServerScript(to: scriptURL)
+
+        let transport = MCPStdioTransport()
+        do {
+            let server = MCPServer(
+                id: "local",
+                displayName: "Local",
+                transport: .stdio(command: pythonURL.path, arguments: [scriptURL.path, markerURL.path])
+            )
+            let manager = await MCPManager(clients: [MCPClient(server: server, transport: transport)])
+
+            do {
+                _ = try await manager.listToolDescriptors()
+                Issue.record("Expected first MCP process to exit before responding")
+            } catch {
+                #expect(FileManager.default.fileExists(atPath: markerURL.path))
+            }
+
+            let descriptors = try await manager.listToolDescriptors()
+            let result = try await manager.executeTool(
+                agentToolID: "mcp__local__echo",
+                arguments: ["message": .string("reconnected")]
+            )
+
+            #expect(descriptors.map(\.id) == ["mcp__local__echo"])
+            #expect(result == .object([
+                "isError": .bool(false),
+                "content": .array([.string("echo:reconnected")]),
+            ]))
+            await transport.shutdownAll()
+        } catch {
+            await transport.shutdownAll()
+            throw error
+        }
+    }
+
     @Test("configured manager loads enabled MCP servers from the user config")
     func configuredManagerLoadsEnabledMCPServersFromUserConfig() async throws {
         let root = temporaryDirectory(named: "mcp-configured-manager")
@@ -557,6 +635,17 @@ struct MCPFoundationSwiftTestingTests {
             "content": .array([.string("PR #1")]),
         ]))
         #expect(requests.map(\.method) == ["tools/list", "tools/list", "tools/call"])
+    }
+
+    private static func python3URL() -> URL? {
+        let candidates = [
+            "/usr/bin/python3",
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+        ]
+        return candidates
+            .map { URL(fileURLWithPath: $0) }
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 }
 
@@ -747,6 +836,63 @@ private func temporaryDirectory(named name: String) -> URL {
         .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
     try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
+}
+
+private func writeMCPServerScript(to url: URL) throws {
+    try """
+    import json
+    import os
+    import sys
+
+    marker = sys.argv[1] if len(sys.argv) > 1 else ""
+    if marker and not os.path.exists(marker):
+        with open(marker, "w", encoding="utf-8") as handle:
+            handle.write("crashed")
+        sys.stdin.readline()
+        sys.exit(17)
+
+    def send(request, result=None, error=None):
+        response = {"jsonrpc": "2.0", "id": request.get("id")}
+        if error is not None:
+            response["error"] = error
+        else:
+            response["result"] = result if result is not None else {}
+        print(json.dumps(response), flush=True)
+
+    for line in sys.stdin:
+        request = json.loads(line)
+        method = request.get("method")
+        if method == "tools/list":
+            send(request, {
+                "tools": [{
+                    "name": "echo",
+                    "description": "Echo a message",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "message": {
+                                "type": "string",
+                                "description": "Message to echo"
+                            }
+                        },
+                        "required": ["message"]
+                    }
+                }]
+            })
+        elif method == "tools/call":
+            params = request.get("params") or {}
+            arguments = params.get("arguments") or {}
+            message = arguments.get("message") or ""
+            send(request, {
+                "content": [{
+                    "type": "text",
+                    "text": "echo:" + str(message)
+                }],
+                "isError": False
+            })
+        else:
+            send(request, {})
+    """.write(to: url, atomically: true, encoding: .utf8)
 }
 
 private func contentObject(_ result: AgentToolResult) throws -> [String: AgentJSONValue] {
