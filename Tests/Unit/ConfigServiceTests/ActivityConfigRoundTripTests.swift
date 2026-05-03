@@ -32,6 +32,8 @@ struct ActivityConfigRoundTripTests {
         #expect(defaults.enabled == false)
         #expect(defaults.costTrackingEnabled == false)
         #expect(defaults.storageDirectory == "~/.config/cocxy/activity")
+        #expect(defaults.inputCostMicrosPerMillionTokens == 0)
+        #expect(defaults.outputCostMicrosPerMillionTokens == 0)
         #expect(defaults.privacyPolicy == .disabled)
     }
 
@@ -42,6 +44,8 @@ struct ActivityConfigRoundTripTests {
         #expect(toml.contains("[activity]"))
         #expect(toml.contains("cost-tracking = false"))
         #expect(toml.contains("storage-directory = \"~/.config/cocxy/activity\""))
+        #expect(toml.contains("input-cost-micros-per-million-tokens = 0"))
+        #expect(toml.contains("output-cost-micros-per-million-tokens = 0"))
     }
 
     @Test("TOML opt-in preserves Activity privacy settings")
@@ -51,11 +55,15 @@ struct ActivityConfigRoundTripTests {
         enabled = true
         cost-tracking = true
         storage-directory = "~/.config/cocxy/activity-custom"
+        input-cost-micros-per-million-tokens = 1250000
+        output-cost-micros-per-million-tokens = 10000000
         """)
 
         #expect(config.activity.enabled == true)
         #expect(config.activity.costTrackingEnabled == true)
         #expect(config.activity.storageDirectory == "~/.config/cocxy/activity-custom")
+        #expect(config.activity.inputCostMicrosPerMillionTokens == 1_250_000)
+        #expect(config.activity.outputCostMicrosPerMillionTokens == 10_000_000)
         #expect(config.activity.privacyPolicy == .enabled)
     }
 
@@ -70,15 +78,24 @@ struct ActivityConfigRoundTripTests {
         enabled = "yes"
         cost-tracking = "yes"
         storage-directory = 42
+        input-cost-micros-per-million-tokens = "1250000"
+        output-cost-micros-per-million-tokens = "10000000"
         """)
         let emptyStorage = try loadConfig(from: """
         [activity]
         storage-directory = "   "
         """)
+        let negativeRates = try loadConfig(from: """
+        [activity]
+        input-cost-micros-per-million-tokens = -1
+        output-cost-micros-per-million-tokens = -2
+        """)
 
         #expect(missing.activity == .defaults)
         #expect(malformed.activity == .defaults)
         #expect(emptyStorage.activity.storageDirectory == ActivityConfig.defaults.storageDirectory)
+        #expect(negativeRates.activity.inputCostMicrosPerMillionTokens == 0)
+        #expect(negativeRates.activity.outputCostMicrosPerMillionTokens == 0)
     }
 
     @Test("legacy Codable payloads decode with Activity disabled")

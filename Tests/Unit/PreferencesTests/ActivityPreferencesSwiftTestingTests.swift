@@ -27,7 +27,12 @@ struct ActivityPreferencesSwiftTestingTests {
             appearance: .defaults,
             terminal: .defaults,
             agentDetection: .defaults,
-            activity: ActivityConfig(enabled: true, costTrackingEnabled: true),
+            activity: ActivityConfig(
+                enabled: true,
+                costTrackingEnabled: true,
+                inputCostMicrosPerMillionTokens: 1_250_000,
+                outputCostMicrosPerMillionTokens: 10_000_000
+            ),
             notifications: .defaults,
             quickTerminal: .defaults,
             keybindings: .defaults,
@@ -38,6 +43,8 @@ struct ActivityPreferencesSwiftTestingTests {
 
         #expect(vm.activityTrackingEnabled == true)
         #expect(vm.activityCostTrackingEnabled == true)
+        #expect(vm.activityInputCostMicrosPerMillionTokens == 1_250_000)
+        #expect(vm.activityOutputCostMicrosPerMillionTokens == 10_000_000)
         #expect(vm.hasUnsavedChanges == false)
     }
 
@@ -47,6 +54,8 @@ struct ActivityPreferencesSwiftTestingTests {
 
         vm.activityTrackingEnabled = true
         vm.activityCostTrackingEnabled = true
+        vm.activityInputCostMicrosPerMillionTokens = 1_250_000
+        vm.activityOutputCostMicrosPerMillionTokens = 10_000_000
 
         #expect(vm.hasUnsavedChanges == true)
 
@@ -54,6 +63,8 @@ struct ActivityPreferencesSwiftTestingTests {
 
         #expect(vm.activityTrackingEnabled == false)
         #expect(vm.activityCostTrackingEnabled == false)
+        #expect(vm.activityInputCostMicrosPerMillionTokens == 0)
+        #expect(vm.activityOutputCostMicrosPerMillionTokens == 0)
         #expect(vm.hasUnsavedChanges == false)
     }
 
@@ -86,6 +97,8 @@ struct ActivityPreferencesSwiftTestingTests {
 
         vm.activityTrackingEnabled = true
         vm.activityCostTrackingEnabled = true
+        vm.activityInputCostMicrosPerMillionTokens = 1_250_000
+        vm.activityOutputCostMicrosPerMillionTokens = 10_000_000
         try vm.save()
 
         let written = try #require(provider.content)
@@ -94,6 +107,8 @@ struct ActivityPreferencesSwiftTestingTests {
 
         #expect(service.current.activity.enabled == true)
         #expect(service.current.activity.costTrackingEnabled == true)
+        #expect(service.current.activity.inputCostMicrosPerMillionTokens == 1_250_000)
+        #expect(service.current.activity.outputCostMicrosPerMillionTokens == 10_000_000)
         #expect(vm.hasUnsavedChanges == false)
     }
 }

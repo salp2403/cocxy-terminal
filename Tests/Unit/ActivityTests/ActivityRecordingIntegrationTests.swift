@@ -121,7 +121,12 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
 
     func testEnabledCostTrackingRecordsAgentTokenUsageLocally() throws {
         let store = try SQLiteActivityStore(databasePath: ":memory:")
-        let controller = try makeActivityEnabledController(store: store, costTracking: true)
+        let controller = try makeActivityEnabledController(
+            store: store,
+            costTracking: true,
+            inputCostMicrosPerMillionTokens: 1_250_000,
+            outputCostMicrosPerMillionTokens: 10_000_000
+        )
         controller.showWindow(nil)
         let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
         try store.deleteAll()
@@ -142,7 +147,7 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         XCTAssertEqual(usage.model, "local-model")
         XCTAssertEqual(usage.inputTokens, 123)
         XCTAssertEqual(usage.outputTokens, 45)
-        XCTAssertEqual(usage.estimatedCostMicros, 0)
+        XCTAssertEqual(usage.estimatedCostMicros, 604)
         XCTAssertNotNil(usage.sessionID)
         XCTAssertNotNil(usage.project)
     }
@@ -233,13 +238,17 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
 
     private func makeActivityEnabledController(
         store: ActivityStoring,
-        costTracking: Bool = false
+        costTracking: Bool = false,
+        inputCostMicrosPerMillionTokens: Int = 0,
+        outputCostMicrosPerMillionTokens: Int = 0
     ) throws -> MainWindowController {
         let provider = ActivityRecordingConfigProvider(content: """
         [activity]
         enabled = true
         cost-tracking = \(costTracking ? "true" : "false")
         storage-directory = "~/.config/cocxy/activity-test"
+        input-cost-micros-per-million-tokens = \(inputCostMicrosPerMillionTokens)
+        output-cost-micros-per-million-tokens = \(outputCostMicrosPerMillionTokens)
         """)
         let service = ConfigService(fileProvider: provider)
         try service.reload()

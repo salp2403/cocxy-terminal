@@ -229,7 +229,8 @@ extension MainWindowController {
         tabID: TabID,
         surfaceID: SurfaceID?
     ) {
-        let policy = configService?.current.activity.privacyPolicy ?? .disabled
+        guard let activityConfig = configService?.current.activity else { return }
+        let policy = activityConfig.privacyPolicy
         guard policy.tokenCostTrackingEnabled else { return }
 
         do {
@@ -240,14 +241,15 @@ extension MainWindowController {
             )
             let workingDirectory = surfaceID.flatMap(workingDirectory(for:))
                 ?? tabManager.tab(for: tabID)?.workingDirectory
-            let record = TokenUsageRecord(
+            let rate = activityConfig.tokenCostRate(provider: usage.provider, model: usage.model)
+            let record = CostTracker.usageRecord(
                 provider: usage.provider,
                 model: usage.model,
                 sessionID: sessionIDForTab(tabID).rawValue.uuidString,
                 project: workingDirectory.map(ActivityProjectRef.workingDirectory(_:)),
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
-                estimatedCostMicros: 0
+                rate: rate
             )
             try recorder.recordTokenUsage(record)
             if activityDashboardViewModel != nil {

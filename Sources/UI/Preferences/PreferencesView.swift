@@ -1144,6 +1144,31 @@ struct ActivityPreferencesSection: View {
                     .help("Uses local token counts and model rates; no data is uploaded.")
             }
 
+            Section("Cost Rates") {
+                LabeledContent("Input / 1M tokens") {
+                    TextField(
+                        "0",
+                        value: $viewModel.activityInputCostMicrosPerMillionTokens,
+                        format: .number
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!viewModel.activityTrackingEnabled || !viewModel.activityCostTrackingEnabled)
+                }
+                LabeledContent("Output / 1M tokens") {
+                    TextField(
+                        "0",
+                        value: $viewModel.activityOutputCostMicrosPerMillionTokens,
+                        format: .number
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!viewModel.activityTrackingEnabled || !viewModel.activityCostTrackingEnabled)
+                }
+                Text("Rates are micro-dollars per one million tokens and stay local in config.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Storage") {
                 LabeledContent("Local directory", value: ActivityConfig.defaults.storageDirectory)
                 Text("Disable the Activity dashboard to stop future writes. Existing local records can be cleared from the Activity dashboard.")

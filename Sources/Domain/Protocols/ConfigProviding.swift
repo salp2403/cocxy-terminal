@@ -1034,19 +1034,25 @@ struct ActivityConfig: Codable, Sendable, Equatable {
     let enabled: Bool
     let costTrackingEnabled: Bool
     let storageDirectory: String
+    let inputCostMicrosPerMillionTokens: Int64
+    let outputCostMicrosPerMillionTokens: Int64
 
     static var defaults: ActivityConfig {
         ActivityConfig(
             enabled: false,
             costTrackingEnabled: false,
-            storageDirectory: "~/.config/cocxy/activity"
+            storageDirectory: "~/.config/cocxy/activity",
+            inputCostMicrosPerMillionTokens: 0,
+            outputCostMicrosPerMillionTokens: 0
         )
     }
 
     init(
         enabled: Bool = false,
         costTrackingEnabled: Bool = false,
-        storageDirectory: String = "~/.config/cocxy/activity"
+        storageDirectory: String = "~/.config/cocxy/activity",
+        inputCostMicrosPerMillionTokens: Int64 = 0,
+        outputCostMicrosPerMillionTokens: Int64 = 0
     ) {
         self.enabled = enabled
         self.costTrackingEnabled = costTrackingEnabled
@@ -1054,12 +1060,51 @@ struct ActivityConfig: Codable, Sendable, Equatable {
         self.storageDirectory = trimmedStorage.isEmpty
             ? Self.defaults.storageDirectory
             : trimmedStorage
+        self.inputCostMicrosPerMillionTokens = max(0, inputCostMicrosPerMillionTokens)
+        self.outputCostMicrosPerMillionTokens = max(0, outputCostMicrosPerMillionTokens)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case costTrackingEnabled
+        case storageDirectory
+        case inputCostMicrosPerMillionTokens
+        case outputCostMicrosPerMillionTokens
+    }
+
+    init(from decoder: Decoder) throws {
+        let defaults = Self.defaults
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled,
+            costTrackingEnabled: try container.decodeIfPresent(Bool.self, forKey: .costTrackingEnabled)
+                ?? defaults.costTrackingEnabled,
+            storageDirectory: try container.decodeIfPresent(String.self, forKey: .storageDirectory)
+                ?? defaults.storageDirectory,
+            inputCostMicrosPerMillionTokens: try container.decodeIfPresent(
+                Int64.self,
+                forKey: .inputCostMicrosPerMillionTokens
+            ) ?? defaults.inputCostMicrosPerMillionTokens,
+            outputCostMicrosPerMillionTokens: try container.decodeIfPresent(
+                Int64.self,
+                forKey: .outputCostMicrosPerMillionTokens
+            ) ?? defaults.outputCostMicrosPerMillionTokens
+        )
     }
 
     var privacyPolicy: ActivityPrivacyPolicy {
         ActivityPrivacyPolicy(
             activityTrackingEnabled: enabled,
             tokenCostTrackingEnabled: enabled && costTrackingEnabled
+        )
+    }
+
+    func tokenCostRate(provider: String, model: String) -> TokenCostRate {
+        TokenCostRate(
+            provider: provider,
+            model: model,
+            inputMicrosPerMillionTokens: inputCostMicrosPerMillionTokens,
+            outputMicrosPerMillionTokens: outputCostMicrosPerMillionTokens
         )
     }
 }

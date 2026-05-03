@@ -184,6 +184,12 @@ final class PreferencesViewModel: ObservableObject {
     /// Whether local token usage and estimated costs are recorded.
     @Published var activityCostTrackingEnabled: Bool
 
+    /// Local input-token rate in micro-dollars per million tokens.
+    @Published var activityInputCostMicrosPerMillionTokens: Int64
+
+    /// Local output-token rate in micro-dollars per million tokens.
+    @Published var activityOutputCostMicrosPerMillionTokens: Int64
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -469,6 +475,8 @@ final class PreferencesViewModel: ObservableObject {
         voiceLocaleIdentifier = c.voice.localeIdentifier
         activityTrackingEnabled = c.activity.enabled
         activityCostTrackingEnabled = c.activity.costTrackingEnabled
+        activityInputCostMicrosPerMillionTokens = c.activity.inputCostMicrosPerMillionTokens
+        activityOutputCostMicrosPerMillionTokens = c.activity.outputCostMicrosPerMillionTokens
         codeReviewAutoShowOnSessionEnd = c.codeReview.autoShowOnSessionEnd
         macosNotifications = c.notifications.macosNotifications
         sound = c.notifications.sound
@@ -611,6 +619,8 @@ final class PreferencesViewModel: ObservableObject {
         // Activity
         self.activityTrackingEnabled = config.activity.enabled
         self.activityCostTrackingEnabled = config.activity.costTrackingEnabled
+        self.activityInputCostMicrosPerMillionTokens = config.activity.inputCostMicrosPerMillionTokens
+        self.activityOutputCostMicrosPerMillionTokens = config.activity.outputCostMicrosPerMillionTokens
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -981,6 +991,8 @@ final class PreferencesViewModel: ObservableObject {
         agentConversationStorageDir = agent.conversationStorageDir
         agentConversationEncryption = agent.conversationEncryption
         activityCostTrackingEnabled = activity.costTrackingEnabled
+        activityInputCostMicrosPerMillionTokens = activity.inputCostMicrosPerMillionTokens
+        activityOutputCostMicrosPerMillionTokens = activity.outputCostMicrosPerMillionTokens
         voiceLocaleIdentifier = voice.localeIdentifier
         pendingKeybindings = nil
     }
@@ -1029,7 +1041,9 @@ final class PreferencesViewModel: ObservableObject {
         ActivityConfig(
             enabled: activityTrackingEnabled,
             costTrackingEnabled: activityTrackingEnabled && activityCostTrackingEnabled,
-            storageDirectory: savedConfig.activity.storageDirectory
+            storageDirectory: savedConfig.activity.storageDirectory,
+            inputCostMicrosPerMillionTokens: activityInputCostMicrosPerMillionTokens,
+            outputCostMicrosPerMillionTokens: activityOutputCostMicrosPerMillionTokens
         )
     }
 
@@ -1037,6 +1051,8 @@ final class PreferencesViewModel: ObservableObject {
         let activity = buildActivityConfigFromViewModel()
         return activity.enabled != config.enabled
             || activity.costTrackingEnabled != config.costTrackingEnabled
+            || activity.inputCostMicrosPerMillionTokens != config.inputCostMicrosPerMillionTokens
+            || activity.outputCostMicrosPerMillionTokens != config.outputCostMicrosPerMillionTokens
     }
 
     private static func agentProviderDisplayName(_ provider: AgentProviderKind) -> String {
@@ -1295,6 +1311,8 @@ final class PreferencesViewModel: ObservableObject {
         enabled = \(activity.enabled)
         cost-tracking = \(activity.costTrackingEnabled)
         storage-directory = "\(activity.storageDirectory)"
+        input-cost-micros-per-million-tokens = \(activity.inputCostMicrosPerMillionTokens)
+        output-cost-micros-per-million-tokens = \(activity.outputCostMicrosPerMillionTokens)
 
         [code-review]
         auto-show-on-session-end = \(codeReviewAutoShowOnSessionEnd)

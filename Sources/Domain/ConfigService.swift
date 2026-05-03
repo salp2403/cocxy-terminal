@@ -264,6 +264,8 @@ final class ConfigService: ConfigProviding {
         enabled = \(defaults.activity.enabled)
         cost-tracking = \(defaults.activity.costTrackingEnabled)
         storage-directory = "\(defaults.activity.storageDirectory)"
+        input-cost-micros-per-million-tokens = \(defaults.activity.inputCostMicrosPerMillionTokens)
+        output-cost-micros-per-million-tokens = \(defaults.activity.outputCostMicrosPerMillionTokens)
 
         [completions]
         # Inline AI completions for the reusable editor. Disabled by
@@ -729,7 +731,15 @@ final class ConfigService: ConfigProviding {
         return ActivityConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
             costTrackingEnabled: boolValue(table["cost-tracking"]) ?? defaults.costTrackingEnabled,
-            storageDirectory: stringValue(table["storage-directory"]) ?? defaults.storageDirectory
+            storageDirectory: stringValue(table["storage-directory"]) ?? defaults.storageDirectory,
+            inputCostMicrosPerMillionTokens: Int64(
+                intValue(table["input-cost-micros-per-million-tokens"])
+                    ?? Int(defaults.inputCostMicrosPerMillionTokens)
+            ),
+            outputCostMicrosPerMillionTokens: Int64(
+                intValue(table["output-cost-micros-per-million-tokens"])
+                    ?? Int(defaults.outputCostMicrosPerMillionTokens)
+            )
         )
     }
 
