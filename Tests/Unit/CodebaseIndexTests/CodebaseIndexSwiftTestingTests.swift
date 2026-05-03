@@ -144,6 +144,86 @@ struct CodebaseIndexSwiftTestingTests {
         #expect(!initial.changedFiles.contains("Generated/File.swift"))
     }
 
+    @Test("vector store persists chunks and ranks by cosine similarity")
+    func vectorStorePersistsChunksAndRanksByCosineSimilarity() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storeURL = root.appendingPathComponent(".cocxy-index", isDirectory: true)
+        let store = CodebaseVectorStore(storageURL: storeURL)
+
+        try store.upsert([
+            CodebaseVectorRecord(
+                path: "Sources/Auth.swift",
+                startLine: 1,
+                endLine: 8,
+                text: "token login session",
+                embedding: [1, 0]
+            ),
+            CodebaseVectorRecord(
+                path: "Sources/Theme.swift",
+                startLine: 1,
+                endLine: 6,
+                text: "glass color palette",
+                embedding: [0, 1]
+            ),
+        ])
+
+        let reloaded = CodebaseVectorStore(storageURL: storeURL)
+        let results = try reloaded.search(embedding: [0.95, 0.05], limit: 10)
+
+        #expect(results.map(\.record.path) == ["Sources/Auth.swift", "Sources/Theme.swift"])
+        #expect(results[0].score > results[1].score)
+    }
+
+    @Test("vector store removes stale path chunks")
+    func vectorStoreRemovesStalePathChunks() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CodebaseVectorStore(storageURL: root.appendingPathComponent(".cocxy-index", isDirectory: true))
+        try store.upsert([
+            CodebaseVectorRecord(path: "Sources/App.swift", startLine: 1, endLine: 4, text: "app", embedding: [1, 0]),
+            CodebaseVectorRecord(path: "Sources/App.swift", startLine: 5, endLine: 9, text: "app 2", embedding: [1, 0.1]),
+            CodebaseVectorRecord(path: "Sources/Other.swift", startLine: 1, endLine: 3, text: "other", embedding: [0, 1]),
+        ])
+
+        try store.remove(paths: ["Sources/App.swift"])
+
+        let results = try store.search(embedding: [1, 0], limit: 10)
+        #expect(results.map(\.record.path) == ["Sources/Other.swift"])
+    }
+
+    @Test("vector store rejects non-finite embeddings")
+    func vectorStoreRejectsNonFiniteEmbeddings() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CodebaseVectorStore(storageURL: root.appendingPathComponent(".cocxy-index", isDirectory: true))
+
+        #expect(throws: CodebaseVectorStoreError.nonFiniteEmbedding("Sources/App.swift:1-1")) {
+            try store.upsert([
+                CodebaseVectorRecord(
+                    path: "Sources/App.swift",
+                    startLine: 1,
+                    endLine: 1,
+                    text: "bad",
+                    embedding: [.nan]
+                ),
+            ])
+        }
+    }
+
+    @Test("vector store returns no results for empty query or zero limit")
+    func vectorStoreReturnsNoResultsForEmptyQueryOrZeroLimit() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CodebaseVectorStore(storageURL: root.appendingPathComponent(".cocxy-index", isDirectory: true))
+        try store.upsert([
+            CodebaseVectorRecord(path: "Sources/App.swift", startLine: 1, endLine: 4, text: "app", embedding: [1, 0]),
+        ])
+
+        #expect(try store.search(embedding: [], limit: 10).isEmpty)
+        #expect(try store.search(embedding: [1, 0], limit: 0).isEmpty)
+    }
+
     private func makeWorkspace() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-codebase-index-\(UUID().uuidString)", isDirectory: true)
