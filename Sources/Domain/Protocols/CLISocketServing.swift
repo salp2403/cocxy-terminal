@@ -280,6 +280,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case notebookImport = "notebook-import"
     /// Export Cocxy notebook markdown to Jupyter nbformat.
     case notebookExport = "notebook-export"
+    /// Run Cocxy notebook code cells locally.
+    case notebookRun = "notebook-run"
+    /// Run a local Cocxy workflow file.
+    case workflowRun = "workflow-run"
     /// List local built-in, user, and project skills.
     case skillList = "skill-list"
 

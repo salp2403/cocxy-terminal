@@ -1070,6 +1070,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleNotebookImport(request)
         case .notebookExport:
             return handleNotebookExport(request)
+        case .notebookRun:
+            return handleNotebookRun(request)
+        case .workflowRun:
+            return handleWorkflowRun(request)
         }
     }
 
@@ -2862,6 +2866,163 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
     }
 
+    private func handleNotebookRun(_ request: SocketRequest) -> SocketResponse {
+        guard let inputPath = request.params?["input"], !inputPath.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: input")
+        }
+
+        let inputURL = fileURL(fromCLIPath: inputPath)
+        guard FileManager.default.fileExists(atPath: inputURL.path) else {
+            return .failure(id: request.id, error: "Input file does not exist: \(inputURL.path)")
+        }
+
+        let outputURL = request.params?["output"].flatMap { outputPath -> URL? in
+            guard !outputPath.isEmpty else { return nil }
+            return fileURL(fromCLIPath: outputPath)
+        } ?? inputURL
+
+        let workingDirectory = request.params?["cwd"].flatMap { cwd -> URL? in
+            guard !cwd.isEmpty else { return nil }
+            return fileURL(fromCLIPath: cwd)
+        } ?? inputURL.deletingLastPathComponent()
+
+        guard directoryExists(at: workingDirectory) else {
+            return .failure(
+                id: request.id,
+                error: "Working directory does not exist: \(workingDirectory.path)"
+            )
+        }
+
+        let timeoutSeconds: TimeInterval?
+        if let rawTimeout = request.params?["timeout"], !rawTimeout.isEmpty {
+            guard let parsedTimeout = Double(rawTimeout), parsedTimeout > 0 else {
+                return .failure(id: request.id, error: "Timeout must be a positive number of seconds.")
+            }
+            timeoutSeconds = parsedTimeout
+        } else {
+            timeoutSeconds = nil
+        }
+
+        let stopOnFailure = request.params?["continue-on-failure"] != "true"
+
+        do {
+            let source = try String(contentsOf: inputURL, encoding: .utf8)
+            let notebook = NotebookDocument.parseMarkdown(source)
+            let summary = try NotebookExecutor().execute(
+                notebook,
+                workingDirectory: workingDirectory,
+                timeoutSeconds: timeoutSeconds ?? 60,
+                stopOnFailure: stopOnFailure
+            )
+            try FileManager.default.createDirectory(
+                at: outputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try NotebookMarkdownCodec.render(summary.document).write(
+                to: outputURL,
+                atomically: true,
+                encoding: .utf8
+            )
+
+            let failedResult = summary.results.first { !$0.succeeded }
+            let status = failedResult == nil ? "completed" : "failed"
+            var data = [
+                "status": status,
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "executed-cells": "\(summary.executedCellIndices.count)",
+                "summary": notebookRunSummary(
+                    executedCells: summary.executedCellIndices.count,
+                    failedCellIndex: failedResult?.cellIndex
+                )
+            ]
+            if let failedResult {
+                data["failed-cell-index"] = "\(failedResult.cellIndex)"
+                data["exit-code"] = "\(failedResult.exitCode)"
+            }
+            return .ok(id: request.id, data: data)
+        } catch {
+            return .failure(
+                id: request.id,
+                error: "Notebook execution failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func handleWorkflowRun(_ request: SocketRequest) -> SocketResponse {
+        guard let inputPath = request.params?["input"], !inputPath.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: input")
+        }
+
+        let inputURL = fileURL(fromCLIPath: inputPath)
+        guard FileManager.default.fileExists(atPath: inputURL.path) else {
+            return .failure(id: request.id, error: "Input file does not exist: \(inputURL.path)")
+        }
+
+        let workspaceRoot = request.params?["cwd"].flatMap { cwd -> URL? in
+            guard !cwd.isEmpty else { return nil }
+            return fileURL(fromCLIPath: cwd)
+        } ?? inputURL.deletingLastPathComponent()
+
+        guard directoryExists(at: workspaceRoot) else {
+            return .failure(
+                id: request.id,
+                error: "Working directory does not exist: \(workspaceRoot.path)"
+            )
+        }
+
+        do {
+            let source = try String(contentsOf: inputURL, encoding: .utf8)
+            let workflow = try WorkflowTOMLCodec.parse(source)
+            let summary = try WorkflowExecutor().execute(workflow, workspaceRoot: workspaceRoot)
+            var data = [
+                "status": workflowStatusString(summary.status),
+                "workflow": summary.workflowID,
+                "steps": "\(summary.results.count)",
+                "stdout": socketPreview(summary.results.map(\.stdout).joined()),
+                "stderr": socketPreview(summary.results.map(\.stderr).joined()),
+                "summary": workflowRunSummary(summary)
+            ]
+            if case .failed(let stepID, let exitCode) = summary.status {
+                data["failed-step"] = stepID
+                data["exit-code"] = "\(exitCode)"
+            }
+            return .ok(id: request.id, data: data)
+        } catch {
+            return .failure(
+                id: request.id,
+                error: "Workflow execution failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func notebookRunSummary(executedCells: Int, failedCellIndex: Int?) -> String {
+        let noun = executedCells == 1 ? "cell" : "cells"
+        if let failedCellIndex {
+            return "Notebook execution failed at cell \(failedCellIndex) after \(executedCells) \(noun)."
+        }
+        return "Executed \(executedCells) notebook \(noun)."
+    }
+
+    private func workflowStatusString(_ status: WorkflowExecutionStatus) -> String {
+        switch status {
+        case .completed:
+            return "completed"
+        case .failed:
+            return "failed"
+        }
+    }
+
+    private func workflowRunSummary(_ summary: WorkflowExecutionSummary) -> String {
+        let noun = summary.results.count == 1 ? "step" : "steps"
+        switch summary.status {
+        case .completed:
+            return "Workflow \(summary.workflowID) completed after \(summary.results.count) \(noun)."
+        case .failed(let stepID, let exitCode):
+            return "Workflow \(summary.workflowID) failed at step \(stepID) with exit code \(exitCode)."
+        }
+    }
+
     private func handleNotebookConversion(
         _ request: SocketRequest,
         operationName: String,
@@ -2921,6 +3082,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             expandedPath = path
         }
         return URL(fileURLWithPath: expandedPath).standardizedFileURL
+    }
+
+    private func directoryExists(at url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    private func socketPreview(_ value: String, maxCharacters: Int = 8_192) -> String {
+        guard value.count > maxCharacters else { return value }
+        return String(value.prefix(maxCharacters)) + "\n[truncated]\n"
     }
 
     // MARK: - TOML Helpers

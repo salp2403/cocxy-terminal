@@ -269,6 +269,10 @@ public enum OutputFormatter {
             return response.data?["summary"] ?? "Imported notebook to \(outputPath)."
         case .notebookExport(_, let outputPath, _):
             return response.data?["summary"] ?? "Exported notebook to \(outputPath)."
+        case .notebookRun:
+            return response.data?["summary"] ?? "Executed notebook."
+        case .workflowRun:
+            return response.data?["summary"] ?? "Executed workflow."
         case .skillList:
             return formatDataOrJSON(response: response)
         case .worktreeAdd:

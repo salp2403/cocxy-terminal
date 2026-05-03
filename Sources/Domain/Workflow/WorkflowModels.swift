@@ -25,6 +25,15 @@ enum WorkflowShell: String, Codable, Sendable, Equatable, CaseIterable {
             return URL(fileURLWithPath: "/bin/sh")
         }
     }
+
+    func commandArguments(for command: String) -> [String] {
+        switch self {
+        case .bash, .sh:
+            return ["-c", command]
+        case .zsh:
+            return ["-f", "-c", command]
+        }
+    }
 }
 
 struct WorkflowStep: Codable, Sendable, Equatable {

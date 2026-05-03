@@ -1741,6 +1741,76 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: outputURL, encoding: .utf8), "existing")
     }
 
+    func test_notebookRun_executesLocalBashCellAndWritesOutputs() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("source.cocxynb")
+        let outputURL = directory.appendingPathComponent("result.cocxynb")
+
+        try """
+        ---
+        cocxy-notebook: "1"
+        title: "Executable"
+        ---
+
+        ```bash
+        echo notebook-ok
+        ```
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "notebook-run-1",
+            command: "notebook-run",
+            params: [
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "cwd": directory.path,
+                "timeout": "15",
+                "continue-on-failure": "false",
+            ]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "completed")
+        XCTAssertEqual(response.data?["executed-cells"], "1")
+        XCTAssertEqual(response.data?["input"], inputURL.standardizedFileURL.path)
+        XCTAssertEqual(response.data?["output"], outputURL.standardizedFileURL.path)
+        let rendered = try String(contentsOf: outputURL, encoding: .utf8)
+        XCTAssertTrue(rendered.contains("```cocxy-output stdout\nnotebook-ok\n```"))
+    }
+
+    func test_workflowRun_executesLocalWorkflowToml() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("workflow.toml")
+
+        try """
+        [workflow]
+        id = "ci"
+        steps = ["verify"]
+
+        [step.verify]
+        command = "echo workflow-ok"
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "workflow-run-1",
+            command: "workflow-run",
+            params: [
+                "input": inputURL.path,
+                "cwd": directory.path,
+            ]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "completed")
+        XCTAssertEqual(response.data?["workflow"], "ci")
+        XCTAssertEqual(response.data?["steps"], "1")
+        XCTAssertEqual(response.data?["stdout"], "workflow-ok\n")
+    }
+
     func test_skillList_returnsLocalSkillsAsJSONContent() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

@@ -371,6 +371,18 @@ public enum ParsedCommand: Equatable {
     /// `cocxy notebook export <input.cocxynb> --output <output.ipynb> [--force]`
     case notebookExport(inputPath: String, outputPath: String, force: Bool)
 
+    /// `cocxy notebook run <input.cocxynb> [--output <output.cocxynb>] [--cwd <dir>]`
+    case notebookRun(
+        inputPath: String,
+        outputPath: String?,
+        workingDirectory: String?,
+        timeoutSeconds: Double?,
+        continueOnFailure: Bool
+    )
+
+    /// `cocxy workflow run <input.toml> [--cwd <dir>]`
+    case workflowRun(inputPath: String, workingDirectory: String?)
+
     /// `cocxy skill list`
     case skillList
 
@@ -664,6 +676,9 @@ public enum CLIArgumentParser {
 
         case "notebook":
             return try parseNotebook(arguments: Array(arguments.dropFirst()))
+
+        case "workflow", "workflows":
+            return try parseWorkflow(arguments: Array(arguments.dropFirst()))
 
         case "skill", "skills":
             return try parseSkill(arguments: Array(arguments.dropFirst()))
@@ -2041,7 +2056,7 @@ public enum CLIArgumentParser {
 
     private static func parseNotebook(arguments: [String]) throws -> ParsedCommand {
         guard let subcommand = arguments.first else {
-            throw CLIError.missingArgument(command: "notebook", argument: "import|export")
+            throw CLIError.missingArgument(command: "notebook", argument: "import|export|run")
         }
 
         let rest = Array(arguments.dropFirst())
@@ -2066,11 +2081,20 @@ public enum CLIArgumentParser {
                 outputPath: options.output,
                 force: options.force
             )
+        case "run":
+            let options = try parseNotebookRunOptions(arguments: rest)
+            return .notebookRun(
+                inputPath: options.input,
+                outputPath: options.output,
+                workingDirectory: options.workingDirectory,
+                timeoutSeconds: options.timeoutSeconds,
+                continueOnFailure: options.continueOnFailure
+            )
         default:
             throw CLIError.invalidArgument(
                 command: "notebook",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use import or export."
+                reason: "Unknown subcommand. Use import, export, or run."
             )
         }
     }
@@ -2123,6 +2147,148 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: command, argument: "output")
         }
         return (input, output, force)
+    }
+
+    private static func parseNotebookRunOptions(
+        arguments: [String]
+    ) throws -> (
+        input: String,
+        output: String?,
+        workingDirectory: String?,
+        timeoutSeconds: Double?,
+        continueOnFailure: Bool
+    ) {
+        var input: String?
+        var output: String?
+        var workingDirectory: String?
+        var timeoutSeconds: Double?
+        var continueOnFailure = false
+        var index = 0
+
+        while index < arguments.count {
+            let token = arguments[index]
+            switch token {
+            case "--output", "-o":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "notebook run", argument: "output")
+                }
+                output = arguments[index + 1]
+                index += 2
+            case "--cwd":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "notebook run", argument: "cwd")
+                }
+                workingDirectory = arguments[index + 1]
+                index += 2
+            case "--timeout":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "notebook run", argument: "timeout")
+                }
+                guard let parsed = Double(arguments[index + 1]), parsed > 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "notebook run",
+                        argument: arguments[index + 1],
+                        reason: "Timeout must be a positive number of seconds."
+                    )
+                }
+                timeoutSeconds = parsed
+                index += 2
+            case "--continue-on-failure":
+                continueOnFailure = true
+                index += 1
+            default:
+                if token.hasPrefix("-") {
+                    throw CLIError.invalidArgument(
+                        command: "notebook run",
+                        argument: token,
+                        reason: "Unknown option. Valid flags: --output, -o, --cwd, --timeout, --continue-on-failure."
+                    )
+                }
+                guard input == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "notebook run",
+                        argument: token,
+                        reason: "Only one input path is accepted."
+                    )
+                }
+                input = token
+                index += 1
+            }
+        }
+
+        guard let input, !input.isEmpty else {
+            throw CLIError.missingArgument(command: "notebook run", argument: "input")
+        }
+        return (input, output, workingDirectory, timeoutSeconds, continueOnFailure)
+    }
+
+    // MARK: - Workflow Parser
+
+    private static func parseWorkflow(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "workflow", argument: "run")
+        }
+        if isHelpToken(subcommand) {
+            return .help
+        }
+
+        let rest = Array(arguments.dropFirst())
+        switch subcommand {
+        case "run":
+            let options = try parseWorkflowRunOptions(arguments: rest)
+            return .workflowRun(
+                inputPath: options.input,
+                workingDirectory: options.workingDirectory
+            )
+        default:
+            throw CLIError.invalidArgument(
+                command: "workflow",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use run."
+            )
+        }
+    }
+
+    private static func parseWorkflowRunOptions(
+        arguments: [String]
+    ) throws -> (input: String, workingDirectory: String?) {
+        var input: String?
+        var workingDirectory: String?
+        var index = 0
+
+        while index < arguments.count {
+            let token = arguments[index]
+            switch token {
+            case "--cwd":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "workflow run", argument: "cwd")
+                }
+                workingDirectory = arguments[index + 1]
+                index += 2
+            default:
+                if token.hasPrefix("-") {
+                    throw CLIError.invalidArgument(
+                        command: "workflow run",
+                        argument: token,
+                        reason: "Unknown option. Valid flags: --cwd."
+                    )
+                }
+                guard input == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "workflow run",
+                        argument: token,
+                        reason: "Only one input path is accepted."
+                    )
+                }
+                input = token
+                index += 1
+            }
+        }
+
+        guard let input, !input.isEmpty else {
+            throw CLIError.missingArgument(command: "workflow run", argument: "input")
+        }
+        return (input, workingDirectory)
     }
 
     // MARK: - Skill Parser

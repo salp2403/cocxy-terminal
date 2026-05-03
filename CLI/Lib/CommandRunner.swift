@@ -790,6 +790,27 @@ public struct CommandRunner {
                 ]
             )
 
+        case .notebookRun(
+            let inputPath,
+            let outputPath,
+            let workingDirectory,
+            let timeoutSeconds,
+            let continueOnFailure
+        ):
+            var params = [
+                "input": inputPath,
+                "continue-on-failure": continueOnFailure ? "true" : "false"
+            ]
+            if let outputPath { params["output"] = outputPath }
+            if let workingDirectory { params["cwd"] = workingDirectory }
+            if let timeoutSeconds { params["timeout"] = "\(timeoutSeconds)" }
+            return CLISocketRequest(id: requestID, command: "notebook-run", params: params)
+
+        case .workflowRun(let inputPath, let workingDirectory):
+            var params = ["input": inputPath]
+            if let workingDirectory { params["cwd"] = workingDirectory }
+            return CLISocketRequest(id: requestID, command: "workflow-run", params: params)
+
         case .skillList:
             return CLISocketRequest(id: requestID, command: "skill-list", params: nil)
 

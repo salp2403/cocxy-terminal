@@ -443,6 +443,38 @@ final class CLIArgumentParserTests: XCTestCase {
         )
     }
 
+    func testParseNotebookRunWithExecutionOptions() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "notebook", "run", "/tmp/source.cocxynb",
+                "--output", "/tmp/result.cocxynb",
+                "--cwd", "/tmp/project",
+                "--timeout", "15",
+                "--continue-on-failure",
+            ]),
+            .notebookRun(
+                inputPath: "/tmp/source.cocxynb",
+                outputPath: "/tmp/result.cocxynb",
+                workingDirectory: "/tmp/project",
+                timeoutSeconds: 15,
+                continueOnFailure: true
+            )
+        )
+    }
+
+    func testParseWorkflowRunWithWorkingDirectory() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "workflow", "run", "/tmp/workflow.toml",
+                "--cwd", "/tmp/project",
+            ]),
+            .workflowRun(
+                inputPath: "/tmp/workflow.toml",
+                workingDirectory: "/tmp/project"
+            )
+        )
+    }
+
     func testParseNotebookImportWithoutOutputThrowsMissingArgument() {
         XCTAssertThrowsError(
             try CLIArgumentParser.parse(["notebook", "import", "/tmp/source.ipynb"])
@@ -779,6 +811,34 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.params?["force"], "false")
     }
 
+    func testBuildNotebookRunRequest() {
+        let request = runner.buildRequest(from: .notebookRun(
+            inputPath: "/tmp/source.cocxynb",
+            outputPath: "/tmp/result.cocxynb",
+            workingDirectory: "/tmp/project",
+            timeoutSeconds: 15,
+            continueOnFailure: true
+        ))
+
+        XCTAssertEqual(request.command, "notebook-run")
+        XCTAssertEqual(request.params?["input"], "/tmp/source.cocxynb")
+        XCTAssertEqual(request.params?["output"], "/tmp/result.cocxynb")
+        XCTAssertEqual(request.params?["cwd"], "/tmp/project")
+        XCTAssertEqual(request.params?["timeout"], "15.0")
+        XCTAssertEqual(request.params?["continue-on-failure"], "true")
+    }
+
+    func testBuildWorkflowRunRequest() {
+        let request = runner.buildRequest(from: .workflowRun(
+            inputPath: "/tmp/workflow.toml",
+            workingDirectory: "/tmp/project"
+        ))
+
+        XCTAssertEqual(request.command, "workflow-run")
+        XCTAssertEqual(request.params?["input"], "/tmp/workflow.toml")
+        XCTAssertEqual(request.params?["cwd"], "/tmp/project")
+    }
+
     func testBuildSkillListRequest() {
         let request = runner.buildRequest(from: .skillList)
 
@@ -933,6 +993,47 @@ final class OutputFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(output, "Exported notebook to /tmp/result.ipynb.")
+    }
+
+    func testFormatNotebookRunUsesServerSummary() {
+        let response = CLISocketResponse(
+            id: "notebook-3",
+            success: true,
+            data: ["summary": "Executed 2 notebook cells."],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .notebookRun(
+                inputPath: "/tmp/source.cocxynb",
+                outputPath: nil,
+                workingDirectory: nil,
+                timeoutSeconds: nil,
+                continueOnFailure: false
+            ),
+            response: response
+        )
+
+        XCTAssertEqual(output, "Executed 2 notebook cells.")
+    }
+
+    func testFormatWorkflowRunUsesServerSummary() {
+        let response = CLISocketResponse(
+            id: "workflow-1",
+            success: true,
+            data: ["summary": "Workflow ci completed after 1 step."],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .workflowRun(
+                inputPath: "/tmp/workflow.toml",
+                workingDirectory: nil
+            ),
+            response: response
+        )
+
+        XCTAssertEqual(output, "Workflow ci completed after 1 step.")
     }
 
     func testFormatSkillListResponseAsJSONContent() {
@@ -1310,7 +1411,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 113)
+        XCTAssertEqual(CLICommand.allCases.count, 115)
     }
 
     // MARK: - 39. Raw values match server protocol

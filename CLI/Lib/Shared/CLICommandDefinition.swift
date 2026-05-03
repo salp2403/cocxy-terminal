@@ -175,6 +175,8 @@ public enum CLICommand: String, CaseIterable {
     case imageClear = "image-clear"
     case notebookImport = "notebook-import"
     case notebookExport = "notebook-export"
+    case notebookRun = "notebook-run"
+    case workflowRun = "workflow-run"
     case skillList = "skill-list"
 
     // MARK: - Worktree (v0.1.81)
@@ -346,6 +348,8 @@ public enum CLICommand: String, CaseIterable {
         case .imageClear: return "Clear inline images from the focused surface"
         case .notebookImport: return "Import a Jupyter notebook into Cocxy notebook markdown"
         case .notebookExport: return "Export Cocxy notebook markdown to Jupyter nbformat"
+        case .notebookRun: return "Run Cocxy notebook code cells locally"
+        case .workflowRun: return "Run a local Cocxy workflow file"
         case .skillList: return "List local Cocxy skills as JSON"
 
         // Worktree v0.1.81
@@ -508,6 +512,8 @@ public enum CLICommand: String, CaseIterable {
         case .imageClear: return "cocxy image clear"
         case .notebookImport: return "cocxy notebook import <input.ipynb> --output <output.cocxynb> [--force]"
         case .notebookExport: return "cocxy notebook export <input.cocxynb> --output <output.ipynb> [--force]"
+        case .notebookRun: return "cocxy notebook run <input.cocxynb> [--output <output.cocxynb>] [--cwd <dir>]"
+        case .workflowRun: return "cocxy workflow run <input.toml> [--cwd <dir>]"
         case .skillList: return "cocxy skill list"
 
         // Worktree v0.1.81

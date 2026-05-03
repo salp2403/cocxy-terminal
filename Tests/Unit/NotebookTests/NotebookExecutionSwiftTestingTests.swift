@@ -43,7 +43,7 @@ struct NotebookExecutionSwiftTestingTests {
         ])
         #expect(runner.calls.map(\.executablePath) == ["/bin/bash", "/usr/bin/env"])
         #expect(runner.calls.map(\.arguments) == [
-            ["-lc", "echo bash"],
+            ["-c", "echo bash"],
             ["swift", "-e", #"print("swift")"#],
         ])
         #expect(runner.calls.map(\.timeoutSeconds) == [12, 12])

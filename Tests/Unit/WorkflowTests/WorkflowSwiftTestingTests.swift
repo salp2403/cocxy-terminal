@@ -84,8 +84,8 @@ struct WorkflowSwiftTestingTests {
         #expect(summary.status == .failed(stepID: "test", exitCode: 1))
         #expect(summary.results.map(\.stepID) == ["build", "test"])
         #expect(runner.calls.map(\.arguments) == [
-            ["-lc", "swift build"],
-            ["-lc", "swift test"],
+            ["-c", "swift build"],
+            ["-c", "swift test"],
         ])
     }
 

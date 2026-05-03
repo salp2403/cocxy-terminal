@@ -126,7 +126,7 @@ private struct NotebookKernelCommand {
         switch language {
         case "bash":
             executableURL = URL(fileURLWithPath: "/bin/bash")
-            arguments = ["-lc", source]
+            arguments = ["-c", source]
         case "python":
             executableURL = URL(fileURLWithPath: "/usr/bin/env")
             arguments = ["python3", "-c", source]

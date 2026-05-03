@@ -63,7 +63,7 @@ struct WorkflowExecutor: Sendable {
             )
             let processResult = try processRunner.run(
                 executableURL: step.shell.executableURL,
-                arguments: ["-lc", step.command],
+                arguments: step.shell.commandArguments(for: step.command),
                 workingDirectory: workingDirectory,
                 timeoutSeconds: step.timeoutSeconds ?? defaultTimeoutSeconds
             )
