@@ -155,6 +155,11 @@ struct CostBreakdown: Sendable, Equatable {
     let totalCostMicros: Int64
 }
 
+struct ProjectTimeBreakdown: Sendable, Equatable {
+    let project: ActivityProjectRef
+    let durationMilliseconds: Int64
+}
+
 struct ProductivityInsights: Sendable, Equatable {
     let mostUsedCommands: [String]
     let peakHour: Int?

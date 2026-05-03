@@ -147,6 +147,55 @@ struct ActivityDomainSwiftTestingTests {
         #expect(try query.productivityInsights().projectSwitches == 1)
     }
 
+    @Test("query service aggregates command runtime by project")
+    func queryServiceAggregatesCommandRuntimeByProject() throws {
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let projectOne = ActivityProjectRef(id: "project-1", name: "Project One")
+        let projectTwo = ActivityProjectRef(id: "project-2", name: "Project Two")
+        try [
+            ActivityEvent(
+                timestamp: date(hour: 8),
+                kind: .commandExecuted,
+                project: projectOne,
+                summary: "swift build",
+                metadata: ["duration_ms": "60000"]
+            ),
+            ActivityEvent(
+                timestamp: date(hour: 8, minute: 10),
+                kind: .commandExecuted,
+                project: projectTwo,
+                summary: "swift test",
+                metadata: ["duration_ms": "30000"]
+            ),
+            ActivityEvent(
+                timestamp: date(hour: 8, minute: 20),
+                kind: .commandExecuted,
+                project: projectOne,
+                summary: "swift test",
+                metadata: ["duration_ms": "30000"]
+            ),
+            ActivityEvent(
+                timestamp: date(hour: 8, minute: 30),
+                kind: .commandExecuted,
+                project: projectTwo,
+                summary: "bad duration",
+                metadata: ["duration_ms": "not-a-number"]
+            ),
+            ActivityEvent(
+                timestamp: date(hour: 8, minute: 40),
+                kind: .projectSwitched,
+                project: projectTwo,
+                summary: "Project Two",
+                metadata: ["duration_ms": "99999"]
+            ),
+        ].forEach { try store.recordEvent($0) }
+
+        let rows = try ActivityQueryService(store: store).projectTimeBreakdown()
+
+        #expect(rows.map(\.project.name) == ["Project One", "Project Two"])
+        #expect(rows.map(\.durationMilliseconds) == [90_000, 30_000])
+    }
+
     @Test("manual exporters produce deterministic JSON and escaped CSV")
     func manualExportersProduceDeterministicJSONAndEscapedCSV() throws {
         let event = ActivityEvent(

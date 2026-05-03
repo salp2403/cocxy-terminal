@@ -17,13 +17,15 @@ struct ActivityDashboardSwiftTestingTests {
             timestamp: date(hour: 8),
             kind: .commandExecuted,
             project: project,
-            summary: "git status"
+            summary: "git status",
+            metadata: ["duration_ms": "60000"]
         ))
         try store.recordEvent(ActivityEvent(
             timestamp: date(hour: 8, minute: 10),
             kind: .commandExecuted,
             project: project,
-            summary: "git status"
+            summary: "git status",
+            metadata: ["duration_ms": "30000"]
         ))
         try store.recordEvent(ActivityEvent(
             timestamp: date(hour: 9),
@@ -61,6 +63,8 @@ struct ActivityDashboardSwiftTestingTests {
         #expect(viewModel.snapshot.totalCostMicros == 95)
         #expect(viewModel.snapshot.eventRows.first { $0.kind == .commandExecuted }?.count == 2)
         #expect(viewModel.snapshot.costRows.map(\.model) == ["large", "small"])
+        #expect(viewModel.snapshot.projectTimeRows.map(\.projectName) == ["Project One"])
+        #expect(viewModel.snapshot.projectTimeRows.map(\.durationText) == ["1m 30s"])
         #expect(viewModel.snapshot.insights.mostUsedCommands == ["git status"])
         #expect(viewModel.snapshot.insights.peakHourLabel == "08:00")
         #expect(viewModel.trackingState == .enabled)

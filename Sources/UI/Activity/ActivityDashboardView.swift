@@ -127,6 +127,7 @@ struct ActivityDashboardView: View {
                 }
 
                 metricsGrid
+                ProjectTimeBreakdownChart(rows: viewModel.snapshot.projectTimeRows)
                 TokenUsageGraph(rows: viewModel.snapshot.tokenRows)
                 CostBreakdownChart(rows: viewModel.snapshot.costRows)
                 ActivityEventCountsView(rows: viewModel.snapshot.eventRows)
@@ -266,6 +267,42 @@ private struct ActivityInlineStatus: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(Color(nsColor: CocxyColors.surface0).opacity(0.48))
         )
+    }
+}
+
+struct ProjectTimeBreakdownChart: View {
+    let rows: [ActivityDashboardProjectTimeRow]
+
+    var body: some View {
+        ActivitySection(title: "Project Time", symbolName: "clock") {
+            if rows.isEmpty {
+                ActivityEmptyRow(title: "No project runtime")
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(rows) { row in
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text(row.projectName)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(row.durationText)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Color(nsColor: CocxyColors.teal))
+                            }
+                            ProgressView(value: progress(for: row))
+                                .progressViewStyle(.linear)
+                                .tint(Color(nsColor: CocxyColors.teal))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func progress(for row: ActivityDashboardProjectTimeRow) -> Double {
+        let maximum = max(rows.map(\.durationMilliseconds).max() ?? 1, 1)
+        return Double(row.durationMilliseconds) / Double(maximum)
     }
 }
 

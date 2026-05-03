@@ -23,6 +23,7 @@ struct ActivityDashboardSnapshot: Sendable, Equatable {
     let eventRows: [ActivityDashboardEventRow]
     let tokenRows: [ActivityDashboardTokenRow]
     let costRows: [ActivityDashboardCostRow]
+    let projectTimeRows: [ActivityDashboardProjectTimeRow]
     let insights: ActivityDashboardInsights
 
     static let empty = ActivityDashboardSnapshot(
@@ -32,6 +33,7 @@ struct ActivityDashboardSnapshot: Sendable, Equatable {
         eventRows: [],
         tokenRows: [],
         costRows: [],
+        projectTimeRows: [],
         insights: .empty
     )
 
@@ -78,6 +80,38 @@ struct ActivityDashboardCostRow: Identifiable, Sendable, Equatable {
 
     var totalCostText: String {
         ActivityDashboardSnapshot.costText(totalCostMicros)
+    }
+}
+
+struct ActivityDashboardProjectTimeRow: Identifiable, Sendable, Equatable {
+    var id: String { projectID }
+    let projectID: String
+    let projectName: String
+    let durationMilliseconds: Int64
+
+    var durationText: String {
+        Self.durationText(milliseconds: durationMilliseconds)
+    }
+
+    private static func durationText(milliseconds: Int64) -> String {
+        let safeMilliseconds = max(0, milliseconds)
+        guard safeMilliseconds > 0 else { return "0s" }
+        let totalSeconds = max(1, (safeMilliseconds + 500) / 1_000)
+        let hours = totalSeconds / 3_600
+        let minutes = (totalSeconds % 3_600) / 60
+        let seconds = totalSeconds % 60
+
+        if hours > 0 {
+            return seconds > 0
+                ? "\(hours)h \(minutes)m \(seconds)s"
+                : "\(hours)h \(minutes)m"
+        }
+        if minutes > 0 {
+            return seconds > 0
+                ? "\(minutes)m \(seconds)s"
+                : "\(minutes)m"
+        }
+        return "\(seconds)s"
     }
 }
 
@@ -186,6 +220,13 @@ final class ActivityDashboardViewModel: ObservableObject {
                 totalCostMicros: breakdown.totalCostMicros
             )
         }
+        let projectTimeRows = try queryService.projectTimeBreakdown().map { breakdown in
+            ActivityDashboardProjectTimeRow(
+                projectID: breakdown.project.id,
+                projectName: breakdown.project.name,
+                durationMilliseconds: breakdown.durationMilliseconds
+            )
+        }
         let insights = try queryService.productivityInsights()
 
         return ActivityDashboardSnapshot(
@@ -195,6 +236,7 @@ final class ActivityDashboardViewModel: ObservableObject {
             eventRows: eventRows,
             tokenRows: tokenRows,
             costRows: costRows,
+            projectTimeRows: projectTimeRows,
             insights: ActivityDashboardInsights(
                 mostUsedCommands: insights.mostUsedCommands,
                 peakHour: insights.peakHour,
