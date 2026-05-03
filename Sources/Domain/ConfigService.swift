@@ -245,6 +245,7 @@ final class ConfigService: ConfigProviding {
         preferred-provider = "\(defaults.agent.preferredProvider.rawValue)"
         foundation-models-fallback = "\(defaults.agent.foundationModelsFallback.rawValue)"
         auto-mode = \(defaults.agent.autoMode)
+        computer-use-confirm = \(defaults.agent.computerUseConfirm)
         max-iterations = \(defaults.agent.maxIterations)
         conversation-storage-dir = "\(defaults.agent.conversationStorageDir)"
         conversation-encryption = "\(defaults.agent.conversationEncryption.rawValue)"
@@ -701,6 +702,7 @@ final class ConfigService: ConfigProviding {
             preferredProvider: preferredProvider,
             foundationModelsFallback: foundationModelsFallback,
             autoMode: boolValue(table["auto-mode"]) ?? defaults.autoMode,
+            computerUseConfirm: boolValue(table["computer-use-confirm"]) ?? defaults.computerUseConfirm,
             maxIterations: rawMaxIterations,
             conversationStorageDir: stringValue(table["conversation-storage-dir"])
                 ?? defaults.conversationStorageDir,

@@ -805,6 +805,7 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
     let preferredProvider: AgentProviderKind
     let foundationModelsFallback: FoundationModelsFallbackPolicy
     let autoMode: Bool
+    let computerUseConfirm: Bool
     let maxIterations: Int
     let conversationStorageDir: String
     let conversationEncryption: AgentConversationEncryptionMode
@@ -815,6 +816,7 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
             preferredProvider: .foundationModelsOnDevice,
             foundationModelsFallback: .requireExplicitChoice,
             autoMode: false,
+            computerUseConfirm: true,
             maxIterations: 8,
             conversationStorageDir: "~/.config/cocxy/agent/conversations",
             conversationEncryption: .disabled
@@ -826,6 +828,7 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
         preferredProvider: AgentProviderKind = .foundationModelsOnDevice,
         foundationModelsFallback: FoundationModelsFallbackPolicy = .requireExplicitChoice,
         autoMode: Bool = false,
+        computerUseConfirm: Bool = true,
         maxIterations: Int = 8,
         conversationStorageDir: String = "~/.config/cocxy/agent/conversations",
         conversationEncryption: AgentConversationEncryptionMode = .disabled
@@ -834,6 +837,7 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
         self.preferredProvider = preferredProvider
         self.foundationModelsFallback = foundationModelsFallback
         self.autoMode = autoMode
+        self.computerUseConfirm = computerUseConfirm
         self.maxIterations = Self.clampedMaxIterations(maxIterations)
         let trimmedStorageDir = conversationStorageDir.trimmingCharacters(in: .whitespacesAndNewlines)
         self.conversationStorageDir = trimmedStorageDir.isEmpty
@@ -864,6 +868,7 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
         case preferredProvider
         case foundationModelsFallback
         case autoMode
+        case computerUseConfirm
         case maxIterations
         case conversationStorageDir
         case conversationEncryption
@@ -882,6 +887,8 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
         ) ?? defaults.foundationModelsFallback
         self.autoMode = try container.decodeIfPresent(Bool.self, forKey: .autoMode)
             ?? defaults.autoMode
+        self.computerUseConfirm = try container.decodeIfPresent(Bool.self, forKey: .computerUseConfirm)
+            ?? defaults.computerUseConfirm
         let rawMaxIterations = try container.decodeIfPresent(Int.self, forKey: .maxIterations)
             ?? defaults.maxIterations
         self.maxIterations = Self.clampedMaxIterations(rawMaxIterations)

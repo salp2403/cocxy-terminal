@@ -19,6 +19,7 @@ struct AgentToolInvocation: Sendable, Equatable {
 enum AgentToolPromptReason: Sendable, Equatable {
     case diffPreviewRequired(toolID: String)
     case commandApprovalRequired(command: String)
+    case computerUseApprovalRequired(toolID: String)
     case externalToolApprovalRequired(toolID: String)
     case userInputRequired(toolID: String)
 }
@@ -26,6 +27,7 @@ enum AgentToolPromptReason: Sendable, Equatable {
 enum AgentToolApprovalPreviewKind: String, Sendable, Equatable {
     case diff
     case command
+    case computerUse
     case externalTool
     case userInput
 }
@@ -92,10 +94,16 @@ enum AgentCommandAllowRule: Sendable, Equatable {
 /// approval flow later.
 struct AgentToolPermissionPolicy: Sendable, Equatable {
     let autoModeEnabled: Bool
+    let computerUseConfirm: Bool
     let commandAllowRules: [AgentCommandAllowRule]
 
-    init(autoModeEnabled: Bool = false, commandAllowRules: [AgentCommandAllowRule] = []) {
+    init(
+        autoModeEnabled: Bool = false,
+        computerUseConfirm: Bool = true,
+        commandAllowRules: [AgentCommandAllowRule] = []
+    ) {
         self.autoModeEnabled = autoModeEnabled
+        self.computerUseConfirm = computerUseConfirm
         self.commandAllowRules = commandAllowRules
     }
 
@@ -107,6 +115,10 @@ struct AgentToolPermissionPolicy: Sendable, Equatable {
             return .prompt(.diffPreviewRequired(toolID: invocation.toolID))
         case .command:
             return commandDecision(for: invocation)
+        case .computerUse:
+            return computerUseConfirm
+                ? .prompt(.computerUseApprovalRequired(toolID: invocation.toolID))
+                : .allow
         case .external:
             return .prompt(.externalToolApprovalRequired(toolID: invocation.toolID))
         case .userInteraction:

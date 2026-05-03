@@ -8,6 +8,7 @@ enum AgentToolCapability: String, Codable, Sendable, Equatable, CaseIterable {
     case read
     case write
     case command
+    case computerUse = "computer-use"
     case external
     case userInteraction = "user-interaction"
 }
@@ -250,6 +251,52 @@ enum AgentBuiltInTools {
                     "timeoutSeconds": AgentToolInputProperty(.number, description: "Command timeout in seconds."),
                 ],
                 required: ["command"]
+            )
+        ),
+        AgentToolDescriptor(
+            id: "computer_move_mouse",
+            displayName: "Move Mouse",
+            description: "Move the local mouse cursor after Computer Use approval and Accessibility permission.",
+            capability: .computerUse,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "x": AgentToolInputProperty(.number, description: "Global display X coordinate in points."),
+                    "y": AgentToolInputProperty(.number, description: "Global display Y coordinate in points."),
+                ],
+                required: ["x", "y"]
+            )
+        ),
+        AgentToolDescriptor(
+            id: "computer_click",
+            displayName: "Click Mouse",
+            description: "Click the local mouse after Computer Use approval and Accessibility permission.",
+            capability: .computerUse,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "x": AgentToolInputProperty(.number, description: "Global display X coordinate in points."),
+                    "y": AgentToolInputProperty(.number, description: "Global display Y coordinate in points."),
+                    "button": AgentToolInputProperty(.string, description: "Mouse button: left, right, or middle."),
+                    "clickCount": AgentToolInputProperty(.number, description: "Click count, clamped to at least 1."),
+                ],
+                required: ["x", "y"]
+            )
+        ),
+        AgentToolDescriptor(
+            id: "computer_screenshot",
+            displayName: "Capture Screenshot",
+            description: "Capture the main display to a local file and return only file metadata.",
+            capability: .computerUse
+        ),
+        AgentToolDescriptor(
+            id: "computer_type_text",
+            displayName: "Type Text",
+            description: "Type text locally after Computer Use approval and Accessibility permission.",
+            capability: .computerUse,
+            inputSchema: AgentToolInputSchema(
+                properties: [
+                    "text": AgentToolInputProperty(.string, description: "Text to type. Approval previews redact the content."),
+                ],
+                required: ["text"]
             )
         ),
         AgentToolDescriptor(

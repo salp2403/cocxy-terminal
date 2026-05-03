@@ -6,6 +6,8 @@ import Foundation
 struct AgentToolApprovalContext: Sendable, Equatable {
     let approvedWriteCallIDs: Set<String>
     let approvedCommandCallIDs: Set<String>
+    let approvedComputerUseCallIDs: Set<String>
+    let computerUseAllowedWithoutApproval: Bool
     let approvedExternalToolCallIDs: Set<String>
     let commandAllowRules: [AgentCommandAllowRule]
     let userInputResponsesByCallID: [String: String]
@@ -13,12 +15,16 @@ struct AgentToolApprovalContext: Sendable, Equatable {
     init(
         approvedWriteCallIDs: Set<String> = [],
         approvedCommandCallIDs: Set<String> = [],
+        approvedComputerUseCallIDs: Set<String> = [],
+        computerUseAllowedWithoutApproval: Bool = false,
         approvedExternalToolCallIDs: Set<String> = [],
         commandAllowRules: [AgentCommandAllowRule] = [],
         userInputResponsesByCallID: [String: String] = [:]
     ) {
         self.approvedWriteCallIDs = approvedWriteCallIDs
         self.approvedCommandCallIDs = approvedCommandCallIDs
+        self.approvedComputerUseCallIDs = approvedComputerUseCallIDs
+        self.computerUseAllowedWithoutApproval = computerUseAllowedWithoutApproval
         self.approvedExternalToolCallIDs = approvedExternalToolCallIDs
         self.commandAllowRules = commandAllowRules
         self.userInputResponsesByCallID = userInputResponsesByCallID
@@ -33,6 +39,10 @@ struct AgentToolApprovalContext: Sendable, Equatable {
             || commandAllowRules.contains { $0.matches(command) }
     }
 
+    func approvesComputerUse(callID: String) -> Bool {
+        computerUseAllowedWithoutApproval || approvedComputerUseCallIDs.contains(callID)
+    }
+
     func approvesExternalTool(callID: String) -> Bool {
         approvedExternalToolCallIDs.contains(callID)
     }
@@ -45,8 +55,22 @@ struct AgentToolApprovalContext: Sendable, Equatable {
         AgentToolApprovalContext(
             approvedWriteCallIDs: approvedWriteCallIDs,
             approvedCommandCallIDs: approvedCommandCallIDs,
+            approvedComputerUseCallIDs: approvedComputerUseCallIDs,
+            computerUseAllowedWithoutApproval: computerUseAllowedWithoutApproval,
             approvedExternalToolCallIDs: approvedExternalToolCallIDs,
             commandAllowRules: commandAllowRules + rules,
+            userInputResponsesByCallID: userInputResponsesByCallID
+        )
+    }
+
+    func allowingComputerUseWithoutApproval(_ allowed: Bool) -> AgentToolApprovalContext {
+        AgentToolApprovalContext(
+            approvedWriteCallIDs: approvedWriteCallIDs,
+            approvedCommandCallIDs: approvedCommandCallIDs,
+            approvedComputerUseCallIDs: approvedComputerUseCallIDs,
+            computerUseAllowedWithoutApproval: computerUseAllowedWithoutApproval || allowed,
+            approvedExternalToolCallIDs: approvedExternalToolCallIDs,
+            commandAllowRules: commandAllowRules,
             userInputResponsesByCallID: userInputResponsesByCallID
         )
     }
@@ -59,6 +83,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
     let shellExecutableURL: URL
     let readOnlyExecutor: AgentReadOnlyToolExecutor
     let mcpManager: (any MCPManaging)?
+    let computerUseController: any ComputerUseControlling
     let maxFileBytes: Int
     let defaultCommandTimeoutSeconds: TimeInterval
     let maxCommandTimeoutSeconds: TimeInterval
@@ -71,6 +96,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
         skillRegistry: SkillRegistry? = nil,
         mcpManager: (any MCPManaging)? = nil,
+        computerUseController: any ComputerUseControlling = ComputerUseActor.liveDefault(),
         gitExecutableURL: URL = URL(fileURLWithPath: "/usr/bin/git"),
         shellExecutableURL: URL = URL(fileURLWithPath: "/bin/zsh"),
         maxFileBytes: Int = 1_000_000,
@@ -85,6 +111,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         self.defaultCommandTimeoutSeconds = defaultCommandTimeoutSeconds
         self.maxCommandTimeoutSeconds = maxCommandTimeoutSeconds
         self.mcpManager = mcpManager
+        self.computerUseController = computerUseController
         self.readOnlyExecutor = AgentReadOnlyToolExecutor(
             workspace: workspace,
             processRunner: processRunner,
@@ -121,6 +148,11 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                 return try applyDiff(call)
             case "run_command":
                 return try runCommand(call)
+            case "computer_move_mouse",
+                 "computer_click",
+                 "computer_screenshot",
+                 "computer_type_text":
+                return try await computerUse(call)
             case "ask_user":
                 return try askUser(call)
             default:
@@ -137,6 +169,8 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
             return failure(call, code: error.code, message: error.message)
         } catch let error as AgentLocalToolError {
             return failure(call, code: error.code, message: error.message)
+        } catch let error as ComputerUseError {
+            return failure(call, code: error.code, message: error.localizedDescription)
         } catch {
             return failure(call, code: "tool_execution_failed", message: String(describing: error))
         }
@@ -150,6 +184,11 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
             return try applyDiffPreview(call)
         case "run_command":
             return try runCommandPreview(call)
+        case "computer_move_mouse",
+             "computer_click",
+             "computer_screenshot",
+             "computer_type_text":
+            return try computerUsePreview(call)
         case "ask_user":
             return AgentToolApprovalPreview(
                 kind: .userInput,
@@ -336,6 +375,25 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         return .success(callID: call.id, toolID: call.toolID, content: content)
     }
 
+    private func computerUse(_ call: AgentToolCall) async throws -> AgentToolResult {
+        guard approvals.approvesComputerUse(callID: call.id) else {
+            throw AgentLocalToolError.approvalRequired(toolID: call.toolID)
+        }
+
+        let action = try computerUseAction(from: call)
+        let result = try await computerUseController.perform(action, promptForPermission: true)
+        return .success(callID: call.id, toolID: call.toolID, content: computerUseContent(for: result))
+    }
+
+    private func computerUsePreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreview {
+        let action = try computerUseAction(from: call)
+        return AgentToolApprovalPreview(
+            kind: .computerUse,
+            title: "Approve computer action",
+            body: computerUsePreviewBody(toolID: call.toolID, action: action)
+        )
+    }
+
     private func askUser(_ call: AgentToolCall) throws -> AgentToolResult {
         let prompt = call.arguments["prompt"]?.stringValue ?? "The agent requested user input."
         guard let answer = approvals.userInputResponse(callID: call.id),
@@ -352,6 +410,82 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                 "answer": .string(answer),
             ])
         )
+    }
+
+    private func computerUseAction(from call: AgentToolCall) throws -> ComputerUseAction {
+        switch call.toolID {
+        case "computer_move_mouse":
+            return .mouse(.move(
+                x: try requiredNumberArgument("x", in: call),
+                y: try requiredNumberArgument("y", in: call)
+            ))
+        case "computer_click":
+            return .mouse(.click(
+                x: try requiredNumberArgument("x", in: call),
+                y: try requiredNumberArgument("y", in: call),
+                button: computerUseMouseButton(from: call.arguments["button"]?.stringValue),
+                clickCount: max(1, Int(call.arguments["clickCount"]?.numberValue ?? 1))
+            ))
+        case "computer_screenshot":
+            return .screenshot(.mainDisplay)
+        case "computer_type_text":
+            return .keyboard(.typeText(try requiredStringArgument("text", in: call)))
+        default:
+            throw AgentLocalToolError.unsupportedTool(call.toolID)
+        }
+    }
+
+    private func computerUseMouseButton(from rawValue: String?) -> ComputerUseMouseButton {
+        guard let rawValue,
+              let button = ComputerUseMouseButton(rawValue: rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        else {
+            return .left
+        }
+        return button
+    }
+
+    private func computerUseContent(for result: ComputerUseResult) -> AgentJSONValue {
+        switch result {
+        case .mouseMoved(let x, let y):
+            return .object([
+                "action": .string("mouse.move"),
+                "x": .number(x),
+                "y": .number(y),
+            ])
+        case .mouseClicked(let x, let y, let button, let clickCount):
+            return .object([
+                "action": .string("mouse.click"),
+                "x": .number(x),
+                "y": .number(y),
+                "button": .string(button.rawValue),
+                "clickCount": .number(Double(clickCount)),
+            ])
+        case .keyboardTyped(let characters):
+            return .object([
+                "action": .string("keyboard.type_text"),
+                "characters": .number(Double(characters)),
+            ])
+        case .screenshot(let fileURL, let width, let height):
+            return .object([
+                "action": .string("screenshot.main_display"),
+                "path": .string(fileURL.path),
+                "width": .number(Double(width)),
+                "height": .number(Double(height)),
+            ])
+        }
+    }
+
+    private func computerUsePreviewBody(toolID: String, action: ComputerUseAction) -> String {
+        switch action {
+        case .mouse(.move(let x, let y)):
+            return "\(toolID)\nx: \(x)\ny: \(y)"
+        case .mouse(.click(let x, let y, let button, let clickCount)):
+            return "\(toolID)\nx: \(x)\ny: \(y)\nbutton: \(button.rawValue)\nclicks: \(clickCount)"
+        case .keyboard(.typeText(let text)):
+            return "\(toolID)\ntext: \(text.count) characters"
+        case .screenshot(.mainDisplay):
+            return "\(toolID)\ntarget: main display\nresult: local screenshot file metadata only"
+        }
     }
 
     private func existingTextContent(at url: URL, relativePath: String) throws -> String {
@@ -389,6 +523,13 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
 
     private func requiredStringArgument(_ name: String, in call: AgentToolCall) throws -> String {
         try stringArgument(name, in: call, allowEmpty: false)
+    }
+
+    private func requiredNumberArgument(_ name: String, in call: AgentToolCall) throws -> Double {
+        guard let value = call.arguments[name]?.numberValue else {
+            throw AgentLocalToolError.missingArgument(name)
+        }
+        return value
     }
 
     private func stringArgument(_ name: String, in call: AgentToolCall, allowEmpty: Bool) throws -> String {

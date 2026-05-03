@@ -133,4 +133,19 @@ struct AgentToolPermissionSwiftTestingTests {
 
         #expect(policy.decision(for: invocation) == .prompt(.userInputRequired(toolID: "ask_user")))
     }
+
+    @Test("computer use prompts by default and can be explicitly configured for no per-action prompt")
+    func computerUsePromptsByDefaultAndCanBeConfigured() {
+        let defaultPolicy = AgentToolPermissionPolicy(autoModeEnabled: true)
+        let noPromptPolicy = AgentToolPermissionPolicy(
+            autoModeEnabled: true,
+            computerUseConfirm: false
+        )
+        let invocation = AgentToolInvocation(toolID: "computer_type_text", capability: .computerUse)
+
+        #expect(defaultPolicy.decision(for: invocation) == .prompt(.computerUseApprovalRequired(
+            toolID: "computer_type_text"
+        )))
+        #expect(noPromptPolicy.decision(for: invocation) == .allow)
+    }
 }

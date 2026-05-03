@@ -46,6 +46,7 @@ struct AgentModePreferencesSwiftTestingTests {
                 enabled: true,
                 preferredProvider: .openai,
                 autoMode: true,
+                computerUseConfirm: false,
                 maxIterations: 14,
                 conversationStorageDir: "~/.config/cocxy/custom-agent",
                 conversationEncryption: .masterPassword
@@ -61,6 +62,7 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(vm.agentModeEnabled == true)
         #expect(vm.agentPreferredProvider == .openai)
         #expect(vm.agentAutoMode == true)
+        #expect(vm.agentComputerUseConfirm == false)
         #expect(vm.agentMaxIterations == 14)
         #expect(vm.agentConversationStorageDir == "~/.config/cocxy/custom-agent")
         #expect(vm.agentConversationEncryption == .masterPassword)
@@ -74,6 +76,7 @@ struct AgentModePreferencesSwiftTestingTests {
 
         vm.agentModeEnabled = true
         vm.agentPreferredProvider = .google
+        vm.agentComputerUseConfirm = false
         vm.agentMaxIterations = 10
         vm.agentConversationEncryption = .masterPassword
 
@@ -102,6 +105,7 @@ struct AgentModePreferencesSwiftTestingTests {
         vm.agentModeEnabled = false
         vm.agentPreferredProvider = .openai
         vm.agentAutoMode = true
+        vm.agentComputerUseConfirm = false
         vm.agentMaxIterations = 3
         vm.agentConversationEncryption = .masterPassword
         #expect(vm.hasUnsavedChanges == true)
@@ -111,6 +115,7 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(vm.agentModeEnabled == true)
         #expect(vm.agentPreferredProvider == .anthropic)
         #expect(vm.agentAutoMode == false)
+        #expect(vm.agentComputerUseConfirm == true)
         #expect(vm.agentMaxIterations == 12)
         #expect(vm.agentConversationEncryption == .disabled)
         #expect(vm.hasUnsavedChanges == false)
@@ -123,6 +128,7 @@ struct AgentModePreferencesSwiftTestingTests {
         vm.agentModeEnabled = true
         vm.agentPreferredProvider = .google
         vm.agentAutoMode = true
+        vm.agentComputerUseConfirm = false
         vm.agentMaxIterations = 15
         vm.agentConversationStorageDir = "~/.config/cocxy/agent/custom"
         vm.agentConversationEncryption = .masterPassword
@@ -135,6 +141,7 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(service.current.agent.enabled == true)
         #expect(service.current.agent.preferredProvider == .google)
         #expect(service.current.agent.autoMode == true)
+        #expect(service.current.agent.computerUseConfirm == false)
         #expect(service.current.agent.maxIterations == 15)
         #expect(service.current.agent.conversationStorageDir == "~/.config/cocxy/agent/custom")
         #expect(service.current.agent.conversationEncryption == .masterPassword)
@@ -246,11 +253,13 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(defaultToml.contains("enabled = false"))
         #expect(defaultToml.contains("preferred-provider = \"foundation-models-on-device\""))
         #expect(defaultToml.contains("auto-mode = false"))
+        #expect(defaultToml.contains("computer-use-confirm = true"))
         #expect(defaultToml.contains("conversation-encryption = \"disabled\""))
 
         vm.agentModeEnabled = true
         vm.agentPreferredProvider = .openai
         vm.agentAutoMode = true
+        vm.agentComputerUseConfirm = false
         vm.agentMaxIterations = 200
         vm.agentConversationEncryption = .masterPassword
 
@@ -259,6 +268,7 @@ struct AgentModePreferencesSwiftTestingTests {
         #expect(toml.contains("enabled = true"))
         #expect(toml.contains("preferred-provider = \"openai\""))
         #expect(toml.contains("auto-mode = true"))
+        #expect(toml.contains("computer-use-confirm = false"))
         #expect(toml.contains("max-iterations = 50"))
         #expect(toml.contains("conversation-encryption = \"master-password\""))
     }

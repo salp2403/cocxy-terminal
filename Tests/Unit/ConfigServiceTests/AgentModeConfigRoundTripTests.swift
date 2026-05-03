@@ -33,6 +33,7 @@ struct AgentModeConfigRoundTripTests {
         #expect(defaults.preferredProvider == .foundationModelsOnDevice)
         #expect(defaults.foundationModelsFallback == .requireExplicitChoice)
         #expect(defaults.autoMode == false)
+        #expect(defaults.computerUseConfirm == true)
         #expect(defaults.maxIterations == 8)
         #expect(defaults.conversationStorageDir == "~/.config/cocxy/agent/conversations")
         #expect(defaults.conversationEncryption == .disabled)
@@ -48,6 +49,7 @@ struct AgentModeConfigRoundTripTests {
         #expect(toml.contains("preferred-provider = \"foundation-models-on-device\""))
         #expect(toml.contains("foundation-models-fallback = \"require-explicit-choice\""))
         #expect(toml.contains("auto-mode = false"))
+        #expect(toml.contains("computer-use-confirm = true"))
         #expect(toml.contains("max-iterations = 8"))
         #expect(toml.contains("conversation-encryption = \"disabled\""))
     }
@@ -60,6 +62,7 @@ struct AgentModeConfigRoundTripTests {
         preferred-provider = "anthropic"
         foundation-models-fallback = "require-explicit-choice"
         auto-mode = true
+        computer-use-confirm = false
         max-iterations = 12
         conversation-storage-dir = "~/.config/cocxy/custom-agent"
         conversation-encryption = "master-password"
@@ -69,6 +72,7 @@ struct AgentModeConfigRoundTripTests {
         #expect(config.agent.preferredProvider == .anthropic)
         #expect(config.agent.foundationModelsFallback == .requireExplicitChoice)
         #expect(config.agent.autoMode == true)
+        #expect(config.agent.computerUseConfirm == false)
         #expect(config.agent.maxIterations == 12)
         #expect(config.agent.conversationStorageDir == "~/.config/cocxy/custom-agent")
         #expect(config.agent.conversationEncryption == .masterPassword)
@@ -87,6 +91,7 @@ struct AgentModeConfigRoundTripTests {
         preferred-provider = "cocxy-cloud"
         foundation-models-fallback = "remote-provider"
         auto-mode = "always"
+        computer-use-confirm = "sometimes"
         max-iterations = 500
         conversation-storage-dir = 42
         conversation-encryption = "cloud"
@@ -97,6 +102,7 @@ struct AgentModeConfigRoundTripTests {
         #expect(malformed.agent.preferredProvider == .foundationModelsOnDevice)
         #expect(malformed.agent.foundationModelsFallback == .requireExplicitChoice)
         #expect(malformed.agent.autoMode == false)
+        #expect(malformed.agent.computerUseConfirm == true)
         #expect(malformed.agent.maxIterations == AgentModeConfig.maxMaxIterations)
         #expect(malformed.agent.conversationStorageDir == AgentModeConfig.defaults.conversationStorageDir)
         #expect(malformed.agent.conversationEncryption == .disabled)

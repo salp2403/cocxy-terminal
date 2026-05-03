@@ -254,6 +254,8 @@ struct AgentPanelView: View {
             return "doc.text.magnifyingglass"
         case .command:
             return "terminal"
+        case .computerUse:
+            return "cursorarrow.click"
         case .externalTool:
             return "point.3.connected.trianglepath.dotted"
         case .userInput:

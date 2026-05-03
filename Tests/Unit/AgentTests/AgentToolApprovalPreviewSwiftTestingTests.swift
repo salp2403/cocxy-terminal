@@ -82,6 +82,25 @@ struct AgentToolApprovalPreviewSwiftTestingTests {
         #expect(runner.calls == 0)
     }
 
+    @Test("computer use preview describes the action without exposing typed text")
+    func computerUsePreviewRedactsTypedText() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executor = AgentLocalToolExecutor(workspace: AgentWorkspace(rootURL: root))
+
+        let preview = try await executor.preview(for: AgentToolCall(
+            id: "call-computer",
+            toolID: "computer_type_text",
+            arguments: ["text": .string("secret-token")]
+        ))
+
+        #expect(preview.kind == .computerUse)
+        #expect(preview.title == "Approve computer action")
+        #expect(preview.body.contains("computer_type_text"))
+        #expect(preview.body.contains("12 characters"))
+        #expect(!preview.body.contains("secret-token"))
+    }
+
     private func makeWorkspace() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-preview-\(UUID().uuidString)", isDirectory: true)

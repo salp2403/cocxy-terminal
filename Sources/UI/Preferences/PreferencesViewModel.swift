@@ -136,6 +136,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Whether Agent Mode may continue approved actions automatically.
     @Published var agentAutoMode: Bool
 
+    /// Whether Computer Use tool calls require explicit per-action approval.
+    @Published var agentComputerUseConfirm: Bool
+
     /// Maximum provider/tool iterations for one Agent Mode turn.
     @Published var agentMaxIterations: Int
 
@@ -486,6 +489,7 @@ final class PreferencesViewModel: ObservableObject {
         agentModeEnabled = c.agent.enabled
         agentPreferredProvider = c.agent.preferredProvider
         agentAutoMode = c.agent.autoMode
+        agentComputerUseConfirm = c.agent.computerUseConfirm
         agentMaxIterations = c.agent.maxIterations
         agentConversationStorageDir = c.agent.conversationStorageDir
         agentConversationEncryption = c.agent.conversationEncryption
@@ -626,6 +630,7 @@ final class PreferencesViewModel: ObservableObject {
         self.agentModeEnabled = config.agent.enabled
         self.agentPreferredProvider = config.agent.preferredProvider
         self.agentAutoMode = config.agent.autoMode
+        self.agentComputerUseConfirm = config.agent.computerUseConfirm
         self.agentMaxIterations = config.agent.maxIterations
         self.agentConversationStorageDir = config.agent.conversationStorageDir
         self.agentConversationEncryption = config.agent.conversationEncryption
@@ -1018,6 +1023,7 @@ final class PreferencesViewModel: ObservableObject {
             vim: buildVimConfigFromViewModel(),
             experimental: savedConfig.experimental
         )
+        agentComputerUseConfirm = agent.computerUseConfirm
         agentMaxIterations = agent.maxIterations
         agentConversationStorageDir = agent.conversationStorageDir
         agentConversationEncryption = agent.conversationEncryption
@@ -1044,6 +1050,7 @@ final class PreferencesViewModel: ObservableObject {
             preferredProvider: agentPreferredProvider,
             foundationModelsFallback: savedConfig.agent.foundationModelsFallback,
             autoMode: agentAutoMode,
+            computerUseConfirm: agentComputerUseConfirm,
             maxIterations: agentMaxIterations,
             conversationStorageDir: agentConversationStorageDir,
             conversationEncryption: agentConversationEncryption
@@ -1054,6 +1061,7 @@ final class PreferencesViewModel: ObservableObject {
         agentModeEnabled != config.enabled
             || agentPreferredProvider != config.preferredProvider
             || agentAutoMode != config.autoMode
+            || agentComputerUseConfirm != config.computerUseConfirm
             || agentMaxIterations != config.maxIterations
             || agentConversationStorageDir != config.conversationStorageDir
             || agentConversationEncryption != config.conversationEncryption
@@ -1371,6 +1379,7 @@ final class PreferencesViewModel: ObservableObject {
         preferred-provider = "\(agent.preferredProvider.rawValue)"
         foundation-models-fallback = "\(agent.foundationModelsFallback.rawValue)"
         auto-mode = \(agent.autoMode)
+        computer-use-confirm = \(agent.computerUseConfirm)
         max-iterations = \(agent.maxIterations)
         conversation-storage-dir = "\(agent.conversationStorageDir)"
         conversation-encryption = "\(agent.conversationEncryption.rawValue)"

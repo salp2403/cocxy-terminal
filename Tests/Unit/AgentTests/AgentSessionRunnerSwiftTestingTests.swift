@@ -334,6 +334,109 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(diagnosticsToolMessage.content.contains("Cannot find value."))
     }
 
+    @Test("runner prompts for computer use by default before executing")
+    func runnerPromptsForComputerUseByDefault() async throws {
+        let workspace = temporaryDirectory(named: "computer-use-prompt-workspace")
+        let conversationRoot = temporaryDirectory(named: "computer-use-prompt-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(
+                content: "I need to inspect the screen.",
+                toolCalls: [AgentToolCall(id: "shot-1", toolID: "computer_screenshot")]
+            ),
+        ])
+        let controller = RecordingSessionComputerUseController(result: .screenshot(
+            fileURL: URL(fileURLWithPath: "/tmp/cocxy-runner-shot.png"),
+            width: 100,
+            height: 80
+        ))
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-computer-use-prompt-test",
+            computerUseController: controller
+        )
+
+        let result = try await runner.run(
+            prompt: "Inspect screen",
+            history: [],
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                conversationStorageDir: conversationRoot.path
+            )
+        )
+
+        if case .permissionRequired(let request) = result.stopReason {
+            #expect(request.reason == .computerUseApprovalRequired(toolID: "computer_screenshot"))
+            #expect(request.preview.kind == .computerUse)
+        } else {
+            Issue.record("Expected computer use approval request")
+        }
+        #expect(await controller.actions.isEmpty)
+    }
+
+    @Test("runner executes computer use without prompt only when config disables per-action confirmation")
+    func runnerExecutesComputerUseWhenConfirmationDisabled() async throws {
+        let workspace = temporaryDirectory(named: "computer-use-run-workspace")
+        let conversationRoot = temporaryDirectory(named: "computer-use-run-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let screenshotURL = URL(fileURLWithPath: "/tmp/cocxy-runner-shot.png")
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(
+                content: "Capturing screen.",
+                toolCalls: [AgentToolCall(id: "shot-1", toolID: "computer_screenshot")]
+            ),
+            AgentLLMResponse(content: "Screen captured locally.", toolCalls: []),
+        ])
+        let controller = RecordingSessionComputerUseController(result: .screenshot(
+            fileURL: screenshotURL,
+            width: 100,
+            height: 80
+        ))
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-computer-use-run-test",
+            computerUseController: controller
+        )
+
+        let result = try await runner.run(
+            prompt: "Capture screen",
+            history: [],
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                computerUseConfirm: false,
+                maxIterations: 4,
+                conversationStorageDir: conversationRoot.path
+            )
+        )
+        let toolMessage = try #require(result.messages.first { $0.role == .tool })
+        let decodedToolResult = try JSONDecoder().decode(
+            AgentToolResult.self,
+            from: Data(toolMessage.content.utf8)
+        )
+
+        #expect(result.stopReason == .completed)
+        #expect(await controller.actions == [.screenshot(.mainDisplay)])
+        #expect(await controller.promptFlags == [true])
+        #expect(decodedToolResult.content == .object([
+            "action": .string("screenshot.main_display"),
+            "path": .string(screenshotURL.path),
+            "width": .number(100),
+            "height": .number(80),
+        ]))
+    }
+
     @Test("runner approval resumes a pending write and persists the tool result")
     func runnerApprovalResumesPendingWriteAndPersistsToolResult() async throws {
         let workspace = temporaryDirectory(named: "approval-workspace")
@@ -622,5 +725,21 @@ private final class RecordingSessionLSPDiagnosticsProvider: AgentLSPDiagnosticsP
     func currentDiagnostics(limit: Int) -> [AgentLSPDiagnostic] {
         limits.append(limit)
         return Array(diagnostics.prefix(max(0, limit)))
+    }
+}
+
+private actor RecordingSessionComputerUseController: ComputerUseControlling {
+    private(set) var actions: [ComputerUseAction] = []
+    private(set) var promptFlags: [Bool] = []
+    let result: ComputerUseResult
+
+    init(result: ComputerUseResult) {
+        self.result = result
+    }
+
+    func perform(_ action: ComputerUseAction, promptForPermission: Bool) async throws -> ComputerUseResult {
+        actions.append(action)
+        promptFlags.append(promptForPermission)
+        return result
     }
 }

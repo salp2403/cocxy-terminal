@@ -324,6 +324,83 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         #expect(content["answer"]?.stringValue == "Use main.")
     }
 
+    @Test("computer use tools refuse execution until the call is approved")
+    func computerUseToolsRequireApproval() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = RecordingAgentComputerUseController(result: .keyboardTyped(characters: 6))
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            computerUseController: controller
+        )
+
+        let result = try await executor.execute(AgentToolCall(
+            id: "call-computer",
+            toolID: "computer_type_text",
+            arguments: ["text": .string("secret")]
+        ))
+
+        #expect(result.status == .failure)
+        #expect(result.error?.code == "approval_required")
+        #expect(await controller.actions.isEmpty)
+    }
+
+    @Test("approved computer type text tool executes without returning typed text")
+    func approvedComputerTypeTextDoesNotEchoText() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = RecordingAgentComputerUseController(result: .keyboardTyped(characters: 6))
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            approvals: AgentToolApprovalContext(approvedComputerUseCallIDs: ["call-computer"]),
+            computerUseController: controller
+        )
+
+        let result = try await executor.execute(AgentToolCall(
+            id: "call-computer",
+            toolID: "computer_type_text",
+            arguments: ["text": .string("secret")]
+        ))
+        let content = try contentObject(result)
+
+        #expect(result.status == .success)
+        #expect(await controller.actions == [.keyboard(.typeText("secret"))])
+        #expect(await controller.promptFlags == [true])
+        #expect(content["characters"]?.numberValue == 6)
+        #expect(content["text"] == nil)
+    }
+
+    @Test("approved computer screenshot tool returns only local screenshot metadata")
+    func approvedComputerScreenshotReturnsMetadata() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let screenshotURL = URL(fileURLWithPath: "/tmp/cocxy-agent-computer-use.png")
+        let controller = RecordingAgentComputerUseController(result: .screenshot(
+            fileURL: screenshotURL,
+            width: 1440,
+            height: 900
+        ))
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            approvals: AgentToolApprovalContext(approvedComputerUseCallIDs: ["call-shot"]),
+            computerUseController: controller
+        )
+
+        let result = try await executor.execute(AgentToolCall(
+            id: "call-shot",
+            toolID: "computer_screenshot"
+        ))
+        let content = try contentObject(result)
+
+        #expect(result.status == .success)
+        #expect(await controller.actions == [.screenshot(.mainDisplay)])
+        #expect(await controller.promptFlags == [true])
+        #expect(content["path"]?.stringValue == screenshotURL.path)
+        #expect(content["width"]?.numberValue == 1440)
+        #expect(content["height"]?.numberValue == 900)
+        #expect(content["image"] == nil)
+    }
+
     private func makeWorkspace() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-local-tools-\(UUID().uuidString)", isDirectory: true)
@@ -369,6 +446,22 @@ private final class RecordingLocalAgentProcessRunner: AgentProcessRunning, @unch
         return results.isEmpty
             ? AgentProcessResult(exitCode: 0, stdout: "", stderr: "")
             : results.removeFirst()
+    }
+}
+
+private actor RecordingAgentComputerUseController: ComputerUseControlling {
+    private(set) var actions: [ComputerUseAction] = []
+    private(set) var promptFlags: [Bool] = []
+    let result: ComputerUseResult
+
+    init(result: ComputerUseResult) {
+        self.result = result
+    }
+
+    func perform(_ action: ComputerUseAction, promptForPermission: Bool) async throws -> ComputerUseResult {
+        actions.append(action)
+        promptFlags.append(promptForPermission)
+        return result
     }
 }
 

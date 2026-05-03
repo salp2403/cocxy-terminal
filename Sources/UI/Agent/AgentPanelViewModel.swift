@@ -295,6 +295,8 @@ final class AgentPanelViewModel: ObservableObject {
             return "Approve command: \(command)"
         case .diffPreviewRequired(let toolID):
             return "Review diff for \(toolID)."
+        case .computerUseApprovalRequired(let toolID):
+            return "Approve computer action \(toolID)."
         case .externalToolApprovalRequired(let toolID):
             return "Approve external tool \(toolID)."
         case .userInputRequired(let toolID):

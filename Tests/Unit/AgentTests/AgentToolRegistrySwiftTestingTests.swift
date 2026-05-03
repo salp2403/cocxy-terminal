@@ -15,6 +15,10 @@ struct AgentToolRegistrySwiftTestingTests {
         #expect(registry.toolIDs == [
             "apply_diff",
             "ask_user",
+            "computer_click",
+            "computer_move_mouse",
+            "computer_screenshot",
+            "computer_type_text",
             "git_diff",
             "git_status",
             "grep",
@@ -33,6 +37,7 @@ struct AgentToolRegistrySwiftTestingTests {
         #expect(registry.descriptor(for: "write_file")?.capability == .write)
         #expect(registry.descriptor(for: "run_command")?.capability == .command)
         #expect(registry.descriptor(for: "ask_user")?.capability == .userInteraction)
+        #expect(registry.descriptor(for: "computer_type_text")?.capability == .computerUse)
         #expect(registry.descriptor(for: "list_skills")?.capability == .read)
         #expect(registry.descriptor(for: "use_skill")?.capability == .read)
 
@@ -54,6 +59,10 @@ struct AgentToolRegistrySwiftTestingTests {
         let useSkillSchema = try #require(registry.descriptor(for: "use_skill")?.inputSchema)
         #expect(useSkillSchema.required == ["id"])
         #expect(useSkillSchema.properties["id"]?.type == .string)
+
+        let typeTextSchema = try #require(registry.descriptor(for: "computer_type_text")?.inputSchema)
+        #expect(typeTextSchema.required == ["text"])
+        #expect(typeTextSchema.properties["text"]?.type == .string)
     }
 
     @Test("registry rejects duplicate tool identifiers")

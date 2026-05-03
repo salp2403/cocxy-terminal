@@ -167,6 +167,7 @@ struct AgentLoop {
     ) async throws -> AgentLoopResult {
         let activePermissionPolicy = AgentToolPermissionPolicy(
             autoModeEnabled: configuration.autoMode,
+            computerUseConfirm: configuration.computerUseConfirm,
             commandAllowRules: permissionPolicy.commandAllowRules
         )
 
@@ -256,6 +257,12 @@ struct AgentLoop {
                 kind: .command,
                 title: "Approve command",
                 body: command
+            )
+        case .computerUseApprovalRequired(let toolID):
+            return AgentToolApprovalPreview(
+                kind: .computerUse,
+                title: "Approve computer action",
+                body: "Allow \(toolID) to control this Mac locally."
             )
         case .externalToolApprovalRequired(let toolID):
             return AgentToolApprovalPreview(

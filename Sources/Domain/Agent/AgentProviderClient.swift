@@ -582,6 +582,14 @@ enum FoundationModelsAgentToolBridge {
             return ["apply diff", "edit", "modify", "change", "fix", "update"]
         case "ask_user":
             return ["ask user", "question", "clarify", "confirm"]
+        case "computer_move_mouse":
+            return ["move mouse", "mouse move", "cursor", "point"]
+        case "computer_click":
+            return ["click", "mouse click", "press button"]
+        case "computer_screenshot":
+            return ["screenshot", "screen capture", "capture screen"]
+        case "computer_type_text":
+            return ["type text", "keyboard", "input text"]
         case "list_skills":
             return ["available skills", "local skills", "built in skills", "built-in skills", "project skills", "user skills"]
         case "use_skill":
@@ -599,6 +607,8 @@ enum FoundationModelsAgentToolBridge {
             return ["write", "edit", "modify", "change", "fix", "update", "create"]
         case .command:
             return ["run", "runs", "execute", "command", "commands", "test", "tests", "build", "builds"]
+        case .computerUse:
+            return ["computer", "mouse", "keyboard", "screenshot", "screen", "click", "type"]
         case .external:
             return ["external", "mcp"]
         case .userInteraction:

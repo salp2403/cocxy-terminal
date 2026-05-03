@@ -66,6 +66,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
     private let terminalOutputProvider: (any AgentTerminalOutputProviding)?
     private let lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)?
     private let mcpManager: (any MCPManaging)?
+    private let computerUseController: any ComputerUseControlling
     private let commandAllowlist: any AgentCommandAllowlistLoading
     private let agentSecrets: AgentSecrets
     private let usageRecorder: AgentUsageRecording?
@@ -80,6 +81,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         terminalOutputProvider: (any AgentTerminalOutputProviding)? = nil,
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
         mcpManager: (any MCPManaging)? = nil,
+        computerUseController: any ComputerUseControlling = ComputerUseActor.liveDefault(),
         commandAllowlist: any AgentCommandAllowlistLoading = AgentCommandAllowlist(),
         agentSecrets: AgentSecrets = AgentSecrets(),
         usageRecorder: AgentUsageRecording? = nil
@@ -93,6 +95,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         self.terminalOutputProvider = terminalOutputProvider
         self.lspDiagnosticsProvider = lspDiagnosticsProvider
         self.mcpManager = mcpManager
+        self.computerUseController = computerUseController
         self.commandAllowlist = commandAllowlist
         self.agentSecrets = agentSecrets
         self.usageRecorder = usageRecorder
@@ -105,7 +108,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
     ) async throws -> AgentLoopResult {
         let loop = try await makeLoop(
             configuration: configuration,
-            approvals: AgentToolApprovalContext()
+            approvals: baseApprovalContext(for: configuration)
         )
 
         return try await loop.run(
@@ -151,7 +154,9 @@ struct AgentSessionRunner: AgentApprovalRunning {
         )
         let commandAllowRules = permissionPolicy.commandAllowRules
             + ((try? commandAllowlist.loadRules()) ?? [])
-        let effectiveApprovals = approvals.addingCommandAllowRules(commandAllowRules)
+        let effectiveApprovals = approvals
+            .allowingComputerUseWithoutApproval(!configuration.computerUseConfirm)
+            .addingCommandAllowRules(commandAllowRules)
         let workspace = AgentWorkspace(rootURL: workspaceRoot)
         let executor = AgentLocalToolExecutor(
             workspace: workspace,
@@ -159,7 +164,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
             processRunner: processRunner,
             terminalOutputProvider: terminalOutputProvider,
             lspDiagnosticsProvider: lspDiagnosticsProvider,
-            mcpManager: mcpManager
+            mcpManager: mcpManager,
+            computerUseController: computerUseController
         )
         let store = AgentConversationStore(
             rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir),
@@ -167,6 +173,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         )
         let effectivePermissionPolicy = AgentToolPermissionPolicy(
             autoModeEnabled: permissionPolicy.autoModeEnabled,
+            computerUseConfirm: configuration.computerUseConfirm,
             commandAllowRules: commandAllowRules
         )
 
@@ -202,6 +209,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
             return AgentToolApprovalContext(approvedWriteCallIDs: [request.call.id])
         case "run_command":
             return AgentToolApprovalContext(approvedCommandCallIDs: [request.call.id])
+        case "computer_move_mouse", "computer_click", "computer_screenshot", "computer_type_text":
+            return AgentToolApprovalContext(approvedComputerUseCallIDs: [request.call.id])
         case "ask_user":
             let trimmedInput = userInput?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !trimmedInput.isEmpty else {
@@ -214,6 +223,10 @@ struct AgentSessionRunner: AgentApprovalRunning {
             }
             return AgentToolApprovalContext()
         }
+    }
+
+    private func baseApprovalContext(for configuration: AgentModeConfig) -> AgentToolApprovalContext {
+        AgentToolApprovalContext(computerUseAllowedWithoutApproval: !configuration.computerUseConfirm)
     }
 
     private static func conversationRootDirectory(from rawPath: String) -> URL {

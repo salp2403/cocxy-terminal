@@ -776,6 +776,9 @@ struct AgentModePreferencesSection: View {
 
                 Toggle("Auto mode", isOn: $viewModel.agentAutoMode)
                     .help("Allows the agent loop to continue after approved actions without changing write or command approval rules.")
+
+                Toggle("Confirm computer actions", isOn: $viewModel.agentComputerUseConfirm)
+                    .help("Requires explicit approval before local mouse, keyboard, or screenshot actions run.")
             }
 
             Section("Provider") {
