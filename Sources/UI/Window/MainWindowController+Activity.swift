@@ -147,6 +147,33 @@ extension MainWindowController {
         }
     }
 
+    func recordCommandBlockActivity(
+        _ block: TerminalCommandBlock,
+        tabID: TabID,
+        surfaceID: SurfaceID?
+    ) {
+        var metadata = [
+            "block_id": "\(block.id)",
+            "duration_ms": "\(block.durationNs / 1_000_000)",
+        ]
+        if let exitCode = block.exitCode {
+            metadata["exit_code"] = "\(exitCode)"
+        }
+        if let surfaceID {
+            metadata["surface_id"] = surfaceID.rawValue.uuidString
+        }
+
+        let workingDirectory = block.pwd.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? tabManager.tab(for: tabID)?.workingDirectory
+        recordLocalActivity(
+            kind: .commandExecuted,
+            summary: commandActivitySummary(block.command),
+            workingDirectory: workingDirectory,
+            sessionID: sessionIDForTab(tabID).rawValue.uuidString,
+            metadata: metadata
+        )
+    }
+
     private func resolveActivityStore() throws -> ActivityStoring {
         if let injectedActivityStore {
             return injectedActivityStore
@@ -174,6 +201,13 @@ extension MainWindowController {
         let expandedDirectory = (configuredDirectory as NSString).expandingTildeInPath
         return URL(fileURLWithPath: expandedDirectory, isDirectory: true)
             .appendingPathComponent("activity.sqlite")
+    }
+
+    private func commandActivitySummary(_ command: String) -> String {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Command finished" }
+        if trimmed.count <= 240 { return trimmed }
+        return String(trimmed.prefix(237)) + "..."
     }
 
     private func refreshVisibleActivityDashboardRootIfNeeded(_ viewModel: ActivityDashboardViewModel) {

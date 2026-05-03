@@ -836,6 +836,7 @@ extension MainWindowController {
         guard persistedCommandBlockKeys.insert(key).inserted else { return }
 
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
+        recordCommandBlockActivity(block, tabID: tabID, surfaceID: surfaceID)
         Task.detached(priority: .utility) {
             try? TerminalBlockStore().append(block, sessionID: sessionID)
         }

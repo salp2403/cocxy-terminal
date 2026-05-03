@@ -53,6 +53,28 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         XCTAssertEqual(events.first?.summary, "Split side by side")
     }
 
+    func testEnabledConfigRecordsCommandBlocksLocally() throws {
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store)
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        try store.deleteAll()
+
+        controller.recordCommandBlockActivity(
+            makeCommandBlock(command: "swift test", pwd: "/tmp/cocxy-test", exitCode: 0),
+            tabID: tabID,
+            surfaceID: SurfaceID()
+        )
+
+        let event = try XCTUnwrap(try store.events().first)
+        XCTAssertEqual(event.kind, .commandExecuted)
+        XCTAssertEqual(event.summary, "swift test")
+        XCTAssertEqual(event.project?.name, "cocxy-test")
+        XCTAssertEqual(event.metadata["exit_code"], "0")
+        XCTAssertEqual(event.metadata["duration_ms"], "1500")
+        XCTAssertEqual(event.metadata["block_id"], "42")
+    }
+
     func testStorageDirectoryChangeUsesNewLocalDatabase() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-activity-\(UUID().uuidString)", isDirectory: true)
@@ -142,6 +164,27 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         cost-tracking = false
         storage-directory = "\(storageDirectory)"
         """
+    }
+
+    private func makeCommandBlock(
+        command: String,
+        pwd: String?,
+        exitCode: Int32?
+    ) -> TerminalCommandBlock {
+        TerminalCommandBlock(
+            id: 42,
+            command: command,
+            output: "ok",
+            exitCode: exitCode,
+            pwd: pwd,
+            startTimeNs: 1_000_000_000,
+            endTimeNs: 2_500_000_000,
+            durationNs: 1_500_000_000,
+            startRow: 1,
+            endRow: 2,
+            streamID: 0,
+            blockType: 2
+        )
     }
 }
 
