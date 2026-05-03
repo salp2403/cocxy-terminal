@@ -1011,6 +1011,7 @@ final class PreferencesViewModel: ObservableObject {
             agent: agent,
             activity: activity,
             voice: voice,
+            iCloudSync: savedConfig.iCloudSync,
             completions: completions,
             codeReview: buildCodeReviewConfigFromViewModel(),
             notifications: NotificationConfig(

@@ -53,6 +53,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let agent: AgentModeConfig
     let activity: ActivityConfig
     let voice: VoiceConfig
+    let iCloudSync: ICloudSyncConfig
     let completions: CompletionConfig
     let codeReview: CodeReviewConfig
     let notifications: NotificationConfig
@@ -74,6 +75,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         agent: AgentModeConfig = .defaults,
         activity: ActivityConfig = .defaults,
         voice: VoiceConfig = .defaults,
+        iCloudSync: ICloudSyncConfig = .defaults,
         completions: CompletionConfig = .defaults,
         codeReview: CodeReviewConfig = .defaults,
         notifications: NotificationConfig,
@@ -94,6 +96,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agent = agent
         self.activity = activity
         self.voice = voice
+        self.iCloudSync = iCloudSync
         self.completions = completions
         self.codeReview = codeReview
         self.notifications = notifications
@@ -118,6 +121,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             agent: .defaults,
             activity: .defaults,
             voice: .defaults,
+            iCloudSync: .defaults,
             completions: .defaults,
             codeReview: .defaults,
             notifications: .defaults,
@@ -141,7 +145,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, agent, activity, voice, completions, codeReview
+        case general, appearance, terminal, agentDetection, agent, activity, voice, iCloudSync, completions, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -157,6 +161,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.activity = try container.decodeIfPresent(ActivityConfig.self, forKey: .activity)
             ?? .defaults
         self.voice = try container.decodeIfPresent(VoiceConfig.self, forKey: .voice)
+            ?? .defaults
+        self.iCloudSync = try container.decodeIfPresent(ICloudSyncConfig.self, forKey: .iCloudSync)
             ?? .defaults
         self.completions = try container.decodeIfPresent(CompletionConfig.self, forKey: .completions)
             ?? .defaults
@@ -278,6 +284,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // Voice input is a global user preference because microphone
             // access and locale selection must never be toggled by a repo.
             voice: voice,
+            // iCloud sync is a global account/data-movement preference.
+            // Project config must not enable it or change what local
+            // artifacts are eligible for encrypted sync.
+            iCloudSync: iCloudSync,
             // Inline completions are a global user opt-in because the
             // provider can read local source text. Repository config must
             // not enable or route completions on the user's behalf.

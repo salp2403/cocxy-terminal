@@ -345,6 +345,17 @@ final class ConfigService: ConfigProviding {
         input-cost-micros-per-million-tokens = \(defaults.activity.inputCostMicrosPerMillionTokens)
         output-cost-micros-per-million-tokens = \(defaults.activity.outputCostMicrosPerMillionTokens)
 
+        [icloud-sync]
+        # Optional iCloud Drive sync for local Cocxy artifacts. Disabled by
+        # default and encrypted when enabled. Cocxy never uses a backend
+        # service; this only resolves the user's own iCloud Drive after
+        # explicit opt-in.
+        enabled = \(defaults.iCloudSync.enabled)
+        sync-directory-name = "\(defaults.iCloudSync.syncDirectoryName)"
+        encryption-required = \(defaults.iCloudSync.encryptionRequired)
+        artifact-kinds = \(tomlStringArray(defaults.iCloudSync.artifactKinds.map(\.rawValue)))
+        conflict-policy = "\(defaults.iCloudSync.conflictPolicy.rawValue)"
+
         [completions]
         # Inline AI completions for the reusable editor. Disabled by
         # default and local-only: the v1 provider is Foundation Models
@@ -541,6 +552,7 @@ final class ConfigService: ConfigProviding {
         let agent = parseAgentModeConfig(from: parsed)
         let activity = parseActivityConfig(from: parsed)
         let voice = parseVoiceConfig(from: parsed)
+        let iCloudSync = parseICloudSyncConfig(from: parsed)
         let completions = parseCompletionConfig(from: parsed)
         let codeReview = parseCodeReviewConfig(from: parsed)
         let notifications = parseNotificationConfig(from: parsed)
@@ -566,6 +578,7 @@ final class ConfigService: ConfigProviding {
             agent: agent,
             activity: activity,
             voice: voice,
+            iCloudSync: iCloudSync,
             completions: completions,
             codeReview: codeReview,
             notifications: notifications,
@@ -839,6 +852,30 @@ final class ConfigService: ConfigProviding {
                 intValue(table["output-cost-micros-per-million-tokens"])
                     ?? Int(defaults.outputCostMicrosPerMillionTokens)
             )
+        )
+    }
+
+    /// Parses `[icloud-sync]` as an explicit data-movement opt-in. Missing
+    /// or malformed values keep sync disabled, encrypted, and conflict-safe.
+    private func parseICloudSyncConfig(from parsed: [String: TOMLValue]) -> ICloudSyncConfig {
+        let table = extractTable("icloud-sync", from: parsed)
+        let defaults = ICloudSyncConfig.defaults
+
+        let kinds = stringArrayValue(table["artifact-kinds"])?
+            .compactMap(ICloudSyncArtifactKind.init(rawValue:))
+            ?? defaults.artifactKinds
+        let conflictPolicy = stringValue(table["conflict-policy"])
+            .flatMap(ICloudSyncConflictPolicy.init(rawValue:))
+            ?? defaults.conflictPolicy
+
+        return ICloudSyncConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            syncDirectoryName: stringValue(table["sync-directory-name"])
+                ?? defaults.syncDirectoryName,
+            encryptionRequired: boolValue(table["encryption-required"])
+                ?? defaults.encryptionRequired,
+            artifactKinds: kinds,
+            conflictPolicy: conflictPolicy
         )
     }
 
