@@ -1984,6 +1984,80 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(rendered.contains("```cocxy-output stdout\nnotebook-ok\n```"))
     }
 
+    func test_notebookRun_executesLocalBashPythonAndSwiftCellsThenExportsJupyter() throws {
+        try requireExecutableOnPath("python3")
+        try requireExecutableOnPath("swift")
+
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("multi-language.cocxynb")
+        let outputURL = directory.appendingPathComponent("multi-language-result.cocxynb")
+        let jupyterURL = directory.appendingPathComponent("multi-language-result.ipynb")
+
+        try """
+        ---
+        cocxy-notebook: "1"
+        title: "Multi Language"
+        ---
+
+        # Smoke
+
+        ```bash
+        printf 'bash-ok\\n'
+        ```
+
+        ```python
+        print("python-ok")
+        ```
+
+        ```swift
+        print("swift-ok")
+        ```
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let runResponse = handler.handleCommand(SocketRequest(
+            id: "notebook-run-multi-language",
+            command: "notebook-run",
+            params: [
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "cwd": directory.path,
+                "timeout": "45",
+                "continue-on-failure": "false",
+            ]
+        ))
+
+        XCTAssertTrue(runResponse.success, runResponse.error ?? "")
+        XCTAssertEqual(runResponse.data?["status"], "completed")
+        XCTAssertEqual(runResponse.data?["executed-cells"], "3")
+        let rendered = try String(contentsOf: outputURL, encoding: .utf8)
+        XCTAssertTrue(rendered.contains("```cocxy-output stdout\nbash-ok\n```"))
+        XCTAssertTrue(rendered.contains("```cocxy-output stdout\npython-ok\n```"))
+        XCTAssertTrue(rendered.contains("```cocxy-output stdout\nswift-ok\n```"))
+
+        let exportResponse = handler.handleCommand(SocketRequest(
+            id: "notebook-export-multi-language",
+            command: "notebook-export",
+            params: [
+                "input": outputURL.path,
+                "output": jupyterURL.path,
+                "force": "false",
+            ]
+        ))
+
+        XCTAssertTrue(exportResponse.success, exportResponse.error ?? "")
+        let data = try Data(contentsOf: jupyterURL)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let cells = try XCTUnwrap(json["cells"] as? [[String: Any]])
+        XCTAssertEqual(cells.map { $0["cell_type"] as? String }, ["markdown", "code", "code", "code"])
+        let codeOutputs = cells.dropFirst().compactMap { $0["outputs"] as? [[String: Any]] }
+        XCTAssertEqual(codeOutputs.count, 3)
+        XCTAssertTrue(codeOutputs[0].contains { (($0["text"] as? [String])?.joined() ?? "") == "bash-ok\n" })
+        XCTAssertTrue(codeOutputs[1].contains { (($0["text"] as? [String])?.joined() ?? "") == "python-ok\n" })
+        XCTAssertTrue(codeOutputs[2].contains { (($0["text"] as? [String])?.joined() ?? "") == "swift-ok\n" })
+    }
+
     func test_workflowRun_executesLocalWorkflowToml() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -2013,6 +2087,54 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["workflow"], "ci")
         XCTAssertEqual(response.data?["steps"], "1")
         XCTAssertEqual(response.data?["stdout"], "workflow-ok\n")
+    }
+
+    func test_workflowRun_executesFiveLocalStepsInOrder() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("workflow.toml")
+        let traceURL = directory.appendingPathComponent("workflow-order.txt")
+
+        try """
+        [workflow]
+        id = "five-step"
+        steps = ["prepare", "build", "test", "package", "report"]
+
+        [step.prepare]
+        command = "printf 'prepare\\n' >> workflow-order.txt && printf 'prepare\\n'"
+
+        [step.build]
+        command = "printf 'build\\n' >> workflow-order.txt && printf 'build\\n'"
+
+        [step.test]
+        command = "printf 'test\\n' >> workflow-order.txt && printf 'test\\n'"
+
+        [step.package]
+        command = "printf 'package\\n' >> workflow-order.txt && printf 'package\\n'"
+
+        [step.report]
+        command = "printf 'report\\n' >> workflow-order.txt && printf 'report\\n'"
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "workflow-run-five-step",
+            command: "workflow-run",
+            params: [
+                "input": inputURL.path,
+                "cwd": directory.path,
+            ]
+        ))
+
+        XCTAssertTrue(response.success, response.error ?? "")
+        XCTAssertEqual(response.data?["status"], "completed")
+        XCTAssertEqual(response.data?["workflow"], "five-step")
+        XCTAssertEqual(response.data?["steps"], "5")
+        XCTAssertEqual(response.data?["stdout"], "prepare\nbuild\ntest\npackage\nreport\n")
+        XCTAssertEqual(
+            try String(contentsOf: traceURL, encoding: .utf8),
+            "prepare\nbuild\ntest\npackage\nreport\n"
+        )
     }
 
     func test_skillList_returnsLocalSkillsAsJSONContent() throws {
@@ -2078,6 +2200,23 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             withIntermediateDirectories: true
         )
         return url
+    }
+
+    private func requireExecutableOnPath(_ executable: String) throws {
+        guard Self.executableOnPath(executable) != nil else {
+            throw XCTSkip("\(executable) is not available on PATH for local execution smoke.")
+        }
+    }
+
+    private static func executableOnPath(_ executable: String) -> String? {
+        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        for directory in path.split(separator: ":").map(String.init) {
+            let candidate = URL(fileURLWithPath: directory).appendingPathComponent(executable).path
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+        return nil
     }
 
     private func writeSkill(id: String, name: String, summary: String, in root: URL) throws {
