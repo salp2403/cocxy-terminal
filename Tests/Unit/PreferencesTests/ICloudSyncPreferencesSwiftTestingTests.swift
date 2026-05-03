@@ -19,6 +19,7 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         config: CocxyConfig = .defaults,
         iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(store: InMemoryICloudSyncSecretStore()),
         iCloudSyncExporter: any ICloudSyncExporting = RecordingICloudSyncExporter(),
+        iCloudSyncImporter: any ICloudSyncImporting = RecordingICloudSyncImporter(),
         iCloudSyncArtifactRoots: ICloudSyncArtifactRoots = ICloudSyncArtifactRoots(
             notebooks: URL(fileURLWithPath: "/tmp/cocxy/notebooks", isDirectory: true),
             workflows: URL(fileURLWithPath: "/tmp/cocxy/workflows", isDirectory: true),
@@ -34,6 +35,7 @@ struct ICloudSyncPreferencesSwiftTestingTests {
                 fileProvider: provider,
                 iCloudSyncSecrets: iCloudSyncSecrets,
                 iCloudSyncExporter: iCloudSyncExporter,
+                iCloudSyncImporter: iCloudSyncImporter,
                 iCloudSyncArtifactRoots: iCloudSyncArtifactRoots
             ),
             provider
@@ -194,10 +196,63 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         let (vm, _) = makeViewModel(iCloudSyncExporter: exporter)
         vm.iCloudSyncEnabled = true
 
-        #expect(throws: ICloudSyncExportRunError.masterPasswordUnavailable) {
+        #expect(throws: ICloudSyncManualRunError.masterPasswordUnavailable) {
             _ = try vm.exportICloudSyncArtifactsNow()
         }
         #expect(exporter.requests.isEmpty)
+    }
+
+    @Test("manual import uses saved master password and keeps conflicts for UI")
+    func manualImportUsesSavedMasterPasswordAndKeepsConflictsForUI() throws {
+        let store = InMemoryICloudSyncSecretStore()
+        let secrets = ICloudSyncSecrets(store: store)
+        try secrets.saveMasterPassword("sync password")
+        let localEntry = ICloudSyncManifestEntry(
+            kind: .notebooks,
+            relativePath: "daily.cocxynb",
+            contentHash: "local",
+            modifiedAt: Date(timeIntervalSince1970: 1)
+        )
+        let remoteEntry = ICloudSyncManifestEntry(
+            kind: .notebooks,
+            relativePath: "daily.cocxynb",
+            contentHash: "remote",
+            modifiedAt: Date(timeIntervalSince1970: 2)
+        )
+        let importer = RecordingICloudSyncImporter(outcome: .imported(ICloudSyncImportResult(
+            rootURL: URL(fileURLWithPath: "/tmp/cocxy-icloud", isDirectory: true),
+            manifest: ICloudSyncManifest(entries: [remoteEntry]),
+            importedArtifactURLs: [URL(fileURLWithPath: "/tmp/cocxy/notebooks/new.cocxynb")],
+            conflicts: [ICloudSyncImportConflict(local: localEntry, remote: remoteEntry)]
+        )))
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            iCloudSync: ICloudSyncConfig(enabled: true, artifactKinds: [.notebooks]),
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let (vm, _) = makeViewModel(
+            config: config,
+            iCloudSyncSecrets: secrets,
+            iCloudSyncImporter: importer
+        )
+
+        let outcome = try vm.importICloudSyncArtifactsNow()
+
+        guard case .imported = outcome else {
+            Issue.record("Expected imported outcome")
+            return
+        }
+        #expect(importer.requests.count == 1)
+        #expect(importer.requests[0].config.enabled == true)
+        #expect(importer.requests[0].password == "sync password")
+        #expect(vm.iCloudSyncImportStatus == "Imported 1 encrypted artifact; 1 conflict requires manual resolution.")
+        #expect(vm.iCloudSyncConflicts == [ICloudSyncImportConflict(local: localEntry, remote: remoteEntry)])
     }
 }
 
@@ -220,6 +275,30 @@ private final class RecordingICloudSyncExporter: ICloudSyncExporting, @unchecked
         roots: ICloudSyncArtifactRoots,
         password: String
     ) throws -> ICloudSyncExportOutcome {
+        requests.append(Request(config: config, roots: roots, password: password))
+        return outcome
+    }
+}
+
+private final class RecordingICloudSyncImporter: ICloudSyncImporting, @unchecked Sendable {
+    struct Request: Equatable {
+        let config: ICloudSyncConfig
+        let roots: ICloudSyncArtifactRoots
+        let password: String
+    }
+
+    private(set) var requests: [Request] = []
+    var outcome: ICloudSyncImportOutcome
+
+    init(outcome: ICloudSyncImportOutcome = .disabled) {
+        self.outcome = outcome
+    }
+
+    func importRemoteArtifacts(
+        config: ICloudSyncConfig,
+        roots: ICloudSyncArtifactRoots,
+        password: String
+    ) throws -> ICloudSyncImportOutcome {
         requests.append(Request(config: config, roots: roots, password: password))
         return outcome
     }

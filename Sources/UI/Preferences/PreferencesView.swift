@@ -1300,6 +1300,33 @@ struct ICloudSyncPreferencesSection: View {
                 }
             }
 
+            Section("Manual Import") {
+                Button("Import Remote Artifacts") {
+                    importICloudSyncArtifacts()
+                }
+                .disabled(!viewModel.iCloudSyncEnabled || !viewModel.hasSavedICloudSyncMasterPassword())
+
+                if let status = viewModel.iCloudSyncImportStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                if !viewModel.iCloudSyncConflicts.isEmpty {
+                    ForEach(Array(viewModel.iCloudSyncConflicts.enumerated()), id: \.offset) { _, conflict in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(conflict.remote.relativePath)
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                            Text("Local and remote versions differ.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
@@ -1341,6 +1368,14 @@ struct ICloudSyncPreferencesSection: View {
             _ = try viewModel.exportICloudSyncArtifactsNow()
         } catch {
             viewModel.iCloudSyncExportStatus = "Failed to export encrypted artifacts: \(error.localizedDescription)"
+        }
+    }
+
+    private func importICloudSyncArtifacts() {
+        do {
+            _ = try viewModel.importICloudSyncArtifactsNow()
+        } catch {
+            viewModel.iCloudSyncImportStatus = "Failed to import encrypted artifacts: \(error.localizedDescription)"
         }
     }
 }

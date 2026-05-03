@@ -199,11 +199,11 @@ enum ICloudSyncExportOutcome: Sendable, Equatable {
     case exported(ICloudSyncExportResult)
 }
 
-enum ICloudSyncExportRunError: Error, Sendable, Equatable {
+enum ICloudSyncManualRunError: Error, Sendable, Equatable {
     case masterPasswordUnavailable
 }
 
-extension ICloudSyncExportRunError: LocalizedError {
+extension ICloudSyncManualRunError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .masterPasswordUnavailable:
@@ -399,6 +399,16 @@ struct ICloudSyncImportService: Sendable {
         return try decoder.decode(ICloudSyncManifest.self, from: Data(contentsOf: manifestURL))
     }
 }
+
+protocol ICloudSyncImporting: Sendable {
+    func importRemoteArtifacts(
+        config: ICloudSyncConfig,
+        roots: ICloudSyncArtifactRoots,
+        password: String
+    ) throws -> ICloudSyncImportOutcome
+}
+
+extension ICloudSyncImportService: ICloudSyncImporting {}
 
 struct ICloudSyncEncryptedImporter: Sendable {
     private let encryption: ICloudSyncEncryption

@@ -234,6 +234,12 @@ final class PreferencesViewModel: ObservableObject {
     /// Short status for the last manual iCloud Sync export action.
     @Published var iCloudSyncExportStatus: String?
 
+    /// Short status for the last manual iCloud Sync import action.
+    @Published var iCloudSyncImportStatus: String?
+
+    /// Conflicts found during the last manual iCloud Sync import.
+    @Published var iCloudSyncConflicts: [ICloudSyncImportConflict]
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -596,6 +602,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Manual encrypted export runner for iCloud Sync.
     private let iCloudSyncExporter: any ICloudSyncExporting
 
+    /// Manual encrypted import runner for iCloud Sync.
+    private let iCloudSyncImporter: any ICloudSyncImporting
+
     /// Local artifact roots scanned by manual iCloud Sync export.
     private let iCloudSyncArtifactRoots: ICloudSyncArtifactRoots
 
@@ -633,6 +642,7 @@ final class PreferencesViewModel: ObservableObject {
         agentSecrets: AgentSecrets = AgentSecrets(),
         iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(),
         iCloudSyncExporter: any ICloudSyncExporting = ICloudSyncExportService(),
+        iCloudSyncImporter: any ICloudSyncImporting = ICloudSyncImportService(),
         iCloudSyncArtifactRoots: ICloudSyncArtifactRoots = .defaults(),
         mcpConfigURL: URL = MCPServerConfigLoader().defaultConfigURL(),
         mcpConfigLoader: MCPServerConfigLoader = MCPServerConfigLoader()
@@ -643,6 +653,7 @@ final class PreferencesViewModel: ObservableObject {
         self.agentSecrets = agentSecrets
         self.iCloudSyncSecrets = iCloudSyncSecrets
         self.iCloudSyncExporter = iCloudSyncExporter
+        self.iCloudSyncImporter = iCloudSyncImporter
         self.iCloudSyncArtifactRoots = iCloudSyncArtifactRoots
         self.mcpConfigURL = mcpConfigURL
         self.mcpConfigLoader = mcpConfigLoader
@@ -714,6 +725,8 @@ final class PreferencesViewModel: ObservableObject {
         self.iCloudSyncMasterPasswordDraft = ""
         self.iCloudSyncMasterPasswordStatus = nil
         self.iCloudSyncExportStatus = nil
+        self.iCloudSyncImportStatus = nil
+        self.iCloudSyncConflicts = []
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -830,7 +843,7 @@ final class PreferencesViewModel: ObservableObject {
             return .disabled
         }
         guard let password = try iCloudSyncSecrets.masterPassword() else {
-            throw ICloudSyncExportRunError.masterPasswordUnavailable
+            throw ICloudSyncManualRunError.masterPasswordUnavailable
         }
 
         let outcome = try iCloudSyncExporter.exportLocalArtifacts(
@@ -847,6 +860,44 @@ final class PreferencesViewModel: ObservableObject {
             let count = result.writtenArtifactURLs.count
             let noun = count == 1 ? "artifact" : "artifacts"
             iCloudSyncExportStatus = "Exported \(count) encrypted \(noun)."
+        }
+        return outcome
+    }
+
+    func importICloudSyncArtifactsNow() throws -> ICloudSyncImportOutcome {
+        let config = buildICloudSyncConfigFromViewModel()
+        guard config.enabled else {
+            iCloudSyncImportStatus = "iCloud Sync is disabled."
+            iCloudSyncConflicts = []
+            return .disabled
+        }
+        guard let password = try iCloudSyncSecrets.masterPassword() else {
+            throw ICloudSyncManualRunError.masterPasswordUnavailable
+        }
+
+        let outcome = try iCloudSyncImporter.importRemoteArtifacts(
+            config: config,
+            roots: iCloudSyncArtifactRoots,
+            password: password
+        )
+        switch outcome {
+        case .disabled:
+            iCloudSyncImportStatus = "iCloud Sync is disabled."
+            iCloudSyncConflicts = []
+        case .unavailable:
+            iCloudSyncImportStatus = "iCloud Drive is unavailable."
+            iCloudSyncConflicts = []
+        case .imported(let result):
+            iCloudSyncConflicts = result.conflicts
+            let count = result.importedArtifactURLs.count
+            let noun = count == 1 ? "artifact" : "artifacts"
+            if result.conflicts.isEmpty {
+                iCloudSyncImportStatus = "Imported \(count) encrypted \(noun)."
+            } else {
+                let conflictCount = result.conflicts.count
+                let conflictNoun = conflictCount == 1 ? "conflict requires" : "conflicts require"
+                iCloudSyncImportStatus = "Imported \(count) encrypted \(noun); \(conflictCount) \(conflictNoun) manual resolution."
+            }
         }
         return outcome
     }
