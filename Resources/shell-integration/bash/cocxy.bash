@@ -66,10 +66,35 @@ else
 fi
 unset _COCXY_DEBUG_TRAP_RAW
 
+__cocxy_wrap_control_sequence() {
+  local seq="$1"
+
+  if [[ -n "${TMUX:-}" ]]; then
+    local payload
+    payload="$(builtin printf '\e]7770;{"type":"cocxy_shell_multiplexer","name":"tmux"}\a')${seq}"
+    local escaped="${payload//$'\e'/$'\e\e'}"
+    builtin printf '\ePtmux;%s\e\\' "$escaped"
+  elif [[ -n "${STY:-}" ]]; then
+    builtin printf '\eP\e]7770;{"type":"cocxy_shell_multiplexer","name":"screen"}\a%s\e\\' "$seq"
+  else
+    builtin printf '%s' "$seq"
+  fi
+}
+
+__cocxy_print() {
+  local wrapped
+  wrapped="$(__cocxy_wrap_control_sequence "$1")"
+  if [[ -w /dev/tty ]]; then
+    builtin printf '%s' "$wrapped" > /dev/tty
+  else
+    builtin printf '%s' "$wrapped"
+  fi
+}
+
 __cocxy_report_pwd() {
   if [[ "$_COCXY_LAST_REPORTED_CWD" != "$PWD" ]]; then
     _COCXY_LAST_REPORTED_CWD="$PWD"
-    builtin printf '\e]7;file://%s\a' "$(__cocxy_uri_encode_path "$PWD")"
+    __cocxy_print "$(builtin printf '\e]7;file://%s\a' "$(__cocxy_uri_encode_path "$PWD")")"
   fi
 }
 
@@ -101,11 +126,13 @@ __cocxy_encode_command_payload() {
   encoded="${encoded//$'\r'/%0A}"
   encoded="${encoded//$'\n'/%0A}"
   encoded="${encoded//$'\t'/%09}"
-  encoded="${encoded//[$'\x00'-$'\x08']/}"
-  encoded="${encoded//[$'\x0b'-$'\x1f']/}"
-  encoded="${encoded//[$'\x7f']/}"
+  encoded="$(builtin printf '%s' "$encoded" | LC_ALL=C tr -d '\001-\010\013\014\016-\037\177')"
 
   builtin printf 'cocxy-percent-v1:%s' "$encoded"
+}
+
+__cocxy_strip_control_chars() {
+  builtin printf '%s' "$1" | LC_ALL=C tr -d '\001-\010\013\014\016-\037\177'
 }
 
 __cocxy_precmd() {
@@ -116,7 +143,7 @@ __cocxy_precmd() {
   local _cocxy_last_status=$?
 
   if [[ "$_COCXY_EXECUTING" == "1" ]]; then
-    builtin printf '\e]133;D;%s\a' "$_cocxy_last_status"
+    __cocxy_print "$(builtin printf '\e]133;D;%s\a' "$_cocxy_last_status")"
     _COCXY_EXECUTING=0
   fi
   _COCXY_PREEXEC_FIRED=0
@@ -124,14 +151,14 @@ __cocxy_precmd() {
   __cocxy_report_pwd
 
   if [[ "${COCXY_SHELL_FEATURES:-}" == *title* ]]; then
-    builtin printf '\e]2;%s\a' "${PWD/#$HOME/~}"
+    __cocxy_print "$(builtin printf '\e]2;%s\a' "${PWD/#$HOME/~}")"
   fi
 
   # Emit OSC 133;A directly to the TTY so Cocxy can mark the start of
   # the prompt without modifying $PS1. Modifying $PS1 would interact
   # with the user's prompt framework (bash-it, oh-my-bash, Liquidprompt)
   # and break their renderers — see Design notes at the top.
-  builtin printf '\e]133;A\a'
+  __cocxy_print "$(builtin printf '\e]133;A\a')"
 }
 
 __cocxy_preexec() {
@@ -143,14 +170,15 @@ __cocxy_preexec() {
   _COCXY_PREEXEC_FIRED=1
 
   local command_text="$1"
-  local sanitized_command="${command_text//[$'\x00'-$'\x1f']/}"
+  local sanitized_command
+  sanitized_command="$(__cocxy_strip_control_chars "$command_text")"
   local encoded_command=""
   if [[ -n "$command_text" ]]; then
     encoded_command="$(__cocxy_encode_command_payload "$command_text")"
   fi
 
   if [[ "${COCXY_SHELL_FEATURES:-}" == *title* && -n "$sanitized_command" ]]; then
-    builtin printf '\e]2;%s\a' "$sanitized_command"
+    __cocxy_print "$(builtin printf '\e]2;%s\a' "$sanitized_command")"
   fi
 
   # OSC 133;B marks the end of the prompt / start of the command.
@@ -160,14 +188,14 @@ __cocxy_preexec() {
   # in the status bar. Without ;B here, bash sessions show no
   # "running" state and no duration for any command — only fish worked
   # before this line because its integration already emitted both.
-  builtin printf '\e]133;B\a'
+  __cocxy_print "$(builtin printf '\e]133;B\a')"
   # OSC 133;C marks that the command is actually being executed.
   # Emitted right after ;B so hosts that treat them as a pair (or that
   # prefer ;C over ;B) both see a consistent signal.
   if [[ -n "$encoded_command" ]]; then
-    builtin printf '\e]133;C;%s\a' "$encoded_command"
+    __cocxy_print "$(builtin printf '\e]133;C;%s\a' "$encoded_command")"
   else
-    builtin printf '\e]133;C\a'
+    __cocxy_print "$(builtin printf '\e]133;C\a')"
   fi
   _COCXY_EXECUTING=1
 }
@@ -176,7 +204,7 @@ __cocxy_debug_trap() {
   local command_text="${BASH_COMMAND:-}"
 
   case "$command_text" in
-    __cocxy_precmd*|__cocxy_preexec*|__cocxy_debug_trap*|__cocxy_report_pwd*|trap*DEBUG*|"")
+    __cocxy_precmd*|__cocxy_preexec*|__cocxy_debug_trap*|__cocxy_report_pwd*|__cocxy_print*|__cocxy_wrap_control_sequence*|trap*DEBUG*|"")
       ;;
     *)
       __cocxy_preexec "$command_text"

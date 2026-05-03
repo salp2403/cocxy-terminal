@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.14.12 (accessibility APIs)
+ * Version: 0.14.13 (shell multiplexer diagnostics)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 14
-#define COCXYCORE_VERSION_PATCH 12
-#define COCXYCORE_VERSION_STRING "0.14.12"
+#define COCXYCORE_VERSION_PATCH 13
+#define COCXYCORE_VERSION_STRING "0.14.13"
 
 /* Platform detection. */
 #if defined(__APPLE__)

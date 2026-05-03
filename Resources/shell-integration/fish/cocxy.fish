@@ -11,11 +11,27 @@ set -g __cocxy_fish_integration_loaded 1
 set -g __cocxy_fish_executing 0
 set -g __cocxy_fish_last_reported_cwd ""
 
-function __cocxy_fish_print
-    if test -w /dev/tty
-        printf '%b' "$argv[1]" > /dev/tty
+function __cocxy_fish_wrap_control_sequence
+    set -l seq (printf '%b' "$argv[1]")
+    if set -q TMUX; and test -n "$TMUX"
+        set -l marker (printf '%b' "\e]7770;{\"type\":\"cocxy_shell_multiplexer\",\"name\":\"tmux\"}\a")
+        set -l payload "$marker$seq"
+        set -l esc (printf '\e')
+        set -l escaped (string replace -a "$esc" "$esc$esc" -- "$payload")
+        printf '%b%s%b' "\ePtmux;" "$escaped" "\e\\"
+    else if set -q STY; and test -n "$STY"
+        printf '%b%s%b' "\eP\e]7770;{\"type\":\"cocxy_shell_multiplexer\",\"name\":\"screen\"}\a" "$seq" "\e\\"
     else
-        printf '%b' "$argv[1]"
+        printf '%s' "$seq"
+    end
+end
+
+function __cocxy_fish_print
+    set -l wrapped (__cocxy_fish_wrap_control_sequence "$argv[1]")
+    if test -w /dev/tty
+        printf '%s' "$wrapped" > /dev/tty
+    else
+        printf '%s' "$wrapped"
     end
 end
 

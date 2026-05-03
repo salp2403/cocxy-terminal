@@ -69,7 +69,32 @@ _cocxy_integration_entrypoint() {
 
 _cocxy_print() {
     emulate -L zsh -o no_aliases -o no_warn_create_global
-    print -rnu $_COCXY_FD -- "$1"
+    print -rnu $_COCXY_FD -- "$(_cocxy_wrap_control_sequence "$1")"
+}
+
+_cocxy_wrap_control_sequence() {
+    emulate -L zsh -o no_aliases -o no_warn_create_global
+    local seq="$1"
+
+    if [[ -n "${TMUX:-}" ]]; then
+        local payload=$'\e]7770;{"type":"cocxy_shell_multiplexer","name":"tmux"}\a'"$seq"
+        local escaped=""
+        local char
+        local -i i
+        for (( i = 1; i <= ${#payload}; i++ )); do
+            char="${payload[i]}"
+            if [[ "$char" == $'\e' ]]; then
+                escaped+=$'\e\e'
+            else
+                escaped+="$char"
+            fi
+        done
+        print -rn -- $'\ePtmux;'"$escaped"$'\e\\'
+    elif [[ -n "${STY:-}" ]]; then
+        print -rn -- $'\eP\e]7770;{"type":"cocxy_shell_multiplexer","name":"screen"}\a'"$seq"$'\e\\'
+    else
+        print -rn -- "$seq"
+    fi
 }
 
 _cocxy_uri_encode_path() {
