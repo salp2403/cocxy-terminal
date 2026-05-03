@@ -85,6 +85,78 @@ struct AgentProviderClientSwiftTestingTests {
         ))
     }
 
+    @Test("OpenAI client sends user image attachments as vision content")
+    func openAIClientSendsImageAttachmentsAsVisionContent() async throws {
+        let attachment = try makeTemporaryImageAttachment()
+        defer { removeTemporaryAttachment(attachment) }
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"choices":[{"message":{"role":"assistant","content":"Visible."}}]}"#.utf8)
+        ))
+        let client = OpenAIAgentLLMClient(
+            apiKey: "openai-key",
+            model: "test-openai-model",
+            transport: transport
+        )
+
+        _ = try await client.nextResponse(for: [
+            AgentMessage(
+                id: "u1",
+                role: .user,
+                content: "Describe this image",
+                imageAttachments: [attachment]
+            ),
+        ])
+        let request = try await onlyRequest(from: transport)
+        let body = try jsonObject(request.body)
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        let userMessage = try #require(messages.first)
+        let content = try #require(userMessage["content"] as? [[String: Any]])
+        let textBlock = try #require(content.first)
+        let imageBlock = try #require(content.dropFirst().first)
+        let imageURL = try #require(imageBlock["image_url"] as? [String: Any])
+
+        #expect(textBlock["type"] as? String == "text")
+        #expect(textBlock["text"] as? String == "Describe this image")
+        #expect(imageBlock["type"] as? String == "image_url")
+        #expect(imageURL["url"] as? String == "data:image/png;base64,\(Self.imageBytes.base64EncodedString())")
+    }
+
+    @Test("provider client rejects missing image attachment files before sending")
+    func providerClientRejectsMissingImageAttachmentFilesBeforeSending() async throws {
+        let missingURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-missing-agent-image-\(UUID().uuidString).png", isDirectory: false)
+        let attachment = AgentImageAttachment(
+            displayName: "missing.png",
+            mimeType: "image/png",
+            filePath: missingURL.path,
+            byteCount: 0,
+            pixelWidth: 1,
+            pixelHeight: 1
+        )
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"choices":[{"message":{"role":"assistant","content":"Visible."}}]}"#.utf8)
+        ))
+        let client = OpenAIAgentLLMClient(
+            apiKey: "openai-key",
+            model: "test-openai-model",
+            transport: transport
+        )
+
+        await #expect(throws: AgentProviderClientError.attachmentUnavailable("missing.png")) {
+            _ = try await client.nextResponse(for: [
+                AgentMessage(
+                    id: "u1",
+                    role: .user,
+                    content: "Describe this image",
+                    imageAttachments: [attachment]
+                ),
+            ])
+        }
+        #expect(await transport.requests.isEmpty)
+    }
+
     @Test("OpenAI transcript preserves assistant tool calls before tool results")
     func openAITranscriptPreservesAssistantToolCalls() async throws {
         let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
@@ -188,6 +260,45 @@ struct AgentProviderClientSwiftTestingTests {
             inputTokens: 22,
             outputTokens: 9
         ))
+    }
+
+    @Test("Anthropic client sends user image attachments as vision blocks")
+    func anthropicClientSendsImageAttachmentsAsVisionBlocks() async throws {
+        let attachment = try makeTemporaryImageAttachment()
+        defer { removeTemporaryAttachment(attachment) }
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"content":[{"type":"text","text":"Visible."}]}"#.utf8)
+        ))
+        let client = AnthropicAgentLLMClient(
+            apiKey: "anthropic-key",
+            model: "test-anthropic-model",
+            transport: transport
+        )
+
+        _ = try await client.nextResponse(for: [
+            AgentMessage(
+                id: "u1",
+                role: .user,
+                content: "Describe this image",
+                imageAttachments: [attachment]
+            ),
+        ])
+        let request = try await onlyRequest(from: transport)
+        let body = try jsonObject(request.body)
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        let userMessage = try #require(messages.first)
+        let content = try #require(userMessage["content"] as? [[String: Any]])
+        let textBlock = try #require(content.first)
+        let imageBlock = try #require(content.dropFirst().first)
+        let source = try #require(imageBlock["source"] as? [String: Any])
+
+        #expect(textBlock["type"] as? String == "text")
+        #expect(textBlock["text"] as? String == "Describe this image")
+        #expect(imageBlock["type"] as? String == "image")
+        #expect(source["type"] as? String == "base64")
+        #expect(source["media_type"] as? String == "image/png")
+        #expect(source["data"] as? String == Self.imageBytes.base64EncodedString())
     }
 
     @Test("Anthropic transcript preserves tool_use and tool_result blocks")
@@ -305,6 +416,42 @@ struct AgentProviderClientSwiftTestingTests {
             inputTokens: 18,
             outputTokens: 11
         ))
+    }
+
+    @Test("Google client sends user image attachments as inline data")
+    func googleClientSendsImageAttachmentsAsInlineData() async throws {
+        let attachment = try makeTemporaryImageAttachment()
+        defer { removeTemporaryAttachment(attachment) }
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"candidates":[{"content":{"parts":[{"text":"Visible."}]}}]}"#.utf8)
+        ))
+        let client = GoogleAgentLLMClient(
+            apiKey: "google-key",
+            model: "test-google-model",
+            transport: transport
+        )
+
+        _ = try await client.nextResponse(for: [
+            AgentMessage(
+                id: "u1",
+                role: .user,
+                content: "Describe this image",
+                imageAttachments: [attachment]
+            ),
+        ])
+        let request = try await onlyRequest(from: transport)
+        let body = try jsonObject(request.body)
+        let contents = try #require(body["contents"] as? [[String: Any]])
+        let userMessage = try #require(contents.first)
+        let parts = try #require(userMessage["parts"] as? [[String: Any]])
+        let textPart = try #require(parts.first)
+        let imagePart = try #require(parts.dropFirst().first)
+        let inlineData = try #require(imagePart["inlineData"] as? [String: Any])
+
+        #expect(textPart["text"] as? String == "Describe this image")
+        #expect(inlineData["mimeType"] as? String == "image/png")
+        #expect(inlineData["data"] as? String == Self.imageBytes.base64EncodedString())
     }
 
     @Test("Google transcript preserves functionCall and functionResponse parts")
@@ -569,6 +716,32 @@ struct AgentProviderClientSwiftTestingTests {
         }
         return object
     }
+
+    private func makeTemporaryImageAttachment(
+        mimeType: String = "image/png",
+        fileExtension: String = "png"
+    ) throws -> AgentImageAttachment {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-agent-provider-image-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fileURL = root.appendingPathComponent("attachment.\(fileExtension)", isDirectory: false)
+        try Self.imageBytes.write(to: fileURL, options: [.atomic])
+        return AgentImageAttachment(
+            id: "image-\(UUID().uuidString)",
+            displayName: "attachment.\(fileExtension)",
+            mimeType: mimeType,
+            filePath: fileURL.path,
+            byteCount: Self.imageBytes.count,
+            pixelWidth: 1,
+            pixelHeight: 1
+        )
+    }
+
+    private func removeTemporaryAttachment(_ attachment: AgentImageAttachment) {
+        try? FileManager.default.removeItem(at: attachment.fileURL.deletingLastPathComponent())
+    }
+
+    private static let imageBytes = Data("image-bytes".utf8)
 }
 
 private enum AgentProviderClientTestError: Error {

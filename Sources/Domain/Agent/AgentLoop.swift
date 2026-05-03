@@ -115,12 +115,29 @@ struct AgentLoop {
         configuration: AgentModeConfig,
         history: [AgentMessage] = []
     ) async throws -> AgentLoopResult {
+        try await run(
+            conversationID: conversationID,
+            userPrompt: userPrompt,
+            configuration: configuration,
+            history: history,
+            imageAttachments: []
+        )
+    }
+
+    func run(
+        conversationID: String,
+        userPrompt: String,
+        configuration: AgentModeConfig,
+        history: [AgentMessage] = [],
+        imageAttachments: [AgentImageAttachment]
+    ) async throws -> AgentLoopResult {
         var messages = history
         try append(
             AgentMessage(
                 id: idGenerator.nextMessageID(role: .user),
                 role: .user,
-                content: userPrompt
+                content: userPrompt,
+                imageAttachments: imageAttachments
             ),
             conversationID: conversationID,
             messages: &messages

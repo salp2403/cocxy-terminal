@@ -100,14 +100,40 @@ struct AgentPanelView: View {
                 approvalCard(approval)
             }
 
+            AgentAttachmentBar(
+                attachments: viewModel.imageAttachments,
+                onRemove: viewModel.removeImageAttachment(id:)
+            )
+
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Ask Agent Mode", text: $viewModel.promptDraft, axis: .vertical)
-                    .lineLimit(1...4)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(!inputEnabled)
-                    .onSubmit {
-                        submit()
+                ZStack(alignment: .topLeading) {
+                    AgentPromptComposerTextView(
+                        text: $viewModel.promptDraft,
+                        isEnabled: inputEnabled,
+                        onSubmit: submit,
+                        onImageData: attachImageData(_:suggestedFilename:),
+                        onFileURLs: attachFiles(_:)
+                    )
+                    .frame(minHeight: 34, maxHeight: 88)
+
+                    if viewModel.promptDraft.isEmpty {
+                        Text("Ask Agent Mode")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .allowsHitTesting(false)
                     }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(nsColor: CocxyColors.surface0).opacity(0.72))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(nsColor: CocxyColors.overlay0).opacity(0.45), lineWidth: 1)
+                )
+                .opacity(inputEnabled ? 1 : 0.55)
 
                 Button(action: submit) {
                     Image(systemName: "paperplane.fill")
@@ -120,6 +146,10 @@ struct AgentPanelView: View {
             }
         }
         .padding(12)
+        .dropDestination(for: URL.self) { urls, _ in
+            attachFiles(urls)
+            return true
+        }
     }
 
     private var skillPicker: some View {
@@ -245,6 +275,24 @@ struct AgentPanelView: View {
     private func approvePendingTool() {
         Task {
             await viewModel.approvePendingTool()
+        }
+    }
+
+    private func attachImageData(_ data: Data, suggestedFilename: String?) {
+        do {
+            try viewModel.attachImageData(data, suggestedFilename: suggestedFilename)
+        } catch {
+            viewModel.handleAttachmentError(error)
+        }
+    }
+
+    private func attachFiles(_ urls: [URL]) {
+        for url in urls {
+            do {
+                try viewModel.attachImageFile(url)
+            } catch {
+                viewModel.handleAttachmentError(error)
+            }
         }
     }
 

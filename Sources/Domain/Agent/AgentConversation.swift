@@ -19,6 +19,7 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
     let toolName: String?
     let toolCallID: String?
     let toolCalls: [AgentToolCall]
+    let imageAttachments: [AgentImageAttachment]
 
     init(
         id: String,
@@ -27,7 +28,8 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         createdAt: Date = Date(),
         toolName: String? = nil,
         toolCallID: String? = nil,
-        toolCalls: [AgentToolCall] = []
+        toolCalls: [AgentToolCall] = [],
+        imageAttachments: [AgentImageAttachment] = []
     ) {
         self.id = id
         self.role = role
@@ -36,6 +38,7 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         self.toolName = toolName
         self.toolCallID = toolCallID
         self.toolCalls = toolCalls
+        self.imageAttachments = imageAttachments
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -46,6 +49,7 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         case toolName
         case toolCallID
         case toolCalls
+        case imageAttachments
     }
 
     init(from decoder: Decoder) throws {
@@ -57,6 +61,10 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         self.toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
         self.toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
         self.toolCalls = try container.decodeIfPresent([AgentToolCall].self, forKey: .toolCalls) ?? []
+        self.imageAttachments = try container.decodeIfPresent(
+            [AgentImageAttachment].self,
+            forKey: .imageAttachments
+        ) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -69,6 +77,9 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         try container.encodeIfPresent(toolCallID, forKey: .toolCallID)
         if !toolCalls.isEmpty {
             try container.encode(toolCalls, forKey: .toolCalls)
+        }
+        if !imageAttachments.isEmpty {
+            try container.encode(imageAttachments, forKey: .imageAttachments)
         }
     }
 }

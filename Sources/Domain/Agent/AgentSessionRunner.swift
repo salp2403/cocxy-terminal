@@ -11,6 +11,30 @@ protocol AgentPromptRunning: Sendable {
     ) async throws -> AgentLoopResult
 }
 
+protocol AgentAttachmentPromptRunning: AgentPromptRunning {
+    func run(
+        prompt: String,
+        history: [AgentMessage],
+        configuration: AgentModeConfig,
+        imageAttachments: [AgentImageAttachment]
+    ) async throws -> AgentLoopResult
+}
+
+extension AgentAttachmentPromptRunning {
+    func run(
+        prompt: String,
+        history: [AgentMessage],
+        configuration: AgentModeConfig
+    ) async throws -> AgentLoopResult {
+        try await run(
+            prompt: prompt,
+            history: history,
+            configuration: configuration,
+            imageAttachments: []
+        )
+    }
+}
+
 protocol AgentApprovalRunning: AgentPromptRunning {
     func approve(
         request: AgentToolApprovalRequest,
@@ -56,7 +80,7 @@ extension AgentSessionRunnerError: LocalizedError {
     }
 }
 
-struct AgentSessionRunner: AgentApprovalRunning {
+struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
     private let clientFactory: any AgentLLMClientMaking
     private let workspaceRootProvider: @MainActor @Sendable () -> URL?
     private let conversationID: String
@@ -106,6 +130,20 @@ struct AgentSessionRunner: AgentApprovalRunning {
         history: [AgentMessage],
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
+        try await run(
+            prompt: prompt,
+            history: history,
+            configuration: configuration,
+            imageAttachments: []
+        )
+    }
+
+    func run(
+        prompt: String,
+        history: [AgentMessage],
+        configuration: AgentModeConfig,
+        imageAttachments: [AgentImageAttachment]
+    ) async throws -> AgentLoopResult {
         let loop = try await makeLoop(
             configuration: configuration,
             approvals: baseApprovalContext(for: configuration)
@@ -115,7 +153,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
             conversationID: conversationID,
             userPrompt: prompt,
             configuration: configuration,
-            history: history
+            history: history,
+            imageAttachments: imageAttachments
         )
     }
 

@@ -54,6 +54,80 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(await runner.prompts == ["What changed?"])
     }
 
+    @Test("submitting image attachments forwards processed images to attachment runner")
+    func submitImageAttachmentsForwardsProcessedImages() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingAttachmentAgentPromptRunner(result: AgentLoopResult(
+            messages: [],
+            stopReason: .completed
+        ))
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true, preferredProvider: .openai),
+            runner: runner,
+            attachmentStorage: AgentAttachmentStorage(rootDirectory: root)
+        )
+
+        try viewModel.attachImageData(Self.pngData, suggestedFilename: "diagram.png")
+        let attachedBeforeSubmit = try #require(viewModel.imageAttachments.first)
+
+        viewModel.promptDraft = "  What does this image show?  "
+        await viewModel.submitPrompt()
+
+        let forwardedAttachments = await runner.imageAttachments
+        #expect(viewModel.promptDraft.isEmpty)
+        #expect(viewModel.imageAttachments.isEmpty)
+        #expect(viewModel.statusText == "Completed.")
+        #expect(await runner.prompts == ["What does this image show?"])
+        #expect(forwardedAttachments.count == 1)
+        #expect(forwardedAttachments.first?.displayName == "diagram.png")
+        #expect(forwardedAttachments.first?.filePath == attachedBeforeSubmit.filePath)
+    }
+
+    @Test("image-only prompts use a safe default prompt")
+    func imageOnlyPromptUsesDefaultPrompt() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingAttachmentAgentPromptRunner(result: AgentLoopResult(
+            messages: [],
+            stopReason: .completed
+        ))
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true, preferredProvider: .anthropic),
+            runner: runner,
+            attachmentStorage: AgentAttachmentStorage(rootDirectory: root)
+        )
+
+        try viewModel.attachImageData(Self.pngData, suggestedFilename: "screenshot.png")
+        await viewModel.submitPrompt()
+
+        #expect(await runner.prompts == ["Please analyze the attached image."])
+        #expect(await runner.imageAttachments.count == 1)
+    }
+
+    @Test("image attachments require a provider with vision support")
+    func imageAttachmentsRequireVisionProvider() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingAttachmentAgentPromptRunner(result: AgentLoopResult(
+            messages: [],
+            stopReason: .completed
+        ))
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true, preferredProvider: .foundationModelsOnDevice),
+            runner: runner,
+            attachmentStorage: AgentAttachmentStorage(rootDirectory: root)
+        )
+
+        try viewModel.attachImageData(Self.pngData, suggestedFilename: "local.png")
+        await viewModel.submitPrompt()
+
+        #expect(viewModel.state == .failed("Foundation Models does not support image attachments in Agent Mode."))
+        #expect(viewModel.statusText == "Foundation Models does not support image attachments in Agent Mode.")
+        #expect(!viewModel.imageAttachments.isEmpty)
+        #expect(await runner.prompts.isEmpty)
+    }
+
     @Test("selected skills are passed as system context without changing user prompt")
     func selectedSkillsArePassedAsSystemContext() async throws {
         let root = try makeTemporaryDirectory()
@@ -277,6 +351,10 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(viewModel.state == .failed("Provider unavailable."))
         #expect(viewModel.statusText == "Provider unavailable.")
     }
+
+    private static let pngData = Data(base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    )!
 }
 
 private actor RecordingAgentPromptRunner: AgentPromptRunning {
@@ -295,6 +373,29 @@ private actor RecordingAgentPromptRunner: AgentPromptRunning {
     ) async throws -> AgentLoopResult {
         prompts.append(prompt)
         histories.append(history)
+        return result
+    }
+}
+
+private actor RecordingAttachmentAgentPromptRunner: AgentAttachmentPromptRunning {
+    private let result: AgentLoopResult
+    private(set) var prompts: [String] = []
+    private(set) var histories: [[AgentMessage]] = []
+    private(set) var imageAttachments: [AgentImageAttachment] = []
+
+    init(result: AgentLoopResult) {
+        self.result = result
+    }
+
+    func run(
+        prompt: String,
+        history: [AgentMessage],
+        configuration: AgentModeConfig,
+        imageAttachments: [AgentImageAttachment]
+    ) async throws -> AgentLoopResult {
+        prompts.append(prompt)
+        histories.append(history)
+        self.imageAttachments.append(contentsOf: imageAttachments)
         return result
     }
 }

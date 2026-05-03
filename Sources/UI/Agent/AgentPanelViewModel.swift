@@ -14,6 +14,8 @@ enum AgentPanelState: Sendable, Equatable {
 
 enum AgentPanelViewModelError: Error, Sendable, Equatable {
     case providerUnavailable
+    case attachmentRunnerUnavailable
+    case imageAttachmentsUnsupported(AgentProviderKind)
 }
 
 extension AgentPanelViewModelError: LocalizedError {
@@ -21,6 +23,10 @@ extension AgentPanelViewModelError: LocalizedError {
         switch self {
         case .providerUnavailable:
             return "Provider unavailable."
+        case .attachmentRunnerUnavailable:
+            return "Current Agent runner does not support image attachments."
+        case .imageAttachmentsUnsupported(let provider):
+            return "\(provider.displayName) does not support image attachments in Agent Mode."
         }
     }
 }
@@ -41,20 +47,27 @@ final class AgentPanelViewModel: ObservableObject {
     @Published private(set) var state: AgentPanelState = .idle
     @Published private(set) var statusText: String = "Ready."
     @Published private(set) var pendingApproval: AgentToolApprovalRequest?
+    @Published private(set) var imageAttachments: [AgentImageAttachment] = []
     @Published var pendingApprovalResponseDraft: String = ""
 
     private var configuration: AgentModeConfig
     private let runner: any AgentPromptRunning
     private var skillRegistry: SkillRegistry
+    private let attachmentStorage: AgentAttachmentStorage
+    private let imageProcessor: AgentImageProcessor
 
     init(
         configuration: AgentModeConfig,
         runner: any AgentPromptRunning,
-        skillRegistry: SkillRegistry = .localDefault()
+        skillRegistry: SkillRegistry = .localDefault(),
+        attachmentStorage: AgentAttachmentStorage = AgentAttachmentStorage(),
+        imageProcessor: AgentImageProcessor = AgentImageProcessor()
     ) {
         self.configuration = configuration
         self.runner = runner
         self.skillRegistry = skillRegistry
+        self.attachmentStorage = attachmentStorage
+        self.imageProcessor = imageProcessor
         refreshSkills()
         if !configuration.enabled {
             state = .disabled
@@ -65,7 +78,10 @@ final class AgentPanelViewModel: ObservableObject {
     var canSubmit: Bool {
         configuration.enabled
             && state != .running
-            && !promptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (
+                !promptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !imageAttachments.isEmpty
+            )
     }
 
     var canApprovePendingTool: Bool {
@@ -122,9 +138,42 @@ final class AgentPanelViewModel: ObservableObject {
         }
     }
 
+    func attachImageData(_ data: Data, suggestedFilename: String? = nil) throws {
+        let processed = try imageProcessor.process(data: data)
+        let attachment = try attachmentStorage.store(processed, originalFilename: suggestedFilename)
+        imageAttachments.append(attachment)
+        statusText = "\(imageAttachments.count) image\(imageAttachments.count == 1 ? "" : "s") attached."
+    }
+
+    func attachImageFile(_ fileURL: URL) throws {
+        let processed = try imageProcessor.process(fileURL: fileURL)
+        let attachment = try attachmentStorage.store(
+            processed,
+            originalFilename: fileURL.lastPathComponent
+        )
+        imageAttachments.append(attachment)
+        statusText = "\(imageAttachments.count) image\(imageAttachments.count == 1 ? "" : "s") attached."
+    }
+
+    func removeImageAttachment(id: String) {
+        guard let index = imageAttachments.firstIndex(where: { $0.id == id }) else { return }
+        let attachment = imageAttachments.remove(at: index)
+        attachmentStorage.remove(attachment)
+        statusText = imageAttachments.isEmpty
+            ? "Ready."
+            : "\(imageAttachments.count) image\(imageAttachments.count == 1 ? "" : "s") attached."
+    }
+
+    func handleAttachmentError(_ error: Error) {
+        let description = error.localizedDescription
+        state = .failed(description)
+        statusText = description
+    }
+
     func submitPrompt() async {
         let prompt = promptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return }
+        let attachments = imageAttachments
+        guard !prompt.isEmpty || !attachments.isEmpty else { return }
 
         guard configuration.enabled else {
             state = .disabled
@@ -133,6 +182,21 @@ final class AgentPanelViewModel: ObservableObject {
         }
 
         guard state != .running else { return }
+
+        if !attachments.isEmpty, !(runner is any AgentAttachmentPromptRunning) {
+            let description = AgentPanelViewModelError.attachmentRunnerUnavailable.localizedDescription
+            state = .failed(description)
+            statusText = description
+            return
+        }
+        if !attachments.isEmpty, !configuration.preferredProvider.supportsAgentImageAttachments {
+            let description = AgentPanelViewModelError
+                .imageAttachmentsUnsupported(configuration.preferredProvider)
+                .localizedDescription
+            state = .failed(description)
+            statusText = description
+            return
+        }
 
         let effectiveHistory: [AgentMessage]
         do {
@@ -145,17 +209,29 @@ final class AgentPanelViewModel: ObservableObject {
         }
 
         promptDraft = ""
+        imageAttachments = []
         pendingApproval = nil
         pendingApprovalResponseDraft = ""
         state = .running
         statusText = "Running..."
 
         do {
-            let result = try await runner.run(
-                prompt: prompt,
-                history: effectiveHistory,
-                configuration: configuration
-            )
+            let effectivePrompt = prompt.isEmpty ? "Please analyze the attached image." : prompt
+            let result: AgentLoopResult
+            if let attachmentRunner = runner as? any AgentAttachmentPromptRunning {
+                result = try await attachmentRunner.run(
+                    prompt: effectivePrompt,
+                    history: effectiveHistory,
+                    configuration: configuration,
+                    imageAttachments: attachments
+                )
+            } else {
+                result = try await runner.run(
+                    prompt: effectivePrompt,
+                    history: effectiveHistory,
+                    configuration: configuration
+                )
+            }
             messages = result.messages
             applyStopReason(result.stopReason)
         } catch {

@@ -53,7 +53,25 @@ enum AgentProviderClientError: Error, Sendable, Equatable {
     case invalidRequestBody
     case invalidResponseBody
     case httpStatus(Int, String)
+    case attachmentUnavailable(String)
     case missingResponseChoice
+}
+
+extension AgentProviderClientError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .invalidRequestBody:
+            return "Agent provider request could not be encoded."
+        case .invalidResponseBody:
+            return "Agent provider response could not be decoded."
+        case .httpStatus(let statusCode, let message):
+            return "Agent provider request failed with HTTP \(statusCode): \(message)"
+        case .attachmentUnavailable(let displayName):
+            return "Image attachment is unavailable: \(displayName)."
+        case .missingResponseChoice:
+            return "Agent provider response did not include a usable message."
+        }
+    }
 }
 
 struct AgentProviderModelCatalog: Sendable, Equatable {
@@ -738,6 +756,7 @@ struct OpenAIAgentLLMClient: AgentLLMClient {
     }
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        let requestMessages = try openAIMessages(from: messages)
         let request = try AgentHTTPRequest(
             url: endpointURL,
             headers: [
@@ -746,7 +765,7 @@ struct OpenAIAgentLLMClient: AgentLLMClient {
             ],
             body: jsonData([
                 "model": model,
-                "messages": openAIMessages(from: messages),
+                "messages": requestMessages,
                 "tools": openAITools(from: toolRegistry.descriptors),
                 "tool_choice": "auto",
             ])
@@ -782,10 +801,11 @@ struct AnthropicAgentLLMClient: AgentLLMClient {
     }
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        let requestMessages = try anthropicMessages(from: messages)
         var body: [String: Any] = [
             "model": model,
             "max_tokens": maxTokens,
-            "messages": anthropicMessages(from: messages),
+            "messages": requestMessages,
             "tools": anthropicTools(from: toolRegistry.descriptors),
         ]
         let systemPrompt = messages
@@ -834,6 +854,7 @@ struct GoogleAgentLLMClient: AgentLLMClient {
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
         let escapedModel = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
+        let requestContents = try googleContents(from: messages)
         let request = try AgentHTTPRequest(
             url: baseURL.appendingPathComponent("\(escapedModel):generateContent"),
             headers: [
@@ -841,7 +862,7 @@ struct GoogleAgentLLMClient: AgentLLMClient {
                 "Content-Type": "application/json",
             ],
             body: jsonData([
-                "contents": googleContents(from: messages),
+                "contents": requestContents,
                 "tools": googleTools(from: toolRegistry.descriptors),
             ])
         )
@@ -871,12 +892,12 @@ private func providerErrorMessage(from data: Data) -> String {
     return "HTTP request failed"
 }
 
-private func openAIMessages(from messages: [AgentMessage]) -> [[String: Any]] {
-    messages.map { message in
+private func openAIMessages(from messages: [AgentMessage]) throws -> [[String: Any]] {
+    try messages.map { message in
         var result: [String: Any] = [
             "role": openAIRole(message.role),
-            "content": message.content,
         ]
+        result["content"] = try openAIContent(from: message)
         if message.role == .assistant, !message.toolCalls.isEmpty {
             result["tool_calls"] = message.toolCalls.map(openAIToolCall)
         }
@@ -885,6 +906,26 @@ private func openAIMessages(from messages: [AgentMessage]) -> [[String: Any]] {
         }
         return result
     }
+}
+
+private func openAIContent(from message: AgentMessage) throws -> Any {
+    guard message.role == .user, !message.imageAttachments.isEmpty else {
+        return message.content
+    }
+
+    var content: [[String: Any]] = []
+    if !message.content.isEmpty {
+        content.append(["type": "text", "text": message.content])
+    }
+    content.append(contentsOf: try encodedImageAttachments(from: message).map { image in
+        [
+            "type": "image_url",
+            "image_url": [
+                "url": "data:\(image.mimeType);base64,\(image.base64Data)",
+            ],
+        ]
+    })
+    return content
 }
 
 private func openAIToolCall(_ call: AgentToolCall) -> [String: Any] {
@@ -911,13 +952,13 @@ private func openAIRole(_ role: AgentMessageRole) -> String {
     }
 }
 
-private func anthropicMessages(from messages: [AgentMessage]) -> [[String: Any]] {
-    messages.compactMap { message in
+private func anthropicMessages(from messages: [AgentMessage]) throws -> [[String: Any]] {
+    try messages.compactMap { message in
         switch message.role {
         case .system:
             return nil
         case .user:
-            return ["role": "user", "content": message.content]
+            return ["role": "user", "content": try anthropicUserContent(from: message)]
         case .assistant:
             guard !message.toolCalls.isEmpty else {
                 return ["role": "assistant", "content": message.content]
@@ -943,6 +984,28 @@ private func anthropicMessages(from messages: [AgentMessage]) -> [[String: Any]]
     }
 }
 
+private func anthropicUserContent(from message: AgentMessage) throws -> Any {
+    guard !message.imageAttachments.isEmpty else {
+        return message.content
+    }
+
+    var blocks: [[String: Any]] = []
+    if !message.content.isEmpty {
+        blocks.append(["type": "text", "text": message.content])
+    }
+    blocks.append(contentsOf: try encodedImageAttachments(from: message).map { image in
+        [
+            "type": "image",
+            "source": [
+                "type": "base64",
+                "media_type": image.mimeType,
+                "data": image.base64Data,
+            ],
+        ]
+    })
+    return blocks
+}
+
 private func anthropicToolUseBlock(_ call: AgentToolCall) -> [String: Any] {
     [
         "type": "tool_use",
@@ -952,8 +1015,8 @@ private func anthropicToolUseBlock(_ call: AgentToolCall) -> [String: Any] {
     ]
 }
 
-private func googleContents(from messages: [AgentMessage]) -> [[String: Any]] {
-    messages.compactMap { message in
+private func googleContents(from messages: [AgentMessage]) throws -> [[String: Any]] {
+    try messages.compactMap { message in
         guard message.role != .system else { return nil }
         switch message.role {
         case .assistant:
@@ -976,10 +1039,49 @@ private func googleContents(from messages: [AgentMessage]) -> [[String: Any]] {
                 ],
             ]
         case .user:
-            return ["role": "user", "parts": [["text": message.content]]]
+            return ["role": "user", "parts": try googleUserParts(from: message)]
         case .system:
             return nil
         }
+    }
+}
+
+private func googleUserParts(from message: AgentMessage) throws -> [[String: Any]] {
+    var parts: [[String: Any]] = []
+    if !message.content.isEmpty {
+        parts.append(["text": message.content])
+    }
+    parts.append(contentsOf: try encodedImageAttachments(from: message).map { image in
+        [
+            "inlineData": [
+                "mimeType": image.mimeType,
+                "data": image.base64Data,
+            ],
+        ]
+    })
+    return parts
+}
+
+private struct EncodedAgentImageAttachment {
+    let mimeType: String
+    let base64Data: String
+}
+
+private func encodedImageAttachments(from message: AgentMessage) throws -> [EncodedAgentImageAttachment] {
+    try message.imageAttachments.map { attachment in
+        let data: Data
+        do {
+            data = try Data(contentsOf: attachment.fileURL)
+        } catch {
+            let displayName = attachment.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw AgentProviderClientError.attachmentUnavailable(
+                displayName.isEmpty ? "image" : displayName
+            )
+        }
+        return EncodedAgentImageAttachment(
+            mimeType: attachment.mimeType,
+            base64Data: data.base64EncodedString()
+        )
     }
 }
 
