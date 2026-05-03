@@ -137,12 +137,19 @@ struct SessionReplayControllerSwiftTestingTests {
         bridge.handle.bytesWrittenValue = 64
         let recording = try controller.stopRecording(surfaceID: sourceSurface)
 
-        try controller.replay(recordingID: recording.id, to: targetSurface)
+        try controller.replay(
+            recordingID: recording.id,
+            to: targetSurface,
+            seekNs: 500_000_000,
+            speedMultiplier: 0
+        )
 
         #expect(bridge.replayRequests == [
             RecordingSessionReplayBridge.ReplayRequest(
                 recordingURL: prepared.castURL,
-                surfaceID: targetSurface
+                surfaceID: targetSurface,
+                seekNs: 500_000_000,
+                speedMultiplier: 1
             )
         ])
     }
@@ -192,6 +199,8 @@ private final class RecordingSessionReplayBridge: SessionReplayTerminalBridging 
     struct ReplayRequest: Equatable {
         let recordingURL: URL
         let surfaceID: SurfaceID
+        let seekNs: UInt64
+        let speedMultiplier: Float
     }
 
     let shouldStart: Bool
@@ -220,11 +229,15 @@ private final class RecordingSessionReplayBridge: SessionReplayTerminalBridging 
 
     func replaySessionRecording(
         from recordingURL: URL,
-        for surface: SurfaceID
+        for surface: SurfaceID,
+        seekNs: UInt64,
+        speedMultiplier: Float
     ) -> Bool {
         replayRequests.append(ReplayRequest(
             recordingURL: recordingURL,
-            surfaceID: surface
+            surfaceID: surface,
+            seekNs: seekNs,
+            speedMultiplier: speedMultiplier
         ))
         return shouldReplay
     }

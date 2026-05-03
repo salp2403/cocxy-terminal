@@ -21,7 +21,9 @@ protocol SessionReplayTerminalBridging: AnyObject {
 
     func replaySessionRecording(
         from recordingURL: URL,
-        for surface: SurfaceID
+        for surface: SurfaceID,
+        seekNs: UInt64,
+        speedMultiplier: Float
     ) -> Bool
 }
 
@@ -156,8 +158,22 @@ final class SessionReplayController {
     }
 
     func replay(recordingID: UUID, to surfaceID: SurfaceID) throws {
+        try replay(recordingID: recordingID, to: surfaceID, seekNs: 0, speedMultiplier: 1)
+    }
+
+    func replay(
+        recordingID: UUID,
+        to surfaceID: SurfaceID,
+        seekNs: UInt64,
+        speedMultiplier: Float
+    ) throws {
         let recordingURL = try store.castFileURL(for: recordingID)
-        guard bridge.replaySessionRecording(from: recordingURL, for: surfaceID) else {
+        guard bridge.replaySessionRecording(
+            from: recordingURL,
+            for: surfaceID,
+            seekNs: seekNs,
+            speedMultiplier: max(1, speedMultiplier)
+        ) else {
             throw SessionReplayControllerError.replayFailed(recordingID)
         }
     }

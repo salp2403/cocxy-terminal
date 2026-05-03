@@ -1857,15 +1857,49 @@ final class CocxyCoreBridge: TerminalEngine {
         from recordingURL: URL,
         for surface: SurfaceID
     ) -> Bool {
+        replaySessionRecording(
+            from: recordingURL,
+            for: surface,
+            seekNs: 0,
+            speedMultiplier: 1
+        )
+    }
+
+    func replaySessionRecording(
+        from recordingURL: URL,
+        for surface: SurfaceID,
+        seekNs: UInt64,
+        speedMultiplier: Float
+    ) -> Bool {
         withTerminalLock(surface) { state -> Bool in
             let player = recordingURL.path.withCString { pathPointer in
                 cocxycore_session_player_open(state.terminal, pathPointer)
             }
             guard let player else { return false }
             defer { cocxycore_session_player_destroy(player) }
+            if speedMultiplier > 0 {
+                cocxycore_session_player_set_speed(player, speedMultiplier)
+            }
+            if seekNs > 0 {
+                cocxycore_session_player_seek_ns(player, seekNs)
+            }
             cocxycore_session_player_play(player)
             return true
         } ?? false
+    }
+
+    func sessionRecordingDuration(
+        from recordingURL: URL,
+        for surface: SurfaceID
+    ) -> UInt64? {
+        withTerminalLock(surface) { state -> UInt64? in
+            let player = recordingURL.path.withCString { pathPointer in
+                cocxycore_session_player_open(state.terminal, pathPointer)
+            }
+            guard let player else { return nil }
+            defer { cocxycore_session_player_destroy(player) }
+            return cocxycore_session_player_duration_ns(player)
+        } ?? nil
     }
 
     func preeditSnapshot(for surface: SurfaceID) -> TerminalPreeditSnapshot? {

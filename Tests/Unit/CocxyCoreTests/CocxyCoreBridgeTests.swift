@@ -356,6 +356,33 @@ struct CocxyCoreBridgeTests {
         #expect(cocxycore_terminal_cell_char(state.terminal, 1, 0) == UInt32(UInt8(ascii: "T")))
     }
 
+    @Test("session replay bridge exposes duration seek and speed controls")
+    func sessionReplayBridgeExposesDurationSeekAndSpeedControls() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let directory = try makeTemporaryDirectory(named: "cocxy-session-replay-controls")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let recordingURL = directory.appendingPathComponent("replay.cast")
+        try """
+        {"version":2,"width":40,"height":4,"timestamp":0,"title":"Replay"}
+        [0.000000000,"o","Hi"]
+        [1.500000000,"o","\\r\\nThere"]
+
+        """.write(to: recordingURL, atomically: true, encoding: .utf8)
+
+        #expect(bridge.sessionRecordingDuration(from: recordingURL, for: surfaceID) == 1_500_000_000)
+        #expect(bridge.replaySessionRecording(
+            from: recordingURL,
+            for: surfaceID,
+            seekNs: 1_000_000_000,
+            speedMultiplier: 2
+        ))
+        #expect(cocxycore_terminal_cell_char(state.terminal, 0, 0) == UInt32(UInt8(ascii: "H")))
+        #expect(cocxycore_terminal_cell_char(state.terminal, 1, 0) == UInt32(UInt8(ascii: "T")))
+    }
+
     @Test("sendKeyEvent returns true for supported arrow keys")
     func sendKeyEventHandlesArrowKeys() throws {
         let bridge = try makeBridge()
