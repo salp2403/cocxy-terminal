@@ -211,6 +211,23 @@ final class PreferencesViewModel: ObservableObject {
     /// Local output-token rate in micro-dollars per million tokens.
     @Published var activityOutputCostMicrosPerMillionTokens: Int64
 
+    // MARK: - Session Replay
+
+    /// Master opt-in for local terminal session recording and replay.
+    @Published var sessionReplayEnabled: Bool
+
+    /// Whether new terminal sessions should be recorded automatically.
+    @Published var sessionReplayAutoRecord: Bool
+
+    /// Explicit user consent required before automatic recording can start.
+    @Published var sessionReplayConsentGranted: Bool
+
+    /// Local directory where session recording bundles are stored.
+    @Published var sessionReplayStorageDirectory: String
+
+    /// Per-recording byte limit. Clamped by `SessionReplayConfig` on save.
+    @Published var sessionReplayMaxRecordingBytes: Int
+
     // MARK: - iCloud Sync
 
     /// Master opt-in for encrypted iCloud Drive sync.
@@ -468,6 +485,7 @@ final class PreferencesViewModel: ObservableObject {
             || voiceHasUnsavedChanges(comparedTo: c.voice)
             || completionHasUnsavedChanges(comparedTo: c.completions)
             || activityHasUnsavedChanges(comparedTo: c.activity)
+            || sessionReplayHasUnsavedChanges(comparedTo: c.sessionReplay)
             || iCloudSyncHasUnsavedChanges(comparedTo: c.iCloudSync)
             || codeReviewAutoShowOnSessionEnd != c.codeReview.autoShowOnSessionEnd
             || macosNotifications != c.notifications.macosNotifications
@@ -539,6 +557,11 @@ final class PreferencesViewModel: ObservableObject {
         activityCostTrackingEnabled = c.activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = c.activity.inputCostMicrosPerMillionTokens
         activityOutputCostMicrosPerMillionTokens = c.activity.outputCostMicrosPerMillionTokens
+        sessionReplayEnabled = c.sessionReplay.enabled
+        sessionReplayAutoRecord = c.sessionReplay.autoRecord
+        sessionReplayConsentGranted = c.sessionReplay.consentGranted
+        sessionReplayStorageDirectory = c.sessionReplay.storageDirectory
+        sessionReplayMaxRecordingBytes = c.sessionReplay.maxRecordingBytes
         iCloudSyncEnabled = c.iCloudSync.enabled
         iCloudSyncDirectoryName = c.iCloudSync.syncDirectoryName
         iCloudSyncEncryptionRequired = c.iCloudSync.encryptionRequired
@@ -727,6 +750,13 @@ final class PreferencesViewModel: ObservableObject {
         self.activityCostTrackingEnabled = config.activity.costTrackingEnabled
         self.activityInputCostMicrosPerMillionTokens = config.activity.inputCostMicrosPerMillionTokens
         self.activityOutputCostMicrosPerMillionTokens = config.activity.outputCostMicrosPerMillionTokens
+
+        // Session Replay
+        self.sessionReplayEnabled = config.sessionReplay.enabled
+        self.sessionReplayAutoRecord = config.sessionReplay.autoRecord
+        self.sessionReplayConsentGranted = config.sessionReplay.consentGranted
+        self.sessionReplayStorageDirectory = config.sessionReplay.storageDirectory
+        self.sessionReplayMaxRecordingBytes = config.sessionReplay.maxRecordingBytes
 
         // iCloud Sync
         self.iCloudSyncEnabled = config.iCloudSync.enabled
@@ -1148,6 +1178,7 @@ final class PreferencesViewModel: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let agent = buildAgentModeConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
+        let sessionReplay = buildSessionReplayConfigFromViewModel()
         let iCloudSync = buildICloudSyncConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
@@ -1209,6 +1240,7 @@ final class PreferencesViewModel: ObservableObject {
             ),
             agent: agent,
             activity: activity,
+            sessionReplay: sessionReplay,
             voice: voice,
             iCloudSync: iCloudSync,
             completions: completions,
@@ -1240,6 +1272,10 @@ final class PreferencesViewModel: ObservableObject {
         activityCostTrackingEnabled = activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = activity.inputCostMicrosPerMillionTokens
         activityOutputCostMicrosPerMillionTokens = activity.outputCostMicrosPerMillionTokens
+        sessionReplayAutoRecord = sessionReplay.autoRecord
+        sessionReplayConsentGranted = sessionReplay.consentGranted
+        sessionReplayStorageDirectory = sessionReplay.storageDirectory
+        sessionReplayMaxRecordingBytes = sessionReplay.maxRecordingBytes
         iCloudSyncDirectoryName = iCloudSync.syncDirectoryName
         iCloudSyncEncryptionRequired = iCloudSync.encryptionRequired
         iCloudSyncArtifactKinds = Set(iCloudSync.artifactKinds)
@@ -1345,6 +1381,25 @@ final class PreferencesViewModel: ObservableObject {
             || activity.costTrackingEnabled != config.costTrackingEnabled
             || activity.inputCostMicrosPerMillionTokens != config.inputCostMicrosPerMillionTokens
             || activity.outputCostMicrosPerMillionTokens != config.outputCostMicrosPerMillionTokens
+    }
+
+    private func buildSessionReplayConfigFromViewModel() -> SessionReplayConfig {
+        SessionReplayConfig(
+            enabled: sessionReplayEnabled,
+            autoRecord: sessionReplayEnabled && sessionReplayAutoRecord,
+            consentGranted: sessionReplayEnabled && sessionReplayAutoRecord && sessionReplayConsentGranted,
+            storageDirectory: sessionReplayStorageDirectory,
+            maxRecordingBytes: sessionReplayMaxRecordingBytes
+        )
+    }
+
+    private func sessionReplayHasUnsavedChanges(comparedTo config: SessionReplayConfig) -> Bool {
+        let replay = buildSessionReplayConfigFromViewModel()
+        return replay.enabled != config.enabled
+            || replay.autoRecord != config.autoRecord
+            || replay.consentGranted != config.consentGranted
+            || replay.storageDirectory != config.storageDirectory
+            || replay.maxRecordingBytes != config.maxRecordingBytes
     }
 
     private func buildICloudSyncConfigFromViewModel() -> ICloudSyncConfig {
@@ -1566,6 +1621,7 @@ final class PreferencesViewModel: ObservableObject {
         let notes = buildNotesConfigFromViewModel()
         let agent = buildAgentModeConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
+        let sessionReplay = buildSessionReplayConfigFromViewModel()
         let iCloudSync = buildICloudSyncConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
@@ -1656,6 +1712,13 @@ final class PreferencesViewModel: ObservableObject {
         storage-directory = "\(activity.storageDirectory)"
         input-cost-micros-per-million-tokens = \(activity.inputCostMicrosPerMillionTokens)
         output-cost-micros-per-million-tokens = \(activity.outputCostMicrosPerMillionTokens)
+
+        [session-replay]
+        enabled = \(sessionReplay.enabled)
+        auto-record = \(sessionReplay.autoRecord)
+        consent-granted = \(sessionReplay.consentGranted)
+        storage-directory = "\(sessionReplay.storageDirectory)"
+        max-recording-bytes = \(sessionReplay.maxRecordingBytes)
 
         [icloud-sync]
         enabled = \(iCloudSync.enabled)

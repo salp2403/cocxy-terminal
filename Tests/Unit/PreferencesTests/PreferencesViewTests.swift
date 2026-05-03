@@ -10,7 +10,7 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasEighteenCases() {
+    func test_allSections_hasNineteenCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
@@ -19,12 +19,13 @@ final class PreferencesSectionTests: XCTestCase {
         // bringing it to 12; Agent Mode settings bring it to 13; Voice
         // settings bring it to 14; MCP server config editing brings it to 15;
         // Activity privacy controls bring it to 16; local plugin management
-        // brings it to 17; iCloud Sync opt-in settings bring it to 18.
+        // brings it to 17; iCloud Sync opt-in settings bring it to 18;
+        // Session Replay opt-in and consent settings bring it to 19.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 18)
+        XCTAssertEqual(PreferencesSection.allCases.count, 19)
     }
 
     func test_worktreesSection_hasTitleAndIcon() {
@@ -117,15 +118,23 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertEqual(section.iconName, "icloud")
     }
 
-    func test_iCloudSyncSection_appearsBetweenActivityAndCodeReview() {
+    func test_sessionReplaySection_hasTitleAndIcon() {
+        let section = PreferencesSection.sessionReplay
+        XCTAssertEqual(section.title, "Session Replay")
+        XCTAssertEqual(section.iconName, "record.circle")
+    }
+
+    func test_sessionReplayAndICloudSyncSections_appearBetweenActivityAndCodeReview() {
         let allCases = PreferencesSection.allCases
         guard let activityIndex = allCases.firstIndex(of: .activity),
+              let sessionReplayIndex = allCases.firstIndex(of: .sessionReplay),
               let iCloudSyncIndex = allCases.firstIndex(of: .iCloudSync),
               let codeReviewIndex = allCases.firstIndex(of: .codeReview) else {
-            XCTFail("activity, iCloud Sync, and code review sections must exist")
+            XCTFail("activity, session replay, iCloud Sync, and code review sections must exist")
             return
         }
-        XCTAssertLessThan(activityIndex, iCloudSyncIndex)
+        XCTAssertLessThan(activityIndex, sessionReplayIndex)
+        XCTAssertLessThan(sessionReplayIndex, iCloudSyncIndex)
         XCTAssertLessThan(iCloudSyncIndex, codeReviewIndex)
     }
 
@@ -213,23 +222,25 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertLessThan(editorIndex, keybindingsIndex)
     }
 
-    func test_agentModeMCPVoiceActivityAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
+    func test_agentModeMCPVoiceActivitySessionReplayAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
         let allCases = PreferencesSection.allCases
         guard let agentIndex = allCases.firstIndex(of: .agentDetection),
               let agentModeIndex = allCases.firstIndex(of: .agentMode),
               let mcpIndex = allCases.firstIndex(of: .mcpServers),
               let voiceIndex = allCases.firstIndex(of: .voice),
               let activityIndex = allCases.firstIndex(of: .activity),
+              let sessionReplayIndex = allCases.firstIndex(of: .sessionReplay),
               let codeReviewIndex = allCases.firstIndex(of: .codeReview),
               let notificationsIndex = allCases.firstIndex(of: .notifications) else {
-            XCTFail("agent detection, agent mode, MCP, voice, activity, code review, and notifications sections must exist")
+            XCTFail("agent detection, agent mode, MCP, voice, activity, session replay, code review, and notifications sections must exist")
             return
         }
         XCTAssertLessThan(agentIndex, agentModeIndex)
         XCTAssertLessThan(agentModeIndex, mcpIndex)
         XCTAssertLessThan(mcpIndex, voiceIndex)
         XCTAssertLessThan(voiceIndex, activityIndex)
-        XCTAssertLessThan(activityIndex, codeReviewIndex)
+        XCTAssertLessThan(activityIndex, sessionReplayIndex)
+        XCTAssertLessThan(sessionReplayIndex, codeReviewIndex)
         XCTAssertLessThan(agentModeIndex, codeReviewIndex)
         XCTAssertLessThan(codeReviewIndex, notificationsIndex)
     }

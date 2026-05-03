@@ -123,6 +123,8 @@ struct PreferencesView: View {
             VoicePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .activity:
             ActivityPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .sessionReplay:
+            SessionReplayPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .iCloudSync:
             ICloudSyncPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .codeReview:
@@ -165,6 +167,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case mcpServers
     case voice
     case activity
+    case sessionReplay
     case iCloudSync
     case codeReview
     case notifications
@@ -189,6 +192,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .mcpServers: return "MCP Servers"
         case .voice: return "Voice"
         case .activity: return "Activity"
+        case .sessionReplay: return "Session Replay"
         case .iCloudSync: return "iCloud Sync"
         case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
@@ -213,6 +217,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .mcpServers: return "link"
         case .voice: return "mic"
         case .activity: return "chart.bar"
+        case .sessionReplay: return "record.circle"
         case .iCloudSync: return "icloud"
         case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
@@ -1211,6 +1216,49 @@ struct ActivityPreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Activity")
+    }
+}
+
+// MARK: - Session Replay Section
+
+/// Editable local session replay privacy preferences.
+struct SessionReplayPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Privacy") {
+                Toggle("Enable Session Replay", isOn: $viewModel.sessionReplayEnabled)
+                Toggle("Record new terminal sessions automatically", isOn: $viewModel.sessionReplayAutoRecord)
+                    .disabled(!viewModel.sessionReplayEnabled)
+                Toggle("Allow automatic recording", isOn: $viewModel.sessionReplayConsentGranted)
+                    .disabled(!viewModel.sessionReplayEnabled || !viewModel.sessionReplayAutoRecord)
+            }
+
+            Section("Storage") {
+                TextField("Storage directory", text: $viewModel.sessionReplayStorageDirectory)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!viewModel.sessionReplayEnabled)
+                LabeledContent("Max recording bytes") {
+                    TextField(
+                        "536870912",
+                        value: $viewModel.sessionReplayMaxRecordingBytes,
+                        format: .number
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!viewModel.sessionReplayEnabled)
+                }
+                Text("Recordings stay local unless exported manually.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Session Replay")
     }
 }
 
