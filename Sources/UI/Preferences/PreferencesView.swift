@@ -114,6 +114,8 @@ struct PreferencesView: View {
             MCPServersPreferencesSection(viewModel: viewModel)
         case .voice:
             VoicePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .activity:
+            ActivityPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .codeReview:
             CodeReviewPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .notifications:
@@ -151,6 +153,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case agentMode
     case mcpServers
     case voice
+    case activity
     case codeReview
     case notifications
     case terminal
@@ -172,6 +175,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .agentMode: return "Agent Mode"
         case .mcpServers: return "MCP Servers"
         case .voice: return "Voice"
+        case .activity: return "Activity"
         case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
         case .terminal: return "Terminal"
@@ -193,6 +197,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .agentMode: return "sparkles"
         case .mcpServers: return "link"
         case .voice: return "mic"
+        case .activity: return "chart.bar"
         case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
         case .terminal: return "terminal"
@@ -1119,6 +1124,38 @@ struct VoicePreferencesSection: View {
 
     private func optionTitle(_ option: VoiceLocaleOption) -> String {
         "\(option.localizedName) (\(option.identifier))"
+    }
+}
+
+// MARK: - Activity Section
+
+/// Editable local Activity dashboard privacy preferences.
+struct ActivityPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Privacy") {
+                Toggle("Enable local Activity dashboard", isOn: $viewModel.activityTrackingEnabled)
+                    .help("Stores activity data locally for dashboards and manual export.")
+                Toggle("Track token usage and estimated costs", isOn: $viewModel.activityCostTrackingEnabled)
+                    .disabled(!viewModel.activityTrackingEnabled)
+                    .help("Uses local token counts and model rates; no data is uploaded.")
+            }
+
+            Section("Storage") {
+                LabeledContent("Local directory", value: ActivityConfig.defaults.storageDirectory)
+                Text("Disable the Activity dashboard to stop future writes. Existing local records can be cleared from the Activity dashboard.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Activity")
     }
 }
 

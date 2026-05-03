@@ -10,19 +10,20 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasFifteenCases() {
+    func test_allSections_hasSixteenCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
         // Code Review config as an editable section, bringing it to 10;
         // v0.2.0 surfaces the opt-in LSP gates and editor Vim mode,
         // bringing it to 12; Agent Mode settings bring it to 13; Voice
-        // settings bring it to 14; MCP server config editing brings it to 15.
+        // settings bring it to 14; MCP server config editing brings it to 15;
+        // Activity privacy controls bring it to 16.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 15)
+        XCTAssertEqual(PreferencesSection.allCases.count, 16)
     }
 
     func test_worktreesSection_hasTitleAndIcon() {
@@ -83,6 +84,12 @@ final class PreferencesSectionTests: XCTestCase {
         let section = PreferencesSection.voice
         XCTAssertEqual(section.title, "Voice")
         XCTAssertEqual(section.iconName, "mic")
+    }
+
+    func test_activitySection_hasTitleAndIcon() {
+        let section = PreferencesSection.activity
+        XCTAssertEqual(section.title, "Activity")
+        XCTAssertEqual(section.iconName, "chart.bar")
     }
 
     func test_codeReviewSection_hasTitleAndIcon() {
@@ -169,21 +176,23 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertLessThan(editorIndex, keybindingsIndex)
     }
 
-    func test_agentModeMCPVoiceAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
+    func test_agentModeMCPVoiceActivityAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
         let allCases = PreferencesSection.allCases
         guard let agentIndex = allCases.firstIndex(of: .agentDetection),
               let agentModeIndex = allCases.firstIndex(of: .agentMode),
               let mcpIndex = allCases.firstIndex(of: .mcpServers),
               let voiceIndex = allCases.firstIndex(of: .voice),
+              let activityIndex = allCases.firstIndex(of: .activity),
               let codeReviewIndex = allCases.firstIndex(of: .codeReview),
               let notificationsIndex = allCases.firstIndex(of: .notifications) else {
-            XCTFail("agent detection, agent mode, MCP, voice, code review, and notifications sections must exist")
+            XCTFail("agent detection, agent mode, MCP, voice, activity, code review, and notifications sections must exist")
             return
         }
         XCTAssertLessThan(agentIndex, agentModeIndex)
         XCTAssertLessThan(agentModeIndex, mcpIndex)
         XCTAssertLessThan(mcpIndex, voiceIndex)
-        XCTAssertLessThan(voiceIndex, codeReviewIndex)
+        XCTAssertLessThan(voiceIndex, activityIndex)
+        XCTAssertLessThan(activityIndex, codeReviewIndex)
         XCTAssertLessThan(agentModeIndex, codeReviewIndex)
         XCTAssertLessThan(codeReviewIndex, notificationsIndex)
     }

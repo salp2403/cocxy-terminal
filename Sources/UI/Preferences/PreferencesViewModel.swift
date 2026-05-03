@@ -176,6 +176,14 @@ final class PreferencesViewModel: ObservableObject {
     /// `"system"` or a normalized locale identifier selected by the user.
     @Published var voiceLocaleIdentifier: String
 
+    // MARK: - Activity
+
+    /// Master opt-in for local activity dashboard persistence.
+    @Published var activityTrackingEnabled: Bool
+
+    /// Whether local token usage and estimated costs are recorded.
+    @Published var activityCostTrackingEnabled: Bool
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -397,6 +405,7 @@ final class PreferencesViewModel: ObservableObject {
             || idleTimeoutSeconds != c.agentDetection.idleTimeoutSeconds
             || agentModeHasUnsavedChanges(comparedTo: c.agent)
             || voiceHasUnsavedChanges(comparedTo: c.voice)
+            || activityHasUnsavedChanges(comparedTo: c.activity)
             || codeReviewAutoShowOnSessionEnd != c.codeReview.autoShowOnSessionEnd
             || macosNotifications != c.notifications.macosNotifications
             || sound != c.notifications.sound
@@ -458,6 +467,8 @@ final class PreferencesViewModel: ObservableObject {
         agentConversationEncryption = c.agent.conversationEncryption
         voiceEnabled = c.voice.enabled
         voiceLocaleIdentifier = c.voice.localeIdentifier
+        activityTrackingEnabled = c.activity.enabled
+        activityCostTrackingEnabled = c.activity.costTrackingEnabled
         codeReviewAutoShowOnSessionEnd = c.codeReview.autoShowOnSessionEnd
         macosNotifications = c.notifications.macosNotifications
         sound = c.notifications.sound
@@ -596,6 +607,10 @@ final class PreferencesViewModel: ObservableObject {
         // Voice Input
         self.voiceEnabled = config.voice.enabled
         self.voiceLocaleIdentifier = config.voice.localeIdentifier
+
+        // Activity
+        self.activityTrackingEnabled = config.activity.enabled
+        self.activityCostTrackingEnabled = config.activity.costTrackingEnabled
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -882,6 +897,7 @@ final class PreferencesViewModel: ObservableObject {
         let normalizedImageDiskCacheDirectory = imageDiskCacheDirectory
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let agent = buildAgentModeConfigFromViewModel()
+        let activity = buildActivityConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
@@ -938,6 +954,7 @@ final class PreferencesViewModel: ObservableObject {
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
             agent: agent,
+            activity: activity,
             voice: voice,
             codeReview: buildCodeReviewConfigFromViewModel(),
             notifications: NotificationConfig(
@@ -963,6 +980,7 @@ final class PreferencesViewModel: ObservableObject {
         agentMaxIterations = agent.maxIterations
         agentConversationStorageDir = agent.conversationStorageDir
         agentConversationEncryption = agent.conversationEncryption
+        activityCostTrackingEnabled = activity.costTrackingEnabled
         voiceLocaleIdentifier = voice.localeIdentifier
         pendingKeybindings = nil
     }
@@ -1005,6 +1023,20 @@ final class PreferencesViewModel: ObservableObject {
     private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
         voiceEnabled != config.enabled
             || VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier) != config.localeIdentifier
+    }
+
+    private func buildActivityConfigFromViewModel() -> ActivityConfig {
+        ActivityConfig(
+            enabled: activityTrackingEnabled,
+            costTrackingEnabled: activityTrackingEnabled && activityCostTrackingEnabled,
+            storageDirectory: savedConfig.activity.storageDirectory
+        )
+    }
+
+    private func activityHasUnsavedChanges(comparedTo config: ActivityConfig) -> Bool {
+        let activity = buildActivityConfigFromViewModel()
+        return activity.enabled != config.enabled
+            || activity.costTrackingEnabled != config.costTrackingEnabled
     }
 
     private static func agentProviderDisplayName(_ provider: AgentProviderKind) -> String {
@@ -1186,6 +1218,7 @@ final class PreferencesViewModel: ObservableObject {
         let keybindings = pendingKeybindings ?? defaults.keybindings
         let notes = buildNotesConfigFromViewModel()
         let agent = buildAgentModeConfigFromViewModel()
+        let activity = buildActivityConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
@@ -1257,6 +1290,11 @@ final class PreferencesViewModel: ObservableObject {
         [voice]
         enabled = \(voice.enabled)
         locale = "\(voice.localeIdentifier)"
+
+        [activity]
+        enabled = \(activity.enabled)
+        cost-tracking = \(activity.costTrackingEnabled)
+        storage-directory = "\(activity.storageDirectory)"
 
         [code-review]
         auto-show-on-session-end = \(codeReviewAutoShowOnSessionEnd)

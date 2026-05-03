@@ -257,6 +257,14 @@ final class ConfigService: ConfigProviding {
         enabled = \(defaults.voice.enabled)
         locale = "\(defaults.voice.localeIdentifier)"
 
+        [activity]
+        # Local activity dashboard and token cost tracking. Disabled by
+        # default; when enabled, data is stored only on this Mac and is
+        # exported only by explicit user action.
+        enabled = \(defaults.activity.enabled)
+        cost-tracking = \(defaults.activity.costTrackingEnabled)
+        storage-directory = "\(defaults.activity.storageDirectory)"
+
         [completions]
         # Inline AI completions for the reusable editor. Disabled by
         # default and local-only: the v1 provider is Foundation Models
@@ -451,6 +459,7 @@ final class ConfigService: ConfigProviding {
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
+        let activity = parseActivityConfig(from: parsed)
         let voice = parseVoiceConfig(from: parsed)
         let completions = parseCompletionConfig(from: parsed)
         let codeReview = parseCodeReviewConfig(from: parsed)
@@ -475,6 +484,7 @@ final class ConfigService: ConfigProviding {
             terminal: terminal,
             agentDetection: agentDetection,
             agent: agent,
+            activity: activity,
             voice: voice,
             completions: completions,
             codeReview: codeReview,
@@ -706,6 +716,20 @@ final class ConfigService: ConfigProviding {
         return VoiceConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
             localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier
+        )
+    }
+
+    /// Parses `[activity]` as an explicit local-only opt-in. Missing or
+    /// malformed values stay disabled so new installs do not start recording
+    /// local activity without user action.
+    private func parseActivityConfig(from parsed: [String: TOMLValue]) -> ActivityConfig {
+        let table = extractTable("activity", from: parsed)
+        let defaults = ActivityConfig.defaults
+
+        return ActivityConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            costTrackingEnabled: boolValue(table["cost-tracking"]) ?? defaults.costTrackingEnabled,
+            storageDirectory: stringValue(table["storage-directory"]) ?? defaults.storageDirectory
         )
     }
 

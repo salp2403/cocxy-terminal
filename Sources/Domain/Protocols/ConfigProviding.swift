@@ -51,6 +51,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
     let agent: AgentModeConfig
+    let activity: ActivityConfig
     let voice: VoiceConfig
     let completions: CompletionConfig
     let codeReview: CodeReviewConfig
@@ -71,6 +72,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         terminal: TerminalConfig,
         agentDetection: AgentDetectionConfig,
         agent: AgentModeConfig = .defaults,
+        activity: ActivityConfig = .defaults,
         voice: VoiceConfig = .defaults,
         completions: CompletionConfig = .defaults,
         codeReview: CodeReviewConfig = .defaults,
@@ -90,6 +92,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = terminal
         self.agentDetection = agentDetection
         self.agent = agent
+        self.activity = activity
         self.voice = voice
         self.completions = completions
         self.codeReview = codeReview
@@ -113,6 +116,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             terminal: .defaults,
             agentDetection: .defaults,
             agent: .defaults,
+            activity: .defaults,
             voice: .defaults,
             completions: .defaults,
             codeReview: .defaults,
@@ -137,7 +141,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, agent, voice, completions, codeReview
+        case general, appearance, terminal, agentDetection, agent, activity, voice, completions, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -149,6 +153,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
         self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
+            ?? .defaults
+        self.activity = try container.decodeIfPresent(ActivityConfig.self, forKey: .activity)
             ?? .defaults
         self.voice = try container.decodeIfPresent(VoiceConfig.self, forKey: .voice)
             ?? .defaults
@@ -265,6 +271,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // overrides must not enable an LLM provider or auto-mode from
             // repository-local config.
             agent: agent,
+            // Activity tracking is a global user privacy preference. A
+            // repository must not be able to enable local activity recording
+            // or token cost tracking on behalf of the user.
+            activity: activity,
             // Voice input is a global user preference because microphone
             // access and locale selection must never be toggled by a repo.
             voice: voice,
@@ -1011,6 +1021,46 @@ struct CompletionConfig: Codable, Sendable, Equatable {
         Array(Set(rawLanguageIDs.map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         }.filter { !$0.isEmpty })).sorted()
+    }
+}
+
+// MARK: - Activity Config
+
+/// `[activity]` section for local-only activity and token usage tracking.
+///
+/// Disabled by default. When enabled, records stay on this Mac under the
+/// configured storage directory and are only exported by explicit user action.
+struct ActivityConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let costTrackingEnabled: Bool
+    let storageDirectory: String
+
+    static var defaults: ActivityConfig {
+        ActivityConfig(
+            enabled: false,
+            costTrackingEnabled: false,
+            storageDirectory: "~/.config/cocxy/activity"
+        )
+    }
+
+    init(
+        enabled: Bool = false,
+        costTrackingEnabled: Bool = false,
+        storageDirectory: String = "~/.config/cocxy/activity"
+    ) {
+        self.enabled = enabled
+        self.costTrackingEnabled = costTrackingEnabled
+        let trimmedStorage = storageDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.storageDirectory = trimmedStorage.isEmpty
+            ? Self.defaults.storageDirectory
+            : trimmedStorage
+    }
+
+    var privacyPolicy: ActivityPrivacyPolicy {
+        ActivityPrivacyPolicy(
+            activityTrackingEnabled: enabled,
+            tokenCostTrackingEnabled: enabled && costTrackingEnabled
+        )
     }
 }
 
