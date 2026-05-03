@@ -188,6 +188,14 @@ struct SessionReplayStore {
         try loadRecording(id: recordingID).bookmarks.sorted()
     }
 
+    func recording(id recordingID: UUID) throws -> SessionReplayRecording {
+        try loadRecording(id: recordingID)
+    }
+
+    func castFileURL(for recordingID: UUID) throws -> URL {
+        try castURL(forRecordingID: recordingID)
+    }
+
     @discardableResult
     func addBookmark(
         recordingID: UUID,
