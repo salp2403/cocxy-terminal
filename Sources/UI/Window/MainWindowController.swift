@@ -273,6 +273,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     var welcomeHostingView: NSHostingView<WelcomeOverlayView>?
     var isWelcomeVisible: Bool = false
+    var onboardingHostingView: NSHostingView<OnboardingFlowView>?
+    var isOnboardingVisible: Bool = false
 
     /// Hosting view for the agent progress overlay shown in the terminal corner.
     var agentProgressHostingView: NSView?
@@ -1500,6 +1502,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         timelineHostingView = nil
         welcomeHostingView?.removeFromSuperview()
         welcomeHostingView = nil
+        onboardingHostingView?.removeFromSuperview()
+        onboardingHostingView = nil
 
         // Clean stored closures on the sidebar and tab strip to prevent leaks.
         tabBarView?.onCommandPalette = nil

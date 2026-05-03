@@ -288,6 +288,23 @@ final class MenuActionWiringTests: XCTestCase {
             "Help must be wired to showWelcomeAction:"
         )
     }
+
+    func testShowOnboardingHasAction() {
+        let onboarding = helpMenu?.items.first(where: { $0.title == "Show Onboarding" })
+        XCTAssertNotNil(
+            onboarding?.action,
+            "Show Onboarding must be reachable from the Help menu"
+        )
+    }
+
+    func testShowOnboardingActionPointsToCorrectSelector() {
+        let onboarding = helpMenu?.items.first(where: { $0.title == "Show Onboarding" })
+        XCTAssertEqual(
+            onboarding?.action,
+            #selector(MainWindowController.showOnboardingAction(_:)),
+            "Show Onboarding must be wired to showOnboardingAction:"
+        )
+    }
 }
 
 // MARK: - Zoom Action Behavior Tests

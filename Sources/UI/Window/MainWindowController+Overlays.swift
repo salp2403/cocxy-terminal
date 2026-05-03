@@ -496,6 +496,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "onboarding.show",
+                name: "Show Onboarding",
+                description: "Open guided local setup",
+                shortcut: nil,
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.showOnboarding() }
+                }
+            ),
+            CommandAction(
                 id: "tabbar.toggle",
                 name: "Toggle Tab Bar",
                 description: "Show or hide the sidebar tab bar",
@@ -2058,6 +2069,7 @@ extension MainWindowController {
     func showWelcome() {
         guard let overlayContainer = overlayContainerView else { return }
 
+        dismissOnboarding()
         welcomeHostingView?.removeFromSuperview()
         let swiftUIView = WelcomeOverlayView(
             onDismiss: { [weak self] in self?.dismissWelcome() }
@@ -2084,6 +2096,63 @@ extension MainWindowController {
         } else {
             showWelcome()
         }
+    }
+
+    // MARK: - Guided Onboarding
+
+    func showOnboarding() {
+        guard let overlayContainer = overlayContainerView else { return }
+
+        dismissWelcome()
+        onboardingHostingView?.removeFromSuperview()
+        let swiftUIView = OnboardingFlowView(
+            onComplete: { [weak self] selection in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if (NSApp.delegate as? AppDelegate)?.completeGuidedOnboarding(selection) == true {
+                        self.dismissOnboarding()
+                    } else {
+                        self.showOnboardingError()
+                    }
+                }
+            },
+            onSkip: { [weak self] in
+                Task { @MainActor in
+                    (NSApp.delegate as? AppDelegate)?.skipGuidedOnboarding()
+                    self?.dismissOnboarding()
+                }
+            }
+        )
+        let hostingView = NSHostingView(rootView: swiftUIView)
+        hostingView.frame = overlayContainer.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        onboardingHostingView = hostingView
+
+        overlayContainer.addSubview(hostingView)
+        isOnboardingVisible = true
+    }
+
+    func dismissOnboarding() {
+        onboardingHostingView?.removeFromSuperview()
+        onboardingHostingView = nil
+        isOnboardingVisible = false
+        focusActiveTerminalSurface()
+    }
+
+    @objc func showOnboardingAction(_ sender: Any?) {
+        if isOnboardingVisible {
+            dismissOnboarding()
+        } else {
+            showOnboarding()
+        }
+    }
+
+    private func showOnboardingError() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Unable to apply onboarding settings."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     // MARK: - Agent Progress Overlay
@@ -2160,7 +2229,9 @@ extension MainWindowController {
     // MARK: - Dismiss All Overlays (Esc)
 
     @objc func dismissActiveOverlay(_ sender: Any?) {
-        if isWelcomeVisible {
+        if isOnboardingVisible {
+            dismissOnboarding()
+        } else if isWelcomeVisible {
             dismissWelcome()
         } else if isCommandPaletteVisible {
             dismissCommandPalette()

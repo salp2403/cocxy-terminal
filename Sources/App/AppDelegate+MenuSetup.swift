@@ -525,6 +525,11 @@ extension AppDelegate {
         helpMenu.addItem(withTitle: "Cocxy Terminal Help",
                          action: #selector(MainWindowController.showWelcomeAction(_:)),
                          keyEquivalent: "?")
+        helpMenu.addItem(
+            withTitle: "Show Onboarding",
+            action: #selector(MainWindowController.showOnboardingAction(_:)),
+            keyEquivalent: ""
+        )
 
         NSApplication.shared.helpMenu = helpMenu
         helpMenuItem.submenu = helpMenu

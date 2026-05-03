@@ -20,6 +20,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "tabs.close",
             "tabs.configSave",
             "tabs.configOpen",
+            "onboarding.show",
             "tabs.next",
             "tabs.previous",
             "tabs.moveToNewWindow",

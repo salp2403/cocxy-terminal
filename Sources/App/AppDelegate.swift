@@ -316,7 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppLaunchSignposts.measure(.autoUpdate) { setupAutoUpdate() }
         AppLaunchSignposts.measure(.appIcon) { applyPlaceholderAppIcon() }
         AppLaunchSignposts.measure(.firstLaunch) { performFirstLaunchSetup() }
-        AppLaunchSignposts.measure(.welcome) { showWelcomeOnFirstLaunch() }
+        AppLaunchSignposts.measure(.welcome) { showGuidedOnboardingOnFirstLaunch() }
         AppLaunchSignposts.measure(.menuBar) { initializeMenuBarItem() }
     }
 
