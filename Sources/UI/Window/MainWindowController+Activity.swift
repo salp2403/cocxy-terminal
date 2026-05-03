@@ -165,13 +165,24 @@ extension MainWindowController {
 
         let workingDirectory = block.pwd.map { URL(fileURLWithPath: $0, isDirectory: true) }
             ?? tabManager.tab(for: tabID)?.workingDirectory
+        let summary = commandActivitySummary(block.command)
+        let sessionID = sessionIDForTab(tabID).rawValue.uuidString
         recordLocalActivity(
             kind: .commandExecuted,
-            summary: commandActivitySummary(block.command),
+            summary: summary,
             workingDirectory: workingDirectory,
-            sessionID: sessionIDForTab(tabID).rawValue.uuidString,
+            sessionID: sessionID,
             metadata: metadata
         )
+        if let exitCode = block.exitCode, exitCode != 0 {
+            recordLocalActivity(
+                kind: .errorEncountered,
+                summary: "Command failed: \(summary)",
+                workingDirectory: workingDirectory,
+                sessionID: sessionID,
+                metadata: metadata
+            )
+        }
     }
 
     private func resolveActivityStore() throws -> ActivityStoring {

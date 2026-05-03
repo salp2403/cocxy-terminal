@@ -75,6 +75,25 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         XCTAssertEqual(event.metadata["block_id"], "42")
     }
 
+    func testFailedCommandBlockRecordsErrorEventLocally() throws {
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store)
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        try store.deleteAll()
+
+        controller.recordCommandBlockActivity(
+            makeCommandBlock(command: "swift test", pwd: "/tmp/cocxy-test", exitCode: 127),
+            tabID: tabID,
+            surfaceID: nil
+        )
+
+        let events = try store.events()
+        XCTAssertEqual(events.map(\.kind), [.commandExecuted, .errorEncountered])
+        XCTAssertEqual(events.last?.summary, "Command failed: swift test")
+        XCTAssertEqual(events.last?.metadata["exit_code"], "127")
+    }
+
     func testEnabledConfigRecordsProjectSwitchesOnlyWhenDirectoryChanges() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-project-switch-\(UUID().uuidString)", isDirectory: true)
