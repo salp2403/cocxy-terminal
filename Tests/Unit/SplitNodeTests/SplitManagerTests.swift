@@ -153,6 +153,78 @@ final class SplitManagerTests: XCTestCase {
         XCTAssertEqual(manager.focusedLeafID, leavesAfterClose[1].leafID)
     }
 
+    func testDetachContentRemovesLeafWithoutLosingPanelMetadata() {
+        let manager = SplitManager()
+        let browserID = manager.splitFocusedWithPanel(
+            direction: .horizontal,
+            panel: .browser(url: URL(string: "http://localhost:8080"))
+        )
+        XCTAssertNotNil(browserID)
+        manager.setPanelTitle(for: browserID!, title: "Preview")
+
+        let detached = manager.detachContent(browserID!)
+
+        XCTAssertNotNil(detached)
+        XCTAssertEqual(detached?.contentID, browserID)
+        XCTAssertEqual(detached?.panelInfo.type, .browser)
+        XCTAssertEqual(detached?.title, "Preview")
+        XCTAssertEqual(manager.rootNode.leafCount, 1)
+        XCTAssertEqual(manager.panelType(for: browserID!), .terminal)
+        XCTAssertNil(manager.panelTitle(for: browserID!))
+    }
+
+    func testDetachContentRejectsLastLeaf() {
+        let manager = SplitManager()
+        let onlyContentID = manager.rootNode.allLeafIDs()[0].terminalID
+
+        XCTAssertNil(manager.detachContent(onlyContentID))
+        XCTAssertEqual(manager.rootNode.leafCount, 1)
+    }
+
+    func testAppendExistingContentPreservesPanelMetadataAndCanFocus() {
+        let source = SplitManager()
+        let markdownID = source.splitFocusedWithPanel(
+            direction: .horizontal,
+            panel: .markdown(path: URL(fileURLWithPath: "/tmp/notes.md"))
+        )
+        XCTAssertNotNil(markdownID)
+        source.setPanelTitle(for: markdownID!, title: "Notes")
+
+        guard let detached = source.detachContent(markdownID!) else {
+            XCTFail("Expected detachable panel")
+            return
+        }
+
+        let target = SplitManager()
+        let appended = target.appendExistingContent(
+            detached.contentID,
+            panelInfo: detached.panelInfo,
+            title: detached.title,
+            focusNewContent: true
+        )
+
+        XCTAssertTrue(appended)
+        XCTAssertEqual(target.rootNode.leafCount, 2)
+        XCTAssertEqual(target.panelInfo(for: detached.contentID), detached.panelInfo)
+        XCTAssertEqual(target.panelTitle(for: detached.contentID), "Notes")
+        let newLeaf = target.rootNode.allLeafIDs().first { $0.terminalID == detached.contentID }
+        XCTAssertEqual(target.focusedLeafID, newLeaf?.leafID)
+    }
+
+    func testAppendExistingContentRejectsDuplicateOrFullTree() {
+        let manager = SplitManager()
+        let existingID = manager.rootNode.allLeafIDs()[0].terminalID
+
+        XCTAssertFalse(manager.appendExistingContent(existingID))
+
+        while manager.rootNode.leafCount < SplitManager.maxPaneCount {
+            _ = manager.splitFocused(direction: .horizontal)
+        }
+
+        XCTAssertFalse(manager.appendExistingContent(UUID()))
+        XCTAssertEqual(manager.rootNode.leafCount, SplitManager.maxPaneCount)
+    }
+
     // MARK: - Close Focused With 1 Pane (No-op)
 
     func testCloseFocusedWithSinglePaneIsNoOp() {

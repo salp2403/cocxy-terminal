@@ -33,6 +33,12 @@ final class SplitManager: ObservableObject {
         let ratioDeltaSign: CGFloat
     }
 
+    struct DetachedContent: Equatable {
+        let contentID: UUID
+        let panelInfo: PanelInfo
+        let title: String?
+    }
+
     private enum PathChildSide {
         case first
         case second
@@ -273,6 +279,99 @@ final class SplitManager: ObservableObject {
         } else {
             focusedLeafID = remainingLeaves.first?.leafID
         }
+    }
+
+    /// Detaches an existing leaf by content ID without tearing down the
+    /// backing view or terminal surface. Used by higher-level drag flows
+    /// that move a pane between tabs and need to preserve the live content.
+    @discardableResult
+    func detachContent(_ contentID: UUID) -> DetachedContent? {
+        guard rootNode.leafCount > 1 else { return nil }
+
+        let leafOrderBeforeDetach = rootNode.allLeafIDs()
+        guard let target = leafOrderBeforeDetach.first(where: {
+            $0.terminalID == contentID
+        }) else {
+            return nil
+        }
+
+        let detached = DetachedContent(
+            contentID: contentID,
+            panelInfo: panelTypes[contentID] ?? .terminal,
+            title: panelTitles[contentID]
+        )
+        let closingIndex = leafOrderBeforeDetach.firstIndex(where: {
+            $0.leafID == target.leafID
+        })
+
+        guard let updatedTree = rootNode.removeLeaf(leafID: target.leafID) else {
+            return nil
+        }
+
+        rootNode = updatedTree
+        panelTypes.removeValue(forKey: contentID)
+        panelTitles.removeValue(forKey: contentID)
+
+        let remainingLeaves = rootNode.allLeafIDs()
+        guard !remainingLeaves.isEmpty else {
+            focusedLeafID = nil
+            return detached
+        }
+
+        if let closingIndex {
+            focusedLeafID = remainingLeaves[min(closingIndex, remainingLeaves.count - 1)].leafID
+        } else {
+            focusedLeafID = remainingLeaves.first?.leafID
+        }
+
+        return detached
+    }
+
+    /// Appends an already-live content ID to this split tree. The caller
+    /// owns moving the corresponding AppKit view and any terminal routing
+    /// state; this method only mutates the split model.
+    @discardableResult
+    func appendExistingContent(
+        _ contentID: UUID,
+        panelInfo: PanelInfo = .terminal,
+        title: String? = nil,
+        focusNewContent: Bool = true
+    ) -> Bool {
+        guard rootNode.leafCount < Self.maxPaneCount else { return false }
+
+        let leaves = rootNode.allLeafIDs()
+        guard !leaves.contains(where: { $0.terminalID == contentID }),
+              let lastLeaf = leaves.last else {
+            return false
+        }
+
+        let previousFocus = focusedLeafID
+        guard let updatedTree = rootNode.splitLeaf(
+            leafID: lastLeaf.leafID,
+            direction: .horizontal,
+            newTerminalID: contentID
+        ) else {
+            return false
+        }
+
+        rootNode = updatedTree
+        if panelInfo.type == .terminal {
+            panelTypes.removeValue(forKey: contentID)
+        } else {
+            panelTypes[contentID] = panelInfo
+        }
+        setPanelTitle(for: contentID, title: title)
+
+        if focusNewContent,
+           let newLeaf = rootNode.allLeafIDs().first(where: {
+               $0.terminalID == contentID
+           }) {
+            focusedLeafID = newLeaf.leafID
+        } else {
+            focusedLeafID = previousFocus
+        }
+
+        return true
     }
 
     // MARK: - Navigation
