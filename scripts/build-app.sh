@@ -192,7 +192,12 @@ if [ -d "${PROJECT_ROOT}/Resources/Templates" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Templates" "${RESOURCES}/Templates"
 fi
 
-# Step 6j: Build and embed the QuickLook extension.
+# Step 6j: Copy bundled plugin repos for the local marketplace.
+if [ -d "${PROJECT_ROOT}/Resources/Plugins" ]; then
+    cp -R "${PROJECT_ROOT}/Resources/Plugins" "${RESOURCES}/Plugins"
+fi
+
+# Step 6k: Build and embed the QuickLook extension.
 echo "==> Building QuickLook extension..."
 QL_APPEX="$("${PROJECT_ROOT}/scripts/build-quicklook-extension.sh" "${BUILD_MODE}")"
 cp -R "${QL_APPEX}" "${PLUGINS}/"

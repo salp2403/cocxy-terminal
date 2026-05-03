@@ -272,6 +272,16 @@ check_exists "$RESOURCES/Templates/python-package/files/pyproject.toml" "python-
 check_exists "$RESOURCES/Templates/python-package/files/src/{{package_name}}/__init__.py" "python-package module source"
 check_exists "$RESOURCES/Templates/python-package/files/tests/test_import.py" "python-package test"
 
+# 9e. Bundled plugin repos for the local marketplace.
+echo ""
+echo "[Plugins]"
+check_exists "$RESOURCES/Plugins" "Plugins resources directory"
+check_exists "$RESOURCES/Plugins/cocxy-github-pane/cocxy-plugin.toml" "GitHub pane bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-linear/cocxy-plugin.toml" "Linear bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-jira/cocxy-plugin.toml" "Jira bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-aws-cli-helper/cocxy-plugin.toml" "AWS CLI bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-docker-helper/cocxy-plugin.toml" "Docker bundled plugin"
+
 # 10. QuickLook extension
 echo ""
 echo "[QuickLook]"

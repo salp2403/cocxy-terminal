@@ -1,0 +1,8 @@
+name = "GitHub Pane"
+description = "Adds local shell context for repository and pull request workflows."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-github-pane"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read"]

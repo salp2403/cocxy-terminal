@@ -192,6 +192,80 @@ struct PluginMarketplaceSwiftTestingTests {
         ))
     }
 
+    @Test("bundled plugin catalog loads manifests")
+    func bundledPluginCatalogLoadsManifests() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let bundled = root.appendingPathComponent("Plugins", isDirectory: true)
+        let plugin = bundled.appendingPathComponent("cocxy-sample", isDirectory: true)
+        try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+        try """
+        name = "Bundled Sample"
+        version = "1.0.0"
+        author = "Cocxy"
+        capabilities = ["environment-read"]
+        """.write(
+            to: plugin.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let manifests = try BundledPluginCatalog(pluginsDirectory: bundled).loadManifests()
+
+        #expect(manifests.count == 1)
+        #expect(manifests[0].id == "cocxy-sample")
+        #expect(manifests[0].capabilities == [.environmentRead])
+    }
+
+    @Test("plugin updater reports newer semver tags")
+    func pluginUpdaterReportsNewerSemverTags() {
+        let manifest = PluginManifest(
+            id: "tagged-plugin",
+            name: "Tagged Plugin",
+            description: "Tagged plugin",
+            version: "1.1.0",
+            author: "Dev",
+            minCocxyVersion: nil,
+            events: [],
+            directoryPath: "/tmp/tagged-plugin"
+        )
+        let updater = PluginUpdater { _, arguments in
+            if arguments.first == "tag" {
+                return "v1.2.0\nv1.1.0\n"
+            }
+            return ""
+        }
+
+        let updates = updater.availableUpdates(for: [manifest])
+
+        #expect(updates.count == 1)
+        #expect(updates[0].pluginID == "tagged-plugin")
+        #expect(updates[0].latestVersion == "1.2.0")
+    }
+
+    @Test("plugin updater ignores same or older tags")
+    func pluginUpdaterIgnoresSameOrOlderTags() {
+        let manifest = PluginManifest(
+            id: "current-plugin",
+            name: "Current Plugin",
+            description: "Current plugin",
+            version: "2.0.0",
+            author: "Dev",
+            minCocxyVersion: nil,
+            events: [],
+            directoryPath: "/tmp/current-plugin"
+        )
+        let updater = PluginUpdater { _, arguments in
+            if arguments.first == "tag" {
+                return "v2.0.0\nv1.9.0\n"
+            }
+            return ""
+        }
+
+        #expect(updater.availableUpdates(for: [manifest]).isEmpty)
+    }
+
     @Test("sandbox rejects scripts outside plugin directory")
     func sandboxRejectsScriptOutsidePluginDirectory() throws {
         let sandbox = PluginSandbox()

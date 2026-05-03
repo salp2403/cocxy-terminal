@@ -1,0 +1,8 @@
+name = "Docker Helper"
+description = "Adds local environment checks for Docker CLI sessions."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-docker-helper"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "process-spawn"]

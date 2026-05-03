@@ -1,0 +1,8 @@
+name = "AWS CLI Helper"
+description = "Adds local environment checks for AWS CLI sessions."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-aws-cli-helper"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "process-spawn"]

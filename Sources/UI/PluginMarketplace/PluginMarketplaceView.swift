@@ -20,20 +20,28 @@ final class PluginMarketplaceViewModel: ObservableObject {
     @Published var installURLText: String = ""
     @Published var statusMessage: String?
     @Published private(set) var sources: [PluginSource] = []
+    @Published private(set) var bundledPlugins: [PluginManifest] = []
     @Published private(set) var plugins: [PluginState] = []
+    @Published private(set) var availableUpdates: [PluginUpdateCandidate] = []
 
     private let sourceStore: PluginSourceStore
     private let installer: PluginInstaller
     private let pluginManager: PluginManager
+    private let bundledCatalog: BundledPluginCatalog
+    private let updater: PluginUpdater
 
     init(
         sourceStore: PluginSourceStore = PluginSourceStore(),
         installer: PluginInstaller = PluginInstaller(),
-        pluginManager: PluginManager? = nil
+        pluginManager: PluginManager? = nil,
+        bundledCatalog: BundledPluginCatalog = BundledPluginCatalog(),
+        updater: PluginUpdater = PluginUpdater()
     ) {
         self.sourceStore = sourceStore
         self.installer = installer
         self.pluginManager = pluginManager ?? PluginManager(pluginsDirectory: installer.pluginsDirectory.path)
+        self.bundledCatalog = bundledCatalog
+        self.updater = updater
         refresh()
     }
 
@@ -43,6 +51,12 @@ final class PluginMarketplaceViewModel: ObservableObject {
         } catch {
             sources = []
             statusMessage = "Failed to load sources."
+        }
+        do {
+            bundledPlugins = try bundledCatalog.loadManifests()
+        } catch {
+            bundledPlugins = []
+            statusMessage = "Failed to load bundled plugins."
         }
         pluginManager.scanPlugins()
         plugins = pluginManager.plugins
@@ -71,6 +85,18 @@ final class PluginMarketplaceViewModel: ObservableObject {
         statusMessage = "Installed \(receipt.pluginID)."
     }
 
+    func installBundledPlugin(id: String, replaceExisting: Bool) throws {
+        guard let manifest = bundledPlugins.first(where: { $0.id == id }) else {
+            throw PluginInstallerError.pluginNotInstalled(id)
+        }
+        let receipt = try installer.install(
+            from: URL(fileURLWithPath: manifest.directoryPath, isDirectory: true),
+            replaceExisting: replaceExisting
+        )
+        refresh()
+        statusMessage = "Installed \(receipt.pluginID)."
+    }
+
     func uninstallPlugin(id: String) throws {
         try installer.uninstall(id: id)
         refresh()
@@ -85,6 +111,13 @@ final class PluginMarketplaceViewModel: ObservableObject {
         }
         refresh()
         statusMessage = enabled ? "Enabled \(id)." : "Disabled \(id)."
+    }
+
+    func checkForPluginUpdates() {
+        availableUpdates = updater.availableUpdates(for: pluginManager.plugins.map(\.manifest))
+        statusMessage = availableUpdates.isEmpty
+            ? "No updates found."
+            : "\(availableUpdates.count) update\(availableUpdates.count == 1 ? "" : "s") found."
     }
 
     private func makeURL(from rawValue: String) throws -> URL {
@@ -142,13 +175,39 @@ struct PluginMarketplaceView: View {
             }
 
             Section("Install") {
-                TextField("URL or local path", text: $viewModel.installURLText)
-                    .textFieldStyle(.roundedBorder)
-                Toggle("Replace existing", isOn: $replaceExisting)
-                Button {
+                PluginInstallSheet(
+                    urlText: $viewModel.installURLText,
+                    replaceExisting: $replaceExisting
+                ) {
                     perform { try viewModel.installPlugin(replaceExisting: replaceExisting) }
-                } label: {
-                    Label("Install", systemImage: "square.and.arrow.down")
+                }
+            }
+
+            Section("Built-in") {
+                if viewModel.bundledPlugins.isEmpty {
+                    Text("No bundled plugins available.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(viewModel.bundledPlugins) { plugin in
+                        PluginCardView(
+                            title: plugin.name,
+                            subtitle: plugin.id,
+                            detail: plugin.description,
+                            capabilities: plugin.capabilities,
+                            primaryAction: PluginCardAction(
+                                title: "Install",
+                                systemImage: "square.and.arrow.down",
+                                perform: {
+                                    perform {
+                                        try viewModel.installBundledPlugin(
+                                            id: plugin.id,
+                                            replaceExisting: replaceExisting
+                                        )
+                                    }
+                                }
+                            )
+                        )
+                    }
                 }
             }
 
@@ -158,17 +217,40 @@ struct PluginMarketplaceView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(viewModel.plugins) { plugin in
-                        PluginMarketplaceRow(
-                            plugin: plugin,
-                            onToggle: { enabled in
-                                perform { try viewModel.setPlugin(plugin.id, enabled: enabled) }
-                            },
-                            onUninstall: {
-                                pendingUninstallID = plugin.id
-                            }
+                        PluginCardView(
+                            title: plugin.manifest.name,
+                            subtitle: plugin.id,
+                            detail: plugin.manifest.description,
+                            capabilities: plugin.manifest.capabilities,
+                            primaryAction: PluginCardAction(
+                                title: plugin.isEnabled ? "Disable" : "Enable",
+                                systemImage: plugin.isEnabled ? "pause.circle" : "play.circle",
+                                perform: {
+                                    perform {
+                                        try viewModel.setPlugin(plugin.id, enabled: !plugin.isEnabled)
+                                    }
+                                }
+                            ),
+                            secondaryAction: PluginCardAction(
+                                title: "Uninstall",
+                                systemImage: "trash",
+                                role: .destructive,
+                                perform: {
+                                    pendingUninstallID = plugin.id
+                                }
+                            )
                         )
                     }
                 }
+            }
+
+            Section("Updates") {
+                PluginUpdatePicker(
+                    updates: viewModel.availableUpdates,
+                    onRefresh: {
+                        viewModel.checkForPluginUpdates()
+                    }
+                )
             }
 
             if let status = viewModel.statusMessage {
@@ -208,38 +290,6 @@ struct PluginMarketplaceView: View {
             try action()
         } catch {
             viewModel.statusMessage = error.localizedDescription
-        }
-    }
-}
-
-private struct PluginMarketplaceRow: View {
-    let plugin: PluginState
-    let onToggle: (Bool) -> Void
-    let onUninstall: () -> Void
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(plugin.manifest.name)
-                    .font(.headline)
-                Text(plugin.id)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button {
-                onToggle(!plugin.isEnabled)
-            } label: {
-                Label(
-                    plugin.isEnabled ? "Disable" : "Enable",
-                    systemImage: plugin.isEnabled ? "pause.circle" : "play.circle"
-                )
-            }
-            Button(role: .destructive) {
-                onUninstall()
-            } label: {
-                Label("Uninstall", systemImage: "trash")
-            }
         }
     }
 }

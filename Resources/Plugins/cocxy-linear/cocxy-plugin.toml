@@ -1,0 +1,8 @@
+name = "Linear Helper"
+description = "Adds local issue workflow hints for Linear-backed projects."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-linear"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "network-client"]

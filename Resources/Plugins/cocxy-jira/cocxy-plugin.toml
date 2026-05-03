@@ -1,0 +1,8 @@
+name = "Jira Helper"
+description = "Adds local issue workflow hints for Jira-backed projects."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-jira"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "network-client"]
