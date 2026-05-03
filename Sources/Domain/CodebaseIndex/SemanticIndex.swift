@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // SemanticIndex.swift - Local semantic codebase indexing orchestration.
 
+import CryptoKit
 import Foundation
 
 struct CodebaseSemanticIndexStats: Sendable, Equatable {
@@ -47,7 +48,14 @@ struct CodebaseSemanticIndex {
     }
 
     static func defaultStorageURL(for workspace: AgentWorkspace) -> URL {
-        workspace.rootURL.appendingPathComponent(".cocxy-index", isDirectory: true)
+        let baseURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let digest = SHA256.hash(data: Data(workspace.rootURL.path.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return baseURL
+            .appendingPathComponent("dev.cocxy.codebase-index", isDirectory: true)
+            .appendingPathComponent(digest, isDirectory: true)
     }
 
     func rebuildIfNeeded() throws -> CodebaseSemanticIndexStats? {

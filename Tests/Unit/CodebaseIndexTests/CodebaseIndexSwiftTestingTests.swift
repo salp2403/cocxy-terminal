@@ -340,6 +340,18 @@ struct CodebaseIndexSwiftTestingTests {
         #expect(allValuesAreFinite)
     }
 
+    @Test("semantic default storage stays outside workspace")
+    func semanticDefaultStorageStaysOutsideWorkspace() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = AgentWorkspace(rootURL: root)
+
+        let storageURL = CodebaseSemanticIndex.defaultStorageURL(for: workspace)
+
+        #expect(!workspace.contains(storageURL))
+        #expect(storageURL.path.contains("dev.cocxy.codebase-index"))
+    }
+
     private func makeWorkspace() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-codebase-index-\(UUID().uuidString)", isDirectory: true)
