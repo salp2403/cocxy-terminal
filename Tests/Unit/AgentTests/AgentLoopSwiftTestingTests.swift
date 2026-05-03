@@ -261,6 +261,38 @@ struct AgentLoopSwiftTestingTests {
         #expect(result.messages.map(\.role) == [.user, .assistant, .tool, .assistant, .tool])
     }
 
+    @Test("loop forwards provider token usage to the local recorder")
+    func loopForwardsProviderUsageToRecorder() async throws {
+        let usage = AgentLLMUsage(
+            provider: "openai",
+            model: "local-model",
+            inputTokens: 40,
+            outputTokens: 12
+        )
+        let provider = ScriptedAgentLLMClient(responses: [
+            AgentLLMResponse(content: "Done.", usage: usage),
+        ])
+        let executor = RecordingAgentToolExecutor(results: [])
+        let recorder = RecordingAgentUsageRecorder()
+        let loop = AgentLoop(
+            provider: provider,
+            toolExecutor: executor,
+            usageRecorder: { usage in
+                await recorder.record(usage)
+            },
+            idGenerator: StableAgentIDGenerator(prefix: "usage")
+        )
+
+        let result = try await loop.run(
+            conversationID: "conv",
+            userPrompt: "Answer",
+            configuration: AgentModeConfig(maxIterations: 2)
+        )
+
+        #expect(result.stopReason == .completed)
+        #expect(await recorder.records == [usage])
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-loop-\(UUID().uuidString)", isDirectory: true)
@@ -318,6 +350,14 @@ private actor RecordingAgentToolExecutor: AgentToolExecuting {
         return results.isEmpty
             ? AgentToolResult.success(callID: call.id, toolID: call.toolID)
             : results.removeFirst()
+    }
+}
+
+private actor RecordingAgentUsageRecorder {
+    private(set) var records: [AgentLLMUsage] = []
+
+    func record(_ usage: AgentLLMUsage) {
+        records.append(usage)
     }
 }
 

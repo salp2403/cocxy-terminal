@@ -68,6 +68,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
     private let mcpManager: (any MCPManaging)?
     private let commandAllowlist: any AgentCommandAllowlistLoading
     private let agentSecrets: AgentSecrets
+    private let usageRecorder: AgentUsageRecording?
 
     init(
         clientFactory: any AgentLLMClientMaking = AgentProviderClientFactory(),
@@ -80,7 +81,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
         mcpManager: (any MCPManaging)? = nil,
         commandAllowlist: any AgentCommandAllowlistLoading = AgentCommandAllowlist(),
-        agentSecrets: AgentSecrets = AgentSecrets()
+        agentSecrets: AgentSecrets = AgentSecrets(),
+        usageRecorder: AgentUsageRecording? = nil
     ) {
         self.clientFactory = clientFactory
         self.workspaceRootProvider = workspaceRootProvider
@@ -93,6 +95,7 @@ struct AgentSessionRunner: AgentApprovalRunning {
         self.mcpManager = mcpManager
         self.commandAllowlist = commandAllowlist
         self.agentSecrets = agentSecrets
+        self.usageRecorder = usageRecorder
     }
 
     func run(
@@ -173,7 +176,8 @@ struct AgentSessionRunner: AgentApprovalRunning {
             toolPreviewer: executor,
             registry: effectiveRegistry,
             permissionPolicy: effectivePermissionPolicy,
-            conversationStore: store
+            conversationStore: store,
+            usageRecorder: usageRecorder
         )
     }
 

@@ -461,6 +461,48 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(result.messages.last?.content == "I will use main.")
     }
 
+    @Test("runner forwards provider token usage to the injected recorder")
+    func runnerForwardsProviderUsageToRecorder() async throws {
+        let workspace = temporaryDirectory(named: "usage-workspace")
+        let conversationRoot = temporaryDirectory(named: "usage-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let usage = AgentLLMUsage(
+            provider: "openai",
+            model: "local-model",
+            inputTokens: 88,
+            outputTokens: 13
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Usage captured.", usage: usage),
+        ])
+        let recorder = RecordingSessionUsageRecorder()
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-usage-test",
+            usageRecorder: { usage in
+                await recorder.record(usage)
+            }
+        )
+
+        let result = try await runner.run(
+            prompt: "Answer",
+            history: [],
+            configuration: AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                conversationStorageDir: conversationRoot.path
+            )
+        )
+
+        #expect(result.stopReason == .completed)
+        #expect(await recorder.records == [usage])
+    }
+
     private func temporaryDirectory(named name: String) -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-runner-\(name)-\(UUID().uuidString)", isDirectory: true)
@@ -511,6 +553,14 @@ private struct StaticAgentCommandAllowlist: AgentCommandAllowlistLoading {
 
     func loadRules() throws -> [AgentCommandAllowRule] {
         rules
+    }
+}
+
+private actor RecordingSessionUsageRecorder {
+    private(set) var records: [AgentLLMUsage] = []
+
+    func record(_ usage: AgentLLMUsage) {
+        records.append(usage)
     }
 }
 

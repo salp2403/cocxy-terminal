@@ -119,6 +119,34 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         XCTAssertNotNil(event.metadata["surface_id"])
     }
 
+    func testEnabledCostTrackingRecordsAgentTokenUsageLocally() throws {
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store, costTracking: true)
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        try store.deleteAll()
+
+        controller.recordAgentTokenUsage(
+            AgentLLMUsage(
+                provider: "openai",
+                model: "local-model",
+                inputTokens: 123,
+                outputTokens: 45
+            ),
+            tabID: tabID,
+            surfaceID: nil
+        )
+
+        let usage = try XCTUnwrap(try store.tokenUsage().first)
+        XCTAssertEqual(usage.provider, "openai")
+        XCTAssertEqual(usage.model, "local-model")
+        XCTAssertEqual(usage.inputTokens, 123)
+        XCTAssertEqual(usage.outputTokens, 45)
+        XCTAssertEqual(usage.estimatedCostMicros, 0)
+        XCTAssertNotNil(usage.sessionID)
+        XCTAssertNotNil(usage.project)
+    }
+
     func testEnabledConfigRecordsProjectSwitchesOnlyWhenDirectoryChanges() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-project-switch-\(UUID().uuidString)", isDirectory: true)
@@ -204,12 +232,13 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
     }
 
     private func makeActivityEnabledController(
-        store: ActivityStoring
+        store: ActivityStoring,
+        costTracking: Bool = false
     ) throws -> MainWindowController {
         let provider = ActivityRecordingConfigProvider(content: """
         [activity]
         enabled = true
-        cost-tracking = false
+        cost-tracking = \(costTracking ? "true" : "false")
         storage-directory = "~/.config/cocxy/activity-test"
         """)
         let service = ConfigService(fileProvider: provider)

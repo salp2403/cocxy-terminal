@@ -14,6 +14,11 @@ struct AgentProviderClientSwiftTestingTests {
             statusCode: 200,
             data: Data("""
             {
+              "model": "test-openai-model",
+              "usage": {
+                "prompt_tokens": 12,
+                "completion_tokens": 7
+              },
               "choices": [
                 {
                   "message": {
@@ -69,6 +74,12 @@ struct AgentProviderClientSwiftTestingTests {
                 arguments: ["path": .string("Sources/App.swift")]
             ),
         ])
+        #expect(response.usage == AgentLLMUsage(
+            provider: "openai",
+            model: "test-openai-model",
+            inputTokens: 12,
+            outputTokens: 7
+        ))
     }
 
     @Test("OpenAI transcript preserves assistant tool calls before tool results")
@@ -121,6 +132,11 @@ struct AgentProviderClientSwiftTestingTests {
             statusCode: 200,
             data: Data("""
             {
+              "model": "test-anthropic-model",
+              "usage": {
+                "input_tokens": 22,
+                "output_tokens": 9
+              },
               "content": [
                 {"type": "text", "text": "I will check git."},
                 {
@@ -163,6 +179,12 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(response.toolCalls == [
             AgentToolCall(id: "toolu_1", toolID: "git_status"),
         ])
+        #expect(response.usage == AgentLLMUsage(
+            provider: "anthropic",
+            model: "test-anthropic-model",
+            inputTokens: 22,
+            outputTokens: 9
+        ))
     }
 
     @Test("Anthropic transcript preserves tool_use and tool_result blocks")
@@ -215,6 +237,10 @@ struct AgentProviderClientSwiftTestingTests {
             statusCode: 200,
             data: Data("""
             {
+              "usageMetadata": {
+                "promptTokenCount": 18,
+                "candidatesTokenCount": 11
+              },
               "candidates": [
                 {
                   "content": {
@@ -270,6 +296,12 @@ struct AgentProviderClientSwiftTestingTests {
                 ]
             ),
         ])
+        #expect(response.usage == AgentLLMUsage(
+            provider: "google",
+            model: "test-google-model",
+            inputTokens: 18,
+            outputTokens: 11
+        ))
     }
 
     @Test("Google transcript preserves functionCall and functionResponse parts")

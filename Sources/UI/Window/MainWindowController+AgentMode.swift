@@ -91,7 +91,10 @@ extension MainWindowController {
             lspDiagnosticsProvider: MainActorAgentLSPDiagnosticsProvider { [weak self] limit in
                 self?.currentAgentModeLSPDiagnostics(limit: limit) ?? []
             },
-            mcpManager: MCPConfiguredManager()
+            mcpManager: MCPConfiguredManager(),
+            usageRecorder: { [weak self] usage in
+                await self?.recordCurrentAgentModeTokenUsage(usage)
+            }
         )
         let viewModel = AgentPanelViewModel(
             configuration: configuration,
@@ -104,6 +107,13 @@ extension MainWindowController {
 
     func currentAgentModeSkillRegistry() -> SkillRegistry {
         SkillRegistry.localDefault(projectRoot: currentAgentModeWorkingDirectory())
+    }
+
+    func recordCurrentAgentModeTokenUsage(_ usage: AgentLLMUsage) {
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
+        let surfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+            ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+        recordAgentTokenUsage(usage, tabID: tabID, surfaceID: surfaceID)
     }
 
     func currentAgentModeWorkingDirectory() -> URL? {

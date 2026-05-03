@@ -224,6 +224,41 @@ extension MainWindowController {
         )
     }
 
+    func recordAgentTokenUsage(
+        _ usage: AgentLLMUsage,
+        tabID: TabID,
+        surfaceID: SurfaceID?
+    ) {
+        let policy = configService?.current.activity.privacyPolicy ?? .disabled
+        guard policy.tokenCostTrackingEnabled else { return }
+
+        do {
+            let store = try resolveActivityStore()
+            let recorder = ActivityRecorder(
+                store: store,
+                policyProvider: { policy }
+            )
+            let workingDirectory = surfaceID.flatMap(workingDirectory(for:))
+                ?? tabManager.tab(for: tabID)?.workingDirectory
+            let record = TokenUsageRecord(
+                provider: usage.provider,
+                model: usage.model,
+                sessionID: sessionIDForTab(tabID).rawValue.uuidString,
+                project: workingDirectory.map(ActivityProjectRef.workingDirectory(_:)),
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                estimatedCostMicros: 0
+            )
+            try recorder.recordTokenUsage(record)
+            if activityDashboardViewModel != nil {
+                _ = resolveActivityDashboardViewModel()
+            }
+            activityDashboardViewModel?.refresh()
+        } catch {
+            return
+        }
+    }
+
     private func resolveActivityStore() throws -> ActivityStoring {
         if let injectedActivityStore {
             return injectedActivityStore

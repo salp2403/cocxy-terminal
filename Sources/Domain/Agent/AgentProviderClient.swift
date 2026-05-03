@@ -281,7 +281,7 @@ struct OpenAIAgentLLMClient: AgentLLMClient {
         )
         let response = try await transport.send(request)
         try validate(response)
-        return try parseOpenAIResponse(response.data)
+        return try parseOpenAIResponse(response.data, fallbackModel: model)
     }
 }
 
@@ -335,7 +335,7 @@ struct AnthropicAgentLLMClient: AgentLLMClient {
         )
         let response = try await transport.send(request)
         try validate(response)
-        return try parseAnthropicResponse(response.data)
+        return try parseAnthropicResponse(response.data, fallbackModel: model)
     }
 }
 
@@ -375,7 +375,7 @@ struct GoogleAgentLLMClient: AgentLLMClient {
         )
         let response = try await transport.send(request)
         try validate(response)
-        return try parseGoogleResponse(response.data)
+        return try parseGoogleResponse(response.data, fallbackModel: model)
     }
 }
 
@@ -639,7 +639,7 @@ private func googleSchemaType(_ type: AgentToolInputProperty.ValueType) -> Strin
     }
 }
 
-private func parseOpenAIResponse(_ data: Data) throws -> AgentLLMResponse {
+private func parseOpenAIResponse(_ data: Data, fallbackModel: String) throws -> AgentLLMResponse {
     let object = try jsonDictionary(from: data)
     guard let choices = object["choices"] as? [[String: Any]],
           let first = choices.first,
@@ -661,10 +661,14 @@ private func parseOpenAIResponse(_ data: Data) throws -> AgentLLMResponse {
         return AgentToolCall(id: id, toolID: name, arguments: arguments)
     }
 
-    return AgentLLMResponse(content: content, toolCalls: toolCalls)
+    return AgentLLMResponse(
+        content: content,
+        toolCalls: toolCalls,
+        usage: parseOpenAIUsage(from: object, fallbackModel: fallbackModel)
+    )
 }
 
-private func parseAnthropicResponse(_ data: Data) throws -> AgentLLMResponse {
+private func parseAnthropicResponse(_ data: Data, fallbackModel: String) throws -> AgentLLMResponse {
     let object = try jsonDictionary(from: data)
     guard let contentBlocks = object["content"] as? [[String: Any]] else {
         throw AgentProviderClientError.missingResponseChoice
@@ -692,10 +696,14 @@ private func parseAnthropicResponse(_ data: Data) throws -> AgentLLMResponse {
         }
     }
 
-    return AgentLLMResponse(content: textParts.joined(separator: "\n"), toolCalls: toolCalls)
+    return AgentLLMResponse(
+        content: textParts.joined(separator: "\n"),
+        toolCalls: toolCalls,
+        usage: parseAnthropicUsage(from: object, fallbackModel: fallbackModel)
+    )
 }
 
-private func parseGoogleResponse(_ data: Data) throws -> AgentLLMResponse {
+private func parseGoogleResponse(_ data: Data, fallbackModel: String) throws -> AgentLLMResponse {
     let object = try jsonDictionary(from: data)
     guard let candidates = object["candidates"] as? [[String: Any]],
           let content = candidates.first?["content"] as? [String: Any],
@@ -722,7 +730,80 @@ private func parseGoogleResponse(_ data: Data) throws -> AgentLLMResponse {
         }
     }
 
-    return AgentLLMResponse(content: textParts.joined(separator: "\n"), toolCalls: toolCalls)
+    return AgentLLMResponse(
+        content: textParts.joined(separator: "\n"),
+        toolCalls: toolCalls,
+        usage: parseGoogleUsage(from: object, fallbackModel: fallbackModel)
+    )
+}
+
+private func parseOpenAIUsage(
+    from object: [String: Any],
+    fallbackModel: String
+) -> AgentLLMUsage? {
+    guard let usage = object["usage"] as? [String: Any],
+          let inputTokens = integerValue(usage["prompt_tokens"]),
+          let outputTokens = integerValue(usage["completion_tokens"]) else {
+        return nil
+    }
+    return AgentLLMUsage(
+        provider: AgentProviderKind.openai.rawValue,
+        model: nonEmptyString(object["model"]) ?? fallbackModel,
+        inputTokens: inputTokens,
+        outputTokens: outputTokens
+    )
+}
+
+private func parseAnthropicUsage(
+    from object: [String: Any],
+    fallbackModel: String
+) -> AgentLLMUsage? {
+    guard let usage = object["usage"] as? [String: Any],
+          let inputTokens = integerValue(usage["input_tokens"]),
+          let outputTokens = integerValue(usage["output_tokens"]) else {
+        return nil
+    }
+    return AgentLLMUsage(
+        provider: AgentProviderKind.anthropic.rawValue,
+        model: nonEmptyString(object["model"]) ?? fallbackModel,
+        inputTokens: inputTokens,
+        outputTokens: outputTokens
+    )
+}
+
+private func parseGoogleUsage(
+    from object: [String: Any],
+    fallbackModel: String
+) -> AgentLLMUsage? {
+    guard let usage = object["usageMetadata"] as? [String: Any],
+          let inputTokens = integerValue(usage["promptTokenCount"]) else {
+        return nil
+    }
+    let outputTokens = integerValue(usage["candidatesTokenCount"])
+        ?? integerValue(usage["totalTokenCount"]).map { max(0, $0 - inputTokens) }
+    guard let outputTokens else { return nil }
+    return AgentLLMUsage(
+        provider: AgentProviderKind.google.rawValue,
+        model: nonEmptyString(object["modelVersion"]) ?? fallbackModel,
+        inputTokens: inputTokens,
+        outputTokens: outputTokens
+    )
+}
+
+private func integerValue(_ value: Any?) -> Int? {
+    if let value = value as? Int {
+        return value
+    }
+    if let value = value as? NSNumber {
+        return value.intValue
+    }
+    return nil
+}
+
+private func nonEmptyString(_ value: Any?) -> String? {
+    let trimmed = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let trimmed, !trimmed.isEmpty else { return nil }
+    return trimmed
 }
 
 private func jsonData(_ object: [String: Any]) throws -> Data {

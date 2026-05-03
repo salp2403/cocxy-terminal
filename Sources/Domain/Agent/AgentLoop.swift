@@ -3,15 +3,45 @@
 
 import Foundation
 
+struct AgentLLMUsage: Sendable, Equatable {
+    let provider: String
+    let model: String
+    let inputTokens: Int
+    let outputTokens: Int
+
+    init(
+        provider: String,
+        model: String,
+        inputTokens: Int,
+        outputTokens: Int
+    ) {
+        let trimmedProvider = provider.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.provider = trimmedProvider.isEmpty ? "unknown" : trimmedProvider
+        self.model = trimmedModel.isEmpty ? "unknown" : trimmedModel
+        self.inputTokens = max(0, inputTokens)
+        self.outputTokens = max(0, outputTokens)
+    }
+}
+
 struct AgentLLMResponse: Sendable, Equatable {
     let content: String
     let toolCalls: [AgentToolCall]
+    let usage: AgentLLMUsage?
 
-    init(content: String, toolCalls: [AgentToolCall] = []) {
+    init(
+        content: String,
+        toolCalls: [AgentToolCall] = [],
+        usage: AgentLLMUsage? = nil
+    ) {
         self.content = content
         self.toolCalls = toolCalls
+        self.usage = usage
     }
 }
+
+typealias AgentUsageRecording = @Sendable (AgentLLMUsage) async -> Void
+
 protocol AgentLLMClient {
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse
 }
@@ -57,6 +87,7 @@ struct AgentLoop {
     let permissionPolicy: AgentToolPermissionPolicy
     let conversationStore: (any AgentConversationRecording)?
     let idGenerator: any AgentMessageIDGenerating
+    let usageRecorder: AgentUsageRecording?
 
     init(
         provider: any AgentLLMClient,
@@ -65,6 +96,7 @@ struct AgentLoop {
         registry: AgentToolRegistry = .minimumBuiltIns(),
         permissionPolicy: AgentToolPermissionPolicy = AgentToolPermissionPolicy(),
         conversationStore: (any AgentConversationRecording)? = nil,
+        usageRecorder: AgentUsageRecording? = nil,
         idGenerator: any AgentMessageIDGenerating = UUIDAgentMessageIDGenerator()
     ) {
         self.provider = provider
@@ -73,6 +105,7 @@ struct AgentLoop {
         self.registry = registry
         self.permissionPolicy = permissionPolicy
         self.conversationStore = conversationStore
+        self.usageRecorder = usageRecorder
         self.idGenerator = idGenerator
     }
 
@@ -139,6 +172,9 @@ struct AgentLoop {
 
         for _ in 0..<configuration.maxIterations {
             let response = try await provider.nextResponse(for: messages)
+            if let usage = response.usage {
+                await usageRecorder?(usage)
+            }
             try append(
                 AgentMessage(
                     id: idGenerator.nextMessageID(role: .assistant),
