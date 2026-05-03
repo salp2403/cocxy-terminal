@@ -874,6 +874,33 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.commandBlock(for: surfaceID, blockID: block.id + 1) == nil)
     }
 
+    @Test("commandBlocks groups multiline commands into one block")
+    func commandBlocksGroupsMultilineCommandsIntoOneBlock() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(
+            "\u{1B}]133;A\u{7}" +
+            "$ " +
+            "\u{1B}]133;B\u{7}" +
+            "cat <<'EOF'\r\n" +
+            "hello\r\n" +
+            "EOF\r\n" +
+            "\u{1B}]133;C\u{7}" +
+            "hello\r\n" +
+            "\u{1B}]133;D;0\u{7}",
+            to: state.terminal
+        )
+
+        let block = try #require(bridge.commandBlocks(for: surfaceID, limit: 10).first)
+
+        #expect(block.command == "cat <<'EOF'\nhello\nEOF")
+        #expect(block.output == "hello")
+        #expect(block.exitCode == 0)
+    }
+
     @Test("latestCommandBlockOutputs exposes clean chronological context")
     func latestCommandBlockOutputsExposesCleanChronologicalContext() throws {
         let bridge = try makeBridge()

@@ -16,6 +16,49 @@ struct TerminalBlockPersistenceSwiftTestingTests {
 
         #expect(line.hasSuffix("\n"))
         #expect(decoded == block)
+        #expect(decoded.schemaVersion == TerminalCommandBlock.currentSchemaVersion)
+        #expect(decoded.isBookmarked == false)
+    }
+
+    @Test("JSONL serializer decodes legacy unversioned records")
+    func jsonlSerializerDecodesLegacyUnversionedRecords() throws {
+        let legacyLine = """
+        {"blockType":2,"command":"echo legacy","durationNs":150,"endRow":4,"endTimeNs":250,"exitCode":0,"id":42,"output":"legacy\\n","pwd":"/Users/Galf/project","startRow":3,"startTimeNs":100,"streamID":0}
+        """
+
+        let decoded = try TerminalBlockSerializer.decodeLine(legacyLine)
+
+        #expect(decoded.schemaVersion == 1)
+        #expect(decoded.command == "echo legacy")
+        #expect(decoded.output == "legacy\n")
+        #expect(decoded.isBookmarked == false)
+    }
+
+    @Test("JSONL serializer rejects future schema versions")
+    func jsonlSerializerRejectsFutureSchemaVersions() throws {
+        let futureLine = """
+        {"schemaVersion":99,"blockType":2,"command":"echo future","durationNs":150,"endRow":4,"endTimeNs":250,"exitCode":0,"id":42,"isBookmarked":false,"output":"future\\n","pwd":"/Users/Galf/project","startRow":3,"startTimeNs":100,"streamID":0}
+        """
+
+        #expect(throws: DecodingError.self) {
+            _ = try TerminalBlockSerializer.decodeLine(futureLine)
+        }
+    }
+
+    @Test("JSONL serializer preserves multiline command and output")
+    func jsonlSerializerPreservesMultilineCommandAndOutput() throws {
+        let block = sampleBlock(
+            id: 51,
+            command: "cat <<'EOF'\nhello\nEOF",
+            output: "hello\nsecond line\n"
+        )
+
+        let decoded = try TerminalBlockSerializer.decodeLine(
+            try TerminalBlockSerializer.encodeLine(block)
+        )
+
+        #expect(decoded.command == "cat <<'EOF'\nhello\nEOF")
+        #expect(decoded.output == "hello\nsecond line\n")
     }
 
     @Test("store appends and loads blocks for one session")
@@ -113,6 +156,48 @@ struct TerminalBlockPersistenceSwiftTestingTests {
         )
     }
 
+    @Test("restoration merges bookmark metadata into live blocks")
+    func restorationMergesBookmarkMetadataIntoLiveBlocks() {
+        let live = [
+            sampleBlock(id: 1, command: "echo live"),
+            sampleBlock(id: 2, command: "echo plain")
+        ]
+        let restored = [
+            sampleBlock(id: 1, command: "echo old").withBookmark(true)
+        ]
+
+        let blocks = TerminalBlockRestoration.blocksForDisplay(
+            live: live,
+            restored: restored,
+            limit: 32
+        )
+
+        #expect(blocks.map(\.id) == [1, 2])
+        #expect(blocks[0].command == "echo live")
+        #expect(blocks[0].isBookmarked == true)
+        #expect(blocks[1].isBookmarked == false)
+    }
+
+    @Test("store keeps newest bookmark update for restored blocks")
+    func storeKeepsNewestBookmarkUpdateForRestoredBlocks() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = TerminalBlockStore(rootDirectory: root)
+
+        try store.append(sampleBlock(id: 8, command: "echo item"), sessionID: "tab-1")
+        try store.append(sampleBlock(id: 8, command: "echo item").withBookmark(true), sessionID: "tab-1")
+
+        let restored = try store.load(sessionID: "tab-1")
+        let blocks = TerminalBlockRestoration.blocksForDisplay(
+            live: [],
+            restored: restored,
+            limit: 32
+        )
+
+        #expect(blocks.count == 1)
+        #expect(blocks.first?.isBookmarked == true)
+    }
+
     @Test("restoration lookup falls back to persisted blocks")
     func restorationLookupFallsBackToPersistedBlocks() {
         let restored = [sampleBlock(id: 10), sampleBlock(id: 11)]
@@ -139,6 +224,15 @@ struct TerminalBlockPersistenceSwiftTestingTests {
                 restored: restored
             ) == nil
         )
+    }
+
+    @Test("share formatter includes command output and exit code")
+    func shareFormatterIncludesCommandOutputAndExitCode() {
+        let text = TerminalBlockShareFormatter.text(for: sampleBlock(id: 4, command: "pwd", output: "/tmp\n"))
+
+        #expect(text.contains("$ pwd"))
+        #expect(text.contains("/tmp"))
+        #expect(text.contains("exit_code=0"))
     }
 
     private func sampleBlock(

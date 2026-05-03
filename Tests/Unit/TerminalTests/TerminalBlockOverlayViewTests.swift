@@ -102,6 +102,48 @@ final class TerminalBlockOverlayViewTests: XCTestCase {
         XCTAssertEqual(rerun, [7])
     }
 
+    func testShareAndBookmarkButtonsSendTheSelectedBlock() {
+        let overlay = TerminalBlockOverlayView(frame: NSRect(x: 0, y: 0, width: 480, height: 260))
+        var shared: [UInt64] = []
+        var bookmarked: [UInt64] = []
+        overlay.onShareBlock = { block, sourceView in
+            shared.append(block.id)
+            XCTAssertTrue(sourceView is NSButton)
+        }
+        overlay.onToggleBookmark = { bookmarked.append($0.id) }
+
+        overlay.update(
+            blocks: [sampleBlock(id: 8, command: "git log", startRow: 3, endRow: 4)],
+            visibleStartRow: 0,
+            visibleRowCount: 24,
+            cellHeight: 11,
+            padding: CGPoint(x: 8, y: 4)
+        )
+        overlay.layoutSubtreeIfNeeded()
+
+        overlay.descendantButton(withIdentifier: "command-block-share-8")?.performClick(nil)
+        overlay.descendantButton(withIdentifier: "command-block-bookmark-8")?.performClick(nil)
+
+        XCTAssertEqual(shared, [8])
+        XCTAssertEqual(bookmarked, [8])
+    }
+
+    func testBookmarkedBlocksUseFilledBookmarkIcon() {
+        let overlay = TerminalBlockOverlayView(frame: NSRect(x: 0, y: 0, width: 480, height: 260))
+        overlay.update(
+            blocks: [sampleBlock(id: 9, command: "make", startRow: 3, endRow: 4).withBookmark(true)],
+            visibleStartRow: 0,
+            visibleRowCount: 24,
+            cellHeight: 11,
+            padding: CGPoint(x: 8, y: 4)
+        )
+        overlay.layoutSubtreeIfNeeded()
+
+        let bookmarkButton = overlay.descendantButton(withIdentifier: "command-block-bookmark-9")
+        XCTAssertEqual(bookmarkButton?.toolTip, "Remove block bookmark")
+        XCTAssertNotNil(bookmarkButton?.image)
+    }
+
     private func sampleBlock(
         id: UInt64,
         command: String,

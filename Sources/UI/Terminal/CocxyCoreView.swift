@@ -75,6 +75,9 @@ final class CocxyCoreView: NSView {
     /// produced new live block metadata in the current process.
     var restoredCommandBlocksProvider: (() -> [TerminalCommandBlock])?
 
+    /// Host callback used to persist bookmark toggles for command blocks.
+    var onToggleCommandBlockBookmark: ((TerminalCommandBlock) -> Void)?
+
     /// IDE-like cursor positioning support for shell prompts.
     private(set) lazy var ideCursorController = IDECursorController(
         hostView: self,
@@ -1061,6 +1064,12 @@ final class CocxyCoreView: NSView {
         overlay.onRerunBlock = { [weak self] block in
             self?.rerunBlockFromOverlay(block)
         }
+        overlay.onShareBlock = { [weak self] block, sourceView in
+            self?.shareBlockFromOverlay(block, sourceView: sourceView)
+        }
+        overlay.onToggleBookmark = { [weak self] block in
+            self?.toggleBlockBookmarkFromOverlay(block)
+        }
         addSubview(overlay)
         commandBlockOverlayView = overlay
     }
@@ -1105,6 +1114,20 @@ final class CocxyCoreView: NSView {
             return
         }
         bridge.sendText(block.command + "\r", to: sid)
+    }
+
+    private func shareBlockFromOverlay(_ block: TerminalCommandBlock, sourceView: NSView) {
+        let text = TerminalBlockShareFormatter.text(for: block)
+        guard !text.isEmpty else { return }
+        NSSharingServicePicker(items: [text]).show(
+            relativeTo: sourceView.bounds,
+            of: sourceView,
+            preferredEdge: .minY
+        )
+    }
+
+    private func toggleBlockBookmarkFromOverlay(_ block: TerminalCommandBlock) {
+        onToggleCommandBlockBookmark?(block)
     }
 }
 

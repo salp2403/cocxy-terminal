@@ -169,6 +169,11 @@ extension MainWindowController {
                 guard let self else { return }
                 self.applyFocusToSurface(surfaceID: capturedSurfaceID)
             }
+            configureCommandBlockOverlayIntegration(
+                for: capturedTabID,
+                surfaceID: capturedSurfaceID,
+                in: cocxyView
+            )
         }
     }
 
@@ -809,11 +814,7 @@ extension MainWindowController {
         guard !blocks.isEmpty else { return }
 
         restoredCommandBlocksBySurfaceID[surfaceID] = blocks
-        guard let coreView = surfaceView as? CocxyCoreView else { return }
-        coreView.restoredCommandBlocksProvider = { [weak self] in
-            self?.restoredCommandBlocksBySurfaceID[surfaceID] ?? []
-        }
-        coreView.refreshCommandBlockOverlay()
+        (surfaceView as? CocxyCoreView)?.refreshCommandBlockOverlay()
     }
 
     func availableCommandBlocks(
@@ -843,12 +844,14 @@ extension MainWindowController {
     private func persistLatestCommandBlockIfAvailable(tabID: TabID, surfaceID sourceSurfaceID: SurfaceID?) {
         let fallbackSurfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID
         guard let surfaceID = sourceSurfaceID ?? fallbackSurfaceID,
-              let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge,
-              let block = cocxyBridge.commandBlocks(for: surfaceID, limit: 1).last else {
+              let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge else {
             return
         }
 
-        restoredCommandBlocksBySurfaceID.removeValue(forKey: surfaceID)
+        let liveBlocks = cocxyBridge.commandBlocks(for: surfaceID, limit: 32)
+        guard let block = liveBlocks.last else { return }
+
+        preserveCommandBlockMetadata(for: surfaceID, liveBlocks: liveBlocks)
         (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
 
         let key = "\(surfaceID.rawValue.uuidString)#\(block.id)"
@@ -858,6 +861,62 @@ extension MainWindowController {
         recordCommandBlockActivity(block, tabID: tabID, surfaceID: surfaceID)
         Task.detached(priority: .utility) {
             try? TerminalBlockStore().append(block, sessionID: sessionID)
+        }
+    }
+
+    private func preserveCommandBlockMetadata(
+        for surfaceID: SurfaceID,
+        liveBlocks: [TerminalCommandBlock]
+    ) {
+        guard let restored = restoredCommandBlocksBySurfaceID[surfaceID],
+              !restored.isEmpty else { return }
+
+        let liveIDs = Set(liveBlocks.map(\.id))
+        let metadata = TerminalBlockRestoration.blocksForDisplay(
+            live: [],
+            restored: restored.filter { liveIDs.contains($0.id) },
+            limit: 256
+        )
+
+        if metadata.isEmpty {
+            restoredCommandBlocksBySurfaceID.removeValue(forKey: surfaceID)
+        } else {
+            restoredCommandBlocksBySurfaceID[surfaceID] = metadata
+        }
+    }
+
+    private func configureCommandBlockOverlayIntegration(
+        for tabID: TabID,
+        surfaceID: SurfaceID,
+        in coreView: CocxyCoreView
+    ) {
+        coreView.restoredCommandBlocksProvider = { [weak self] in
+            self?.restoredCommandBlocksBySurfaceID[surfaceID] ?? []
+        }
+        coreView.onToggleCommandBlockBookmark = { [weak self] block in
+            self?.toggleCommandBlockBookmark(block, tabID: tabID, surfaceID: surfaceID)
+        }
+    }
+
+    private func toggleCommandBlockBookmark(
+        _ block: TerminalCommandBlock,
+        tabID: TabID,
+        surfaceID: SurfaceID
+    ) {
+        let updated = block.withBookmark(!block.isBookmarked)
+        var restored = restoredCommandBlocksBySurfaceID[surfaceID] ?? []
+        restored.append(updated)
+        restoredCommandBlocksBySurfaceID[surfaceID] = TerminalBlockRestoration.blocksForDisplay(
+            live: [],
+            restored: restored,
+            limit: 256
+        )
+
+        (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
+
+        let sessionID = sessionIDForTab(tabID).rawValue.uuidString
+        Task.detached(priority: .utility) {
+            try? TerminalBlockStore().append(updated, sessionID: sessionID)
         }
     }
 

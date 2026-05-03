@@ -60,6 +60,8 @@ enum TerminalBlockOverlayLayout {
 final class TerminalBlockOverlayView: NSView {
     var onCopyBlockOutput: ((TerminalCommandBlock) -> Void)?
     var onRerunBlock: ((TerminalCommandBlock) -> Void)?
+    var onShareBlock: ((TerminalCommandBlock, NSView) -> Void)?
+    var onToggleBookmark: ((TerminalCommandBlock) -> Void)?
 
     private var blocks: [TerminalCommandBlock] = []
     private var visibleStartRow: UInt32 = 0
@@ -138,6 +140,12 @@ final class TerminalBlockOverlayView: NSView {
             row.onRerun = { [weak self] block in
                 self?.onRerunBlock?(block)
             }
+            row.onShare = { [weak self] block, sourceView in
+                self?.onShareBlock?(block, sourceView)
+            }
+            row.onBookmark = { [weak self] block in
+                self?.onToggleBookmark?(block)
+            }
             addSubview(row)
             row.layoutSubtreeIfNeeded()
         }
@@ -182,10 +190,14 @@ private final class TerminalBlockRailView: NSView {
 private final class TerminalBlockHeaderView: NSView {
     var onCopy: ((TerminalCommandBlock) -> Void)?
     var onRerun: ((TerminalCommandBlock) -> Void)?
+    var onShare: ((TerminalCommandBlock, NSView) -> Void)?
+    var onBookmark: ((TerminalCommandBlock) -> Void)?
 
     private let block: TerminalCommandBlock
     private let commandLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
+    private let bookmarkButton = NSButton()
+    private let shareButton = NSButton()
     private let copyButton = NSButton()
     private let rerunButton = NSButton()
 
@@ -212,8 +224,12 @@ private final class TerminalBlockHeaderView: NSView {
         let y = (bounds.height - buttonSize.height) / 2
         let rerunX = bounds.width - buttonSize.width - 6
         let copyX = rerunX - buttonSize.width - 4
+        let shareX = copyX - buttonSize.width - 4
+        let bookmarkX = shareX - buttonSize.width - 4
         rerunButton.frame = NSRect(origin: CGPoint(x: rerunX, y: y), size: buttonSize)
         copyButton.frame = NSRect(origin: CGPoint(x: copyX, y: y), size: buttonSize)
+        shareButton.frame = NSRect(origin: CGPoint(x: shareX, y: y), size: buttonSize)
+        bookmarkButton.frame = NSRect(origin: CGPoint(x: bookmarkX, y: y), size: buttonSize)
 
         let statusWidth: CGFloat = 46
         statusLabel.frame = NSRect(
@@ -225,7 +241,7 @@ private final class TerminalBlockHeaderView: NSView {
         commandLabel.frame = NSRect(
             x: statusLabel.frame.maxX + 8,
             y: 4,
-            width: max(0, copyButton.frame.minX - statusLabel.frame.maxX - 16),
+            width: max(0, bookmarkButton.frame.minX - statusLabel.frame.maxX - 16),
             height: bounds.height - 8
         )
     }
@@ -262,6 +278,20 @@ private final class TerminalBlockHeaderView: NSView {
 
     private func configureButtons() {
         configureIconButton(
+            bookmarkButton,
+            symbolName: block.isBookmarked ? "bookmark.fill" : "bookmark",
+            accessibilityLabel: block.isBookmarked ? "Remove block bookmark" : "Bookmark command block",
+            identifier: "command-block-bookmark-\(block.id)",
+            action: #selector(toggleBookmark)
+        )
+        configureIconButton(
+            shareButton,
+            symbolName: "square.and.arrow.up",
+            accessibilityLabel: "Share command block",
+            identifier: "command-block-share-\(block.id)",
+            action: #selector(shareBlock)
+        )
+        configureIconButton(
             copyButton,
             symbolName: "doc.on.doc",
             accessibilityLabel: "Copy block output",
@@ -275,6 +305,8 @@ private final class TerminalBlockHeaderView: NSView {
             identifier: "command-block-rerun-\(block.id)",
             action: #selector(rerunBlock)
         )
+        addSubview(bookmarkButton)
+        addSubview(shareButton)
         addSubview(copyButton)
         addSubview(rerunButton)
     }
@@ -305,5 +337,13 @@ private final class TerminalBlockHeaderView: NSView {
 
     @objc private func rerunBlock() {
         onRerun?(block)
+    }
+
+    @objc private func shareBlock() {
+        onShare?(block, shareButton)
+    }
+
+    @objc private func toggleBookmark() {
+        onBookmark?(block)
     }
 }

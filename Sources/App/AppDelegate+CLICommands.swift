@@ -35,6 +35,7 @@ extension AppDelegate {
     }
 
     private struct CommandBlockPayload: Encodable {
+        let schemaVersion: UInt8
         let id: UInt64
         let command: String
         let outputPreview: String
@@ -50,6 +51,7 @@ extension AppDelegate {
         let streamID: UInt32
         let blockType: UInt8
         let blockTypeName: String
+        let isBookmarked: Bool
     }
 
     private struct CommandBlockListPayload: Encodable {
@@ -677,6 +679,7 @@ extension AppDelegate {
     private func commandBlockPayload(_ block: TerminalCommandBlock) -> CommandBlockPayload {
         let previewLimit = 160
         return CommandBlockPayload(
+            schemaVersion: block.schemaVersion,
             id: block.id,
             command: block.command,
             outputPreview: String(block.output.prefix(previewLimit)),
@@ -691,7 +694,8 @@ extension AppDelegate {
             endRow: block.endRow,
             streamID: block.streamID,
             blockType: block.blockType,
-            blockTypeName: semanticBlockTypeName(block.blockType)
+            blockTypeName: semanticBlockTypeName(block.blockType),
+            isBookmarked: block.isBookmarked
         )
     }
 
