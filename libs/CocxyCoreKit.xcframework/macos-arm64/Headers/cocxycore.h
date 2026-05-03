@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.14.11 (color management APIs)
+ * Version: 0.14.12 (accessibility APIs)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 14
-#define COCXYCORE_VERSION_PATCH 11
-#define COCXYCORE_VERSION_STRING "0.14.11"
+#define COCXYCORE_VERSION_PATCH 12
+#define COCXYCORE_VERSION_STRING "0.14.12"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -363,6 +363,31 @@ typedef enum {
     COCXYCORE_COLOR_SPACE_DISPLAY_P3 = 1,
     COCXYCORE_COLOR_SPACE_AUTO = 2,
 } cocxycore_color_space;
+
+/** Accessibility element for screen-reader terminal exposure. */
+typedef struct {
+    uint32_t row;
+    uint32_t column;
+    uint32_t width;
+    uint32_t height;
+    const char* role_str;
+    const char* value;
+    const char* hint;
+} cocxycore_a11y_element;
+
+/** Accessibility notification kinds. */
+typedef enum {
+    COCXYCORE_A11Y_NOTIFY_CONTENT_CHANGED = 1,
+    COCXYCORE_A11Y_NOTIFY_BLOCK_FINISHED = 2,
+    COCXYCORE_A11Y_NOTIFY_ERROR_DETECTED = 3,
+    COCXYCORE_A11Y_NOTIFY_CURSOR_MOVED = 4,
+} cocxycore_a11y_notify_kind;
+
+/** Accessibility notification callback. */
+typedef void (*cocxycore_a11y_notify_cb)(
+    cocxycore_a11y_notify_kind kind,
+    void* user_data
+);
 
 /** Get the foreground color type. */
 uint8_t cocxycore_terminal_cell_fg_type(
@@ -1655,6 +1680,42 @@ size_t cocxycore_terminal_icc_profile_path(
 
 /** Whether the current platform can provide wide-gamut output. */
 bool cocxycore_terminal_supports_wide_gamut(const cocxycore_terminal* term);
+
+/**
+ * Iterate visible terminal cell accessibility elements for [start_row, end_row).
+ * String pointers in returned elements are owned by the terminal and remain valid
+ * until the next accessibility-element query or terminal destroy.
+ */
+size_t cocxycore_terminal_iterate_a11y_elements(
+    cocxycore_terminal* term,
+    cocxycore_a11y_element* buffer,
+    size_t max_count,
+    uint32_t viewport_start_row,
+    uint32_t viewport_end_row
+);
+
+/**
+ * Get the accessibility element that follows the terminal cursor.
+ * String pointers in the returned element are owned by the terminal and remain
+ * valid until the next accessibility-element query or terminal destroy.
+ */
+bool cocxycore_terminal_get_a11y_cursor_element(
+    cocxycore_terminal* term,
+    cocxycore_a11y_element* out
+);
+
+/** Register an accessibility notification callback. */
+void cocxycore_terminal_set_a11y_notify_callback(
+    cocxycore_terminal* term,
+    cocxycore_a11y_notify_cb cb,
+    void* user_data
+);
+
+/** Enable or disable high-contrast color adjustment for resolved output. */
+void cocxycore_terminal_set_high_contrast_mode(cocxycore_terminal* term, bool enabled);
+
+/** Whether high-contrast color adjustment is enabled. */
+bool cocxycore_terminal_high_contrast_mode(const cocxycore_terminal* term);
 
 /**
  * Resolve a cell's colors to RGBA with theme and style effects.

@@ -115,6 +115,7 @@ extension AppDelegate {
         if let colorDetails = cocxyBridge.colorDiagnostics(for: surfaceID) {
             data["color_space"] = colorDetails.colorSpace.rawValue
             data["wide_gamut"] = colorDetails.supportsWideGamut ? "true" : "false"
+            data["high_contrast"] = colorDetails.highContrastEnabled ? "true" : "false"
             data["icc_profile_configured"] = colorDetails.iccProfilePath == nil ? "false" : "true"
             if let path = colorDetails.iccProfilePath {
                 data["icc_profile_path"] = path

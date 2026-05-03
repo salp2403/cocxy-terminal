@@ -51,7 +51,8 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                     "web_port": "7770",
                     "current_stream_id": "2",
                     "color_space": "srgb",
-                    "wide_gamut": "true"
+                    "wide_gamut": "true",
+                    "high_contrast": "false"
                 ]
             }
         )
@@ -64,6 +65,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["current_stream_id"], "2")
         XCTAssertEqual(response.data?["color_space"], "srgb")
         XCTAssertEqual(response.data?["wide_gamut"], "true")
+        XCTAssertEqual(response.data?["high_contrast"], "false")
     }
 
     @MainActor

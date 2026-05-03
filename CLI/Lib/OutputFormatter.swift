@@ -391,9 +391,10 @@ public enum OutputFormatter {
 
         if let colorSpace = data["color_space"] {
             let wideGamut = data["wide_gamut"] ?? "false"
+            let highContrast = data["high_contrast"] ?? "false"
             let iccProfile = data["icc_profile_configured"] ?? "false"
             lines.append(
-                "Color: \(colorSpace), wide gamut \(boolText(wideGamut)), ICC \(boolText(iccProfile))"
+                "Color: \(colorSpace), wide gamut \(boolText(wideGamut)), high contrast \(boolText(highContrast)), ICC \(boolText(iccProfile))"
             )
         }
 

@@ -117,6 +117,63 @@ struct TerminalColorDiagnostics: Equatable, Sendable, Encodable {
     let colorSpace: TerminalColorSpace
     let supportsWideGamut: Bool
     let iccProfilePath: String?
+    let highContrastEnabled: Bool
+}
+
+struct TerminalAccessibilityElement: Equatable, Sendable, Encodable {
+    let row: UInt32
+    let column: UInt32
+    let width: UInt32
+    let height: UInt32
+    let role: String
+    let value: String
+    let hint: String
+
+    init(
+        row: UInt32,
+        column: UInt32,
+        width: UInt32,
+        height: UInt32,
+        role: String,
+        value: String,
+        hint: String
+    ) {
+        self.row = row
+        self.column = column
+        self.width = width
+        self.height = height
+        self.role = role
+        self.value = value
+        self.hint = hint
+    }
+
+    init(cElement: cocxycore_a11y_element) {
+        self.init(
+            row: cElement.row,
+            column: cElement.column,
+            width: cElement.width,
+            height: cElement.height,
+            role: Self.string(from: cElement.role_str),
+            value: Self.string(from: cElement.value),
+            hint: Self.string(from: cElement.hint)
+        )
+    }
+
+    private static func string(from pointer: UnsafePointer<CChar>?) -> String {
+        guard let pointer else { return "" }
+        return String(cString: pointer)
+    }
+}
+
+enum TerminalAccessibilityNotification: UInt32, Sendable {
+    case contentChanged = 1
+    case blockFinished = 2
+    case errorDetected = 3
+    case cursorMoved = 4
+
+    init?(cValue: cocxycore_a11y_notify_kind) {
+        self.init(rawValue: cValue.rawValue)
+    }
 }
 
 enum TerminalBellMode: UInt8, Sendable {
@@ -361,6 +418,7 @@ final class CocxyCoreBridge: TerminalEngine {
         var configuredImageITerm2Enabled: Bool = true
         var configuredImageDiskCacheDirectory: URL?
         var configuredImageDiskCacheLimitBytes: UInt64 = 512 * 1024 * 1024
+        var accessibilityNotificationHandler: ((TerminalAccessibilityNotification) -> Void)?
 
         var outputHandler: (@Sendable (Data) -> Void)?
         var oscHandler: (@Sendable (OSCNotification) -> Void)?
@@ -1505,9 +1563,62 @@ final class CocxyCoreBridge: TerminalEngine {
             return TerminalColorDiagnostics(
                 colorSpace: colorSpace,
                 supportsWideGamut: cocxycore_terminal_supports_wide_gamut(state.terminal),
-                iccProfilePath: path
+                iccProfilePath: path,
+                highContrastEnabled: cocxycore_terminal_high_contrast_mode(state.terminal)
             )
         }
+    }
+
+    func accessibilityElements(
+        for surface: SurfaceID,
+        viewportStartRow: UInt32,
+        viewportEndRow: UInt32,
+        maxCount: Int = 2048
+    ) -> [TerminalAccessibilityElement]? {
+        guard maxCount > 0 else { return [] }
+        return withTerminalLock(surface) { state in
+            var buffer = [cocxycore_a11y_element](
+                repeating: cocxycore_a11y_element(),
+                count: maxCount
+            )
+            let count = cocxycore_terminal_iterate_a11y_elements(
+                state.terminal,
+                &buffer,
+                buffer.count,
+                viewportStartRow,
+                viewportEndRow
+            )
+            return buffer.prefix(count).map(TerminalAccessibilityElement.init(cElement:))
+        }
+    }
+
+    func accessibilityCursorElement(for surface: SurfaceID) -> TerminalAccessibilityElement? {
+        withTerminalLock(surface) { state -> TerminalAccessibilityElement? in
+            var element = cocxycore_a11y_element()
+            guard cocxycore_terminal_get_a11y_cursor_element(state.terminal, &element) else {
+                return nil
+            }
+            return TerminalAccessibilityElement(cElement: element)
+        } ?? nil
+    }
+
+    func setHighContrastMode(_ enabled: Bool, for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_high_contrast_mode(state.terminal, enabled)
+        }
+    }
+
+    func highContrastMode(for surface: SurfaceID) -> Bool? {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_high_contrast_mode(state.terminal)
+        }
+    }
+
+    func setAccessibilityNotificationHandler(
+        _ handler: ((TerminalAccessibilityNotification) -> Void)?,
+        for surface: SurfaceID
+    ) {
+        surfaces[surface]?.accessibilityNotificationHandler = handler
     }
 
     func setBellMode(_ mode: TerminalBellMode, for surface: SurfaceID) {
@@ -2545,6 +2656,13 @@ final class CocxyCoreBridge: TerminalEngine {
         // Semantic layer
         cocxycore_terminal_enable_semantic(terminal, Self.semanticBlockCapacity)
 
+        // Mirror the user's system accessibility contrast preference at
+        // surface creation; callers can override per surface at runtime.
+        cocxycore_terminal_set_high_contrast_mode(
+            terminal,
+            NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        )
+
         // Font
         _ = applyResolvedFont(
             family: config.fontFamily,
@@ -3026,6 +3144,16 @@ final class CocxyCoreBridge: TerminalEngine {
             }
         }, context)
 
+        // Accessibility notifications
+        cocxycore_terminal_set_a11y_notify_callback(terminal, { kind, ctx in
+            guard let ctx = ctx,
+                  let notification = TerminalAccessibilityNotification(cValue: kind) else { return }
+            let box = Unmanaged<CallbackContext>.fromOpaque(ctx).takeUnretainedValue()
+            DispatchQueue.main.async {
+                box.bridge?.handleAccessibilityNotification(notification, for: box.surfaceID)
+            }
+        }, context)
+
         // Process tracking events
         cocxycore_terminal_set_process_callback(terminal, { event, ctx in
             guard let ctx = ctx, let event = event else { return }
@@ -3224,6 +3352,13 @@ final class CocxyCoreBridge: TerminalEngine {
         // ALL events → semantic adapter for agent detection + timeline
         let cwd = currentWorkingDirectory(for: surfaceID)
         semanticAdapter.processSemanticEvent(event, for: surfaceID, cwd: cwd)
+    }
+
+    private func handleAccessibilityNotification(
+        _ notification: TerminalAccessibilityNotification,
+        for surfaceID: SurfaceID
+    ) {
+        surfaces[surfaceID]?.accessibilityNotificationHandler?(notification)
     }
 
     /// Handle process tracking events from CocxyCore.
