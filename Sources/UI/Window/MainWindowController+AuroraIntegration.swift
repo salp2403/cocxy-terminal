@@ -256,6 +256,10 @@ extension MainWindowController {
             self.tabManager.moveTab(from: index, to: index + 1)
             self.refreshAuroraChromeAfterTabMutation()
         }
+        controller.onMovePaneToSession = { [weak self] surfaceID, targetTabID in
+            guard let self else { return false }
+            return self.moveSplitSurface(surfaceID, to: targetTabID)
+        }
         controller.onTogglePalette = { [weak self] in
             self?.toggleAuroraPalette()
         }

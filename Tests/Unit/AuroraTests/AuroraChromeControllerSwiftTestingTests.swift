@@ -298,6 +298,40 @@ struct AuroraChromeControllerSwiftTestingTests {
     }
 
     @Test
+    func movePaneToSessionRoutesTypedSurfaceAndTargetTab() {
+        let harness = makeHarness()
+        let target = harness.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/aurora-pane-target")
+        )
+        let surfaceID = SurfaceID()
+        var capturedSurfaceID: SurfaceID?
+        var capturedTabID: TabID?
+        harness.controller.onMovePaneToSession = { surfaceID, tabID in
+            capturedSurfaceID = surfaceID
+            capturedTabID = tabID
+            return true
+        }
+
+        let moved = harness.controller.movePane(
+            surfaceID.rawValue.uuidString,
+            toSessionID: target.id.rawValue.uuidString
+        )
+
+        #expect(moved == true)
+        #expect(capturedSurfaceID == surfaceID)
+        #expect(capturedTabID == target.id)
+    }
+
+    @Test
+    func movePaneToSessionRejectsInvalidSurfaceOrTargetSession() {
+        let harness = makeHarness()
+        let target = harness.tabManager.tabs[0]
+
+        #expect(harness.controller.movePane("not-a-uuid", toSessionID: target.id.rawValue.uuidString) == false)
+        #expect(harness.controller.movePane(SurfaceID().rawValue.uuidString, toSessionID: "missing") == false)
+    }
+
+    @Test
     func togglePaletteCallbackFiresFromSidebar() {
         let harness = makeHarness()
         var invoked = false

@@ -62,6 +62,7 @@ extension Design {
         var onMoveSessionUp: ((String) -> Void)? = nil
         var onMoveSessionDown: ((String) -> Void)? = nil
         var onMoveSessionBefore: ((String, String) -> Void)? = nil
+        var onMovePaneToSession: ((String, String) -> Void)? = nil
         /// Optional callback for the notification tray button. Stays
         /// optional so tests and previews that do not care about the
         /// notification center can omit it; the header renders the
@@ -369,6 +370,11 @@ extension Design {
                                         handler(sourceSessionID, session.id)
                                     }
                                 },
+                                onMovePaneToSession: onMovePaneToSession.map { handler in
+                                    { paneID in
+                                        handler(paneID, session.id)
+                                    }
+                                },
                                 onHoverChange: { hovering in
                                     if hovering {
                                         hoveredSession = HoveredSessionContext(
@@ -512,6 +518,7 @@ extension Design {
         var onMoveUp: (() -> Void)? = nil
         var onMoveDown: (() -> Void)? = nil
         var onMoveSessionBefore: ((String) -> Void)? = nil
+        var onMovePaneToSession: ((String) -> Void)? = nil
         var onHoverChange: (Bool) -> Void = { _ in }
 
         @Environment(\.designThemePalette) private var palette
@@ -583,7 +590,7 @@ extension Design {
             .overlay(borderView)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .onDrag {
-                NSItemProvider(object: session.id as NSString)
+                NSItemProvider(object: "session:\(session.id)" as NSString)
             }
             .onDrop(of: [UTType.text], isTargeted: $isDropTargeted) { providers in
                 handleSessionDrop(providers)
@@ -628,12 +635,23 @@ extension Design {
             }
 
             provider.loadObject(ofClass: NSString.self) { object, _ in
-                guard let sourceSessionID = object as? String,
-                      sourceSessionID != session.id else {
+                guard let payload = object as? String else {
+                    return
+                }
+
+                if let sourceSessionID = payload.droppablePayloadValue(prefix: "session:"),
+                   sourceSessionID != session.id {
+                    Task { @MainActor in
+                        onMoveSessionBefore?(sourceSessionID)
+                    }
+                    return
+                }
+
+                guard let paneID = payload.droppablePayloadValue(prefix: "pane:") else {
                     return
                 }
                 Task { @MainActor in
-                    onMoveSessionBefore?(sourceSessionID)
+                    onMovePaneToSession?(paneID)
                 }
             }
             return true
@@ -1074,6 +1092,9 @@ extension Design {
                         )
                         .frame(width: 7, height: 7)
                         .help(pane.diagnosticLine)
+                        .onDrag {
+                            NSItemProvider(object: "pane:\(pane.id)" as NSString)
+                        }
                 }
             }
             .accessibilityHidden(true)
@@ -1113,6 +1134,14 @@ extension Design {
             .help("Cocxy does not phone home. Remote panes connect only when you explicitly open them.")
             .accessibilityLabel("No telemetry: Cocxy does not phone home")
         }
+    }
+}
+
+private extension String {
+    func droppablePayloadValue(prefix: String) -> String? {
+        guard hasPrefix(prefix) else { return nil }
+        let value = String(dropFirst(prefix.count))
+        return value.isEmpty ? nil : value
     }
 }
 

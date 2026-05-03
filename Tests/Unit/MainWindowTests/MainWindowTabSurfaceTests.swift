@@ -1088,6 +1088,75 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertFalse(bridge.destroyedSurfaces.contains(originalPrimarySurfaceID))
     }
 
+    func testMoveSplitSurfaceToTabPreservesLiveSurfaceAndReassignsOwnership() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let sourceTabID = controller.tabManager.activeTabID else {
+            XCTFail("Expected bootstrap tab")
+            return
+        }
+
+        controller.performVisualSplit(isVertical: true)
+
+        guard let movedEntry = controller.splitSurfaceViews.first,
+              let movedViewModel = controller.splitViewModels[movedEntry.key] else {
+            XCTFail("Expected a movable split surface")
+            return
+        }
+        let movedSurfaceID = movedEntry.key
+        let movedSurfaceView = movedEntry.value
+
+        let targetTabID = controller.createTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/pane-target")
+        )
+
+        XCTAssertTrue(controller.moveSplitSurface(movedSurfaceID, to: targetTabID))
+        XCTAssertFalse(bridge.destroyedSurfaces.contains(movedSurfaceID))
+        XCTAssertFalse(controller.surfaceIDs(for: sourceTabID).contains(movedSurfaceID))
+        XCTAssertTrue(controller.surfaceIDs(for: targetTabID).contains(movedSurfaceID))
+        XCTAssertEqual(controller.tabID(for: movedSurfaceID), targetTabID)
+        XCTAssertTrue(controller.splitSurfaceViews[movedSurfaceID] === movedSurfaceView)
+        XCTAssertTrue(controller.splitViewModels[movedSurfaceID] === movedViewModel)
+        XCTAssertNil(controller.savedTabSplitSurfaceViews[sourceTabID]?[movedSurfaceID])
+        XCTAssertNotNil(controller.activeSplitView)
+    }
+
+    func testMoveSplitSurfaceRejectsPrimarySurfaceAndSameTabMove() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let sourceTabID = controller.tabManager.activeTabID,
+              let primarySurfaceID = controller.tabSurfaceMap[sourceTabID] else {
+            XCTFail("Expected bootstrap tab and primary surface")
+            return
+        }
+
+        controller.performVisualSplit(isVertical: true)
+        guard let splitSurfaceID = controller.splitSurfaceViews.keys.first else {
+            XCTFail("Expected split surface")
+            return
+        }
+
+        XCTAssertFalse(controller.moveSplitSurface(splitSurfaceID, to: sourceTabID))
+
+        let targetTabID = controller.createTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/pane-target-primary")
+        )
+
+        XCTAssertFalse(controller.moveSplitSurface(primarySurfaceID, to: targetTabID))
+        XCTAssertEqual(controller.tabID(for: primarySurfaceID), sourceTabID)
+        XCTAssertFalse(bridge.destroyedSurfaces.contains(primarySurfaceID))
+    }
+
     func testEditorPanelQuitRequestClosesOnlyThatPanel() throws {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

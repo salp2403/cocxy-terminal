@@ -121,6 +121,7 @@ final class AuroraChromeController: ObservableObject {
     var onCloseOtherSessions: ((TabID) -> Void)?
     var onMoveSessionUp: ((TabID) -> Void)?
     var onMoveSessionDown: ((TabID) -> Void)?
+    var onMovePaneToSession: ((SurfaceID, TabID) -> Bool)?
 
     /// Invoked when the user presses the palette hotkey inside an
     /// Aurora view (sidebar header button, palette-trigger keyboard
@@ -609,6 +610,15 @@ final class AuroraChromeController: ObservableObject {
         refreshSources()
         return true
     }
+
+    @discardableResult
+    func movePane(_ paneID: String, toSessionID targetSessionID: String) -> Bool {
+        guard let paneUUID = UUID(uuidString: paneID),
+              let targetTabID = tabID(forSessionID: targetSessionID) else {
+            return false
+        }
+        return onMovePaneToSession?(SurfaceID(rawValue: paneUUID), targetTabID) ?? false
+    }
 }
 
 // MARK: - SwiftUI host wrappers
@@ -663,6 +673,9 @@ struct AuroraSidebarHost: View {
             },
             onMoveSessionBefore: { sourceSessionID, targetSessionID in
                 _ = controller.moveSession(sourceSessionID, before: targetSessionID)
+            },
+            onMovePaneToSession: { paneID, targetSessionID in
+                _ = controller.movePane(paneID, toSessionID: targetSessionID)
             },
             onToggleNotifications: controller.onToggleNotifications.map { handler in
                 { handler() }
