@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.14.7 (block metadata command/pwd snapshots)
+ * Version: 0.14.8 (OSC 8 hyperlink metadata)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 14
-#define COCXYCORE_VERSION_PATCH 7
-#define COCXYCORE_VERSION_STRING "0.14.7"
+#define COCXYCORE_VERSION_PATCH 8
+#define COCXYCORE_VERSION_STRING "0.14.8"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -518,6 +518,37 @@ size_t cocxycore_terminal_selection_copy_text(
     const cocxycore_terminal* term,
     uint8_t* buf,
     size_t buf_len
+);
+
+/* -- Hyperlinks -- */
+
+/** OSC 8 hyperlink metadata for one terminal span. */
+typedef struct {
+    const char* uri;
+    size_t uri_len;
+    const char* params;
+    size_t params_len;
+    uint32_t row;       /**< Absolute history row. */
+    uint32_t column;    /**< Terminal cell column. */
+    uint32_t length;    /**< Span length in terminal cells. */
+} cocxycore_hyperlink_metadata;
+
+/** Query hyperlink metadata at an absolute history row and terminal column. */
+bool cocxycore_terminal_get_hyperlink_at(
+    const cocxycore_terminal* term,
+    uint32_t row,
+    uint32_t column,
+    cocxycore_hyperlink_metadata* out
+);
+
+/**
+ * Iterate stored hyperlink spans. Returns the total number of spans available.
+ * Pass NULL for buffer or 0 for max_count to query the total count only.
+ */
+size_t cocxycore_terminal_iterate_hyperlinks(
+    const cocxycore_terminal* term,
+    cocxycore_hyperlink_metadata* buffer,
+    size_t max_count
 );
 
 /* -- Search -- */

@@ -115,6 +115,14 @@ struct TerminalSelectionSnapshot: Equatable, Sendable, Encodable {
     let text: String?
 }
 
+struct TerminalHyperlinkMetadata: Equatable, Sendable, Encodable {
+    let uri: String
+    let params: String
+    let row: UInt32
+    let column: UInt32
+    let length: UInt32
+}
+
 struct TerminalPreeditSnapshot: Equatable, Sendable, Encodable {
     let active: Bool
     let text: String
@@ -1440,6 +1448,49 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    func hyperlink(
+        atRow row: UInt32,
+        column: UInt32,
+        for surface: SurfaceID
+    ) -> TerminalHyperlinkMetadata? {
+        withTerminalLock(surface) { state -> TerminalHyperlinkMetadata? in
+            var metadata = cocxycore_hyperlink_metadata()
+            guard cocxycore_terminal_get_hyperlink_at(
+                state.terminal,
+                row,
+                column,
+                &metadata
+            ) else {
+                return nil
+            }
+            return Self.hyperlinkMetadata(from: metadata)
+        } ?? nil
+    }
+
+    func hyperlinkSpans(
+        for surface: SurfaceID,
+        limit: Int = Int.max
+    ) -> [TerminalHyperlinkMetadata] {
+        guard limit > 0 else { return [] }
+        return withTerminalLock(surface) { state -> [TerminalHyperlinkMetadata] in
+            let total = cocxycore_terminal_iterate_hyperlinks(state.terminal, nil, 0)
+            guard total > 0 else { return [] }
+
+            let requested = min(total, limit)
+            var buffer = [cocxycore_hyperlink_metadata](
+                repeating: cocxycore_hyperlink_metadata(),
+                count: requested
+            )
+            let available = cocxycore_terminal_iterate_hyperlinks(
+                state.terminal,
+                &buffer,
+                buffer.count
+            )
+            let copied = min(available, buffer.count)
+            return buffer.prefix(copied).map(Self.hyperlinkMetadata(from:))
+        } ?? []
+    }
+
     func preeditSnapshot(for surface: SurfaceID) -> TerminalPreeditSnapshot? {
         withTerminalLock(surface) { state -> TerminalPreeditSnapshot in
             let active = cocxycore_terminal_preedit_active(state.terminal)
@@ -1627,6 +1678,18 @@ final class CocxyCoreBridge: TerminalEngine {
         guard let pointer, length > 0 else { return "" }
         let buffer = UnsafeBufferPointer(start: pointer, count: length)
         return String(decoding: buffer.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
+    private static func hyperlinkMetadata(
+        from metadata: cocxycore_hyperlink_metadata
+    ) -> TerminalHyperlinkMetadata {
+        TerminalHyperlinkMetadata(
+            uri: string(from: metadata.uri, length: metadata.uri_len),
+            params: string(from: metadata.params, length: metadata.params_len),
+            row: metadata.row,
+            column: metadata.column,
+            length: metadata.length
+        )
     }
 
     private static func blockOutput(from terminal: OpaquePointer, blockID: UInt64) -> String {

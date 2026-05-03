@@ -261,6 +261,51 @@ struct CocxyCoreBridgeTests {
         #expect(snapshot.text == "alpha")
     }
 
+    @Test("hyperlink metadata exposes OSC 8 spans")
+    func hyperlinkMetadataExposesOSC8Spans() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(
+            "\u{001B}]8;id=docs;https://cocxy.dev/docs\u{0007}Click\u{001B}]8;;\u{0007} plain",
+            to: state.terminal
+        )
+
+        let link = try #require(bridge.hyperlink(atRow: 0, column: 0, for: surfaceID))
+        #expect(link.uri == "https://cocxy.dev/docs")
+        #expect(link.params == "id=docs")
+        #expect(link.row == 0)
+        #expect(link.column == 0)
+        #expect(link.length == 5)
+        #expect(bridge.hyperlink(atRow: 0, column: 5, for: surfaceID) == nil)
+    }
+
+    @Test("hyperlink spans iterate in terminal order")
+    func hyperlinkSpansIterateInTerminalOrder() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(
+            "\u{001B}]8;id=one;https://one.example\u{0007}One\u{001B}]8;;\u{0007}\r\n" +
+                "\u{001B}]8;id=two;https://two.example\u{0007}Two\u{001B}]8;;\u{0007}",
+            to: state.terminal
+        )
+
+        let links = bridge.hyperlinkSpans(for: surfaceID)
+        #expect(links.map(\.uri) == ["https://one.example", "https://two.example"])
+        #expect(links.map(\.params) == ["id=one", "id=two"])
+        #expect(links.map(\.row) == [0, 1])
+        #expect(links.map(\.column) == [0, 0])
+        #expect(links.map(\.length) == [3, 3])
+
+        let limited = bridge.hyperlinkSpans(for: surfaceID, limit: 1)
+        #expect(limited.map(\.uri) == ["https://one.example"])
+    }
+
     @Test("sendKeyEvent returns true for supported arrow keys")
     func sendKeyEventHandlesArrowKeys() throws {
         let bridge = try makeBridge()
