@@ -60,6 +60,28 @@ struct AgentToolApprovalPreviewSwiftTestingTests {
         #expect(runner.calls == 0)
     }
 
+    @Test("run_command preview refuses normalized root delete variants")
+    func runCommandPreviewRefusesRootDeleteVariants() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingPreviewProcessRunner()
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            processRunner: runner
+        )
+
+        for command in ["rm -rf /.", "/bin/rm -rf /.", "sh -c 'rm -rf /.'", "env -S 'rm -rf /.'"] {
+            await #expect(throws: (any Error).self) {
+                _ = try await executor.preview(for: AgentToolCall(
+                    id: "call-danger-\(command)",
+                    toolID: "run_command",
+                    arguments: ["command": .string(command)]
+                ))
+            }
+        }
+        #expect(runner.calls == 0)
+    }
+
     private func makeWorkspace() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-preview-\(UUID().uuidString)", isDirectory: true)

@@ -59,7 +59,29 @@ struct AgentToolPermissionSwiftTestingTests {
         let policy = AgentToolPermissionPolicy(commandAllowRules: [.prefix("rm")])
         let commands = [
             "rm -rf /",
+            "rm -rf /.",
+            "rm -rf /*",
+            "rm -rf \"/\"",
+            "rm -rf '/'",
+            "rm -r -f /",
+            "rm --recursive --force /",
+            "rm -rf --no-preserve-root /",
+            "/bin/rm -rf /.",
             "sudo rm -fr -- /",
+            "sudo rm -fr -- /.",
+            "sudo -n rm -fr /.",
+            "sudo /bin/rm -fr /.",
+            "sudo -u root rm -fr /.",
+            "sudo --user root rm -rf /.",
+            "env COCXY_SMOKE=1 rm -rf /*",
+            "env -S 'rm -rf /.'",
+            "env --split-string 'rm -rf /.'",
+            "command rm -rf /",
+            "command sudo -n rm -rf /.",
+            "sh -c 'rm -rf /.'",
+            "/bin/sh -c 'rm -rf /.'",
+            "bash -lc \"rm -rf /.\"",
+            "zsh -c 'sudo -u root rm -rf /.'",
             "diskutil eraseDisk APFS Cocxy /dev/disk4",
             "mkfs.ext4 /dev/disk2",
             "dd if=/dev/zero of=/dev/disk3 bs=1m",
@@ -74,6 +96,25 @@ struct AgentToolPermissionSwiftTestingTests {
                 command: command
             )
             #expect(policy.decision(for: invocation) == .deny(.dangerousCommand(command: command)))
+        }
+    }
+
+    @Test("safe rm commands still require approval instead of being denied")
+    func safeRMCommandsStillRequireApproval() {
+        let policy = AgentToolPermissionPolicy()
+        let commands = [
+            "rm -rf /tmp/cocxy-agent-smoke",
+            "rm -rf ./build",
+            "rm --recursive --force Sources",
+        ]
+
+        for command in commands {
+            let invocation = AgentToolInvocation(
+                toolID: "run_command",
+                capability: .command,
+                command: command
+            )
+            #expect(policy.decision(for: invocation) == .prompt(.commandApprovalRequired(command: command)))
         }
     }
 

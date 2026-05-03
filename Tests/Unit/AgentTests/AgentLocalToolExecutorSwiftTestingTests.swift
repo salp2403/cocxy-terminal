@@ -263,6 +263,38 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         #expect(runner.calls.isEmpty)
     }
 
+    @Test("run_command denies normalized root delete variants before invoking the runner")
+    func runCommandDeniesRootDeleteVariantsBeforeRunner() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingLocalAgentProcessRunner(results: [])
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            processRunner: runner
+        )
+        let commands = [
+            "rm -rf /.",
+            "rm -rf /*",
+            "/bin/rm -rf /.",
+            "sudo rm -fr -- /.",
+            "sudo -u root rm -fr -- /.",
+            "sh -c 'rm -rf /.'",
+            "env -S 'rm -rf /.'",
+        ]
+
+        for command in commands {
+            let result = try await executor.execute(AgentToolCall(
+                id: "call-danger-\(command)",
+                toolID: "run_command",
+                arguments: ["command": .string(command)]
+            ))
+
+            #expect(result.status == .failure)
+            #expect(result.error?.code == "dangerous_command")
+        }
+        #expect(runner.calls.isEmpty)
+    }
+
     @Test("ask_user returns approved human answer as a tool result")
     func askUserReturnsApprovedHumanAnswer() async throws {
         let root = try makeWorkspace()
