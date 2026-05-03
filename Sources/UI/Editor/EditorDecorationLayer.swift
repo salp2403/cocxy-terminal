@@ -11,6 +11,9 @@ enum EditorDecorationLayer {
         textStorage.removeAttribute(.backgroundColor, range: fullRange)
         textStorage.removeAttribute(.underlineStyle, range: fullRange)
         textStorage.removeAttribute(.underlineColor, range: fullRange)
+        if fullRange.length > 0 {
+            textStorage.addAttribute(.foregroundColor, value: CocxyColors.text, range: fullRange)
+        }
 
         for decoration in decorationSet.decorations {
             let clamped = decoration.range.clamped(to: textLength)

@@ -96,6 +96,21 @@ struct EditorViewSwiftTestingTests {
         #expect(requestedTexts.last == "func greet() {}\n")
     }
 
+    @Test("plain text keeps readable editor foreground when syntax has no tokens")
+    func plainTextKeepsReadableForegroundWithoutSyntaxTokens() throws {
+        let view = EditorView(text: "alpha beta\n")
+        let textView: EditorTextView = try #require(findSubview(in: view))
+
+        let color = textView.textStorage?.attribute(
+            .foregroundColor,
+            at: 0,
+            effectiveRange: nil
+        ) as? NSColor
+
+        #expect(color?.isEqual(CocxyColors.text) == true)
+        #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
+    }
+
     @Test("editor view applies real bundled syntax decorations for first smoke languages")
     func editorViewAppliesRealBundledSyntaxDecorationsForSmokeLanguages() throws {
         let resourcesURL = repositoryRoot().appendingPathComponent("Resources", isDirectory: true)

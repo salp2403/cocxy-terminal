@@ -87,6 +87,7 @@ final class EditorTextView: NSTextView {
         font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         textColor = CocxyColors.text
         insertionPointColor = CocxyColors.text
+        typingAttributes[.foregroundColor] = CocxyColors.text
         selectedTextAttributes = [
             .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.28),
             .foregroundColor: CocxyColors.text,
