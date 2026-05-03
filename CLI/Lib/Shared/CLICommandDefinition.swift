@@ -36,6 +36,10 @@ public enum CLICommand: String, CaseIterable {
 
     case tabRename = "tab-rename"
     case tabMove = "tab-move"
+    case tabConfigSave = "tab-config-save"
+    case tabConfigOpen = "tab-config-open"
+    case tabConfigList = "tab-config-list"
+    case tabConfigPath = "tab-config-path"
 
     // MARK: - Split extended (v2)
 
@@ -232,6 +236,10 @@ public enum CLICommand: String, CaseIterable {
         // Tab extended
         case .tabRename: return "Rename a tab by UUID"
         case .tabMove: return "Move a tab to a new position"
+        case .tabConfigSave: return "Save the active tab as a reusable TOML config"
+        case .tabConfigOpen: return "Open a new tab from a reusable TOML config"
+        case .tabConfigList: return "List saved tab configs"
+        case .tabConfigPath: return "Show a tab config TOML path"
 
         // Split extended
         case .splitList: return "List all split panes as JSON"
@@ -396,6 +404,10 @@ public enum CLICommand: String, CaseIterable {
         // Tab extended
         case .tabRename: return "cocxy tab rename <id> <name>"
         case .tabMove: return "cocxy tab move <id> <position>"
+        case .tabConfigSave: return "cocxy tab config save <name> [--command <cmd>] [--theme <theme>] [--env KEY=VALUE]"
+        case .tabConfigOpen: return "cocxy tab config open <name>"
+        case .tabConfigList: return "cocxy tab config list"
+        case .tabConfigPath: return "cocxy tab config path <name>"
 
         // Split extended
         case .splitList: return "cocxy split list [--json]"

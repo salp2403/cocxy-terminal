@@ -126,6 +126,19 @@ extension AppDelegate {
 
         fileMenu.addItem(NSMenuItem.separator())
 
+        fileMenu.addItem(
+            withTitle: "Save Current Tab as Config...",
+            action: #selector(MainWindowController.saveCurrentTabConfigAction(_:)),
+            keyEquivalent: ""
+        )
+        fileMenu.addItem(
+            withTitle: "Open Tab from Config...",
+            action: #selector(MainWindowController.openTabConfigAction(_:)),
+            keyEquivalent: ""
+        )
+
+        fileMenu.addItem(NSMenuItem.separator())
+
         let closeTabItem = NSMenuItem(
             title: "Close Tab",
             action: #selector(MainWindowController.closeTabAction(_:)),

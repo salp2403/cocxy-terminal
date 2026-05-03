@@ -85,6 +85,23 @@ public enum ParsedCommand: Equatable {
     /// `cocxy tab move <id> <position>`
     case tabMove(id: String, position: String)
 
+    /// `cocxy tab config save <name> [--command <cmd>] [--theme <theme>] [--env KEY=VALUE]`
+    case tabConfigSave(
+        name: String,
+        command: String?,
+        theme: String?,
+        environment: [String: String]
+    )
+
+    /// `cocxy tab config open <name>`
+    case tabConfigOpen(name: String)
+
+    /// `cocxy tab config list`
+    case tabConfigList
+
+    /// `cocxy tab config path <name>`
+    case tabConfigPath(name: String)
+
     // MARK: - Split extended (v2)
 
     /// `cocxy split list`
@@ -1122,6 +1139,8 @@ public enum CLIArgumentParser {
             return try parseTabRename(arguments: Array(arguments.dropFirst()))
         case "move":
             return try parseTabMove(arguments: Array(arguments.dropFirst()))
+        case "config":
+            return try parseTabConfig(arguments: Array(arguments.dropFirst()))
         case "duplicate":
             return .tabDuplicate(id: arguments.dropFirst().first)
         case "pin":
@@ -1130,9 +1149,99 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "tab",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use rename, move, duplicate, or pin."
+                reason: "Unknown subcommand. Use rename, move, config, duplicate, or pin."
             )
         }
+    }
+
+    /// Parses `cocxy tab config <save|open|list|path>`.
+    private static func parseTabConfig(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "tab config", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "save":
+            return try parseTabConfigSave(arguments: Array(arguments.dropFirst()))
+        case "open":
+            let rest = Array(arguments.dropFirst())
+            guard let name = rest.first, !name.isEmpty else {
+                throw CLIError.missingArgument(command: "tab config open", argument: "name")
+            }
+            return .tabConfigOpen(name: name)
+        case "list":
+            return .tabConfigList
+        case "path":
+            let rest = Array(arguments.dropFirst())
+            guard let name = rest.first, !name.isEmpty else {
+                throw CLIError.missingArgument(command: "tab config path", argument: "name")
+            }
+            return .tabConfigPath(name: name)
+        default:
+            throw CLIError.invalidArgument(
+                command: "tab config",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use save, open, list, or path."
+            )
+        }
+    }
+
+    private static func parseTabConfigSave(arguments: [String]) throws -> ParsedCommand {
+        guard let name = arguments.first, !name.isEmpty else {
+            throw CLIError.missingArgument(command: "tab config save", argument: "name")
+        }
+
+        var command: String?
+        var theme: String?
+        var environment: [String: String] = [:]
+        var index = 1
+
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--command":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "tab config save", argument: "command")
+                }
+                command = arguments[index + 1]
+                index += 2
+            case "--theme":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "tab config save", argument: "theme")
+                }
+                theme = arguments[index + 1]
+                index += 2
+            case "--env":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "tab config save", argument: "KEY=VALUE")
+                }
+                let pair = arguments[index + 1]
+                guard let equals = pair.firstIndex(of: "="),
+                      equals != pair.startIndex else {
+                    throw CLIError.invalidArgument(
+                        command: "tab config save",
+                        argument: pair,
+                        reason: "Environment overrides must use KEY=VALUE."
+                    )
+                }
+                let key = String(pair[..<equals])
+                let value = String(pair[pair.index(after: equals)...])
+                environment[key] = value
+                index += 2
+            default:
+                throw CLIError.invalidArgument(
+                    command: "tab config save",
+                    argument: arguments[index],
+                    reason: "Unknown flag. Use --command, --theme, or --env KEY=VALUE."
+                )
+            }
+        }
+
+        return .tabConfigSave(
+            name: name,
+            command: command,
+            theme: theme,
+            environment: environment
+        )
     }
 
     /// Parses `cocxy tab rename <id> <name>`.

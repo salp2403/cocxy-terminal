@@ -18,6 +18,8 @@ final class CommandPaletteWiringTests: XCTestCase {
             "window.commandPalette",
             "tabs.new",
             "tabs.close",
+            "tabs.configSave",
+            "tabs.configOpen",
             "tabs.next",
             "tabs.previous",
             "tabs.moveToNewWindow",

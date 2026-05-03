@@ -373,6 +373,32 @@ public struct CommandRunner {
                 params: ["id": id, "position": position]
             )
 
+        case .tabConfigSave(let name, let command, let theme, let environment):
+            var params: [String: String] = ["name": name]
+            if let command { params["command"] = command }
+            if let theme { params["theme"] = theme }
+            for key in environment.keys.sorted() {
+                params["env.\(key)"] = environment[key]
+            }
+            return CLISocketRequest(id: requestID, command: "tab-config-save", params: params)
+
+        case .tabConfigOpen(let name):
+            return CLISocketRequest(
+                id: requestID,
+                command: "tab-config-open",
+                params: ["name": name]
+            )
+
+        case .tabConfigList:
+            return CLISocketRequest(id: requestID, command: "tab-config-list", params: nil)
+
+        case .tabConfigPath(let name):
+            return CLISocketRequest(
+                id: requestID,
+                command: "tab-config-path",
+                params: ["name": name]
+            )
+
         // MARK: Split extended (v2)
 
         case .splitList:

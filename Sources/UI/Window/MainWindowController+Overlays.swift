@@ -287,6 +287,28 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "tabs.configSave",
+                name: "Save Current Tab as Config",
+                description: "Write the active tab setup to a local TOML file",
+                shortcut: nil,
+                category: .tabs,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.promptAndSaveCurrentTabConfig() }
+                }
+            ),
+            CommandAction(
+                id: "tabs.configOpen",
+                name: "Open Tab from Config",
+                description: "Open a new terminal tab from a saved TOML setup",
+                shortcut: nil,
+                category: .tabs,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.promptAndOpenTabConfig() }
+                }
+            ),
+            CommandAction(
                 id: "tabs.moveToNewWindow",
                 name: "Move Tab to New Window",
                 description: "Detach the active tab into its own window",

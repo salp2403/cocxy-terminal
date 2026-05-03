@@ -186,6 +186,64 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["summary"], "Review approved for PR #42.")
     }
 
+    func test_tabConfigSave_routesNameCommandThemeAndEnvToProvider() {
+        let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>(
+            (nil, nil, nil, [:])
+        )
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            tabConfigSaveProvider: { name, command, theme, environment in
+                captured.withValue { value in
+                    value = (name, command, theme, environment)
+                }
+                return (name: name, path: "/tmp/\(name).toml")
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "tab-config-save-1",
+            command: "tab-config-save",
+            params: [
+                "name": "api",
+                "command": "npm run dev",
+                "theme": "Nord",
+                "env.API_URL": "http://127.0.0.1:8080",
+            ]
+        ))
+
+        XCTAssertTrue(response.success)
+        let snapshot = captured.withValue { $0 }
+        XCTAssertEqual(snapshot.name, "api")
+        XCTAssertEqual(snapshot.command, "npm run dev")
+        XCTAssertEqual(snapshot.theme, "Nord")
+        XCTAssertEqual(snapshot.env, ["API_URL": "http://127.0.0.1:8080"])
+        XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
+    }
+
+    func test_tabConfigOpen_routesNameToProvider() {
+        let captured = LockedBox<String?>(nil)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            tabConfigOpenProvider: { name in
+                captured.withValue { $0 = name }
+                return (id: "tab-1", title: "api", path: "/tmp/api.toml")
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "tab-config-open-1",
+            command: "tab-config-open",
+            params: ["name": "api"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(captured.withValue { $0 }, "api")
+        XCTAssertEqual(response.data?["id"], "tab-1")
+        XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
+    }
+
     func test_reviewRequestChanges_routesToGitHubProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(

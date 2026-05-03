@@ -1764,6 +1764,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return true
                 }
             },
+            tabConfigSaveProvider: { name, command, theme, environment in
+                syncOnMainActor {
+                    delegateRef.value?.saveFocusedTabConfigForCLI(
+                        name: name,
+                        command: command,
+                        theme: theme,
+                        environment: environment
+                    )
+                }
+            },
+            tabConfigOpenProvider: { name in
+                syncOnMainActor {
+                    delegateRef.value?.openTabConfigForCLI(named: name)
+                }
+            },
+            tabConfigListProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.listTabConfigsForCLI()
+                }
+            },
+            tabConfigPathProvider: { name in
+                syncOnMainActor {
+                    delegateRef.value?.tabConfigPathForCLI(named: name)
+                }
+            },
             projectConfigProviderOverride: {
                 syncOnMainActor {
                     guard let controller = focusedControllerProvider(),

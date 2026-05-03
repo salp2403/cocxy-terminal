@@ -66,6 +66,20 @@ public enum OutputFormatter {
             return "Tab renamed."
         case .tabMove:
             return "Tab moved."
+        case .tabConfigSave:
+            if let path = response.data?["path"] {
+                return "Tab config saved: \(path)"
+            }
+            return "Tab config saved."
+        case .tabConfigOpen:
+            if let name = response.data?["name"] {
+                return "Tab opened from config: \(name)"
+            }
+            return "Tab opened from config."
+        case .tabConfigList:
+            return formatDataOrJSON(response: response)
+        case .tabConfigPath:
+            return response.data?["path"] ?? ""
 
         // MARK: Split extended (v2)
 

@@ -236,6 +236,40 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testSaveCurrentTabAsConfigHasAction() {
+        let saveConfig = fileMenu.items.first(where: { $0.title == "Save Current Tab as Config..." })
+        XCTAssertNotNil(
+            saveConfig?.action,
+            "Save Current Tab as Config must be reachable from the File menu"
+        )
+    }
+
+    func testSaveCurrentTabAsConfigActionPointsToCorrectSelector() {
+        let saveConfig = fileMenu.items.first(where: { $0.title == "Save Current Tab as Config..." })
+        XCTAssertEqual(
+            saveConfig?.action,
+            #selector(MainWindowController.saveCurrentTabConfigAction(_:)),
+            "Save Current Tab as Config must be wired to saveCurrentTabConfigAction:"
+        )
+    }
+
+    func testOpenTabFromConfigHasAction() {
+        let openConfig = fileMenu.items.first(where: { $0.title == "Open Tab from Config..." })
+        XCTAssertNotNil(
+            openConfig?.action,
+            "Open Tab from Config must be reachable from the File menu"
+        )
+    }
+
+    func testOpenTabFromConfigActionPointsToCorrectSelector() {
+        let openConfig = fileMenu.items.first(where: { $0.title == "Open Tab from Config..." })
+        XCTAssertEqual(
+            openConfig?.action,
+            #selector(MainWindowController.openTabConfigAction(_:)),
+            "Open Tab from Config must be wired to openTabConfigAction:"
+        )
+    }
+
     // MARK: - Help
 
     func testHelpHasAction() {

@@ -105,6 +105,14 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case tabRename = "tab-rename"
     /// Move a tab to a new position.
     case tabMove = "tab-move"
+    /// Save the active tab as a reusable TOML config.
+    case tabConfigSave = "tab-config-save"
+    /// Open a new tab from a reusable TOML config.
+    case tabConfigOpen = "tab-config-open"
+    /// List reusable tab configs.
+    case tabConfigList = "tab-config-list"
+    /// Return the TOML path for a reusable tab config.
+    case tabConfigPath = "tab-config-path"
 
     // MARK: - Split extended (v2)
 

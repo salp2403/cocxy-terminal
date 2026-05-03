@@ -83,6 +83,15 @@ struct TabConfigStoreSwiftTestingTests {
         }
     }
 
+    @Test("suggested names stay compatible with the store validator")
+    func suggestedNamesStayASCIIAndStoreSafe() throws {
+        let suggested = TabConfigStore.suggestedName(from: "Café API / Dev")
+        let store = TabConfigStore(rootDirectory: try temporaryDirectory())
+
+        #expect(suggested == "caf-api-dev")
+        #expect(try store.fileURL(forName: suggested).lastPathComponent == "caf-api-dev.toml")
+    }
+
     private func temporaryDirectory() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-tab-config-tests")

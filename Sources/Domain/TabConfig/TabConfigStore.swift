@@ -204,6 +204,29 @@ struct TabConfigStore {
             .appendingPathComponent("tabs")
     }
 
+    static func suggestedName(from displayTitle: String) -> String {
+        let lowercased = displayTitle
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        var result = ""
+        var previousWasSeparator = false
+
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789._-")
+        for scalar in lowercased.unicodeScalars {
+            let isAllowed = allowed.contains(scalar)
+            if isAllowed {
+                result.unicodeScalars.append(scalar)
+                previousWasSeparator = false
+            } else if !previousWasSeparator {
+                result.append("-")
+                previousWasSeparator = true
+            }
+        }
+
+        let trimmed = result.trimmingCharacters(in: CharacterSet(charactersIn: "-."))
+        return trimmed.isEmpty ? "tab" : trimmed
+    }
+
     func save(_ config: TabConfig) throws {
         let target = try fileURL(forName: config.name)
         try ensureRootDirectory()

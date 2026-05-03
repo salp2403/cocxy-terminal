@@ -164,6 +164,23 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Closure that moves a tab. Params: (tabID, destinationIndex). Returns true on success.
     private let tabMoveProvider: @Sendable (String, Int) -> Bool
 
+    /// Saves the focused tab as a reusable local TOML config.
+    private let tabConfigSaveProvider: (@Sendable (
+        _ name: String,
+        _ command: String?,
+        _ theme: String?,
+        _ environment: [String: String]
+    ) -> (name: String, path: String)?)?
+
+    /// Opens a new tab from a reusable local TOML config.
+    private let tabConfigOpenProvider: (@Sendable (_ name: String) -> (id: String, title: String, path: String)?)?
+
+    /// Lists saved reusable tab config names.
+    private let tabConfigListProvider: (@Sendable () -> [String]?)?
+
+    /// Returns the TOML path for a saved reusable tab config.
+    private let tabConfigPathProvider: (@Sendable (_ name: String) -> String?)?
+
     /// Closure that reads the active tab's project config. Returns a dict of overrides or nil.
     private let projectConfigProvider: @Sendable () -> [String: String]?
 
@@ -427,6 +444,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         tabCreateWithEngineProviderOverride: (@Sendable (String?, String?) -> (id: String, title: String)?)? = nil,
         tabRenameProviderOverride: (@Sendable (String, String) -> Bool)? = nil,
         tabMoveProviderOverride: (@Sendable (String, Int) -> Bool)? = nil,
+        tabConfigSaveProvider: (@Sendable (
+            _ name: String,
+            _ command: String?,
+            _ theme: String?,
+            _ environment: [String: String]
+        ) -> (name: String, path: String)?)? = nil,
+        tabConfigOpenProvider: (@Sendable (_ name: String) -> (id: String, title: String, path: String)?)? = nil,
+        tabConfigListProvider: (@Sendable () -> [String]?)? = nil,
+        tabConfigPathProvider: (@Sendable (_ name: String) -> String?)? = nil,
         projectConfigProviderOverride: (@Sendable () -> [String: String]?)? = nil,
         configProvider: (@Sendable () -> CocxyConfig)? = nil,
         statusDetailsProvider: (@Sendable () -> [String: String])? = nil,
@@ -507,6 +533,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.notifyDispatcher = notifyDispatcher ?? { _, _ in }
         self.tabDuplicateProvider = tabDuplicateProvider
         self.tabPinProvider = tabPinProvider
+        self.tabConfigSaveProvider = tabConfigSaveProvider
+        self.tabConfigOpenProvider = tabConfigOpenProvider
+        self.tabConfigListProvider = tabConfigListProvider
+        self.tabConfigPathProvider = tabConfigPathProvider
         self.configReloadProvider = configReloadProvider
         self.splitInfoProvider = splitInfoProvider
         self.splitSwapProvider = splitSwapProvider
@@ -807,6 +837,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleTabRename(request)
         case .tabMove:
             return handleTabMove(request)
+        case .tabConfigSave:
+            return handleTabConfigSave(request)
+        case .tabConfigOpen:
+            return handleTabConfigOpen(request)
+        case .tabConfigList:
+            return handleTabConfigList(request)
+        case .tabConfigPath:
+            return handleTabConfigPath(request)
 
         // Config operations
         case .configGet:
@@ -1252,6 +1290,107 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         } else {
             return .failure(id: request.id, error: "Tab not found or invalid position")
         }
+    }
+
+    /// Saves the focused tab to `~/.cocxy/tabs/<name>.toml`.
+    ///
+    /// Required params: `name`.
+    /// Optional params: `command`, `theme`, and `env.<KEY>` entries.
+    private func handleTabConfigSave(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = tabConfigSaveProvider else {
+            return .failure(id: request.id, error: "Tab config save not available")
+        }
+        guard let name = request.params?["name"], !name.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+
+        let environment: [String: String]
+        do {
+            environment = try extractTabConfigEnvironment(from: request.params)
+        } catch {
+            return .failure(id: request.id, error: error.localizedDescription)
+        }
+
+        guard let result = provider(
+            name,
+            nonEmptyParam(request.params?["command"]),
+            nonEmptyParam(request.params?["theme"]),
+            environment
+        ) else {
+            return .failure(id: request.id, error: "Unable to save tab config")
+        }
+
+        return .ok(id: request.id, data: [
+            "status": "saved",
+            "name": result.name,
+            "path": result.path,
+        ])
+    }
+
+    /// Opens a new tab from a saved TOML config. The provider reloads the
+    /// TOML from disk on every call so manual edits are picked up.
+    private func handleTabConfigOpen(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = tabConfigOpenProvider else {
+            return .failure(id: request.id, error: "Tab config open not available")
+        }
+        guard let name = request.params?["name"], !name.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+        guard let result = provider(name) else {
+            return .failure(id: request.id, error: "Unable to open tab config")
+        }
+        return .ok(id: request.id, data: [
+            "status": "opened",
+            "name": name,
+            "id": result.id,
+            "title": result.title,
+            "path": result.path,
+        ])
+    }
+
+    private func handleTabConfigList(_ request: SocketRequest) -> SocketResponse {
+        guard let names = tabConfigListProvider?() else {
+            return .failure(id: request.id, error: "Tab config list not available")
+        }
+        var data: [String: String] = ["count": "\(names.count)"]
+        for (index, name) in names.enumerated() {
+            data["config_\(index)_name"] = name
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleTabConfigPath(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = tabConfigPathProvider else {
+            return .failure(id: request.id, error: "Tab config path not available")
+        }
+        guard let name = request.params?["name"], !name.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+        guard let path = provider(name) else {
+            return .failure(id: request.id, error: "Unable to resolve tab config path")
+        }
+        return .ok(id: request.id, data: ["name": name, "path": path])
+    }
+
+    private func extractTabConfigEnvironment(from params: [String: String]?) throws -> [String: String] {
+        guard let params else { return [:] }
+        var environment: [String: String] = [:]
+        for (key, value) in params where key.hasPrefix("env.") {
+            let envKey = String(key.dropFirst("env.".count))
+            guard TabConfigTOMLCodec.isValidEnvironmentKey(envKey) else {
+                throw TabConfigStoreError.invalidConfig("invalid env key \(envKey)")
+            }
+            environment[envKey] = value
+        }
+        return environment
+    }
+
+    private func nonEmptyParam(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 
     // MARK: - Config Handlers
