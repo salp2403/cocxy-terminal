@@ -375,6 +375,50 @@ struct AgentProviderClientSwiftTestingTests {
         }
     }
 
+    #if canImport(FoundationModels)
+    @Test("Foundation Models instructions state on-device chat limitations")
+    func foundationModelsInstructionsStateOnDeviceChatLimitations() {
+        let instructions = FoundationModelsAgentPromptBuilder.instructions(from: [
+            AgentMessage(
+                id: "s1",
+                role: .system,
+                content: "Prefer concise answers."
+            ),
+        ])
+
+        #expect(instructions.contains("Prefer concise answers."))
+        #expect(instructions.contains("chat-only"))
+        #expect(instructions.contains("cannot execute tools or commands"))
+        #expect(instructions.contains("Never claim you read files, ran commands, changed repositories"))
+        #expect(instructions.contains("Follow direct user formatting instructions exactly"))
+        #expect(instructions.count <= FoundationModelsAgentPromptBuilder.maxInstructionsCharacters)
+    }
+
+    @Test("Foundation Models prompt builder bounds long transcripts and keeps recent context")
+    func foundationModelsPromptBuilderBoundsLongTranscriptsAndKeepsRecentContext() {
+        let oldContent = String(repeating: "old context ", count: 4_000)
+        let toolContent = String(repeating: "tool output ", count: 4_000)
+        let recentPrompt = "Di exactamente COCXY_AGENT_SMOKE_OK y nada mas."
+
+        let oldMessages = (0..<6).map {
+            AgentMessage(id: "u-old-\($0)", role: .user, content: oldContent)
+        }
+        let prompt = FoundationModelsAgentPromptBuilder.prompt(from: oldMessages + [
+            AgentMessage(
+                id: "t1",
+                role: .tool,
+                content: toolContent,
+                toolName: "terminal_output"
+            ),
+            AgentMessage(id: "u-recent", role: .user, content: recentPrompt),
+        ])
+
+        #expect(prompt.contains("User:\n\(recentPrompt)"))
+        #expect(prompt.contains("[Earlier transcript omitted to fit the on-device context window.]"))
+        #expect(prompt.count <= FoundationModelsAgentPromptBuilder.maxPromptCharacters)
+    }
+    #endif
+
     private func onlyRequest(from transport: RecordingAgentHTTPTransport) async throws -> AgentHTTPRequest {
         let requests = await transport.requests
         guard requests.count == 1, let request = requests.first else {

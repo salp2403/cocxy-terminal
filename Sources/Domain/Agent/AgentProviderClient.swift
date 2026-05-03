@@ -188,6 +188,163 @@ struct FoundationModelsAgentLLMClient: AgentLLMClient {
 }
 
 #if canImport(FoundationModels)
+enum FoundationModelsAgentPromptBuilder {
+    static let maxInstructionsCharacters = 6_000
+    static let maxPromptCharacters = 12_000
+    static let maxMessageCharacters = 3_000
+
+    private static let omittedTranscriptMarker = "[Earlier transcript omitted to fit the on-device context window.]"
+    private static let omittedContentMarker = "[Earlier content omitted to fit the on-device context window.]"
+
+    static func instructions(from messages: [AgentMessage]) -> String {
+        let systemMessages = messages
+            .filter { $0.role == .system }
+            .map(\.content)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let baseInstructions = [
+            "You are Cocxy Agent Mode running fully on this Mac.",
+            "You are using the on-device Foundation Models provider. This provider is chat-only in the current build and cannot execute tools or commands.",
+            "Never claim you read files, ran commands, changed repositories, opened apps, checked logs, installed software, monitored system performance, or verified local state unless a message labeled \"Local tool result\" explicitly contains that result.",
+            "If a local action is needed, explain the next local action clearly instead of saying it already happened.",
+            "Follow direct user formatting instructions exactly when they do not conflict with safety.",
+        ]
+
+        let systemContext = boundedJoined(
+            systemMessages.map {
+                boundedKeepingEnd(
+                    $0,
+                    maxCharacters: maxMessageCharacters,
+                    marker: omittedContentMarker
+                )
+            },
+            maxCharacters: maxInstructionsCharacters / 2,
+            marker: "[Earlier system instructions omitted to fit the on-device context window.]"
+        )
+
+        let parts = systemContext.isEmpty
+            ? baseInstructions
+            : systemMessagesHeader(systemContext) + baseInstructions
+        return boundedJoined(
+            parts,
+            maxCharacters: maxInstructionsCharacters,
+            marker: "[Earlier instructions omitted to fit the on-device context window.]"
+        )
+    }
+
+    static func prompt(from messages: [AgentMessage]) -> String {
+        let blocks = messages
+            .filter { $0.role != .system }
+            .map(block)
+            .filter { !$0.isEmpty }
+
+        guard !blocks.isEmpty else {
+            return "User:\nHello"
+        }
+
+        let transcript = blocks.joined(separator: "\n\n")
+        guard transcript.count > maxPromptCharacters else {
+            return transcript
+        }
+
+        return boundedJoinedKeepingEnd(
+            blocks,
+            maxCharacters: maxPromptCharacters,
+            marker: omittedTranscriptMarker
+        )
+    }
+
+    private static func systemMessagesHeader(_ context: String) -> [String] {
+        [
+            """
+            Additional local system context:
+            \(context)
+            """,
+        ]
+    }
+
+    private static func block(for message: AgentMessage) -> String {
+        let content = boundedKeepingEnd(
+            message.content.trimmingCharacters(in: .whitespacesAndNewlines),
+            maxCharacters: maxMessageCharacters,
+            marker: omittedContentMarker
+        )
+        guard !content.isEmpty else { return "" }
+
+        switch message.role {
+        case .user:
+            return "User:\n\(content)"
+        case .assistant:
+            return "Assistant:\n\(content)"
+        case .tool:
+            let name = message.toolName ?? "tool"
+            return "Local tool result (\(name)):\n\(content)"
+        case .system:
+            return ""
+        }
+    }
+
+    private static func boundedJoined(
+        _ parts: [String],
+        maxCharacters: Int,
+        marker: String
+    ) -> String {
+        let joined = parts
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+        guard joined.count > maxCharacters else { return joined }
+        return boundedKeepingEnd(joined, maxCharacters: maxCharacters, marker: marker)
+    }
+
+    private static func boundedJoinedKeepingEnd(
+        _ parts: [String],
+        maxCharacters: Int,
+        marker: String
+    ) -> String {
+        let separator = "\n\n"
+        let prefix = marker + separator
+        let budget = max(0, maxCharacters - prefix.count)
+        var kept: [String] = []
+        var used = 0
+
+        for part in parts.reversed() {
+            let separatorCost = kept.isEmpty ? 0 : separator.count
+            let remaining = budget - used - separatorCost
+            guard remaining > 0 else { break }
+
+            if part.count <= remaining {
+                kept.insert(part, at: 0)
+                used += separatorCost + part.count
+            } else if kept.isEmpty {
+                kept.insert(
+                    boundedKeepingEnd(part, maxCharacters: remaining, marker: omittedContentMarker),
+                    at: 0
+                )
+                break
+            } else {
+                break
+            }
+        }
+
+        return prefix + kept.joined(separator: separator)
+    }
+
+    private static func boundedKeepingEnd(
+        _ text: String,
+        maxCharacters: Int,
+        marker: String
+    ) -> String {
+        guard text.count > maxCharacters else { return text }
+        guard maxCharacters > marker.count + 1 else {
+            return String(text.suffix(max(0, maxCharacters)))
+        }
+
+        let suffixCount = maxCharacters - marker.count - 1
+        return marker + "\n" + String(text.suffix(suffixCount))
+    }
+}
+
 @available(macOS 26.0, *)
 private enum FoundationModelsAgentRuntime {
     static var isAvailable: Bool {
@@ -201,45 +358,10 @@ private enum FoundationModelsAgentRuntime {
 
         let session = LanguageModelSession(
             model: .default,
-            instructions: foundationModelsInstructions(from: messages)
+            instructions: FoundationModelsAgentPromptBuilder.instructions(from: messages)
         )
-        let response = try await session.respond(to: foundationModelsPrompt(from: messages))
+        let response = try await session.respond(to: FoundationModelsAgentPromptBuilder.prompt(from: messages))
         return AgentLLMResponse(content: response.content, toolCalls: [])
-    }
-
-    private static func foundationModelsInstructions(from messages: [AgentMessage]) -> String {
-        let systemMessages = messages
-            .filter { $0.role == .system }
-            .map(\.content)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-        return (systemMessages + [
-            "You are Cocxy Agent Mode running fully on this Mac.",
-            "Use the conversation and local tool results already provided in the prompt.",
-            "When a repository change or command is needed, explain the next local action clearly instead of inventing unavailable tool output.",
-        ]).joined(separator: "\n\n")
-    }
-
-    private static func foundationModelsPrompt(from messages: [AgentMessage]) -> String {
-        let transcript = messages
-            .filter { $0.role != .system }
-            .map { message -> String in
-                switch message.role {
-                case .user:
-                    return "User:\n\(message.content)"
-                case .assistant:
-                    return "Assistant:\n\(message.content)"
-                case .tool:
-                    let name = message.toolName ?? "tool"
-                    return "Local tool result (\(name)):\n\(message.content)"
-                case .system:
-                    return ""
-                }
-            }
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n\n")
-
-        return transcript.isEmpty ? "User:\nHello" : transcript
     }
 }
 #endif
