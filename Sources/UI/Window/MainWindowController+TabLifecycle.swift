@@ -68,6 +68,13 @@ extension MainWindowController {
             }
         }
 
+        recordLocalActivity(
+            kind: .tabOpened,
+            summary: "New tab",
+            workingDirectory: dir,
+            sessionID: sessionID.rawValue.uuidString
+        )
+
         handleTabSwitch(to: newTab.id)
         return newTab.id
     }

@@ -396,6 +396,14 @@ extension MainWindowController {
         // refresh so the new pane shows up in the Aurora session row
         // without waiting for the next agent activity.
         auroraChromeController?.refreshSources()
+
+        recordLocalActivity(
+            kind: .splitCreated,
+            summary: isVertical ? "Split side by side" : "Split stacked",
+            workingDirectory: workingDirectory,
+            sessionID: currentTabID.map { sessionIDForTab($0).rawValue.uuidString },
+            metadata: ["orientation": isVertical ? "side_by_side" : "stacked"]
+        )
     }
 
     // MARK: - Close Split
