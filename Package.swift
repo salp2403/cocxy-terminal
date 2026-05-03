@@ -56,6 +56,7 @@ let package = Package(
                 .linkedFramework("IOSurface"),
                 .linkedFramework("UniformTypeIdentifiers"),
                 .linkedFramework("Carbon"),
+                .linkedFramework("NaturalLanguage"),
             ]
         ),
         .testTarget(

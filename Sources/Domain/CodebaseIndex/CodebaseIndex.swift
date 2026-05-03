@@ -5,6 +5,7 @@ import Foundation
 
 enum CodebaseSearchMode: String, Sendable, Equatable {
     case lexicalFallback = "lexical-fallback"
+    case semanticOnDevice = "semantic-on-device"
 }
 
 enum CodebaseSearchMatchKind: String, Sendable, Equatable {
@@ -41,10 +42,16 @@ struct CodebaseSearchResponse: Sendable, Equatable {
 struct CodebaseIndex {
     let workspace: AgentWorkspace
     let maxFileBytes: Int
+    let semanticIndex: CodebaseSemanticIndex?
 
-    init(workspace: AgentWorkspace, maxFileBytes: Int = 1_000_000) {
+    init(
+        workspace: AgentWorkspace,
+        maxFileBytes: Int = 1_000_000,
+        semanticIndex: CodebaseSemanticIndex? = nil
+    ) {
         self.workspace = workspace
         self.maxFileBytes = maxFileBytes
+        self.semanticIndex = semanticIndex
     }
 
     func search(_ request: CodebaseSearchRequest) throws -> CodebaseSearchResponse {
@@ -62,6 +69,22 @@ struct CodebaseIndex {
         }
 
         let limit = min(max(request.limit, 1), 50)
+        let scopePrefix = workspace.relativePath(for: searchRoot)
+        if let semanticIndex,
+           let semanticResults = try semanticResults(
+               semanticIndex: semanticIndex,
+               query: normalizedQuery,
+               scopePrefix: scopePrefix,
+               limit: limit
+           ),
+           !semanticResults.isEmpty {
+            return CodebaseSearchResponse(
+                query: normalizedQuery,
+                mode: .semanticOnDevice,
+                results: semanticResults
+            )
+        }
+
         let searcher = CodebaseLexicalSearcher(
             workspace: workspace,
             maxFileBytes: maxFileBytes
@@ -76,6 +99,26 @@ struct CodebaseIndex {
             )
         )
     }
+
+    private func semanticResults(
+        semanticIndex: CodebaseSemanticIndex,
+        query: String,
+        scopePrefix: String,
+        limit: Int
+    ) throws -> [CodebaseSearchResult]? {
+        do {
+            return try semanticIndex.search(query: query, scopePath: scopePrefix, limit: limit)
+        } catch let error as CodebaseEmbeddingProviderError {
+            switch error {
+            case .emptyInput, .emptyEmbedding, .providerUnavailable:
+                return nil
+            case .nonFiniteEmbedding:
+                throw error
+            }
+        } catch {
+            throw error
+        }
+    }
 }
 
 private struct CodebaseLexicalSearcher {
@@ -86,22 +129,21 @@ private struct CodebaseLexicalSearcher {
         let tokens = CodebaseQueryTokens(query)
         guard !tokens.values.isEmpty else { return [] }
 
-        let ignorePatterns = CodebaseIndexIgnorePatterns(rootURL: workspace.rootURL)
+        let scanner = CodebaseIndexFileScanner(workspace: workspace, maxFileBytes: maxFileBytes)
         var bestByPath: [String: CodebaseSearchResult] = [:]
 
-        for url in regularFiles(startingAt: rootURL, ignorePatterns: ignorePatterns) {
-            let relativePath = workspace.relativePath(for: url)
-            guard let content = try? readTextFile(url, relativePath: relativePath) else {
+        for file in scanner.regularFiles(startingAt: rootURL) {
+            guard let content = try? scanner.readTextFile(file) else {
                 continue
             }
             guard let result = bestMatch(
-                path: relativePath,
+                path: file.relativePath,
                 content: content,
                 tokens: tokens
             ) else {
                 continue
             }
-            bestByPath[relativePath] = result
+            bestByPath[file.relativePath] = result
         }
 
         return bestByPath.values
@@ -154,50 +196,6 @@ private struct CodebaseLexicalSearcher {
             )
         }
         return bestResult
-    }
-
-    private func regularFiles(
-        startingAt rootURL: URL,
-        ignorePatterns: CodebaseIndexIgnorePatterns
-    ) -> [URL] {
-        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey]
-        let enumerator = FileManager.default.enumerator(
-            at: rootURL,
-            includingPropertiesForKeys: Array(keys),
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        )
-        var files: [URL] = []
-
-        while let url = enumerator?.nextObject() as? URL {
-            let values = try? url.resourceValues(forKeys: keys)
-            let relativePath = workspace.relativePath(for: url)
-            let isDirectory = values?.isDirectory == true
-
-            if ignorePatterns.isIgnored(relativePath: relativePath, isDirectory: isDirectory) {
-                if isDirectory {
-                    enumerator?.skipDescendants()
-                }
-                continue
-            }
-            guard values?.isRegularFile == true else { continue }
-            files.append(url)
-        }
-
-        return files.sorted { workspace.relativePath(for: $0) < workspace.relativePath(for: $1) }
-    }
-
-    private func readTextFile(_ url: URL, relativePath: String) throws -> String {
-        let values = try url.resourceValues(forKeys: [.fileSizeKey])
-        let fileSize = values.fileSize ?? 0
-        guard fileSize <= maxFileBytes else {
-            throw AgentWorkspaceError.fileTooLarge(path: relativePath, maxBytes: maxFileBytes)
-        }
-
-        let data = try Data(contentsOf: url)
-        guard !data.contains(0), let content = String(data: data, encoding: .utf8) else {
-            throw AgentWorkspaceError.nonUTF8File(relativePath)
-        }
-        return content
     }
 }
 

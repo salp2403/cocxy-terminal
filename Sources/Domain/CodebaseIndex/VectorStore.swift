@@ -42,6 +42,11 @@ struct CodebaseVectorStore: Sendable {
         try saveRecords(recordsByID.values.sorted(by: recordSort))
     }
 
+    func replaceAll(_ records: [CodebaseVectorRecord]) throws {
+        try validateFinite(records)
+        try saveRecords(records)
+    }
+
     func remove(paths: Set<String>) throws {
         guard !paths.isEmpty else { return }
         let records = try loadRecords().filter { !paths.contains($0.path) }
@@ -52,13 +57,20 @@ struct CodebaseVectorStore: Sendable {
         try remove(paths: Set(paths))
     }
 
-    func search(embedding queryEmbedding: [Double], limit: Int) throws -> [CodebaseVectorSearchResult] {
+    func search(
+        embedding queryEmbedding: [Double],
+        limit: Int,
+        pathPrefix: String? = nil
+    ) throws -> [CodebaseVectorSearchResult] {
         guard !queryEmbedding.isEmpty, limit > 0 else { return [] }
         try validateFinite(embedding: queryEmbedding, id: "query")
 
         let clampedLimit = min(limit, 50)
         return try loadRecords()
             .compactMap { record in
+                guard matchesPathPrefix(record.path, pathPrefix: pathPrefix) else {
+                    return nil
+                }
                 guard record.embedding.count == queryEmbedding.count,
                       let score = cosineSimilarity(queryEmbedding, record.embedding)
                 else {
@@ -115,6 +127,16 @@ struct CodebaseVectorStore: Sendable {
             return nil
         }
         return dot / (sqrt(lhsMagnitude) * sqrt(rhsMagnitude))
+    }
+
+    private func matchesPathPrefix(_ path: String, pathPrefix: String?) -> Bool {
+        guard let pathPrefix,
+              !pathPrefix.isEmpty,
+              pathPrefix != "."
+        else {
+            return true
+        }
+        return path == pathPrefix || path.hasPrefix(pathPrefix + "/")
     }
 
     private func recordSort(_ lhs: CodebaseVectorRecord, _ rhs: CodebaseVectorRecord) -> Bool {

@@ -1,0 +1,161 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// SemanticIndex.swift - Local semantic codebase indexing orchestration.
+
+import Foundation
+
+struct CodebaseSemanticIndexStats: Sendable, Equatable {
+    let indexedFiles: Int
+    let indexedChunks: Int
+    let removedPaths: Int
+}
+
+struct CodebaseSemanticIndex {
+    let workspace: AgentWorkspace
+    let store: CodebaseVectorStore
+    let embeddingProvider: any CodebaseEmbeddingProviding
+    let chunker: CodebaseFileChunker
+    let maxFileBytes: Int
+
+    init(
+        workspace: AgentWorkspace,
+        store: CodebaseVectorStore,
+        embeddingProvider: any CodebaseEmbeddingProviding,
+        chunker: CodebaseFileChunker = CodebaseFileChunker(),
+        maxFileBytes: Int = 1_000_000
+    ) {
+        self.workspace = workspace
+        self.store = store
+        self.embeddingProvider = embeddingProvider
+        self.chunker = chunker
+        self.maxFileBytes = maxFileBytes
+    }
+
+    func rebuild() throws -> CodebaseSemanticIndexStats {
+        guard embeddingProvider.isAvailable else {
+            throw CodebaseEmbeddingProviderError.providerUnavailable(embeddingProvider.identifier)
+        }
+
+        let scanner = CodebaseIndexFileScanner(workspace: workspace, maxFileBytes: maxFileBytes)
+        var indexedFiles = 0
+        var records: [CodebaseVectorRecord] = []
+
+        for file in scanner.regularFiles(startingAt: workspace.rootURL) {
+            guard let content = try? scanner.readTextFile(file) else {
+                continue
+            }
+            let chunks = chunker.chunks(for: content, path: file.relativePath)
+            let chunkRecords = try recordsForChunks(chunks)
+            guard !chunkRecords.isEmpty else {
+                continue
+            }
+            indexedFiles += 1
+            records.append(contentsOf: chunkRecords)
+        }
+
+        try store.replaceAll(records)
+        return CodebaseSemanticIndexStats(
+            indexedFiles: indexedFiles,
+            indexedChunks: records.count,
+            removedPaths: 0
+        )
+    }
+
+    func update(changes: CodebaseIndexChangeSet) throws -> CodebaseSemanticIndexStats {
+        guard embeddingProvider.isAvailable else {
+            throw CodebaseEmbeddingProviderError.providerUnavailable(embeddingProvider.identifier)
+        }
+
+        let stalePaths = Set(changes.changedFiles + changes.removedFiles)
+        try store.remove(paths: stalePaths)
+
+        let scanner = CodebaseIndexFileScanner(workspace: workspace, maxFileBytes: maxFileBytes)
+        var indexedFiles = 0
+        var records: [CodebaseVectorRecord] = []
+
+        for path in changes.changedFiles {
+            guard let content = try? scanner.readTextFile(relativePath: path) else {
+                continue
+            }
+            let chunks = chunker.chunks(for: content, path: path)
+            let chunkRecords = try recordsForChunks(chunks)
+            guard !chunkRecords.isEmpty else {
+                continue
+            }
+            indexedFiles += 1
+            records.append(contentsOf: chunkRecords)
+        }
+
+        try store.upsert(records)
+        return CodebaseSemanticIndexStats(
+            indexedFiles: indexedFiles,
+            indexedChunks: records.count,
+            removedPaths: stalePaths.count
+        )
+    }
+
+    func search(query: String, scopePath: String? = nil, limit: Int) throws -> [CodebaseSearchResult] {
+        guard embeddingProvider.isAvailable else {
+            throw CodebaseEmbeddingProviderError.providerUnavailable(embeddingProvider.identifier)
+        }
+
+        let queryEmbedding = try embeddingProvider.embedding(for: query)
+        let vectorResults = try store.search(
+            embedding: queryEmbedding,
+            limit: limit,
+            pathPrefix: normalizedScopePrefix(scopePath)
+        )
+
+        return vectorResults.filter { $0.score > 0 }.map { result in
+            CodebaseSearchResult(
+                path: result.record.path,
+                line: result.record.startLine,
+                preview: preview(for: result.record),
+                score: result.score,
+                matchKind: .content
+            )
+        }
+    }
+
+    private func recordsForChunks(_ chunks: [CodebaseFileChunk]) throws -> [CodebaseVectorRecord] {
+        try chunks.compactMap { chunk in
+            let embedding: [Double]
+            do {
+                embedding = try embeddingProvider.embedding(for: chunk.text)
+            } catch let error as CodebaseEmbeddingProviderError {
+                switch error {
+                case .emptyInput, .emptyEmbedding:
+                    return nil
+                case .providerUnavailable, .nonFiniteEmbedding:
+                    throw error
+                }
+            }
+            guard !embedding.isEmpty else {
+                return nil
+            }
+            return CodebaseVectorRecord(
+                path: chunk.path,
+                startLine: chunk.startLine,
+                endLine: chunk.endLine,
+                text: chunk.text,
+                embedding: embedding
+            )
+        }
+    }
+
+    private func normalizedScopePrefix(_ scopePath: String?) -> String? {
+        guard let scopePath,
+              !scopePath.isEmpty,
+              scopePath != "."
+        else {
+            return nil
+        }
+        return scopePath
+    }
+
+    private func preview(for record: CodebaseVectorRecord) -> String {
+        record.text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? record.path
+    }
+}

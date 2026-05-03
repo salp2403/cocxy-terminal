@@ -224,6 +224,122 @@ struct CodebaseIndexSwiftTestingTests {
         #expect(try store.search(embedding: [1, 0], limit: 0).isEmpty)
     }
 
+    @Test("semantic index rebuilds local chunks and CodebaseIndex returns semantic results")
+    func semanticIndexRebuildsLocalChunksAndSearchesSemantically() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try """
+        struct AuthService {
+            func issueSessionToken() {}
+        }
+        """.write(to: root.appendingPathComponent("Sources/Auth.swift"), atomically: true, encoding: .utf8)
+        try """
+        struct ThemeService {
+            let palette = "glass"
+        }
+        """.write(to: root.appendingPathComponent("Sources/Theme.swift"), atomically: true, encoding: .utf8)
+
+        let workspace = AgentWorkspace(rootURL: root)
+        let semanticIndex = makeSemanticIndex(workspace: workspace)
+        let stats = try semanticIndex.rebuild()
+
+        let index = CodebaseIndex(workspace: workspace, semanticIndex: semanticIndex)
+        let response = try index.search(CodebaseSearchRequest(query: "authentication flow", limit: 10))
+
+        #expect(stats.indexedFiles == 2)
+        #expect(stats.indexedChunks == 2)
+        #expect(response.mode == .semanticOnDevice)
+        #expect(response.results.map(\.path) == ["Sources/Auth.swift", "Sources/Theme.swift"])
+        #expect(response.results.first?.line == 1)
+    }
+
+    @Test("semantic index updates changed files and removes stale paths")
+    func semanticIndexUpdatesChangedFilesAndRemovesStalePaths() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let authURL = root.appendingPathComponent("Sources/Auth.swift")
+        let themeURL = root.appendingPathComponent("Sources/Theme.swift")
+        try "let token = \"session\"\n".write(to: authURL, atomically: true, encoding: .utf8)
+        try "let palette = \"glass\"\n".write(to: themeURL, atomically: true, encoding: .utf8)
+
+        let workspace = AgentWorkspace(rootURL: root)
+        let semanticIndex = makeSemanticIndex(workspace: workspace)
+        _ = try semanticIndex.rebuild()
+
+        try "let palette = \"solarized\"\n".write(to: authURL, atomically: true, encoding: .utf8)
+        try FileManager.default.removeItem(at: themeURL)
+        let stats = try semanticIndex.update(changes: CodebaseIndexChangeSet(
+            changedFiles: ["Sources/Auth.swift"],
+            removedFiles: ["Sources/Theme.swift"],
+            snapshot: CodebaseMerkleSnapshot(fileDigests: [:])
+        ))
+        let results = try semanticIndex.search(query: "palette colors", limit: 10)
+
+        #expect(stats.indexedFiles == 1)
+        #expect(stats.indexedChunks == 1)
+        #expect(stats.removedPaths == 2)
+        #expect(results.map(\.path) == ["Sources/Auth.swift"])
+    }
+
+    @Test("semantic index skips chunks the provider cannot embed")
+    func semanticIndexSkipsChunksProviderCannotEmbed() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "let token = \"session\"\n".write(to: root.appendingPathComponent("Sources/Auth.swift"), atomically: true, encoding: .utf8)
+        try "xyzzy plugh\n".write(to: root.appendingPathComponent("Sources/Unknown.swift"), atomically: true, encoding: .utf8)
+
+        let workspace = AgentWorkspace(rootURL: root)
+        let semanticIndex = makeSemanticIndex(workspace: workspace)
+        let stats = try semanticIndex.rebuild()
+        let results = try semanticIndex.search(query: "authentication", limit: 10)
+
+        #expect(stats.indexedFiles == 1)
+        #expect(stats.indexedChunks == 1)
+        #expect(results.map(\.path) == ["Sources/Auth.swift"])
+    }
+
+    @Test("semantic search respects validated scope and falls back when unavailable")
+    func semanticSearchRespectsScopeAndFallsBackWhenUnavailable() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "let token = \"session\"\n".write(to: root.appendingPathComponent("Sources/Auth.swift"), atomically: true, encoding: .utf8)
+        try "let tokenTest = true\n".write(to: root.appendingPathComponent("Tests/AuthTests.swift"), atomically: true, encoding: .utf8)
+
+        let workspace = AgentWorkspace(rootURL: root)
+        let semanticIndex = makeSemanticIndex(workspace: workspace)
+        _ = try semanticIndex.rebuild()
+        let semanticResponse = try CodebaseIndex(
+            workspace: workspace,
+            semanticIndex: semanticIndex
+        ).search(CodebaseSearchRequest(query: "authentication", scopePath: "Tests", limit: 10))
+
+        let unavailableIndex = CodebaseIndex(
+            workspace: workspace,
+            semanticIndex: makeSemanticIndex(
+                workspace: workspace,
+                provider: MockCodebaseEmbeddingProvider(isAvailable: false)
+            )
+        )
+        let fallbackResponse = try unavailableIndex.search(CodebaseSearchRequest(query: "token", limit: 10))
+
+        #expect(semanticResponse.mode == .semanticOnDevice)
+        #expect(semanticResponse.results.map(\.path) == ["Tests/AuthTests.swift"])
+        #expect(fallbackResponse.mode == .lexicalFallback)
+        #expect(fallbackResponse.results.map(\.path).contains("Sources/Auth.swift"))
+    }
+
+    @Test("NaturalLanguage provider generates finite local embeddings when assets are available")
+    func naturalLanguageProviderGeneratesFiniteLocalEmbeddingsWhenAvailable() throws {
+        let provider = NaturalLanguageCodebaseEmbeddingProvider()
+        guard provider.isAvailable else { return }
+
+        let vector = try provider.embedding(for: "authentication flow")
+        let allValuesAreFinite = vector.allSatisfy(\.isFinite)
+
+        #expect(!vector.isEmpty)
+        #expect(allValuesAreFinite)
+    }
+
     private func makeWorkspace() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-codebase-index-\(UUID().uuidString)", isDirectory: true)
@@ -240,5 +356,44 @@ struct CodebaseIndexSwiftTestingTests {
             withIntermediateDirectories: true
         )
         return root
+    }
+
+    private func makeSemanticIndex(
+        workspace: AgentWorkspace,
+        provider: MockCodebaseEmbeddingProvider = MockCodebaseEmbeddingProvider()
+    ) -> CodebaseSemanticIndex {
+        CodebaseSemanticIndex(
+            workspace: workspace,
+            store: CodebaseVectorStore(storageURL: workspace.rootURL.appendingPathComponent(".cocxy-index", isDirectory: true)),
+            embeddingProvider: provider,
+            chunker: CodebaseFileChunker(maxChunkBytes: 4_096)
+        )
+    }
+}
+
+private struct MockCodebaseEmbeddingProvider: CodebaseEmbeddingProviding {
+    let isAvailable: Bool
+
+    init(isAvailable: Bool = true) {
+        self.isAvailable = isAvailable
+    }
+
+    var identifier: String {
+        "mock-codebase-embedding"
+    }
+
+    func embedding(for text: String) throws -> [Double] {
+        guard isAvailable else {
+            throw CodebaseEmbeddingProviderError.providerUnavailable(identifier)
+        }
+
+        let lowercased = text.lowercased()
+        if lowercased.contains("auth") || lowercased.contains("token") || lowercased.contains("session") {
+            return [1, 0]
+        }
+        if lowercased.contains("theme") || lowercased.contains("palette") || lowercased.contains("color") {
+            return [0.2, 0.8]
+        }
+        throw CodebaseEmbeddingProviderError.emptyEmbedding(identifier)
     }
 }
