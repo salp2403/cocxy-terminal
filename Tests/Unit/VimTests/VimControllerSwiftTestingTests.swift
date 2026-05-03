@@ -871,6 +871,27 @@ struct VimControllerSwiftTestingTests {
         #expect(controller.unnamedRegister == "two ")
     }
 
+    @Test("cw changes a word without consuming the following separator")
+    func cwChangesWordWithoutConsumingFollowingSeparator() {
+        var session = EditorSession(
+            document: EditorDocument(text: "alpha beta gamma"),
+            selection: .caret(at: 0)
+        )
+        var controller = VimController()
+
+        #expect(controller.handle(.character("c"), session: &session).handled)
+        #expect(controller.handle(.character("w"), session: &session).handled)
+
+        #expect(controller.mode == .insert)
+        #expect(controller.unnamedRegister == "alpha")
+        #expect(session.document.buffer.text == " beta gamma")
+        #expect(session.selection == .caret(at: 0))
+
+        #expect(controller.handle(.text("BETA"), session: &session).handled)
+        #expect(controller.handle(.escape, session: &session).handled)
+        #expect(session.document.buffer.text == "BETA beta gamma")
+    }
+
     @Test("X deletes backward and dot repeats from the current caret")
     func xUppercaseDeletesBackwardAndDotRepeats() {
         var session = EditorSession(
@@ -1942,13 +1963,13 @@ struct VimControllerSwiftTestingTests {
         #expect(controller.handle(.character("w"), session: &session).handled)
         #expect(controller.handle(.text("X"), session: &session).handled)
         #expect(controller.handle(.escape, session: &session).handled)
-        #expect(session.document.buffer.text == "Xtwo three")
+        #expect(session.document.buffer.text == "X two three")
 
-        session.setSelection(.caret(at: 1))
+        session.setSelection(.caret(at: 2))
         #expect(controller.handle(.character("."), session: &session).handled)
 
-        #expect(session.document.buffer.text == "XXthree")
-        #expect(session.selection == .caret(at: 2))
+        #expect(session.document.buffer.text == "X X three")
+        #expect(session.selection == .caret(at: 3))
     }
 
     @Test("system clipboard register writes yanks and reads pastes through injected access")

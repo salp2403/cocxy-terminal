@@ -1474,7 +1474,10 @@ struct VimController: Equatable {
         session: inout EditorSession,
         systemRegisters: VimSystemRegisterAccess
     ) {
-        guard let range = operatorRange(for: motion, count: count, session: session),
+        let resolvedRange = operatorCharacter == "c"
+            ? changeOperatorRange(for: motion, count: count, session: session)
+            : operatorRange(for: motion, count: count, session: session)
+        guard let range = resolvedRange,
               range.length > 0
         else { return }
 
@@ -1608,6 +1611,41 @@ struct VimController: Equatable {
         default:
             return nil
         }
+    }
+
+    private func changeOperatorRange(
+        for motion: Character,
+        count: Int,
+        session: EditorSession
+    ) -> EditorTextRange? {
+        guard let range = operatorRange(for: motion, count: count, session: session) else {
+            return nil
+        }
+        switch motion {
+        case "w", "W":
+            return rangeByTrimmingTrailingWhitespaceForChange(range, in: session.document.buffer)
+        default:
+            return range
+        }
+    }
+
+    private func rangeByTrimmingTrailingWhitespaceForChange(
+        _ range: EditorTextRange,
+        in buffer: EditorBuffer
+    ) -> EditorTextRange {
+        let nsText = buffer.text as NSString
+        guard range.length > 0,
+              range.location < nsText.length,
+              !isWhitespace(nsText.character(at: range.location))
+        else {
+            return range
+        }
+
+        var end = min(range.location + range.length, nsText.length)
+        while end > range.location, isWhitespace(nsText.character(at: end - 1)) {
+            end -= 1
+        }
+        return EditorTextRange(location: range.location, length: max(1, end - range.location))
     }
 
     private func findOperatorRange(
@@ -2537,7 +2575,7 @@ struct VimController: Equatable {
         case let .insertText(text):
             session.replaceSelection(with: text)
         case let .changeMotion(motion, count, insertedText):
-            guard let range = operatorRange(for: motion, count: count, session: session),
+            guard let range = changeOperatorRange(for: motion, count: count, session: session),
                   range.length > 0
             else { return }
             replaceChangeRange(
