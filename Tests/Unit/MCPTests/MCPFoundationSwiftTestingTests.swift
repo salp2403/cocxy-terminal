@@ -637,6 +637,59 @@ struct MCPFoundationSwiftTestingTests {
         #expect(requests.map(\.method) == ["tools/list", "tools/list", "tools/call"])
     }
 
+    @Test("configured manager routes five real stdio MCP servers")
+    func configuredManagerRoutesFiveRealStdioMCPServers() async throws {
+        let pythonURL = try #require(Self.python3URL())
+        let root = temporaryDirectory(named: "mcp-five-real-servers")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scriptURL = root.appendingPathComponent("server.py")
+        let configURL = root.appendingPathComponent("mcp.json")
+        try writeMCPServerScript(to: scriptURL)
+        let serverIDs = ["docs", "filesystem", "issues", "memory", "repo"]
+        let serverEntries = serverIDs.map { id in
+            """
+                "\(id)": {
+                  "command": "\(pythonURL.path)",
+                  "args": ["\(scriptURL.path)"]
+                }
+            """
+        }.joined(separator: ",\n")
+        try """
+        {
+          "mcpServers": {
+        \(serverEntries)
+          }
+        }
+        """.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let transport = MCPStdioTransport()
+        do {
+            let manager = MCPConfiguredManager(
+                configURL: configURL,
+                transportFactory: MCPClientTransportFactory(stdioTransport: transport)
+            )
+            let descriptors = try await manager.listToolDescriptors()
+            let expectedToolIDs = serverIDs.map { "mcp__\($0)__echo" }
+
+            #expect(descriptors.map(\.id) == expectedToolIDs)
+
+            for toolID in expectedToolIDs {
+                let result = try await manager.executeTool(
+                    agentToolID: toolID,
+                    arguments: ["message": .string(toolID)]
+                )
+                #expect(result == .object([
+                    "isError": .bool(false),
+                    "content": .array([.string("echo:\(toolID)")]),
+                ]))
+            }
+            await transport.shutdownAll()
+        } catch {
+            await transport.shutdownAll()
+            throw error
+        }
+    }
+
     private static func python3URL() -> URL? {
         let candidates = [
             "/usr/bin/python3",
