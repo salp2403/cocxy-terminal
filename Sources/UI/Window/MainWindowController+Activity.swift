@@ -210,6 +210,11 @@ extension MainWindowController {
         return String(trimmed.prefix(237)) + "..."
     }
 
+    func projectSwitchActivitySummary(_ directory: URL) -> String {
+        let name = directory.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? directory.path : name
+    }
+
     private func refreshVisibleActivityDashboardRootIfNeeded(_ viewModel: ActivityDashboardViewModel) {
         guard let hostingView = activityDashboardHostingView else { return }
         hostingView.rootView = ActivityDashboardView(

@@ -75,6 +75,27 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         XCTAssertEqual(event.metadata["block_id"], "42")
     }
 
+    func testEnabledConfigRecordsProjectSwitchesOnlyWhenDirectoryChanges() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-project-switch-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store)
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        try store.deleteAll()
+
+        controller.handleOSCNotification(.currentDirectory(root), fromTabID: tabID)
+        controller.handleOSCNotification(.currentDirectory(root), fromTabID: tabID)
+
+        let events = try store.events()
+        XCTAssertEqual(events.map(\.kind), [.projectSwitched])
+        XCTAssertEqual(events.first?.summary, root.lastPathComponent)
+        XCTAssertEqual(events.first?.project?.name, root.lastPathComponent)
+    }
+
     func testStorageDirectoryChangeUsesNewLocalDatabase() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-activity-\(UUID().uuidString)", isDirectory: true)

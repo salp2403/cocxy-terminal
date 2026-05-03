@@ -652,6 +652,8 @@ extension MainWindowController {
 
         case .currentDirectory(let directoryURL):
             guard let tabID = targetTabID else { break }
+            let previousDirectory = tabManager.tab(for: tabID)?.workingDirectory.standardizedFileURL
+            let standardizedDirectory = directoryURL.standardizedFileURL
             if let sourceSurfaceID {
                 surfaceWorkingDirectories[sourceSurfaceID] = directoryURL
             }
@@ -669,6 +671,19 @@ extension MainWindowController {
                 sessionIDForTab(tabID),
                 directory: directoryURL
             )
+            if previousDirectory != standardizedDirectory {
+                var metadata = ["source": "osc7"]
+                if let sourceSurfaceID {
+                    metadata["surface_id"] = sourceSurfaceID.rawValue.uuidString
+                }
+                recordLocalActivity(
+                    kind: .projectSwitched,
+                    summary: projectSwitchActivitySummary(standardizedDirectory),
+                    workingDirectory: directoryURL,
+                    sessionID: sessionIDForTab(tabID).rawValue.uuidString,
+                    metadata: metadata
+                )
+            }
 
             // Reload project config for the new working directory.
             //
