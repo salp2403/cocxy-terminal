@@ -28,7 +28,21 @@ enum AppSocketConfigTOMLUpdater {
         field: String,
         newValue: String
     ) -> String {
-        let rendered = "\(field) = \(renderedValue(newValue))"
+        updateTomlValue(
+            in: content,
+            section: section,
+            field: field,
+            renderedValue: renderedScalarValue(newValue)
+        )
+    }
+
+    static func updateTomlValue(
+        in content: String,
+        section: String,
+        field: String,
+        renderedValue: String
+    ) -> String {
+        let rendered = "\(field) = \(renderedValue)"
         var lines = content.components(separatedBy: "\n")
         var inTargetSection = false
         var sawTargetSection = false
@@ -78,11 +92,15 @@ enum AppSocketConfigTOMLUpdater {
         return lines.joined(separator: "\n")
     }
 
-    private static func renderedValue(_ value: String) -> String {
+    static func renderedScalarValue(_ value: String) -> String {
         if value == "true" || value == "false" || Int(value) != nil || Double(value) != nil {
             return value
         }
         return "\"\(escapedStringValue(value))\""
+    }
+
+    static func renderedStringArrayValue(_ values: [String]) -> String {
+        "[\(values.map { "\"\(escapedStringValue($0))\"" }.joined(separator: ", "))]"
     }
 
     private static func escapedStringValue(_ value: String) -> String {
@@ -1464,13 +1482,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         // Reject values containing characters that could corrupt TOML structure.
-        guard !value.contains("\n") && !value.contains("\r") && !value.contains("\"") else {
-            return .failure(id: request.id, error: "Value must not contain newlines or double quotes")
+        guard !value.contains("\n") && !value.contains("\r") else {
+            return .failure(id: request.id, error: "Value must not contain newlines")
         }
 
         // Validate key against known config keys.
         guard resolveConfigValue(key: key, config: CocxyConfig.defaults) != nil else {
             return .failure(id: request.id, error: "Unknown config key: \(key)")
+        }
+        guard let renderedValue = renderedConfigValue(key: key, rawValue: value) else {
+            return .failure(id: request.id, error: "Invalid value for config key: \(key)")
         }
 
         let homePath = FileManager.default.homeDirectoryForCurrentUser.path
@@ -1484,7 +1505,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             in: existingContent,
             section: sectionFromKey(key),
             field: fieldFromKey(key),
-            newValue: value
+            renderedValue: renderedValue
         )
 
         do {
@@ -1793,9 +1814,75 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "notes.auto-save-interval-seconds":
             return "\(config.notes.autoSaveIntervalSeconds)"
 
+        // Completions
+        case "completions.inline-ai":
+            return "\(config.completions.inlineAIEnabled)"
+        case "completions.provider":
+            return config.completions.provider.rawValue
+        case "completions.idle-delay-seconds":
+            return "\(config.completions.idleDelaySeconds)"
+        case "completions.max-context-utf16-length":
+            return "\(config.completions.maxContextUTF16Length)"
+        case "completions.enabled-languages":
+            return config.completions.enabledLanguageIDs.joined(separator: ",")
+
         default:
             return nil
         }
+    }
+
+    private func renderedConfigValue(key: String, rawValue: String) -> String? {
+        switch key {
+        case "completions.inline-ai":
+            guard let value = normalizedConfigBool(rawValue) else { return nil }
+            return value
+        case "completions.provider":
+            guard CompletionProviderKind(rawValue: rawValue) != nil else { return nil }
+            return AppSocketConfigTOMLUpdater.renderedScalarValue(rawValue)
+        case "completions.enabled-languages":
+            let normalized = CompletionConfig(
+                enabledLanguageIDs: parsedStringListConfigValue(rawValue)
+            ).enabledLanguageIDs
+            return AppSocketConfigTOMLUpdater.renderedStringArrayValue(normalized)
+        default:
+            return AppSocketConfigTOMLUpdater.renderedScalarValue(rawValue)
+        }
+    }
+
+    private func normalizedConfigBool(_ rawValue: String) -> String? {
+        switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "true": return "true"
+        case "false": return "false"
+        default: return nil
+        }
+    }
+
+    private func parsedStringListConfigValue(_ rawValue: String) -> [String] {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        let inner: String
+        if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+            inner = String(trimmed.dropFirst().dropLast())
+        } else {
+            inner = trimmed
+        }
+
+        return inner
+            .split(separator: ",", omittingEmptySubsequences: true)
+            .map { component in
+                component.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .map { component in
+                guard component.count >= 2 else { return component }
+                let first = component.first
+                let last = component.last
+                if (first == "\"" && last == "\"") || (first == "'" && last == "'") {
+                    return String(component.dropFirst().dropLast())
+                }
+                return component
+            }
+            .filter { !$0.isEmpty }
     }
 
     // MARK: - Browser Handlers
@@ -3078,7 +3165,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "sessions.restore-on-launch",
             "notes.enabled", "notes.format", "notes.search-engine",
             "notes.storage-dir", "notes.shortcut", "notes.auto-save",
-            "notes.auto-save-interval-seconds"
+            "notes.auto-save-interval-seconds",
+            "completions.inline-ai", "completions.provider",
+            "completions.idle-delay-seconds",
+            "completions.max-context-utf16-length",
+            "completions.enabled-languages"
         ]
     }
 

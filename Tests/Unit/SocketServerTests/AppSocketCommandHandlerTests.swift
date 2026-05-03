@@ -944,6 +944,19 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], "\(NotesConfig.defaults.enabled)")
     }
 
+    func test_configGet_completionKeys_returnsDefaults() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cg-completions",
+            command: "config-get",
+            params: ["key": "completions.inline-ai"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "completions.inline-ai")
+        XCTAssertEqual(response.data?["value"], "\(CompletionConfig.defaults.inlineAIEnabled)")
+    }
+
     func test_configGet_rateLimitIndicatorKey_returnsDefault() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
@@ -1006,6 +1019,12 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["worktree.on-close"], WorktreeConfig.defaults.onClose.rawValue)
         XCTAssertEqual(response.data?["experimental.pip-enabled"], "\(ExperimentalConfig.defaults.pipEnabled)")
         XCTAssertEqual(response.data?["experimental.pty-daemon"], "\(ExperimentalConfig.defaults.ptyDaemonEnabled)")
+        XCTAssertEqual(response.data?["completions.inline-ai"], "\(CompletionConfig.defaults.inlineAIEnabled)")
+        XCTAssertEqual(response.data?["completions.provider"], CompletionConfig.defaults.provider.rawValue)
+        XCTAssertEqual(
+            response.data?["completions.enabled-languages"],
+            CompletionConfig.defaults.enabledLanguageIDs.joined(separator: ",")
+        )
     }
 
     func test_configList_withFilterOnlyReturnsMatchingKeys() {
@@ -1022,6 +1041,22 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["worktree.on-close"], WorktreeConfig.defaults.onClose.rawValue)
         XCTAssertNil(response.data?["appearance.theme"])
         XCTAssertNil(response.data?["experimental.pip-enabled"])
+    }
+
+    func test_configList_withCompletionFilterOnlyReturnsCompletionKeys() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cl-completions",
+            command: "config-list",
+            params: ["filter": "completions."]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "5")
+        XCTAssertEqual(response.data?["completions.inline-ai"], "\(CompletionConfig.defaults.inlineAIEnabled)")
+        XCTAssertEqual(response.data?["completions.provider"], CompletionConfig.defaults.provider.rawValue)
+        XCTAssertEqual(response.data?["completions.idle-delay-seconds"], "\(CompletionConfig.defaults.idleDelaySeconds)")
+        XCTAssertNil(response.data?["worktree.enabled"])
     }
 
     // MARK: config-set
@@ -1138,6 +1173,17 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         )
 
         XCTAssertTrue(updated.contains("base-path = \"/tmp/quoted \\\"folder\\\" \\\\ suffix\""))
+    }
+
+    func test_configTOMLUpdater_rendersStringArrayValues() {
+        let updated = AppSocketConfigTOMLUpdater.updateTomlValue(
+            in: "[completions]",
+            section: "completions",
+            field: "enabled-languages",
+            renderedValue: AppSocketConfigTOMLUpdater.renderedStringArrayValue(["python", "swift"])
+        )
+
+        XCTAssertTrue(updated.contains("enabled-languages = [\"python\", \"swift\"]"))
     }
 
     // MARK: - Group 3: Theme Operations
