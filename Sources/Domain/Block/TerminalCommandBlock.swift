@@ -179,6 +179,15 @@ enum TerminalBlockShareFormatter {
     }
 }
 
+enum TerminalBlockOutputContextFormatter {
+    static func text(for blocks: [TerminalCommandBlock]) -> String {
+        blocks
+            .map { $0.output.trimmingCharacters(in: .newlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+}
+
 enum TerminalBlockRestoration {
     static func blocksForDisplay(
         live: [TerminalCommandBlock],
@@ -216,14 +225,17 @@ enum TerminalBlockRestoration {
     private static func newestRestoredBlocksByID(
         _ restored: [TerminalCommandBlock]
     ) -> [TerminalCommandBlock] {
-        var seenIDs = Set<UInt64>()
-        var newestReversed: [TerminalCommandBlock] = []
-
-        for block in restored.reversed() where seenIDs.insert(block.id).inserted {
-            newestReversed.append(block)
+        var blocksByID: [UInt64: TerminalCommandBlock] = [:]
+        for block in restored {
+            blocksByID[block.id] = block
         }
 
-        return newestReversed.reversed()
+        return blocksByID.values.sorted { lhs, rhs in
+            if lhs.startTimeNs != rhs.startTimeNs {
+                return lhs.startTimeNs < rhs.startTimeNs
+            }
+            return lhs.id < rhs.id
+        }
     }
 
     private static func newestRestoredBlockMapByID(

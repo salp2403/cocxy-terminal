@@ -131,12 +131,12 @@ struct TerminalBlockPersistenceSwiftTestingTests {
         #expect(limited.map(\.id) == [3, 4, 5])
     }
 
-    @Test("restoration deduplicates persisted block IDs using the newest record")
-    func restorationDeduplicatesPersistedBlockIDsUsingNewestRecord() {
+    @Test("restoration deduplicates persisted block IDs without changing chronology")
+    func restorationDeduplicatesPersistedBlockIDsWithoutChangingChronology() {
         let restored = [
-            sampleBlock(id: 1, command: "echo first"),
-            sampleBlock(id: 2, command: "echo second"),
-            sampleBlock(id: 1, command: "echo newest")
+            sampleBlock(id: 1, command: "echo first", startTimeNs: 100),
+            sampleBlock(id: 2, command: "echo second", startTimeNs: 200),
+            sampleBlock(id: 1, command: "echo newest", startTimeNs: 100).withBookmark(true)
         ]
 
         let blocks = TerminalBlockRestoration.blocksForDisplay(
@@ -145,8 +145,9 @@ struct TerminalBlockPersistenceSwiftTestingTests {
             limit: 32
         )
 
-        #expect(blocks.map(\.id) == [2, 1])
-        #expect(blocks.last?.command == "echo newest")
+        #expect(blocks.map(\.id) == [1, 2])
+        #expect(blocks.first?.command == "echo newest")
+        #expect(blocks.first?.isBookmarked == true)
         #expect(
             TerminalBlockRestoration.block(
                 id: 1,
@@ -235,10 +236,35 @@ struct TerminalBlockPersistenceSwiftTestingTests {
         #expect(text.contains("exit_code=0"))
     }
 
+    @Test("output context formatter joins clean block outputs chronologically")
+    func outputContextFormatterJoinsCleanBlockOutputsChronologically() {
+        let text = TerminalBlockOutputContextFormatter.text(
+            for: [
+                sampleBlock(id: 1, output: "one\n"),
+                sampleBlock(id: 2, output: "two-a\ntwo-b\n")
+            ]
+        )
+
+        #expect(text == "one\ntwo-a\ntwo-b")
+    }
+
+    @Test("output context formatter skips empty outputs without trimming content spaces")
+    func outputContextFormatterSkipsEmptyOutputsWithoutTrimmingContentSpaces() {
+        let text = TerminalBlockOutputContextFormatter.text(
+            for: [
+                sampleBlock(id: 1, output: "\n"),
+                sampleBlock(id: 2, output: "  spaced output  \n")
+            ]
+        )
+
+        #expect(text == "  spaced output  ")
+    }
+
     private func sampleBlock(
         id: UInt64,
         command: String = "echo hi",
-        output: String = "hi\n"
+        output: String = "hi\n",
+        startTimeNs: UInt64 = 100
     ) -> TerminalCommandBlock {
         TerminalCommandBlock(
             id: id,
@@ -246,8 +272,8 @@ struct TerminalBlockPersistenceSwiftTestingTests {
             output: output,
             exitCode: 0,
             pwd: "/Users/Galf/project",
-            startTimeNs: 100,
-            endTimeNs: 250,
+            startTimeNs: startTimeNs,
+            endTimeNs: startTimeNs + 150,
             durationNs: 150,
             startRow: 3,
             endRow: 4,

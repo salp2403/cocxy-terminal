@@ -139,11 +139,12 @@ extension MainWindowController {
             return ""
         }
 
-        return cocxyBridge.latestCommandBlockOutputs(
-            for: surfaceID,
-            limit: boundedLimit,
-            stripANSI: true
+        let blocks = availableCommandBlocks(
+            surfaceID: surfaceID,
+            liveBlocks: cocxyBridge.commandBlocks(for: surfaceID, limit: boundedLimit),
+            limit: boundedLimit
         )
+        return TerminalBlockOutputContextFormatter.text(for: blocks)
     }
 
     func currentAgentModeLSPDiagnostics(limit: Int) -> [AgentLSPDiagnostic] {
