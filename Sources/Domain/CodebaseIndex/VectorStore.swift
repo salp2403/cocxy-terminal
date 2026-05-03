@@ -47,6 +47,10 @@ struct CodebaseVectorStore: Sendable {
         try saveRecords(records)
     }
 
+    func recordCount() throws -> Int {
+        try loadRecords().count
+    }
+
     func remove(paths: Set<String>) throws {
         guard !paths.isEmpty else { return }
         let records = try loadRecords().filter { !paths.contains($0.path) }

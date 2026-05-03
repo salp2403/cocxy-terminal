@@ -283,6 +283,78 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         #expect(!resultPaths.contains("Generated/Ignored.swift"))
     }
 
+    @Test("search_codebase uses injected semantic index when available")
+    func searchCodebaseUsesInjectedSemanticIndexWhenAvailable() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "let sessionToken = \"abc\"\n".write(
+            to: root.appendingPathComponent("Sources/Auth.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "let palette = \"glass\"\n".write(
+            to: root.appendingPathComponent("Sources/Theme.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let workspace = AgentWorkspace(rootURL: root)
+        let executor = AgentReadOnlyToolExecutor(
+            workspace: workspace,
+            codebaseSemanticIndex: makeSemanticIndex(workspace: workspace)
+        )
+
+        let result = try await executor.execute(AgentToolCall(
+            id: "call-codebase-semantic",
+            toolID: "search_codebase",
+            arguments: [
+                "query": .string("authentication flow"),
+                "limit": .number(5),
+            ]
+        ))
+        let resultContent = try contentObject(result)
+        let results = try arrayValue(resultContent["results"])
+
+        #expect(result.status == AgentToolResultStatus.success)
+        #expect(resultContent["mode"]?.stringValue == "semantic-on-device")
+        let resultPaths = results.compactMap { value -> String? in
+            guard case .object(let object) = value else { return nil }
+            return object["path"]?.stringValue
+        }
+        #expect(resultPaths.first == "Sources/Auth.swift")
+    }
+
+    @Test("search_codebase falls back when injected semantic index is unavailable")
+    func searchCodebaseFallsBackWhenInjectedSemanticIndexUnavailable() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "let sessionToken = \"abc\"\n".write(
+            to: root.appendingPathComponent("Sources/Auth.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let workspace = AgentWorkspace(rootURL: root)
+        let executor = AgentReadOnlyToolExecutor(
+            workspace: workspace,
+            codebaseSemanticIndex: makeSemanticIndex(
+                workspace: workspace,
+                provider: AgentToolMockCodebaseEmbeddingProvider(isAvailable: false)
+            )
+        )
+
+        let result = try await executor.execute(AgentToolCall(
+            id: "call-codebase-fallback",
+            toolID: "search_codebase",
+            arguments: [
+                "query": .string("session"),
+                "limit": .number(5),
+            ]
+        ))
+        let resultContent = try contentObject(result)
+
+        #expect(result.status == AgentToolResultStatus.success)
+        #expect(resultContent["mode"]?.stringValue == "lexical-fallback")
+    }
+
     @Test("list_skills and use_skill expose project skills to the agent")
     func listSkillsAndUseSkillExposeProjectSkillsToAgent() async throws {
         let root = try makeWorkspace()
@@ -540,6 +612,17 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         }
         return array
     }
+
+    private func makeSemanticIndex(
+        workspace: AgentWorkspace,
+        provider: AgentToolMockCodebaseEmbeddingProvider = AgentToolMockCodebaseEmbeddingProvider()
+    ) -> CodebaseSemanticIndex {
+        CodebaseSemanticIndex(
+            workspace: workspace,
+            store: CodebaseVectorStore(storageURL: workspace.rootURL.appendingPathComponent(".cocxy-index", isDirectory: true)),
+            embeddingProvider: provider
+        )
+    }
 }
 
 private enum AgentReadOnlyToolExecutorTestError: Error {
@@ -611,5 +694,32 @@ private struct StaticAgentLSPDiagnosticsProvider: AgentLSPDiagnosticsProviding {
 
     func currentDiagnostics(limit: Int) -> [AgentLSPDiagnostic] {
         Array(diagnostics.prefix(limit))
+    }
+}
+
+private struct AgentToolMockCodebaseEmbeddingProvider: CodebaseEmbeddingProviding {
+    let isAvailable: Bool
+
+    init(isAvailable: Bool = true) {
+        self.isAvailable = isAvailable
+    }
+
+    var identifier: String {
+        "agent-tool-mock-codebase-embedding"
+    }
+
+    func embedding(for text: String) throws -> [Double] {
+        guard isAvailable else {
+            throw CodebaseEmbeddingProviderError.providerUnavailable(identifier)
+        }
+
+        let lowercased = text.lowercased()
+        if lowercased.contains("auth") || lowercased.contains("token") || lowercased.contains("session") {
+            return [1, 0]
+        }
+        if lowercased.contains("theme") || lowercased.contains("palette") || lowercased.contains("color") {
+            return [0.2, 0.8]
+        }
+        throw CodebaseEmbeddingProviderError.emptyEmbedding(identifier)
     }
 }

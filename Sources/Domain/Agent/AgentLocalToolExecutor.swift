@@ -91,6 +91,10 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
             terminalOutputProvider: terminalOutputProvider,
             lspDiagnosticsProvider: lspDiagnosticsProvider,
             skillRegistry: skillRegistry,
+            codebaseSemanticIndex: CodebaseSemanticIndex.localDefault(
+                workspace: workspace,
+                maxFileBytes: maxFileBytes
+            ),
             gitExecutableURL: gitExecutableURL,
             maxFileBytes: maxFileBytes
         )

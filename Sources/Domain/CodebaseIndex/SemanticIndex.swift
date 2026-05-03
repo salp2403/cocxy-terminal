@@ -30,6 +30,33 @@ struct CodebaseSemanticIndex {
         self.maxFileBytes = maxFileBytes
     }
 
+    static func localDefault(
+        workspace: AgentWorkspace,
+        maxFileBytes: Int = 1_000_000
+    ) -> CodebaseSemanticIndex? {
+        let provider = NaturalLanguageCodebaseEmbeddingProvider()
+        guard provider.isAvailable else {
+            return nil
+        }
+        return CodebaseSemanticIndex(
+            workspace: workspace,
+            store: CodebaseVectorStore(storageURL: defaultStorageURL(for: workspace)),
+            embeddingProvider: provider,
+            maxFileBytes: maxFileBytes
+        )
+    }
+
+    static func defaultStorageURL(for workspace: AgentWorkspace) -> URL {
+        workspace.rootURL.appendingPathComponent(".cocxy-index", isDirectory: true)
+    }
+
+    func rebuildIfNeeded() throws -> CodebaseSemanticIndexStats? {
+        guard try store.recordCount() == 0 else {
+            return nil
+        }
+        return try rebuild()
+    }
+
     func rebuild() throws -> CodebaseSemanticIndexStats {
         guard embeddingProvider.isAvailable else {
             throw CodebaseEmbeddingProviderError.providerUnavailable(embeddingProvider.identifier)

@@ -157,6 +157,7 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
     let defaultLimit: Int
     let maxLimit: Int
     let skillRegistry: SkillRegistry
+    let codebaseSemanticIndex: CodebaseSemanticIndex?
 
     init(
         workspace: AgentWorkspace,
@@ -164,6 +165,7 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
         terminalOutputProvider: (any AgentTerminalOutputProviding)? = nil,
         lspDiagnosticsProvider: (any AgentLSPDiagnosticsProviding)? = nil,
         skillRegistry: SkillRegistry? = nil,
+        codebaseSemanticIndex: CodebaseSemanticIndex? = nil,
         gitExecutableURL: URL = URL(fileURLWithPath: "/usr/bin/git"),
         maxFileBytes: Int = 1_000_000,
         defaultLimit: Int = 50,
@@ -178,6 +180,7 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
         self.defaultLimit = defaultLimit
         self.maxLimit = maxLimit
         self.skillRegistry = skillRegistry ?? SkillRegistry.localDefault(projectRoot: workspace.rootURL)
+        self.codebaseSemanticIndex = codebaseSemanticIndex
     }
 
     func execute(_ call: AgentToolCall) async throws -> AgentToolResult {
@@ -301,7 +304,11 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
 
     private func searchCodebase(_ call: AgentToolCall) throws -> AgentToolResult {
         let query = try requiredStringArgument("query", in: call)
-        let index = CodebaseIndex(workspace: workspace, maxFileBytes: maxFileBytes)
+        let index = CodebaseIndex(
+            workspace: workspace,
+            maxFileBytes: maxFileBytes,
+            semanticIndex: preparedSemanticIndex()
+        )
         let response = try index.search(CodebaseSearchRequest(
             query: query,
             scopePath: call.arguments["path"]?.stringValue,
@@ -330,6 +337,18 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
                 "results": .array(results),
             ])
         )
+    }
+
+    private func preparedSemanticIndex() -> CodebaseSemanticIndex? {
+        guard let codebaseSemanticIndex else {
+            return nil
+        }
+        do {
+            _ = try codebaseSemanticIndex.rebuildIfNeeded()
+            return codebaseSemanticIndex
+        } catch {
+            return nil
+        }
     }
 
     private func listSkills(_ call: AgentToolCall) throws -> AgentToolResult {
