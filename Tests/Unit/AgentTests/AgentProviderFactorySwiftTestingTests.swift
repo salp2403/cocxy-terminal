@@ -68,6 +68,30 @@ struct AgentProviderFactorySwiftTestingTests {
         #expect(client is FoundationModelsAgentLLMClient)
     }
 
+    @Test("factory passes effective tool registry to on-device client")
+    func factoryPassesEffectiveToolRegistryToOnDeviceClient() throws {
+        let registry = try AgentToolRegistry(descriptors: [
+            AgentToolDescriptor(
+                id: "custom_read",
+                displayName: "Custom Read",
+                description: "Read a custom local source.",
+                capability: .read
+            ),
+        ])
+        let factory = AgentProviderClientFactory(
+            secrets: AgentSecrets(store: InMemoryAgentSecretStore()),
+            foundationModelsAvailable: true,
+            transport: RecordingFactoryHTTPTransport()
+        )
+
+        let client = try #require(try factory.makeClient(
+            configuration: AgentModeConfig(enabled: true),
+            toolRegistry: registry
+        ) as? FoundationModelsAgentLLMClient)
+
+        #expect(client.toolRegistry.toolIDs == ["custom_read"])
+    }
+
     @Test("factory refuses remote providers without a saved user API key")
     func factoryRequiresUserAPIKeyForRemoteProviders() async throws {
         let factory = AgentProviderClientFactory(

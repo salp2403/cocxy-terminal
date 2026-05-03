@@ -2,6 +2,9 @@
 // AgentProviderClientSwiftTestingTests.swift - Remote provider request/response contracts.
 
 import Foundation
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 import Testing
 @testable import CocxyTerminal
 
@@ -376,8 +379,8 @@ struct AgentProviderClientSwiftTestingTests {
     }
 
     #if canImport(FoundationModels)
-    @Test("Foundation Models instructions state on-device chat limitations")
-    func foundationModelsInstructionsStateOnDeviceChatLimitations() {
+    @Test("Foundation Models instructions state on-device tool gating")
+    func foundationModelsInstructionsStateOnDeviceToolGating() {
         let instructions = FoundationModelsAgentPromptBuilder.instructions(from: [
             AgentMessage(
                 id: "s1",
@@ -387,8 +390,8 @@ struct AgentProviderClientSwiftTestingTests {
         ])
 
         #expect(instructions.contains("Prefer concise answers."))
-        #expect(instructions.contains("chat-only"))
-        #expect(instructions.contains("cannot execute tools or commands"))
+        #expect(instructions.contains("Request local tools"))
+        #expect(instructions.contains("local permission rules"))
         #expect(instructions.contains("Never claim you read files, ran commands, changed repositories"))
         #expect(instructions.contains("Follow direct user formatting instructions exactly"))
         #expect(instructions.count <= FoundationModelsAgentPromptBuilder.maxInstructionsCharacters)
@@ -416,6 +419,108 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(prompt.contains("User:\n\(recentPrompt)"))
         #expect(prompt.contains("[Earlier transcript omitted to fit the on-device context window.]"))
         #expect(prompt.count <= FoundationModelsAgentPromptBuilder.maxPromptCharacters)
+    }
+
+    @Test("Foundation Models tool bridge converts transcript calls without trusting synthetic content")
+    @available(macOS 26.0, *)
+    func foundationModelsToolBridgeConvertsTranscriptCallsWithoutTrustingSyntheticContent() throws {
+        let entries: ArraySlice<Transcript.Entry> = [
+            .toolCalls(Transcript.ToolCalls([
+                Transcript.ToolCall(
+                    id: "call-read",
+                    toolName: "read_file",
+                    arguments: GeneratedContent(properties: ["path": "Package.swift"])
+                ),
+                Transcript.ToolCall(
+                    id: "call-read-duplicate",
+                    toolName: "read_file",
+                    arguments: GeneratedContent(properties: ["path": "Package.swift"])
+                ),
+                Transcript.ToolCall(
+                    id: "call-run",
+                    toolName: "run_command",
+                    arguments: GeneratedContent(properties: [
+                        "command": "swift test --filter AgentLoopSwiftTestingTests",
+                        "timeoutSeconds": 30,
+                    ])
+                ),
+            ])),
+        ][...]
+
+        let response = FoundationModelsAgentToolBridge.response(
+            from: "Package.swift has already been read.",
+            transcriptEntries: entries
+        )
+
+        #expect(response.content == "")
+        #expect(response.toolCalls == [
+            AgentToolCall(
+                id: "call-read",
+                toolID: "read_file",
+                arguments: ["path": .string("Package.swift")]
+            ),
+            AgentToolCall(
+                id: "call-run",
+                toolID: "run_command",
+                arguments: [
+                    "command": .string("swift test --filter AgentLoopSwiftTestingTests"),
+                    "timeoutSeconds": .number(30),
+                ]
+            ),
+        ])
+    }
+
+    @Test("Foundation Models tool bridge creates no-op tools from Agent registry")
+    @available(macOS 26.0, *)
+    func foundationModelsToolBridgeCreatesNoOpToolsFromAgentRegistry() throws {
+        let registry = try AgentToolRegistry(descriptors: [
+            AgentToolDescriptor(
+                id: "read_file",
+                displayName: "Read File",
+                description: "Read a repository file after path validation.",
+                capability: .read,
+                inputSchema: AgentToolInputSchema(
+                    properties: [
+                        "path": AgentToolInputProperty(.string, description: "Repository-relative path."),
+                        "limit": AgentToolInputProperty(.number, description: "Maximum bytes."),
+                        "includeHidden": AgentToolInputProperty(.boolean, description: "Include hidden files."),
+                    ],
+                    required: ["path"]
+                )
+            ),
+        ])
+
+        let tools = try FoundationModelsAgentToolBridge.tools(from: registry)
+
+        #expect(tools.count == 1)
+        #expect(tools.first?.name == "read_file")
+        #expect(tools.first?.description == "Read a repository file after path validation.")
+    }
+
+    @Test("Foundation Models tool bridge selects exact tool requests without sending every schema")
+    @available(macOS 26.0, *)
+    func foundationModelsToolBridgeSelectsExactToolRequestsWithoutSendingEverySchema() {
+        let selected = FoundationModelsAgentToolBridge.selectedDescriptors(
+            from: .minimumBuiltIns(),
+            matching: "Use the read_file tool with path Package.swift.",
+            maxTools: 6
+        )
+
+        #expect(selected.map(\.id) == ["read_file"])
+    }
+
+    @Test("Foundation Models tool bridge bounds contextual tool selection")
+    @available(macOS 26.0, *)
+    func foundationModelsToolBridgeBoundsContextualToolSelection() {
+        let selected = FoundationModelsAgentToolBridge.selectedDescriptors(
+            from: .minimumBuiltIns(),
+            matching: "Find where AgentSessionRunner runs commands and inspect recent terminal output.",
+            maxTools: 3
+        )
+
+        #expect(selected.count <= 3)
+        #expect(selected.map(\.id).contains("run_command"))
+        #expect(selected.map(\.id).contains("read_terminal_output"))
     }
     #endif
 

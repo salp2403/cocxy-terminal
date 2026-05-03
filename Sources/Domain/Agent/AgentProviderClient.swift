@@ -134,7 +134,7 @@ struct AgentProviderClientFactory: Sendable {
     ) throws -> any AgentLLMClient {
         switch provider {
         case .foundationModelsOnDevice:
-            return FoundationModelsAgentLLMClient()
+            return FoundationModelsAgentLLMClient(toolRegistry: toolRegistry)
         case .openai:
             return OpenAIAgentLLMClient(
                 apiKey: try requiredAPIKey(for: provider),
@@ -168,6 +168,12 @@ struct AgentProviderClientFactory: Sendable {
 }
 
 struct FoundationModelsAgentLLMClient: AgentLLMClient {
+    let toolRegistry: AgentToolRegistry
+
+    init(toolRegistry: AgentToolRegistry = .minimumBuiltIns()) {
+        self.toolRegistry = toolRegistry
+    }
+
     static var isAvailable: Bool {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
@@ -180,7 +186,10 @@ struct FoundationModelsAgentLLMClient: AgentLLMClient {
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
-            return try await FoundationModelsAgentRuntime.nextResponse(for: messages)
+            return try await FoundationModelsAgentRuntime.nextResponse(
+                for: messages,
+                toolRegistry: toolRegistry
+            )
         }
         #endif
         throw AgentProviderClientFactoryError.foundationModelsClientUnavailable
@@ -189,9 +198,9 @@ struct FoundationModelsAgentLLMClient: AgentLLMClient {
 
 #if canImport(FoundationModels)
 enum FoundationModelsAgentPromptBuilder {
-    static let maxInstructionsCharacters = 6_000
-    static let maxPromptCharacters = 12_000
-    static let maxMessageCharacters = 3_000
+    static let maxInstructionsCharacters = 3_000
+    static let maxPromptCharacters = 5_000
+    static let maxMessageCharacters = 2_000
 
     private static let omittedTranscriptMarker = "[Earlier transcript omitted to fit the on-device context window.]"
     private static let omittedContentMarker = "[Earlier content omitted to fit the on-device context window.]"
@@ -205,9 +214,10 @@ enum FoundationModelsAgentPromptBuilder {
 
         let baseInstructions = [
             "You are Cocxy Agent Mode running fully on this Mac.",
-            "You are using the on-device Foundation Models provider. This provider is chat-only in the current build and cannot execute tools or commands.",
+            "You are using the on-device Foundation Models provider. Request local tools when repository, terminal, app, or file state is needed.",
+            "Cocxy captures tool requests and runs them only through local permission rules before any action happens.",
             "Never claim you read files, ran commands, changed repositories, opened apps, checked logs, installed software, monitored system performance, or verified local state unless a message labeled \"Local tool result\" explicitly contains that result.",
-            "If a local action is needed, explain the next local action clearly instead of saying it already happened.",
+            "If a local action is needed, request the relevant tool or explain the needed action clearly instead of saying it already happened.",
             "Follow direct user formatting instructions exactly when they do not conflict with safety.",
         ]
 
@@ -346,22 +356,350 @@ enum FoundationModelsAgentPromptBuilder {
 }
 
 @available(macOS 26.0, *)
+enum FoundationModelsAgentToolBridge {
+    static let maxRuntimeTools = 6
+
+    static func tools(from registry: AgentToolRegistry) throws -> [any Tool] {
+        try registry.descriptors.map(FoundationModelsAgentTool.init(descriptor:))
+    }
+
+    static func tools(
+        from registry: AgentToolRegistry,
+        matching prompt: String
+    ) throws -> [any Tool] {
+        try selectedDescriptors(from: registry, matching: prompt)
+            .map(FoundationModelsAgentTool.init(descriptor:))
+    }
+
+    static func selectedDescriptors(
+        from registry: AgentToolRegistry,
+        matching prompt: String,
+        maxTools: Int = maxRuntimeTools
+    ) -> [AgentToolDescriptor] {
+        let promptIndex = PromptIndex(prompt)
+        let exactMatches = registry.descriptors
+            .filter { promptIndex.referencesTool($0) }
+            .sorted {
+                if priority(for: $0.id) != priority(for: $1.id) {
+                    return priority(for: $0.id) > priority(for: $1.id)
+                }
+                return $0.id < $1.id
+            }
+        if !exactMatches.isEmpty {
+            return Array(exactMatches.prefix(max(0, maxTools)))
+        }
+
+        let scoredDescriptors = registry.descriptors
+            .compactMap { descriptor -> (score: Int, priority: Int, descriptor: AgentToolDescriptor)? in
+                let score = score(descriptor, promptIndex: promptIndex)
+                guard score > 0 else { return nil }
+                return (score, priority(for: descriptor.id), descriptor)
+            }
+            .sorted {
+                if $0.score != $1.score { return $0.score > $1.score }
+                if $0.priority != $1.priority { return $0.priority > $1.priority }
+                return $0.descriptor.id < $1.descriptor.id
+            }
+
+        return Array(scoredDescriptors.prefix(max(0, maxTools)).map(\.descriptor))
+    }
+
+    static func response(
+        from content: String,
+        transcriptEntries: ArraySlice<Transcript.Entry>
+    ) -> AgentLLMResponse {
+        let toolCalls = toolCalls(from: transcriptEntries)
+        return AgentLLMResponse(
+            content: toolCalls.isEmpty ? content : "",
+            toolCalls: toolCalls
+        )
+    }
+
+    private static func toolCalls(from transcriptEntries: ArraySlice<Transcript.Entry>) -> [AgentToolCall] {
+        let calls = transcriptEntries.flatMap { entry -> [AgentToolCall] in
+            guard case .toolCalls(let calls) = entry else { return [] }
+            return calls.map { call in
+                AgentToolCall(
+                    id: call.id,
+                    toolID: call.toolName,
+                    arguments: agentObject(from: call.arguments)
+                )
+            }
+        }
+        return deduplicatedToolCalls(calls)
+    }
+
+    private static func deduplicatedToolCalls(_ calls: [AgentToolCall]) -> [AgentToolCall] {
+        var seenKeys: Set<String> = []
+        var result: [AgentToolCall] = []
+
+        for call in calls {
+            let key = "\(call.toolID)|\(canonicalValue(.object(call.arguments)))"
+            guard seenKeys.insert(key).inserted else { continue }
+            result.append(call)
+        }
+
+        return result
+    }
+
+    private static func agentObject(from content: GeneratedContent) -> [String: AgentJSONValue] {
+        guard case .structure(let properties, _) = content.kind else {
+            return [:]
+        }
+        return properties.mapValues(agentJSONValue)
+    }
+
+    private static func agentJSONValue(from content: GeneratedContent) -> AgentJSONValue {
+        switch content.kind {
+        case .null:
+            return .null
+        case .bool(let value):
+            return .bool(value)
+        case .number(let value):
+            return .number(value)
+        case .string(let value):
+            return .string(value)
+        case .array(let values):
+            return .array(values.map(agentJSONValue))
+        case .structure(let properties, _):
+            return .object(properties.mapValues(agentJSONValue))
+        @unknown default:
+            return .null
+        }
+    }
+
+    private static func canonicalValue(_ value: AgentJSONValue) -> String {
+        if let data = try? AgentToolProtocolCodec.encode(value),
+           let encoded = String(data: data, encoding: .utf8) {
+            return encoded
+        }
+        return String(describing: value)
+    }
+
+    private struct PromptIndex {
+        let raw: String
+        let words: Set<String>
+        let phrases: String
+
+        init(_ prompt: String) {
+            self.raw = prompt.lowercased()
+            let normalized = FoundationModelsAgentToolBridge.normalizedPrompt(prompt)
+            self.words = Set(normalized.split(separator: " ").map(String.init))
+            self.phrases = " \(normalized) "
+        }
+
+        func containsPhrase(_ phrase: String) -> Bool {
+            let normalized = FoundationModelsAgentToolBridge.normalizedPrompt(phrase)
+            return !normalized.isEmpty && phrases.contains(" \(normalized) ")
+        }
+
+        func referencesTool(_ descriptor: AgentToolDescriptor) -> Bool {
+            raw.contains(descriptor.id)
+                || containsPhrase(descriptor.id.replacingOccurrences(of: "_", with: " "))
+                || containsPhrase(descriptor.displayName)
+        }
+    }
+
+    private static func score(
+        _ descriptor: AgentToolDescriptor,
+        promptIndex: PromptIndex
+    ) -> Int {
+        var score = 0
+        let id = descriptor.id
+        if promptIndex.raw.contains(id) || promptIndex.containsPhrase(id.replacingOccurrences(of: "_", with: " ")) {
+            score += 120
+        }
+        if promptIndex.containsPhrase(descriptor.displayName) {
+            score += 80
+        }
+        for keyword in keywords(for: id) where promptIndex.containsPhrase(keyword) {
+            score += 24
+        }
+        for keyword in capabilityKeywords(for: descriptor.capability) where promptIndex.words.contains(keyword) {
+            score += 8
+        }
+        if score > 0, MCPToolBridge.parseToolID(id) != nil {
+            score -= 10
+        }
+        return max(score, 0)
+    }
+
+    private static func normalizedPrompt(_ prompt: String) -> String {
+        let scalars = prompt.lowercased().unicodeScalars.map { scalar -> Character in
+            CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : " "
+        }
+        return String(scalars)
+            .split(separator: " ")
+            .joined(separator: " ")
+    }
+
+    private static func priority(for toolID: String) -> Int {
+        switch toolID {
+        case "read_file": return 100
+        case "list_directory": return 95
+        case "search_codebase": return 90
+        case "grep": return 85
+        case "search_files": return 80
+        case "git_status": return 75
+        case "git_diff": return 70
+        case "read_terminal_output": return 65
+        case "read_lsp_diagnostics": return 60
+        case "run_command": return 55
+        case "write_file": return 50
+        case "apply_diff": return 45
+        case "ask_user": return 40
+        case "list_skills": return 35
+        case "use_skill": return 30
+        default: return 10
+        }
+    }
+
+    private static func keywords(for toolID: String) -> [String] {
+        switch toolID {
+        case "read_file":
+            return ["read", "read file", "file", "source", "package", "contents"]
+        case "list_directory":
+            return ["list", "directory", "folder", "files", "tree"]
+        case "search_files":
+            return ["find file", "filename", "glob", "path"]
+        case "search_codebase":
+            return ["search", "codebase", "symbol", "semantic", "where"]
+        case "grep":
+            return ["grep", "regex", "pattern", "find text", "search text"]
+        case "git_status":
+            return ["git status", "status", "branch", "dirty"]
+        case "git_diff":
+            return ["git diff", "diff", "changes", "patch"]
+        case "read_terminal_output":
+            return ["terminal output", "scrollback", "screen", "recent output"]
+        case "read_lsp_diagnostics":
+            return ["diagnostic", "diagnostics", "lsp", "warning", "errors"]
+        case "run_command":
+            return ["run", "runs", "command", "commands", "test", "tests", "build", "builds", "execute", "shell"]
+        case "write_file":
+            return ["write", "write file", "create file", "save"]
+        case "apply_diff":
+            return ["apply diff", "edit", "modify", "change", "fix", "update"]
+        case "ask_user":
+            return ["ask user", "question", "clarify", "confirm"]
+        case "list_skills", "use_skill":
+            return ["skill", "skills"]
+        default:
+            return []
+        }
+    }
+
+    private static func capabilityKeywords(for capability: AgentToolCapability) -> Set<String> {
+        switch capability {
+        case .read:
+            return ["read", "inspect", "show", "find", "search", "list", "check"]
+        case .write:
+            return ["write", "edit", "modify", "change", "fix", "update", "create"]
+        case .command:
+            return ["run", "runs", "execute", "command", "commands", "test", "tests", "build", "builds"]
+        case .external:
+            return ["external", "mcp"]
+        case .userInteraction:
+            return ["ask", "clarify", "confirm"]
+        }
+    }
+}
+
+@available(macOS 26.0, *)
+private struct FoundationModelsAgentTool: Tool {
+    typealias Arguments = GeneratedContent
+    typealias Output = String
+
+    let name: String
+    let description: String
+    let parameters: GenerationSchema
+    var includesSchemaInInstructions: Bool { true }
+
+    init(descriptor: AgentToolDescriptor) throws {
+        self.name = descriptor.id
+        self.description = descriptor.description
+        self.parameters = try Self.parameters(from: descriptor)
+    }
+
+    func call(arguments: GeneratedContent) async throws -> String {
+        _ = arguments
+        return "Tool request captured. Cocxy will review permissions before any local action runs."
+    }
+
+    private static func parameters(from descriptor: AgentToolDescriptor) throws -> GenerationSchema {
+        let schemaName = "\(schemaSafeName(descriptor.id))_arguments"
+        let root = DynamicGenerationSchema(
+            name: schemaName,
+            description: descriptor.description,
+            properties: descriptor.inputSchema.properties
+                .sorted { $0.key < $1.key }
+                .map { name, property in
+                    DynamicGenerationSchema.Property(
+                        name: name,
+                        description: property.description,
+                        schema: dynamicSchema(for: property.type),
+                        isOptional: !descriptor.inputSchema.required.contains(name)
+                    )
+                }
+        )
+        return try GenerationSchema(root: root, dependencies: [])
+    }
+
+    private static func dynamicSchema(for type: AgentToolInputProperty.ValueType) -> DynamicGenerationSchema {
+        switch type {
+        case .boolean:
+            return DynamicGenerationSchema(type: Bool.self)
+        case .number:
+            return DynamicGenerationSchema(type: Double.self)
+        case .string:
+            return DynamicGenerationSchema(type: String.self)
+        }
+    }
+
+    private static func schemaSafeName(_ rawName: String) -> String {
+        let scalars = rawName.unicodeScalars.map { scalar -> Character in
+            if CharacterSet.alphanumerics.contains(scalar) || scalar == "_" {
+                return Character(scalar)
+            }
+            return "_"
+        }
+        let candidate = String(scalars)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        let nonEmpty = candidate.isEmpty ? "tool" : candidate
+        guard let first = nonEmpty.unicodeScalars.first,
+              CharacterSet.letters.contains(first)
+        else {
+            return "tool_\(nonEmpty)"
+        }
+        return nonEmpty
+    }
+}
+
+@available(macOS 26.0, *)
 private enum FoundationModelsAgentRuntime {
     static var isAvailable: Bool {
         SystemLanguageModel.default.isAvailable
     }
 
-    static func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+    static func nextResponse(
+        for messages: [AgentMessage],
+        toolRegistry: AgentToolRegistry
+    ) async throws -> AgentLLMResponse {
         guard SystemLanguageModel.default.isAvailable else {
             throw AgentProviderClientFactoryError.foundationModelsClientUnavailable
         }
 
+        let prompt = FoundationModelsAgentPromptBuilder.prompt(from: messages)
         let session = LanguageModelSession(
             model: .default,
+            tools: try FoundationModelsAgentToolBridge.tools(from: toolRegistry, matching: prompt),
             instructions: FoundationModelsAgentPromptBuilder.instructions(from: messages)
         )
-        let response = try await session.respond(to: FoundationModelsAgentPromptBuilder.prompt(from: messages))
-        return AgentLLMResponse(content: response.content, toolCalls: [])
+        let response = try await session.respond(to: prompt, options: GenerationOptions(maximumResponseTokens: 512))
+        return FoundationModelsAgentToolBridge.response(
+            from: response.content,
+            transcriptEntries: response.transcriptEntries
+        )
     }
 }
 #endif
