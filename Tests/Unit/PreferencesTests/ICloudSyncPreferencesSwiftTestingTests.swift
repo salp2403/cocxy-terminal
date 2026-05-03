@@ -15,9 +15,19 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         func writeConfigFile(_ content: String) throws { self.content = content }
     }
 
-    private func makeViewModel(config: CocxyConfig = .defaults) -> (PreferencesViewModel, InMemoryProvider) {
+    private func makeViewModel(
+        config: CocxyConfig = .defaults,
+        iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(store: InMemoryICloudSyncSecretStore())
+    ) -> (PreferencesViewModel, InMemoryProvider) {
         let provider = InMemoryProvider()
-        return (PreferencesViewModel(config: config, fileProvider: provider), provider)
+        return (
+            PreferencesViewModel(
+                config: config,
+                fileProvider: provider,
+                iCloudSyncSecrets: iCloudSyncSecrets
+            ),
+            provider
+        )
     }
 
     @Test("init populates iCloud Sync fields from the saved config")
@@ -102,5 +112,24 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         #expect(service.current.iCloudSync.artifactKinds == [.notebooks, .skills])
         #expect(service.current.iCloudSync.conflictPolicy == .manual)
         #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test("iCloud Sync master password saves and deletes through Preferences")
+    func iCloudSyncMasterPasswordSaveDelete() throws {
+        let secrets = ICloudSyncSecrets(store: InMemoryICloudSyncSecretStore())
+        let (vm, _) = makeViewModel(iCloudSyncSecrets: secrets)
+
+        vm.iCloudSyncMasterPasswordDraft = " sync password\n"
+        try vm.saveICloudSyncMasterPasswordDraft()
+
+        #expect(vm.iCloudSyncMasterPasswordDraft.isEmpty)
+        #expect(vm.iCloudSyncMasterPasswordStatus == "iCloud Sync master password saved.")
+        #expect(vm.hasSavedICloudSyncMasterPassword())
+        #expect(try secrets.masterPassword() == "sync password")
+
+        try vm.deleteICloudSyncMasterPassword()
+
+        #expect(vm.iCloudSyncMasterPasswordStatus == "iCloud Sync master password deleted.")
+        #expect(!vm.hasSavedICloudSyncMasterPassword())
     }
 }

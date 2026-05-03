@@ -225,6 +225,12 @@ final class PreferencesViewModel: ObservableObject {
     /// Artifact classes selected for encrypted sync export.
     @Published var iCloudSyncArtifactKinds: Set<ICloudSyncArtifactKind>
 
+    /// Draft master password for encrypted iCloud Sync exports.
+    @Published var iCloudSyncMasterPasswordDraft: String
+
+    /// Short status for the last iCloud Sync secret action.
+    @Published var iCloudSyncMasterPasswordStatus: String?
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -581,6 +587,9 @@ final class PreferencesViewModel: ObservableObject {
     /// tests inject an in-memory store.
     private let agentSecrets: AgentSecrets
 
+    /// Local secret facade for the iCloud Sync master password.
+    private let iCloudSyncSecrets: ICloudSyncSecrets
+
     /// Resolves Voice locale availability without any network fallback.
     private let voiceLocaleResolver: VoiceLocaleResolver
 
@@ -613,6 +622,7 @@ final class PreferencesViewModel: ObservableObject {
         fileProvider: ConfigFileProviding = DiskConfigFileProvider(),
         voiceLocaleResolver: VoiceLocaleResolver = .live(),
         agentSecrets: AgentSecrets = AgentSecrets(),
+        iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(),
         mcpConfigURL: URL = MCPServerConfigLoader().defaultConfigURL(),
         mcpConfigLoader: MCPServerConfigLoader = MCPServerConfigLoader()
     ) {
@@ -620,6 +630,7 @@ final class PreferencesViewModel: ObservableObject {
         self.fileProvider = fileProvider
         self.voiceLocaleResolver = voiceLocaleResolver
         self.agentSecrets = agentSecrets
+        self.iCloudSyncSecrets = iCloudSyncSecrets
         self.mcpConfigURL = mcpConfigURL
         self.mcpConfigLoader = mcpConfigLoader
 
@@ -687,6 +698,8 @@ final class PreferencesViewModel: ObservableObject {
         self.iCloudSyncDirectoryName = config.iCloudSync.syncDirectoryName
         self.iCloudSyncEncryptionRequired = config.iCloudSync.encryptionRequired
         self.iCloudSyncArtifactKinds = Set(config.iCloudSync.artifactKinds)
+        self.iCloudSyncMasterPasswordDraft = ""
+        self.iCloudSyncMasterPasswordStatus = nil
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -777,6 +790,23 @@ final class PreferencesViewModel: ObservableObject {
 
     func hasSavedAgentConversationMasterPassword() -> Bool {
         (try? agentSecrets.hasConversationMasterPassword()) ?? false
+    }
+
+    // MARK: - iCloud Sync Secrets
+
+    func saveICloudSyncMasterPasswordDraft() throws {
+        try iCloudSyncSecrets.saveMasterPassword(iCloudSyncMasterPasswordDraft)
+        iCloudSyncMasterPasswordDraft = ""
+        iCloudSyncMasterPasswordStatus = "iCloud Sync master password saved."
+    }
+
+    func deleteICloudSyncMasterPassword() throws {
+        try iCloudSyncSecrets.deleteMasterPassword()
+        iCloudSyncMasterPasswordStatus = "iCloud Sync master password deleted."
+    }
+
+    func hasSavedICloudSyncMasterPassword() -> Bool {
+        (try? iCloudSyncSecrets.hasMasterPassword()) ?? false
     }
 
     // MARK: - MCP Config Editing

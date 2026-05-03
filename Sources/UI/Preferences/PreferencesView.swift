@@ -1226,9 +1226,44 @@ struct ICloudSyncPreferencesSection: View {
             Section("Opt-In") {
                 Toggle("Enable iCloud Drive sync", isOn: $viewModel.iCloudSyncEnabled)
                     .help("Exports selected local Cocxy artifacts to the user's iCloud Drive.")
+            }
+
+            Section("Encryption") {
                 Toggle("Encrypt synced artifacts", isOn: .constant(true))
                     .disabled(true)
                     .help("Encryption is required for iCloud Sync.")
+
+                SecureField("Master password", text: $viewModel.iCloudSyncMasterPasswordDraft)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Button("Save Master Password") {
+                        saveICloudSyncMasterPassword()
+                    }
+                    .disabled(trimmedICloudSyncMasterPasswordDraft.isEmpty)
+
+                    Button("Delete Saved Password") {
+                        deleteICloudSyncMasterPassword()
+                    }
+                    .disabled(!viewModel.hasSavedICloudSyncMasterPassword())
+
+                    Spacer()
+                }
+
+                Text(
+                    viewModel.hasSavedICloudSyncMasterPassword()
+                        ? "A master password is saved in the macOS Keychain."
+                        : "No master password is saved."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if let status = viewModel.iCloudSyncMasterPasswordStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
 
             Section("Location") {
@@ -1264,6 +1299,26 @@ struct ICloudSyncPreferencesSection: View {
         case .skills: return "Skills"
         case .settings: return "Settings"
         case .themes: return "Themes"
+        }
+    }
+
+    private var trimmedICloudSyncMasterPasswordDraft: String {
+        viewModel.iCloudSyncMasterPasswordDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func saveICloudSyncMasterPassword() {
+        do {
+            try viewModel.saveICloudSyncMasterPasswordDraft()
+        } catch {
+            viewModel.iCloudSyncMasterPasswordStatus = "Failed to save master password: \(error.localizedDescription)"
+        }
+    }
+
+    private func deleteICloudSyncMasterPassword() {
+        do {
+            try viewModel.deleteICloudSyncMasterPassword()
+        } catch {
+            viewModel.iCloudSyncMasterPasswordStatus = "Failed to delete master password: \(error.localizedDescription)"
         }
     }
 }
