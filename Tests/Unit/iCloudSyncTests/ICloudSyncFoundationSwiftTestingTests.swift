@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // ICloudSyncFoundationSwiftTestingTests.swift - Local iCloud sync foundation contracts.
 
+import CryptoKit
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -213,6 +214,93 @@ struct ICloudSyncFoundationSwiftTestingTests {
         #expect(manifestPermissions == 0o600)
         #expect(artifactPermissions == 0o600)
     }
+
+    @Test("import service decrypts remote-only artifacts without overwriting locals")
+    func importServiceDecryptsRemoteOnlyArtifactsWithoutOverwritingLocals() throws {
+        let root = temporaryDirectory(named: "icloud-sync-import")
+        let roots = try makeArtifactRoots(in: root.appendingPathComponent("local", isDirectory: true))
+        let remoteContainer = root.appendingPathComponent("remote", isDirectory: true)
+        let remoteSyncRoot = remoteContainer.appendingPathComponent("Cocxy", isDirectory: true)
+        try FileManager.default.createDirectory(at: remoteSyncRoot, withIntermediateDirectories: true)
+        let remoteEntry = ICloudSyncManifestEntry(
+            kind: .notebooks,
+            relativePath: "daily.cocxynb",
+            contentHash: sha256Hex("remote notebook"),
+            modifiedAt: Date(timeIntervalSince1970: 40)
+        )
+        try writeRemoteManifest([remoteEntry], to: remoteSyncRoot)
+        try writeEncryptedRemoteArtifact(
+            entry: remoteEntry,
+            plaintext: "remote notebook",
+            rootURL: remoteSyncRoot,
+            password: "sync password"
+        )
+        let service = ICloudSyncImportService(
+            rootResolver: ICloudSyncRootResolver(containerProvider: RecordingICloudContainerProvider(root: remoteContainer))
+        )
+
+        let outcome = try service.importRemoteArtifacts(
+            config: ICloudSyncConfig(enabled: true, artifactKinds: [.notebooks]),
+            roots: roots,
+            password: "sync password"
+        )
+
+        guard case .imported(let result) = outcome else {
+            Issue.record("Expected imported outcome")
+            return
+        }
+        let importedURL = roots.notebooks.appendingPathComponent("daily.cocxynb")
+        #expect(result.importedArtifactURLs == [importedURL.standardizedFileURL])
+        #expect(result.conflicts.isEmpty)
+        #expect(try String(contentsOf: importedURL, encoding: .utf8) == "remote notebook")
+        #expect(try posixPermissions(at: importedURL) == 0o600)
+    }
+
+    @Test("import service reports conflicts and preserves local files")
+    func importServiceReportsConflictsAndPreservesLocalFiles() throws {
+        let root = temporaryDirectory(named: "icloud-sync-import-conflict")
+        let roots = try makeArtifactRoots(in: root.appendingPathComponent("local", isDirectory: true))
+        let localURL = roots.notebooks.appendingPathComponent("daily.cocxynb")
+        try "local notebook".write(to: localURL, atomically: true, encoding: .utf8)
+        let remoteContainer = root.appendingPathComponent("remote", isDirectory: true)
+        let remoteSyncRoot = remoteContainer.appendingPathComponent("Cocxy", isDirectory: true)
+        try FileManager.default.createDirectory(at: remoteSyncRoot, withIntermediateDirectories: true)
+        let remoteEntry = ICloudSyncManifestEntry(
+            kind: .notebooks,
+            relativePath: "daily.cocxynb",
+            contentHash: sha256Hex("remote notebook"),
+            modifiedAt: Date(timeIntervalSince1970: 41)
+        )
+        try writeRemoteManifest([remoteEntry], to: remoteSyncRoot)
+        try writeEncryptedRemoteArtifact(
+            entry: remoteEntry,
+            plaintext: "remote notebook",
+            rootURL: remoteSyncRoot,
+            password: "sync password"
+        )
+        let service = ICloudSyncImportService(
+            rootResolver: ICloudSyncRootResolver(containerProvider: RecordingICloudContainerProvider(root: remoteContainer))
+        )
+
+        let outcome = try service.importRemoteArtifacts(
+            config: ICloudSyncConfig(enabled: true, artifactKinds: [.notebooks]),
+            roots: roots,
+            password: "sync password"
+        )
+
+        guard case .imported(let result) = outcome else {
+            Issue.record("Expected imported outcome")
+            return
+        }
+        #expect(result.importedArtifactURLs.isEmpty)
+        #expect(result.conflicts.count == 1)
+        guard let conflict = result.conflicts.first else { return }
+        #expect(conflict.local.kind == .notebooks)
+        #expect(conflict.local.relativePath == "daily.cocxynb")
+        #expect(conflict.local.contentHash == sha256Hex("local notebook"))
+        #expect(conflict.remote == remoteEntry)
+        #expect(try String(contentsOf: localURL, encoding: .utf8) == "local notebook")
+    }
 }
 
 private final class RecordingICloudContainerProvider: ICloudContainerProviding, @unchecked Sendable {
@@ -258,4 +346,33 @@ private func temporaryDirectory(named name: String) -> URL {
 private func posixPermissions(at url: URL) throws -> Int {
     let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
     return attributes[.posixPermissions] as? Int ?? -1
+}
+
+private func writeRemoteManifest(_ entries: [ICloudSyncManifestEntry], to rootURL: URL) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    encoder.dateEncodingStrategy = .iso8601
+    let manifest = ICloudSyncManifest(generatedAt: Date(timeIntervalSince1970: 42), entries: entries)
+    try encoder.encode(manifest).write(to: rootURL.appendingPathComponent("manifest.json"), options: .atomic)
+}
+
+private func writeEncryptedRemoteArtifact(
+    entry: ICloudSyncManifestEntry,
+    plaintext: String,
+    rootURL: URL,
+    password: String
+) throws {
+    let destination = rootURL
+        .appendingPathComponent(entry.kind.rawValue, isDirectory: true)
+        .appendingPathComponent(entry.relativePath + ".cocxyenc", isDirectory: false)
+    try FileManager.default.createDirectory(
+        at: destination.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    let encrypted = try ICloudSyncEncryption().seal(Data(plaintext.utf8), password: password)
+    try encrypted.write(to: destination, options: .atomic)
+}
+
+private func sha256Hex(_ value: String) -> String {
+    SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
 }
