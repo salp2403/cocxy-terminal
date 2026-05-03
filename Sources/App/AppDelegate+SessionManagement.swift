@@ -498,6 +498,10 @@ extension AppDelegate {
                     in: surfaceView,
                     initialWorkingDirectory: workingDirectory
                 )
+                controller.startAutomaticSessionReplayIfNeeded(
+                    surfaceID: surfaceID,
+                    tabID: restoredTab.tabID
+                )
 
                 if isPrimaryLeaf {
                     controller.tabSurfaceMap[restoredTab.tabID] = surfaceID

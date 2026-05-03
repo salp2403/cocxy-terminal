@@ -36,6 +36,8 @@ extension MainWindowController {
         let panelContentViews: [UUID: NSView]
         let outputBuffer: TerminalOutputBuffer?
         let commandTracker: CommandDurationTracker?
+        let sessionReplayControllers: [SurfaceID: SessionReplayController]
+        let sessionReplayControllerStorageKeys: [SurfaceID: String]
     }
 
     // MARK: - Detach
@@ -121,6 +123,11 @@ extension MainWindowController {
             surfaceWorkingDirectories.removeValue(forKey: sid)
             surfaceImageDetectors.removeValue(forKey: sid)
         }
+        var replaySurfaceIDs = Array(tabSplitSurfaces.keys)
+        if let surfaceID {
+            replaySurfaceIDs.append(surfaceID)
+        }
+        let sessionReplayState = detachSessionReplayControllers(for: replaySurfaceIDs)
 
         // Clear active reference if this was the displayed tab.
         if isActive && terminalSurfaceView === surfaceView {
@@ -143,7 +150,9 @@ extension MainWindowController {
             splitViewModels: tabSplitVMs,
             panelContentViews: tabPanels,
             outputBuffer: outputBuffer,
-            commandTracker: commandTracker
+            commandTracker: commandTracker,
+            sessionReplayControllers: sessionReplayState.controllers,
+            sessionReplayControllerStorageKeys: sessionReplayState.storageKeys
         )
     }
 
@@ -183,6 +192,10 @@ extension MainWindowController {
         if let commandTracker = state.commandTracker {
             tabCommandTrackers[tabID] = commandTracker
         }
+        installSessionReplayControllers(
+            state.sessionReplayControllers,
+            storageKeys: state.sessionReplayControllerStorageKeys
+        )
 
         // Store session ID mapping.
         tabSessionMap[tabID] = state.sessionID

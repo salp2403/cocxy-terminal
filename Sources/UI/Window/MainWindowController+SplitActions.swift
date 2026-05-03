@@ -239,12 +239,10 @@ extension MainWindowController {
             panelView = NSHostingView(rootView: view)
         case .sessionReplay:
             let config = configService?.current.sessionReplay ?? .defaults
-            let store = SessionReplayStore(rootDirectory: sessionReplayStorageURL(from: config))
-            let playback = sessionReplayPlaybackController(config: config, store: store)
             let viewModel = SessionReplayPanelViewModel(
                 config: config,
-                store: store,
-                playback: playback,
+                store: sessionReplayStore(from: config),
+                playback: sessionReplayPlaybackController(),
                 targetSurfaceProvider: { [weak self] in
                     self?.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
                 }
@@ -364,28 +362,6 @@ extension MainWindowController {
         return firstRegularFile(in: directory) { $0.lastPathComponent.hasSuffix(".workflow.toml") }
     }
 
-    private func sessionReplayStorageURL(from config: SessionReplayConfig) -> URL {
-        URL(
-            fileURLWithPath: (config.storageDirectory as NSString).expandingTildeInPath,
-            isDirectory: true
-        )
-        .standardizedFileURL
-    }
-
-    private func sessionReplayPlaybackController(
-        config: SessionReplayConfig,
-        store: SessionReplayStore
-    ) -> (any SessionReplayPlaybackControlling)? {
-        guard let replayBridge = bridge as? any SessionReplayTerminalBridging else {
-            return nil
-        }
-        return SessionReplayController(
-            config: config,
-            store: store,
-            bridge: replayBridge
-        )
-    }
-
     private func firstExistingRegularFile(
         in directory: URL,
         named names: [String]
@@ -491,6 +467,7 @@ extension MainWindowController {
                 in: newSurfaceView,
                 initialWorkingDirectory: workingDirectory
             )
+            startAutomaticSessionReplayIfNeeded(surfaceID: surfaceID, tabID: activeTabID)
         }
 
         // Determine the parent of the focused surface view.
@@ -602,6 +579,7 @@ extension MainWindowController {
 
             // Destroy the surface in the engine.
             if let sid = surfaceIDToDestroy {
+                stopSessionReplayIfActive(surfaceID: sid)
                 clearSurfaceTracking(for: sid)
                 // Cancel any pending `.launched` watchdog or foreground
                 // probe before we tear the surface down so the scheduled

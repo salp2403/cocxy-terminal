@@ -587,6 +587,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// All split view models keyed by their surface ID, for recursive splits.
     var splitViewModels: [SurfaceID: TerminalViewModel] = [:]
 
+    /// Session Replay controllers keyed by surface so active recordings stay
+    /// tied to the exact terminal engine that owns each PTY.
+    var sessionReplayControllers: [SurfaceID: SessionReplayController] = [:]
+    var sessionReplayControllerStorageKeys: [SurfaceID: String] = [:]
+
     /// Non-terminal panel views in splits, keyed by content UUID.
     var panelContentViews: [UUID: NSView] = [:]
 

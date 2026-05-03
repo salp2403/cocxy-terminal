@@ -52,6 +52,7 @@ extension MainWindowController {
                     surfaceID: surfaceID,
                     in: surfaceView
                 )
+                startAutomaticSessionReplayIfNeeded(surfaceID: surfaceID, tabID: firstTabID)
             }
         } catch {
             NSLog("[MainWindowController] Failed to create terminal surface: %@",
@@ -295,6 +296,7 @@ extension MainWindowController {
     func destroyTerminalSurface() {
         guard let tabID = visibleTabID,
               let surfaceID = tabSurfaceMap[tabID] ?? tabViewModels[tabID]?.surfaceID else { return }
+        stopSessionReplayIfActive(surfaceID: surfaceID)
         clearSurfaceTracking(for: surfaceID)
         // Cancel any pending `.launched` watchdog and in-flight
         // foreground-process probe first so their `DispatchWorkItem`s
@@ -381,6 +383,7 @@ extension MainWindowController {
 
         // Destroy each surface exactly once.
         for surfaceID in surfacesToDestroy {
+            stopSessionReplayIfActive(surfaceID: surfaceID)
             clearSurfaceTracking(for: surfaceID)
             // Release any per-surface detection state before the
             // underlying terminal is torn down, so the engine does not
@@ -434,6 +437,7 @@ extension MainWindowController {
                 in: surfaceView,
                 initialWorkingDirectory: tabManager.tab(for: tabID)?.workingDirectory
             )
+            startAutomaticSessionReplayIfNeeded(surfaceID: surfaceID, tabID: tabID)
         }
     }
 

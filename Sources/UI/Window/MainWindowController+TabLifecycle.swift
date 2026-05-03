@@ -186,6 +186,7 @@ extension MainWindowController {
 
         // Destroy the primary terminal surface.
         if let surfaceID = tabSurfaceMap[tabID] {
+            stopSessionReplayIfActive(surfaceID: surfaceID)
             clearSurfaceTracking(for: surfaceID)
             // Release any per-surface detection state before the bridge
             // tears the terminal down, so the engine does not retain
@@ -222,6 +223,7 @@ extension MainWindowController {
         }
 
         for (surfaceID, _) in tabSplitSurfaces {
+            stopSessionReplayIfActive(surfaceID: surfaceID)
             clearSurfaceTracking(for: surfaceID)
             // Release per-surface detection state (engine + shadow
             // store) for each split before the bridge frees the
@@ -409,6 +411,7 @@ extension MainWindowController {
                 in: surfaceView,
                 initialWorkingDirectory: workingDirectory ?? tabManager.tab(for: tabID)?.workingDirectory
             )
+            startAutomaticSessionReplayIfNeeded(surfaceID: surfaceID, tabID: tabID)
         } catch {
             NSLog("[MainWindowController] Failed to create surface for tab: %@",
                   String(describing: error))

@@ -4,7 +4,20 @@ import AppKit
 @testable import CocxyTerminal
 
 @MainActor
-final class MockTerminalEngine: TerminalEngine {
+final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
+    struct SessionReplayStartRequest: Equatable {
+        let surface: SurfaceID
+        let outputURL: URL
+        let title: String?
+    }
+
+    struct SessionReplayReplayRequest: Equatable {
+        let recordingURL: URL
+        let surface: SurfaceID
+        let seekNs: UInt64
+        let speedMultiplier: Float
+    }
+
     private(set) var initializeCalls: [TerminalEngineConfig] = []
     private(set) var createdSurfaces: [SurfaceID: NativeTerminalView] = [:]
     private(set) var createSurfaceRequests: [(surface: SurfaceID, workingDirectory: URL?, command: String?)] = []
@@ -16,11 +29,16 @@ final class MockTerminalEngine: TerminalEngine {
     private(set) var scrolledResults: [(surface: SurfaceID, lineNumber: Int)] = []
     private(set) var focusNotifications: [(surface: SurfaceID, focused: Bool)] = []
     private(set) var nativeSearchRequests: [(surface: SurfaceID, options: SearchOptions)] = []
+    private(set) var sessionReplayStartRequests: [SessionReplayStartRequest] = []
+    private(set) var sessionReplayReplayRequests: [SessionReplayReplayRequest] = []
+    private(set) var sessionReplayRecordingHandles: [SurfaceID: MockSessionReplayRecordingHandle] = [:]
     private(set) var tickCount: Int = 0
 
     var createSurfaceError: Error?
     var sendKeyEventReturnValue: Bool = true
     var nativeSearchResults: [SurfaceID: [SearchResult]?] = [:]
+    var sessionReplayShouldStart = true
+    var sessionReplayShouldReplay = true
 
     private var outputHandlers: [SurfaceID: @Sendable (Data) -> Void] = [:]
     private var oscHandlers: [SurfaceID: @Sendable (OSCNotification) -> Void] = [:]
@@ -100,11 +118,55 @@ final class MockTerminalEngine: TerminalEngine {
         return nativeSearchResults[surfaceID] ?? nil
     }
 
+    func beginSessionRecording(
+        for surface: SurfaceID,
+        outputURL: URL,
+        title: String?
+    ) -> (any SessionReplayTerminalRecording)? {
+        sessionReplayStartRequests.append(SessionReplayStartRequest(
+            surface: surface,
+            outputURL: outputURL,
+            title: title
+        ))
+        guard sessionReplayShouldStart else {
+            return nil
+        }
+        let handle = MockSessionReplayRecordingHandle()
+        sessionReplayRecordingHandles[surface] = handle
+        return handle
+    }
+
+    func replaySessionRecording(
+        from recordingURL: URL,
+        for surface: SurfaceID,
+        seekNs: UInt64,
+        speedMultiplier: Float
+    ) -> Bool {
+        sessionReplayReplayRequests.append(SessionReplayReplayRequest(
+            recordingURL: recordingURL,
+            surface: surface,
+            seekNs: seekNs,
+            speedMultiplier: speedMultiplier
+        ))
+        return sessionReplayShouldReplay
+    }
+
     func emitOutput(_ data: Data, for surface: SurfaceID) {
         outputHandlers[surface]?(data)
     }
 
     func emitOSC(_ notification: OSCNotification, for surface: SurfaceID) {
         oscHandlers[surface]?(notification)
+    }
+}
+
+final class MockSessionReplayRecordingHandle: SessionReplayTerminalRecording {
+    private(set) var stopCallCount = 0
+    var bytesWritten = 0
+    private(set) var isActive = true
+
+    func stop() {
+        stopCallCount += 1
+        isActive = false
     }
 }
