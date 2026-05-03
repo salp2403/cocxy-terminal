@@ -117,6 +117,37 @@ struct SessionReplayPanelViewModelSwiftTestingTests {
         }
     }
 
+    @Test("delete all clears recordings selection and stored bundles")
+    func deleteAllClearsRecordingsSelectionAndStoredBundles() throws {
+        let root = try makeTemporaryDirectory(named: "session-replay-panel-delete-all")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = SessionReplayStore(rootDirectory: root)
+        let first = try makeRecording(store: store, title: "First")
+        let second = try makeRecording(store: store, title: "Second")
+        let viewModel = SessionReplayPanelViewModel(
+            config: SessionReplayConfig(enabled: true),
+            store: store,
+            playback: nil,
+            targetSurfaceProvider: { nil }
+        )
+
+        try viewModel.refresh()
+        #expect(viewModel.recordings.count == 2)
+
+        try viewModel.deleteAll()
+
+        #expect(viewModel.recordings.isEmpty)
+        #expect(viewModel.selectedRecordingID == nil)
+        #expect(viewModel.statusText == "No recordings")
+        #expect(throws: SessionReplayStoreError.recordingNotFound(first.id)) {
+            try store.recording(id: first.id)
+        }
+        #expect(throws: SessionReplayStoreError.recordingNotFound(second.id)) {
+            try store.recording(id: second.id)
+        }
+    }
+
     @Test("replay selected recording uses seek target and half speed")
     func replaySelectedRecordingUsesSeekTargetAndHalfSpeed() throws {
         let root = try makeTemporaryDirectory(named: "session-replay-panel-replay")

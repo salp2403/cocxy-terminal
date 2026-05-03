@@ -136,6 +136,28 @@ struct SessionReplayDomainSwiftTestingTests {
         #expect(try permissions(at: destination) == 0o600)
     }
 
+    @Test("delete all recordings removes local bundles and tolerates missing root")
+    func deleteAllRecordingsRemovesLocalBundles() throws {
+        let root = try makeTemporaryDirectory(named: "session-replay-delete-all")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = SessionReplayStore(rootDirectory: root)
+        let first = try store.prepareRecording(title: "One", surfaceID: SurfaceID())
+        let second = try store.prepareRecording(title: "Two", surfaceID: SurfaceID())
+        try sampleCast().write(to: first.castURL, atomically: true, encoding: .utf8)
+        try sampleCast().write(to: second.castURL, atomically: true, encoding: .utf8)
+        try store.finishRecording(id: first.recording.id, durationNs: 1, byteCount: 10)
+        try store.finishRecording(id: second.recording.id, durationNs: 2, byteCount: 20)
+
+        try store.deleteAllRecordings()
+
+        #expect(try store.listRecordings().isEmpty)
+        #expect(FileManager.default.fileExists(atPath: first.metadataURL.path) == false)
+        #expect(FileManager.default.fileExists(atPath: second.metadataURL.path) == false)
+        try store.deleteAllRecordings()
+        #expect(try store.listRecordings().isEmpty)
+    }
+
     private func sampleCast() -> String {
         """
         {"version":2,"width":80,"height":24,"timestamp":1800000000,"env":{"TERM":"xterm-256color"}}

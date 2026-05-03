@@ -262,6 +262,13 @@ struct SessionReplayStore {
         try fileManager.removeItem(at: directory)
     }
 
+    func deleteAllRecordings() throws {
+        guard fileManager.fileExists(atPath: rootDirectory.path) else {
+            return
+        }
+        try fileManager.removeItem(at: rootDirectory)
+    }
+
     private func loadRecording(id: UUID) throws -> SessionReplayRecording {
         let url = metadataURL(for: id)
         guard fileManager.fileExists(atPath: url.path) else {

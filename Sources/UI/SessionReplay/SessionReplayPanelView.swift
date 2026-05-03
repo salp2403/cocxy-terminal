@@ -63,6 +63,14 @@ struct SessionReplayPanelView: View {
             }
             .controlSize(.small)
 
+            Button(role: .destructive) {
+                confirmDeleteAllRecordings()
+            } label: {
+                Label("Delete All", systemImage: "trash")
+            }
+            .controlSize(.small)
+            .disabled(viewModel.recordings.isEmpty)
+
             if let onClose {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
@@ -73,6 +81,19 @@ struct SessionReplayPanelView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+    }
+
+    private func confirmDeleteAllRecordings() {
+        let alert = NSAlert()
+        alert.messageText = "Delete All Recordings?"
+        alert.informativeText = "This removes every local Session Replay recording from this Mac."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete All")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        viewModel.perform {
+            try viewModel.deleteAll()
+        }
     }
 
     private var recordingList: some View {

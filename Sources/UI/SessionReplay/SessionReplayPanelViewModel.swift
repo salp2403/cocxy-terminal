@@ -208,6 +208,16 @@ final class SessionReplayPanelViewModel: ObservableObject {
         statusText = recordings.isEmpty ? "No recordings" : statusText
     }
 
+    func deleteAll() throws {
+        try store.deleteAllRecordings()
+        try refresh()
+        selectedRecordingID = nil
+        seekNs = 0
+        searchMatches = []
+        statusText = "No recordings"
+        errorText = nil
+    }
+
     func replaySelected() throws {
         guard config.enabled else {
             throw SessionReplayPanelError.replayDisabled
