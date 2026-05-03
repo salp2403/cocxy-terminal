@@ -284,6 +284,19 @@ final class ViewMenuItemTests: XCTestCase {
             KeybindingActionCatalog.reviewAgentMode.id
         )
     }
+
+    func testViewMenuHasVoiceInputItemWithDedicatedAction() {
+        guard let voiceInput = viewMenu.items.first(where: { $0.title == "Voice Input" }) else {
+            XCTFail("View menu must expose Voice Input")
+            return
+        }
+
+        XCTAssertEqual(voiceInput.action, #selector(MainWindowController.startVoiceInputAction(_:)))
+        XCTAssertEqual(
+            MenuKeybindingsBinder.actionId(of: voiceInput),
+            KeybindingActionCatalog.voiceInput.id
+        )
+    }
 }
 
 // MARK: - Window Menu Tests

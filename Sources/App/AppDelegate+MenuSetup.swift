@@ -198,6 +198,14 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(commandPaletteItem, with: KeybindingActionCatalog.windowCommandPalette)
         viewMenu.addItem(commandPaletteItem)
 
+        let voiceInputItem = NSMenuItem(
+            title: "Voice Input",
+            action: #selector(MainWindowController.startVoiceInputAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(voiceInputItem, with: KeybindingActionCatalog.voiceInput)
+        viewMenu.addItem(voiceInputItem)
+
         let dashboardItem = NSMenuItem(
             title: "Agent Dashboard",
             action: #selector(MainWindowController.toggleDashboardAction(_:)),

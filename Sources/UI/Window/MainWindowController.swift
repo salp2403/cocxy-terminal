@@ -252,6 +252,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var isAgentModeVisible: Bool = false
     var injectedAgentPromptRunner: (any AgentPromptRunning)?
 
+    var voiceTriggerHandler: VoiceTriggerHandler?
+    var voiceIndicatorHostingView: NSHostingView<VoiceIndicator>?
+    var voiceInputTask: Task<Void, Never>?
+    var injectedVoiceSessionFactory: VoiceTriggerHandler.SessionFactory?
+
     var searchBarViewModel: ScrollbackSearchBarViewModel?
     var searchBarHostingView: NSHostingView<ScrollbackSearchBarView>?
     var isSearchBarVisible: Bool = false

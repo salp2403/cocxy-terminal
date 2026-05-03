@@ -98,18 +98,42 @@ private struct PlatformSpeechRecognitionRunner: SpeechRecognitionRunning {
             throw VoiceSessionFailure.transcriberUnavailable
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            let run = SpeechRecognitionAudioEngineRun(
-                localeIdentifier: localeIdentifier,
-                recognizer: recognizer,
-                maximumDuration: maximumDuration,
-                requiresOnDeviceRecognition: requiresOnDeviceRecognition,
-                reportPartialResults: reportPartialResults,
-                onPartial: onPartial,
-                continuation: continuation
-            )
-            run.start()
+        let runBox = SpeechRecognitionRunBox()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let run = SpeechRecognitionAudioEngineRun(
+                    localeIdentifier: localeIdentifier,
+                    recognizer: recognizer,
+                    maximumDuration: maximumDuration,
+                    requiresOnDeviceRecognition: requiresOnDeviceRecognition,
+                    reportPartialResults: reportPartialResults,
+                    onPartial: onPartial,
+                    continuation: continuation
+                )
+                runBox.store(run)
+                run.start()
+            }
+        } onCancel: {
+            runBox.cancel()
         }
+    }
+}
+
+private final class SpeechRecognitionRunBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var run: SpeechRecognitionAudioEngineRun?
+
+    func store(_ run: SpeechRecognitionAudioEngineRun) {
+        lock.lock()
+        self.run = run
+        lock.unlock()
+    }
+
+    func cancel() {
+        lock.lock()
+        let run = self.run
+        lock.unlock()
+        run?.cancel()
     }
 }
 
@@ -227,6 +251,10 @@ private final class SpeechRecognitionAudioEngineRun: @unchecked Sendable {
         } else {
             finish(.failure(VoiceSessionFailure.transcriptionFailed("No speech was recognized before the recording timed out.")))
         }
+    }
+
+    func cancel() {
+        finish(.failure(CancellationError()))
     }
 
     private func finish(_ result: Result<VoiceTranscript, Error>) {

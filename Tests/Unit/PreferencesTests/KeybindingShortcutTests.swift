@@ -168,4 +168,9 @@ struct KeybindingActionCatalogTests {
                 != KeybindingActionCatalog.reviewDashboard.defaultShortcut
         )
     }
+
+    @Test func voiceInputUsesDedicatedCommandShiftSpaceShortcut() {
+        #expect(KeybindingActionCatalog.voiceInput.defaultShortcut.canonical == "cmd+shift+space")
+        #expect(KeybindingActionCatalog.voiceInput.category == .editor)
+    }
 }

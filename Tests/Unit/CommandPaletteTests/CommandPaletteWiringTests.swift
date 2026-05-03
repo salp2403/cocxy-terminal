@@ -54,6 +54,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "timeline.toggle",
             "notifications.toggle",
             "browser.toggle",
+            "voice.input",
             "workspace.browser",
             "workspace.markdown",
             "workspace.editor",

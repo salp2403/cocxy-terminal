@@ -87,6 +87,7 @@ extension MainWindowController {
         "window.minimize": KeybindingActionCatalog.windowMinimize.id,
         "window.fullscreen": KeybindingActionCatalog.windowToggleFullScreen.id,
         "window.commandPalette": KeybindingActionCatalog.windowCommandPalette.id,
+        "voice.input": KeybindingActionCatalog.voiceInput.id,
         "tabs.new": KeybindingActionCatalog.tabNew.id,
         "tabs.close": KeybindingActionCatalog.tabClose.id,
         "tabs.next": KeybindingActionCatalog.tabNext.id,
@@ -245,6 +246,19 @@ extension MainWindowController {
                 category: .navigation,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
+                }
+            ),
+            CommandAction(
+                id: "voice.input",
+                name: "Voice Input",
+                description: "Dictate into the active command surface locally",
+                shortcut: paletteShortcutLabel("voice.input", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        await self?.startVoiceInput()
+                    }
                 }
             ),
             CommandAction(

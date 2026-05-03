@@ -38,21 +38,32 @@ enum VoiceSessionStatus: Sendable, Equatable {
 
 @MainActor
 final class VoiceSession {
+    typealias StatusHandler = @MainActor @Sendable (VoiceSessionStatus) -> Void
+    typealias PartialHandler = @MainActor @Sendable (VoiceTranscript) -> Void
+
     private let localeResolver: VoiceLocaleResolver
     private let permissionManager: any VoicePermissionManaging
     private let transcriber: any VoiceTranscribing
+    private let statusDidChange: StatusHandler
+    private let partialDidChange: PartialHandler
 
-    private(set) var status: VoiceSessionStatus = .idle
+    private(set) var status: VoiceSessionStatus = .idle {
+        didSet { statusDidChange(status) }
+    }
     private(set) var partialTranscripts: [VoiceTranscript] = []
 
     init(
         localeResolver: VoiceLocaleResolver = .live(),
         permissionManager: any VoicePermissionManaging = PlatformVoicePermissionManager(),
-        transcriber: any VoiceTranscribing = SpeechVoiceTranscriber()
+        transcriber: any VoiceTranscribing = SpeechVoiceTranscriber(),
+        statusDidChange: @escaping StatusHandler = { _ in },
+        partialDidChange: @escaping PartialHandler = { _ in }
     ) {
         self.localeResolver = localeResolver
         self.permissionManager = permissionManager
         self.transcriber = transcriber
+        self.statusDidChange = statusDidChange
+        self.partialDidChange = partialDidChange
     }
 
     func start(config: VoiceConfig) async {
@@ -83,6 +94,7 @@ final class VoiceSession {
         do {
             let transcript = try await transcriber.transcribe(localeIdentifier: localeIdentifier) { [weak self] partial in
                 self?.partialTranscripts.append(partial)
+                self?.partialDidChange(partial)
             }
             status = .completed(transcript)
         } catch let failure as VoiceSessionFailure {

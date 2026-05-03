@@ -371,6 +371,14 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "f")
     )
 
+    static let voiceInput = KeybindingAction(
+        id: "voice.input",
+        displayName: "Voice Input",
+        summary: "Start local voice dictation for the active command surface.",
+        category: .editor,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "space")
+    )
+
     static let editorZoomIn = KeybindingAction(
         id: "editor.zoomIn",
         displayName: "Zoom In",
@@ -492,6 +500,7 @@ enum KeybindingActionCatalog {
         navigateSplitDown,
         // Editor
         editorFind,
+        voiceInput,
         editorZoomIn,
         editorZoomOut,
         editorResetZoom,
