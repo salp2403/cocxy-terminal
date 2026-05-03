@@ -100,6 +100,83 @@ final class DashboardIntegrationTests: XCTestCase {
     }
 }
 
+// MARK: - Activity Dashboard Integration Tests
+
+/// Tests that the local Activity dashboard can be toggled on the main window
+/// without enabling recording or touching the production database in tests.
+@MainActor
+final class ActivityDashboardIntegrationTests: XCTestCase {
+
+    func testToggleActivityDashboardCreatesPanelWithInjectedStore() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.injectedActivityStore = try SQLiteActivityStore(databasePath: ":memory:")
+        controller.showWindow(nil)
+
+        controller.toggleActivityDashboard()
+
+        XCTAssertTrue(
+            controller.isActivityDashboardVisible,
+            "Activity dashboard must be visible after first toggle"
+        )
+        XCTAssertNotNil(
+            controller.activityDashboardViewModel,
+            "Activity dashboard must create its panel view model"
+        )
+        XCTAssertEqual(controller.activityDashboardViewModel?.trackingState, .disabled)
+    }
+
+    func testToggleActivityDashboardTwiceHidesPanel() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.injectedActivityStore = try SQLiteActivityStore(databasePath: ":memory:")
+        controller.showWindow(nil)
+
+        controller.toggleActivityDashboard()
+        controller.toggleActivityDashboard()
+
+        XCTAssertFalse(
+            controller.isActivityDashboardVisible,
+            "Activity dashboard must be hidden after second toggle"
+        )
+    }
+
+    func testActivityDashboardActionIsObjCCallable() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.injectedActivityStore = try SQLiteActivityStore(databasePath: ":memory:")
+        controller.showWindow(nil)
+
+        controller.toggleActivityDashboardAction(nil)
+
+        XCTAssertTrue(
+            controller.isActivityDashboardVisible,
+            "toggleActivityDashboardAction must toggle Activity dashboard"
+        )
+    }
+
+    func testActivityDashboardReflectsActivityConfigPrivacy() throws {
+        let provider = MainWindowActivityConfigProvider(content: """
+        [activity]
+        enabled = true
+        cost-tracking = false
+        storage-directory = "~/.config/cocxy/activity-test"
+        """)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: service
+        )
+        controller.injectedActivityStore = try SQLiteActivityStore(databasePath: ":memory:")
+        controller.showWindow(nil)
+
+        controller.toggleActivityDashboard()
+
+        XCTAssertEqual(controller.activityDashboardViewModel?.trackingState, .activityOnly)
+    }
+}
+
 // MARK: - Agent Mode Integration Tests
 
 /// Tests that the built-in Agent Mode panel can be toggled on the main window.
@@ -441,10 +518,12 @@ final class OverlayTerminalCoexistenceTests: XCTestCase {
     func testTabBarViewRemainsAfterAllOverlaysToggled() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
+        controller.injectedActivityStore = try? SQLiteActivityStore(databasePath: ":memory:")
         controller.showWindow(nil)
 
         controller.toggleCommandPalette()
         controller.toggleDashboard()
+        controller.toggleActivityDashboard()
         controller.toggleAgentMode()
         controller.toggleSearchBar()
         controller.showSmartRouting()
@@ -457,5 +536,21 @@ final class OverlayTerminalCoexistenceTests: XCTestCase {
             controller.terminalSurfaceView,
             "Terminal surface view must remain after all overlays toggled"
         )
+    }
+}
+
+private final class MainWindowActivityConfigProvider: ConfigFileProviding, @unchecked Sendable {
+    var content: String?
+
+    init(content: String?) {
+        self.content = content
+    }
+
+    func readConfigFile() -> String? {
+        content
+    }
+
+    func writeConfigFile(_ content: String) throws {
+        self.content = content
     }
 }

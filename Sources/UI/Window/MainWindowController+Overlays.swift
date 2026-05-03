@@ -328,6 +328,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "activity.toggle",
+                name: "Toggle Activity",
+                description: "Show or hide the local Activity dashboard",
+                shortcut: paletteShortcutLabel("activity.toggle", fallback: nil),
+                category: .dashboard,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.toggleActivityDashboard() }
+                }
+            ),
+            CommandAction(
                 id: "agent.mode",
                 name: "Toggle Agent Mode",
                 description: "Show or hide the built-in Agent Mode panel",
@@ -1612,6 +1623,7 @@ extension MainWindowController {
         let visiblePanels: [DockedPanel] = [
             isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!, avoidsStatusBar: false) : nil,
             isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!, avoidsStatusBar: false) : nil,
+            isActivityDashboardVisible ? DockedPanel(width: ActivityDashboardView.panelWidth, view: activityDashboardHostingView!, avoidsStatusBar: true) : nil,
             isAgentModeVisible ? DockedPanel(width: AgentPanelView.panelWidth, view: agentModeHostingView!, avoidsStatusBar: true) : nil,
             isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!, avoidsStatusBar: true) : nil,
             isGitHubPaneVisible ? DockedPanel(width: gitHubPanePanelWidth, view: gitHubPaneHostingView!, avoidsStatusBar: true) : nil,

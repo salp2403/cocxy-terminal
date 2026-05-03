@@ -162,6 +162,10 @@ extension MainWindowController {
             agentPanelViewModel?.updateConfiguration(config.agent)
         }
 
+        if old?.activity != config.activity {
+            refreshActivityDashboardPrivacyState(config.activity)
+        }
+
         if old?.lsp != config.lsp {
             resetLSPWorkspaceCoordinators()
         }

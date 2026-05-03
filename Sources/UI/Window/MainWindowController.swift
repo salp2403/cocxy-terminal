@@ -239,6 +239,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var dashboardHostingView: NSHostingView<DashboardPanelView>?
     var isDashboardVisible: Bool = false
 
+    var activityDashboardViewModel: ActivityDashboardViewModel?
+    var activityDashboardHostingView: NSHostingView<ActivityDashboardView>?
+    var isActivityDashboardVisible: Bool = false
+    var injectedActivityStore: ActivityStoring?
+
     var agentPanelViewModel: AgentPanelViewModel?
     var agentModeHostingView: NSHostingView<AgentPanelView>?
     var isAgentModeVisible: Bool = false
@@ -1686,6 +1691,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // Auto-dismiss side panels when window is too narrow.
         if windowWidth < Self.panelAutoHideThreshold {
             if isDashboardVisible { dismissDashboard() }
+            if isActivityDashboardVisible { dismissActivityDashboard() }
             if isAgentModeVisible { dismissAgentMode() }
             if isTimelineVisible { dismissTimeline() }
             if isNotificationPanelVisible { dismissNotificationPanel() }
@@ -1698,7 +1704,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             toggleTabBarAction(nil)
         }
 
-        if isTimelineVisible || isDashboardVisible || isAgentModeVisible || isCodeReviewVisible || isGitHubPaneVisible || isNotesVisible {
+        if isTimelineVisible || isDashboardVisible || isActivityDashboardVisible || isAgentModeVisible || isCodeReviewVisible || isGitHubPaneVisible || isNotesVisible {
             layoutRightDockedAgentPanels()
         }
     }

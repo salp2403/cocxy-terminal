@@ -48,6 +48,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "welcome.show",
             "tabbar.toggle",
             "dashboard.toggle",
+            "activity.toggle",
             "agent.mode",
             "agent.review",
             "timeline.toggle",
