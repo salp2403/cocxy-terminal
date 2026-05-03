@@ -92,6 +92,10 @@ struct AgentPanelView: View {
                 .lineLimit(2)
                 .textSelection(.enabled)
 
+            if let status = viewModel.computerUseStatus {
+                computerUseStatusRow(status)
+            }
+
             if !viewModel.availableSkills.isEmpty {
                 skillPicker
             }
@@ -175,6 +179,43 @@ struct AgentPanelView: View {
         .disabled(viewModel.state == .running)
         .help("Select local skills for the next Agent prompt")
         .accessibilityLabel(skillPickerTitle)
+    }
+
+    private func computerUseStatusRow(_ status: AgentComputerUseStatus) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: status.systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(
+                    status.phase == .running
+                        ? Color(nsColor: CocxyColors.blue)
+                        : Color(nsColor: CocxyColors.yellow)
+                )
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(status.detail)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: CocxyColors.surface0).opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: CocxyColors.overlay0).opacity(0.45), lineWidth: 1)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(status.accessibilityLabel)
     }
 
     private func approvalCard(_ request: AgentToolApprovalRequest) -> some View {

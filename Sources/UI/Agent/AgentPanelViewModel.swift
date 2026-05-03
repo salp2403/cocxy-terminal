@@ -38,6 +38,92 @@ struct AgentPanelSkillOption: Identifiable, Sendable, Equatable {
     let source: SkillSource
 }
 
+struct AgentComputerUseStatus: Sendable, Equatable {
+    enum Phase: Sendable, Equatable {
+        case awaitingApproval
+        case running
+    }
+
+    let phase: Phase
+    let title: String
+    let detail: String
+    let systemImage: String
+    let accessibilityLabel: String
+
+    init?(request: AgentToolApprovalRequest, phase: Phase) {
+        guard request.preview.kind == .computerUse else { return nil }
+        self.phase = phase
+
+        switch request.call.toolID {
+        case "computer_move_mouse":
+            let coordinateText = Self.coordinateText(from: request.call)
+            self.systemImage = "cursorarrow.motionlines"
+            self.title = phase == .running ? "Moving mouse" : "Mouse move pending"
+            self.detail = coordinateText
+            self.accessibilityLabel = "Computer action \(phase.accessibilityVerb): move mouse, \(coordinateText)"
+        case "computer_click":
+            let coordinateText = Self.coordinateText(from: request.call)
+            let rawButton = request.call.arguments["button"]?.stringValue?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let button = rawButton?.isEmpty == false ? rawButton ?? "left" : "left"
+            let clickCount = Int(Self.numberValue(request.call.arguments["clickCount"]) ?? 1)
+            let normalizedClickCount = max(1, clickCount)
+            let clickText = "\(normalizedClickCount) \(button) click\(normalizedClickCount == 1 ? "" : "s")"
+            self.systemImage = "cursorarrow.click"
+            self.title = phase == .running ? "Clicking mouse" : "Mouse click pending"
+            self.detail = "\(clickText) at \(coordinateText)"
+            self.accessibilityLabel = "Computer action \(phase.accessibilityVerb): \(clickText) at \(coordinateText)"
+        case "computer_type_text":
+            let characterCount = request.call.arguments["text"]?.stringValue?.count ?? 0
+            let detail = "\(characterCount) character\(characterCount == 1 ? "" : "s")"
+            self.systemImage = "keyboard"
+            self.title = phase == .running ? "Typing text" : "Typing pending"
+            self.detail = detail
+            self.accessibilityLabel = "Computer action \(phase.accessibilityVerb): type text, \(detail)"
+        case "computer_screenshot":
+            self.systemImage = "camera.viewfinder"
+            self.title = phase == .running ? "Capturing screen" : "Screenshot pending"
+            self.detail = "Main display"
+            self.accessibilityLabel = "Computer action \(phase.accessibilityVerb): capture screenshot, main display"
+        default:
+            self.systemImage = "cursorarrow.click"
+            self.title = phase == .running ? "Running computer action" : "Computer action pending"
+            self.detail = request.call.toolID
+            self.accessibilityLabel = "Computer action \(phase.accessibilityVerb): \(request.call.toolID)"
+        }
+    }
+
+    private static func coordinateText(from call: AgentToolCall) -> String {
+        let x = coordinateValue(numberValue(call.arguments["x"]))
+        let y = coordinateValue(numberValue(call.arguments["y"]))
+        return "x \(x), y \(y)"
+    }
+
+    private static func numberValue(_ value: AgentJSONValue?) -> Double? {
+        guard case .number(let number) = value else { return nil }
+        return number
+    }
+
+    private static func coordinateValue(_ value: Double?) -> String {
+        guard let value else { return "unknown" }
+        if value.rounded(.towardZero) == value {
+            return "\(Int(value))"
+        }
+        return String(format: "%.1f", value)
+    }
+}
+
+private extension AgentComputerUseStatus.Phase {
+    var accessibilityVerb: String {
+        switch self {
+        case .awaitingApproval:
+            return "pending"
+        case .running:
+            return "running"
+        }
+    }
+}
+
 @MainActor
 final class AgentPanelViewModel: ObservableObject {
     @Published var promptDraft: String = ""
@@ -103,6 +189,12 @@ final class AgentPanelViewModel: ObservableObject {
 
     var selectedSkillsCount: Int {
         selectedSkillIDs.count
+    }
+
+    var computerUseStatus: AgentComputerUseStatus? {
+        guard let pendingApproval else { return nil }
+        let phase: AgentComputerUseStatus.Phase = state == .running ? .running : .awaitingApproval
+        return AgentComputerUseStatus(request: pendingApproval, phase: phase)
     }
 
     func updateConfiguration(_ configuration: AgentModeConfig) {

@@ -200,6 +200,70 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(viewModel.canApprovePendingTool)
     }
 
+    @Test("computer use approval exposes per-action status without typed text")
+    func computerUseApprovalExposesPerActionStatusWithoutTypedText() async throws {
+        let request = AgentToolApprovalRequest(
+            call: AgentToolCall(
+                id: "call-type",
+                toolID: "computer_type_text",
+                arguments: ["text": .string("secret-token")]
+            ),
+            reason: .computerUseApprovalRequired(toolID: "computer_type_text"),
+            preview: AgentToolApprovalPreview(
+                kind: .computerUse,
+                title: "Approve computer action",
+                body: "computer_type_text\ntext: 12 characters"
+            )
+        )
+        let runner = RecordingApprovalAgentPromptRunner(
+            result: AgentLoopResult(messages: [], stopReason: .permissionRequired(request)),
+            approvedResult: AgentLoopResult(messages: [], stopReason: .completed)
+        )
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true),
+            runner: runner
+        )
+
+        viewModel.promptDraft = "Type locally"
+        await viewModel.submitPrompt()
+
+        let status = try #require(viewModel.computerUseStatus)
+        #expect(status.phase == .awaitingApproval)
+        #expect(status.title == "Typing pending")
+        #expect(status.detail == "12 characters")
+        #expect(status.systemImage == "keyboard")
+        #expect(status.accessibilityLabel == "Computer action pending: type text, 12 characters")
+        #expect(!status.accessibilityLabel.contains("secret-token"))
+    }
+
+    @Test("computer use status names running screenshot and mouse actions")
+    func computerUseStatusNamesRunningScreenshotAndMouseActions() throws {
+        let screenshotRequest = AgentToolApprovalRequest(
+            call: AgentToolCall(id: "shot", toolID: "computer_screenshot"),
+            reason: .computerUseApprovalRequired(toolID: "computer_screenshot"),
+            preview: AgentToolApprovalPreview(kind: .computerUse, title: "Approve computer action", body: "shot")
+        )
+        let mouseRequest = AgentToolApprovalRequest(
+            call: AgentToolCall(
+                id: "move",
+                toolID: "computer_move_mouse",
+                arguments: ["x": .number(10), "y": .number(20.5)]
+            ),
+            reason: .computerUseApprovalRequired(toolID: "computer_move_mouse"),
+            preview: AgentToolApprovalPreview(kind: .computerUse, title: "Approve computer action", body: "move")
+        )
+
+        let screenshot = try #require(AgentComputerUseStatus(request: screenshotRequest, phase: .running))
+        #expect(screenshot.title == "Capturing screen")
+        #expect(screenshot.detail == "Main display")
+        #expect(screenshot.accessibilityLabel == "Computer action running: capture screenshot, main display")
+
+        let mouse = try #require(AgentComputerUseStatus(request: mouseRequest, phase: .running))
+        #expect(mouse.title == "Moving mouse")
+        #expect(mouse.detail == "x 10, y 20.5")
+        #expect(mouse.accessibilityLabel == "Computer action running: move mouse, x 10, y 20.5")
+    }
+
     @Test("approving pending tool resumes runner and clears approval state")
     func approvingPendingToolResumesRunnerAndClearsApprovalState() async throws {
         let request = AgentToolApprovalRequest(
