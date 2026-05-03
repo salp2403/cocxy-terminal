@@ -103,6 +103,46 @@ struct ActivityDashboardSwiftTestingTests {
         #expect(eventCSV?.contains("error_encountered") == true)
     }
 
+    @Test("file actions export selected format to explicit user destination")
+    func fileActionsExportSelectedFormatToExplicitUserDestination() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-activity-export-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let destination = root.appendingPathComponent("activity.json")
+        let presenter = ActivityDashboardTestPresenter(destinationURL: destination)
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        try store.recordEvent(ActivityEvent(kind: .errorEncountered, summary: "Build failed"))
+        let viewModel = ActivityDashboardViewModel(store: store, privacyPolicy: .enabled)
+        let actions = ActivityDashboardFileActions(viewModel: viewModel, presenter: presenter)
+
+        actions.export(.json)
+
+        let exported = try String(contentsOf: destination, encoding: .utf8)
+        #expect(exported.contains("\"Build failed\""))
+        #expect(actions.errorMessage == nil)
+        #expect(actions.lastExportedURL == destination)
+        #expect(presenter.requestedDefaultFilename == "cocxy-activity.json")
+    }
+
+    @Test("file actions clear local data only after destructive confirmation")
+    func fileActionsClearLocalDataOnlyAfterDestructiveConfirmation() throws {
+        let presenter = ActivityDashboardTestPresenter(confirmedDelete: false)
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        try store.recordEvent(ActivityEvent(kind: .tabOpened, summary: "New tab"))
+        let viewModel = ActivityDashboardViewModel(store: store, privacyPolicy: .enabled)
+        let actions = ActivityDashboardFileActions(viewModel: viewModel, presenter: presenter)
+
+        actions.confirmAndDeleteAllLocalData()
+        #expect(viewModel.snapshot.totalEvents == 1)
+
+        presenter.confirmedDelete = true
+        actions.confirmAndDeleteAllLocalData()
+
+        #expect(viewModel.snapshot == .empty)
+        #expect(actions.errorMessage == nil)
+    }
+
     private func date(day: Int = 1, hour: Int, minute: Int = 0) -> Date {
         DateComponents(
             calendar: utcCalendar(),
@@ -119,5 +159,30 @@ struct ActivityDashboardSwiftTestingTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         return calendar
+    }
+}
+
+@MainActor
+private final class ActivityDashboardTestPresenter: ActivityDashboardFilePresenting {
+    var destinationURL: URL?
+    var confirmedDelete: Bool
+    private(set) var requestedDefaultFilename: String?
+
+    init(destinationURL: URL? = nil, confirmedDelete: Bool = false) {
+        self.destinationURL = destinationURL
+        self.confirmedDelete = confirmedDelete
+    }
+
+    func destination(
+        for format: ActivityDashboardExportFormat,
+        defaultFilename: String,
+        completion: @escaping (URL?) -> Void
+    ) {
+        requestedDefaultFilename = defaultFilename
+        completion(destinationURL)
+    }
+
+    func confirmDeleteAll(completion: @escaping (Bool) -> Void) {
+        completion(confirmedDelete)
     }
 }

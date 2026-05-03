@@ -5,9 +5,22 @@ import SwiftUI
 
 struct ActivityDashboardView: View {
     @ObservedObject var viewModel: ActivityDashboardViewModel
+    @StateObject private var fileActions: ActivityDashboardFileActions
     var onDismiss: (() -> Void)? = nil
 
     static let panelWidth: CGFloat = 400
+
+    init(
+        viewModel: ActivityDashboardViewModel,
+        onDismiss: (() -> Void)? = nil,
+        fileActions: ActivityDashboardFileActions? = nil
+    ) {
+        self.viewModel = viewModel
+        self.onDismiss = onDismiss
+        _fileActions = StateObject(
+            wrappedValue: fileActions ?? ActivityDashboardFileActions(viewModel: viewModel)
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -36,6 +49,36 @@ struct ActivityDashboardView: View {
                 .font(.system(size: 13, weight: .semibold))
 
             Spacer()
+
+            Menu {
+                Button(ActivityDashboardExportFormat.json.menuTitle) {
+                    fileActions.export(.json)
+                }
+                Button(ActivityDashboardExportFormat.eventsCSV.menuTitle) {
+                    fileActions.export(.eventsCSV)
+                }
+                Button(ActivityDashboardExportFormat.tokenUsageCSV.menuTitle) {
+                    fileActions.export(.tokenUsageCSV)
+                }
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 24, height: 24)
+            .disabled(!hasLocalData)
+            .help("Export Activity")
+            .accessibilityLabel("Export Activity")
+
+            Button(role: .destructive, action: fileActions.confirmAndDeleteAllLocalData) {
+                Image(systemName: "trash")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 24, height: 24)
+            .disabled(!hasLocalData)
+            .help("Delete Activity Data")
+            .accessibilityLabel("Delete Activity Data")
 
             Button(action: viewModel.refresh) {
                 Image(systemName: "arrow.clockwise")
@@ -75,6 +118,14 @@ struct ActivityDashboardView: View {
                     )
                 }
 
+                if let actionError = fileActions.errorMessage {
+                    ActivityInlineStatus(
+                        title: "Activity action failed",
+                        detail: actionError,
+                        symbolName: "exclamationmark.triangle"
+                    )
+                }
+
                 metricsGrid
                 TokenUsageGraph(rows: viewModel.snapshot.tokenRows)
                 CostBreakdownChart(rows: viewModel.snapshot.costRows)
@@ -110,6 +161,10 @@ struct ActivityDashboardView: View {
                 symbolName: "creditcard"
             )
         }
+    }
+
+    private var hasLocalData: Bool {
+        viewModel.snapshot.totalEvents > 0 || viewModel.snapshot.totalTokens > 0
     }
 }
 
