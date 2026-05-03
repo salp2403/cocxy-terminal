@@ -35,8 +35,12 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright (c) 2026 Said Arturo Lopez. MIT License.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Cocxy uses the microphone only when you start local Voice input.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Cocxy uses on-device speech recognition to turn your local Voice input into text.</string>
 	<key>OSAScriptingDefinition</key>
 	<string>CocxyTerminal.sdef</string>
 	<key>SUAutomaticallyUpdate</key>

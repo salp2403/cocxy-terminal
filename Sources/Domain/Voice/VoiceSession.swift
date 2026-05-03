@@ -48,7 +48,7 @@ final class VoiceSession {
     init(
         localeResolver: VoiceLocaleResolver = .live(),
         permissionManager: any VoicePermissionManaging = PlatformVoicePermissionManager(),
-        transcriber: any VoiceTranscribing = UnavailableVoiceTranscriber()
+        transcriber: any VoiceTranscribing = SpeechVoiceTranscriber()
     ) {
         self.localeResolver = localeResolver
         self.permissionManager = permissionManager

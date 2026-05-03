@@ -132,6 +132,8 @@ esac
 check_plist_string "$CONTENTS/Info.plist" "SUFeedURL" "$expected_feed_url" "Sparkle feed URL"
 check_plist_exists "$CONTENTS/Info.plist" "SUPublicEDKey" "Sparkle public key"
 check_plist_exists "$CONTENTS/Info.plist" "OSAScriptingDefinition" "AppleScript definition key"
+check_plist_exists "$CONTENTS/Info.plist" "NSMicrophoneUsageDescription" "Microphone privacy description"
+check_plist_exists "$CONTENTS/Info.plist" "NSSpeechRecognitionUsageDescription" "Speech recognition privacy description"
 
 # 2. Frameworks
 echo ""
@@ -192,6 +194,7 @@ echo ""
 echo "[Assets]"
 check_exists "$RESOURCES/AppIcon.png" "App icon"
 check_exists "$RESOURCES/CocxyTerminal.sdef" "AppleScript definition"
+check_codesign_entitlement_true "$APP_BUNDLE" "com.apple.security.device.audio-input" "App audio input entitlement"
 
 # 8. Markdown preview resources (Mermaid, KaTeX)
 echo ""
