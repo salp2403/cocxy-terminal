@@ -410,6 +410,86 @@ protocol ICloudSyncImporting: Sendable {
 
 extension ICloudSyncImportService: ICloudSyncImporting {}
 
+enum ICloudSyncConflictResolution: Sendable, Equatable {
+    case keepLocal
+    case useRemote
+}
+
+struct ICloudSyncConflictResolutionResult: Sendable, Equatable {
+    let conflict: ICloudSyncImportConflict
+    let resolution: ICloudSyncConflictResolution
+    let localURL: URL
+    let backupURL: URL?
+}
+
+enum ICloudSyncConflictResolutionOutcome: Sendable, Equatable {
+    case disabled
+    case unavailable
+    case resolved(ICloudSyncConflictResolutionResult)
+}
+
+protocol ICloudSyncConflictResolving: Sendable {
+    func resolveConflict(
+        config: ICloudSyncConfig,
+        conflict: ICloudSyncImportConflict,
+        resolution: ICloudSyncConflictResolution,
+        roots: ICloudSyncArtifactRoots,
+        backupRoot: URL,
+        password: String
+    ) throws -> ICloudSyncConflictResolutionOutcome
+}
+
+struct ICloudSyncConflictResolutionService: Sendable {
+    private let rootResolver: ICloudSyncRootResolver
+    private let importer: ICloudSyncEncryptedImporter
+
+    init(
+        rootResolver: ICloudSyncRootResolver = ICloudSyncRootResolver(),
+        importer: ICloudSyncEncryptedImporter = ICloudSyncEncryptedImporter()
+    ) {
+        self.rootResolver = rootResolver
+        self.importer = importer
+    }
+
+    func resolveConflict(
+        config: ICloudSyncConfig,
+        conflict: ICloudSyncImportConflict,
+        resolution: ICloudSyncConflictResolution,
+        roots: ICloudSyncArtifactRoots = .defaults(),
+        backupRoot: URL,
+        password: String
+    ) throws -> ICloudSyncConflictResolutionOutcome {
+        switch resolution {
+        case .keepLocal:
+            return .resolved(ICloudSyncConflictResolutionResult(
+                conflict: conflict,
+                resolution: resolution,
+                localURL: try importer.localArtifactURL(for: conflict.local, roots: roots),
+                backupURL: nil
+            ))
+        case .useRemote:
+            switch rootResolver.resolveRoot(for: config) {
+            case .disabled:
+                return .disabled
+            case .unavailable:
+                return .unavailable
+            case .available(let rootURL):
+                let result = try importer.resolveConflict(
+                    conflict,
+                    resolution: resolution,
+                    from: rootURL,
+                    into: roots,
+                    backupRoot: backupRoot,
+                    password: password
+                )
+                return .resolved(result)
+            }
+        }
+    }
+}
+
+extension ICloudSyncConflictResolutionService: ICloudSyncConflictResolving {}
+
 struct ICloudSyncEncryptedImporter: Sendable {
     private let encryption: ICloudSyncEncryption
 
@@ -458,6 +538,50 @@ struct ICloudSyncEncryptedImporter: Sendable {
         )
     }
 
+    func resolveConflict(
+        _ conflict: ICloudSyncImportConflict,
+        resolution: ICloudSyncConflictResolution,
+        from rootURL: URL,
+        into roots: ICloudSyncArtifactRoots,
+        backupRoot: URL,
+        password: String
+    ) throws -> ICloudSyncConflictResolutionResult {
+        switch resolution {
+        case .keepLocal:
+            return ICloudSyncConflictResolutionResult(
+                conflict: conflict,
+                resolution: resolution,
+                localURL: try localURL(for: conflict.local, roots: roots),
+                backupURL: nil
+            )
+        case .useRemote:
+            let remoteURL = try encryptedURL(for: conflict.remote, rootURL: rootURL)
+            guard FileManager.default.fileExists(atPath: remoteURL.path) else {
+                throw ICloudSyncImportError.encryptedArtifactMissing(remoteURL)
+            }
+            let destination = try localURL(for: conflict.remote, roots: roots)
+            let backupURL = try backupLocalArtifactIfPresent(
+                destination,
+                entry: conflict.local,
+                backupRoot: backupRoot
+            )
+            let plaintext = try encryption.open(Data(contentsOf: remoteURL), password: password)
+            try ensurePrivateDirectory(destination.deletingLastPathComponent())
+            try plaintext.write(to: destination, options: .atomic)
+            try setPrivateFilePermissions(destination)
+            return ICloudSyncConflictResolutionResult(
+                conflict: conflict,
+                resolution: resolution,
+                localURL: destination.standardizedFileURL,
+                backupURL: backupURL
+            )
+        }
+    }
+
+    func localArtifactURL(for entry: ICloudSyncManifestEntry, roots: ICloudSyncArtifactRoots) throws -> URL {
+        try localURL(for: entry, roots: roots)
+    }
+
     private func encryptedURL(for entry: ICloudSyncManifestEntry, rootURL: URL) throws -> URL {
         let relativePath = try Self.validatedRelativePath(entry.relativePath)
         return rootURL
@@ -504,6 +628,23 @@ struct ICloudSyncEncryptedImporter: Sendable {
             throw ICloudSyncImportError.invalidManifestPath(relativePath)
         }
         return relativePath
+    }
+
+    private func backupLocalArtifactIfPresent(
+        _ localURL: URL,
+        entry: ICloudSyncManifestEntry,
+        backupRoot: URL
+    ) throws -> URL? {
+        guard FileManager.default.fileExists(atPath: localURL.path) else { return nil }
+        let relativePath = try Self.validatedRelativePath(entry.relativePath)
+        let backupURL = backupRoot
+            .appendingPathComponent(entry.kind.rawValue, isDirectory: true)
+            .appendingPathComponent(relativePath + ".\(UUID().uuidString).local-backup", isDirectory: false)
+            .standardizedFileURL
+        try ensurePrivateDirectory(backupURL.deletingLastPathComponent())
+        try FileManager.default.copyItem(at: localURL, to: backupURL)
+        try setPrivateFilePermissions(backupURL)
+        return backupURL
     }
 
     private func ensurePrivateDirectory(_ url: URL) throws {

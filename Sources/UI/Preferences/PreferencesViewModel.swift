@@ -605,8 +605,14 @@ final class PreferencesViewModel: ObservableObject {
     /// Manual encrypted import runner for iCloud Sync.
     private let iCloudSyncImporter: any ICloudSyncImporting
 
+    /// Manual iCloud Sync conflict resolver.
+    private let iCloudSyncConflictResolver: any ICloudSyncConflictResolving
+
     /// Local artifact roots scanned by manual iCloud Sync export.
     private let iCloudSyncArtifactRoots: ICloudSyncArtifactRoots
+
+    /// Destination for local backups created before accepting a remote conflict.
+    private let iCloudSyncConflictBackupRoot: URL
 
     /// Resolves Voice locale availability without any network fallback.
     private let voiceLocaleResolver: VoiceLocaleResolver
@@ -643,7 +649,10 @@ final class PreferencesViewModel: ObservableObject {
         iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(),
         iCloudSyncExporter: any ICloudSyncExporting = ICloudSyncExportService(),
         iCloudSyncImporter: any ICloudSyncImporting = ICloudSyncImportService(),
+        iCloudSyncConflictResolver: any ICloudSyncConflictResolving = ICloudSyncConflictResolutionService(),
         iCloudSyncArtifactRoots: ICloudSyncArtifactRoots = .defaults(),
+        iCloudSyncConflictBackupRoot: URL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cocxy/icloud-conflict-backups", isDirectory: true),
         mcpConfigURL: URL = MCPServerConfigLoader().defaultConfigURL(),
         mcpConfigLoader: MCPServerConfigLoader = MCPServerConfigLoader()
     ) {
@@ -654,7 +663,9 @@ final class PreferencesViewModel: ObservableObject {
         self.iCloudSyncSecrets = iCloudSyncSecrets
         self.iCloudSyncExporter = iCloudSyncExporter
         self.iCloudSyncImporter = iCloudSyncImporter
+        self.iCloudSyncConflictResolver = iCloudSyncConflictResolver
         self.iCloudSyncArtifactRoots = iCloudSyncArtifactRoots
+        self.iCloudSyncConflictBackupRoot = iCloudSyncConflictBackupRoot.standardizedFileURL
         self.mcpConfigURL = mcpConfigURL
         self.mcpConfigLoader = mcpConfigLoader
 
@@ -898,6 +909,45 @@ final class PreferencesViewModel: ObservableObject {
                 let conflictNoun = conflictCount == 1 ? "conflict requires" : "conflicts require"
                 iCloudSyncImportStatus = "Imported \(count) encrypted \(noun); \(conflictCount) \(conflictNoun) manual resolution."
             }
+        }
+        return outcome
+    }
+
+    func resolveICloudSyncConflict(
+        _ conflict: ICloudSyncImportConflict,
+        resolution: ICloudSyncConflictResolution
+    ) throws -> ICloudSyncConflictResolutionOutcome {
+        let config = buildICloudSyncConfigFromViewModel()
+        guard config.enabled else {
+            iCloudSyncImportStatus = "iCloud Sync is disabled."
+            return .disabled
+        }
+        let password: String
+        if resolution == .useRemote {
+            guard let savedPassword = try iCloudSyncSecrets.masterPassword() else {
+                throw ICloudSyncManualRunError.masterPasswordUnavailable
+            }
+            password = savedPassword
+        } else {
+            password = ""
+        }
+
+        let outcome = try iCloudSyncConflictResolver.resolveConflict(
+            config: config,
+            conflict: conflict,
+            resolution: resolution,
+            roots: iCloudSyncArtifactRoots,
+            backupRoot: iCloudSyncConflictBackupRoot,
+            password: password
+        )
+        switch outcome {
+        case .disabled:
+            iCloudSyncImportStatus = "iCloud Sync is disabled."
+        case .unavailable:
+            iCloudSyncImportStatus = "iCloud Drive is unavailable."
+        case .resolved(let result):
+            iCloudSyncConflicts.removeAll { $0 == result.conflict }
+            iCloudSyncImportStatus = "Resolved conflict for \(result.conflict.remote.relativePath)."
         }
         return outcome
     }

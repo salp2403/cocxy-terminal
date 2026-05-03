@@ -1322,6 +1322,16 @@ struct ICloudSyncPreferencesSection: View {
                             Text("Local and remote versions differ.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            HStack {
+                                Button("Keep Local") {
+                                    resolveICloudSyncConflict(conflict, resolution: .keepLocal)
+                                }
+
+                                Button("Use Remote") {
+                                    resolveICloudSyncConflict(conflict, resolution: .useRemote)
+                                }
+                                .disabled(!viewModel.hasSavedICloudSyncMasterPassword())
+                            }
                         }
                     }
                 }
@@ -1376,6 +1386,17 @@ struct ICloudSyncPreferencesSection: View {
             _ = try viewModel.importICloudSyncArtifactsNow()
         } catch {
             viewModel.iCloudSyncImportStatus = "Failed to import encrypted artifacts: \(error.localizedDescription)"
+        }
+    }
+
+    private func resolveICloudSyncConflict(
+        _ conflict: ICloudSyncImportConflict,
+        resolution: ICloudSyncConflictResolution
+    ) {
+        do {
+            _ = try viewModel.resolveICloudSyncConflict(conflict, resolution: resolution)
+        } catch {
+            viewModel.iCloudSyncImportStatus = "Failed to resolve conflict: \(error.localizedDescription)"
         }
     }
 }

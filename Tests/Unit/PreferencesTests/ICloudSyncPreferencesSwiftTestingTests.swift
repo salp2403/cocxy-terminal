@@ -20,6 +20,7 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(store: InMemoryICloudSyncSecretStore()),
         iCloudSyncExporter: any ICloudSyncExporting = RecordingICloudSyncExporter(),
         iCloudSyncImporter: any ICloudSyncImporting = RecordingICloudSyncImporter(),
+        iCloudSyncConflictResolver: any ICloudSyncConflictResolving = RecordingICloudSyncConflictResolver(),
         iCloudSyncArtifactRoots: ICloudSyncArtifactRoots = ICloudSyncArtifactRoots(
             notebooks: URL(fileURLWithPath: "/tmp/cocxy/notebooks", isDirectory: true),
             workflows: URL(fileURLWithPath: "/tmp/cocxy/workflows", isDirectory: true),
@@ -36,6 +37,7 @@ struct ICloudSyncPreferencesSwiftTestingTests {
                 iCloudSyncSecrets: iCloudSyncSecrets,
                 iCloudSyncExporter: iCloudSyncExporter,
                 iCloudSyncImporter: iCloudSyncImporter,
+                iCloudSyncConflictResolver: iCloudSyncConflictResolver,
                 iCloudSyncArtifactRoots: iCloudSyncArtifactRoots
             ),
             provider
@@ -254,6 +256,55 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         #expect(vm.iCloudSyncImportStatus == "Imported 1 encrypted artifact; 1 conflict requires manual resolution.")
         #expect(vm.iCloudSyncConflicts == [ICloudSyncImportConflict(local: localEntry, remote: remoteEntry)])
     }
+
+    @Test("manual conflict resolution removes resolved conflict from Preferences")
+    func manualConflictResolutionRemovesResolvedConflictFromPreferences() throws {
+        let store = InMemoryICloudSyncSecretStore()
+        let secrets = ICloudSyncSecrets(store: store)
+        try secrets.saveMasterPassword("sync password")
+        let conflict = ICloudSyncImportConflict(
+            local: ICloudSyncManifestEntry(
+                kind: .notebooks,
+                relativePath: "daily.cocxynb",
+                contentHash: "local",
+                modifiedAt: Date(timeIntervalSince1970: 1)
+            ),
+            remote: ICloudSyncManifestEntry(
+                kind: .notebooks,
+                relativePath: "daily.cocxynb",
+                contentHash: "remote",
+                modifiedAt: Date(timeIntervalSince1970: 2)
+            )
+        )
+        let resolver = RecordingICloudSyncConflictResolver()
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            iCloudSync: ICloudSyncConfig(enabled: true, artifactKinds: [.notebooks]),
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let (vm, _) = makeViewModel(
+            config: config,
+            iCloudSyncSecrets: secrets,
+            iCloudSyncConflictResolver: resolver
+        )
+        vm.iCloudSyncConflicts = [conflict]
+
+        let outcome = try vm.resolveICloudSyncConflict(conflict, resolution: .keepLocal)
+
+        guard case .resolved = outcome else {
+            Issue.record("Expected resolved outcome")
+            return
+        }
+        #expect(resolver.requests.map(\.resolution) == [.keepLocal])
+        #expect(vm.iCloudSyncConflicts.isEmpty)
+        #expect(vm.iCloudSyncImportStatus == "Resolved conflict for daily.cocxynb.")
+    }
 }
 
 private final class RecordingICloudSyncExporter: ICloudSyncExporting, @unchecked Sendable {
@@ -301,5 +352,42 @@ private final class RecordingICloudSyncImporter: ICloudSyncImporting, @unchecked
     ) throws -> ICloudSyncImportOutcome {
         requests.append(Request(config: config, roots: roots, password: password))
         return outcome
+    }
+}
+
+private final class RecordingICloudSyncConflictResolver: ICloudSyncConflictResolving, @unchecked Sendable {
+    struct Request: Equatable {
+        let config: ICloudSyncConfig
+        let conflict: ICloudSyncImportConflict
+        let resolution: ICloudSyncConflictResolution
+        let roots: ICloudSyncArtifactRoots
+        let backupRoot: URL
+        let password: String
+    }
+
+    private(set) var requests: [Request] = []
+
+    func resolveConflict(
+        config: ICloudSyncConfig,
+        conflict: ICloudSyncImportConflict,
+        resolution: ICloudSyncConflictResolution,
+        roots: ICloudSyncArtifactRoots,
+        backupRoot: URL,
+        password: String
+    ) throws -> ICloudSyncConflictResolutionOutcome {
+        requests.append(Request(
+            config: config,
+            conflict: conflict,
+            resolution: resolution,
+            roots: roots,
+            backupRoot: backupRoot,
+            password: password
+        ))
+        return .resolved(ICloudSyncConflictResolutionResult(
+            conflict: conflict,
+            resolution: resolution,
+            localURL: URL(fileURLWithPath: "/tmp/cocxy/notebooks/daily.cocxynb"),
+            backupURL: nil
+        ))
     }
 }

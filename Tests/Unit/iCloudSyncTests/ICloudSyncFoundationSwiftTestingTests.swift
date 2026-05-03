@@ -301,6 +301,99 @@ struct ICloudSyncFoundationSwiftTestingTests {
         #expect(conflict.remote == remoteEntry)
         #expect(try String(contentsOf: localURL, encoding: .utf8) == "local notebook")
     }
+
+    @Test("conflict resolver can keep local without touching files")
+    func conflictResolverCanKeepLocalWithoutTouchingFiles() throws {
+        let root = temporaryDirectory(named: "icloud-sync-keep-local")
+        let roots = try makeArtifactRoots(in: root.appendingPathComponent("local", isDirectory: true))
+        let localURL = roots.notebooks.appendingPathComponent("daily.cocxynb")
+        try "local notebook".write(to: localURL, atomically: true, encoding: .utf8)
+        let conflict = ICloudSyncImportConflict(
+            local: ICloudSyncManifestEntry(
+                kind: .notebooks,
+                relativePath: "daily.cocxynb",
+                contentHash: sha256Hex("local notebook"),
+                modifiedAt: Date(timeIntervalSince1970: 1)
+            ),
+            remote: ICloudSyncManifestEntry(
+                kind: .notebooks,
+                relativePath: "daily.cocxynb",
+                contentHash: sha256Hex("remote notebook"),
+                modifiedAt: Date(timeIntervalSince1970: 2)
+            )
+        )
+        let service = ICloudSyncConflictResolutionService()
+
+        let outcome = try service.resolveConflict(
+            config: ICloudSyncConfig(enabled: true, artifactKinds: [.notebooks]),
+            conflict: conflict,
+            resolution: .keepLocal,
+            roots: roots,
+            backupRoot: root.appendingPathComponent("backups", isDirectory: true),
+            password: "sync password"
+        )
+
+        guard case .resolved(let result) = outcome else {
+            Issue.record("Expected resolved outcome")
+            return
+        }
+        #expect(result.resolution == .keepLocal)
+        #expect(result.backupURL == nil)
+        #expect(try String(contentsOf: localURL, encoding: .utf8) == "local notebook")
+    }
+
+    @Test("conflict resolver uses remote only after backing up local")
+    func conflictResolverUsesRemoteOnlyAfterBackingUpLocal() throws {
+        let root = temporaryDirectory(named: "icloud-sync-use-remote")
+        let roots = try makeArtifactRoots(in: root.appendingPathComponent("local", isDirectory: true))
+        let localURL = roots.notebooks.appendingPathComponent("daily.cocxynb")
+        try "local notebook".write(to: localURL, atomically: true, encoding: .utf8)
+        let remoteContainer = root.appendingPathComponent("remote", isDirectory: true)
+        let remoteSyncRoot = remoteContainer.appendingPathComponent("Cocxy", isDirectory: true)
+        try FileManager.default.createDirectory(at: remoteSyncRoot, withIntermediateDirectories: true)
+        let localEntry = ICloudSyncManifestEntry(
+            kind: .notebooks,
+            relativePath: "daily.cocxynb",
+            contentHash: sha256Hex("local notebook"),
+            modifiedAt: Date(timeIntervalSince1970: 1)
+        )
+        let remoteEntry = ICloudSyncManifestEntry(
+            kind: .notebooks,
+            relativePath: "daily.cocxynb",
+            contentHash: sha256Hex("remote notebook"),
+            modifiedAt: Date(timeIntervalSince1970: 2)
+        )
+        try writeEncryptedRemoteArtifact(
+            entry: remoteEntry,
+            plaintext: "remote notebook",
+            rootURL: remoteSyncRoot,
+            password: "sync password"
+        )
+        let service = ICloudSyncConflictResolutionService(
+            rootResolver: ICloudSyncRootResolver(containerProvider: RecordingICloudContainerProvider(root: remoteContainer))
+        )
+
+        let outcome = try service.resolveConflict(
+            config: ICloudSyncConfig(enabled: true, artifactKinds: [.notebooks]),
+            conflict: ICloudSyncImportConflict(local: localEntry, remote: remoteEntry),
+            resolution: .useRemote,
+            roots: roots,
+            backupRoot: root.appendingPathComponent("backups", isDirectory: true),
+            password: "sync password"
+        )
+
+        guard case .resolved(let result) = outcome else {
+            Issue.record("Expected resolved outcome")
+            return
+        }
+        let backupURL = try #require(result.backupURL)
+        #expect(result.resolution == .useRemote)
+        #expect(result.localURL == localURL.standardizedFileURL)
+        #expect(try String(contentsOf: localURL, encoding: .utf8) == "remote notebook")
+        #expect(try String(contentsOf: backupURL, encoding: .utf8) == "local notebook")
+        #expect(try posixPermissions(at: localURL) == 0o600)
+        #expect(try posixPermissions(at: backupURL) == 0o600)
+    }
 }
 
 private final class RecordingICloudContainerProvider: ICloudContainerProviding, @unchecked Sendable {
