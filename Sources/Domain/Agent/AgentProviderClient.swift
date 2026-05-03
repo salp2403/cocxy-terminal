@@ -582,8 +582,10 @@ enum FoundationModelsAgentToolBridge {
             return ["apply diff", "edit", "modify", "change", "fix", "update"]
         case "ask_user":
             return ["ask user", "question", "clarify", "confirm"]
-        case "list_skills", "use_skill":
-            return ["skill", "skills"]
+        case "list_skills":
+            return ["available skills", "local skills", "built in skills", "built-in skills", "project skills", "user skills"]
+        case "use_skill":
+            return ["load skill", "select skill", "apply skill", "skill id"]
         default:
             return []
         }

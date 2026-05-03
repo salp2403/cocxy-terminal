@@ -522,6 +522,37 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(selected.map(\.id).contains("run_command"))
         #expect(selected.map(\.id).contains("read_terminal_output"))
     }
+
+    @Test("Foundation Models tool bridge avoids skill tools for generic skill wording")
+    @available(macOS 26.0, *)
+    func foundationModelsToolBridgeAvoidsSkillToolsForGenericSkillWording() {
+        let selected = FoundationModelsAgentToolBridge.selectedDescriptors(
+            from: .minimumBuiltIns(),
+            matching: "Reply exactly: skill smoke ok. Do not use tools.",
+            maxTools: 6
+        )
+
+        #expect(!selected.map(\.id).contains("list_skills"))
+        #expect(!selected.map(\.id).contains("use_skill"))
+    }
+
+    @Test("Foundation Models tool bridge still selects skill tools for explicit skill requests")
+    @available(macOS 26.0, *)
+    func foundationModelsToolBridgeStillSelectsSkillToolsForExplicitSkillRequests() {
+        let listSelected = FoundationModelsAgentToolBridge.selectedDescriptors(
+            from: .minimumBuiltIns(),
+            matching: "Show available skills for this project.",
+            maxTools: 6
+        )
+        let useSelected = FoundationModelsAgentToolBridge.selectedDescriptors(
+            from: .minimumBuiltIns(),
+            matching: "Load skill write-tests.",
+            maxTools: 6
+        )
+
+        #expect(listSelected.map(\.id).contains("list_skills"))
+        #expect(useSelected.map(\.id).contains("use_skill"))
+    }
     #endif
 
     private func onlyRequest(from transport: RecordingAgentHTTPTransport) async throws -> AgentHTTPRequest {
