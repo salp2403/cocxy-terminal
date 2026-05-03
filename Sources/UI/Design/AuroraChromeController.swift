@@ -794,45 +794,15 @@ struct AuroraSidebarTooltipHost: View {
     var body: some View {
         GeometryReader { proxy in
             if let tooltip = controller.sidebarTooltip {
-                let placement = placement(
-                    for: tooltip,
+                Design.VerticalTabHoverSidecar(
+                    tooltip: tooltip,
                     sidebarFrame: controller.sidebarTooltipSidebarFrameInOverlay,
                     containerSize: proxy.size
                 )
-                Design.AuroraSessionTooltipCard(
-                    session: tooltip.session,
-                    workspaceName: tooltip.workspaceName,
-                    workspaceBranch: tooltip.workspaceBranch
-                )
-                .frame(width: placement.width)
-                .allowsHitTesting(false)
-                .position(x: placement.x, y: placement.y)
-                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .leading)))
             }
         }
         .allowsHitTesting(false)
         .designThemePalette(Design.palette(for: controller.themeIdentity))
-    }
-
-    private func placement(
-        for tooltip: Design.AuroraSidebarTooltipSnapshot,
-        sidebarFrame: CGRect,
-        containerSize: CGSize
-    ) -> (x: CGFloat, y: CGFloat, width: CGFloat) {
-        let rightSpace = max(0, containerSize.width - sidebarFrame.maxX - 18)
-        let width = min(360, max(260, rightSpace - 18))
-        let x = min(
-            containerSize.width - width * 0.5 - 12,
-            sidebarFrame.maxX + 18 + width * 0.5
-        )
-        let sidebarTopY = max(0, containerSize.height - sidebarFrame.maxY)
-        let rawY = sidebarTopY + tooltip.rowFrame.midY
-        let approximateHalfHeight: CGFloat = 158
-        let y = min(
-            max(rawY, approximateHalfHeight + 12),
-            max(approximateHalfHeight + 12, containerSize.height - approximateHalfHeight - 12)
-        )
-        return (x, y, width)
     }
 }
 

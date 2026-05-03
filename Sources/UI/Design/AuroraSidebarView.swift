@@ -105,8 +105,13 @@ extension Design {
             GlassSurface(cornerRadius: .large) {
                 VStack(alignment: .leading, spacing: Spacing.small) {
                     sidebarHeader
-                    searchField
-                    controlBar
+                    VerticalTabSearchBar(query: $query)
+                    VerticalTabControlBar(
+                        displayMode: displayMode,
+                        primaryInfo: primaryInfo,
+                        onDisplayModeChange: onDisplayModeChange,
+                        onPrimaryInfoChange: onPrimaryInfoChange
+                    )
                     if let availableUpdate, let onInstallUpdate {
                         updateCallout(availableUpdate, action: onInstallUpdate)
                     }
@@ -207,78 +212,6 @@ extension Design {
             }
             .buttonStyle(.plain)
             .help(help)
-        }
-
-        // MARK: - Search
-
-        private var searchField: some View {
-            HStack(spacing: Spacing.xSmall) {
-                Text("⌕")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(palette.textLow.resolvedColor())
-                TextField("Filter sessions…", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(palette.textHigh.resolvedColor())
-            }
-            .padding(.horizontal, Spacing.small)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(palette.glassHighlight.resolvedColor())
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(palette.glassBorder.resolvedColor(), lineWidth: 1)
-                    )
-            )
-        }
-
-        // MARK: - Controls
-
-        private var controlBar: some View {
-            HStack(spacing: Spacing.xSmall) {
-                Picker(
-                    "",
-                    selection: Binding(
-                        get: { displayMode },
-                        set: { onDisplayModeChange?($0) }
-                    )
-                ) {
-                    ForEach(AuroraSidebarDisplayMode.allCases, id: \.self) { mode in
-                        Text(mode.shortLabel).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 88)
-                .help("Sidebar density")
-
-                Menu {
-                    ForEach(AuroraSidebarPrimaryInfo.allCases, id: \.self) { info in
-                        Button(info.menuLabel) {
-                            onPrimaryInfoChange?(info)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: primaryInfo.systemImage)
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(primaryInfo.shortLabel)
-                            .font(.system(size: 10.5, weight: .semibold))
-                    }
-                    .foregroundStyle(palette.textMedium.resolvedColor())
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 5)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(palette.glassHighlight.resolvedColor())
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .frame(maxWidth: .infinity)
-                .help("Primary row detail")
-            }
-            .padding(.horizontal, 1)
         }
 
         private func updateCallout(
@@ -526,7 +459,12 @@ extension Design {
         @State private var isDropTargeted = false
 
         var body: some View {
-            VStack(alignment: .leading, spacing: displayMode == .compact ? 0 : 4) {
+            let layout = VerticalTabCompactMode(mode: displayMode)
+            let summary = VerticalTabSummaryMode(
+                session: session,
+                primaryInfo: primaryInfo
+            )
+            VStack(alignment: .leading, spacing: CGFloat(layout.rowSpacing)) {
                 HStack(spacing: Spacing.xSmall) {
                     AgentChipView(agent: session.agent, state: session.state, size: 22)
                     Text(session.name)
@@ -548,13 +486,13 @@ extension Design {
                             .accessibilityLabel("Worktree")
                     }
                     Spacer()
-                    if displayMode.showsPaneMatrix {
+                    if layout.showsPaneMatrix {
                         MiniMatrixView(panes: session.matrixPanes)
                     }
                     if !session.movablePanes.isEmpty {
                         PaneTransferHandleView(panes: session.movablePanes)
                     }
-                    if let onClose, !session.isPinned, displayMode.showsCloseButton {
+                    if let onClose, !session.isPinned, layout.showsCloseButton {
                         Button(action: onClose) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 10, weight: .semibold))
@@ -572,12 +510,12 @@ extension Design {
                         .opacity(isActive || isHovered ? 0.95 : 0.55)
                     }
                 }
-                if displayMode.showsPrimaryMetadata {
+                if layout.showsPrimaryMetadata {
                     HStack(spacing: Spacing.xxSmall) {
                         Circle()
-                            .fill(session.state.token.resolvedColor())
+                            .fill(summary.state.token.resolvedColor())
                             .frame(width: 7, height: 7)
-                        Text(session.primaryMetadataLine(selection: primaryInfo))
+                        Text(summary.metadataLine)
                             .font(.system(size: 10.5, design: .monospaced))
                             .foregroundStyle(palette.textLow.resolvedColor())
                             .lineLimit(1)
@@ -587,13 +525,15 @@ extension Design {
                 }
             }
             .padding(.horizontal, Spacing.small)
-            .padding(.vertical, CGFloat(displayMode.verticalPadding))
+            .padding(.vertical, CGFloat(layout.verticalPadding))
             .background(backgroundView)
             .background(SessionFrameReporter(sessionID: session.id))
             .overlay(borderView)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .onDrag {
-                NSItemProvider(object: "session:\(session.id)" as NSString)
+                NSItemProvider(
+                    object: VerticalTabDragPayload.session(session.id).encodedValue as NSString
+                )
             }
             .onDrop(of: [UTType.text], isTargeted: $isDropTargeted) { providers in
                 handleSessionDrop(providers)
@@ -642,22 +582,25 @@ extension Design {
                     return
                 }
 
-                if let sourceSessionID = payload.droppablePayloadValue(prefix: "session:"),
-                   sourceSessionID != session.id {
-                    Task { @MainActor in
-                        onMoveSessionBefore?(sourceSessionID)
-                    }
+                guard let parsed = VerticalTabDragPayload(encodedValue: payload) else {
                     return
                 }
 
-                guard let paneID = payload.droppablePayloadValue(prefix: "pane:") else {
-                    return
-                }
                 Task { @MainActor in
-                    onMovePaneToSession?(paneID)
+                    handleParsedDrop(parsed)
                 }
             }
             return true
+        }
+
+        @MainActor
+        private func handleParsedDrop(_ payload: VerticalTabDragPayload) {
+            let handler = VerticalTabDragHandler(
+                currentSessionID: session.id,
+                onMoveSessionBefore: onMoveSessionBefore,
+                onMovePaneToSession: onMovePaneToSession
+            )
+            _ = handler.handle(payload)
         }
 
         @ViewBuilder
@@ -1122,7 +1065,9 @@ extension Design {
                         .help("Drag \(pane.name) pane to another tab")
                         .accessibilityLabel("Move \(pane.name) pane")
                         .onDrag {
-                            NSItemProvider(object: "pane:\(pane.id)" as NSString)
+                            NSItemProvider(
+                                object: VerticalTabDragPayload.pane(pane.id).encodedValue as NSString
+                            )
                         }
                 }
             }
@@ -1161,53 +1106,6 @@ extension Design {
             )
             .help("Cocxy does not phone home. Remote panes connect only when you explicitly open them.")
             .accessibilityLabel("No telemetry: Cocxy does not phone home")
-        }
-    }
-}
-
-private extension String {
-    func droppablePayloadValue(prefix: String) -> String? {
-        guard hasPrefix(prefix) else { return nil }
-        let value = String(dropFirst(prefix.count))
-        return value.isEmpty ? nil : value
-    }
-}
-
-private extension AuroraSidebarDisplayMode {
-    var shortLabel: String {
-        switch self {
-        case .detailed: return "D"
-        case .summary: return "S"
-        case .compact: return "C"
-        }
-    }
-}
-
-private extension AuroraSidebarPrimaryInfo {
-    var shortLabel: String {
-        switch self {
-        case .state: return "State"
-        case .directory: return "Dir"
-        case .process: return "Proc"
-        case .command: return "Cmd"
-        }
-    }
-
-    var menuLabel: String {
-        switch self {
-        case .state: return "State and panes"
-        case .directory: return "Directory"
-        case .process: return "Foreground process"
-        case .command: return "Last command"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .state: return "circle.hexagongrid"
-        case .directory: return "folder"
-        case .process: return "cpu"
-        case .command: return "terminal"
         }
     }
 }
