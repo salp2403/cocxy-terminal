@@ -122,6 +122,8 @@ final class AuroraChromeController: ObservableObject {
     var onMoveSessionUp: ((TabID) -> Void)?
     var onMoveSessionDown: ((TabID) -> Void)?
     var onMovePaneToSession: ((SurfaceID, TabID) -> Bool)?
+    var onSidebarDisplayModeChange: ((AuroraSidebarDisplayMode) -> Void)?
+    var onSidebarPrimaryInfoChange: ((AuroraSidebarPrimaryInfo) -> Void)?
 
     /// Invoked when the user presses the palette hotkey inside an
     /// Aurora view (sidebar header button, palette-trigger keyboard
@@ -242,6 +244,18 @@ final class AuroraChromeController: ObservableObject {
     func applyAppearance(_ appearance: AppearanceConfig) {
         sidebarDisplayMode = appearance.auroraSidebarDisplayMode
         sidebarPrimaryInfo = appearance.auroraSidebarPrimaryInfo
+    }
+
+    func updateSidebarDisplayMode(_ mode: AuroraSidebarDisplayMode) {
+        guard sidebarDisplayMode != mode else { return }
+        sidebarDisplayMode = mode
+        onSidebarDisplayModeChange?(mode)
+    }
+
+    func updateSidebarPrimaryInfo(_ info: AuroraSidebarPrimaryInfo) {
+        guard sidebarPrimaryInfo != info else { return }
+        sidebarPrimaryInfo = info
+        onSidebarPrimaryInfoChange?(info)
     }
 
     // MARK: - Subscriptions
@@ -696,10 +710,10 @@ struct AuroraSidebarHost: View {
             displayMode: controller.sidebarDisplayMode,
             primaryInfo: controller.sidebarPrimaryInfo,
             onDisplayModeChange: { mode in
-                controller.sidebarDisplayMode = mode
+                controller.updateSidebarDisplayMode(mode)
             },
             onPrimaryInfoChange: { info in
-                controller.sidebarPrimaryInfo = info
+                controller.updateSidebarPrimaryInfo(info)
             },
             paletteShortcutLabel: controller.paletteShortcutLabel,
             newTabShortcutLabel: controller.newTabShortcutLabel

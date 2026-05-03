@@ -156,6 +156,79 @@ final class ConfigService: ConfigProviding {
         configSubject.send(config)
     }
 
+    /// Persists the Aurora sidebar's inline controls back to the
+    /// `[appearance]` table and reloads the validated snapshot. This keeps
+    /// the sidebar toolbar lightweight while still preserving the user's
+    /// density and primary-row choices across launches.
+    func updateAuroraSidebarPreferences(
+        displayMode: AuroraSidebarDisplayMode,
+        primaryInfo: AuroraSidebarPrimaryInfo
+    ) throws {
+        var content = fileProvider.readConfigFile() ?? Self.generateDefaultToml()
+        content = Self.upsertingAppearanceValue(
+            key: "aurora-sidebar-display-mode",
+            value: "\"\(displayMode.rawValue)\"",
+            in: content
+        )
+        content = Self.upsertingAppearanceValue(
+            key: "aurora-sidebar-primary-info",
+            value: "\"\(primaryInfo.rawValue)\"",
+            in: content
+        )
+        try fileProvider.writeConfigFile(content)
+        try reload()
+    }
+
+    private static func upsertingAppearanceValue(
+        key: String,
+        value: String,
+        in content: String
+    ) -> String {
+        var lines = content
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+
+        guard let appearanceIndex = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines) == "[appearance]"
+        }) else {
+            if !lines.isEmpty, lines.last?.isEmpty == false {
+                lines.append("")
+            }
+            lines.append("[appearance]")
+            lines.append("\(key) = \(value)")
+            return lines.joined(separator: "\n") + "\n"
+        }
+
+        let sectionEnd = lines[(appearanceIndex + 1)...].firstIndex(where: {
+            isTomlTableHeader($0)
+        }) ?? lines.endIndex
+
+        if let keyIndex = lines[(appearanceIndex + 1)..<sectionEnd].firstIndex(where: {
+            tomlKey(in: $0) == key
+        }) {
+            lines[keyIndex] = "\(key) = \(value)"
+        } else {
+            lines.insert("\(key) = \(value)", at: sectionEnd)
+        }
+
+        let rendered = lines.joined(separator: "\n")
+        return rendered.hasSuffix("\n") ? rendered : rendered + "\n"
+    }
+
+    private static func isTomlTableHeader(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("[") && trimmed.hasSuffix("]")
+    }
+
+    private static func tomlKey(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.hasPrefix("#"),
+              let equals = trimmed.firstIndex(of: "=") else {
+            return nil
+        }
+        return String(trimmed[..<equals]).trimmingCharacters(in: .whitespaces)
+    }
+
     // MARK: - Default Config File Creation
 
     /// Creates the default config file via the file provider.

@@ -181,6 +181,48 @@ struct AuroraEnabledRoundTripTests {
         #expect(config.appearance.auroraSidebarPrimaryInfo == .process)
     }
 
+    @Test
+    func updateAuroraSidebarPreferencesWritesOnlyAppearanceKeysAndReloadsCurrent() throws {
+        let provider = InMemoryProvider(content: ConfigService.generateDefaultToml())
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+
+        try service.updateAuroraSidebarPreferences(
+            displayMode: .compact,
+            primaryInfo: .directory
+        )
+
+        let written = try #require(provider.writtenContent)
+        #expect(written.contains("aurora-sidebar-display-mode = \"compact\""))
+        #expect(written.contains("aurora-sidebar-primary-info = \"directory\""))
+        #expect(service.current.appearance.auroraSidebarDisplayMode == .compact)
+        #expect(service.current.appearance.auroraSidebarPrimaryInfo == .directory)
+
+        let reloaded = ConfigService(fileProvider: provider)
+        try reloaded.reload()
+        #expect(reloaded.current.appearance.auroraSidebarDisplayMode == .compact)
+        #expect(reloaded.current.appearance.auroraSidebarPrimaryInfo == .directory)
+    }
+
+    @Test
+    func updateAuroraSidebarPreferencesCreatesAppearanceSectionWhenMissing() throws {
+        let provider = InMemoryProvider(content: "[general]\nshell = \"/bin/zsh\"\n")
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+
+        try service.updateAuroraSidebarPreferences(
+            displayMode: .summary,
+            primaryInfo: .command
+        )
+
+        let written = try #require(provider.writtenContent)
+        #expect(written.contains("[appearance]"))
+        #expect(written.contains("aurora-sidebar-display-mode = \"summary\""))
+        #expect(written.contains("aurora-sidebar-primary-info = \"command\""))
+        #expect(service.current.appearance.auroraSidebarDisplayMode == .summary)
+        #expect(service.current.appearance.auroraSidebarPrimaryInfo == .command)
+    }
+
     // MARK: - Decoder backwards compatibility
 
     @Test

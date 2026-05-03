@@ -260,6 +260,12 @@ extension MainWindowController {
             guard let self else { return false }
             return self.moveSplitSurface(surfaceID, to: targetTabID)
         }
+        controller.onSidebarDisplayModeChange = { [weak self] mode in
+            self?.persistAuroraSidebarPreferences(displayMode: mode)
+        }
+        controller.onSidebarPrimaryInfoChange = { [weak self] info in
+            self?.persistAuroraSidebarPreferences(primaryInfo: info)
+        }
         controller.onTogglePalette = { [weak self] in
             self?.toggleAuroraPalette()
         }
@@ -714,6 +720,32 @@ extension MainWindowController {
     private func stopAuroraAgentReconciliationLoop() {
         auroraAgentReconciliationCancellable?.cancel()
         auroraAgentReconciliationCancellable = nil
+    }
+
+    func persistAuroraSidebarPreferences(
+        displayMode: AuroraSidebarDisplayMode? = nil,
+        primaryInfo: AuroraSidebarPrimaryInfo? = nil
+    ) {
+        guard let configService else { return }
+        let appearance = configService.current.appearance
+        let nextDisplayMode = displayMode ?? appearance.auroraSidebarDisplayMode
+        let nextPrimaryInfo = primaryInfo ?? appearance.auroraSidebarPrimaryInfo
+        guard nextDisplayMode != appearance.auroraSidebarDisplayMode
+                || nextPrimaryInfo != appearance.auroraSidebarPrimaryInfo else {
+            return
+        }
+
+        do {
+            try configService.updateAuroraSidebarPreferences(
+                displayMode: nextDisplayMode,
+                primaryInfo: nextPrimaryInfo
+            )
+        } catch {
+            NSLog(
+                "Persist Aurora sidebar preferences failed: %@",
+                String(describing: error)
+            )
+        }
     }
 
     /// Refreshes every chrome surface that depends on tab ordering,

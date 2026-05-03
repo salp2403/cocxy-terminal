@@ -85,6 +85,25 @@ struct AuroraChromeControllerSwiftTestingTests {
         #expect(harness.controller.sidebarPrimaryInfo == .process)
     }
 
+    @Test
+    func sidebarPreferenceChangesNotifyPersistenceCallbacksOnlyWhenChanged() {
+        let harness = makeHarness()
+        var displayModes: [AuroraSidebarDisplayMode] = []
+        var primaryInfos: [AuroraSidebarPrimaryInfo] = []
+        harness.controller.onSidebarDisplayModeChange = { displayModes.append($0) }
+        harness.controller.onSidebarPrimaryInfoChange = { primaryInfos.append($0) }
+
+        harness.controller.updateSidebarDisplayMode(.compact)
+        harness.controller.updateSidebarDisplayMode(.compact)
+        harness.controller.updateSidebarPrimaryInfo(.directory)
+        harness.controller.updateSidebarPrimaryInfo(.directory)
+
+        #expect(harness.controller.sidebarDisplayMode == .compact)
+        #expect(harness.controller.sidebarPrimaryInfo == .directory)
+        #expect(displayModes == [.compact])
+        #expect(primaryInfos == [.directory])
+    }
+
     // MARK: - Domain reactivity
 
     @Test
