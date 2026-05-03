@@ -47,8 +47,42 @@ struct CodebaseVectorStore: Sendable {
         try saveRecords(records)
     }
 
+    func replaceAllStreaming(_ build: (inout CodebaseVectorStoreReplacementWriter) throws -> Void) throws {
+        try FileManager.default.createDirectory(
+            at: storageURL,
+            withIntermediateDirectories: true
+        )
+        let temporaryURL = storageURL.appendingPathComponent("vectors-\(UUID().uuidString).json.tmp")
+        FileManager.default.createFile(atPath: temporaryURL.path, contents: nil)
+        let fileHandle = try FileHandle(forWritingTo: temporaryURL)
+        var writer = CodebaseVectorStoreReplacementWriter(fileHandle: fileHandle)
+
+        do {
+            try writer.begin()
+            try build(&writer)
+            try writer.finish()
+            try fileHandle.close()
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+            }
+            try FileManager.default.moveItem(at: temporaryURL, to: fileURL)
+        } catch {
+            try? fileHandle.close()
+            try? FileManager.default.removeItem(at: temporaryURL)
+            throw error
+        }
+    }
+
     func recordCount() throws -> Int {
         try loadRecords().count
+    }
+
+    func storageSizeBytes() throws -> Int64 {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return 0
+        }
+        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values.fileSize ?? 0)
     }
 
     func remove(paths: Set<String>) throws {
@@ -101,7 +135,7 @@ struct CodebaseVectorStore: Sendable {
             withIntermediateDirectories: true
         )
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(records.sorted(by: recordSort))
         try data.write(to: fileURL, options: .atomic)
     }
@@ -158,5 +192,53 @@ struct CodebaseVectorStore: Sendable {
             return lhs.score > rhs.score
         }
         return recordSort(lhs.record, rhs.record)
+    }
+}
+
+struct CodebaseVectorStoreReplacementWriter {
+    private let fileHandle: FileHandle
+    private let encoder: JSONEncoder
+    private(set) var recordCount = 0
+    private var hasBegun = false
+    private var hasFinished = false
+
+    init(fileHandle: FileHandle) {
+        self.fileHandle = fileHandle
+        self.encoder = JSONEncoder()
+        self.encoder.outputFormatting = [.sortedKeys]
+    }
+
+    mutating func begin() throws {
+        guard !hasBegun else { return }
+        try fileHandle.write(contentsOf: Data("[\n".utf8))
+        hasBegun = true
+    }
+
+    mutating func append(_ records: [CodebaseVectorRecord]) throws {
+        guard !records.isEmpty else { return }
+        guard hasBegun, !hasFinished else { return }
+        try validateFinite(records)
+        for record in records {
+            if recordCount > 0 {
+                try fileHandle.write(contentsOf: Data(",\n".utf8))
+            }
+            let data = try encoder.encode(record)
+            try fileHandle.write(contentsOf: data)
+            recordCount += 1
+        }
+    }
+
+    mutating func finish() throws {
+        guard hasBegun, !hasFinished else { return }
+        try fileHandle.write(contentsOf: Data("\n]\n".utf8))
+        hasFinished = true
+    }
+
+    private func validateFinite(_ records: [CodebaseVectorRecord]) throws {
+        for record in records {
+            guard record.embedding.allSatisfy(\.isFinite) else {
+                throw CodebaseVectorStoreError.nonFiniteEmbedding(record.id)
+            }
+        }
     }
 }

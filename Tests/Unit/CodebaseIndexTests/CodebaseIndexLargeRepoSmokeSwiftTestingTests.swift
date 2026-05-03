@@ -15,15 +15,17 @@ struct CodebaseIndexLargeRepoSmokeSwiftTestingTests {
         }
 
         let rootPath = environment["COCXY_CODEBASE_SMOKE_ROOT"] ?? FileManager.default.currentDirectoryPath
-        let maxFiles = Self.integerEnvironmentValue("COCXY_CODEBASE_SMOKE_MAX_FILES", defaultValue: 300)
-        let maxChunks = Self.integerEnvironmentValue("COCXY_CODEBASE_SMOKE_MAX_CHUNKS", defaultValue: 450)
+        let maxFiles = Self.integerEnvironmentValue("COCXY_CODEBASE_SMOKE_MAX_FILES", defaultValue: 10_000)
+        let maxChunks = Self.integerEnvironmentValue("COCXY_CODEBASE_SMOKE_MAX_CHUNKS", defaultValue: 12_000)
         let minimumFiles = Self.integerEnvironmentValue(
             "COCXY_CODEBASE_SMOKE_MIN_FILES",
-            defaultValue: min(100, maxFiles)
+            defaultValue: min(1_000, maxFiles)
         )
         let rootURL = URL(fileURLWithPath: rootPath, isDirectory: true)
         let workspace = AgentWorkspace(rootURL: rootURL)
-        let provider = NaturalLanguageCodebaseEmbeddingProvider()
+        let provider = Self.embeddingProvider(
+            named: environment["COCXY_CODEBASE_SMOKE_PROVIDER"] ?? "local-code-token"
+        )
         #expect(provider.isAvailable)
         guard provider.isAvailable else {
             return
@@ -56,6 +58,7 @@ struct CodebaseIndexLargeRepoSmokeSwiftTestingTests {
             "indexed_files=\(stats.indexedFiles) " +
             "indexed_chunks=\(stats.indexedChunks) " +
             "truncated=\(stats.truncated) " +
+            "provider=\(provider.identifier) " +
             "max_files=\(maxFiles) " +
             "max_chunks=\(maxChunks) " +
             "rebuild_seconds=\(String(format: "%.3f", rebuildSeconds)) " +
@@ -77,5 +80,14 @@ struct CodebaseIndexLargeRepoSmokeSwiftTestingTests {
             return defaultValue
         }
         return max(1, value)
+    }
+
+    private static func embeddingProvider(named name: String) -> any CodebaseEmbeddingProviding {
+        switch name {
+        case "natural-language":
+            return NaturalLanguageCodebaseEmbeddingProvider()
+        default:
+            return LocalCodeTokenEmbeddingProvider()
+        }
     }
 }

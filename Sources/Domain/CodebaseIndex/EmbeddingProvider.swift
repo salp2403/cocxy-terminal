@@ -18,6 +18,85 @@ enum CodebaseEmbeddingProviderError: Error, Sendable, Equatable {
     case nonFiniteEmbedding(String)
 }
 
+struct LocalCodeTokenEmbeddingProvider: CodebaseEmbeddingProviding {
+    let dimensions: Int
+    let maxTokens: Int
+
+    init(dimensions: Int = 256, maxTokens: Int = 4_096) {
+        self.dimensions = max(16, dimensions)
+        self.maxTokens = max(1, maxTokens)
+    }
+
+    var identifier: String {
+        "local-code-token-on-device"
+    }
+
+    var isAvailable: Bool {
+        true
+    }
+
+    func embedding(for text: String) throws -> [Double] {
+        let tokens = Self.tokens(in: text)
+        guard !tokens.isEmpty else {
+            throw CodebaseEmbeddingProviderError.emptyInput
+        }
+
+        var vector = Array(repeating: 0.0, count: dimensions)
+        for token in tokens.prefix(maxTokens) {
+            let hash = Self.stableHash(token)
+            let index = Int(hash % UInt64(dimensions))
+            let sign = (hash & 0x8000_0000_0000_0000) == 0 ? 1.0 : -1.0
+            let weight = token.count <= 2 ? 0.35 : 1.0
+            vector[index] += sign * weight
+        }
+
+        let magnitude = sqrt(vector.reduce(0.0) { $0 + ($1 * $1) })
+        guard magnitude > 0 else {
+            throw CodebaseEmbeddingProviderError.emptyEmbedding(identifier)
+        }
+        return vector.map { $0 / magnitude }
+    }
+
+    private static func tokens(in text: String) -> [String] {
+        var tokens: [String] = []
+        var current = ""
+        var previousWasLowercaseOrDigit = false
+
+        func flush() {
+            guard current.count >= 2 else {
+                current.removeAll(keepingCapacity: true)
+                return
+            }
+            tokens.append(current)
+            current.removeAll(keepingCapacity: true)
+        }
+
+        for character in text {
+            guard character.isLetter || character.isNumber else {
+                flush()
+                previousWasLowercaseOrDigit = false
+                continue
+            }
+            if character.isUppercase, previousWasLowercaseOrDigit {
+                flush()
+            }
+            current += character.lowercased()
+            previousWasLowercaseOrDigit = character.isLowercase || character.isNumber
+        }
+        flush()
+        return tokens
+    }
+
+    private static func stableHash(_ token: String) -> UInt64 {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in token.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 0x0000_0100_0000_01b3
+        }
+        return hash
+    }
+}
+
 struct NaturalLanguageCodebaseEmbeddingProvider: CodebaseEmbeddingProviding {
     let preferredLanguages: [NLLanguage]
     let maxInputCharacters: Int

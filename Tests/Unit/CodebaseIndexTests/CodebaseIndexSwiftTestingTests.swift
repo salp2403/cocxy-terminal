@@ -365,6 +365,34 @@ struct CodebaseIndexSwiftTestingTests {
         #expect(allValuesAreFinite)
     }
 
+    @Test("local code token provider generates deterministic finite embeddings")
+    func localCodeTokenProviderGeneratesDeterministicFiniteEmbeddings() throws {
+        let provider = LocalCodeTokenEmbeddingProvider(dimensions: 64)
+
+        let first = try provider.embedding(for: "struct AuthService { let sessionToken = token }")
+        let second = try provider.embedding(for: "AuthService session token")
+        let firstIsFinite = first.allSatisfy { $0.isFinite }
+        let secondIsFinite = second.allSatisfy { $0.isFinite }
+        let repeated = try provider.embedding(for: "AuthService")
+
+        #expect(first.count == 64)
+        #expect(second.count == 64)
+        #expect(firstIsFinite)
+        #expect(secondIsFinite)
+        #expect(repeated == (try provider.embedding(for: "AuthService")))
+    }
+
+    @Test("semantic default uses fast local code token embeddings")
+    func semanticDefaultUsesFastLocalCodeTokenEmbeddings() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = AgentWorkspace(rootURL: root)
+
+        let semanticIndex = try #require(CodebaseSemanticIndex.localDefault(workspace: workspace))
+
+        #expect(semanticIndex.embeddingProvider.identifier == "local-code-token-on-device")
+    }
+
     @Test("semantic default storage stays outside workspace")
     func semanticDefaultStorageStaysOutsideWorkspace() throws {
         let root = try makeWorkspace()
@@ -375,6 +403,65 @@ struct CodebaseIndexSwiftTestingTests {
 
         #expect(!workspace.contains(storageURL))
         #expect(storageURL.path.contains("dev.cocxy.codebase-index"))
+    }
+
+    @Test("semantic index rebuilds ten thousand files in persistent batches")
+    func semanticIndexRebuildsTenThousandFilesInPersistentBatches() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceRoot = root.appendingPathComponent("Sources", isDirectory: true)
+        let fileCount = 10_000
+        let targetIndex = 4_242
+
+        for bucket in 0..<100 {
+            let bucketURL = sourceRoot.appendingPathComponent(
+                String(format: "Shard%03d", bucket),
+                isDirectory: true
+            )
+            try FileManager.default.createDirectory(at: bucketURL, withIntermediateDirectories: true)
+        }
+
+        for index in 0..<fileCount {
+            let bucket = index / 100
+            let bucketURL = sourceRoot.appendingPathComponent(
+                String(format: "Shard%03d", bucket),
+                isDirectory: true
+            )
+            let fileURL = bucketURL.appendingPathComponent(String(format: "File%05d.swift", index))
+            let marker = index == targetIndex ? "needle lookup target" : "semantic batch source"
+            try """
+            struct GeneratedFile\(index) {
+                let marker = "\(marker)"
+            }
+            """.write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+
+        let workspace = AgentWorkspace(rootURL: root)
+        let store = CodebaseVectorStore(storageURL: root.appendingPathComponent(".cocxy-index", isDirectory: true))
+        let semanticIndex = CodebaseSemanticIndex(
+            workspace: workspace,
+            store: store,
+            embeddingProvider: LocalCodeTokenEmbeddingProvider(dimensions: 128),
+            chunker: CodebaseFileChunker(maxChunkBytes: 4_096),
+            maxIndexedFiles: fileCount,
+            maxIndexedChunks: fileCount,
+            replacementBatchSize: 97,
+            maxStoredTextCharacters: 128
+        )
+
+        let startedAt = Date()
+        let stats = try semanticIndex.rebuild()
+        let elapsedSeconds = Date().timeIntervalSince(startedAt)
+        let results = try semanticIndex.search(query: "needle lookup", limit: 5)
+        let storageSize = try store.storageSizeBytes()
+
+        #expect(stats.indexedFiles == fileCount)
+        #expect(stats.indexedChunks == fileCount)
+        #expect(!stats.truncated)
+        #expect(try store.recordCount() == fileCount)
+        #expect(elapsedSeconds < 300)
+        #expect(storageSize < 200 * 1_024 * 1_024)
+        #expect(results.first?.path == "Sources/Shard042/File04242.swift")
     }
 
     private func makeWorkspace() throws -> URL {

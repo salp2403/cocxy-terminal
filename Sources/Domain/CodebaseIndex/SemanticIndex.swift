@@ -19,6 +19,8 @@ struct CodebaseSemanticIndex {
     let maxFileBytes: Int
     let maxIndexedFiles: Int
     let maxIndexedChunks: Int
+    let replacementBatchSize: Int
+    let maxStoredTextCharacters: Int
 
     init(
         workspace: AgentWorkspace,
@@ -26,8 +28,10 @@ struct CodebaseSemanticIndex {
         embeddingProvider: any CodebaseEmbeddingProviding,
         chunker: CodebaseFileChunker = CodebaseFileChunker(),
         maxFileBytes: Int = 1_000_000,
-        maxIndexedFiles: Int = 2_000,
-        maxIndexedChunks: Int = 4_000
+        maxIndexedFiles: Int = 10_000,
+        maxIndexedChunks: Int = 12_000,
+        replacementBatchSize: Int = 128,
+        maxStoredTextCharacters: Int = 512
     ) {
         self.workspace = workspace
         self.store = store
@@ -36,13 +40,15 @@ struct CodebaseSemanticIndex {
         self.maxFileBytes = maxFileBytes
         self.maxIndexedFiles = max(1, maxIndexedFiles)
         self.maxIndexedChunks = max(1, maxIndexedChunks)
+        self.replacementBatchSize = max(1, replacementBatchSize)
+        self.maxStoredTextCharacters = max(64, maxStoredTextCharacters)
     }
 
     static func localDefault(
         workspace: AgentWorkspace,
         maxFileBytes: Int = 1_000_000
     ) -> CodebaseSemanticIndex? {
-        let provider = NaturalLanguageCodebaseEmbeddingProvider()
+        let provider = LocalCodeTokenEmbeddingProvider()
         guard provider.isAvailable else {
             return nil
         }
@@ -79,36 +85,61 @@ struct CodebaseSemanticIndex {
 
         let scanner = CodebaseIndexFileScanner(workspace: workspace, maxFileBytes: maxFileBytes)
         var indexedFiles = 0
-        var records: [CodebaseVectorRecord] = []
+        var indexedChunks = 0
+        var pendingRecords: [CodebaseVectorRecord] = []
         var truncated = false
 
-        for file in scanner.regularFiles(startingAt: workspace.rootURL) {
-            guard indexedFiles < maxIndexedFiles, records.count < maxIndexedChunks else {
-                truncated = true
-                break
+        try store.replaceAllStreaming { writer in
+            for file in scanner.regularFiles(startingAt: workspace.rootURL) {
+                guard indexedFiles < maxIndexedFiles, indexedChunks < maxIndexedChunks else {
+                    truncated = true
+                    break
+                }
+                guard let content = try? scanner.readTextFile(file) else {
+                    continue
+                }
+                let chunks = chunker.chunks(for: content, path: file.relativePath)
+                let chunkRecords = try recordsForChunks(chunks)
+                guard !chunkRecords.isEmpty else {
+                    continue
+                }
+
+                let remainingChunkCapacity = maxIndexedChunks - indexedChunks
+                let recordsToWrite: ArraySlice<CodebaseVectorRecord>
+                if chunkRecords.count > remainingChunkCapacity {
+                    recordsToWrite = chunkRecords.prefix(remainingChunkCapacity)
+                    truncated = true
+                } else {
+                    recordsToWrite = chunkRecords[...]
+                }
+
+                guard !recordsToWrite.isEmpty else {
+                    truncated = true
+                    break
+                }
+
+                indexedFiles += 1
+                pendingRecords.append(contentsOf: recordsToWrite)
+                indexedChunks += recordsToWrite.count
+
+                if pendingRecords.count >= replacementBatchSize {
+                    try writer.append(pendingRecords)
+                    pendingRecords.removeAll(keepingCapacity: true)
+                }
+                if truncated {
+                    break
+                }
             }
-            guard let content = try? scanner.readTextFile(file) else {
-                continue
+
+            if !pendingRecords.isEmpty {
+                try writer.append(pendingRecords)
+                pendingRecords.removeAll(keepingCapacity: false)
             }
-            let chunks = chunker.chunks(for: content, path: file.relativePath)
-            let chunkRecords = try recordsForChunks(chunks)
-            guard !chunkRecords.isEmpty else {
-                continue
-            }
-            indexedFiles += 1
-            let remainingChunkCapacity = maxIndexedChunks - records.count
-            if chunkRecords.count > remainingChunkCapacity {
-                records.append(contentsOf: chunkRecords.prefix(remainingChunkCapacity))
-                truncated = true
-                break
-            }
-            records.append(contentsOf: chunkRecords)
         }
 
-        try store.replaceAll(records)
         return CodebaseSemanticIndexStats(
             indexedFiles: indexedFiles,
-            indexedChunks: records.count,
+            indexedChunks: indexedChunks,
             removedPaths: 0,
             truncated: truncated
         )
@@ -202,10 +233,17 @@ struct CodebaseSemanticIndex {
                 path: chunk.path,
                 startLine: chunk.startLine,
                 endLine: chunk.endLine,
-                text: chunk.text,
+                text: storedText(for: chunk.text),
                 embedding: embedding
             )
         }
+    }
+
+    private func storedText(for text: String) -> String {
+        guard text.count > maxStoredTextCharacters else {
+            return text
+        }
+        return String(text.prefix(maxStoredTextCharacters))
     }
 
     private func normalizedScopePrefix(_ scopePath: String?) -> String? {
