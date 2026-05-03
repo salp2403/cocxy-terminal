@@ -211,6 +211,20 @@ final class PreferencesViewModel: ObservableObject {
     /// Local output-token rate in micro-dollars per million tokens.
     @Published var activityOutputCostMicrosPerMillionTokens: Int64
 
+    // MARK: - iCloud Sync
+
+    /// Master opt-in for encrypted iCloud Drive sync.
+    @Published var iCloudSyncEnabled: Bool
+
+    /// Safe folder name created inside the user's iCloud Drive.
+    @Published var iCloudSyncDirectoryName: String
+
+    /// Whether artifacts must be encrypted before export. Pinned on in UI.
+    @Published var iCloudSyncEncryptionRequired: Bool
+
+    /// Artifact classes selected for encrypted sync export.
+    @Published var iCloudSyncArtifactKinds: Set<ICloudSyncArtifactKind>
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -439,6 +453,7 @@ final class PreferencesViewModel: ObservableObject {
             || voiceHasUnsavedChanges(comparedTo: c.voice)
             || completionHasUnsavedChanges(comparedTo: c.completions)
             || activityHasUnsavedChanges(comparedTo: c.activity)
+            || iCloudSyncHasUnsavedChanges(comparedTo: c.iCloudSync)
             || codeReviewAutoShowOnSessionEnd != c.codeReview.autoShowOnSessionEnd
             || macosNotifications != c.notifications.macosNotifications
             || sound != c.notifications.sound
@@ -509,6 +524,10 @@ final class PreferencesViewModel: ObservableObject {
         activityCostTrackingEnabled = c.activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = c.activity.inputCostMicrosPerMillionTokens
         activityOutputCostMicrosPerMillionTokens = c.activity.outputCostMicrosPerMillionTokens
+        iCloudSyncEnabled = c.iCloudSync.enabled
+        iCloudSyncDirectoryName = c.iCloudSync.syncDirectoryName
+        iCloudSyncEncryptionRequired = c.iCloudSync.encryptionRequired
+        iCloudSyncArtifactKinds = Set(c.iCloudSync.artifactKinds)
         codeReviewAutoShowOnSessionEnd = c.codeReview.autoShowOnSessionEnd
         macosNotifications = c.notifications.macosNotifications
         sound = c.notifications.sound
@@ -662,6 +681,12 @@ final class PreferencesViewModel: ObservableObject {
         self.activityCostTrackingEnabled = config.activity.costTrackingEnabled
         self.activityInputCostMicrosPerMillionTokens = config.activity.inputCostMicrosPerMillionTokens
         self.activityOutputCostMicrosPerMillionTokens = config.activity.outputCostMicrosPerMillionTokens
+
+        // iCloud Sync
+        self.iCloudSyncEnabled = config.iCloudSync.enabled
+        self.iCloudSyncDirectoryName = config.iCloudSync.syncDirectoryName
+        self.iCloudSyncEncryptionRequired = config.iCloudSync.encryptionRequired
+        self.iCloudSyncArtifactKinds = Set(config.iCloudSync.artifactKinds)
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -950,6 +975,7 @@ final class PreferencesViewModel: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let agent = buildAgentModeConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
+        let iCloudSync = buildICloudSyncConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
@@ -1011,7 +1037,7 @@ final class PreferencesViewModel: ObservableObject {
             agent: agent,
             activity: activity,
             voice: voice,
-            iCloudSync: savedConfig.iCloudSync,
+            iCloudSync: iCloudSync,
             completions: completions,
             codeReview: buildCodeReviewConfigFromViewModel(),
             notifications: NotificationConfig(
@@ -1041,6 +1067,9 @@ final class PreferencesViewModel: ObservableObject {
         activityCostTrackingEnabled = activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = activity.inputCostMicrosPerMillionTokens
         activityOutputCostMicrosPerMillionTokens = activity.outputCostMicrosPerMillionTokens
+        iCloudSyncDirectoryName = iCloudSync.syncDirectoryName
+        iCloudSyncEncryptionRequired = iCloudSync.encryptionRequired
+        iCloudSyncArtifactKinds = Set(iCloudSync.artifactKinds)
         voiceLocaleIdentifier = voice.localeIdentifier
         completionIdleDelaySeconds = completions.idleDelaySeconds
         completionMaxContextUTF16Length = completions.maxContextUTF16Length
@@ -1143,6 +1172,45 @@ final class PreferencesViewModel: ObservableObject {
             || activity.costTrackingEnabled != config.costTrackingEnabled
             || activity.inputCostMicrosPerMillionTokens != config.inputCostMicrosPerMillionTokens
             || activity.outputCostMicrosPerMillionTokens != config.outputCostMicrosPerMillionTokens
+    }
+
+    private func buildICloudSyncConfigFromViewModel() -> ICloudSyncConfig {
+        ICloudSyncConfig(
+            enabled: iCloudSyncEnabled,
+            syncDirectoryName: iCloudSyncDirectoryName,
+            encryptionRequired: true,
+            artifactKinds: Self.sortedICloudSyncArtifactKinds(from: iCloudSyncArtifactKinds),
+            conflictPolicy: .manual
+        )
+    }
+
+    private func iCloudSyncHasUnsavedChanges(comparedTo config: ICloudSyncConfig) -> Bool {
+        let sync = buildICloudSyncConfigFromViewModel()
+        return sync.enabled != config.enabled
+            || sync.syncDirectoryName != config.syncDirectoryName
+            || sync.encryptionRequired != config.encryptionRequired
+            || sync.artifactKinds != config.artifactKinds
+            || sync.conflictPolicy != config.conflictPolicy
+    }
+
+    func isICloudSyncArtifactKindEnabled(_ kind: ICloudSyncArtifactKind) -> Bool {
+        iCloudSyncArtifactKinds.contains(kind)
+    }
+
+    func setICloudSyncArtifactKind(_ kind: ICloudSyncArtifactKind, enabled: Bool) {
+        var next = iCloudSyncArtifactKinds
+        if enabled {
+            next.insert(kind)
+        } else {
+            next.remove(kind)
+        }
+        iCloudSyncArtifactKinds = next
+    }
+
+    private static func sortedICloudSyncArtifactKinds(
+        from kinds: Set<ICloudSyncArtifactKind>
+    ) -> [ICloudSyncArtifactKind] {
+        ICloudSyncArtifactKind.allCases.filter { kinds.contains($0) }
     }
 
     private static func agentProviderDisplayName(_ provider: AgentProviderKind) -> String {
@@ -1325,6 +1393,7 @@ final class PreferencesViewModel: ObservableObject {
         let notes = buildNotesConfigFromViewModel()
         let agent = buildAgentModeConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
+        let iCloudSync = buildICloudSyncConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
@@ -1414,6 +1483,13 @@ final class PreferencesViewModel: ObservableObject {
         storage-directory = "\(activity.storageDirectory)"
         input-cost-micros-per-million-tokens = \(activity.inputCostMicrosPerMillionTokens)
         output-cost-micros-per-million-tokens = \(activity.outputCostMicrosPerMillionTokens)
+
+        [icloud-sync]
+        enabled = \(iCloudSync.enabled)
+        sync-directory-name = "\(iCloudSync.syncDirectoryName)"
+        encryption-required = \(iCloudSync.encryptionRequired)
+        artifact-kinds = \(Self.tomlStringArray(iCloudSync.artifactKinds.map(\.rawValue)))
+        conflict-policy = "\(iCloudSync.conflictPolicy.rawValue)"
 
         [code-review]
         auto-show-on-session-end = \(codeReviewAutoShowOnSessionEnd)

@@ -10,7 +10,7 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasSeventeenCases() {
+    func test_allSections_hasEighteenCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
@@ -19,12 +19,12 @@ final class PreferencesSectionTests: XCTestCase {
         // bringing it to 12; Agent Mode settings bring it to 13; Voice
         // settings bring it to 14; MCP server config editing brings it to 15;
         // Activity privacy controls bring it to 16; local plugin management
-        // brings it to 17.
+        // brings it to 17; iCloud Sync opt-in settings bring it to 18.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 17)
+        XCTAssertEqual(PreferencesSection.allCases.count, 18)
     }
 
     func test_worktreesSection_hasTitleAndIcon() {
@@ -109,6 +109,24 @@ final class PreferencesSectionTests: XCTestCase {
         let section = PreferencesSection.activity
         XCTAssertEqual(section.title, "Activity")
         XCTAssertEqual(section.iconName, "chart.bar")
+    }
+
+    func test_iCloudSyncSection_hasTitleAndIcon() {
+        let section = PreferencesSection.iCloudSync
+        XCTAssertEqual(section.title, "iCloud Sync")
+        XCTAssertEqual(section.iconName, "icloud")
+    }
+
+    func test_iCloudSyncSection_appearsBetweenActivityAndCodeReview() {
+        let allCases = PreferencesSection.allCases
+        guard let activityIndex = allCases.firstIndex(of: .activity),
+              let iCloudSyncIndex = allCases.firstIndex(of: .iCloudSync),
+              let codeReviewIndex = allCases.firstIndex(of: .codeReview) else {
+            XCTFail("activity, iCloud Sync, and code review sections must exist")
+            return
+        }
+        XCTAssertLessThan(activityIndex, iCloudSyncIndex)
+        XCTAssertLessThan(iCloudSyncIndex, codeReviewIndex)
     }
 
     func test_codeReviewSection_hasTitleAndIcon() {

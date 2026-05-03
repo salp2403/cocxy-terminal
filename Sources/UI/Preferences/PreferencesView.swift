@@ -123,6 +123,8 @@ struct PreferencesView: View {
             VoicePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .activity:
             ActivityPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .iCloudSync:
+            ICloudSyncPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .codeReview:
             CodeReviewPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .notifications:
@@ -163,6 +165,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case mcpServers
     case voice
     case activity
+    case iCloudSync
     case codeReview
     case notifications
     case terminal
@@ -186,6 +189,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .mcpServers: return "MCP Servers"
         case .voice: return "Voice"
         case .activity: return "Activity"
+        case .iCloudSync: return "iCloud Sync"
         case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
         case .terminal: return "Terminal"
@@ -209,6 +213,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .mcpServers: return "link"
         case .voice: return "mic"
         case .activity: return "chart.bar"
+        case .iCloudSync: return "icloud"
         case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
         case .terminal: return "terminal"
@@ -1206,6 +1211,60 @@ struct ActivityPreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Activity")
+    }
+}
+
+// MARK: - iCloud Sync Section
+
+/// Editable encrypted iCloud Drive sync preferences.
+struct ICloudSyncPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Opt-In") {
+                Toggle("Enable iCloud Drive sync", isOn: $viewModel.iCloudSyncEnabled)
+                    .help("Exports selected local Cocxy artifacts to the user's iCloud Drive.")
+                Toggle("Encrypt synced artifacts", isOn: .constant(true))
+                    .disabled(true)
+                    .help("Encryption is required for iCloud Sync.")
+            }
+
+            Section("Location") {
+                TextField("Folder name", text: $viewModel.iCloudSyncDirectoryName)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!viewModel.iCloudSyncEnabled)
+                LabeledContent("Conflict policy", value: ICloudSyncConflictPolicy.manual.rawValue)
+            }
+
+            Section("Artifacts") {
+                ForEach(ICloudSyncArtifactKind.allCases, id: \.self) { kind in
+                    Toggle(
+                        iCloudSyncArtifactTitle(kind),
+                        isOn: Binding(
+                            get: { viewModel.isICloudSyncArtifactKindEnabled(kind) },
+                            set: { viewModel.setICloudSyncArtifactKind(kind, enabled: $0) }
+                        )
+                    )
+                    .disabled(!viewModel.iCloudSyncEnabled)
+                }
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("iCloud Sync")
+    }
+
+    private func iCloudSyncArtifactTitle(_ kind: ICloudSyncArtifactKind) -> String {
+        switch kind {
+        case .notebooks: return "Notebooks"
+        case .workflows: return "Workflows"
+        case .skills: return "Skills"
+        case .settings: return "Settings"
+        case .themes: return "Themes"
+        }
     }
 }
 

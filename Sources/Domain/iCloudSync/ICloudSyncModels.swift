@@ -48,7 +48,7 @@ struct ICloudSyncConfig: Codable, Sendable, Equatable {
     ) {
         self.enabled = enabled
         self.syncDirectoryName = Self.normalizedSyncDirectoryName(syncDirectoryName)
-        self.encryptionRequired = encryptionRequired
+        self.encryptionRequired = true
         self.artifactKinds = Self.normalizedArtifactKinds(artifactKinds)
         self.conflictPolicy = conflictPolicy
     }
