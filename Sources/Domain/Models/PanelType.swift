@@ -32,6 +32,9 @@ enum PanelType: String, Codable, Sendable, Equatable {
     /// A local reusable workflow panel.
     case workflow
 
+    /// A local terminal session recording library and replay panel.
+    case sessionReplay = "session-replay"
+
     /// A live subagent activity panel.
     case subagent
 }
@@ -82,6 +85,9 @@ struct PanelInfo: Equatable, Sendable {
     }
     static func workflow(path: URL? = nil) -> PanelInfo {
         PanelInfo(type: .workflow, filePath: path)
+    }
+    static func sessionReplay() -> PanelInfo {
+        PanelInfo(type: .sessionReplay)
     }
     static func subagent(id: String, sessionId: String) -> PanelInfo {
         PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)

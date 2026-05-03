@@ -937,6 +937,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onAddEditor = { [weak self] in self?.splitWithEditorAction(nil) }
         strip.onAddNotebook = { [weak self] in self?.splitWithNotebookAction(nil) }
         strip.onAddWorkflow = { [weak self] in self?.splitWithWorkflowAction(nil) }
+        strip.onAddSessionReplay = { [weak self] in self?.splitWithSessionReplayAction(nil) }
         strip.onSplitSideBySide = { [weak self] in self?.performVisualSplit(isVertical: true) }
         strip.onSplitStacked = { [weak self] in self?.performVisualSplit(isVertical: false) }
         strip.onOpenBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
@@ -944,6 +945,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onOpenEditor = { [weak self] in self?.splitWithEditorAction(nil) }
         strip.onOpenNotebook = { [weak self] in self?.splitWithNotebookAction(nil) }
         strip.onOpenWorkflow = { [weak self] in self?.splitWithWorkflowAction(nil) }
+        strip.onOpenSessionReplay = { [weak self] in self?.splitWithSessionReplayAction(nil) }
         strip.onReload = { [weak self] in self?.reloadFocusedBrowserPanel() }
         strip.onGoBack = { [weak self] in self?.goBackFocusedBrowserPanel() }
         strip.onGoForward = { [weak self] in self?.goForwardFocusedBrowserPanel() }
@@ -1167,6 +1169,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             paneName = "notebook panel"
         case .workflow:
             paneName = "workflow panel"
+        case .sessionReplay:
+            paneName = "session replay panel"
         case .subagent:
             paneName = "subagent panel"
         }
@@ -1520,6 +1524,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             strip.onAddEditor = nil
             strip.onAddNotebook = nil
             strip.onAddWorkflow = nil
+            strip.onAddSessionReplay = nil
             strip.onAddStackedTerminal = nil
             strip.onSplitSideBySide = nil
             strip.onSplitStacked = nil
@@ -1528,6 +1533,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             strip.onOpenEditor = nil
             strip.onOpenNotebook = nil
             strip.onOpenWorkflow = nil
+            strip.onOpenSessionReplay = nil
             strip.onReload = nil
             strip.onGoBack = nil
             strip.onGoForward = nil

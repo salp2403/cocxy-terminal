@@ -37,6 +37,16 @@ extension CocxyCoreBridge: SessionReplayTerminalBridging {
     }
 }
 
+@MainActor
+protocol SessionReplayPlaybackControlling: AnyObject {
+    func replay(
+        recordingID: UUID,
+        to surfaceID: SurfaceID,
+        seekNs: UInt64,
+        speedMultiplier: Float
+    ) throws
+}
+
 enum SessionReplayRecordingMode: Sendable, Equatable {
     case manual
     case automatic
@@ -172,7 +182,7 @@ final class SessionReplayController {
             from: recordingURL,
             for: surfaceID,
             seekNs: seekNs,
-            speedMultiplier: max(1, speedMultiplier)
+            speedMultiplier: speedMultiplier > 0 ? speedMultiplier : 1
         ) else {
             throw SessionReplayControllerError.replayFailed(recordingID)
         }
@@ -209,3 +219,5 @@ final class SessionReplayController {
         let startedAt: Date
     }
 }
+
+extension SessionReplayController: SessionReplayPlaybackControlling {}

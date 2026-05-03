@@ -116,6 +116,16 @@ extension MainWindowController {
         )
     }
 
+    /// Opens the local session recording library and replay controls.
+    @objc func splitWithSessionReplayAction(_ sender: Any?) {
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .sessionReplay(),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
+    }
+
     // MARK: - Split with Panel
 
     /// Creates a visual split with a non-terminal panel.
@@ -224,6 +234,22 @@ extension MainWindowController {
                 workspaceRoot: workspaceDir
             )
             let view = WorkflowPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            panelView = NSHostingView(rootView: view)
+        case .sessionReplay:
+            let config = configService?.current.sessionReplay ?? .defaults
+            let store = SessionReplayStore(rootDirectory: sessionReplayStorageURL(from: config))
+            let playback = sessionReplayPlaybackController(config: config, store: store)
+            let viewModel = SessionReplayPanelViewModel(
+                config: config,
+                store: store,
+                playback: playback,
+                targetSurfaceProvider: { [weak self] in
+                    self?.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+                }
+            )
+            let view = SessionReplayPanelView(viewModel: viewModel) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             panelView = NSHostingView(rootView: view)
@@ -336,6 +362,28 @@ extension MainWindowController {
         }
 
         return firstRegularFile(in: directory) { $0.lastPathComponent.hasSuffix(".workflow.toml") }
+    }
+
+    private func sessionReplayStorageURL(from config: SessionReplayConfig) -> URL {
+        URL(
+            fileURLWithPath: (config.storageDirectory as NSString).expandingTildeInPath,
+            isDirectory: true
+        )
+        .standardizedFileURL
+    }
+
+    private func sessionReplayPlaybackController(
+        config: SessionReplayConfig,
+        store: SessionReplayStore
+    ) -> (any SessionReplayPlaybackControlling)? {
+        guard let replayBridge = bridge as? any SessionReplayTerminalBridging else {
+            return nil
+        }
+        return SessionReplayController(
+            config: config,
+            store: store,
+            bridge: replayBridge
+        )
     }
 
     private func firstExistingRegularFile(

@@ -200,6 +200,23 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testOpenSessionReplayPanelHasAction() {
+        let replay = viewMenu.items.first(where: { $0.title == "Open Session Replay Panel" })
+        XCTAssertNotNil(
+            replay?.action,
+            "Open Session Replay Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenSessionReplayPanelActionPointsToCorrectSelector() {
+        let replay = viewMenu.items.first(where: { $0.title == "Open Session Replay Panel" })
+        XCTAssertEqual(
+            replay?.action,
+            #selector(MainWindowController.splitWithSessionReplayAction(_:)),
+            "Open Session Replay Panel must create the real replay library split panel"
+        )
+    }
+
     // MARK: - New Window
 
     func testNewWindowHasAction() {

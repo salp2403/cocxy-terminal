@@ -52,6 +52,9 @@ final class HorizontalTabStripView: NSView {
     /// Callback when "Workflow" is selected from the add menu.
     var onAddWorkflow: (() -> Void)?
 
+    /// Callback when "Session Replay" is selected from the add menu.
+    var onAddSessionReplay: (() -> Void)?
+
     /// Callback when the close button is clicked on a tab by index.
     var onCloseTab: ((Int) -> Void)?
 
@@ -81,6 +84,9 @@ final class HorizontalTabStripView: NSView {
 
     /// Callback when the "Open Workflow" action icon is clicked.
     var onOpenWorkflow: (() -> Void)?
+
+    /// Callback when the "Open Session Replay" action icon is clicked.
+    var onOpenSessionReplay: (() -> Void)?
 
     /// Callback when the "Reload" action icon is clicked.
     var onReload: (() -> Void)?
@@ -607,6 +613,13 @@ final class HorizontalTabStripView: NSView {
         }
         menu.addItem(workflowItem)
 
+        let replayItem = NSMenuItem(title: "Session Replay", action: #selector(addSessionReplay), keyEquivalent: "")
+        replayItem.target = self
+        if let img = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil) {
+            replayItem.image = img
+        }
+        menu.addItem(replayItem)
+
         let point = NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 4)
         menu.popUp(positioning: nil, at: point, in: button)
     }
@@ -618,6 +631,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func addEditor() { onAddEditor?() }
     @objc private func addNotebook() { onAddNotebook?() }
     @objc private func addWorkflow() { onAddWorkflow?() }
+    @objc private func addSessionReplay() { onAddSessionReplay?() }
 
     // MARK: - Contextual Action Icons
 
@@ -694,6 +708,14 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleOpenWorkflow)
                 )
             )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "record.circle",
+                    tooltip: "Open Session Replay",
+                    accessibilityID: "action:openSessionReplay",
+                    action: #selector(handleOpenSessionReplay)
+                )
+            )
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
@@ -719,7 +741,7 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .editor, .notebook, .workflow, .subagent:
+        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .subagent:
             break
         }
 
@@ -770,6 +792,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleOpenEditor() { onOpenEditor?() }
     @objc private func handleOpenNotebook() { onOpenNotebook?() }
     @objc private func handleOpenWorkflow() { onOpenWorkflow?() }
+    @objc private func handleOpenSessionReplay() { onOpenSessionReplay?() }
     @objc private func handleReload() { onReload?() }
     @objc private func handleGoBack() { onGoBack?() }
     @objc private func handleGoForward() { onGoForward?() }

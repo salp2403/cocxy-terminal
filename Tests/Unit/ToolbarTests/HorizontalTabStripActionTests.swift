@@ -44,6 +44,11 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertNil(strip.onAddWorkflow)
     }
 
+    func testOnAddSessionReplayCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onAddSessionReplay)
+    }
+
     func testOnOpenEditorCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onOpenEditor)
@@ -57,6 +62,11 @@ final class HorizontalTabStripActionTests: XCTestCase {
     func testOnOpenWorkflowCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onOpenWorkflow)
+    }
+
+    func testOnOpenSessionReplayCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onOpenSessionReplay)
     }
 
     func testOnReloadCallbackDefaultIsNil() {
@@ -142,6 +152,14 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertTrue(called)
     }
 
+    func testOnAddSessionReplayCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onAddSessionReplay = { called = true }
+        strip.onAddSessionReplay?()
+        XCTAssertTrue(called)
+    }
+
     func testOnOpenEditorCallbackFires() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         var called = false
@@ -163,6 +181,14 @@ final class HorizontalTabStripActionTests: XCTestCase {
         var called = false
         strip.onOpenWorkflow = { called = true }
         strip.onOpenWorkflow?()
+        XCTAssertTrue(called)
+    }
+
+    func testOnOpenSessionReplayCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onOpenSessionReplay = { called = true }
+        strip.onOpenSessionReplay?()
         XCTAssertTrue(called)
     }
 
@@ -219,22 +245,22 @@ final class HorizontalTabStripActionTests: XCTestCase {
 
     // MARK: - Action Icons Update
 
-    func testUpdateActionIconsForTerminalPanelShowsSevenActions() {
+    func testUpdateActionIconsForTerminalPanelShowsEightActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
         let actionButtons = findActionButtons(in: strip)
-        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Notebook, Workflow
-        XCTAssertEqual(actionButtons.count, 7)
+        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Notebook, Workflow, Replay
+        XCTAssertEqual(actionButtons.count, 8)
     }
 
-    func testUpdateActionIconsForTerminalWithCloseShowsEightActions() {
+    func testUpdateActionIconsForTerminalWithCloseShowsNineActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: true)
 
         let actionButtons = findActionButtons(in: strip)
-        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Notebook, Workflow, Close
-        XCTAssertEqual(actionButtons.count, 8)
+        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Notebook, Workflow, Replay, Close
+        XCTAssertEqual(actionButtons.count, 9)
     }
 
     func testUpdateActionIconsForBrowserPanelShowsFiveActions() {
@@ -304,12 +330,23 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertEqual(workflowButton?.toolTip, "Open Workflow")
     }
 
+    func testTerminalActionIconsIncludeSessionReplayButton() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(panelType: .terminal, canClose: false)
+
+        let replayButton = findActionButtons(in: strip).first {
+            $0.accessibilityLabel() == "action:openSessionReplay"
+        }
+
+        XCTAssertEqual(replayButton?.toolTip, "Open Session Replay")
+    }
+
     func testUpdateActionIconsReplacesOldButtons() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
 
         strip.updateActionIcons(panelType: .terminal, canClose: true)
         let terminalButtons = findActionButtons(in: strip)
-        XCTAssertEqual(terminalButtons.count, 8)
+        XCTAssertEqual(terminalButtons.count, 9)
 
         strip.updateActionIcons(panelType: .browser, canClose: false)
         let browserButtons = findActionButtons(in: strip)

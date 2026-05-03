@@ -57,6 +57,14 @@ final class WorkspaceToolbarTests: XCTestCase {
         XCTAssertEqual(tab.symbolName, "arrow.triangle.branch")
     }
 
+    func testPanelTabInfoSessionReplaySymbol() {
+        let tab = PanelTabInfo(
+            leafID: UUID(), contentID: UUID(),
+            panelType: .sessionReplay, title: "Replay", isFocused: false
+        )
+        XCTAssertEqual(tab.symbolName, "record.circle")
+    }
+
     // MARK: - Toolbar Visibility
 
     func testToolbarVisibleWithSinglePane() {
@@ -171,6 +179,19 @@ final class WorkspaceToolbarTests: XCTestCase {
         let titlesByType = Dictionary(uniqueKeysWithValues: controller.panelTabs.map { ($0.panelType, $0.title) })
         XCTAssertEqual(titlesByType[.notebook], "Notebook")
         XCTAssertEqual(titlesByType[.workflow], "Workflow")
+    }
+
+    func testSessionReplayPanelTabTitle() {
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window)
+        let manager = SplitManager()
+        manager.splitFocusedWithPanel(direction: .horizontal, panel: .sessionReplay())
+
+        controller.update(splitManager: manager)
+
+        let replayTabs = controller.panelTabs.filter { $0.panelType == .sessionReplay }
+        XCTAssertEqual(replayTabs.count, 1)
+        XCTAssertEqual(replayTabs.first?.title, "Replay")
     }
 
     // MARK: - Callbacks

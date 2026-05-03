@@ -18,6 +18,7 @@ final class PanelTypeTests: XCTestCase {
         XCTAssertEqual(PanelType.editor.rawValue, "editor")
         XCTAssertEqual(PanelType.notebook.rawValue, "notebook")
         XCTAssertEqual(PanelType.workflow.rawValue, "workflow")
+        XCTAssertEqual(PanelType.sessionReplay.rawValue, "session-replay")
     }
 
     func testPanelTypeCodable() throws {
@@ -79,6 +80,12 @@ final class PanelTypeTests: XCTestCase {
         let info = PanelInfo.workflow(path: path)
         XCTAssertEqual(info.type, .workflow)
         XCTAssertEqual(info.filePath, path)
+    }
+
+    func testPanelInfoSessionReplayDefault() {
+        let info = PanelInfo.sessionReplay()
+        XCTAssertEqual(info.type, .sessionReplay)
+        XCTAssertNil(info.filePath)
     }
 }
 
@@ -173,6 +180,17 @@ final class SplitManagerPanelTests: XCTestCase {
         XCTAssertEqual(manager.panelType(for: newID!), .workflow)
         let info = manager.panelInfo(for: newID!)
         XCTAssertEqual(info.filePath, path)
+    }
+
+    func testSplitFocusedWithSessionReplayTracksType() {
+        let manager = SplitManager()
+        let newID = manager.splitFocusedWithPanel(
+            direction: .vertical,
+            panel: .sessionReplay()
+        )
+
+        XCTAssertNotNil(newID)
+        XCTAssertEqual(manager.panelType(for: newID!), .sessionReplay)
     }
 
     func testCloseFocusedCleansPanelType() {

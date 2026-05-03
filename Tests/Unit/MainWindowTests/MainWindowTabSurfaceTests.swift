@@ -1475,6 +1475,43 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testSessionReplayPanelActionInstallsRealHostedPanel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithSessionReplayAction(nil)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after opening session replay panel")
+            return
+        }
+
+        let leaves = splitManager.rootNode.allLeafIDs()
+        guard let replayLeaf = leaves.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .sessionReplay
+        }) else {
+            XCTFail("Expected session replay panel leaf")
+            return
+        }
+
+        XCTAssertTrue(
+            controller.panelContentViews[replayLeaf.terminalID] is NSHostingView<SessionReplayPanelView>,
+            "Session Replay split must host the real recording library and controls"
+        )
+
+        let panelTabs = (controller.horizontalTabStripView as? HorizontalTabStripView)?.tabs.map(\.title) ?? []
+        XCTAssertTrue(panelTabs.contains("Replay"))
+        XCTAssertEqual(
+            splitManager.focusedLeafID,
+            replayLeaf.leafID,
+            "Opening Session Replay should leave the replay panel selected"
+        )
+    }
+
     func testToolbarSplitButtonsMapToVisualOrientation() {
         let sideBySideController = MainWindowController(bridge: MockTerminalEngine())
         sideBySideController.showWindow(nil)

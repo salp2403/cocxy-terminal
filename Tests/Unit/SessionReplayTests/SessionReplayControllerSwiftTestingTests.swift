@@ -154,6 +154,47 @@ struct SessionReplayControllerSwiftTestingTests {
         ])
     }
 
+    @Test("controller preserves positive fractional replay speed")
+    func controllerPreservesPositiveFractionalReplaySpeed() throws {
+        let root = try makeTemporaryDirectory(named: "session-replay-controller-fractional-speed")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let bridge = RecordingSessionReplayBridge()
+        let store = SessionReplayStore(rootDirectory: root)
+        let controller = SessionReplayController(
+            config: SessionReplayConfig(enabled: true),
+            store: store,
+            bridge: bridge
+        )
+        let sourceSurface = SurfaceID()
+        let targetSurface = SurfaceID()
+
+        let prepared = try controller.startRecording(
+            surfaceID: sourceSurface,
+            title: "Half speed",
+            mode: .manual,
+            startedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        bridge.handle.bytesWrittenValue = 32
+        let recording = try controller.stopRecording(surfaceID: sourceSurface)
+
+        try controller.replay(
+            recordingID: recording.id,
+            to: targetSurface,
+            seekNs: 250_000_000,
+            speedMultiplier: 0.5
+        )
+
+        #expect(bridge.replayRequests == [
+            RecordingSessionReplayBridge.ReplayRequest(
+                recordingURL: prepared.castURL,
+                surfaceID: targetSurface,
+                seekNs: 250_000_000,
+                speedMultiplier: 0.5
+            )
+        ])
+    }
+
     private func sampleCast() -> String {
         """
         {"version":2,"width":80,"height":24,"timestamp":1800000000}

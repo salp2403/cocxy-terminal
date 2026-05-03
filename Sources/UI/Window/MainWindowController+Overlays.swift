@@ -606,6 +606,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "workspace.sessionReplay",
+                name: "Open Session Replay Panel",
+                description: "Open local session recordings and replay controls",
+                shortcut: nil,
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.splitWithSessionReplayAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "remote.toggle",
                 name: "Toggle Remote Workspaces",
                 description: "Show or hide the remote workspace panel",
