@@ -155,6 +155,13 @@ extension MainWindowController {
         var metadata = [
             "block_id": "\(block.id)",
             "duration_ms": "\(block.durationNs / 1_000_000)",
+            "schema_version": "\(block.schemaVersion)",
+            "output_bytes": "\(block.output.utf8.count)",
+            "start_row": "\(block.startRow)",
+            "end_row": "\(block.endRow)",
+            "stream_id": "\(block.streamID)",
+            "block_type": "\(block.blockType)",
+            "is_bookmarked": block.isBookmarked ? "true" : "false",
         ]
         if let exitCode = block.exitCode {
             metadata["exit_code"] = "\(exitCode)"

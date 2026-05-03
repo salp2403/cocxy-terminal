@@ -74,6 +74,13 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         XCTAssertEqual(commandEvent.metadata["exit_code"], "0")
         XCTAssertEqual(commandEvent.metadata["duration_ms"], "1500")
         XCTAssertEqual(commandEvent.metadata["block_id"], "42")
+        XCTAssertEqual(commandEvent.metadata["schema_version"], "\(TerminalCommandBlock.currentSchemaVersion)")
+        XCTAssertEqual(commandEvent.metadata["output_bytes"], "2")
+        XCTAssertEqual(commandEvent.metadata["start_row"], "1")
+        XCTAssertEqual(commandEvent.metadata["end_row"], "2")
+        XCTAssertEqual(commandEvent.metadata["stream_id"], "0")
+        XCTAssertEqual(commandEvent.metadata["block_type"], "2")
+        XCTAssertEqual(commandEvent.metadata["is_bookmarked"], "false")
         XCTAssertEqual(events.last?.summary, "Block finished: swift test")
     }
 
