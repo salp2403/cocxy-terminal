@@ -49,7 +49,9 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                     "web_running": "true",
                     "web_bind": "127.0.0.1",
                     "web_port": "7770",
-                    "current_stream_id": "2"
+                    "current_stream_id": "2",
+                    "color_space": "srgb",
+                    "wide_gamut": "true"
                 ]
             }
         )
@@ -60,6 +62,8 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["status"], "running")
         XCTAssertEqual(response.data?["web_running"], "true")
         XCTAssertEqual(response.data?["current_stream_id"], "2")
+        XCTAssertEqual(response.data?["color_space"], "srgb")
+        XCTAssertEqual(response.data?["wide_gamut"], "true")
     }
 
     @MainActor

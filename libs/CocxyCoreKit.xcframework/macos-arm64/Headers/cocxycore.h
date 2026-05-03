@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.14.10 (UX polish core APIs)
+ * Version: 0.14.11 (color management APIs)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 14
-#define COCXYCORE_VERSION_PATCH 10
-#define COCXYCORE_VERSION_STRING "0.14.10"
+#define COCXYCORE_VERSION_PATCH 11
+#define COCXYCORE_VERSION_STRING "0.14.11"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -356,6 +356,13 @@ typedef enum {
     COCXYCORE_COLOR_INDEXED = 1,
     COCXYCORE_COLOR_RGB = 2,
 } cocxycore_color_type;
+
+/** Output color space configuration. */
+typedef enum {
+    COCXYCORE_COLOR_SPACE_SRGB = 0,
+    COCXYCORE_COLOR_SPACE_DISPLAY_P3 = 1,
+    COCXYCORE_COLOR_SPACE_AUTO = 2,
+} cocxycore_color_space;
 
 /** Get the foreground color type. */
 uint8_t cocxycore_terminal_cell_fg_type(
@@ -1626,6 +1633,28 @@ void cocxycore_terminal_set_selection_color(
     uint8_t b,
     uint8_t a
 );
+
+/** Set the terminal output color space. Invalid values are ignored. */
+void cocxycore_terminal_set_color_space(
+    cocxycore_terminal* term,
+    cocxycore_color_space space
+);
+
+/** Get the configured terminal output color space. */
+cocxycore_color_space cocxycore_terminal_get_color_space(const cocxycore_terminal* term);
+
+/** Store a local ICC/ICM profile path for color-managed output. */
+bool cocxycore_terminal_set_icc_profile_path(cocxycore_terminal* term, const char* path);
+
+/** Copy the configured ICC/ICM profile path. */
+size_t cocxycore_terminal_icc_profile_path(
+    const cocxycore_terminal* term,
+    uint8_t* buf,
+    size_t buf_len
+);
+
+/** Whether the current platform can provide wide-gamut output. */
+bool cocxycore_terminal_supports_wide_gamut(const cocxycore_terminal* term);
 
 /**
  * Resolve a cell's colors to RGBA with theme and style effects.

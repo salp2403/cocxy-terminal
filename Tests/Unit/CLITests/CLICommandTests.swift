@@ -992,6 +992,10 @@ final class OutputFormatterTests: XCTestCase {
                 "semantic_error_blocks": "1",
                 "semantic_tool_blocks": "4",
                 "semantic_agent_blocks": "2",
+                "color_space": "display-p3",
+                "wide_gamut": "true",
+                "icc_profile_configured": "true",
+                "icc_profile_path": "/tmp/cocxy-display.icc",
                 "shell_preexec_avg_ns": "120000000",
                 "shell_preexec_max_ns": "180000000",
                 "shell_preexec_warnings": "1",
@@ -1029,6 +1033,8 @@ final class OutputFormatterTests: XCTestCase {
         XCTAssertTrue(output.contains("Protocol v2: observed on, capabilities on, current stream 3"))
         XCTAssertTrue(output.contains("Modes: cursor on, app cursor off, alt screen off, bracketed paste on"))
         XCTAssertTrue(output.contains("Input: mouse mode 6, kitty keyboard 1, preedit off, cursor shape 5, semantic blocks 4"))
+        XCTAssertTrue(output.contains("Color: display-p3, wide gamut on, ICC on"))
+        XCTAssertFalse(output.contains("/tmp/cocxy-display.icc"))
         XCTAssertTrue(output.contains("Process: pid 81234, alive on"))
         XCTAssertTrue(output.contains("Font: cell 8.50x17.00, ascent 12.20, descent 3.10, leading 1.70"))
         XCTAssertTrue(output.contains("Selection: on (10:2 -> 10:7, 5 bytes)"))

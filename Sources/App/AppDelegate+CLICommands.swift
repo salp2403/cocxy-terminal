@@ -112,6 +112,15 @@ extension AppDelegate {
             data["semantic_block_count"] = "\(modeDetails.semanticBlockCount)"
         }
 
+        if let colorDetails = cocxyBridge.colorDiagnostics(for: surfaceID) {
+            data["color_space"] = colorDetails.colorSpace.rawValue
+            data["wide_gamut"] = colorDetails.supportsWideGamut ? "true" : "false"
+            data["icc_profile_configured"] = colorDetails.iccProfilePath == nil ? "false" : "true"
+            if let path = colorDetails.iccProfilePath {
+                data["icc_profile_path"] = path
+            }
+        }
+
         if let process = cocxyBridge.processDiagnostics(for: surfaceID) {
             data["child_pid"] = "\(process.childPID)"
             data["process_alive"] = process.isAlive ? "true" : "false"

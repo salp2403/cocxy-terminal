@@ -389,6 +389,14 @@ public enum OutputFormatter {
             )
         }
 
+        if let colorSpace = data["color_space"] {
+            let wideGamut = data["wide_gamut"] ?? "false"
+            let iccProfile = data["icc_profile_configured"] ?? "false"
+            lines.append(
+                "Color: \(colorSpace), wide gamut \(boolText(wideGamut)), ICC \(boolText(iccProfile))"
+            )
+        }
+
         if let childPID = data["child_pid"] {
             let processAlive = data["process_alive"] ?? "false"
             lines.append("Process: pid \(childPID), alive \(boolText(processAlive))")

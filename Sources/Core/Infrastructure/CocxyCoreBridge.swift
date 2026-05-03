@@ -83,6 +83,42 @@ struct TerminalModeDiagnostics: Equatable, Sendable, Encodable {
     let semanticBlockCount: UInt32
 }
 
+enum TerminalColorSpace: String, Sendable, Codable {
+    case srgb
+    case displayP3 = "display-p3"
+    case auto
+
+    var cValue: cocxycore_color_space {
+        switch self {
+        case .srgb:
+            return COCXYCORE_COLOR_SPACE_SRGB
+        case .displayP3:
+            return COCXYCORE_COLOR_SPACE_DISPLAY_P3
+        case .auto:
+            return COCXYCORE_COLOR_SPACE_AUTO
+        }
+    }
+
+    init?(cValue: cocxycore_color_space) {
+        switch cValue.rawValue {
+        case COCXYCORE_COLOR_SPACE_SRGB.rawValue:
+            self = .srgb
+        case COCXYCORE_COLOR_SPACE_DISPLAY_P3.rawValue:
+            self = .displayP3
+        case COCXYCORE_COLOR_SPACE_AUTO.rawValue:
+            self = .auto
+        default:
+            return nil
+        }
+    }
+}
+
+struct TerminalColorDiagnostics: Equatable, Sendable, Encodable {
+    let colorSpace: TerminalColorSpace
+    let supportsWideGamut: Bool
+    let iccProfilePath: String?
+}
+
 enum TerminalBellMode: UInt8, Sendable {
     case systemDefault = 0
     case visualFlash = 1
@@ -1415,6 +1451,61 @@ final class CocxyCoreBridge: TerminalEngine {
                 cursorShape: cocxycore_terminal_cursor_shape(state.terminal),
                 preeditActive: cocxycore_terminal_preedit_active(state.terminal),
                 semanticBlockCount: cocxycore_terminal_semantic_block_count(state.terminal)
+            )
+        }
+    }
+
+    func setColorSpace(_ colorSpace: TerminalColorSpace, for surface: SurfaceID) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_color_space(state.terminal, colorSpace.cValue)
+        }
+    }
+
+    func colorSpace(for surface: SurfaceID) -> TerminalColorSpace? {
+        guard let rawSpace = withTerminalLock(surface, body: { state in
+            cocxycore_terminal_get_color_space(state.terminal)
+        }) else { return nil }
+        return TerminalColorSpace(cValue: rawSpace)
+    }
+
+    func supportsWideGamut(for surface: SurfaceID) -> Bool? {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_supports_wide_gamut(state.terminal)
+        }
+    }
+
+    func setICCProfilePath(_ url: URL, for surface: SurfaceID) -> Bool {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_set_icc_profile_path(state.terminal, url.path)
+        } ?? false
+    }
+
+    func iccProfilePath(for surface: SurfaceID) -> String? {
+        guard let path = withTerminalLock(surface, body: { state -> String? in
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            let copied = cocxycore_terminal_icc_profile_path(state.terminal, &buffer, buffer.count)
+            guard copied > 0 else { return nil }
+            return String(decoding: buffer.prefix(copied), as: UTF8.self)
+        }) else { return nil }
+        return path
+    }
+
+    func colorDiagnostics(for surface: SurfaceID) -> TerminalColorDiagnostics? {
+        withTerminalLock(surface) { state in
+            let colorSpace = TerminalColorSpace(
+                cValue: cocxycore_terminal_get_color_space(state.terminal)
+            ) ?? .srgb
+
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            let copied = cocxycore_terminal_icc_profile_path(state.terminal, &buffer, buffer.count)
+            let path = copied > 0
+                ? String(decoding: buffer.prefix(copied), as: UTF8.self)
+                : nil
+
+            return TerminalColorDiagnostics(
+                colorSpace: colorSpace,
+                supportsWideGamut: cocxycore_terminal_supports_wide_gamut(state.terminal),
+                iccProfilePath: path
             )
         }
     }

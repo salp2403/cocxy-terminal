@@ -599,6 +599,38 @@ struct CocxyCoreBridgeTests {
         #expect(foreground.b == 0x33)
     }
 
+    @Test("color management bridge maps color space and profile settings")
+    func colorManagementBridgeMapsColorSpaceAndProfileSettings() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+
+        let initialDiagnostics = try #require(bridge.colorDiagnostics(for: surfaceID))
+        #expect(initialDiagnostics.colorSpace == .srgb)
+        #expect(initialDiagnostics.supportsWideGamut == true)
+        #expect(initialDiagnostics.iccProfilePath == nil)
+
+        bridge.setColorSpace(.displayP3, for: surfaceID)
+        #expect(bridge.colorSpace(for: surfaceID) == .displayP3)
+        #expect(bridge.colorDiagnostics(for: surfaceID)?.colorSpace == .displayP3)
+
+        let profileURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("cocxy-display.icc")
+        #expect(bridge.setICCProfilePath(profileURL, for: surfaceID))
+        #expect(bridge.iccProfilePath(for: surfaceID) == profileURL.path)
+
+        let foreground = try #require(bridge.withTerminalLock(surfaceID) { state in
+            feed("x", to: state.terminal)
+            cocxycore_terminal_set_theme(state.terminal, 255, 0, 0, 0, 0, 0, 255, 0, 0)
+            var foreground = cocxycore_rgba()
+            cocxycore_terminal_resolve_cell_colors(state.terminal, 0, 0, &foreground, nil)
+            return foreground
+        })
+        #expect(foreground.r == 234)
+        #expect(foreground.g == 51)
+        #expect(foreground.b == 35)
+    }
+
     @Test("process and font diagnostics expose live runtime state")
     func processAndFontDiagnosticsExposeRuntimeState() throws {
         let bridge = try makeBridge()
