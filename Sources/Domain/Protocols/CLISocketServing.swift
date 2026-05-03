@@ -194,6 +194,14 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case pluginEnable = "plugin-enable"
     /// Disable a plugin by ID.
     case pluginDisable = "plugin-disable"
+    /// List decentralized plugin sources.
+    case pluginSourceList = "plugin-source-list"
+    /// Add a decentralized plugin source URL.
+    case pluginSourceAdd = "plugin-source-add"
+    /// Install a plugin from a source URL or local repo.
+    case pluginInstall = "plugin-install"
+    /// Uninstall a local plugin by ID.
+    case pluginUninstall = "plugin-uninstall"
 
     // MARK: - Browser (v2)
 

@@ -3,6 +3,22 @@
 
 import Foundation
 
+// MARK: - Plugin Sandbox Error
+
+enum PluginSandboxError: Error, Equatable {
+    case scriptOutsidePluginDirectory(String)
+    case invalidEnvironmentKey(String)
+}
+
+// MARK: - Plugin Execution Plan
+
+struct PluginExecutionPlan: Equatable, Sendable {
+    let executableURL: URL
+    let arguments: [String]
+    let environment: [String: String]
+    let currentDirectoryURL: URL
+}
+
 // MARK: - Plugin Sandbox
 
 /// Executes plugin scripts in a controlled environment.
@@ -58,20 +74,47 @@ final class PluginSandbox: @unchecked Sendable {
         environment: [String: String],
         pluginID: String
     ) {
+        let pluginDirectory = URL(fileURLWithPath: scriptPath)
+            .deletingLastPathComponent()
+            .path
+        execute(
+            scriptPath: scriptPath,
+            environment: environment,
+            pluginID: pluginID,
+            pluginDirectory: pluginDirectory,
+            capabilities: []
+        )
+    }
+
+    /// Executes a plugin script with an explicit plugin root and capability set.
+    func execute(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>
+    ) {
         executionQueue.async { [timeoutSeconds] in
+            let plan: PluginExecutionPlan
+            do {
+                plan = try self.makeExecutionPlan(
+                    scriptPath: scriptPath,
+                    environment: environment,
+                    pluginID: pluginID,
+                    pluginDirectory: pluginDirectory,
+                    capabilities: capabilities
+                )
+            } catch {
+                NSLog("[PluginSandbox] Rejected script %@: %@", scriptPath, "\(error)")
+                return
+            }
+
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = [scriptPath]
+            process.executableURL = plan.executableURL
+            process.arguments = plan.arguments
+            process.environment = plan.environment
+            process.currentDirectoryURL = plan.currentDirectoryURL
 
-            // Build a clean environment with only explicit variables.
-            var env = environment
-            env["COCXY_PLUGIN_ID"] = pluginID
-            env["COCXY_SCRIPT_PATH"] = scriptPath
-            env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
-            env["HOME"] = NSHomeDirectory()
-            process.environment = env
-
-            // Capture output for debugging.
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
             process.standardOutput = stdoutPipe
@@ -106,5 +149,57 @@ final class PluginSandbox: @unchecked Sendable {
                       scriptPath, process.terminationStatus, truncated)
             }
         }
+    }
+
+    /// Builds the sanitized process launch plan before any script is executed.
+    func makeExecutionPlan(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>
+    ) throws -> PluginExecutionPlan {
+        let pluginURL = URL(fileURLWithPath: pluginDirectory, isDirectory: true)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let scriptURL = URL(fileURLWithPath: scriptPath)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+
+        let pluginPath = pluginURL.path.hasSuffix("/") ? pluginURL.path : pluginURL.path + "/"
+        guard scriptURL.path.hasPrefix(pluginPath) else {
+            throw PluginSandboxError.scriptOutsidePluginDirectory(scriptPath)
+        }
+
+        var cleanEnvironment: [String: String] = [:]
+        for (key, value) in environment {
+            guard Self.isAllowedEnvironmentKey(key) else {
+                throw PluginSandboxError.invalidEnvironmentKey(key)
+            }
+            cleanEnvironment[key] = String(value.prefix(8_192))
+        }
+
+        cleanEnvironment["COCXY_PLUGIN_ID"] = pluginID
+        cleanEnvironment["COCXY_SCRIPT_PATH"] = scriptURL.path
+        cleanEnvironment["COCXY_PLUGIN_CAPABILITIES"] = capabilities
+            .map(\.rawValue)
+            .sorted()
+            .joined(separator: ",")
+        cleanEnvironment["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+        cleanEnvironment["HOME"] = NSHomeDirectory()
+
+        return PluginExecutionPlan(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: [scriptURL.path],
+            environment: cleanEnvironment,
+            currentDirectoryURL: pluginURL
+        )
+    }
+
+    private static func isAllowedEnvironmentKey(_ key: String) -> Bool {
+        key.range(
+            of: #"^[A-Z_][A-Z0-9_]{0,63}$"#,
+            options: .regularExpression
+        ) != nil
     }
 }

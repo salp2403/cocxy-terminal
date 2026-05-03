@@ -118,6 +118,24 @@ struct PluginManagerTests {
         #expect(manager.plugins.isEmpty)
     }
 
+    @Test func defaultDirectoryUsesLegacyOnlyWhenCurrentDirectoryDoesNotExist() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-plugin-manager-defaults", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let legacy = root.appendingPathComponent(".config/cocxy/plugins", isDirectory: true)
+        let current = root.appendingPathComponent(".cocxy/plugins", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+
+        #expect(PluginManager.defaultPluginsDirectory(homeDirectory: root) == legacy.path)
+
+        try FileManager.default.createDirectory(at: current, withIntermediateDirectories: true)
+
+        #expect(PluginManager.defaultPluginsDirectory(homeDirectory: root) == current.path)
+    }
+
     // MARK: - Enable / Disable
 
     @Test @MainActor func enablePlugin() throws {

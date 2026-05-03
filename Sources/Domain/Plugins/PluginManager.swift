@@ -79,9 +79,11 @@ final class DiskPluginFileSystem: PluginFileSystem {
 
 /// Manages the lifecycle of Cocxy plugins.
 ///
-/// Plugins are stored as directories in `~/.config/cocxy/plugins/`.
-/// Each directory must contain a `manifest.toml` file. Enabled/disabled
-/// state is tracked in `~/.config/cocxy/plugins.json`.
+/// Plugins are stored as directories in `~/.cocxy/plugins/` by default.
+/// Existing `~/.config/cocxy/plugins/` installs are still discovered when the
+/// new directory does not exist yet.
+/// Each directory must contain `cocxy-plugin.toml` or the legacy
+/// `manifest.toml` file. Enabled/disabled state is tracked locally.
 ///
 /// ## Plugin Lifecycle
 ///
@@ -107,16 +109,34 @@ final class PluginManager: ObservableObject {
 
     init(
         fileSystem: any PluginFileSystem = DiskPluginFileSystem(),
-        pluginsDirectory: String = {
-            let home = FileManager.default.homeDirectoryForCurrentUser.path
-            return "\(home)/.config/cocxy/plugins"
-        }(),
+        pluginsDirectory: String = PluginManager.defaultPluginsDirectory(),
         sandbox: PluginSandbox = PluginSandbox()
     ) {
         self.fileSystem = fileSystem
         self.pluginsDirectory = pluginsDirectory
         self.stateFilePath = "\(pluginsDirectory)/../plugins.json"
         self.sandbox = sandbox
+    }
+
+    nonisolated static func defaultPluginsDirectory(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default
+    ) -> String {
+        let current = homeDirectory.appendingPathComponent(".cocxy/plugins").path
+        let legacy = homeDirectory.appendingPathComponent(".config/cocxy/plugins").path
+
+        if directoryExists(at: current, fileManager: fileManager) {
+            return current
+        }
+        if directoryExists(at: legacy, fileManager: fileManager) {
+            return legacy
+        }
+        return current
+    }
+
+    private nonisolated static func directoryExists(at path: String, fileManager: FileManager) -> Bool {
+        var isDirectory: ObjCBool = false
+        return fileManager.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     // MARK: - Discovery
@@ -142,13 +162,23 @@ final class PluginManager: ObservableObject {
 
         plugins = subdirectories.compactMap { dirName -> PluginState? in
             let dirPath = "\(pluginsDirectory)/\(dirName)"
-            let manifestPath = "\(dirPath)/manifest.toml"
+            let manifestCandidates = [
+                PluginManifest.marketplaceManifestFileName,
+                PluginManifest.legacyManifestFileName,
+            ]
+            guard let manifestFileName = manifestCandidates.first(where: {
+                fileSystem.fileExists(at: "\(dirPath)/\($0)")
+            }) else {
+                return nil
+            }
+            let manifestPath = "\(dirPath)/\(manifestFileName)"
 
             guard fileSystem.fileExists(at: manifestPath),
                   let content = try? fileSystem.readFile(at: manifestPath),
                   let manifest = try? PluginManifestParser.parse(
                       content: content,
-                      directoryPath: dirPath
+                      directoryPath: dirPath,
+                      manifestFileName: manifestFileName
                   )
             else { return nil }
 
@@ -210,7 +240,9 @@ final class PluginManager: ObservableObject {
             sandbox.execute(
                 scriptPath: scriptPath,
                 environment: environment,
-                pluginID: plugin.id
+                pluginID: plugin.id,
+                pluginDirectory: plugin.manifest.directoryPath,
+                capabilities: plugin.manifest.capabilities
             )
 
             // Update last triggered timestamp.

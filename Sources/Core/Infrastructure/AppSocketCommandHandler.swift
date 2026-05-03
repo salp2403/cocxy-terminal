@@ -211,6 +211,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Provides the plugin manager for plugin lifecycle commands.
     private let pluginManagerProvider: (() -> PluginManager?)?
 
+    /// Provides the decentralized plugin source store for marketplace commands.
+    private let pluginSourceStoreProvider: () -> PluginSourceStore
+
+    /// Provides the installer for plugin install/uninstall commands.
+    private let pluginInstallerProvider: () -> PluginInstaller
+
     /// Provides the local skill registry for `cocxy skill list`.
     private let skillRegistryProvider: (@Sendable () -> SkillRegistry)?
 
@@ -460,6 +466,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         remoteConnectionManagerProvider: (() -> RemoteConnectionManager?)? = nil,
         remoteProfileStoreProvider: (() -> (any RemoteProfileStoring)?)? = nil,
         pluginManagerProvider: (() -> PluginManager?)? = nil,
+        pluginSourceStoreProvider: (() -> PluginSourceStore)? = nil,
+        pluginInstallerProvider: (() -> PluginInstaller)? = nil,
         skillRegistryProvider: (@Sendable () -> SkillRegistry)? = nil,
         notifyDispatcher: (@Sendable (String, String) -> Void)? = nil,
         tabDuplicateProvider: (@Sendable () -> (id: String, title: String)?)? = nil,
@@ -529,6 +537,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.remoteConnectionManagerProvider = remoteConnectionManagerProvider
         self.remoteProfileStoreProvider = remoteProfileStoreProvider
         self.pluginManagerProvider = pluginManagerProvider
+        self.pluginSourceStoreProvider = pluginSourceStoreProvider ?? { PluginSourceStore() }
+        self.pluginInstallerProvider = pluginInstallerProvider ?? { PluginInstaller() }
         self.skillRegistryProvider = skillRegistryProvider
         self.notifyDispatcher = notifyDispatcher ?? { _, _ in }
         self.tabDuplicateProvider = tabDuplicateProvider
@@ -903,6 +913,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handlePluginEnable(request)
         case .pluginDisable:
             return handlePluginDisable(request)
+        case .pluginSourceList:
+            return handlePluginSourceList(request)
+        case .pluginSourceAdd:
+            return handlePluginSourceAdd(request)
+        case .pluginInstall:
+            return handlePluginInstall(request)
+        case .pluginUninstall:
+            return handlePluginUninstall(request)
         case .skillList:
             return handleSkillList(request)
 
@@ -2075,6 +2093,104 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .ok(id: request.id, data: ["plugin": pluginID, "status": "disabled"])
         }
         return .failure(id: request.id, error: resultMessage)
+    }
+
+    /// Lists decentralized plugin source URLs configured on this Mac.
+    private func handlePluginSourceList(_ request: SocketRequest) -> SocketResponse {
+        do {
+            let sources = try pluginSourceStoreProvider().load()
+            var data: [String: String] = ["count": "\(sources.count)"]
+            for (index, source) in sources.enumerated() {
+                data["source_\(index)_id"] = source.id
+                data["source_\(index)_url"] = source.url.absoluteString
+                if let displayName = source.displayName {
+                    data["source_\(index)_name"] = displayName
+                }
+            }
+            return .ok(id: request.id, data: data)
+        } catch {
+            return .failure(id: request.id, error: "Failed to load plugin sources: \(error)")
+        }
+    }
+
+    /// Adds a decentralized plugin source URL.
+    private func handlePluginSourceAdd(_ request: SocketRequest) -> SocketResponse {
+        guard let rawURL = request.params?["url"],
+              let url = makePluginSourceURL(rawURL)
+        else {
+            return .failure(id: request.id, error: "Usage: plugin-source-add {\"url\": \"<url>\"}")
+        }
+
+        do {
+            try pluginSourceStoreProvider().add(
+                PluginSource(
+                    url: url,
+                    displayName: request.params?["name"]
+                )
+            )
+            return .ok(id: request.id, data: ["url": url.absoluteString, "status": "added"])
+        } catch {
+            return .failure(id: request.id, error: "Failed to add plugin source: \(error)")
+        }
+    }
+
+    /// Installs a plugin from a decentralized source URL or local repository path.
+    private func handlePluginInstall(_ request: SocketRequest) -> SocketResponse {
+        guard let rawURL = request.params?["url"],
+              let url = makePluginSourceURL(rawURL)
+        else {
+            return .failure(id: request.id, error: "Usage: plugin-install {\"url\": \"<url-or-path>\"}")
+        }
+
+        let replace = request.params?["replace"] == "true"
+        do {
+            let receipt = try pluginInstallerProvider().install(from: url, replaceExisting: replace)
+            refreshPluginManager()
+            return .ok(
+                id: request.id,
+                data: [
+                    "plugin": receipt.pluginID,
+                    "path": receipt.installedURL.path,
+                    "signature": String(describing: receipt.signatureStatus),
+                    "status": "installed",
+                ]
+            )
+        } catch {
+            return .failure(id: request.id, error: "Failed to install plugin: \(error)")
+        }
+    }
+
+    /// Uninstalls a local plugin by ID.
+    private func handlePluginUninstall(_ request: SocketRequest) -> SocketResponse {
+        guard let pluginID = request.params?["id"] else {
+            return .failure(id: request.id, error: "Usage: plugin-uninstall {\"id\": \"<plugin-id>\"}")
+        }
+
+        do {
+            try pluginInstallerProvider().uninstall(id: pluginID)
+            refreshPluginManager()
+            return .ok(id: request.id, data: ["plugin": pluginID, "status": "uninstalled"])
+        } catch {
+            return .failure(id: request.id, error: "Failed to uninstall plugin: \(error)")
+        }
+    }
+
+    private func makePluginSourceURL(_ rawValue: String) -> URL? {
+        PluginSourceURLResolver.resolve(rawValue)
+    }
+
+    private func refreshPluginManager() {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                self.pluginManagerProvider?()?.scanPlugins()
+            }
+        } else {
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    self.pluginManagerProvider?()?.scanPlugins()
+                }
+            }
+        }
     }
 
     // MARK: - Skill Handlers

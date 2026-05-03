@@ -218,6 +218,14 @@ public enum OutputFormatter {
             return "Plugin enabled."
         case .pluginDisable:
             return "Plugin disabled."
+        case .pluginSourceList:
+            return formatDataOrJSON(response: response)
+        case .pluginSourceAdd:
+            return "Plugin source added."
+        case .pluginInstall:
+            return formatDataOrJSON(response: response)
+        case .pluginUninstall:
+            return "Plugin uninstalled."
 
         // MARK: Browser (exposed v3)
 

@@ -269,6 +269,18 @@ public enum ParsedCommand: Equatable {
     /// `cocxy plugin disable <id>`
     case pluginDisable(id: String)
 
+    /// `cocxy plugin source list`
+    case pluginSourceList
+
+    /// `cocxy plugin source add <url> [--name <display-name>]`
+    case pluginSourceAdd(url: String, displayName: String?)
+
+    /// `cocxy plugin install <url-or-path> [--replace]`
+    case pluginInstall(url: String, replaceExisting: Bool)
+
+    /// `cocxy plugin uninstall <id>`
+    case pluginUninstall(id: String)
+
     // MARK: - Browser (exposed v3)
 
     /// `cocxy browser navigate <url>`
@@ -1733,11 +1745,78 @@ public enum CLIArgumentParser {
                 throw CLIError.missingArgument(command: "plugin disable", argument: "id")
             }
             return .pluginDisable(id: id)
+        case "source":
+            return try parsePluginSource(arguments: Array(arguments.dropFirst()))
+        case "install":
+            let rest = Array(arguments.dropFirst())
+            guard let url = rest.first, !url.isEmpty else {
+                throw CLIError.missingArgument(command: "plugin install", argument: "url")
+            }
+            let flags = rest.dropFirst()
+            let replace = flags.contains("--replace")
+            let unknown = flags.first { $0 != "--replace" }
+            if let unknown {
+                throw CLIError.invalidArgument(
+                    command: "plugin install",
+                    argument: unknown,
+                    reason: "Unknown option. Use --replace to reinstall an existing plugin."
+                )
+            }
+            return .pluginInstall(url: url, replaceExisting: replace)
+        case "uninstall":
+            let rest = Array(arguments.dropFirst())
+            guard let id = rest.first, !id.isEmpty else {
+                throw CLIError.missingArgument(command: "plugin uninstall", argument: "id")
+            }
+            return .pluginUninstall(id: id)
         default:
             throw CLIError.invalidArgument(
                 command: "plugin",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use list, enable, or disable."
+                reason: "Unknown subcommand. Use list, enable, disable, source, install, or uninstall."
+            )
+        }
+    }
+
+    /// Parses `cocxy plugin source <subcommand>`.
+    private static func parsePluginSource(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "plugin source", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "list":
+            return .pluginSourceList
+        case "add":
+            let rest = Array(arguments.dropFirst())
+            guard let url = rest.first, !url.isEmpty else {
+                throw CLIError.missingArgument(command: "plugin source add", argument: "url")
+            }
+            var displayName: String?
+            var index = 1
+            while index < rest.count {
+                let argument = rest[index]
+                switch argument {
+                case "--name":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(command: "plugin source add", argument: "name")
+                    }
+                    displayName = rest[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "plugin source add",
+                        argument: argument,
+                        reason: "Unknown option. Use --name <display-name>."
+                    )
+                }
+            }
+            return .pluginSourceAdd(url: url, displayName: displayName)
+        default:
+            throw CLIError.invalidArgument(
+                command: "plugin source",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list or add."
             )
         }
     }

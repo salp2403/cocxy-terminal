@@ -5,24 +5,31 @@ import Foundation
 
 // MARK: - Plugin Manifest
 
-/// Describes a Cocxy plugin from its `manifest.toml` file.
+/// Describes a Cocxy plugin from its `cocxy-plugin.toml` or legacy
+/// `manifest.toml` file.
 ///
-/// Plugins are stored as directories in `~/.config/cocxy/plugins/`.
-/// Each plugin directory contains a `manifest.toml` with metadata
+/// Plugins are stored as directories in `~/.cocxy/plugins/`.
+/// Each plugin directory contains a manifest with metadata
 /// and optionally scripts that respond to terminal events.
 ///
 /// ## Directory Layout
 ///
 /// ```
-/// ~/.config/cocxy/plugins/
+/// ~/.cocxy/plugins/
 /// └── my-plugin/
-///     ├── manifest.toml
+///     ├── cocxy-plugin.toml
 ///     ├── on-session-start.sh    (optional)
 ///     ├── on-agent-detected.sh   (optional)
 ///     ├── on-command-complete.sh  (optional)
 ///     └── README.md              (optional)
 /// ```
 struct PluginManifest: Identifiable, Codable, Equatable, Sendable {
+
+    /// Legacy plugin manifest filename kept for backward compatibility.
+    static let legacyManifestFileName = "manifest.toml"
+
+    /// Marketplace plugin manifest filename used by decentralized plugin repos.
+    static let marketplaceManifestFileName = "cocxy-plugin.toml"
 
     /// Unique identifier derived from the directory name.
     let id: String
@@ -47,6 +54,64 @@ struct PluginManifest: Identifiable, Codable, Equatable, Sendable {
 
     /// Absolute path to the plugin directory on disk.
     let directoryPath: String
+
+    /// Manifest filename used on disk.
+    var manifestFileName: String = Self.legacyManifestFileName
+
+    /// Source repository URL declared by marketplace plugins.
+    var repositoryURL: String?
+
+    /// Optional homepage URL declared by the plugin.
+    var homepageURL: String?
+
+    /// Optional license identifier declared by the plugin.
+    var license: String?
+
+    /// Capabilities requested by this plugin.
+    var capabilities: Set<PluginCapability> = []
+
+    /// Optional signature metadata. Unsigned plugins are allowed, but surfaced.
+    var signature: PluginSignature?
+
+    /// Returns a copy with its directory path updated after staging/install.
+    func relocated(to directoryPath: String) -> PluginManifest {
+        PluginManifest(
+            id: id,
+            name: name,
+            description: description,
+            version: version,
+            author: author,
+            minCocxyVersion: minCocxyVersion,
+            events: events,
+            directoryPath: directoryPath,
+            manifestFileName: manifestFileName,
+            repositoryURL: repositoryURL,
+            homepageURL: homepageURL,
+            license: license,
+            capabilities: capabilities,
+            signature: signature
+        )
+    }
+}
+
+// MARK: - Plugin Capability
+
+/// Explicit capabilities a plugin may request in `cocxy-plugin.toml`.
+enum PluginCapability: String, Codable, Sendable, CaseIterable, Hashable {
+    case filesystemRead = "filesystem-read"
+    case filesystemWrite = "filesystem-write"
+    case environmentRead = "environment-read"
+    case processSpawn = "process-spawn"
+    case networkClient = "network-client"
+}
+
+// MARK: - Plugin Signature
+
+/// Optional signature metadata for decentralized plugins.
+struct PluginSignature: Codable, Equatable, Sendable {
+    let algorithm: String
+    let keyID: String?
+    let value: String
 }
 
 // MARK: - Plugin Event
@@ -107,7 +172,12 @@ enum PluginManifestParser {
         } catch {
             throw PluginManifestError.fileNotFound(filePath)
         }
-        return try parse(content: content, directoryPath: directoryPath)
+        let manifestFileName = URL(fileURLWithPath: filePath).lastPathComponent
+        return try parse(
+            content: content,
+            directoryPath: directoryPath,
+            manifestFileName: manifestFileName
+        )
     }
 
     /// Parses manifest TOML content from a string.
@@ -119,7 +189,8 @@ enum PluginManifestParser {
     /// - Throws: `PluginManifestError` if required fields are missing.
     static func parse(
         content: String,
-        directoryPath: String
+        directoryPath: String,
+        manifestFileName: String = PluginManifest.legacyManifestFileName
     ) throws -> PluginManifest {
         let values = parseToml(content)
 
@@ -127,16 +198,22 @@ enum PluginManifestParser {
             throw PluginManifestError.missingRequiredField("name")
         }
 
-        let directoryName = URL(fileURLWithPath: directoryPath).lastPathComponent
+        let directoryName = values["id"] ?? URL(fileURLWithPath: directoryPath).lastPathComponent
 
-        let eventsRaw = values["events"]?
-            .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'")) }
-            ?? []
+        let eventsRaw = parseStringArray(values["events"])
 
         let events = eventsRaw.compactMap { PluginEvent(rawValue: $0) }
+        let capabilities = Set(parseStringArray(values["capabilities"]).compactMap {
+            PluginCapability(rawValue: $0)
+        })
+        let signatureValue = values["signature"]
+        let signature = signatureValue.map {
+            PluginSignature(
+                algorithm: values["signature-algorithm"] ?? "unknown",
+                keyID: values["signature-key-id"],
+                value: $0
+            )
+        }
 
         return PluginManifest(
             id: directoryName,
@@ -146,7 +223,13 @@ enum PluginManifestParser {
             author: values["author"] ?? "Unknown",
             minCocxyVersion: values["min-cocxy-version"],
             events: events,
-            directoryPath: directoryPath
+            directoryPath: directoryPath,
+            manifestFileName: manifestFileName,
+            repositoryURL: values["repository"],
+            homepageURL: values["homepage"],
+            license: values["license"],
+            capabilities: capabilities,
+            signature: signature
         )
     }
 
@@ -182,5 +265,17 @@ enum PluginManifestParser {
         }
 
         return result
+    }
+
+    private static func parseStringArray(_ rawValue: String?) -> [String] {
+        guard let rawValue else { return [] }
+        return rawValue
+            .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+            .split(separator: ",")
+            .map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            }
+            .filter { !$0.isEmpty }
     }
 }

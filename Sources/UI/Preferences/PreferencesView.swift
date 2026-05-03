@@ -45,6 +45,9 @@ struct PreferencesView: View {
     /// preference section.
     private let onOpenGitHubCLIInstallGuide: (() -> Void)?
 
+    /// Shared plugin manager from the app delegate, used by the Plugins section.
+    private let pluginManager: PluginManager?
+
     /// Currently selected section in the sidebar.
     @State private var selectedSection: PreferencesSection = .general
 
@@ -57,22 +60,26 @@ struct PreferencesView: View {
     init(
         config: CocxyConfig,
         onGitHubSignIn: (() -> Void)? = nil,
-        onOpenGitHubCLIInstallGuide: (() -> Void)? = nil
+        onOpenGitHubCLIInstallGuide: (() -> Void)? = nil,
+        pluginManager: PluginManager? = nil
     ) {
         self.viewModel = PreferencesViewModel(config: config)
         self.onGitHubSignIn = onGitHubSignIn
         self.onOpenGitHubCLIInstallGuide = onOpenGitHubCLIInstallGuide
+        self.pluginManager = pluginManager
     }
 
     /// Primary initializer with an editable view model.
     init(
         viewModel: PreferencesViewModel,
         onGitHubSignIn: (() -> Void)? = nil,
-        onOpenGitHubCLIInstallGuide: (() -> Void)? = nil
+        onOpenGitHubCLIInstallGuide: (() -> Void)? = nil,
+        pluginManager: PluginManager? = nil
     ) {
         self.viewModel = viewModel
         self.onGitHubSignIn = onGitHubSignIn
         self.onOpenGitHubCLIInstallGuide = onOpenGitHubCLIInstallGuide
+        self.pluginManager = pluginManager
     }
 
     // MARK: - Body
@@ -130,6 +137,8 @@ struct PreferencesView: View {
             KeybindingsEditorView(viewModel: viewModel.keybindingsEditor)
         case .worktrees:
             WorktreesPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .plugins:
+            PluginMarketplaceView(pluginManager: pluginManager)
         case .github:
             GitHubPreferencesSection(
                 viewModel: viewModel,
@@ -161,6 +170,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case editor
     case keybindings
     case worktrees
+    case plugins
     case github
     case about
 
@@ -183,6 +193,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .editor: return "Editor"
         case .keybindings: return "Keybindings"
         case .worktrees: return "Worktrees"
+        case .plugins: return "Plugins"
         case .github: return "GitHub"
         case .about: return "About"
         }
@@ -205,6 +216,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .editor: return "text.cursor"
         case .keybindings: return "keyboard"
         case .worktrees: return "arrow.triangle.branch"
+        case .plugins: return "shippingbox"
         case .github: return "arrow.triangle.pull"
         case .about: return "info.circle"
         }

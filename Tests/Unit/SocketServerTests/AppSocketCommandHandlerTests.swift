@@ -17,6 +17,15 @@ import XCTest
 /// providers can safely capture TabManager state.
 final class AppSocketCommandHandlerTests: XCTestCase {
 
+    private func temporaryDirectory(_ name: String = UUID().uuidString) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-app-socket-handler-tests", isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+        try? FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
     // MARK: - Existing Handler Tests (moved from PreferencesViewTests)
 
     func test_unknownCommand_returnsFailure() {
@@ -154,6 +163,97 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(snapshot.kind, "focus")
         XCTAssertEqual(snapshot.params?["id"], "abc123")
         XCTAssertEqual(response.data?["status"], "focused")
+    }
+
+    @MainActor
+    func test_pluginMarketplaceCommands_useInjectedLocalStores() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("sample-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try """
+        name = "Sample Plugin"
+        version = "1.0.0"
+        author = "Dev"
+        events = ["session-start"]
+        capabilities = ["environment-read"]
+        """.write(
+            to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let manager = PluginManager(pluginsDirectory: pluginsDirectory.path)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            pluginManagerProvider: { manager },
+            pluginSourceStoreProvider: {
+                PluginSourceStore(fileURL: root.appendingPathComponent("sources.json"))
+            },
+            pluginInstallerProvider: {
+                PluginInstaller(pluginsDirectory: pluginsDirectory)
+            }
+        )
+
+        let addResponse = handler.handleCommand(SocketRequest(
+            id: "plugin-source-add-1",
+            command: "plugin-source-add",
+            params: ["url": repo.path, "name": "Local sample"]
+        ))
+        XCTAssertTrue(addResponse.success)
+
+        let sourceListResponse = handler.handleCommand(SocketRequest(
+            id: "plugin-source-list-1",
+            command: "plugin-source-list",
+            params: nil
+        ))
+        XCTAssertTrue(sourceListResponse.success)
+        XCTAssertEqual(sourceListResponse.data?["count"], "1")
+        XCTAssertEqual(sourceListResponse.data?["source_0_name"], "Local sample")
+
+        let installResponse = handler.handleCommand(SocketRequest(
+            id: "plugin-install-1",
+            command: "plugin-install",
+            params: ["url": repo.path]
+        ))
+        XCTAssertTrue(installResponse.success)
+        XCTAssertEqual(installResponse.data?["plugin"], "sample-plugin")
+
+        let listResponse = handler.handleCommand(SocketRequest(
+            id: "plugin-list-1",
+            command: "plugin-list",
+            params: nil
+        ))
+        XCTAssertTrue(listResponse.success)
+        XCTAssertEqual(listResponse.data?["count"], "1")
+        XCTAssertEqual(listResponse.data?["plugin_0_id"], "sample-plugin")
+
+        let enableResponse = handler.handleCommand(SocketRequest(
+            id: "plugin-enable-1",
+            command: "plugin-enable",
+            params: ["id": "sample-plugin"]
+        ))
+        XCTAssertTrue(enableResponse.success)
+
+        let disableResponse = handler.handleCommand(SocketRequest(
+            id: "plugin-disable-1",
+            command: "plugin-disable",
+            params: ["id": "sample-plugin"]
+        ))
+        XCTAssertTrue(disableResponse.success)
+
+        let uninstallResponse = handler.handleCommand(SocketRequest(
+            id: "plugin-uninstall-1",
+            command: "plugin-uninstall",
+            params: ["id": "sample-plugin"]
+        ))
+        XCTAssertTrue(uninstallResponse.success)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: pluginsDirectory.appendingPathComponent("sample-plugin").path
+        ))
     }
 
     func test_reviewApprove_routesToGitHubProvider() {

@@ -94,6 +94,10 @@ public enum CLICommand: String, CaseIterable {
     case pluginList = "plugin-list"
     case pluginEnable = "plugin-enable"
     case pluginDisable = "plugin-disable"
+    case pluginSourceList = "plugin-source-list"
+    case pluginSourceAdd = "plugin-source-add"
+    case pluginInstall = "plugin-install"
+    case pluginUninstall = "plugin-uninstall"
 
     // MARK: - Browser (v2)
 
@@ -278,6 +282,10 @@ public enum CLICommand: String, CaseIterable {
         case .pluginList: return "List all installed plugins"
         case .pluginEnable: return "Enable a plugin by ID"
         case .pluginDisable: return "Disable a plugin by ID"
+        case .pluginSourceList: return "List decentralized plugin sources"
+        case .pluginSourceAdd: return "Add a decentralized plugin source URL"
+        case .pluginInstall: return "Install a plugin from a source URL or local repo"
+        case .pluginUninstall: return "Uninstall a local plugin by ID"
 
         // Remote Workspace
         case .remoteList: return "List all saved remote connection profiles"
@@ -446,6 +454,10 @@ public enum CLICommand: String, CaseIterable {
         case .pluginList: return "cocxy plugin-list"
         case .pluginEnable: return "cocxy plugin-enable <id>"
         case .pluginDisable: return "cocxy plugin-disable <id>"
+        case .pluginSourceList: return "cocxy plugin-source-list"
+        case .pluginSourceAdd: return "cocxy plugin-source-add <url>"
+        case .pluginInstall: return "cocxy plugin-install <url-or-path>"
+        case .pluginUninstall: return "cocxy plugin-uninstall <id>"
 
         // Remote Workspace
         case .remoteList: return "cocxy remote-list [--group <group>]"

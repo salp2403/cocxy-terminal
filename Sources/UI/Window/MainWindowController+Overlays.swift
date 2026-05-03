@@ -2013,7 +2013,8 @@ extension MainWindowController {
             },
             onOpenGitHubCLIInstallGuide: { [weak self] in
                 self?.openInternalBrowser(to: "https://cli.github.com/")
-            }
+            },
+            pluginManager: (NSApp.delegate as? AppDelegate)?.pluginManager
         )
         let hostingController = NSHostingController(rootView: prefsView)
         let prefsWindow = NSWindow(contentViewController: hostingController)

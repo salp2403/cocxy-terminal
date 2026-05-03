@@ -651,6 +651,28 @@ public struct CommandRunner {
                 id: requestID, command: "plugin-disable", params: ["id": id]
             )
 
+        case .pluginSourceList:
+            return CLISocketRequest(id: requestID, command: "plugin-source-list", params: nil)
+
+        case .pluginSourceAdd(let url, let displayName):
+            var params = ["url": url]
+            if let displayName {
+                params["name"] = displayName
+            }
+            return CLISocketRequest(id: requestID, command: "plugin-source-add", params: params)
+
+        case .pluginInstall(let url, let replaceExisting):
+            return CLISocketRequest(
+                id: requestID,
+                command: "plugin-install",
+                params: ["url": url, "replace": replaceExisting ? "true" : "false"]
+            )
+
+        case .pluginUninstall(let id):
+            return CLISocketRequest(
+                id: requestID, command: "plugin-uninstall", params: ["id": id]
+            )
+
         // MARK: Browser (exposed v3)
 
         case .browserNavigate(let url):

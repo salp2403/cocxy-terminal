@@ -10,7 +10,7 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasSixteenCases() {
+    func test_allSections_hasSeventeenCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
@@ -18,18 +18,25 @@ final class PreferencesSectionTests: XCTestCase {
         // v0.2.0 surfaces the opt-in LSP gates and editor Vim mode,
         // bringing it to 12; Agent Mode settings bring it to 13; Voice
         // settings bring it to 14; MCP server config editing brings it to 15;
-        // Activity privacy controls bring it to 16.
+        // Activity privacy controls bring it to 16; local plugin management
+        // brings it to 17.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 16)
+        XCTAssertEqual(PreferencesSection.allCases.count, 17)
     }
 
     func test_worktreesSection_hasTitleAndIcon() {
         let section = PreferencesSection.worktrees
         XCTAssertEqual(section.title, "Worktrees")
         XCTAssertEqual(section.iconName, "arrow.triangle.branch")
+    }
+
+    func test_pluginsSection_hasTitleAndIcon() {
+        let section = PreferencesSection.plugins
+        XCTAssertEqual(section.title, "Plugins")
+        XCTAssertEqual(section.iconName, "shippingbox")
     }
 
     func test_worktreesSection_appearsBeforeAbout() {
@@ -41,6 +48,18 @@ final class PreferencesSectionTests: XCTestCase {
         }
         XCTAssertLessThan(worktreesIndex, aboutIndex,
                          "Worktrees section must appear before About")
+    }
+
+    func test_pluginsSection_appearsBetweenWorktreesAndAbout() {
+        let allCases = PreferencesSection.allCases
+        guard let worktreesIndex = allCases.firstIndex(of: .worktrees),
+              let pluginsIndex = allCases.firstIndex(of: .plugins),
+              let aboutIndex = allCases.firstIndex(of: .about) else {
+            XCTFail("worktrees, plugins, and about sections must exist")
+            return
+        }
+        XCTAssertLessThan(worktreesIndex, pluginsIndex)
+        XCTAssertLessThan(pluginsIndex, aboutIndex)
     }
 
     func test_sectionIDs_areUnique() {
