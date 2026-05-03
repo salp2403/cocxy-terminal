@@ -16,6 +16,8 @@ final class PanelTypeTests: XCTestCase {
         XCTAssertEqual(PanelType.browser.rawValue, "browser")
         XCTAssertEqual(PanelType.markdown.rawValue, "markdown")
         XCTAssertEqual(PanelType.editor.rawValue, "editor")
+        XCTAssertEqual(PanelType.notebook.rawValue, "notebook")
+        XCTAssertEqual(PanelType.workflow.rawValue, "workflow")
     }
 
     func testPanelTypeCodable() throws {
@@ -62,6 +64,20 @@ final class PanelTypeTests: XCTestCase {
         let path = URL(fileURLWithPath: "/tmp/App.swift")
         let info = PanelInfo.editor(path: path)
         XCTAssertEqual(info.type, .editor)
+        XCTAssertEqual(info.filePath, path)
+    }
+
+    func testPanelInfoNotebookWithPath() {
+        let path = URL(fileURLWithPath: "/tmp/demo.cocxynb")
+        let info = PanelInfo.notebook(path: path)
+        XCTAssertEqual(info.type, .notebook)
+        XCTAssertEqual(info.filePath, path)
+    }
+
+    func testPanelInfoWorkflowWithPath() {
+        let path = URL(fileURLWithPath: "/tmp/ci.toml")
+        let info = PanelInfo.workflow(path: path)
+        XCTAssertEqual(info.type, .workflow)
         XCTAssertEqual(info.filePath, path)
     }
 }
@@ -127,6 +143,34 @@ final class SplitManagerPanelTests: XCTestCase {
 
         XCTAssertNotNil(newID)
         XCTAssertEqual(manager.panelType(for: newID!), .editor)
+        let info = manager.panelInfo(for: newID!)
+        XCTAssertEqual(info.filePath, path)
+    }
+
+    func testSplitFocusedWithNotebookTracksType() {
+        let manager = SplitManager()
+        let path = URL(fileURLWithPath: "/tmp/demo.cocxynb")
+        let newID = manager.splitFocusedWithPanel(
+            direction: .vertical,
+            panel: .notebook(path: path)
+        )
+
+        XCTAssertNotNil(newID)
+        XCTAssertEqual(manager.panelType(for: newID!), .notebook)
+        let info = manager.panelInfo(for: newID!)
+        XCTAssertEqual(info.filePath, path)
+    }
+
+    func testSplitFocusedWithWorkflowTracksType() {
+        let manager = SplitManager()
+        let path = URL(fileURLWithPath: "/tmp/ci.toml")
+        let newID = manager.splitFocusedWithPanel(
+            direction: .vertical,
+            panel: .workflow(path: path)
+        )
+
+        XCTAssertNotNil(newID)
+        XCTAssertEqual(manager.panelType(for: newID!), .workflow)
         let info = manager.panelInfo(for: newID!)
         XCTAssertEqual(info.filePath, path)
     }

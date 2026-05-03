@@ -80,9 +80,7 @@ extension MainWindowController {
 
     /// Opens a general text editor panel appended at the end of the split tree.
     @objc func splitWithEditorAction(_ sender: Any?) {
-        let dir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
-            ?? tabManager.activeTab?.workingDirectory
-            ?? FileManager.default.homeDirectoryForCurrentUser
+        let dir = workspaceDirectoryForCurrentTab()
         let candidate = defaultEditorFile(in: dir)
         openEditorPanel(fileURL: candidate)
     }
@@ -91,6 +89,28 @@ extension MainWindowController {
         performVisualSplitWithPanel(
             isVertical: true,
             panel: .editor(path: fileURL),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
+    }
+
+    /// Opens a local executable notebook panel appended at the end of the split tree.
+    @objc func splitWithNotebookAction(_ sender: Any?) {
+        let dir = workspaceDirectoryForCurrentTab()
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .notebook(path: defaultNotebookFile(in: dir)),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
+    }
+
+    /// Opens a reusable local workflow panel appended at the end of the split tree.
+    @objc func splitWithWorkflowAction(_ sender: Any?) {
+        let dir = workspaceDirectoryForCurrentTab()
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .workflow(path: defaultWorkflowFile(in: dir)),
             appendToEnd: true,
             focusNewPanel: true
         )
@@ -181,6 +201,32 @@ extension MainWindowController {
             }
             wireEditorLSPIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: currentTabID)
             panelView = editorView
+        case .notebook:
+            let workspaceDir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+                ?? tabManager.activeTab?.workingDirectory
+                ?? panel.filePath?.deletingLastPathComponent()
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            let viewModel = NotebookPanelViewModel(
+                fileURL: panel.filePath,
+                workingDirectory: workspaceDir
+            )
+            let view = NotebookPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            panelView = NSHostingView(rootView: view)
+        case .workflow:
+            let workspaceDir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+                ?? tabManager.activeTab?.workingDirectory
+                ?? panel.filePath?.deletingLastPathComponent()
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            let viewModel = WorkflowPanelViewModel(
+                fileURL: panel.filePath,
+                workspaceRoot: workspaceDir
+            )
+            let view = WorkflowPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            panelView = NSHostingView(rootView: view)
         case .subagent:
             guard let dashboardVM = injectedDashboardViewModel,
                   let subagentId = panel.subagentId,
@@ -262,9 +308,41 @@ extension MainWindowController {
         window?.makeFirstResponder(panelView)
     }
 
+    private func workspaceDirectoryForCurrentTab() -> URL {
+        visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+            ?? tabManager.activeTab?.workingDirectory
+            ?? FileManager.default.homeDirectoryForCurrentUser
+    }
+
     private func defaultEditorFile(in directory: URL) -> URL? {
-        let preferredNames = ["README.md", "Package.swift", "main.swift"]
-        for name in preferredNames {
+        firstExistingRegularFile(in: directory, named: ["README.md", "Package.swift", "main.swift"])
+    }
+
+    private func defaultNotebookFile(in directory: URL) -> URL? {
+        firstExistingRegularFile(in: directory, named: ["notebook.cocxynb"])
+            ?? firstRegularFile(in: directory) { $0.pathExtension.lowercased() == "cocxynb" }
+    }
+
+    private func defaultWorkflowFile(in directory: URL) -> URL? {
+        if let preferred = firstExistingRegularFile(in: directory, named: ["workflow.toml", "ci.toml"]) {
+            return preferred
+        }
+
+        let localWorkflowDirectory = directory
+            .appendingPathComponent(".cocxy", isDirectory: true)
+            .appendingPathComponent("workflows", isDirectory: true)
+        if let workflow = firstRegularFile(in: localWorkflowDirectory, matching: { $0.pathExtension.lowercased() == "toml" }) {
+            return workflow
+        }
+
+        return firstRegularFile(in: directory) { $0.lastPathComponent.hasSuffix(".workflow.toml") }
+    }
+
+    private func firstExistingRegularFile(
+        in directory: URL,
+        named names: [String]
+    ) -> URL? {
+        for name in names {
             let candidate = directory.appendingPathComponent(name)
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
@@ -272,7 +350,29 @@ extension MainWindowController {
                 return candidate
             }
         }
+
         return nil
+    }
+
+    private func firstRegularFile(
+        in directory: URL,
+        matching predicate: (URL) -> Bool
+    ) -> URL? {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+        return entries
+            .filter { url in
+                guard let isDirectory = try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory,
+                      isDirectory != true else { return false }
+                return predicate(url)
+            }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            .first
     }
 
     // MARK: - Terminal Split

@@ -166,6 +166,40 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testOpenNotebookPanelHasAction() {
+        let notebook = viewMenu.items.first(where: { $0.title == "Open Notebook Panel" })
+        XCTAssertNotNil(
+            notebook?.action,
+            "Open Notebook Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenNotebookPanelActionPointsToCorrectSelector() {
+        let notebook = viewMenu.items.first(where: { $0.title == "Open Notebook Panel" })
+        XCTAssertEqual(
+            notebook?.action,
+            #selector(MainWindowController.splitWithNotebookAction(_:)),
+            "Open Notebook Panel must create the real notebook split panel"
+        )
+    }
+
+    func testOpenWorkflowPanelHasAction() {
+        let workflow = viewMenu.items.first(where: { $0.title == "Open Workflow Panel" })
+        XCTAssertNotNil(
+            workflow?.action,
+            "Open Workflow Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenWorkflowPanelActionPointsToCorrectSelector() {
+        let workflow = viewMenu.items.first(where: { $0.title == "Open Workflow Panel" })
+        XCTAssertEqual(
+            workflow?.action,
+            #selector(MainWindowController.splitWithWorkflowAction(_:)),
+            "Open Workflow Panel must create the real workflow split panel"
+        )
+    }
+
     // MARK: - New Window
 
     func testNewWindowHasAction() {

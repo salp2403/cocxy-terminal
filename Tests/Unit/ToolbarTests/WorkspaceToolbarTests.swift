@@ -41,6 +41,22 @@ final class WorkspaceToolbarTests: XCTestCase {
         XCTAssertEqual(tab.symbolName, "doc.plaintext")
     }
 
+    func testPanelTabInfoNotebookSymbol() {
+        let tab = PanelTabInfo(
+            leafID: UUID(), contentID: UUID(),
+            panelType: .notebook, title: "Notebook", isFocused: false
+        )
+        XCTAssertEqual(tab.symbolName, "book")
+    }
+
+    func testPanelTabInfoWorkflowSymbol() {
+        let tab = PanelTabInfo(
+            leafID: UUID(), contentID: UUID(),
+            panelType: .workflow, title: "Workflow", isFocused: false
+        )
+        XCTAssertEqual(tab.symbolName, "arrow.triangle.branch")
+    }
+
     // MARK: - Toolbar Visibility
 
     func testToolbarVisibleWithSinglePane() {
@@ -141,6 +157,20 @@ final class WorkspaceToolbarTests: XCTestCase {
         let editorTabs = controller.panelTabs.filter { $0.panelType == .editor }
         XCTAssertEqual(editorTabs.count, 1)
         XCTAssertEqual(editorTabs.first?.title, "Editor")
+    }
+
+    func testNotebookAndWorkflowPanelTabTitles() {
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window)
+        let manager = SplitManager()
+        manager.splitFocusedWithPanel(direction: .horizontal, panel: .notebook())
+        manager.splitFocusedWithPanel(direction: .horizontal, panel: .workflow())
+
+        controller.update(splitManager: manager)
+
+        let titlesByType = Dictionary(uniqueKeysWithValues: controller.panelTabs.map { ($0.panelType, $0.title) })
+        XCTAssertEqual(titlesByType[.notebook], "Notebook")
+        XCTAssertEqual(titlesByType[.workflow], "Workflow")
     }
 
     // MARK: - Callbacks

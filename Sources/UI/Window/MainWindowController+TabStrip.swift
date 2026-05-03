@@ -67,6 +67,8 @@ extension MainWindowController {
                     case .browser: icon = "globe"
                     case .markdown: icon = "doc.text"
                     case .editor: icon = "doc.plaintext"
+                    case .notebook: icon = "book"
+                    case .workflow: icon = "arrow.triangle.branch"
                     case .subagent: icon = "person.2"
                     }
                 } else {
@@ -85,6 +87,12 @@ extension MainWindowController {
                     case .editor:
                         title = "Editor"
                         icon = "doc.plaintext"
+                    case .notebook:
+                        title = "Notebook"
+                        icon = "book"
+                    case .workflow:
+                        title = "Workflow"
+                        icon = "arrow.triangle.branch"
                     case .subagent:
                         title = "Agent"
                         icon = "person.2"

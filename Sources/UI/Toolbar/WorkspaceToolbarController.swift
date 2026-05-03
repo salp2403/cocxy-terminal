@@ -30,6 +30,8 @@ struct PanelTabInfo: Equatable {
         case .browser: return "globe"
         case .markdown: return "doc.text"
         case .editor: return "doc.plaintext"
+        case .notebook: return "book"
+        case .workflow: return "arrow.triangle.branch"
         case .subagent: return "person.2"
         }
     }
@@ -112,6 +114,8 @@ final class WorkspaceToolbarController: NSObject {
             case .browser: title = "Browser"
             case .markdown: title = "Markdown"
             case .editor: title = "Editor"
+            case .notebook: title = "Notebook"
+            case .workflow: title = "Workflow"
             case .subagent: title = "Agent"
             }
             return PanelTabInfo(

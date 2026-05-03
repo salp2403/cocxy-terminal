@@ -46,6 +46,12 @@ final class HorizontalTabStripView: NSView {
     /// Callback when "Editor" is selected from the add menu.
     var onAddEditor: (() -> Void)?
 
+    /// Callback when "Notebook" is selected from the add menu.
+    var onAddNotebook: (() -> Void)?
+
+    /// Callback when "Workflow" is selected from the add menu.
+    var onAddWorkflow: (() -> Void)?
+
     /// Callback when the close button is clicked on a tab by index.
     var onCloseTab: ((Int) -> Void)?
 
@@ -69,6 +75,12 @@ final class HorizontalTabStripView: NSView {
 
     /// Callback when the "Open Text Editor" action icon is clicked.
     var onOpenEditor: (() -> Void)?
+
+    /// Callback when the "Open Notebook" action icon is clicked.
+    var onOpenNotebook: (() -> Void)?
+
+    /// Callback when the "Open Workflow" action icon is clicked.
+    var onOpenWorkflow: (() -> Void)?
 
     /// Callback when the "Reload" action icon is clicked.
     var onReload: (() -> Void)?
@@ -581,6 +593,20 @@ final class HorizontalTabStripView: NSView {
         }
         menu.addItem(editorItem)
 
+        let notebookItem = NSMenuItem(title: "Notebook", action: #selector(addNotebook), keyEquivalent: "")
+        notebookItem.target = self
+        if let img = NSImage(systemSymbolName: "book", accessibilityDescription: nil) {
+            notebookItem.image = img
+        }
+        menu.addItem(notebookItem)
+
+        let workflowItem = NSMenuItem(title: "Workflow", action: #selector(addWorkflow), keyEquivalent: "")
+        workflowItem.target = self
+        if let img = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil) {
+            workflowItem.image = img
+        }
+        menu.addItem(workflowItem)
+
         let point = NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 4)
         menu.popUp(positioning: nil, at: point, in: button)
     }
@@ -590,6 +616,8 @@ final class HorizontalTabStripView: NSView {
     @objc private func addBrowser() { onAddBrowser?() }
     @objc private func addMarkdown() { onAddMarkdown?() }
     @objc private func addEditor() { onAddEditor?() }
+    @objc private func addNotebook() { onAddNotebook?() }
+    @objc private func addWorkflow() { onAddWorkflow?() }
 
     // MARK: - Contextual Action Icons
 
@@ -650,6 +678,22 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleOpenEditor)
                 )
             )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "book",
+                    tooltip: "Open Notebook",
+                    accessibilityID: "action:openNotebook",
+                    action: #selector(handleOpenNotebook)
+                )
+            )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "arrow.triangle.branch",
+                    tooltip: "Open Workflow",
+                    accessibilityID: "action:openWorkflow",
+                    action: #selector(handleOpenWorkflow)
+                )
+            )
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
@@ -675,7 +719,7 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .editor, .subagent:
+        case .markdown, .editor, .notebook, .workflow, .subagent:
             break
         }
 
@@ -724,6 +768,8 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleOpenBrowser() { onOpenBrowser?() }
     @objc private func handleOpenMarkdown() { onOpenMarkdown?() }
     @objc private func handleOpenEditor() { onOpenEditor?() }
+    @objc private func handleOpenNotebook() { onOpenNotebook?() }
+    @objc private func handleOpenWorkflow() { onOpenWorkflow?() }
     @objc private func handleReload() { onReload?() }
     @objc private func handleGoBack() { onGoBack?() }
     @objc private func handleGoForward() { onGoForward?() }

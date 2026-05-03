@@ -34,9 +34,29 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertNil(strip.onAddEditor)
     }
 
+    func testOnAddNotebookCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onAddNotebook)
+    }
+
+    func testOnAddWorkflowCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onAddWorkflow)
+    }
+
     func testOnOpenEditorCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onOpenEditor)
+    }
+
+    func testOnOpenNotebookCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onOpenNotebook)
+    }
+
+    func testOnOpenWorkflowCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onOpenWorkflow)
     }
 
     func testOnReloadCallbackDefaultIsNil() {
@@ -106,11 +126,43 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertTrue(called)
     }
 
+    func testOnAddNotebookCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onAddNotebook = { called = true }
+        strip.onAddNotebook?()
+        XCTAssertTrue(called)
+    }
+
+    func testOnAddWorkflowCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onAddWorkflow = { called = true }
+        strip.onAddWorkflow?()
+        XCTAssertTrue(called)
+    }
+
     func testOnOpenEditorCallbackFires() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         var called = false
         strip.onOpenEditor = { called = true }
         strip.onOpenEditor?()
+        XCTAssertTrue(called)
+    }
+
+    func testOnOpenNotebookCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onOpenNotebook = { called = true }
+        strip.onOpenNotebook?()
+        XCTAssertTrue(called)
+    }
+
+    func testOnOpenWorkflowCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onOpenWorkflow = { called = true }
+        strip.onOpenWorkflow?()
         XCTAssertTrue(called)
     }
 
@@ -167,22 +219,22 @@ final class HorizontalTabStripActionTests: XCTestCase {
 
     // MARK: - Action Icons Update
 
-    func testUpdateActionIconsForTerminalPanelShowsFiveActions() {
+    func testUpdateActionIconsForTerminalPanelShowsSevenActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
         let actionButtons = findActionButtons(in: strip)
-        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor
-        XCTAssertEqual(actionButtons.count, 5)
+        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Notebook, Workflow
+        XCTAssertEqual(actionButtons.count, 7)
     }
 
-    func testUpdateActionIconsForTerminalWithCloseShowsSixActions() {
+    func testUpdateActionIconsForTerminalWithCloseShowsEightActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: true)
 
         let actionButtons = findActionButtons(in: strip)
-        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Close
-        XCTAssertEqual(actionButtons.count, 6)
+        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Notebook, Workflow, Close
+        XCTAssertEqual(actionButtons.count, 8)
     }
 
     func testUpdateActionIconsForBrowserPanelShowsFiveActions() {
@@ -240,12 +292,24 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertEqual(editorButton?.toolTip, "Open Text Editor")
     }
 
+    func testTerminalActionIconsIncludeNotebookAndWorkflowButtons() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(panelType: .terminal, canClose: false)
+
+        let buttons = findActionButtons(in: strip)
+        let notebookButton = buttons.first { $0.accessibilityLabel() == "action:openNotebook" }
+        let workflowButton = buttons.first { $0.accessibilityLabel() == "action:openWorkflow" }
+
+        XCTAssertEqual(notebookButton?.toolTip, "Open Notebook")
+        XCTAssertEqual(workflowButton?.toolTip, "Open Workflow")
+    }
+
     func testUpdateActionIconsReplacesOldButtons() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
 
         strip.updateActionIcons(panelType: .terminal, canClose: true)
         let terminalButtons = findActionButtons(in: strip)
-        XCTAssertEqual(terminalButtons.count, 6)
+        XCTAssertEqual(terminalButtons.count, 8)
 
         strip.updateActionIcons(panelType: .browser, canClose: false)
         let browserButtons = findActionButtons(in: strip)

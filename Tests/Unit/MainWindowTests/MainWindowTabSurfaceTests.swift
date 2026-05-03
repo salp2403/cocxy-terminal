@@ -1357,6 +1357,55 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testNotebookAndWorkflowPanelActionsInstallRealHostedPanels() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithNotebookAction(nil)
+        controller.splitWithWorkflowAction(nil)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after opening notebook and workflow panels")
+            return
+        }
+
+        let leaves = splitManager.rootNode.allLeafIDs()
+        guard let notebookLeaf = leaves.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .notebook
+        }) else {
+            XCTFail("Expected notebook panel leaf")
+            return
+        }
+        guard let workflowLeaf = leaves.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .workflow
+        }) else {
+            XCTFail("Expected workflow panel leaf")
+            return
+        }
+
+        XCTAssertTrue(
+            controller.panelContentViews[notebookLeaf.terminalID] is NSHostingView<NotebookPanelView>,
+            "Notebook split must host the real notebook editor and output view"
+        )
+        XCTAssertTrue(
+            controller.panelContentViews[workflowLeaf.terminalID] is NSHostingView<WorkflowPanelView>,
+            "Workflow split must host the real workflow editor and run-output view"
+        )
+
+        let panelTabs = (controller.horizontalTabStripView as? HorizontalTabStripView)?.tabs.map(\.title) ?? []
+        XCTAssertTrue(panelTabs.contains("Notebook"))
+        XCTAssertTrue(panelTabs.contains("Workflow"))
+        XCTAssertEqual(
+            splitManager.focusedLeafID,
+            workflowLeaf.leafID,
+            "Opening workflow after notebook should leave the newest panel selected"
+        )
+    }
+
     func testToolbarSplitButtonsMapToVisualOrientation() {
         let sideBySideController = MainWindowController(bridge: MockTerminalEngine())
         sideBySideController.showWindow(nil)

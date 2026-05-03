@@ -289,6 +289,14 @@ extension AppDelegate {
                          action: #selector(MainWindowController.splitWithEditorAction(_:)),
                          keyEquivalent: "")
 
+        viewMenu.addItem(withTitle: "Open Notebook Panel",
+                         action: #selector(MainWindowController.splitWithNotebookAction(_:)),
+                         keyEquivalent: "")
+
+        viewMenu.addItem(withTitle: "Open Workflow Panel",
+                         action: #selector(MainWindowController.splitWithWorkflowAction(_:)),
+                         keyEquivalent: "")
+
         viewMenu.addItem(NSMenuItem.separator())
 
         // Toggle Tab Bar: not rebindable (no catalog entry, no default shortcut).

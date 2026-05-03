@@ -537,6 +537,28 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "workspace.notebook",
+                name: "Open Notebook Panel",
+                description: "Open a local executable notebook alongside the terminal",
+                shortcut: nil,
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.splitWithNotebookAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "workspace.workflow",
+                name: "Open Workflow Panel",
+                description: "Open a local workflow runner alongside the terminal",
+                shortcut: nil,
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.splitWithWorkflowAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "remote.toggle",
                 name: "Toggle Remote Workspaces",
                 description: "Show or hide the remote workspace panel",

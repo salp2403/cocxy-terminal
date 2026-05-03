@@ -26,6 +26,12 @@ enum PanelType: String, Codable, Sendable, Equatable {
     /// A general-purpose local text editor.
     case editor
 
+    /// A local executable notebook panel.
+    case notebook
+
+    /// A local reusable workflow panel.
+    case workflow
+
     /// A live subagent activity panel.
     case subagent
 }
@@ -43,7 +49,7 @@ struct PanelInfo: Equatable, Sendable {
     /// Optional initial URL for browser panels.
     let initialURL: URL?
 
-    /// Optional file path for markdown and editor panels.
+    /// Optional file path for document-backed panels.
     let filePath: URL?
 
     /// Subagent identifier for linking the panel to dashboard data.
@@ -70,6 +76,12 @@ struct PanelInfo: Equatable, Sendable {
     }
     static func editor(path: URL? = nil) -> PanelInfo {
         PanelInfo(type: .editor, filePath: path)
+    }
+    static func notebook(path: URL? = nil) -> PanelInfo {
+        PanelInfo(type: .notebook, filePath: path)
+    }
+    static func workflow(path: URL? = nil) -> PanelInfo {
+        PanelInfo(type: .workflow, filePath: path)
     }
     static func subagent(id: String, sessionId: String) -> PanelInfo {
         PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)
