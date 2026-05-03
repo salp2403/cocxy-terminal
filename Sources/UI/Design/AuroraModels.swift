@@ -131,6 +131,15 @@ extension Design {
             panes.filter(\.contributesToMatrix)
         }
 
+        /// Panes that can be transferred to another session from the
+        /// vertical sidebar. The first surface is the tab's primary
+        /// terminal and remains anchored to keep the source tab valid;
+        /// split panes after it can move without destroying their live
+        /// backing surface.
+        var movablePanes: [AuroraPane] {
+            Array(panes.dropFirst())
+        }
+
         /// Number of panes with visible recent or active agent work.
         var activePaneCount: Int {
             matrixPanes.count

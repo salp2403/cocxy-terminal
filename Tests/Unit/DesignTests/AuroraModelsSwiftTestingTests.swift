@@ -231,6 +231,23 @@ struct AuroraWorkspaceModelTests {
         #expect(session.matrixPanes.isEmpty)
     }
 
+    @Test("AuroraSession.movablePanes excludes the primary pane but keeps idle split panes draggable")
+    func movablePanesExcludePrimaryAndKeepIdleSplits() {
+        let primary = Design.AuroraPane(id: "primary", name: "zsh", agent: .shell, state: .idle)
+        let idleSplit = Design.AuroraPane(id: "split-idle", name: "logs", agent: .shell, state: .idle)
+        let activeSplit = Design.AuroraPane(id: "split-active", name: "tests", agent: .shell, state: .working)
+        let session = Design.AuroraSession(
+            id: "s",
+            name: "split",
+            agent: .shell,
+            state: .idle,
+            panes: [primary, idleSplit, activeSplit]
+        )
+
+        #expect(session.movablePanes.map(\.id) == ["split-idle", "split-active"])
+        #expect(session.matrixPanes.map(\.id) == ["split-active"])
+    }
+
     @Test("AuroraPane diagnostic line includes activity and counters")
     func paneDiagnosticLineIncludesActivityAndCounters() {
         let pane = Design.AuroraPane(

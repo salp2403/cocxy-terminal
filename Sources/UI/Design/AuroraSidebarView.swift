@@ -551,6 +551,9 @@ extension Design {
                     if displayMode.showsPaneMatrix {
                         MiniMatrixView(panes: session.matrixPanes)
                     }
+                    if !session.movablePanes.isEmpty {
+                        PaneTransferHandleView(panes: session.movablePanes)
+                    }
                     if let onClose, !session.isPinned, displayMode.showsCloseButton {
                         Button(action: onClose) {
                             Image(systemName: "xmark")
@@ -1092,12 +1095,37 @@ extension Design {
                         )
                         .frame(width: 7, height: 7)
                         .help(pane.diagnosticLine)
+                }
+            }
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// Drag handles for split panes. Kept separate from the mini-matrix:
+    /// matrix dots describe active agent work, while these handles expose
+    /// every movable split pane, including idle shells.
+    struct PaneTransferHandleView: View {
+        let panes: [AuroraPane]
+
+        @Environment(\.designThemePalette) private var palette
+
+        var body: some View {
+            HStack(spacing: 3) {
+                ForEach(panes) { pane in
+                    Circle()
+                        .fill(palette.glassHighlight.resolvedColor())
+                        .overlay(
+                            Circle()
+                                .strokeBorder(pane.state.token.resolvedColor(), lineWidth: 0.9)
+                        )
+                        .frame(width: 7, height: 7)
+                        .help("Drag \(pane.name) pane to another tab")
+                        .accessibilityLabel("Move \(pane.name) pane")
                         .onDrag {
                             NSItemProvider(object: "pane:\(pane.id)" as NSString)
                         }
                 }
             }
-            .accessibilityHidden(true)
         }
     }
 
