@@ -257,6 +257,18 @@ check_exists "$RESOURCES/Skills/review-pr/SKILL.md" "review-pr skill"
 check_exists "$RESOURCES/Skills/triage-issue/SKILL.md" "triage-issue skill"
 check_exists "$RESOURCES/Skills/write-tests/SKILL.md" "write-tests skill"
 
+# 9d. Bundled local project templates.
+echo ""
+echo "[Templates]"
+check_exists "$RESOURCES/Templates" "Templates resources directory"
+check_exists "$RESOURCES/Templates/swift-package/template.json" "swift-package template manifest"
+check_exists "$RESOURCES/Templates/swift-package/files/Package.swift" "swift-package Package.swift"
+check_exists "$RESOURCES/Templates/swift-package/files/Sources/{{module_name}}/main.swift" "swift-package executable source"
+check_exists "$RESOURCES/Templates/python-package/template.json" "python-package template manifest"
+check_exists "$RESOURCES/Templates/python-package/files/pyproject.toml" "python-package pyproject"
+check_exists "$RESOURCES/Templates/python-package/files/src/{{package_name}}/__init__.py" "python-package module source"
+check_exists "$RESOURCES/Templates/python-package/files/tests/test_import.py" "python-package test"
+
 # 10. QuickLook extension
 echo ""
 echo "[QuickLook]"
