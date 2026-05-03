@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.14.8 (OSC 8 hyperlink metadata)
+ * Version: 0.14.9 (session recording and replay)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 14
-#define COCXYCORE_VERSION_PATCH 8
-#define COCXYCORE_VERSION_STRING "0.14.8"
+#define COCXYCORE_VERSION_PATCH 9
+#define COCXYCORE_VERSION_STRING "0.14.9"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -519,6 +519,60 @@ size_t cocxycore_terminal_selection_copy_text(
     uint8_t* buf,
     size_t buf_len
 );
+
+/* -- Session recording / replay -- */
+
+/** Opaque session recorder handle. */
+typedef struct cocxycore_session_recorder cocxycore_session_recorder;
+
+/** Opaque session player handle. */
+typedef struct cocxycore_session_player cocxycore_session_player;
+
+/**
+ * Start writing terminal output bytes to a local asciinema-compatible .cast file.
+ * The returned handle is owned by the caller and must be destroyed.
+ */
+cocxycore_session_recorder* cocxycore_session_recorder_start(
+    cocxycore_terminal* term,
+    const char* output_path,
+    const char* title
+);
+
+/** Stop a recorder. Safe to call repeatedly or with NULL. */
+void cocxycore_session_recorder_stop(cocxycore_session_recorder* recorder);
+
+/** Stop and destroy a recorder. Safe with NULL. */
+void cocxycore_session_recorder_destroy(cocxycore_session_recorder* recorder);
+
+/** Whether the recorder is actively writing events. */
+bool cocxycore_session_recorder_is_active(const cocxycore_session_recorder* recorder);
+
+/** Total bytes written to the recording file so far. */
+size_t cocxycore_session_recorder_bytes_written(const cocxycore_session_recorder* recorder);
+
+/** Open a local .cast recording for replay into a terminal. */
+cocxycore_session_player* cocxycore_session_player_open(
+    cocxycore_terminal* term,
+    const char* recording_path
+);
+
+/** Replay remaining output events into the terminal. */
+void cocxycore_session_player_play(cocxycore_session_player* player);
+
+/** Pause playback. Playback is synchronous today, but this preserves API shape. */
+void cocxycore_session_player_pause(cocxycore_session_player* player);
+
+/** Seek to a timestamp, rebuilding terminal state up to that point. */
+void cocxycore_session_player_seek_ns(cocxycore_session_player* player, uint64_t ns);
+
+/** Duration of the loaded recording in nanoseconds. */
+uint64_t cocxycore_session_player_duration_ns(const cocxycore_session_player* player);
+
+/** Set future playback speed multiplier; values <= 0 are ignored. */
+void cocxycore_session_player_set_speed(cocxycore_session_player* player, float multiplier);
+
+/** Destroy a player. Safe with NULL. */
+void cocxycore_session_player_destroy(cocxycore_session_player* player);
 
 /* -- Hyperlinks -- */
 

@@ -306,6 +306,56 @@ struct CocxyCoreBridgeTests {
         #expect(limited.map(\.uri) == ["https://one.example"])
     }
 
+    @Test("session recording bridge writes local cast output")
+    func sessionRecordingBridgeWritesLocalCastOutput() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let directory = try makeTemporaryDirectory(named: "cocxy-session-recording")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let recordingURL = directory.appendingPathComponent("recording.cast")
+
+        let recorder = try #require(bridge.startSessionRecording(
+            for: surfaceID,
+            outputURL: recordingURL,
+            title: "Bridge smoke"
+        ))
+
+        feed("Bridge\r\nRecording", to: state.terminal)
+        recorder.stop()
+
+        #expect(recorder.isActive == false)
+        #expect(recorder.bytesWritten > 0)
+
+        let contents = try String(contentsOf: recordingURL, encoding: .utf8)
+        #expect(contents.contains("\"version\":2"))
+        #expect(contents.contains("\"title\":\"Bridge smoke\""))
+        #expect(contents.contains("\"Bridge\\r\\nRecording\""))
+    }
+
+    @Test("session replay bridge feeds cast output into terminal")
+    func sessionReplayBridgeFeedsCastOutputIntoTerminal() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let directory = try makeTemporaryDirectory(named: "cocxy-session-replay")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let recordingURL = directory.appendingPathComponent("replay.cast")
+        try """
+        {"version":2,"width":40,"height":4,"timestamp":0,"title":"Replay"}
+        [0.000000000,"o","Hi"]
+        [1.500000000,"o","\\r\\nThere"]
+
+        """.write(to: recordingURL, atomically: true, encoding: .utf8)
+
+        #expect(bridge.replaySessionRecording(from: recordingURL, for: surfaceID))
+        #expect(cocxycore_terminal_cell_char(state.terminal, 0, 0) == UInt32(UInt8(ascii: "H")))
+        #expect(cocxycore_terminal_cell_char(state.terminal, 0, 1) == UInt32(UInt8(ascii: "i")))
+        #expect(cocxycore_terminal_cell_char(state.terminal, 1, 0) == UInt32(UInt8(ascii: "T")))
+    }
+
     @Test("sendKeyEvent returns true for supported arrow keys")
     func sendKeyEventHandlesArrowKeys() throws {
         let bridge = try makeBridge()
@@ -946,6 +996,15 @@ private func numberedLines(_ count: Int) -> String {
     (0..<count)
         .map { String(format: "line-%02d", $0) }
         .joined(separator: "\r\n") + "\r\n"
+}
+
+private func makeTemporaryDirectory(named prefix: String) throws -> URL {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "\(prefix)-\(UUID().uuidString)",
+        isDirectory: true
+    )
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory
 }
 
 private func feed(_ text: String, to terminal: OpaquePointer) {

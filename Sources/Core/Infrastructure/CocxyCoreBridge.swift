@@ -123,6 +123,36 @@ struct TerminalHyperlinkMetadata: Equatable, Sendable, Encodable {
     let length: UInt32
 }
 
+final class TerminalSessionRecorder {
+    private var raw: OpaquePointer?
+
+    fileprivate init(raw: OpaquePointer) {
+        self.raw = raw
+    }
+
+    var isActive: Bool {
+        guard let raw else { return false }
+        return cocxycore_session_recorder_is_active(raw)
+    }
+
+    var bytesWritten: Int {
+        guard let raw else { return 0 }
+        return Int(cocxycore_session_recorder_bytes_written(raw))
+    }
+
+    func stop() {
+        guard let raw else { return }
+        cocxycore_session_recorder_stop(raw)
+    }
+
+    deinit {
+        if let raw {
+            cocxycore_session_recorder_destroy(raw)
+            self.raw = nil
+        }
+    }
+}
+
 struct TerminalPreeditSnapshot: Equatable, Sendable, Encodable {
     let active: Bool
     let text: String
@@ -1489,6 +1519,40 @@ final class CocxyCoreBridge: TerminalEngine {
             let copied = min(available, buffer.count)
             return buffer.prefix(copied).map(Self.hyperlinkMetadata(from:))
         } ?? []
+    }
+
+    func startSessionRecording(
+        for surface: SurfaceID,
+        outputURL: URL,
+        title: String? = nil
+    ) -> TerminalSessionRecorder? {
+        withTerminalLock(surface) { state -> TerminalSessionRecorder? in
+            let recorder = outputURL.path.withCString { pathPointer -> OpaquePointer? in
+                if let title {
+                    return title.withCString { titlePointer in
+                        cocxycore_session_recorder_start(state.terminal, pathPointer, titlePointer)
+                    }
+                }
+                return cocxycore_session_recorder_start(state.terminal, pathPointer, nil)
+            }
+            guard let recorder else { return nil }
+            return TerminalSessionRecorder(raw: recorder)
+        } ?? nil
+    }
+
+    func replaySessionRecording(
+        from recordingURL: URL,
+        for surface: SurfaceID
+    ) -> Bool {
+        withTerminalLock(surface) { state -> Bool in
+            let player = recordingURL.path.withCString { pathPointer in
+                cocxycore_session_player_open(state.terminal, pathPointer)
+            }
+            guard let player else { return false }
+            defer { cocxycore_session_player_destroy(player) }
+            cocxycore_session_player_play(player)
+            return true
+        } ?? false
     }
 
     func preeditSnapshot(for surface: SurfaceID) -> TerminalPreeditSnapshot? {
