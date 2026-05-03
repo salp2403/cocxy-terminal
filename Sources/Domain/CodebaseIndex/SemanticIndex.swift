@@ -8,6 +8,7 @@ struct CodebaseSemanticIndexStats: Sendable, Equatable {
     let indexedFiles: Int
     let indexedChunks: Int
     let removedPaths: Int
+    let truncated: Bool
 }
 
 struct CodebaseSemanticIndex {
@@ -16,19 +17,25 @@ struct CodebaseSemanticIndex {
     let embeddingProvider: any CodebaseEmbeddingProviding
     let chunker: CodebaseFileChunker
     let maxFileBytes: Int
+    let maxIndexedFiles: Int
+    let maxIndexedChunks: Int
 
     init(
         workspace: AgentWorkspace,
         store: CodebaseVectorStore,
         embeddingProvider: any CodebaseEmbeddingProviding,
         chunker: CodebaseFileChunker = CodebaseFileChunker(),
-        maxFileBytes: Int = 1_000_000
+        maxFileBytes: Int = 1_000_000,
+        maxIndexedFiles: Int = 2_000,
+        maxIndexedChunks: Int = 4_000
     ) {
         self.workspace = workspace
         self.store = store
         self.embeddingProvider = embeddingProvider
         self.chunker = chunker
         self.maxFileBytes = maxFileBytes
+        self.maxIndexedFiles = max(1, maxIndexedFiles)
+        self.maxIndexedChunks = max(1, maxIndexedChunks)
     }
 
     static func localDefault(
@@ -73,8 +80,13 @@ struct CodebaseSemanticIndex {
         let scanner = CodebaseIndexFileScanner(workspace: workspace, maxFileBytes: maxFileBytes)
         var indexedFiles = 0
         var records: [CodebaseVectorRecord] = []
+        var truncated = false
 
         for file in scanner.regularFiles(startingAt: workspace.rootURL) {
+            guard indexedFiles < maxIndexedFiles, records.count < maxIndexedChunks else {
+                truncated = true
+                break
+            }
             guard let content = try? scanner.readTextFile(file) else {
                 continue
             }
@@ -84,6 +96,12 @@ struct CodebaseSemanticIndex {
                 continue
             }
             indexedFiles += 1
+            let remainingChunkCapacity = maxIndexedChunks - records.count
+            if chunkRecords.count > remainingChunkCapacity {
+                records.append(contentsOf: chunkRecords.prefix(remainingChunkCapacity))
+                truncated = true
+                break
+            }
             records.append(contentsOf: chunkRecords)
         }
 
@@ -91,7 +109,8 @@ struct CodebaseSemanticIndex {
         return CodebaseSemanticIndexStats(
             indexedFiles: indexedFiles,
             indexedChunks: records.count,
-            removedPaths: 0
+            removedPaths: 0,
+            truncated: truncated
         )
     }
 
@@ -106,8 +125,13 @@ struct CodebaseSemanticIndex {
         let scanner = CodebaseIndexFileScanner(workspace: workspace, maxFileBytes: maxFileBytes)
         var indexedFiles = 0
         var records: [CodebaseVectorRecord] = []
+        var truncated = false
 
         for path in changes.changedFiles {
+            guard indexedFiles < maxIndexedFiles, records.count < maxIndexedChunks else {
+                truncated = true
+                break
+            }
             guard let content = try? scanner.readTextFile(relativePath: path) else {
                 continue
             }
@@ -117,6 +141,12 @@ struct CodebaseSemanticIndex {
                 continue
             }
             indexedFiles += 1
+            let remainingChunkCapacity = maxIndexedChunks - records.count
+            if chunkRecords.count > remainingChunkCapacity {
+                records.append(contentsOf: chunkRecords.prefix(remainingChunkCapacity))
+                truncated = true
+                break
+            }
             records.append(contentsOf: chunkRecords)
         }
 
@@ -124,7 +154,8 @@ struct CodebaseSemanticIndex {
         return CodebaseSemanticIndexStats(
             indexedFiles: indexedFiles,
             indexedChunks: records.count,
-            removedPaths: stalePaths.count
+            removedPaths: stalePaths.count,
+            truncated: truncated
         )
     }
 

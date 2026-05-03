@@ -20,9 +20,11 @@ enum CodebaseEmbeddingProviderError: Error, Sendable, Equatable {
 
 struct NaturalLanguageCodebaseEmbeddingProvider: CodebaseEmbeddingProviding {
     let preferredLanguages: [NLLanguage]
+    let maxInputCharacters: Int
 
-    init(preferredLanguages: [NLLanguage] = [.english, .spanish]) {
+    init(preferredLanguages: [NLLanguage] = [.english, .spanish], maxInputCharacters: Int = 1_024) {
         self.preferredLanguages = preferredLanguages
+        self.maxInputCharacters = max(1, maxInputCharacters)
     }
 
     var identifier: String {
@@ -38,7 +40,7 @@ struct NaturalLanguageCodebaseEmbeddingProvider: CodebaseEmbeddingProviding {
     }
 
     func embedding(for text: String) throws -> [Double] {
-        let normalized = Self.normalizedInput(text)
+        let normalized = String(Self.normalizedInput(text).prefix(maxInputCharacters))
         guard !normalized.isEmpty else {
             throw CodebaseEmbeddingProviderError.emptyInput
         }
@@ -48,9 +50,13 @@ struct NaturalLanguageCodebaseEmbeddingProvider: CodebaseEmbeddingProviding {
         }
 
         for language in candidateLanguages(for: normalized) {
-            guard let embedding = NLEmbedding.sentenceEmbedding(for: language),
-                  let vector = embedding.vector(for: normalized),
-                  !vector.isEmpty
+            let vector = autoreleasepool { () -> [Double]? in
+                guard let embedding = NLEmbedding.sentenceEmbedding(for: language) else {
+                    return nil
+                }
+                return embedding.vector(for: normalized)
+            }
+            guard let vector, !vector.isEmpty
             else {
                 continue
             }

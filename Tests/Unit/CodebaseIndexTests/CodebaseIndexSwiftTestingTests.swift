@@ -248,6 +248,7 @@ struct CodebaseIndexSwiftTestingTests {
 
         #expect(stats.indexedFiles == 2)
         #expect(stats.indexedChunks == 2)
+        #expect(!stats.truncated)
         #expect(response.mode == .semanticOnDevice)
         #expect(response.results.map(\.path) == ["Sources/Auth.swift", "Sources/Theme.swift"])
         #expect(response.results.first?.line == 1)
@@ -278,6 +279,7 @@ struct CodebaseIndexSwiftTestingTests {
         #expect(stats.indexedFiles == 1)
         #expect(stats.indexedChunks == 1)
         #expect(stats.removedPaths == 2)
+        #expect(!stats.truncated)
         #expect(results.map(\.path) == ["Sources/Auth.swift"])
     }
 
@@ -295,7 +297,30 @@ struct CodebaseIndexSwiftTestingTests {
 
         #expect(stats.indexedFiles == 1)
         #expect(stats.indexedChunks == 1)
+        #expect(!stats.truncated)
         #expect(results.map(\.path) == ["Sources/Auth.swift"])
+    }
+
+    @Test("semantic index truncates rebuilds at configured limits")
+    func semanticIndexTruncatesRebuildsAtConfiguredLimits() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "let token = \"one\"\n".write(to: root.appendingPathComponent("Sources/One.swift"), atomically: true, encoding: .utf8)
+        try "let token = \"two\"\n".write(to: root.appendingPathComponent("Sources/Two.swift"), atomically: true, encoding: .utf8)
+
+        let workspace = AgentWorkspace(rootURL: root)
+        let semanticIndex = CodebaseSemanticIndex(
+            workspace: workspace,
+            store: CodebaseVectorStore(storageURL: root.appendingPathComponent(".cocxy-index", isDirectory: true)),
+            embeddingProvider: MockCodebaseEmbeddingProvider(),
+            maxIndexedFiles: 1,
+            maxIndexedChunks: 1
+        )
+        let stats = try semanticIndex.rebuild()
+
+        #expect(stats.indexedFiles == 1)
+        #expect(stats.indexedChunks == 1)
+        #expect(stats.truncated)
     }
 
     @Test("semantic search respects validated scope and falls back when unavailable")
