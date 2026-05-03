@@ -17,14 +17,24 @@ struct ICloudSyncPreferencesSwiftTestingTests {
 
     private func makeViewModel(
         config: CocxyConfig = .defaults,
-        iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(store: InMemoryICloudSyncSecretStore())
+        iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(store: InMemoryICloudSyncSecretStore()),
+        iCloudSyncExporter: any ICloudSyncExporting = RecordingICloudSyncExporter(),
+        iCloudSyncArtifactRoots: ICloudSyncArtifactRoots = ICloudSyncArtifactRoots(
+            notebooks: URL(fileURLWithPath: "/tmp/cocxy/notebooks", isDirectory: true),
+            workflows: URL(fileURLWithPath: "/tmp/cocxy/workflows", isDirectory: true),
+            skills: URL(fileURLWithPath: "/tmp/cocxy/skills", isDirectory: true),
+            settings: URL(fileURLWithPath: "/tmp/cocxy/config.toml", isDirectory: false),
+            themes: URL(fileURLWithPath: "/tmp/cocxy/themes", isDirectory: true)
+        )
     ) -> (PreferencesViewModel, InMemoryProvider) {
         let provider = InMemoryProvider()
         return (
             PreferencesViewModel(
                 config: config,
                 fileProvider: provider,
-                iCloudSyncSecrets: iCloudSyncSecrets
+                iCloudSyncSecrets: iCloudSyncSecrets,
+                iCloudSyncExporter: iCloudSyncExporter,
+                iCloudSyncArtifactRoots: iCloudSyncArtifactRoots
             ),
             provider
         )
@@ -131,5 +141,86 @@ struct ICloudSyncPreferencesSwiftTestingTests {
 
         #expect(vm.iCloudSyncMasterPasswordStatus == "iCloud Sync master password deleted.")
         #expect(!vm.hasSavedICloudSyncMasterPassword())
+    }
+
+    @Test("manual export uses saved master password and reports exported artifacts")
+    func manualExportUsesSavedMasterPasswordAndReportsExportedArtifacts() throws {
+        let store = InMemoryICloudSyncSecretStore()
+        let secrets = ICloudSyncSecrets(store: store)
+        try secrets.saveMasterPassword("sync password")
+        let rootURL = URL(fileURLWithPath: "/tmp/cocxy-icloud", isDirectory: true)
+        let exporter = RecordingICloudSyncExporter(outcome: .exported(ICloudSyncExportResult(
+            rootURL: rootURL,
+            manifest: ICloudSyncManifest(entries: []),
+            manifestURL: rootURL.appendingPathComponent("manifest.json"),
+            writtenArtifactURLs: [
+                rootURL.appendingPathComponent("notebooks/daily.cocxynb.cocxyenc"),
+                rootURL.appendingPathComponent("settings/config.toml.cocxyenc"),
+            ]
+        )))
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            iCloudSync: ICloudSyncConfig(enabled: true, artifactKinds: [.notebooks, .settings]),
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let (vm, _) = makeViewModel(
+            config: config,
+            iCloudSyncSecrets: secrets,
+            iCloudSyncExporter: exporter
+        )
+
+        let outcome = try vm.exportICloudSyncArtifactsNow()
+
+        guard case .exported = outcome else {
+            Issue.record("Expected exported outcome")
+            return
+        }
+        #expect(exporter.requests.count == 1)
+        #expect(exporter.requests[0].config.enabled == true)
+        #expect(exporter.requests[0].config.artifactKinds == [.notebooks, .settings])
+        #expect(exporter.requests[0].password == "sync password")
+        #expect(vm.iCloudSyncExportStatus == "Exported 2 encrypted artifacts.")
+    }
+
+    @Test("manual export refuses to run without a saved master password")
+    func manualExportRequiresSavedMasterPassword() throws {
+        let exporter = RecordingICloudSyncExporter()
+        let (vm, _) = makeViewModel(iCloudSyncExporter: exporter)
+        vm.iCloudSyncEnabled = true
+
+        #expect(throws: ICloudSyncExportRunError.masterPasswordUnavailable) {
+            _ = try vm.exportICloudSyncArtifactsNow()
+        }
+        #expect(exporter.requests.isEmpty)
+    }
+}
+
+private final class RecordingICloudSyncExporter: ICloudSyncExporting, @unchecked Sendable {
+    struct Request: Equatable {
+        let config: ICloudSyncConfig
+        let roots: ICloudSyncArtifactRoots
+        let password: String
+    }
+
+    private(set) var requests: [Request] = []
+    var outcome: ICloudSyncExportOutcome
+
+    init(outcome: ICloudSyncExportOutcome = .disabled) {
+        self.outcome = outcome
+    }
+
+    func exportLocalArtifacts(
+        config: ICloudSyncConfig,
+        roots: ICloudSyncArtifactRoots,
+        password: String
+    ) throws -> ICloudSyncExportOutcome {
+        requests.append(Request(config: config, roots: roots, password: password))
+        return outcome
     }
 }

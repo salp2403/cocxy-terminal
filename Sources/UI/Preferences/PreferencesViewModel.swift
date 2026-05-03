@@ -231,6 +231,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Short status for the last iCloud Sync secret action.
     @Published var iCloudSyncMasterPasswordStatus: String?
 
+    /// Short status for the last manual iCloud Sync export action.
+    @Published var iCloudSyncExportStatus: String?
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -590,6 +593,12 @@ final class PreferencesViewModel: ObservableObject {
     /// Local secret facade for the iCloud Sync master password.
     private let iCloudSyncSecrets: ICloudSyncSecrets
 
+    /// Manual encrypted export runner for iCloud Sync.
+    private let iCloudSyncExporter: any ICloudSyncExporting
+
+    /// Local artifact roots scanned by manual iCloud Sync export.
+    private let iCloudSyncArtifactRoots: ICloudSyncArtifactRoots
+
     /// Resolves Voice locale availability without any network fallback.
     private let voiceLocaleResolver: VoiceLocaleResolver
 
@@ -623,6 +632,8 @@ final class PreferencesViewModel: ObservableObject {
         voiceLocaleResolver: VoiceLocaleResolver = .live(),
         agentSecrets: AgentSecrets = AgentSecrets(),
         iCloudSyncSecrets: ICloudSyncSecrets = ICloudSyncSecrets(),
+        iCloudSyncExporter: any ICloudSyncExporting = ICloudSyncExportService(),
+        iCloudSyncArtifactRoots: ICloudSyncArtifactRoots = .defaults(),
         mcpConfigURL: URL = MCPServerConfigLoader().defaultConfigURL(),
         mcpConfigLoader: MCPServerConfigLoader = MCPServerConfigLoader()
     ) {
@@ -631,6 +642,8 @@ final class PreferencesViewModel: ObservableObject {
         self.voiceLocaleResolver = voiceLocaleResolver
         self.agentSecrets = agentSecrets
         self.iCloudSyncSecrets = iCloudSyncSecrets
+        self.iCloudSyncExporter = iCloudSyncExporter
+        self.iCloudSyncArtifactRoots = iCloudSyncArtifactRoots
         self.mcpConfigURL = mcpConfigURL
         self.mcpConfigLoader = mcpConfigLoader
 
@@ -700,6 +713,7 @@ final class PreferencesViewModel: ObservableObject {
         self.iCloudSyncArtifactKinds = Set(config.iCloudSync.artifactKinds)
         self.iCloudSyncMasterPasswordDraft = ""
         self.iCloudSyncMasterPasswordStatus = nil
+        self.iCloudSyncExportStatus = nil
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -807,6 +821,34 @@ final class PreferencesViewModel: ObservableObject {
 
     func hasSavedICloudSyncMasterPassword() -> Bool {
         (try? iCloudSyncSecrets.hasMasterPassword()) ?? false
+    }
+
+    func exportICloudSyncArtifactsNow() throws -> ICloudSyncExportOutcome {
+        let config = buildICloudSyncConfigFromViewModel()
+        guard config.enabled else {
+            iCloudSyncExportStatus = "iCloud Sync is disabled."
+            return .disabled
+        }
+        guard let password = try iCloudSyncSecrets.masterPassword() else {
+            throw ICloudSyncExportRunError.masterPasswordUnavailable
+        }
+
+        let outcome = try iCloudSyncExporter.exportLocalArtifacts(
+            config: config,
+            roots: iCloudSyncArtifactRoots,
+            password: password
+        )
+        switch outcome {
+        case .disabled:
+            iCloudSyncExportStatus = "iCloud Sync is disabled."
+        case .unavailable:
+            iCloudSyncExportStatus = "iCloud Drive is unavailable."
+        case .exported(let result):
+            let count = result.writtenArtifactURLs.count
+            let noun = count == 1 ? "artifact" : "artifacts"
+            iCloudSyncExportStatus = "Exported \(count) encrypted \(noun)."
+        }
+        return outcome
     }
 
     // MARK: - MCP Config Editing

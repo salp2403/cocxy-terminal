@@ -199,6 +199,27 @@ enum ICloudSyncExportOutcome: Sendable, Equatable {
     case exported(ICloudSyncExportResult)
 }
 
+enum ICloudSyncExportRunError: Error, Sendable, Equatable {
+    case masterPasswordUnavailable
+}
+
+extension ICloudSyncExportRunError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .masterPasswordUnavailable:
+            return "iCloud Sync master password is not saved."
+        }
+    }
+}
+
+protocol ICloudSyncExporting: Sendable {
+    func exportLocalArtifacts(
+        config: ICloudSyncConfig,
+        roots: ICloudSyncArtifactRoots,
+        password: String
+    ) throws -> ICloudSyncExportOutcome
+}
+
 struct ICloudSyncExportService: Sendable {
     private let rootResolver: ICloudSyncRootResolver
     private let scanner: ICloudSyncArtifactScanner
@@ -231,6 +252,8 @@ struct ICloudSyncExportService: Sendable {
         }
     }
 }
+
+extension ICloudSyncExportService: ICloudSyncExporting {}
 
 struct ICloudSyncEncryptedExporter: Sendable {
     private let encryption: ICloudSyncEncryption

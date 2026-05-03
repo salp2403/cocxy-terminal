@@ -1286,6 +1286,20 @@ struct ICloudSyncPreferencesSection: View {
                 }
             }
 
+            Section("Manual Export") {
+                Button("Export Encrypted Artifacts") {
+                    exportICloudSyncArtifacts()
+                }
+                .disabled(!viewModel.iCloudSyncEnabled || !viewModel.hasSavedICloudSyncMasterPassword())
+
+                if let status = viewModel.iCloudSyncExportStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
@@ -1319,6 +1333,14 @@ struct ICloudSyncPreferencesSection: View {
             try viewModel.deleteICloudSyncMasterPassword()
         } catch {
             viewModel.iCloudSyncMasterPasswordStatus = "Failed to delete master password: \(error.localizedDescription)"
+        }
+    }
+
+    private func exportICloudSyncArtifacts() {
+        do {
+            _ = try viewModel.exportICloudSyncArtifactsNow()
+        } catch {
+            viewModel.iCloudSyncExportStatus = "Failed to export encrypted artifacts: \(error.localizedDescription)"
         }
     }
 }
