@@ -76,6 +76,12 @@ final class AuroraChromeController: ObservableObject {
     /// the user switches the shell to a light palette.
     @Published var themeIdentity: Design.ThemeIdentity = .aurora
 
+    /// User-selected density for the Aurora vertical sidebar.
+    @Published var sidebarDisplayMode: AuroraSidebarDisplayMode = .detailed
+
+    /// User-selected metadata signal shown in Aurora session rows.
+    @Published var sidebarPrimaryInfo: AuroraSidebarPrimaryInfo = .state
+
     /// Sidebar hover inspector rendered by a separate passthrough host
     /// on the window overlay layer. Keeping it outside the sidebar's
     /// hosting view prevents the card from covering rows while the user
@@ -228,6 +234,13 @@ final class AuroraChromeController: ObservableObject {
         self.tabManager = tabManager
         self.store = store
         updateClockLabel()
+    }
+
+    /// Mirrors hot-reloadable appearance choices that affect Aurora
+    /// presentation but do not require rebuilding the hosting views.
+    func applyAppearance(_ appearance: AppearanceConfig) {
+        sidebarDisplayMode = appearance.auroraSidebarDisplayMode
+        sidebarPrimaryInfo = appearance.auroraSidebarPrimaryInfo
     }
 
     // MARK: - Subscriptions
@@ -640,6 +653,14 @@ struct AuroraSidebarHost: View {
                 controller.sidebarTooltip = snapshot
             },
             availableUpdate: controller.availableUpdate,
+            displayMode: controller.sidebarDisplayMode,
+            primaryInfo: controller.sidebarPrimaryInfo,
+            onDisplayModeChange: { mode in
+                controller.sidebarDisplayMode = mode
+            },
+            onPrimaryInfoChange: { info in
+                controller.sidebarPrimaryInfo = info
+            },
             paletteShortcutLabel: controller.paletteShortcutLabel,
             newTabShortcutLabel: controller.newTabShortcutLabel
         )

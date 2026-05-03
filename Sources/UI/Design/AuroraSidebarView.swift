@@ -89,6 +89,10 @@ extension Design {
         var onHoverSession: ((AuroraSidebarTooltipSnapshot?) -> Void)? = nil
 
         var availableUpdate: CocxyUpdateAvailability? = nil
+        var displayMode: AuroraSidebarDisplayMode = .detailed
+        var primaryInfo: AuroraSidebarPrimaryInfo = .state
+        var onDisplayModeChange: ((AuroraSidebarDisplayMode) -> Void)? = nil
+        var onPrimaryInfoChange: ((AuroraSidebarPrimaryInfo) -> Void)? = nil
         var paletteShortcutLabel: String = "⇧⌘P"
         var newTabShortcutLabel: String = "⌘T"
 
@@ -99,6 +103,7 @@ extension Design {
                 VStack(alignment: .leading, spacing: Spacing.small) {
                     sidebarHeader
                     searchField
+                    controlBar
                     if let availableUpdate, let onInstallUpdate {
                         updateCallout(availableUpdate, action: onInstallUpdate)
                     }
@@ -225,6 +230,54 @@ extension Design {
             )
         }
 
+        // MARK: - Controls
+
+        private var controlBar: some View {
+            HStack(spacing: Spacing.xSmall) {
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { displayMode },
+                        set: { onDisplayModeChange?($0) }
+                    )
+                ) {
+                    ForEach(AuroraSidebarDisplayMode.allCases, id: \.self) { mode in
+                        Text(mode.shortLabel).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 88)
+                .help("Sidebar density")
+
+                Menu {
+                    ForEach(AuroraSidebarPrimaryInfo.allCases, id: \.self) { info in
+                        Button(info.menuLabel) {
+                            onPrimaryInfoChange?(info)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: primaryInfo.systemImage)
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(primaryInfo.shortLabel)
+                            .font(.system(size: 10.5, weight: .semibold))
+                    }
+                    .foregroundStyle(palette.textMedium.resolvedColor())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(palette.glassHighlight.resolvedColor())
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .frame(maxWidth: .infinity)
+                .help("Primary row detail")
+            }
+            .padding(.horizontal, 1)
+        }
+
         private func updateCallout(
             _ update: CocxyUpdateAvailability,
             action: @escaping () -> Void
@@ -291,6 +344,8 @@ extension Design {
                                 workspaceName: workspace.name,
                                 workspaceBranch: workspace.branch,
                                 isActive: session.id == activeSessionID,
+                                displayMode: displayMode,
+                                primaryInfo: primaryInfo,
                                 onActivate: { onActivateSession(session.id) },
                                 onClose: onCloseSession.map { handler in
                                     { handler(session.id) }
@@ -441,6 +496,8 @@ extension Design {
         let workspaceName: String
         let workspaceBranch: String?
         let isActive: Bool
+        var displayMode: AuroraSidebarDisplayMode = .detailed
+        var primaryInfo: AuroraSidebarPrimaryInfo = .state
         let onActivate: () -> Void
         var onClose: (() -> Void)? = nil
         var onTogglePin: (() -> Void)? = nil
@@ -453,7 +510,7 @@ extension Design {
         @State private var isHovered = false
 
         var body: some View {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: displayMode == .compact ? 0 : 4) {
                 HStack(spacing: Spacing.xSmall) {
                     AgentChipView(agent: session.agent, state: session.state, size: 22)
                     Text(session.name)
@@ -475,8 +532,10 @@ extension Design {
                             .accessibilityLabel("Worktree")
                     }
                     Spacer()
-                    MiniMatrixView(panes: session.matrixPanes)
-                    if let onClose, !session.isPinned {
+                    if displayMode.showsPaneMatrix {
+                        MiniMatrixView(panes: session.matrixPanes)
+                    }
+                    if let onClose, !session.isPinned, displayMode.showsCloseButton {
                         Button(action: onClose) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 10, weight: .semibold))
@@ -494,23 +553,22 @@ extension Design {
                         .opacity(isActive || isHovered ? 0.95 : 0.55)
                     }
                 }
-                HStack(spacing: Spacing.xxSmall) {
-                    Circle()
-                        .fill(session.state.token.resolvedColor())
-                        .frame(width: 7, height: 7)
-                    Text(stateLabel)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(palette.textLow.resolvedColor())
-                    Text("·")
-                        .foregroundStyle(palette.textLow.resolvedColor().opacity(0.5))
-                    Text(session.paneCountLabel)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(palette.textLow.resolvedColor())
+                if displayMode.showsPrimaryMetadata {
+                    HStack(spacing: Spacing.xxSmall) {
+                        Circle()
+                            .fill(session.state.token.resolvedColor())
+                            .frame(width: 7, height: 7)
+                        Text(session.primaryMetadataLine(selection: primaryInfo))
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .padding(.leading, 30)
                 }
-                .padding(.leading, 30)
             }
             .padding(.horizontal, Spacing.small)
-            .padding(.vertical, 8)
+            .padding(.vertical, CGFloat(displayMode.verticalPadding))
             .background(backgroundView)
             .background(SessionFrameReporter(sessionID: session.id))
             .overlay(borderView)
@@ -522,17 +580,6 @@ extension Design {
             }
             .contextMenu { contextMenuContent }
             .padding(.leading, 12)
-        }
-
-        private var stateLabel: String {
-            switch session.state {
-            case .idle: return "idle"
-            case .launched: return "launched"
-            case .working: return "working"
-            case .waiting: return "waiting"
-            case .finished: return "finished"
-            case .error: return "error"
-            }
         }
 
         @ViewBuilder
@@ -983,13 +1030,13 @@ extension Design {
         var body: some View {
             HStack(spacing: 3) {
                 ForEach(panes) { pane in
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    Circle()
                         .fill(pane.agent.token.resolvedColor())
                         .overlay(
-                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            Circle()
                                 .strokeBorder(pane.state.token.resolvedColor(), lineWidth: 0.8)
                         )
-                        .frame(width: 6, height: 6)
+                        .frame(width: 7, height: 7)
                         .help(pane.diagnosticLine)
                 }
             }
@@ -1029,6 +1076,45 @@ extension Design {
             )
             .help("Cocxy does not phone home. Remote panes connect only when you explicitly open them.")
             .accessibilityLabel("No telemetry: Cocxy does not phone home")
+        }
+    }
+}
+
+private extension AuroraSidebarDisplayMode {
+    var shortLabel: String {
+        switch self {
+        case .detailed: return "D"
+        case .summary: return "S"
+        case .compact: return "C"
+        }
+    }
+}
+
+private extension AuroraSidebarPrimaryInfo {
+    var shortLabel: String {
+        switch self {
+        case .state: return "State"
+        case .directory: return "Dir"
+        case .process: return "Proc"
+        case .command: return "Cmd"
+        }
+    }
+
+    var menuLabel: String {
+        switch self {
+        case .state: return "State and panes"
+        case .directory: return "Directory"
+        case .process: return "Foreground process"
+        case .command: return "Last command"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .state: return "circle.hexagongrid"
+        case .directory: return "folder"
+        case .process: return "cpu"
+        case .command: return "terminal"
         }
     }
 }

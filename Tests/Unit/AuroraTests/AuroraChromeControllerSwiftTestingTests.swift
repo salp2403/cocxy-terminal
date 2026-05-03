@@ -59,6 +59,32 @@ struct AuroraChromeControllerSwiftTestingTests {
         #expect(harness.controller.clockLabel.contains(":"))
     }
 
+    @Test
+    func applyAppearanceMirrorsAuroraSidebarPreferences() {
+        let harness = makeHarness()
+        let appearance = AppearanceConfig(
+            theme: "catppuccin-mocha",
+            lightTheme: "catppuccin-latte",
+            fontFamily: "Menlo",
+            fontSize: 13,
+            tabPosition: .left,
+            windowPadding: 8,
+            windowPaddingX: nil,
+            windowPaddingY: nil,
+            ligatures: false,
+            backgroundOpacity: 1,
+            backgroundBlurRadius: 0,
+            auroraEnabled: true,
+            auroraSidebarDisplayMode: .compact,
+            auroraSidebarPrimaryInfo: .process
+        )
+
+        harness.controller.applyAppearance(appearance)
+
+        #expect(harness.controller.sidebarDisplayMode == .compact)
+        #expect(harness.controller.sidebarPrimaryInfo == .process)
+    }
+
     // MARK: - Domain reactivity
 
     @Test

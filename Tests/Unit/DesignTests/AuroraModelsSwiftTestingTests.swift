@@ -109,11 +109,82 @@ struct AuroraWorkspaceModelTests {
         #expect(filtered.sessions.first?.id == "s-api")
     }
 
+    @Test("filteringSessions matches directory, foreground process, command summary, pane names, and workspace metadata")
+    func filterMatchesRichSessionMetadata() {
+        let session = Design.AuroraSession(
+            id: "s-rich",
+            name: "local shell",
+            agent: .shell,
+            state: .working,
+            panes: [
+                Design.AuroraPane(id: "pane-api", name: "API server", agent: .shell, state: .working),
+            ],
+            workingDirectory: "/Users/test/code/cocxy-core",
+            foregroundProcessName: "swift-test",
+            lastCommandSummary: "Command: swift test --filter Aurora"
+        )
+        let workspace = Design.AuroraWorkspace(
+            id: "ws-rich",
+            name: "terminal-rebuild",
+            branch: "feature/vertical-tabs",
+            isCollapsed: false,
+            sessions: [session],
+            notesWorkspaceID: "notes-rich"
+        )
+
+        #expect(workspace.filteringSessions(by: "cocxy-core").sessions.map(\.id) == ["s-rich"])
+        #expect(workspace.filteringSessions(by: "swift-test").sessions.map(\.id) == ["s-rich"])
+        #expect(workspace.filteringSessions(by: "filter aurora").sessions.map(\.id) == ["s-rich"])
+        #expect(workspace.filteringSessions(by: "api server").sessions.map(\.id) == ["s-rich"])
+        #expect(workspace.filteringSessions(by: "vertical-tabs").sessions.map(\.id) == ["s-rich"])
+        #expect(workspace.filteringSessions(by: "  TERMINAL  ").sessions.map(\.id) == ["s-rich"])
+    }
+
     @Test("filteringSessions returns an empty session list when nothing matches")
     func filterNoMatchEmpties() {
         let workspace = Design.sampleWorkspaces[0]
         let filtered = workspace.filteringSessions(by: "nothing-here")
         #expect(filtered.sessions.isEmpty)
+    }
+
+    @Test("AuroraSession primary metadata line follows the selected signal with stable fallbacks")
+    func sessionPrimaryMetadataLineFollowsSelection() {
+        let session = Design.AuroraSession(
+            id: "s",
+            name: "metadata",
+            agent: .shell,
+            state: .waiting,
+            panes: [
+                Design.AuroraPane(id: "p", name: "Shell", agent: .shell, state: .waiting),
+            ],
+            workingDirectory: "/Users/test/code/app",
+            foregroundProcessName: "claude",
+            lastCommandSummary: "Command: reviewing"
+        )
+
+        #expect(session.primaryMetadataLine(selection: .state) == "waiting · 1 pane")
+        #expect(session.primaryMetadataLine(selection: .directory) == "/Users/test/code/app")
+        #expect(session.primaryMetadataLine(selection: .process) == "claude")
+        #expect(session.primaryMetadataLine(selection: .command) == "Command: reviewing")
+
+        let sparse = Design.AuroraSession(
+            id: "s2",
+            name: "sparse",
+            agent: .shell,
+            state: .idle,
+            panes: []
+        )
+        #expect(sparse.primaryMetadataLine(selection: .directory) == "idle · 0 panes")
+        #expect(sparse.primaryMetadataLine(selection: .process) == "idle · 0 panes")
+        #expect(sparse.primaryMetadataLine(selection: .command) == "idle · 0 panes")
+    }
+
+    @Test("Aurora sidebar display mode exposes compact and summary contracts")
+    func sidebarDisplayModeContracts() {
+        #expect(AuroraSidebarDisplayMode.defaults == .detailed)
+        #expect(AuroraSidebarDisplayMode.compact.showsPaneMatrix == false)
+        #expect(AuroraSidebarDisplayMode.summary.showsPrimaryMetadata == true)
+        #expect(AuroraSidebarDisplayMode.detailed.verticalPadding > AuroraSidebarDisplayMode.compact.verticalPadding)
     }
 
     // MARK: - Pane matrix contribution

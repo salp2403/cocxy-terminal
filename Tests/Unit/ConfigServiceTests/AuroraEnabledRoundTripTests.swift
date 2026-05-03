@@ -42,12 +42,16 @@ struct AuroraEnabledRoundTripTests {
     func defaultConfigHasAuroraEnabled() {
         let defaults = CocxyConfig.defaults
         #expect(defaults.appearance.auroraEnabled == true)
+        #expect(defaults.appearance.auroraSidebarDisplayMode == .detailed)
+        #expect(defaults.appearance.auroraSidebarPrimaryInfo == .state)
     }
 
     @Test
     func defaultTomlTemplateContainsAuroraEnabledTrue() {
         let generated = ConfigService.generateDefaultToml()
         #expect(generated.contains("aurora-enabled = true"))
+        #expect(generated.contains("aurora-sidebar-display-mode = \"detailed\""))
+        #expect(generated.contains("aurora-sidebar-primary-info = \"state\""))
     }
 
     // MARK: - Round-trip
@@ -74,6 +78,22 @@ struct AuroraEnabledRoundTripTests {
         """
         let config = try loadConfig(from: toml)
         #expect(config.appearance.auroraEnabled == false)
+    }
+
+    @Test
+    func tomlRoundTripPreservesAuroraSidebarDisplayChoices() throws {
+        let toml = """
+        [appearance]
+        theme = "catppuccin-mocha"
+        background-opacity = 0.9
+        aurora-sidebar-display-mode = "compact"
+        aurora-sidebar-primary-info = "command"
+        """
+
+        let config = try loadConfig(from: toml)
+
+        #expect(config.appearance.auroraSidebarDisplayMode == .compact)
+        #expect(config.appearance.auroraSidebarPrimaryInfo == .command)
     }
 
     // MARK: - Tolerant parsing
@@ -105,6 +125,20 @@ struct AuroraEnabledRoundTripTests {
     }
 
     @Test
+    func invalidAuroraSidebarChoicesFallBackToDefaults() throws {
+        let toml = """
+        [appearance]
+        aurora-sidebar-display-mode = "full-screen"
+        aurora-sidebar-primary-info = 42
+        """
+
+        let config = try loadConfig(from: toml)
+
+        #expect(config.appearance.auroraSidebarDisplayMode == .detailed)
+        #expect(config.appearance.auroraSidebarPrimaryInfo == .state)
+    }
+
+    @Test
     func emptyAppearanceSectionProducesEnabledDefault() throws {
         let toml = """
         [appearance]
@@ -126,6 +160,25 @@ struct AuroraEnabledRoundTripTests {
         )
         let config = try loadConfig(from: toggled)
         #expect(config.appearance.auroraEnabled == false)
+    }
+
+    @Test
+    func generatedTomlWithAuroraSidebarChoicesPreservesValues() throws {
+        let base = ConfigService.generateDefaultToml()
+        let toggled = base
+            .replacingOccurrences(
+                of: "aurora-sidebar-display-mode = \"detailed\"",
+                with: "aurora-sidebar-display-mode = \"summary\""
+            )
+            .replacingOccurrences(
+                of: "aurora-sidebar-primary-info = \"state\"",
+                with: "aurora-sidebar-primary-info = \"process\""
+            )
+
+        let config = try loadConfig(from: toggled)
+
+        #expect(config.appearance.auroraSidebarDisplayMode == .summary)
+        #expect(config.appearance.auroraSidebarPrimaryInfo == .process)
     }
 
     // MARK: - Decoder backwards compatibility

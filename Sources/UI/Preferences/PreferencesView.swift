@@ -445,6 +445,16 @@ struct EditableAppearanceSection: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
+                Picker("Sidebar density", selection: $viewModel.auroraSidebarDisplayMode) {
+                    ForEach(AuroraSidebarDisplayMode.allCases, id: \.self) { mode in
+                        Text(mode.preferencesLabel).tag(mode)
+                    }
+                }
+                Picker("Sidebar row detail", selection: $viewModel.auroraSidebarPrimaryInfo) {
+                    ForEach(AuroraSidebarPrimaryInfo.allCases, id: \.self) { info in
+                        Text(info.preferencesLabel).tag(info)
+                    }
+                }
             }
 
             Section("Status bar") {
@@ -1706,5 +1716,26 @@ struct AboutPreferencesSection: View {
         }
         .frame(maxWidth: .infinity)
         .navigationTitle("About")
+    }
+}
+
+private extension AuroraSidebarDisplayMode {
+    var preferencesLabel: String {
+        switch self {
+        case .detailed: return "Detailed"
+        case .summary: return "Summary"
+        case .compact: return "Compact"
+        }
+    }
+}
+
+private extension AuroraSidebarPrimaryInfo {
+    var preferencesLabel: String {
+        switch self {
+        case .state: return "State"
+        case .directory: return "Directory"
+        case .process: return "Process"
+        case .command: return "Command"
+        }
     }
 }

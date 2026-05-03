@@ -17,7 +17,9 @@ struct PreferencesViewModelAuroraEnabledTests {
     }
 
     private func makeViewModel(
-        auroraEnabled: Bool
+        auroraEnabled: Bool,
+        displayMode: AuroraSidebarDisplayMode = .detailed,
+        primaryInfo: AuroraSidebarPrimaryInfo = .state
     ) -> (PreferencesViewModel, InMemoryConfigFileProvider) {
         let appearance = AppearanceConfig(
             theme: "Catppuccin Mocha",
@@ -32,7 +34,9 @@ struct PreferencesViewModelAuroraEnabledTests {
             fontThicken: false,
             backgroundOpacity: 1.0,
             backgroundBlurRadius: 0,
-            auroraEnabled: auroraEnabled
+            auroraEnabled: auroraEnabled,
+            auroraSidebarDisplayMode: displayMode,
+            auroraSidebarPrimaryInfo: primaryInfo
         )
         let config = CocxyConfig(
             general: .defaults,
@@ -60,6 +64,18 @@ struct PreferencesViewModelAuroraEnabledTests {
     }
 
     @Test
+    func loadReflectsSidebarDisplayChoices() {
+        let (vm, _) = makeViewModel(
+            auroraEnabled: true,
+            displayMode: .compact,
+            primaryInfo: .command
+        )
+
+        #expect(vm.auroraSidebarDisplayMode == .compact)
+        #expect(vm.auroraSidebarPrimaryInfo == .command)
+    }
+
+    @Test
     func togglingMarksUnsavedChanges() {
         let (vm, _) = makeViewModel(auroraEnabled: false)
         #expect(vm.hasUnsavedChanges == false)
@@ -80,8 +96,12 @@ struct PreferencesViewModelAuroraEnabledTests {
     func generatedTomlContainsCurrentValue() {
         let (vm, _) = makeViewModel(auroraEnabled: false)
         vm.auroraEnabled = true
+        vm.auroraSidebarDisplayMode = .summary
+        vm.auroraSidebarPrimaryInfo = .process
         let toml = vm.generateToml()
         #expect(toml.contains("aurora-enabled = true"))
+        #expect(toml.contains("aurora-sidebar-display-mode = \"summary\""))
+        #expect(toml.contains("aurora-sidebar-primary-info = \"process\""))
     }
 
     @Test
@@ -100,8 +120,12 @@ struct PreferencesViewModelAuroraEnabledTests {
     func saveWritesAuroraEnabledAndResetsDirty() throws {
         let (vm, provider) = makeViewModel(auroraEnabled: false)
         vm.auroraEnabled = true
+        vm.auroraSidebarDisplayMode = .compact
+        vm.auroraSidebarPrimaryInfo = .directory
         try vm.save()
         #expect(vm.hasUnsavedChanges == false)
         #expect(provider.lastWrite?.contains("aurora-enabled = true") == true)
+        #expect(provider.lastWrite?.contains("aurora-sidebar-display-mode = \"compact\"") == true)
+        #expect(provider.lastWrite?.contains("aurora-sidebar-primary-info = \"directory\"") == true)
     }
 }

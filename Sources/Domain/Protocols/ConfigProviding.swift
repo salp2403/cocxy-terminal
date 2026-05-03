@@ -385,6 +385,19 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     /// Hot-reloadable via `ConfigService.configChangedPublisher`.
     let auroraEnabled: Bool
 
+    /// Density/layout mode for the Aurora vertical workspace sidebar.
+    ///
+    /// Defaults to `.detailed`, preserving the existing full row layout.
+    /// `.summary` keeps the primary metadata line with tighter spacing,
+    /// and `.compact` hides secondary metadata/matrix affordances for
+    /// high-tab-count workspaces.
+    let auroraSidebarDisplayMode: AuroraSidebarDisplayMode
+
+    /// Signal promoted into each Aurora session row's primary metadata
+    /// line. The hover sidecar continues to expose all context, so this
+    /// is only the always-visible row preference.
+    let auroraSidebarPrimaryInfo: AuroraSidebarPrimaryInfo
+
     /// Switch for the status-bar rate-limit indicator pill.
     ///
     /// When `true` (default), the pill appears in the status bar whenever
@@ -426,6 +439,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         backgroundBlurRadius: Double,
         transparencyChromeTheme: TransparencyChromeTheme = .followSystem,
         auroraEnabled: Bool = true,
+        auroraSidebarDisplayMode: AuroraSidebarDisplayMode = .detailed,
+        auroraSidebarPrimaryInfo: AuroraSidebarPrimaryInfo = .state,
         rateLimitIndicatorEnabled: Bool = true,
         quickSwitchMode: QuickSwitchMode = .unified
     ) {
@@ -443,6 +458,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         self.backgroundBlurRadius = backgroundBlurRadius
         self.transparencyChromeTheme = transparencyChromeTheme
         self.auroraEnabled = auroraEnabled
+        self.auroraSidebarDisplayMode = auroraSidebarDisplayMode
+        self.auroraSidebarPrimaryInfo = auroraSidebarPrimaryInfo
         self.rateLimitIndicatorEnabled = rateLimitIndicatorEnabled
         self.quickSwitchMode = quickSwitchMode
     }
@@ -463,6 +480,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             backgroundBlurRadius: 0,
             transparencyChromeTheme: .followSystem,
             auroraEnabled: true,
+            auroraSidebarDisplayMode: .detailed,
+            auroraSidebarPrimaryInfo: .state,
             rateLimitIndicatorEnabled: true,
             quickSwitchMode: .unified
         )
@@ -472,8 +491,9 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
 
     /// Backwards-compatible decoding: configs persisted before the
     /// `transparencyChromeTheme`, `auroraEnabled`,
-    /// `rateLimitIndicatorEnabled`, or `quickSwitchMode` keys existed decode
-    /// cleanly with their runtime defaults.
+    /// `auroraSidebarDisplayMode`, `auroraSidebarPrimaryInfo`,
+    /// `rateLimitIndicatorEnabled`, or `quickSwitchMode` keys existed
+    /// decode cleanly with their runtime defaults.
     private enum CodingKeys: String, CodingKey {
         case theme
         case lightTheme
@@ -489,6 +509,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         case backgroundBlurRadius
         case transparencyChromeTheme
         case auroraEnabled
+        case auroraSidebarDisplayMode
+        case auroraSidebarPrimaryInfo
         case rateLimitIndicatorEnabled
         case quickSwitchMode
     }
@@ -515,6 +537,14 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             Bool.self,
             forKey: .auroraEnabled
         ) ?? AppearanceConfig.defaults.auroraEnabled
+        self.auroraSidebarDisplayMode = try container.decodeIfPresent(
+            AuroraSidebarDisplayMode.self,
+            forKey: .auroraSidebarDisplayMode
+        ) ?? AppearanceConfig.defaults.auroraSidebarDisplayMode
+        self.auroraSidebarPrimaryInfo = try container.decodeIfPresent(
+            AuroraSidebarPrimaryInfo.self,
+            forKey: .auroraSidebarPrimaryInfo
+        ) ?? AppearanceConfig.defaults.auroraSidebarPrimaryInfo
         self.rateLimitIndicatorEnabled = try container.decodeIfPresent(
             Bool.self,
             forKey: .rateLimitIndicatorEnabled

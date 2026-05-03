@@ -78,6 +78,10 @@ final class PreferencesViewModel: ObservableObject {
 
     /// Whether the experimental Aurora chrome is enabled.
     @Published var auroraEnabled: Bool
+    /// Density/layout mode for the Aurora vertical sidebar.
+    @Published var auroraSidebarDisplayMode: AuroraSidebarDisplayMode
+    /// Signal promoted into Aurora sidebar session rows.
+    @Published var auroraSidebarPrimaryInfo: AuroraSidebarPrimaryInfo
 
     /// Whether the status-bar rate-limit indicator pill is enabled.
     ///
@@ -415,6 +419,8 @@ final class PreferencesViewModel: ObservableObject {
             || backgroundOpacity != c.appearance.backgroundOpacity
             || transparencyChromeTheme != c.appearance.transparencyChromeTheme
             || auroraEnabled != c.appearance.auroraEnabled
+            || auroraSidebarDisplayMode != c.appearance.auroraSidebarDisplayMode
+            || auroraSidebarPrimaryInfo != c.appearance.auroraSidebarPrimaryInfo
             || rateLimitIndicatorEnabled != c.appearance.rateLimitIndicatorEnabled
             || quickSwitchMode != c.appearance.quickSwitchMode
             || imageFileTransfer != c.terminal.imageFileTransfer
@@ -616,6 +622,8 @@ final class PreferencesViewModel: ObservableObject {
         self.backgroundOpacity = config.appearance.backgroundOpacity
         self.transparencyChromeTheme = config.appearance.transparencyChromeTheme
         self.auroraEnabled = config.appearance.auroraEnabled
+        self.auroraSidebarDisplayMode = config.appearance.auroraSidebarDisplayMode
+        self.auroraSidebarPrimaryInfo = config.appearance.auroraSidebarPrimaryInfo
         self.rateLimitIndicatorEnabled = config.appearance.rateLimitIndicatorEnabled
         self.quickSwitchMode = config.appearance.quickSwitchMode
 
@@ -971,6 +979,8 @@ final class PreferencesViewModel: ObservableObject {
                 backgroundBlurRadius: savedConfig.appearance.backgroundBlurRadius,
                 transparencyChromeTheme: transparencyChromeTheme,
                 auroraEnabled: auroraEnabled,
+                auroraSidebarDisplayMode: auroraSidebarDisplayMode,
+                auroraSidebarPrimaryInfo: auroraSidebarPrimaryInfo,
                 rateLimitIndicatorEnabled: rateLimitIndicatorEnabled,
                 quickSwitchMode: quickSwitchMode
             ),
@@ -1347,6 +1357,8 @@ final class PreferencesViewModel: ObservableObject {
         background-blur-radius = \(Self.tomlNumber(defaults.appearance.backgroundBlurRadius))
         transparency-chrome-theme = "\(transparencyChromeTheme.rawValue)"
         aurora-enabled = \(auroraEnabled)
+        aurora-sidebar-display-mode = "\(auroraSidebarDisplayMode.rawValue)"
+        aurora-sidebar-primary-info = "\(auroraSidebarPrimaryInfo.rawValue)"
         rate-limit-indicator-enabled = \(rateLimitIndicatorEnabled)
         quickswitch-mode = "\(quickSwitchMode.rawValue)"
 

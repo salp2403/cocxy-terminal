@@ -60,6 +60,7 @@ extension MainWindowController {
             // helper is no-op when the controller is nil so this stays
             // safe during the very first install pass.
             if let controller = auroraChromeController {
+                controller.applyAppearance(appearance)
                 refreshAuroraNotesAvailability(on: controller)
             }
             applyAuroraChromeVisibility(true)

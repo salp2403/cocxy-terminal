@@ -146,6 +146,39 @@ extension Design {
             panes.reduce(0) { $0 + $1.errorCount }
         }
 
+        /// Always-visible row metadata selected by the user. Falls back
+        /// to state + pane count when the chosen signal is unavailable so
+        /// every row remains useful even for fresh shells and detached
+        /// sessions with no command/process yet.
+        func primaryMetadataLine(selection: AuroraSidebarPrimaryInfo) -> String {
+            switch selection {
+            case .state:
+                return stateMetadataLine
+            case .directory:
+                return Self.cleaned(workingDirectory).map(Self.prettyDirectory) ?? stateMetadataLine
+            case .process:
+                return Self.cleaned(foregroundProcessName) ?? stateMetadataLine
+            case .command:
+                return Self.cleaned(lastCommandSummary) ?? stateMetadataLine
+            }
+        }
+
+        /// Case-insensitive search corpus for the Aurora sidebar filter.
+        /// Includes the session, live context, pane labels, and workspace
+        /// metadata so users can jump by project path, process, command,
+        /// split-pane name, branch, or status without focusing every tab.
+        func matchesSearchTokens(
+            _ tokens: [String],
+            workspaceName: String,
+            branch: String?
+        ) -> Bool {
+            guard !tokens.isEmpty else { return true }
+            let corpus = searchCorpus(workspaceName: workspaceName, branch: branch)
+            return tokens.allSatisfy { token in
+                corpus.contains { $0.contains(token) }
+            }
+        }
+
         /// Multiline tooltip for hovering a sidebar session. This is the
         /// fast "what is happening in this tab?" surface: workspace,
         /// foreground process, command state, and every live split pane
@@ -185,6 +218,42 @@ extension Design {
 
             lines.append("Click to focus. Use the × button to close this tab.")
             return lines.joined(separator: "\n")
+        }
+
+        private var stateMetadataLine: String {
+            "\(state.rawValue) · \(paneCountLabel)"
+        }
+
+        private func searchCorpus(workspaceName: String, branch: String?) -> [String] {
+            [
+                name,
+                state.rawValue,
+                paneCountLabel,
+                workingDirectory,
+                foregroundProcessName,
+                lastCommandSummary,
+                workspaceName,
+                branch,
+            ]
+            .compactMap(Self.cleaned)
+            .map { $0.lowercased() }
+            + panes.flatMap { pane in
+                [
+                    pane.name,
+                    pane.agent.rawValue,
+                    pane.state.rawValue,
+                    pane.activity,
+                    pane.diagnosticLine,
+                ].compactMap(Self.cleaned).map { $0.lowercased() }
+            }
+        }
+
+        private static func cleaned(_ value: String?) -> String? {
+            guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !trimmed.isEmpty else {
+                return nil
+            }
+            return trimmed
         }
 
         private static func prettyDirectory(_ path: String) -> String {
@@ -244,13 +313,21 @@ extension Design {
             self.notesWorkspaceID = notesWorkspaceID
         }
 
-        /// Filters the session list by a case-insensitive substring
-        /// against the session name. An empty query returns every
-        /// session; this mirrors the CSS prototype's filter box.
+        /// Filters the session list by case-insensitive tokens across
+        /// session name, workspace metadata, directory, foreground
+        /// process, last command, pane labels and pane activity. An empty
+        /// query returns every session; whitespace is ignored so the
+        /// field behaves like a direct jump target rather than a brittle
+        /// title-only matcher.
         func filteringSessions(by query: String) -> AuroraWorkspace {
-            guard !query.isEmpty else { return self }
-            let needle = query.lowercased()
-            let filtered = sessions.filter { $0.name.lowercased().contains(needle) }
+            let tokens = query
+                .lowercased()
+                .split(whereSeparator: \.isWhitespace)
+                .map(String.init)
+            guard !tokens.isEmpty else { return self }
+            let filtered = sessions.filter {
+                $0.matchesSearchTokens(tokens, workspaceName: name, branch: branch)
+            }
             return AuroraWorkspace(
                 id: id,
                 name: name,

@@ -199,6 +199,10 @@ final class ConfigService: ConfigProviding {
         # sidebar / status bar while keeping the rest of the terminal
         # behavior unchanged.
         aurora-enabled = \(defaults.appearance.auroraEnabled)
+        # Aurora vertical sidebar density: detailed, summary, compact.
+        aurora-sidebar-display-mode = "\(defaults.appearance.auroraSidebarDisplayMode.rawValue)"
+        # Aurora row metadata: state, directory, process, command.
+        aurora-sidebar-primary-info = "\(defaults.appearance.auroraSidebarPrimaryInfo.rawValue)"
         # Rate-limit indicator pill in the status bar. Shows local-only,
         # estimated usage for agents that expose a stable usage source
         # (currently Claude Code via ~/.claude/metrics/costs.jsonl). Set
@@ -549,6 +553,8 @@ final class ConfigService: ConfigProviding {
         let rawBlur = doubleValue(table["background-blur-radius"]) ?? defaults.backgroundBlurRadius
         let chromeTheme = parseTransparencyChromeTheme(table["transparency-chrome-theme"])
         let quickSwitchMode = parseQuickSwitchMode(table["quickswitch-mode"])
+        let auroraSidebarDisplayMode = parseAuroraSidebarDisplayMode(table["aurora-sidebar-display-mode"])
+        let auroraSidebarPrimaryInfo = parseAuroraSidebarPrimaryInfo(table["aurora-sidebar-primary-info"])
 
         return AppearanceConfig(
             theme: stringValue(table["theme"]) ?? defaults.theme,
@@ -565,10 +571,28 @@ final class ConfigService: ConfigProviding {
             backgroundBlurRadius: clamp(rawBlur, min: 0, max: 100),
             transparencyChromeTheme: chromeTheme,
             auroraEnabled: boolValue(table["aurora-enabled"]) ?? defaults.auroraEnabled,
+            auroraSidebarDisplayMode: auroraSidebarDisplayMode,
+            auroraSidebarPrimaryInfo: auroraSidebarPrimaryInfo,
             rateLimitIndicatorEnabled: boolValue(table["rate-limit-indicator-enabled"])
                 ?? defaults.rateLimitIndicatorEnabled,
             quickSwitchMode: quickSwitchMode
         )
+    }
+
+    private func parseAuroraSidebarDisplayMode(_ value: TOMLValue?) -> AuroraSidebarDisplayMode {
+        guard case .string(let raw)? = value,
+              let parsed = AuroraSidebarDisplayMode(rawValue: raw) else {
+            return AppearanceConfig.defaults.auroraSidebarDisplayMode
+        }
+        return parsed
+    }
+
+    private func parseAuroraSidebarPrimaryInfo(_ value: TOMLValue?) -> AuroraSidebarPrimaryInfo {
+        guard case .string(let raw)? = value,
+              let parsed = AuroraSidebarPrimaryInfo(rawValue: raw) else {
+            return AppearanceConfig.defaults.auroraSidebarPrimaryInfo
+        }
+        return parsed
     }
 
     /// Parses the `transparency-chrome-theme` value tolerantly.
