@@ -1168,42 +1168,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             guard terminalLeafCount > 1 else { return nil }
         }
 
-        let paneName: String
-        switch focusedType {
-        case .terminal:
-            paneName = "terminal split"
-        case .browser:
-            paneName = "browser panel"
-        case .markdown:
-            paneName = "markdown panel"
-        case .editor:
-            paneName = "editor panel"
-        case .notebook:
-            paneName = "notebook panel"
-        case .workflow:
-            paneName = "workflow panel"
-        case .sessionReplay:
-            paneName = "session replay panel"
-        case .aiEditHistory:
-            paneName = "edit history panel"
-        case .templates:
-            paneName = "templates panel"
-        case .macros:
-            paneName = "macros panel"
-        case .dbCloud:
-            paneName = "DB/cloud helpers panel"
-        case .subagent:
-            paneName = "subagent panel"
-        }
-
         let remainingPaneCount = max(leaves.count - 1, 1)
+        let copy = Self.localizedFocusedPaneCloseCopy(
+            localizer: appLocalizer(),
+            paneType: focusedType,
+            remainingPaneCount: remainingPaneCount
+        )
         return (
             leafID: focusedLeaf.leafID,
-            title: "Close Focused Pane?",
-            informativeText: """
-            This will close the focused \(paneName). The workspace tab stays \
-            open with \(remainingPaneCount) pane\(remainingPaneCount == 1 ? "" : "s") remaining.
-            """
+            title: copy.messageText,
+            informativeText: copy.informativeText
         )
     }
 
@@ -1222,8 +1196,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         alert.informativeText = informativeText
         alert.alertStyle = .warning
         alert.icon = AppIconGenerator.generatePlaceholderIcon()
-        alert.addButton(withTitle: "Close Pane")
-        alert.addButton(withTitle: "Cancel")
+        let localizer = appLocalizer()
+        alert.addButton(withTitle: localizer.string("window.closePane.button", fallback: "Close Pane"))
+        alert.addButton(withTitle: localizer.string("common.cancel", fallback: "Cancel"))
 
         if let window {
             alert.beginSheetModal(for: window) { response in

@@ -137,12 +137,13 @@ extension MainWindowController {
         let shouldConfirm = configService?.current.general.confirmCloseProcess ?? false
         if shouldConfirm {
             let alert = NSAlert()
-            alert.messageText = "Close Tab?"
-            alert.informativeText = "Running processes in this tab will be terminated."
+            let copy = Self.localizedCloseTabConfirmationCopy(localizer: appLocalizer())
+            alert.messageText = copy.messageText
+            alert.informativeText = copy.informativeText
             alert.alertStyle = .warning
             alert.icon = AppIconGenerator.generatePlaceholderIcon()
-            alert.addButton(withTitle: "Close")
-            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: copy.primaryButton)
+            alert.addButton(withTitle: copy.secondaryButton)
             guard let window else { return }
             alert.beginSheetModal(for: window) { [weak self] response in
                 if response == .alertFirstButtonReturn {
@@ -294,15 +295,16 @@ extension MainWindowController {
         }
 
         let alert = NSAlert()
-        alert.messageText = "Close Worktree Tab?"
-        alert.informativeText = """
-        This tab is attached to a cocxy-managed git worktree. Keep the worktree on disk, or remove it only if it has no uncommitted changes.
-        """
+        let copy = Self.localizedCloseWorktreeTabCopy(localizer: appLocalizer())
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.alertStyle = .warning
         alert.icon = AppIconGenerator.generatePlaceholderIcon()
-        alert.addButton(withTitle: "Keep Worktree")
-        alert.addButton(withTitle: "Remove if Clean")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
+        if let tertiaryButton = copy.tertiaryButton {
+            alert.addButton(withTitle: tertiaryButton)
+        }
         alert.beginSheetModal(for: window) { [weak self] response in
             switch response {
             case .alertFirstButtonReturn:

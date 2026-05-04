@@ -20,11 +20,12 @@ extension MainWindowController {
         field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
 
         let alert = NSAlert()
-        alert.messageText = "Save Current Tab as Config"
-        alert.informativeText = "Saved configs live locally as TOML and can be edited before opening."
+        let copy = Self.localizedSaveTabConfigCopy(localizer: appLocalizer())
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.accessoryView = field
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,7 +35,7 @@ extension MainWindowController {
             theme: nil,
             environment: [:]
         ) != nil else {
-            showTabConfigError("Unable to save tab config.")
+            showTabConfigError(Self.localizedTabConfigSaveFailureMessage(localizer: appLocalizer()))
             return
         }
     }
@@ -48,16 +49,17 @@ extension MainWindowController {
         field.stringValue = names.first ?? ""
 
         let alert = NSAlert()
-        alert.messageText = "Open Tab from Config"
-        alert.informativeText = "The TOML file is reloaded from disk before the tab opens."
+        let copy = Self.localizedOpenTabConfigCopy(localizer: appLocalizer())
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.accessoryView = field
-        alert.addButton(withTitle: "Open")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard appDelegate.openTabConfigForCLI(named: name) != nil else {
-            showTabConfigError("Unable to open tab config.")
+            showTabConfigError(Self.localizedTabConfigOpenFailureMessage(localizer: appLocalizer()))
             return
         }
     }
@@ -66,7 +68,7 @@ extension MainWindowController {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = message
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: appLocalizer().string("common.ok", fallback: "OK"))
         alert.runModal()
     }
 }

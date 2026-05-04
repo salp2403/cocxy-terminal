@@ -8,6 +8,21 @@ struct AppAlertCopy: Equatable {
     let informativeText: String
     let primaryButton: String
     let secondaryButton: String
+    let tertiaryButton: String?
+
+    init(
+        messageText: String,
+        informativeText: String,
+        primaryButton: String,
+        secondaryButton: String,
+        tertiaryButton: String? = nil
+    ) {
+        self.messageText = messageText
+        self.informativeText = informativeText
+        self.primaryButton = primaryButton
+        self.secondaryButton = secondaryButton
+        self.tertiaryButton = tertiaryButton
+    }
 }
 
 extension AppDelegate {
