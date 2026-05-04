@@ -1,0 +1,9 @@
+{
+  "name": "local/{{project_name}}",
+  "type": "library",
+  "autoload": {
+    "psr-4": {
+      "{{namespace}}\\": "src/"
+    }
+  }
+}

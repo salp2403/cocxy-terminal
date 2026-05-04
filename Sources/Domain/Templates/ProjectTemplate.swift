@@ -142,3 +142,56 @@ struct ProjectTemplateManifest: Codable, Sendable, Equatable {
     let variables: [ProjectTemplateVariable]
     let hooks: ProjectTemplateHooks?
 }
+
+enum ProjectTemplateHookPhase: String, Sendable, Hashable, Equatable {
+    case pre
+    case post
+}
+
+struct ProjectTemplateHookExecution: Sendable, Equatable {
+    let phase: ProjectTemplateHookPhase
+    let command: String
+    let exitCode: Int32
+    let stdout: String
+    let stderr: String
+}
+
+enum ProjectTemplateHookError: Error, Sendable, Equatable {
+    case emptyCommand
+    case unterminatedQuote(String)
+    case shellOperatorNotAllowed(String)
+    case executablePathNotAllowed(String)
+    case executableBlocked(String)
+    case executableNotAllowed(String)
+    case unsafeArgument(String)
+    case subcommandNotAllowed(executable: String, subcommand: String)
+    case workingDirectoryMissing(URL)
+    case commandFailed(command: String, exitCode: Int32, stderr: String)
+}
+
+extension ProjectTemplateHookError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .emptyCommand:
+            return "Template hook command is empty."
+        case .unterminatedQuote(let command):
+            return "Template hook command has an unterminated quote: \(command)"
+        case .shellOperatorNotAllowed(let command):
+            return "Template hook command uses unsupported shell syntax: \(command)"
+        case .executablePathNotAllowed(let executable):
+            return "Template hook executable must be resolved from PATH: \(executable)"
+        case .executableBlocked(let executable):
+            return "Template hook executable is blocked by the sandbox: \(executable)"
+        case .executableNotAllowed(let executable):
+            return "Template hook executable is not allowed: \(executable)"
+        case .unsafeArgument(let argument):
+            return "Template hook argument is unsafe: \(argument)"
+        case .subcommandNotAllowed(let executable, let subcommand):
+            return "Template hook subcommand is not allowed: \(executable) \(subcommand)"
+        case .workingDirectoryMissing(let url):
+            return "Template hook working directory is missing: \(url.path)"
+        case .commandFailed(let command, let exitCode, let stderr):
+            return "Template hook failed with exit \(exitCode): \(command)\n\(stderr)"
+        }
+    }
+}

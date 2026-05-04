@@ -1,0 +1,24 @@
+{
+  "id": "rust-package",
+  "name": "Rust Package",
+  "description": "Creates a local Rust package with a library, binary, and unit test.",
+  "variables": [
+    {
+      "name": "project_name",
+      "prompt": "Project name",
+      "default": "cocxy-tool",
+      "required": true
+    },
+    {
+      "name": "crate_name",
+      "prompt": "Rust crate name",
+      "default": "cocxy_tool",
+      "required": true
+    }
+  ],
+  "hooks": {
+    "post": [
+      "cargo test"
+    ]
+  }
+}

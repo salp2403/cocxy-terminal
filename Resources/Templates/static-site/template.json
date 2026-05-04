@@ -1,0 +1,18 @@
+{
+  "id": "static-site",
+  "name": "Static Site",
+  "description": "Creates a dependency-free static web project.",
+  "variables": [
+    {
+      "name": "project_name",
+      "prompt": "Project name",
+      "default": "Cocxy Site",
+      "required": true
+    }
+  ],
+  "hooks": {
+    "post": [
+      "true"
+    ]
+  }
+}

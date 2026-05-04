@@ -1,0 +1,30 @@
+{
+  "id": "ruby-gem",
+  "name": "Ruby Gem",
+  "description": "Creates a local Ruby gem-style project skeleton.",
+  "variables": [
+    {
+      "name": "project_name",
+      "prompt": "Project name",
+      "default": "cocxy-ruby-tool",
+      "required": true
+    },
+    {
+      "name": "gem_name",
+      "prompt": "Gem file name",
+      "default": "cocxy_tool",
+      "required": true
+    },
+    {
+      "name": "module_name",
+      "prompt": "Ruby module name",
+      "default": "CocxyTool",
+      "required": true
+    }
+  ],
+  "hooks": {
+    "post": [
+      "ruby -c lib/{{gem_name}}.rb"
+    ]
+  }
+}

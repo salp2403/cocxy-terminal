@@ -1,0 +1,24 @@
+{
+  "id": "go-module",
+  "name": "Go Module",
+  "description": "Creates a local Go module with a tiny testable package.",
+  "variables": [
+    {
+      "name": "project_name",
+      "prompt": "Project name",
+      "default": "cocxy-go-tool",
+      "required": true
+    },
+    {
+      "name": "module_path",
+      "prompt": "Go module path",
+      "default": "example.com/cocxy-go-tool",
+      "required": true
+    }
+  ],
+  "hooks": {
+    "post": [
+      "go test ./..."
+    ]
+  }
+}

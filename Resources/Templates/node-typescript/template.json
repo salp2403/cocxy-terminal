@@ -1,0 +1,24 @@
+{
+  "id": "node-typescript",
+  "name": "Node TypeScript",
+  "description": "Creates a local TypeScript project layout without installing packages.",
+  "variables": [
+    {
+      "name": "project_name",
+      "prompt": "Project name",
+      "default": "cocxy-node-tool",
+      "required": true
+    },
+    {
+      "name": "package_name",
+      "prompt": "Package name",
+      "default": "cocxy-node-tool",
+      "required": true
+    }
+  ],
+  "hooks": {
+    "post": [
+      "npm test"
+    ]
+  }
+}

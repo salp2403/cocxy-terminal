@@ -1,0 +1,5 @@
+services:
+  {{service_name}}:
+    build: .
+    ports:
+      - "8080:8080"

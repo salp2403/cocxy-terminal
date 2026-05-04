@@ -171,6 +171,152 @@ struct ProjectTemplateSwiftTestingTests {
         }
     }
 
+    @Test("hook runner executes approved local commands")
+    func hookRunnerExecutesApprovedLocalCommands() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = ProjectTemplateHookPlan(
+            workingDirectory: root,
+            pre: ["echo preparing local scaffold"],
+            post: ["touch marker.txt"]
+        )
+
+        let executions = try ProjectTemplateHookRunner().run(plan)
+
+        #expect(executions.map(\.phase) == [.pre, .post])
+        #expect(executions.first?.stdout == "preparing local scaffold\n")
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("marker.txt").path))
+    }
+
+    @Test("hook sandbox blocks network destructive shell and escape commands")
+    func hookSandboxBlocksNetworkDestructiveShellAndEscapeCommands() throws {
+        let sandbox = ProjectTemplateHookSandbox()
+
+        #expect(throws: ProjectTemplateHookError.executableBlocked("curl")) {
+            _ = try sandbox.validate("curl https://example.com/template")
+        }
+        #expect(throws: ProjectTemplateHookError.shellOperatorNotAllowed("echo ok; rm -rf .")) {
+            _ = try sandbox.validate("echo ok; rm -rf .")
+        }
+        #expect(throws: ProjectTemplateHookError.subcommandNotAllowed(
+            executable: "git",
+            subcommand: "clone"
+        )) {
+            _ = try sandbox.validate("git clone https://example.com/repo.git")
+        }
+        #expect(throws: ProjectTemplateHookError.unsafeArgument("../escape")) {
+            _ = try sandbox.validate("touch ../escape")
+        }
+
+        #expect(try sandbox.validate("python -m unittest discover -s tests") == ProjectTemplateHookCommand(
+            executable: "python",
+            arguments: ["-m", "unittest", "discover", "-s", "tests"]
+        ))
+    }
+
+    @Test("marketplace installs local template then scaffolds from the installed registry")
+    func marketplaceInstallsLocalTemplateThenScaffoldsFromInstalledRegistry() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceRoot = root.appendingPathComponent("source", isDirectory: true)
+        let installRoot = root.appendingPathComponent("installed", isDirectory: true)
+        let output = root.appendingPathComponent("output", isDirectory: true)
+        try writeTemplate(
+            id: "custom-cli",
+            name: "Custom CLI",
+            summary: "Local marketplace template",
+            files: [
+                "README.md": "# {{project_name}}\n",
+                "Sources/{{module_name}}/main.swift": "print(\"{{project_name}}\")\n",
+            ],
+            in: sourceRoot
+        )
+
+        let receipt = try ProjectTemplateMarketplaceInstaller(
+            templatesDirectory: installRoot
+        ).install(from: sourceRoot.appendingPathComponent("custom-cli", isDirectory: true))
+
+        #expect(receipt.templateID == "custom-cli")
+        #expect(receipt.template.source == .user)
+        #expect(FileManager.default.fileExists(
+            atPath: installRoot.appendingPathComponent("custom-cli/template.json").path
+        ))
+
+        let installedTemplate = try #require(ProjectTemplateRegistry(
+            directories: [ProjectTemplateDirectory(url: installRoot, source: .user)]
+        ).templateMap()["custom-cli"])
+        let scaffold = try ProjectTemplateScaffolder().scaffold(
+            template: installedTemplate,
+            values: ["project_name": "InstalledDemo", "module_name": "InstalledDemo"],
+            destinationURL: output
+        )
+
+        #expect(scaffold.createdFiles == ["README.md", "Sources/InstalledDemo/main.swift"])
+        #expect(try String(
+            contentsOf: output.appendingPathComponent("README.md"),
+            encoding: .utf8
+        ) == "# InstalledDemo\n")
+    }
+
+    @Test("marketplace source store deduplicates URLs and rejects unsupported schemes")
+    func marketplaceSourceStoreDeduplicatesURLsAndRejectsUnsupportedSchemes() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ProjectTemplateSourceStore(
+            fileURL: root.appendingPathComponent("sources.json")
+        )
+        let sourceURL = try #require(URL(string: "https://example.com/templates/swift-package.git"))
+
+        try store.add(ProjectTemplateMarketplaceSource(url: sourceURL, displayName: "Swift"))
+        try store.add(ProjectTemplateMarketplaceSource(url: sourceURL, displayName: "Swift updated"))
+
+        let sources = try store.load()
+        #expect(sources.count == 1)
+        #expect(sources.first?.displayName == "Swift updated")
+        let attributes = try FileManager.default.attributesOfItem(atPath: store.fileURL.path)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+        #expect(throws: ProjectTemplateMarketplaceError.invalidSourceScheme("ftp")) {
+            try store.add(ProjectTemplateMarketplaceSource(
+                url: #require(URL(string: "ftp://example.com/template.git"))
+            ))
+        }
+    }
+
+    @Test("all bundled templates scaffold with defaults and leave no unresolved placeholders")
+    func allBundledTemplatesScaffoldWithDefaultsAndLeaveNoUnresolvedPlaceholders() throws {
+        let root = repositoryRoot()
+        let outputRoot = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outputRoot) }
+        let templatesRoot = root.appendingPathComponent("Resources/Templates", isDirectory: true)
+        let templates = try ProjectTemplateRegistry(
+            directories: [ProjectTemplateDirectory(url: templatesRoot, source: .builtIn)]
+        ).loadTemplates()
+        let scaffolder = ProjectTemplateScaffolder()
+
+        for template in templates {
+            let values = Dictionary(uniqueKeysWithValues: template.variables.map { variable in
+                (variable.name, variable.defaultValue ?? "")
+            })
+            let destination = outputRoot.appendingPathComponent(template.id, isDirectory: true)
+            let result = try scaffolder.scaffold(
+                template: template,
+                values: values,
+                destinationURL: destination
+            )
+
+            #expect(!result.createdFiles.isEmpty)
+            #expect((result.hookPlan.pre + result.hookPlan.post).allSatisfy { !$0.contains("{{") })
+            for relativePath in result.createdFiles {
+                #expect(!relativePath.contains("{{"))
+                let content = try String(
+                    contentsOf: destination.appendingPathComponent(relativePath),
+                    encoding: .utf8
+                )
+                #expect(!content.contains("{{"))
+            }
+        }
+    }
+
     @Test("bundled template resources are copied and verified by app bundle scripts")
     func bundledTemplateResourcesAreCopiedAndVerifiedByAppBundleScripts() throws {
         let root = repositoryRoot()
@@ -186,13 +332,26 @@ struct ProjectTemplateSwiftTestingTests {
         let templates = try ProjectTemplateRegistry(
             directories: [ProjectTemplateDirectory(url: templatesRoot, source: .builtIn)]
         ).loadTemplates()
+        let expectedTemplateIDs = [
+            "docker-service",
+            "flutter-app",
+            "go-module",
+            "node-typescript",
+            "php-composer",
+            "python-package",
+            "ruby-gem",
+            "rust-package",
+            "static-site",
+            "swift-package",
+        ]
 
-        #expect(templates.map(\.id) == ["python-package", "swift-package"])
+        #expect(templates.map(\.id) == expectedTemplateIDs)
         #expect(buildScript.contains("Resources/Templates"))
         #expect(verifyScript.contains("[Templates]"))
         #expect(verifyScript.contains("$RESOURCES/Templates"))
-        #expect(verifyScript.contains("Templates/swift-package/template.json"))
-        #expect(verifyScript.contains("Templates/python-package/template.json"))
+        for id in expectedTemplateIDs {
+            #expect(verifyScript.contains("Templates/\(id)/template.json"))
+        }
     }
 
     private func makeTemporaryDirectory() throws -> URL {

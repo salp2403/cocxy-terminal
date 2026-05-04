@@ -1,0 +1,24 @@
+{
+  "id": "docker-service",
+  "name": "Docker Service",
+  "description": "Creates a minimal local service with Docker assets.",
+  "variables": [
+    {
+      "name": "project_name",
+      "prompt": "Project name",
+      "default": "cocxy-service",
+      "required": true
+    },
+    {
+      "name": "service_name",
+      "prompt": "Service name",
+      "default": "cocxy-service",
+      "required": true
+    }
+  ],
+  "hooks": {
+    "post": [
+      "true"
+    ]
+  }
+}
