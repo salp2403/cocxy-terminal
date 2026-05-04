@@ -145,4 +145,24 @@ enum DiffMode: String, CaseIterable, Sendable {
         case .vsBranch: return "Reference"
         }
     }
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .uncommitted:
+            return localizer.string(
+                "codeReview.diffMode.uncommitted",
+                fallback: title
+            )
+        case .sinceSessionStart:
+            return localizer.string(
+                "codeReview.diffMode.sinceSessionStart",
+                fallback: title
+            )
+        case .vsBranch:
+            return localizer.string(
+                "codeReview.diffMode.vsBranch",
+                fallback: title
+            )
+        }
+    }
 }

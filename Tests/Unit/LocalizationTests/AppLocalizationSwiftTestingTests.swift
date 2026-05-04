@@ -187,6 +187,20 @@ struct AppLocalizationSwiftTestingTests {
         #expect(GitHubCheckConclusion.success.localizedDisplayName(using: spanish) == "Correcto")
     }
 
+    @Test
+    func codeReviewPanelStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("codeReview.panel.accessibility", fallback: "Agent code review panel") == "Panel de revisión de código")
+        #expect(spanish.string("codeReview.panel.title", fallback: "Agent Code Review") == "Revisión de código")
+        #expect(spanish.string("codeReview.panel.empty.title", fallback: "No reviewable changes yet") == "Aún no hay cambios para revisar")
+        #expect(spanish.string("codeReview.toolbar.editFile", fallback: "Edit File") == "Editar archivo")
+        #expect(spanish.string("codeReview.toolbar.shortcuts.title", fallback: "Review Shortcuts") == "Atajos de revisión")
+        #expect(DiffMode.sinceSessionStart.localizedTitle(using: spanish) == "Sesión de agente")
+        #expect(CodeReviewEditorSplitLayout.sideBySide.localizedTitle(using: spanish) == "Lado a lado")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

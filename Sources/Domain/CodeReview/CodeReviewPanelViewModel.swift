@@ -17,6 +17,21 @@ enum CodeReviewEditorSplitLayout: String, CaseIterable, Identifiable {
         }
     }
 
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .stacked:
+            return localizer.string(
+                "codeReview.editor.layout.stacked",
+                fallback: title
+            )
+        case .sideBySide:
+            return localizer.string(
+                "codeReview.editor.layout.sideBySide",
+                fallback: title
+            )
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .stacked: return "rectangle.split.2x1"

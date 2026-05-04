@@ -114,9 +114,11 @@ struct CodeReviewPanelView: View {
             .frame(width: 0, height: 0)
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Agent code review panel")
+        .accessibilityLabel(
+            localized("codeReview.panel.accessibility", fallback: "Agent code review panel")
+        )
         .alert(
-            "Save editor changes?",
+            localized("codeReview.panel.saveEditorChanges.title", fallback: "Save editor changes?"),
             isPresented: Binding(
                 get: { viewModel.pendingEditorSwitch != nil },
                 set: { isPresented in
@@ -126,17 +128,30 @@ struct CodeReviewPanelView: View {
                 }
             )
         ) {
-            Button("Save") {
+            Button(localized("codeReview.panel.save", fallback: "Save")) {
                 viewModel.saveAndSwitchEditorFile()
             }
-            Button("Discard", role: .destructive) {
+            Button(localized("codeReview.panel.discard", fallback: "Discard"), role: .destructive) {
                 viewModel.discardAndSwitchEditorFile()
             }
-            Button("Cancel", role: .cancel) {
+            Button(localized("codeReview.panel.cancel", fallback: "Cancel"), role: .cancel) {
                 viewModel.cancelEditorFileSwitch()
             }
         } message: {
-            Text("Save the current file before switching to \(viewModel.pendingEditorSwitch?.targetFilePath ?? "the selected file")?")
+            let target = viewModel.pendingEditorSwitch?.targetFilePath
+                ?? localized(
+                    "codeReview.panel.saveEditorChanges.targetFallback",
+                    fallback: "the selected file"
+                )
+            Text(
+                String(
+                    format: localized(
+                        "codeReview.panel.saveEditorChanges.message",
+                        fallback: "Save the current file before switching to %@?"
+                    ),
+                    target
+                )
+            )
         }
     }
 
@@ -159,9 +174,16 @@ struct CodeReviewPanelView: View {
 
                     if viewModel.isEditorVisible {
                         if viewModel.isEditorExpanded {
-                            CodeReviewFileEditorView(viewModel: viewModel, fillsAvailableSpace: true)
+                            CodeReviewFileEditorView(
+                                viewModel: viewModel,
+                                fillsAvailableSpace: true,
+                                localizer: localizer
+                            )
                         } else {
-                            CodeReviewEditorDiffSplitView(viewModel: viewModel) {
+                            CodeReviewEditorDiffSplitView(
+                                viewModel: viewModel,
+                                localizer: localizer
+                            ) {
                                 diffContentView
                             }
                         }
@@ -228,14 +250,19 @@ struct CodeReviewPanelView: View {
             Image(systemName: "rectangle.split.3x1")
                 .font(.system(size: 24))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("Editor focus mode")
+            Text(localized("codeReview.panel.editorFocus.title", fallback: "Editor focus mode"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("The diff is temporarily hidden so the inline editor can use the full review panel.")
+            Text(
+                localized(
+                    "codeReview.panel.editorFocus.message",
+                    fallback: "The diff is temporarily hidden so the inline editor can use the full review panel."
+                )
+            )
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 .multilineTextAlignment(.center)
-            Button("Show Diff") {
+            Button(localized("codeReview.panel.editorFocus.showDiff", fallback: "Show Diff")) {
                 viewModel.toggleEditorExpanded()
             }
             .buttonStyle(.bordered)
@@ -253,7 +280,7 @@ struct CodeReviewPanelView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(Color(nsColor: CocxyColors.blue))
 
-                        Text("Agent Code Review")
+                        Text(localized("codeReview.panel.title", fallback: "Agent Code Review"))
                             .font(.system(size: 13, weight: .semibold))
                     }
 
@@ -262,7 +289,12 @@ struct CodeReviewPanelView: View {
                             .font(.system(size: 10))
                             .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     } else {
-                        Text("Review agent-generated changes before they land")
+                        Text(
+                            localized(
+                                "codeReview.panel.subtitle",
+                                fallback: "Review agent-generated changes before they land"
+                            )
+                        )
                             .font(.system(size: 10))
                             .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     }
@@ -279,8 +311,18 @@ struct CodeReviewPanelView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!canDecreaseWidth)
-                    .help("Make review panel narrower")
-                    .accessibilityLabel("Make review panel narrower")
+                    .help(
+                        localized(
+                            "codeReview.panel.width.narrower",
+                            fallback: "Make review panel narrower"
+                        )
+                    )
+                    .accessibilityLabel(
+                        localized(
+                            "codeReview.panel.width.narrower",
+                            fallback: "Make review panel narrower"
+                        )
+                    )
 
                     Text("\(Int(panelWidth.rounded())) px")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -295,8 +337,18 @@ struct CodeReviewPanelView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!canIncreaseWidth)
-                    .help("Make review panel wider")
-                    .accessibilityLabel("Make review panel wider")
+                    .help(
+                        localized(
+                            "codeReview.panel.width.wider",
+                            fallback: "Make review panel wider"
+                        )
+                    )
+                    .accessibilityLabel(
+                        localized(
+                            "codeReview.panel.width.wider",
+                            fallback: "Make review panel wider"
+                        )
+                    )
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
@@ -312,8 +364,8 @@ struct CodeReviewPanelView: View {
                         .font(.system(size: 11, weight: .medium))
                 }
                 .buttonStyle(.plain)
-                .help("Refresh review")
-                .accessibilityLabel("Refresh review")
+                .help(localized("codeReview.panel.refresh", fallback: "Refresh review"))
+                .accessibilityLabel(localized("codeReview.panel.refresh", fallback: "Refresh review"))
 
                 Button {
                     onDismiss?()
@@ -322,39 +374,39 @@ struct CodeReviewPanelView: View {
                         .font(.system(size: 10, weight: .medium))
                 }
                 .buttonStyle(.plain)
-                .help("Close review panel")
-                .accessibilityLabel("Close review panel")
+                .help(localized("codeReview.panel.close", fallback: "Close review panel"))
+                .accessibilityLabel(localized("codeReview.panel.close", fallback: "Close review panel"))
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     headerChip(
-                        label: "Mode",
-                        value: viewModel.diffMode.title,
+                        label: localized("codeReview.panel.chip.mode", fallback: "Mode"),
+                        value: viewModel.diffMode.localizedTitle(using: localizer),
                         color: CocxyColors.blue
                     )
                     headerChip(
-                        label: "Files",
+                        label: localized("codeReview.panel.chip.files", fallback: "Files"),
                         value: "\(viewModel.currentDiffs.count)",
                         color: CocxyColors.subtext0
                     )
                     if let activeSessionId = viewModel.activeSessionId {
                         headerChip(
-                            label: "Session",
+                            label: localized("codeReview.panel.chip.session", fallback: "Session"),
                             value: String(activeSessionId.prefix(8)),
                             color: CocxyColors.mauve
                         )
                     }
                     if viewModel.pendingCommentCount > 0 {
                         headerChip(
-                            label: "Pending",
-                            value: "\(viewModel.pendingCommentCount) comments",
+                            label: localized("codeReview.panel.chip.pending", fallback: "Pending"),
+                            value: localizedCommentCount(viewModel.pendingCommentCount),
                             color: CocxyColors.yellow
                         )
                     }
                     if !viewModel.reviewRounds.isEmpty {
                         headerChip(
-                            label: "Rounds",
+                            label: localized("codeReview.panel.chip.rounds", fallback: "Rounds"),
                             value: "\(viewModel.reviewRounds.count)",
                             color: CocxyColors.green
                         )
@@ -371,7 +423,7 @@ struct CodeReviewPanelView: View {
             Spacer()
             ProgressView()
                 .controlSize(.small)
-            Text("Collecting agent changes…")
+            Text(localized("codeReview.panel.loading", fallback: "Collecting agent changes..."))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
             Spacer()
@@ -385,22 +437,37 @@ struct CodeReviewPanelView: View {
             Image(systemName: "checkmark.shield")
                 .font(.system(size: 30))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No reviewable changes yet")
+            Text(localized("codeReview.panel.empty.title", fallback: "No reviewable changes yet"))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("When an agent writes or edits files in this workspace, their diffs will appear here for review.")
+            Text(
+                localized(
+                    "codeReview.panel.empty.message",
+                    fallback: "When an agent writes or edits files in this workspace, their diffs will appear here for review."
+                )
+            )
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
-            Text("Tip: use Cmd+Option+R to reopen this panel quickly.")
+            Text(
+                localized(
+                    "codeReview.panel.empty.tip",
+                    fallback: "Tip: use Cmd+Option+R to reopen this panel quickly."
+                )
+            )
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-            Button("Refresh Review") {
+            Button(localized("codeReview.panel.empty.refresh", fallback: "Refresh Review")) {
                 viewModel.refreshDiffs()
             }
             .buttonStyle(.borderedProminent)
-            .accessibilityHint("Reload the current agent diff")
+            .accessibilityHint(
+                localized(
+                    "codeReview.panel.empty.refreshHint",
+                    fallback: "Reload the current agent diff"
+                )
+            )
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -410,7 +477,7 @@ struct CodeReviewPanelView: View {
     private var reviewRoundsView: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Review Rounds")
+                Text(localized("codeReview.panel.rounds.title", fallback: "Review Rounds"))
                     .font(.system(size: 11, weight: .semibold))
                 Spacer()
                 Text("\(viewModel.reviewRounds.count)")
@@ -423,14 +490,32 @@ struct CodeReviewPanelView: View {
                     ForEach(viewModel.reviewRounds.reversed()) { round in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text("Round \(round.id)")
+                                Text(
+                                    String(
+                                        format: localized(
+                                            "codeReview.panel.rounds.round",
+                                            fallback: "Round %d"
+                                        ),
+                                        round.id
+                                    )
+                                )
                                     .font(.system(size: 10, weight: .semibold))
                                 Spacer()
                                 Text(round.timestamp.formatted(date: .omitted, time: .shortened))
                                     .font(.system(size: 9))
                                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                             }
-                            Text("\(round.comments.count) comments · \(round.diffs.count) files · \(round.baseRef.prefix(7))")
+                            Text(
+                                String(
+                                    format: localized(
+                                        "codeReview.panel.rounds.summary",
+                                        fallback: "%d comments · %d files · %@"
+                                    ),
+                                    round.comments.count,
+                                    round.diffs.count,
+                                    String(round.baseRef.prefix(7))
+                                )
+                            )
                                 .font(.system(size: 10))
                                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                         }
@@ -451,9 +536,17 @@ struct CodeReviewPanelView: View {
     private var fileListPane: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Changed Files")
+                Text(localized("codeReview.panel.files.title", fallback: "Changed Files"))
                     .font(.system(size: 11, weight: .semibold))
-                Text("\(viewModel.currentDiffs.count) files ready for review")
+                Text(
+                    String(
+                        format: localized(
+                            "codeReview.panel.files.ready",
+                            fallback: "%d files ready for review"
+                        ),
+                        viewModel.currentDiffs.count
+                    )
+                )
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
             }
@@ -494,20 +587,30 @@ struct CodeReviewPanelView: View {
                 Spacer()
 
                 if let agentName = fileDiff.agentName {
-                    headerChip(label: "Agent", value: agentName, color: CocxyColors.blue)
+                    headerChip(
+                        label: localized("codeReview.panel.chip.agent", fallback: "Agent"),
+                        value: agentName,
+                        color: CocxyColors.blue
+                    )
                 }
             }
 
             HStack(spacing: 8) {
-                summaryMetric(text: "\(fileDiff.hunks.count) hunks", color: CocxyColors.subtext0)
+                summaryMetric(
+                    text: String(
+                        format: localized("codeReview.panel.metric.hunks", fallback: "%d hunks"),
+                        fileDiff.hunks.count
+                    ),
+                    color: CocxyColors.subtext0
+                )
                 summaryMetric(text: "+\(fileDiff.additions)", color: CocxyColors.green)
                 summaryMetric(text: "-\(fileDiff.deletions)", color: CocxyColors.red)
                 let commentCount = viewModel.commentCount(for: fileDiff.filePath)
                 if commentCount > 0 {
-                    summaryMetric(text: "\(commentCount) comments", color: CocxyColors.yellow)
+                    summaryMetric(text: localizedCommentCount(commentCount), color: CocxyColors.yellow)
                 }
                 Spacer()
-                Text("Click a line to anchor feedback")
+                Text(localized("codeReview.panel.anchorHint", fallback: "Click a line to anchor feedback"))
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
             }
@@ -559,6 +662,21 @@ struct CodeReviewPanelView: View {
             case .info: return "Review notice"
             }
         }
+
+        func localizedAccessibilityPrefix(using localizer: AppLocalizer) -> String {
+            switch self {
+            case .error:
+                return localizer.string(
+                    "codeReview.panel.banner.error",
+                    fallback: accessibilityPrefix
+                )
+            case .info:
+                return localizer.string(
+                    "codeReview.panel.banner.info",
+                    fallback: accessibilityPrefix
+                )
+            }
+        }
     }
 
     private func banner(message: String, kind: BannerKind) -> some View {
@@ -577,7 +695,7 @@ struct CodeReviewPanelView: View {
         .padding(.vertical, 8)
         .background(Color(nsColor: kind.backgroundColor).opacity(0.08))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(kind.accessibilityPrefix): \(message)")
+        .accessibilityLabel("\(kind.localizedAccessibilityPrefix(using: localizer)): \(message)")
     }
 
     private func headerChip(label: String, value: String, color: NSColor) -> some View {
@@ -632,10 +750,22 @@ struct CodeReviewPanelView: View {
             return CocxyColors.mauve
         }
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    private func localizedCommentCount(_ count: Int) -> String {
+        String(
+            format: localized("codeReview.panel.metric.comments", fallback: "%d comments"),
+            count
+        )
+    }
 }
 
 private struct CodeReviewEditorDiffSplitView<DiffContent: View>: View {
     @ObservedObject var viewModel: CodeReviewPanelViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     @ViewBuilder let diffContent: DiffContent
     @State private var dragStartFraction: Double?
 
@@ -655,7 +785,11 @@ private struct CodeReviewEditorDiffSplitView<DiffContent: View>: View {
 
             if isSideBySide {
                 HStack(spacing: 0) {
-                    CodeReviewFileEditorView(viewModel: viewModel, fillsAvailableSpace: true)
+                    CodeReviewFileEditorView(
+                        viewModel: viewModel,
+                        fillsAvailableSpace: true,
+                        localizer: localizer
+                    )
                         .frame(width: editorExtent)
                     splitHandle(axis: .vertical, available: usableExtent, handleExtent: handleExtent)
                     diffContent
@@ -664,7 +798,11 @@ private struct CodeReviewEditorDiffSplitView<DiffContent: View>: View {
                 }
             } else {
                 VStack(spacing: 0) {
-                    CodeReviewFileEditorView(viewModel: viewModel, fillsAvailableSpace: true)
+                    CodeReviewFileEditorView(
+                        viewModel: viewModel,
+                        fillsAvailableSpace: true,
+                        localizer: localizer
+                    )
                         .frame(height: editorExtent)
                     splitHandle(axis: .horizontal, available: usableExtent, handleExtent: handleExtent)
                     diffContent
@@ -721,14 +859,33 @@ private struct CodeReviewEditorDiffSplitView<DiffContent: View>: View {
                     dragStartFraction = nil
                 }
         )
-        .accessibilityLabel(isHorizontal ? "Resize stacked editor and diff" : "Resize side-by-side editor and diff")
-        .help(isHorizontal ? "Drag to resize editor and diff vertically" : "Drag to resize editor and diff horizontally")
+        .accessibilityLabel(
+            isHorizontal
+                ? localized("codeReview.editor.resize.stacked", fallback: "Resize stacked editor and diff")
+                : localized("codeReview.editor.resize.sideBySide", fallback: "Resize side-by-side editor and diff")
+        )
+        .help(
+            isHorizontal
+                ? localized(
+                    "codeReview.editor.resize.stacked.help",
+                    fallback: "Drag to resize editor and diff vertically"
+                )
+                : localized(
+                    "codeReview.editor.resize.sideBySide.help",
+                    fallback: "Drag to resize editor and diff horizontally"
+                )
+        )
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
 private struct CodeReviewFileEditorView: View {
     @ObservedObject var viewModel: CodeReviewPanelViewModel
     let fillsAvailableSpace: Bool
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -740,16 +897,25 @@ private struct CodeReviewFileEditorView: View {
                     Text(viewModel.editorFilePath ?? "Editor")
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .lineLimit(1)
-                    Text("\(viewModel.editorLanguage) · \(lineCount) lines")
+                    Text(
+                        String(
+                            format: localized("codeReview.editor.lines", fallback: "%@ · %d lines"),
+                            viewModel.editorLanguage,
+                            lineCount
+                        )
+                    )
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 }
 
                 Spacer()
 
-                Picker("Editor layout", selection: $viewModel.editorSplitLayout) {
+                Picker(
+                    localized("codeReview.editor.layout.picker", fallback: "Editor layout"),
+                    selection: $viewModel.editorSplitLayout
+                ) {
                     ForEach(CodeReviewEditorSplitLayout.allCases) { layout in
-                        Label(layout.title, systemImage: layout.systemImage)
+                        Label(layout.localizedTitle(using: localizer), systemImage: layout.systemImage)
                             .tag(layout)
                     }
                 }
@@ -757,7 +923,12 @@ private struct CodeReviewFileEditorView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 122)
                 .disabled(viewModel.isEditorExpanded)
-                .help("Switch between stacked and side-by-side editor/diff layout")
+                .help(
+                    localized(
+                        "codeReview.editor.layout.help",
+                        fallback: "Switch between stacked and side-by-side editor/diff layout"
+                    )
+                )
 
                 HStack(spacing: 6) {
                     Button {
@@ -766,7 +937,7 @@ private struct CodeReviewFileEditorView: View {
                         Image(systemName: "arrow.uturn.backward")
                     }
                     .buttonStyle(.bordered)
-                    .help("Undo editor change")
+                    .help(localized("codeReview.editor.undo", fallback: "Undo editor change"))
 
                     Button {
                         viewModel.requestEditorRedo()
@@ -774,7 +945,7 @@ private struct CodeReviewFileEditorView: View {
                         Image(systemName: "arrow.uturn.forward")
                     }
                     .buttonStyle(.bordered)
-                    .help("Redo editor change")
+                    .help(localized("codeReview.editor.redo", fallback: "Redo editor change"))
                 }
 
                 HStack(spacing: 6) {
@@ -784,7 +955,12 @@ private struct CodeReviewFileEditorView: View {
                         Image(systemName: "textformat.size.smaller")
                     }
                     .buttonStyle(.bordered)
-                    .help("Decrease editor font size")
+                    .help(
+                        localized(
+                            "codeReview.editor.font.decrease",
+                            fallback: "Decrease editor font size"
+                        )
+                    )
 
                     Text("\(Int(viewModel.editorFontSize))pt")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -797,7 +973,12 @@ private struct CodeReviewFileEditorView: View {
                         Image(systemName: "textformat.size.larger")
                     }
                     .buttonStyle(.bordered)
-                    .help("Increase editor font size")
+                    .help(
+                        localized(
+                            "codeReview.editor.font.increase",
+                            fallback: "Increase editor font size"
+                        )
+                    )
                 }
 
                 HStack(spacing: 6) {
@@ -808,7 +989,7 @@ private struct CodeReviewFileEditorView: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(viewModel.isEditorExpanded)
-                    .help("Give the diff more room")
+                    .help(localized("codeReview.editor.split.moreDiff", fallback: "Give the diff more room"))
 
                     Button {
                         viewModel.adjustEditorSplitFraction(by: 0.08)
@@ -817,24 +998,35 @@ private struct CodeReviewFileEditorView: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(viewModel.isEditorExpanded)
-                    .help("Give the editor more room")
+                    .help(
+                        localized(
+                            "codeReview.editor.split.moreEditor",
+                            fallback: "Give the editor more room"
+                        )
+                    )
 
                     Button {
                         viewModel.toggleEditorExpanded()
                     } label: {
                         Label(
-                            viewModel.isEditorExpanded ? "Restore" : "Focus",
+                            viewModel.isEditorExpanded
+                                ? localized("codeReview.editor.restore", fallback: "Restore")
+                                : localized("codeReview.editor.focus", fallback: "Focus"),
                             systemImage: viewModel.isEditorExpanded
                                 ? "rectangle.compress.vertical"
                                 : "rectangle.expand.vertical"
                         )
                     }
                     .buttonStyle(.bordered)
-                    .help(viewModel.isEditorExpanded ? "Restore diff view" : "Give the editor the full panel")
+                    .help(
+                        viewModel.isEditorExpanded
+                            ? localized("codeReview.editor.restore.help", fallback: "Restore diff view")
+                            : localized("codeReview.editor.focus.help", fallback: "Give the editor the full panel")
+                    )
                 }
 
                 if viewModel.isEditorDirty {
-                    Text("modified")
+                    Text(localized("codeReview.editor.modified", fallback: "modified"))
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundColor(Color(nsColor: CocxyColors.yellow))
                         .padding(.horizontal, 7)
@@ -845,12 +1037,12 @@ private struct CodeReviewFileEditorView: View {
                         )
                 }
 
-                Button("Reload") {
+                Button(localized("codeReview.editor.reload", fallback: "Reload")) {
                     viewModel.reloadEditorContent()
                 }
                 .buttonStyle(.bordered)
 
-                Button("Save") {
+                Button(localized("codeReview.panel.save", fallback: "Save")) {
                     viewModel.saveEditorContent()
                 }
                 .buttonStyle(.borderedProminent)
@@ -862,7 +1054,7 @@ private struct CodeReviewFileEditorView: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.plain)
-                .help("Close editor")
+                .help(localized("codeReview.editor.close", fallback: "Close editor"))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -888,7 +1080,9 @@ private struct CodeReviewFileEditorView: View {
                 .frame(height: fillsAvailableSpace || viewModel.isEditorExpanded ? nil : CGFloat(viewModel.editorHeight))
                 .frame(maxHeight: fillsAvailableSpace || viewModel.isEditorExpanded ? .infinity : nil)
                 .layoutPriority(viewModel.isEditorExpanded ? 3 : 1)
-                .accessibilityLabel("Code review inline editor")
+                .accessibilityLabel(
+                    localized("codeReview.editor.accessibility", fallback: "Code review inline editor")
+                )
         }
         .glassPanelBackground()
         .layoutPriority(viewModel.isEditorExpanded ? 3 : 1)
@@ -898,6 +1092,10 @@ private struct CodeReviewFileEditorView: View {
         viewModel.editorContent
             .split(separator: "\n", omittingEmptySubsequences: false)
             .count
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 

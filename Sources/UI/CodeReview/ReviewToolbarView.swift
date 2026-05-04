@@ -13,84 +13,172 @@ struct ReviewToolbarView: View {
             mergeBannerStack
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    stat(text: "\(viewModel.currentDiffs.count) files", color: CocxyColors.blue)
+                    stat(
+                        text: localizedCount(
+                            "codeReview.toolbar.stat.files",
+                            fallback: "%d files",
+                            count: viewModel.currentDiffs.count
+                        ),
+                        color: CocxyColors.blue
+                    )
                     stat(text: "+\(totalAdditions)", color: CocxyColors.green)
                     stat(text: "-\(totalDeletions)", color: CocxyColors.red)
                     if viewModel.pendingCommentCount > 0 {
-                        stat(text: "\(viewModel.pendingCommentCount) comments", color: CocxyColors.yellow)
+                        stat(
+                            text: localizedCount(
+                                "codeReview.toolbar.stat.comments",
+                                fallback: "%d comments",
+                                count: viewModel.pendingCommentCount
+                            ),
+                            color: CocxyColors.yellow
+                        )
                     }
                     if !viewModel.reviewRounds.isEmpty {
-                        stat(text: "\(viewModel.reviewRounds.count) rounds", color: CocxyColors.mauve)
+                        stat(
+                            text: localizedCount(
+                                "codeReview.toolbar.stat.rounds",
+                                fallback: "%d rounds",
+                                count: viewModel.reviewRounds.count
+                            ),
+                            color: CocxyColors.mauve
+                        )
                     }
                     if let gitStatus = viewModel.gitStatus {
                         stat(text: gitStatus.summary, color: CocxyColors.sky)
                     }
                     if !viewModel.reviewAgentSessions.isEmpty {
-                        stat(text: "\(viewModel.reviewAgentSessions.count) agents", color: CocxyColors.blue)
+                        stat(
+                            text: localizedCount(
+                                "codeReview.toolbar.stat.agents",
+                                fallback: "%d agents",
+                                count: viewModel.reviewAgentSessions.count
+                            ),
+                            color: CocxyColors.blue
+                        )
                     }
                     if viewModel.reviewSubagentCount > 0 {
-                        stat(text: "\(viewModel.reviewSubagentCount) subagents", color: CocxyColors.mauve)
+                        stat(
+                            text: localizedCount(
+                                "codeReview.toolbar.stat.subagents",
+                                fallback: "%d subagents",
+                                count: viewModel.reviewSubagentCount
+                            ),
+                            color: CocxyColors.mauve
+                        )
                     }
                     if viewModel.reviewTouchedFileCount > 0 {
-                        stat(text: "\(viewModel.reviewTouchedFileCount) touched", color: CocxyColors.green)
+                        stat(
+                            text: localizedCount(
+                                "codeReview.toolbar.stat.touched",
+                                fallback: "%d touched",
+                                count: viewModel.reviewTouchedFileCount
+                            ),
+                            color: CocxyColors.green
+                        )
                     }
                     if viewModel.reviewConflictCount > 0 {
-                        stat(text: "\(viewModel.reviewConflictCount) conflicts", color: CocxyColors.red)
+                        stat(
+                            text: localizedCount(
+                                "codeReview.toolbar.stat.conflicts",
+                                fallback: "%d conflicts",
+                                count: viewModel.reviewConflictCount
+                            ),
+                            color: CocxyColors.red
+                        )
                     }
-                    ReviewKeyboardHintsButton()
+                    ReviewKeyboardHintsButton(localizer: localizer)
                 }
             }
             .frame(height: 24)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    Picker("Diff Mode", selection: $viewModel.diffMode) {
+                    Picker(
+                        localized("codeReview.toolbar.diffMode", fallback: "Diff Mode"),
+                        selection: $viewModel.diffMode
+                    ) {
                         ForEach(DiffMode.allCases, id: \.self) { mode in
-                            Text(mode.title).tag(mode)
+                            Text(mode.localizedTitle(using: localizer)).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: viewModel.diffMode) { _, _ in
                         viewModel.refreshDiffs()
                     }
-                    .accessibilityHint("Switch the review comparison mode")
+                    .accessibilityHint(
+                        localized(
+                            "codeReview.toolbar.diffMode.hint",
+                            fallback: "Switch the review comparison mode"
+                        )
+                    )
 
                     Button {
                         viewModel.refreshDiffs()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(
+                            localized("codeReview.toolbar.refresh", fallback: "Refresh"),
+                            systemImage: "arrow.clockwise"
+                        )
                     }
                     .buttonStyle(.bordered)
-                    .accessibilityHint("Reload the current review diff")
+                    .accessibilityHint(
+                        localized(
+                            "codeReview.toolbar.refresh.hint",
+                            fallback: "Reload the current review diff"
+                        )
+                    )
 
                     Button {
                         viewModel.openSelectedFileInEditor()
                     } label: {
-                        Label("Edit File", systemImage: "curlybraces")
+                        Label(
+                            localized("codeReview.toolbar.editFile", fallback: "Edit File"),
+                            systemImage: "curlybraces"
+                        )
                     }
                     .buttonStyle(.bordered)
                     .disabled(viewModel.selectedFileDiff == nil)
-                    .accessibilityHint("Open the selected file in the inline review editor")
+                    .accessibilityHint(
+                        localized(
+                            "codeReview.toolbar.editFile.hint",
+                            fallback: "Open the selected file in the inline review editor"
+                        )
+                    )
 
                     Button {
                         viewModel.toggleGitWorkflowVisibility()
                     } label: {
                         Label(
-                            viewModel.isGitWorkflowVisible ? "Hide Git" : "Git",
+                            viewModel.isGitWorkflowVisible
+                                ? localized("codeReview.toolbar.hideGit", fallback: "Hide Git")
+                                : localized("codeReview.toolbar.git", fallback: "Git"),
                             systemImage: "arrow.triangle.branch"
                         )
                     }
                     .buttonStyle(.bordered)
-                    .accessibilityHint("Show branch, commit, and push controls inside the review panel")
+                    .accessibilityHint(
+                        localized(
+                            "codeReview.toolbar.git.hint",
+                            fallback: "Show branch, commit, and push controls inside the review panel"
+                        )
+                    )
 
                     if viewModel.pendingCommentCount > 0 {
                         Button(role: .destructive) {
                             viewModel.discardPendingComments()
                         } label: {
-                            Label("Discard Drafts", systemImage: "trash")
+                            Label(
+                                localized("codeReview.toolbar.discardDrafts", fallback: "Discard Drafts"),
+                                systemImage: "trash"
+                            )
                         }
                         .buttonStyle(.bordered)
-                        .accessibilityHint("Clear all pending inline comments")
+                        .accessibilityHint(
+                            localized(
+                                "codeReview.toolbar.discardDrafts.hint",
+                                fallback: "Clear all pending inline comments"
+                            )
+                        )
                     }
 
                     if let prNumber = viewModel.activePullRequestNumber {
@@ -102,14 +190,23 @@ struct ReviewToolbarView: View {
                     } label: {
                         Label(
                             viewModel.pendingCommentCount == 0
-                                ? "Submit"
-                                : "Submit \(viewModel.pendingCommentCount)",
+                                ? localized("codeReview.toolbar.submit", fallback: "Submit")
+                                : localizedCount(
+                                    "codeReview.toolbar.submitCount",
+                                    fallback: "Submit %d",
+                                    count: viewModel.pendingCommentCount
+                                ),
                             systemImage: "paperplane.fill"
                         )
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(viewModel.pendingCommentCount == 0 || viewModel.isMergingPullRequest)
-                    .accessibilityHint("Send all pending comments back to the originating agent")
+                    .accessibilityHint(
+                        localized(
+                            "codeReview.toolbar.submit.hint",
+                            fallback: "Send all pending comments back to the originating agent"
+                        )
+                    )
                 }
             }
             .frame(height: 36)
@@ -137,6 +234,14 @@ struct ReviewToolbarView: View {
                 Capsule()
                     .fill(Color(nsColor: color).opacity(0.10))
             )
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    private func localizedCount(_ key: String, fallback: String, count: Int) -> String {
+        String(format: localized(key, fallback: fallback), count)
     }
 
     // MARK: - Merge banners (v0.1.86)
@@ -187,6 +292,21 @@ struct ReviewToolbarView: View {
             case .error: return "Merge error"
             }
         }
+
+        func localizedAccessibilityPrefix(using localizer: AppLocalizer) -> String {
+            switch self {
+            case .info:
+                return localizer.string(
+                    "codeReview.toolbar.merge.info",
+                    fallback: accessibilityPrefix
+                )
+            case .error:
+                return localizer.string(
+                    "codeReview.toolbar.merge.error",
+                    fallback: accessibilityPrefix
+                )
+            }
+        }
     }
 
     private func mergeBanner(text: String, kind: MergeBannerKind) -> some View {
@@ -207,7 +327,7 @@ struct ReviewToolbarView: View {
                 .fill(Color(nsColor: kind.tint).opacity(0.10))
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(kind.accessibilityPrefix): \(text)")
+        .accessibilityLabel("\(kind.localizedAccessibilityPrefix(using: localizer)): \(text)")
     }
 
     // MARK: - Merge button (v0.1.86)
@@ -232,7 +352,13 @@ struct ReviewToolbarView: View {
                 presentMergeActionSheet(prNumber: prNumber)
             } label: {
                 Label {
-                    Text("Merge PR #\(prNumber)")
+                    Text(
+                        localizedCount(
+                            "codeReview.toolbar.merge.button",
+                            fallback: "Merge PR #%d",
+                            count: prNumber
+                        )
+                    )
                 } icon: {
                     if isMerging {
                         ProgressView()
@@ -253,12 +379,36 @@ struct ReviewToolbarView: View {
     private func mergeStatusChip(kind: GitHubMergeability.ChipKind) -> some View {
         let (label, color): (String, NSColor) = {
             switch kind {
-            case .ready: return ("Ready", CocxyColors.green)
-            case .pending: return ("Pending", CocxyColors.yellow)
-            case .blocked: return ("Blocked", CocxyColors.red)
-            case .conflicting: return ("Conflicts", CocxyColors.red)
-            case .merged: return ("Merged", CocxyColors.mauve)
-            case .closed: return ("Closed", CocxyColors.overlay1)
+            case .ready:
+                return (
+                    localized("codeReview.toolbar.merge.status.ready", fallback: "Ready"),
+                    CocxyColors.green
+                )
+            case .pending:
+                return (
+                    localized("codeReview.toolbar.merge.status.pending", fallback: "Pending"),
+                    CocxyColors.yellow
+                )
+            case .blocked:
+                return (
+                    localized("codeReview.toolbar.merge.status.blocked", fallback: "Blocked"),
+                    CocxyColors.red
+                )
+            case .conflicting:
+                return (
+                    localized("codeReview.toolbar.merge.status.conflicts", fallback: "Conflicts"),
+                    CocxyColors.red
+                )
+            case .merged:
+                return (
+                    localized("codeReview.toolbar.merge.status.merged", fallback: "Merged"),
+                    CocxyColors.mauve
+                )
+            case .closed:
+                return (
+                    localized("codeReview.toolbar.merge.status.closed", fallback: "Closed"),
+                    CocxyColors.overlay1
+                )
             }
         }()
         return Text(label)
@@ -270,7 +420,15 @@ struct ReviewToolbarView: View {
                 Capsule()
                     .fill(Color(nsColor: color).opacity(0.14))
             )
-            .accessibilityLabel("Merge status: \(label)")
+            .accessibilityLabel(
+                String(
+                    format: localized(
+                        "codeReview.toolbar.merge.status.accessibility",
+                        fallback: "Merge status: %@"
+                    ),
+                    label
+                )
+            )
     }
 
     private func mergeButtonTooltip(
@@ -278,16 +436,27 @@ struct ReviewToolbarView: View {
         mergeability: GitHubMergeability?,
         isMerging: Bool
     ) -> String {
-        if isMerging { return "Merging in progress…" }
+        if isMerging {
+            return localized(
+                "codeReview.toolbar.merge.tooltip.inProgress",
+                fallback: "Merging in progress..."
+            )
+        }
         if canMerge {
-            return "Merge this pull request via gh."
+            return localized(
+                "codeReview.toolbar.merge.tooltip.ready",
+                fallback: "Merge this pull request via gh."
+            )
         }
         if let mergeability,
            let reason = mergeability.reasonIfBlocked,
            !reason.isEmpty {
             return reason
         }
-        return "Mergeability is being computed."
+        return localized(
+            "codeReview.toolbar.merge.tooltip.pending",
+            fallback: "Mergeability is being computed."
+        )
     }
 
     private func presentMergeActionSheet(prNumber: Int) {
@@ -304,6 +473,7 @@ struct ReviewToolbarView: View {
 
 private struct ReviewKeyboardHintsButton: View {
     @State private var isShowingPopover = false
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         Button {
@@ -314,24 +484,70 @@ private struct ReviewKeyboardHintsButton: View {
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
         }
         .buttonStyle(.plain)
-        .help("Review shortcuts")
+        .help(localized("codeReview.toolbar.shortcuts.help", fallback: "Review shortcuts"))
         .popover(isPresented: $isShowingPopover, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Review Shortcuts")
+                Text(localized("codeReview.toolbar.shortcuts.title", fallback: "Review Shortcuts"))
                     .font(.system(size: 13, weight: .bold))
 
-                ReviewShortcutRow(keys: "j / k", description: "Next / previous hunk")
-                ReviewShortcutRow(keys: "n / p", description: "Next / previous file")
-                ReviewShortcutRow(keys: "c", description: "Comment current line")
-                ReviewShortcutRow(keys: "a / r", description: "Accept / reject hunk")
-                ReviewShortcutRow(keys: "d", description: "Cycle diff mode")
-                ReviewShortcutRow(keys: "Cmd+Enter", description: "Submit all comments")
-                ReviewShortcutRow(keys: "Esc", description: "Cancel comment / close panel")
+                ReviewShortcutRow(
+                    keys: "j / k",
+                    description: localized(
+                        "codeReview.toolbar.shortcuts.nextHunk",
+                        fallback: "Next / previous hunk"
+                    )
+                )
+                ReviewShortcutRow(
+                    keys: "n / p",
+                    description: localized(
+                        "codeReview.toolbar.shortcuts.nextFile",
+                        fallback: "Next / previous file"
+                    )
+                )
+                ReviewShortcutRow(
+                    keys: "c",
+                    description: localized(
+                        "codeReview.toolbar.shortcuts.comment",
+                        fallback: "Comment current line"
+                    )
+                )
+                ReviewShortcutRow(
+                    keys: "a / r",
+                    description: localized(
+                        "codeReview.toolbar.shortcuts.acceptReject",
+                        fallback: "Accept / reject hunk"
+                    )
+                )
+                ReviewShortcutRow(
+                    keys: "d",
+                    description: localized(
+                        "codeReview.toolbar.shortcuts.diffMode",
+                        fallback: "Cycle diff mode"
+                    )
+                )
+                ReviewShortcutRow(
+                    keys: "Cmd+Enter",
+                    description: localized(
+                        "codeReview.toolbar.shortcuts.submitAll",
+                        fallback: "Submit all comments"
+                    )
+                )
+                ReviewShortcutRow(
+                    keys: "Esc",
+                    description: localized(
+                        "codeReview.toolbar.shortcuts.cancel",
+                        fallback: "Cancel comment / close panel"
+                    )
+                )
             }
             .padding(16)
             .frame(width: 250)
             .glassPanelBackground()
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
