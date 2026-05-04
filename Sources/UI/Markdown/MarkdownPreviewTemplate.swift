@@ -17,9 +17,11 @@ enum MarkdownPreviewTemplate {
         katexCSS: String = "",
         autoRenderJS: String = "",
         highlightJS: String = "",
-        highlightCSS: String = ""
+        highlightCSS: String = "",
+        tableOfContentsTitle: String = "Table of Contents"
     ) -> String {
-        """
+        let escapedTableOfContentsTitle = htmlAttributeEscape(tableOfContentsTitle)
+        return """
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -33,7 +35,7 @@ enum MarkdownPreviewTemplate {
         \(highlightJS.isEmpty ? "" : "<script>\(highlightJS)</script>")
         </head>
         <body>
-        <button id="toc-toggle" title="Table of Contents">&#9776;</button>
+        <button id="toc-toggle" title="\(escapedTableOfContentsTitle)">&#9776;</button>
         <div id="toc-panel"></div>
         <div id="content"></div>
         <div id="footnote-popover" class="footnote-popover" hidden></div>
@@ -45,5 +47,13 @@ enum MarkdownPreviewTemplate {
         </body>
         </html>
         """
+    }
+
+    private static func htmlAttributeEscape(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 }

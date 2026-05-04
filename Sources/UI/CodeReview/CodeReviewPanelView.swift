@@ -566,6 +566,7 @@ struct CodeReviewPanelView: View {
                 commentCount: viewModel.commentCount(for:),
                 selectedPath: viewModel.selectedFilePath,
                 externalEditorActions: externalEditorActions,
+                localizer: localizer,
                 onSelect: { path in
                     viewModel.selectFile(path)
                 }

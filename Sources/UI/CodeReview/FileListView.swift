@@ -15,6 +15,7 @@ struct FileListView: View {
     let commentCount: (String) -> Int
     let selectedPath: String?
     let externalEditorActions: [CodeReviewExternalEditorAction]
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     let onSelect: (String) -> Void
 
     var body: some View {
@@ -40,26 +41,60 @@ struct FileListView: View {
                         }
                     }
                     .accessibilityElement()
-                    .accessibilityLabel("\(diff.displayName), \(accessibilityStatus(diff.status)), plus \(diff.additions), minus \(diff.deletions)")
-                    .accessibilityHint("Select this file to review its hunks")
+                    .accessibilityLabel(
+                        Self.localizedAccessibilityLabel(
+                            displayName: diff.displayName,
+                            status: diff.status,
+                            additions: diff.additions,
+                            deletions: diff.deletions,
+                            using: localizer
+                        )
+                    )
+                    .accessibilityHint(Self.localizedAccessibilityHint(using: localizer))
                 }
             }
             .padding(10)
         }
         .glassPanelBackground()
     }
-}
 
-private func accessibilityStatus(_ status: FileStatus) -> String {
-    switch status {
-    case .added, .untracked:
-        return "added"
-    case .modified:
-        return "modified"
-    case .deleted:
-        return "deleted"
-    case .renamed:
-        return "renamed"
+    static func localizedAccessibilityLabel(
+        displayName: String,
+        status: FileStatus,
+        additions: Int,
+        deletions: Int,
+        using localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(
+                "codeReview.fileList.accessibility.label",
+                fallback: "%@, %@, plus %d, minus %d"
+            ),
+            displayName,
+            localizedAccessibilityStatus(status, using: localizer),
+            additions,
+            deletions
+        )
+    }
+
+    static func localizedAccessibilityHint(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "codeReview.fileList.accessibility.hint",
+            fallback: "Select this file to review its hunks"
+        )
+    }
+
+    static func localizedAccessibilityStatus(_ status: FileStatus, using localizer: AppLocalizer) -> String {
+        switch status {
+        case .added, .untracked:
+            return localizer.string("codeReview.fileList.status.added", fallback: "added")
+        case .modified:
+            return localizer.string("codeReview.fileList.status.modified", fallback: "modified")
+        case .deleted:
+            return localizer.string("codeReview.fileList.status.deleted", fallback: "deleted")
+        case .renamed:
+            return localizer.string("codeReview.fileList.status.renamed", fallback: "renamed")
+        }
     }
 }
 

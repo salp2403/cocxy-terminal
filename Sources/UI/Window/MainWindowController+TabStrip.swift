@@ -22,6 +22,7 @@ extension MainWindowController {
     /// Updates the horizontal tab strip to reflect current workspace state.
     func refreshTabStrip(syncFromFirstResponder: Bool = true) {
         guard let strip = horizontalTabStripView as? HorizontalTabStripView else { return }
+        let localizer = appLocalizer()
         if syncFromFirstResponder {
             syncFocusedLeafSelectionFromFirstResponder()
         }
@@ -84,37 +85,37 @@ extension MainWindowController {
                         title = leaves.count > 1 ? "\(dirName) \(terminalIndex)" : dirName
                         icon = "terminal.fill"
                     case .browser:
-                        title = "Browser"
+                        title = Self.localizedPanelTitle(.browser, using: localizer)
                         icon = "globe"
                     case .markdown:
-                        title = "Markdown"
+                        title = Self.localizedPanelTitle(.markdown, using: localizer)
                         icon = "doc.text"
                     case .editor:
-                        title = "Editor"
+                        title = Self.localizedPanelTitle(.editor, using: localizer)
                         icon = "doc.plaintext"
                     case .notebook:
-                        title = "Notebook"
+                        title = Self.localizedPanelTitle(.notebook, using: localizer)
                         icon = "book"
                     case .workflow:
-                        title = "Workflow"
+                        title = Self.localizedPanelTitle(.workflow, using: localizer)
                         icon = "arrow.triangle.branch"
                     case .sessionReplay:
-                        title = "Replay"
+                        title = Self.localizedPanelTitle(.sessionReplay, using: localizer)
                         icon = "record.circle"
                     case .aiEditHistory:
-                        title = "Edit History"
+                        title = Self.localizedPanelTitle(.aiEditHistory, using: localizer)
                         icon = "clock.arrow.circlepath"
                     case .templates:
-                        title = "Templates"
+                        title = Self.localizedPanelTitle(.templates, using: localizer)
                         icon = "square.grid.2x2"
                     case .macros:
-                        title = "Macros"
+                        title = Self.localizedPanelTitle(.macros, using: localizer)
                         icon = "keyboard"
                     case .dbCloud:
-                        title = "DB/Cloud"
+                        title = Self.localizedPanelTitle(.dbCloud, using: localizer)
                         icon = "externaldrive.connected.to.line.below"
                     case .subagent:
-                        title = "Agent"
+                        title = Self.localizedPanelTitle(.subagent, using: localizer)
                         icon = "person.2"
                     }
                 }
@@ -134,6 +135,36 @@ extension MainWindowController {
 
         // Update contextual action icons based on the focused panel type.
         updateHorizontalStripActionIcons(strip)
+    }
+
+    static func localizedPanelTitle(_ panelType: PanelType, using localizer: AppLocalizer) -> String {
+        switch panelType {
+        case .terminal:
+            let format = localizer.string("workspaceToolbar.panel.terminal", fallback: "Terminal %d")
+            return String(format: format, 1)
+        case .browser:
+            return localizer.string("workspaceToolbar.panel.browser", fallback: "Browser")
+        case .markdown:
+            return localizer.string("workspaceToolbar.panel.markdown", fallback: "Markdown")
+        case .editor:
+            return localizer.string("workspaceToolbar.panel.editor", fallback: "Editor")
+        case .notebook:
+            return localizer.string("workspaceToolbar.panel.notebook", fallback: "Notebook")
+        case .workflow:
+            return localizer.string("workspaceToolbar.panel.workflow", fallback: "Workflow")
+        case .sessionReplay:
+            return localizer.string("workspaceToolbar.panel.sessionReplay", fallback: "Replay")
+        case .aiEditHistory:
+            return localizer.string("workspaceToolbar.panel.aiEditHistory", fallback: "Edit History")
+        case .templates:
+            return localizer.string("workspaceToolbar.panel.templates", fallback: "Templates")
+        case .macros:
+            return localizer.string("workspaceToolbar.panel.macros", fallback: "Macros")
+        case .dbCloud:
+            return localizer.string("workspaceToolbar.panel.dbCloud", fallback: "DB/Cloud")
+        case .subagent:
+            return localizer.string("workspaceToolbar.panel.subagent", fallback: "Agent")
+        }
     }
 
     private func updateHorizontalStripActionIcons(_ strip: HorizontalTabStripView) {

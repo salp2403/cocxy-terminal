@@ -32,6 +32,7 @@ final class MarkdownPreviewView: NSView {
     private var isContentUpdatePending = false
     private var pendingHTML: String?
     private var pendingActions: [() -> Void] = []
+    private var localizer: AppLocalizer
 
     /// Current document. Setting this re-renders the preview.
     var document: MarkdownDocument = .empty {
@@ -64,7 +65,7 @@ final class MarkdownPreviewView: NSView {
 
     // MARK: - Init
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
         let config = WKWebViewConfiguration()
         let proxy = ScriptMessageProxy()
         config.userContentController.add(proxy, name: "cocxy")
@@ -73,6 +74,7 @@ final class MarkdownPreviewView: NSView {
         #endif
         self.messageProxy = proxy
         self.webView = WKWebView(frame: .zero, configuration: config)
+        self.localizer = localizer
         super.init(frame: .zero)
         proxy.handler = self
         setupUI()
@@ -124,6 +126,17 @@ final class MarkdownPreviewView: NSView {
         printInfo.leftMargin = 36
         printInfo.rightMargin = 36
         return webView.printOperation(with: printInfo)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        guard self.localizer.resolvedLanguage != localizer.resolvedLanguage else {
+            self.localizer = localizer
+            return
+        }
+        self.localizer = localizer
+        isTemplateLoaded = false
+        loadTemplate()
+        updatePreview()
     }
 
     /// Captures the fully rendered DOM (including Mermaid SVGs and KaTeX spans)
@@ -182,7 +195,11 @@ final class MarkdownPreviewView: NSView {
             katexCSS: katexCSS,
             autoRenderJS: autoRenderJS,
             highlightJS: highlightJS,
-            highlightCSS: highlightCSS
+            highlightCSS: highlightCSS,
+            tableOfContentsTitle: localizer.string(
+                "markdown.preview.toc.title",
+                fallback: "Table of Contents"
+            )
         )
 
         webView.loadHTMLString(html, baseURL: baseDirectory)

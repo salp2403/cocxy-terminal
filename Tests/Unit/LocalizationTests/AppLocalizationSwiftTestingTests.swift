@@ -73,6 +73,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.about.checkForUpdates", fallback: "Check for Updates") == "Buscar actualizaciones")
         #expect(spanish.string("agentState.indicator.waitingInput", fallback: "Agent state: waiting for input") == "Estado del agente: esperando entrada")
         #expect(spanish.string("markdown.toolbar.untitledFile", fallback: "Untitled.md") == "Sin título.md")
+        #expect(spanish.string("markdown.preview.toc.title", fallback: "Table of Contents") == "Tabla de contenidos")
         #expect(spanish.string("window.activity.tabOpened", fallback: "New tab") == "Nueva pestaña")
         #expect(spanish.string("app.crashRecovery.restore.button", fallback: "Restore") == "Restaurar")
         #expect(spanish.string("app.quit.message", fallback: "All terminal sessions will be closed.") == "Todas las sesiones de terminal se cerrarán.")
@@ -218,6 +219,16 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("codeReview.toolbar.shortcuts.title", fallback: "Review Shortcuts") == "Atajos de revisión")
         #expect(MainWindowController.localizedOpenInDefaultEditorTitle(localizer: spanish) == "Abrir en editor predeterminado")
         #expect(MainWindowController.localizedOpenInEditorTitle("Nova", localizer: spanish) == "Abrir en Nova")
+        #expect(FileListView.localizedAccessibilityHint(using: spanish) == "Selecciona este archivo para revisar sus hunks")
+        #expect(
+            FileListView.localizedAccessibilityLabel(
+                displayName: "README.md",
+                status: .modified,
+                additions: 2,
+                deletions: 1,
+                using: spanish
+            ) == "README.md, modificado, más 2, menos 1"
+        )
         #expect(DiffMode.sinceSessionStart.localizedTitle(using: spanish) == "Sesión de agente")
         #expect(CodeReviewEditorSplitLayout.sideBySide.localizedTitle(using: spanish) == "Lado a lado")
     }
@@ -429,6 +440,9 @@ struct AppLocalizationSwiftTestingTests {
         #expect(HorizontalTabStripView.localizedTerminalSideBySide(using: spanish) == "Terminal (lado a lado)")
         #expect(HorizontalTabStripView.localizedOpenDBCloudHelpers(using: spanish) == "Abrir ayudas DB/Cloud")
         #expect(HorizontalTabStripView.localizedPanelRenamePlaceholder(using: spanish) == "Nombre del panel")
+        #expect(MainWindowController.localizedPanelTitle(.browser, using: spanish) == "Navegador")
+        #expect(MainWindowController.localizedPanelTitle(.aiEditHistory, using: spanish) == "Historial de ediciones")
+        #expect(MainWindowController.localizedPanelTitle(.subagent, using: spanish) == "Agente")
     }
 
     @MainActor
@@ -581,6 +595,21 @@ struct AppLocalizationSwiftTestingTests {
         #expect(buildScript.contains("Resources/Localization"))
         #expect(verifyScript.contains("en.lproj/Localizable.strings"))
         #expect(verifyScript.contains("es.lproj/Localizable.strings"))
+    }
+
+    @Test
+    func markdownPreviewTemplateUsesLocalizedTOCTitle() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let html = MarkdownPreviewTemplate.build(
+            tableOfContentsTitle: spanish.string(
+                "markdown.preview.toc.title",
+                fallback: "Table of Contents"
+            )
+        )
+
+        #expect(html.contains(#"title="Tabla de contenidos""#))
+        #expect(!html.contains(#"title="Table of Contents""#))
     }
 
     private func localizationBundle() -> Bundle? {

@@ -1283,6 +1283,7 @@
 "markdown.toolbar.copyAs.html" = "Copiar como HTML";
 "markdown.toolbar.copyAs.richText" = "Copiar como texto enriquecido";
 "markdown.toolbar.copyAs.plainText" = "Copiar como texto plano";
+"markdown.preview.toc.title" = "Tabla de contenidos";
 "markdown.status.words" = "Palabras: %d";
 "markdown.status.characters" = "Caracteres: %d";
 "markdown.status.lines" = "Líneas: %d";
@@ -1360,6 +1361,12 @@
 "codeReview.panel.rounds.summary" = "%d comentarios · %d archivos · %@";
 "codeReview.panel.files.title" = "Archivos modificados";
 "codeReview.panel.files.ready" = "%d archivos listos para revisión";
+"codeReview.fileList.accessibility.label" = "%@, %@, más %d, menos %d";
+"codeReview.fileList.accessibility.hint" = "Selecciona este archivo para revisar sus hunks";
+"codeReview.fileList.status.added" = "agregado";
+"codeReview.fileList.status.modified" = "modificado";
+"codeReview.fileList.status.deleted" = "eliminado";
+"codeReview.fileList.status.renamed" = "renombrado";
 "codeReview.panel.metric.hunks" = "%d hunks";
 "codeReview.panel.metric.comments" = "%d comentarios";
 "codeReview.panel.anchorHint" = "Haz clic en una línea para anclar feedback";
