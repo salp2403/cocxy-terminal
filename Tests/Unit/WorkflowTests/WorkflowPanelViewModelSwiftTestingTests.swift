@@ -41,6 +41,47 @@ struct WorkflowPanelViewModelSwiftTestingTests {
         #expect(viewModel.stepPresentations.first?.stdout == "workflow-panel-ok\n")
         #expect(runner.calls.map(\.arguments) == [["-c", "echo workflow-panel-ok"]])
     }
+
+    @Test("Spanish localizer updates workflow status text")
+    @MainActor
+    func spanishLocalizerUpdatesWorkflowStatusText() async throws {
+        let workspace = try temporaryWorkflowPanelDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let fileURL = workspace.appendingPathComponent("local.toml")
+        try """
+        [workflow]
+        id = "local"
+        steps = ["verify"]
+
+        [step.verify]
+        command = "echo listo"
+        """.write(to: fileURL, atomically: true, encoding: .utf8)
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let runner = RecordingWorkflowPanelProcessRunner(results: [
+            AgentProcessResult(exitCode: 0, stdout: "listo\n", stderr: ""),
+        ])
+        let viewModel = WorkflowPanelViewModel(
+            fileURL: fileURL,
+            workspaceRoot: workspace,
+            executor: WorkflowExecutor(processRunner: runner),
+            localizer: spanish
+        )
+
+        #expect(viewModel.statusText == "local.toml cargado")
+        #expect(viewModel.stepPresentations.first?.status == "Pendiente")
+
+        await viewModel.run()
+
+        #expect(viewModel.statusText == "Workflow local completado después de 1 paso.")
+        #expect(viewModel.stepPresentations.first?.status == "Completado")
+        #expect(viewModel.stepPresentations.first?.statusKind == .completed)
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.statusText == "Workflow local completed after 1 step.")
+        #expect(viewModel.stepPresentations.first?.status == "Completed")
+    }
 }
 
 private final class RecordingWorkflowPanelProcessRunner: AgentProcessRunning, @unchecked Sendable {
@@ -79,4 +120,9 @@ private func temporaryWorkflowPanelDirectory() throws -> URL {
         .appendingPathComponent("cocxy-workflow-panel-tests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }

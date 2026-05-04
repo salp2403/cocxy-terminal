@@ -5,11 +5,18 @@ import SwiftUI
 
 struct WorkflowPanelView: View {
     @StateObject private var viewModel: WorkflowPanelViewModel
+    var localizer: AppLocalizer
     let onClose: (() -> Void)?
 
-    init(viewModel: WorkflowPanelViewModel, onClose: (() -> Void)? = nil) {
+    init(
+        viewModel: WorkflowPanelViewModel,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        onClose: (() -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.localizer = localizer
         self.onClose = onClose
+        viewModel.updateLocalizer(localizer)
     }
 
     var body: some View {
@@ -34,6 +41,12 @@ struct WorkflowPanelView: View {
             }
         }
         .glassPanelBackground()
+        .onAppear {
+            viewModel.updateLocalizer(localizer)
+        }
+        .onChange(of: localizer.resolvedLanguage) {
+            viewModel.updateLocalizer(localizer)
+        }
     }
 
     private var toolbar: some View {
@@ -59,14 +72,19 @@ struct WorkflowPanelView: View {
             Button {
                 try? viewModel.save()
             } label: {
-                Label("Save", systemImage: "square.and.arrow.down")
+                Label(localized("common.save", fallback: "Save"), systemImage: "square.and.arrow.down")
             }
             .controlSize(.small)
 
             Button {
                 Task { await viewModel.run() }
             } label: {
-                Label(viewModel.isRunning ? "Running" : "Run", systemImage: "play.fill")
+                Label(
+                    viewModel.isRunning
+                        ? localized("workflow.running", fallback: "Running")
+                        : localized("workflow.run", fallback: "Run"),
+                    systemImage: "play.fill"
+                )
             }
             .controlSize(.small)
             .disabled(viewModel.isRunning)
@@ -76,11 +94,15 @@ struct WorkflowPanelView: View {
                     Image(systemName: "xmark")
                 }
                 .controlSize(.small)
-                .help("Close")
+                .help(localized("common.close", fallback: "Close"))
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
@@ -122,12 +144,12 @@ private struct WorkflowStepPanel: View {
     }
 
     private var statusColor: Color {
-        switch step.status {
-        case "Completed":
+        switch step.statusKind {
+        case .completed:
             return Color(nsColor: CocxyColors.green)
-        case "Failed":
+        case .failed:
             return Color(nsColor: CocxyColors.red)
-        default:
+        case .pending, .exited:
             return Color(nsColor: CocxyColors.subtext0)
         }
     }

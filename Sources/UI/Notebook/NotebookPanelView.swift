@@ -5,11 +5,18 @@ import SwiftUI
 
 struct NotebookPanelView: View {
     @StateObject private var viewModel: NotebookPanelViewModel
+    var localizer: AppLocalizer
     let onClose: (() -> Void)?
 
-    init(viewModel: NotebookPanelViewModel, onClose: (() -> Void)? = nil) {
+    init(
+        viewModel: NotebookPanelViewModel,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        onClose: (() -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.localizer = localizer
         self.onClose = onClose
+        viewModel.updateLocalizer(localizer)
     }
 
     var body: some View {
@@ -34,6 +41,12 @@ struct NotebookPanelView: View {
             }
         }
         .glassPanelBackground()
+        .onAppear {
+            viewModel.updateLocalizer(localizer)
+        }
+        .onChange(of: localizer.resolvedLanguage) {
+            viewModel.updateLocalizer(localizer)
+        }
     }
 
     private var toolbar: some View {
@@ -59,14 +72,19 @@ struct NotebookPanelView: View {
             Button {
                 try? viewModel.save()
             } label: {
-                Label("Save", systemImage: "square.and.arrow.down")
+                Label(localized("common.save", fallback: "Save"), systemImage: "square.and.arrow.down")
             }
             .controlSize(.small)
 
             Button {
                 Task { await viewModel.runAll() }
             } label: {
-                Label(viewModel.isRunning ? "Running" : "Run", systemImage: "play.fill")
+                Label(
+                    viewModel.isRunning
+                        ? localized("notebook.running", fallback: "Running")
+                        : localized("notebook.run", fallback: "Run"),
+                    systemImage: "play.fill"
+                )
             }
             .controlSize(.small)
             .disabled(viewModel.isRunning)
@@ -76,11 +94,15 @@ struct NotebookPanelView: View {
                     Image(systemName: "xmark")
                 }
                 .controlSize(.small)
-                .help("Close")
+                .help(localized("common.close", fallback: "Close"))
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 

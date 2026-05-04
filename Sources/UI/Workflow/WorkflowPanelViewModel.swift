@@ -5,11 +5,19 @@ import Combine
 import Foundation
 
 struct WorkflowStepPresentation: Identifiable, Equatable {
+    enum StatusKind: Equatable {
+        case pending
+        case completed
+        case failed
+        case exited(Int32)
+    }
+
     let id: String
     let title: String?
     let command: String
     let shell: WorkflowShell
     let status: String
+    let statusKind: StatusKind
     let stdout: String
     let stderr: String
     let exitCode: Int32?
@@ -17,6 +25,15 @@ struct WorkflowStepPresentation: Identifiable, Equatable {
 
 @MainActor
 final class WorkflowPanelViewModel: ObservableObject {
+    private enum StatusState {
+        case loaded(String)
+        case new
+        case unsaved
+        case saved(String)
+        case runFailed
+        case summary(WorkflowExecutionSummary)
+    }
+
     @Published var sourceText: String
     @Published private(set) var statusText: String
     @Published private(set) var errorText: String?
@@ -27,6 +44,8 @@ final class WorkflowPanelViewModel: ObservableObject {
     let workspaceRoot: URL
 
     private let executor: WorkflowExecutor
+    private var localizer: AppLocalizer
+    private var statusState: StatusState
 
     var workflow: WorkflowDocument? {
         try? WorkflowTOMLCodec.parse(sourceText)
@@ -46,12 +65,14 @@ final class WorkflowPanelViewModel: ObservableObject {
         }
         return (workflow?.steps ?? []).map { step in
             let result = resultsByStepID[step.id]
+            let status = statusPresentation(for: step.id, result: result)
             return WorkflowStepPresentation(
                 id: step.id,
                 title: step.title,
                 command: step.command,
                 shell: step.shell,
-                status: status(for: step.id, result: result),
+                status: status.text,
+                statusKind: status.kind,
                 stdout: result?.stdout ?? "",
                 stderr: result?.stderr ?? "",
                 exitCode: result?.exitCode
@@ -62,25 +83,33 @@ final class WorkflowPanelViewModel: ObservableObject {
     init(
         fileURL: URL?,
         workspaceRoot: URL,
-        executor: WorkflowExecutor = WorkflowExecutor()
+        executor: WorkflowExecutor = WorkflowExecutor(),
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.fileURL = fileURL
         self.workspaceRoot = workspaceRoot
         self.executor = executor
+        self.localizer = localizer
 
         if let fileURL,
            let loaded = try? String(contentsOf: fileURL, encoding: .utf8) {
             sourceText = loaded
-            statusText = "Loaded \(fileURL.lastPathComponent)"
+            statusState = .loaded(fileURL.lastPathComponent)
         } else {
             sourceText = Self.defaultWorkflowSource()
-            statusText = "New workflow"
+            statusState = .new
         }
+        statusText = Self.localizedStatusText(statusState, localizer: localizer)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        statusText = Self.localizedStatusText(statusState, localizer: localizer)
     }
 
     func save() throws {
         guard let fileURL else {
-            statusText = "Unsaved workflow"
+            setStatus(.unsaved)
             return
         }
         try FileManager.default.createDirectory(
@@ -88,7 +117,7 @@ final class WorkflowPanelViewModel: ObservableObject {
             withIntermediateDirectories: true
         )
         try sourceText.write(to: fileURL, atomically: true, encoding: .utf8)
-        statusText = "Saved \(fileURL.lastPathComponent)"
+        setStatus(.saved(fileURL.lastPathComponent))
         errorText = nil
     }
 
@@ -109,36 +138,96 @@ final class WorkflowPanelViewModel: ObservableObject {
             }.value
 
             lastSummary = summary
-            statusText = Self.summaryText(for: summary)
+            setStatus(.summary(summary))
         } catch {
             errorText = error.localizedDescription
-            statusText = "Workflow run failed"
+            setStatus(.runFailed)
         }
     }
 
-    private func status(
+    private func statusPresentation(
         for stepID: String,
         result: WorkflowStepExecutionResult?
-    ) -> String {
-        guard let result else { return "Pending" }
+    ) -> (text: String, kind: WorkflowStepPresentation.StatusKind) {
+        guard let result else {
+            return (
+                localizer.string("workflow.step.status.pending", fallback: "Pending"),
+                .pending
+            )
+        }
         if result.exitCode == 0 {
-            return "Completed"
+            return (
+                localizer.string("workflow.step.status.completed", fallback: "Completed"),
+                .completed
+            )
         }
         if case .failed(let failedStepID, _) = lastSummary?.status,
            failedStepID == stepID {
-            return "Failed"
+            return (
+                localizer.string("workflow.step.status.failed", fallback: "Failed"),
+                .failed
+            )
         }
-        return "Exited \(result.exitCode)"
+        return (
+            String(
+                format: localizer.string("workflow.step.status.exited", fallback: "Exited %d"),
+                result.exitCode
+            ),
+            .exited(result.exitCode)
+        )
     }
 
-    private static func summaryText(for summary: WorkflowExecutionSummary) -> String {
+    private func setStatus(_ state: StatusState) {
+        statusState = state
+        statusText = Self.localizedStatusText(state, localizer: localizer)
+    }
+
+    private static func localizedStatusText(_ state: StatusState, localizer: AppLocalizer) -> String {
+        switch state {
+        case .loaded(let name):
+            return String(format: localizer.string("workflow.status.loaded", fallback: "Loaded %@"), name)
+        case .new:
+            return localizer.string("workflow.status.new", fallback: "New workflow")
+        case .unsaved:
+            return localizer.string("workflow.status.unsaved", fallback: "Unsaved workflow")
+        case .saved(let name):
+            return String(format: localizer.string("workflow.status.saved", fallback: "Saved %@"), name)
+        case .runFailed:
+            return localizer.string("workflow.status.runFailed", fallback: "Workflow run failed")
+        case .summary(let summary):
+            return summaryText(for: summary, localizer: localizer)
+        }
+    }
+
+    private static func summaryText(
+        for summary: WorkflowExecutionSummary,
+        localizer: AppLocalizer
+    ) -> String {
         let count = summary.results.count
-        let noun = count == 1 ? "step" : "steps"
         switch summary.status {
         case .completed:
-            return "Workflow \(summary.workflowID) completed after \(count) \(noun)."
+            return String(
+                format: localizer.string(
+                    count == 1
+                        ? "workflow.status.completed.one"
+                        : "workflow.status.completed.many",
+                    fallback: count == 1
+                        ? "Workflow %@ completed after %d step."
+                        : "Workflow %@ completed after %d steps."
+                ),
+                summary.workflowID,
+                count
+            )
         case .failed(let stepID, let exitCode):
-            return "Workflow \(summary.workflowID) failed at \(stepID) with exit \(exitCode)."
+            return String(
+                format: localizer.string(
+                    "workflow.status.failed",
+                    fallback: "Workflow %@ failed at %@ with exit %d."
+                ),
+                summary.workflowID,
+                stepID,
+                exitCode
+            )
         }
     }
 

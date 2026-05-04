@@ -261,9 +261,10 @@ extension MainWindowController {
                 ?? FileManager.default.homeDirectoryForCurrentUser
             let viewModel = NotebookPanelViewModel(
                 fileURL: panel.filePath,
-                workingDirectory: workspaceDir
+                workingDirectory: workspaceDir,
+                localizer: appLocalizer()
             )
-            let view = NotebookPanelView(viewModel: viewModel) { [weak self] in
+            let view = NotebookPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             return NSHostingView(rootView: view)
@@ -273,9 +274,10 @@ extension MainWindowController {
                 ?? FileManager.default.homeDirectoryForCurrentUser
             let viewModel = WorkflowPanelViewModel(
                 fileURL: panel.filePath,
-                workspaceRoot: workspaceDir
+                workspaceRoot: workspaceDir,
+                localizer: appLocalizer()
             )
-            let view = WorkflowPanelView(viewModel: viewModel) { [weak self] in
+            let view = WorkflowPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             return NSHostingView(rootView: view)

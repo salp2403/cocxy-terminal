@@ -78,6 +78,7 @@ extension MainWindowController {
         updateDBCloudHelperPanelLocalizers(localizer)
         updateProjectTemplatePanelLocalizers(localizer)
         updateBrowserPanelLocalizers(localizer)
+        updateNotebookAndWorkflowPanelLocalizers(localizer)
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
@@ -303,6 +304,30 @@ extension MainWindowController {
                     hostingView.rootView = root
                 }
             }
+        }
+    }
+
+    private func updateNotebookAndWorkflowPanelLocalizers(_ localizer: AppLocalizer) {
+        for view in panelContentViews.values {
+            updateNotebookAndWorkflowPanelLocalizer(view, localizer: localizer)
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                updateNotebookAndWorkflowPanelLocalizer(view, localizer: localizer)
+            }
+        }
+    }
+
+    private func updateNotebookAndWorkflowPanelLocalizer(_ view: NSView, localizer: AppLocalizer) {
+        if let hostingView = view as? NSHostingView<NotebookPanelView> {
+            var root = hostingView.rootView
+            root.localizer = localizer
+            hostingView.rootView = root
+        } else if let hostingView = view as? NSHostingView<WorkflowPanelView> {
+            var root = hostingView.rootView
+            root.localizer = localizer
+            hostingView.rootView = root
         }
     }
 

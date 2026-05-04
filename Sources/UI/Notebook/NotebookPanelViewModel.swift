@@ -21,6 +21,15 @@ struct NotebookCellPresentation: Identifiable, Equatable {
 
 @MainActor
 final class NotebookPanelViewModel: ObservableObject {
+    private enum StatusState {
+        case loaded(String)
+        case new
+        case unsaved
+        case saved(String)
+        case runFailed
+        case summary(NotebookExecutionSummary)
+    }
+
     @Published var sourceText: String
     @Published private(set) var statusText: String
     @Published private(set) var errorText: String?
@@ -30,6 +39,8 @@ final class NotebookPanelViewModel: ObservableObject {
     let workingDirectory: URL
 
     private let executor: NotebookExecutor
+    private var localizer: AppLocalizer
+    private var statusState: StatusState
 
     var document: NotebookDocument {
         NotebookDocument.parseMarkdown(sourceText)
@@ -38,7 +49,7 @@ final class NotebookPanelViewModel: ObservableObject {
     var title: String {
         document.metadata.title
             ?? fileURL?.lastPathComponent
-            ?? "Untitled Notebook"
+            ?? localizer.string("notebook.untitledTitle", fallback: "Untitled Notebook")
     }
 
     var cellPresentations: [NotebookCellPresentation] {
@@ -63,25 +74,33 @@ final class NotebookPanelViewModel: ObservableObject {
     init(
         fileURL: URL?,
         workingDirectory: URL,
-        executor: NotebookExecutor = NotebookExecutor()
+        executor: NotebookExecutor = NotebookExecutor(),
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.fileURL = fileURL
         self.workingDirectory = workingDirectory
         self.executor = executor
+        self.localizer = localizer
 
         if let fileURL,
            let loaded = try? String(contentsOf: fileURL, encoding: .utf8) {
             sourceText = loaded
-            statusText = "Loaded \(fileURL.lastPathComponent)"
+            statusState = .loaded(fileURL.lastPathComponent)
         } else {
             sourceText = Self.defaultNotebookSource()
-            statusText = "New notebook"
+            statusState = .new
         }
+        statusText = Self.localizedStatusText(statusState, localizer: localizer)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        statusText = Self.localizedStatusText(statusState, localizer: localizer)
     }
 
     func save() throws {
         guard let fileURL else {
-            statusText = "Unsaved notebook"
+            setStatus(.unsaved)
             return
         }
         try FileManager.default.createDirectory(
@@ -89,7 +108,7 @@ final class NotebookPanelViewModel: ObservableObject {
             withIntermediateDirectories: true
         )
         try sourceText.write(to: fileURL, atomically: true, encoding: .utf8)
-        statusText = "Saved \(fileURL.lastPathComponent)"
+        setStatus(.saved(fileURL.lastPathComponent))
         errorText = nil
     }
 
@@ -115,23 +134,79 @@ final class NotebookPanelViewModel: ObservableObject {
 
             sourceText = NotebookMarkdownCodec.render(summary.document)
             try save()
-            statusText = Self.summaryText(for: summary)
+            setStatus(.summary(summary))
         } catch {
             errorText = error.localizedDescription
-            statusText = "Notebook run failed"
+            setStatus(.runFailed)
         }
     }
 
-    private static func summaryText(for summary: NotebookExecutionSummary) -> String {
+    private func setStatus(_ state: StatusState) {
+        statusState = state
+        statusText = Self.localizedStatusText(state, localizer: localizer)
+    }
+
+    private static func localizedStatusText(_ state: StatusState, localizer: AppLocalizer) -> String {
+        switch state {
+        case .loaded(let name):
+            return String(format: localizer.string("notebook.status.loaded", fallback: "Loaded %@"), name)
+        case .new:
+            return localizer.string("notebook.status.new", fallback: "New notebook")
+        case .unsaved:
+            return localizer.string("notebook.status.unsaved", fallback: "Unsaved notebook")
+        case .saved(let name):
+            return String(format: localizer.string("notebook.status.saved", fallback: "Saved %@"), name)
+        case .runFailed:
+            return localizer.string("notebook.status.runFailed", fallback: "Notebook run failed")
+        case .summary(let summary):
+            return summaryText(for: summary, localizer: localizer)
+        }
+    }
+
+    private static func summaryText(
+        for summary: NotebookExecutionSummary,
+        localizer: AppLocalizer
+    ) -> String {
         let count = summary.executedCellIndices.count
-        let noun = count == 1 ? "cell" : "cells"
         if let failedIndex = summary.failedCellIndex {
-            return "Notebook stopped at cell \(failedIndex) after \(count) \(noun)."
+            return String(
+                format: localizer.string(
+                    count == 1
+                        ? "notebook.status.stopped.one"
+                        : "notebook.status.stopped.many",
+                    fallback: count == 1
+                        ? "Notebook stopped at cell %d after %d cell."
+                        : "Notebook stopped at cell %d after %d cells."
+                ),
+                failedIndex,
+                count
+            )
         }
         if let failedResult = summary.results.first(where: { !$0.succeeded }) {
-            return "Notebook failed at cell \(failedResult.cellIndex) after \(count) \(noun)."
+            return String(
+                format: localizer.string(
+                    count == 1
+                        ? "notebook.status.failed.one"
+                        : "notebook.status.failed.many",
+                    fallback: count == 1
+                        ? "Notebook failed at cell %d after %d cell."
+                        : "Notebook failed at cell %d after %d cells."
+                ),
+                failedResult.cellIndex,
+                count
+            )
         }
-        return "Executed \(count) notebook \(noun)."
+        return String(
+            format: localizer.string(
+                count == 1
+                    ? "notebook.status.executed.one"
+                    : "notebook.status.executed.many",
+                fallback: count == 1
+                    ? "Executed %d notebook cell."
+                    : "Executed %d notebook cells."
+            ),
+            count
+        )
     }
 
     private static func defaultNotebookSource() -> String {

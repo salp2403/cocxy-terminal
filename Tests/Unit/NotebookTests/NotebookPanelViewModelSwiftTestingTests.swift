@@ -45,6 +45,41 @@ struct NotebookPanelViewModelSwiftTestingTests {
         #expect(try String(contentsOf: fileURL, encoding: .utf8).contains("panel-ok"))
         #expect(runner.calls.map(\.arguments) == [["-c", "echo stale"]])
     }
+
+    @Test("Spanish localizer updates notebook status text")
+    @MainActor
+    func spanishLocalizerUpdatesNotebookStatusText() async throws {
+        let workspace = try temporaryNotebookPanelDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let runner = RecordingNotebookPanelProcessRunner(results: [
+            AgentProcessResult(exitCode: 0, stdout: "ok\n", stderr: ""),
+        ])
+        let viewModel = NotebookPanelViewModel(
+            fileURL: nil,
+            workingDirectory: workspace,
+            executor: NotebookExecutor(processRunner: runner),
+            localizer: spanish
+        )
+
+        #expect(viewModel.statusText == "Notebook nuevo")
+        viewModel.sourceText = ""
+        #expect(viewModel.title == "Notebook sin título")
+        viewModel.sourceText = """
+        ```bash
+        echo ok
+        ```
+        """
+
+        await viewModel.runAll()
+
+        #expect(viewModel.statusText == "1 celda de notebook ejecutada.")
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.statusText == "Executed 1 notebook cell.")
+    }
 }
 
 private final class RecordingNotebookPanelProcessRunner: AgentProcessRunning, @unchecked Sendable {
@@ -83,4 +118,9 @@ private func temporaryNotebookPanelDirectory() throws -> URL {
         .appendingPathComponent("cocxy-notebook-panel-tests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
