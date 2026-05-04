@@ -19,7 +19,7 @@ import AppKit
 ///
 /// ## Accessibility
 ///
-/// Each state has a descriptive `accessibilityLabel` in English.
+/// Each state has a descriptive localized `accessibilityLabel`.
 /// The pulse animation respects `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`.
 ///
 /// - SeeAlso: `TabBarView` (parent view)
@@ -45,6 +45,12 @@ final class AgentStateIndicator: NSView {
 
     /// The accessibility label describing the current state.
     private(set) var currentAccessibilityLabel: String = "Agent state: idle"
+
+    /// The semantic state currently rendered by the indicator.
+    private(set) var currentState: AgentState = .idle
+
+    /// Localizer for VoiceOver labels.
+    private var localizer: AppLocalizer
 
     /// Whether pulse animation is logically enabled for the current state.
     ///
@@ -104,7 +110,8 @@ final class AgentStateIndicator: NSView {
 
     // MARK: - Initialization
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .english)) {
+        self.localizer = localizer
         super.init(frame: NSRect(
             x: 0, y: 0,
             width: Self.indicatorSize,
@@ -154,11 +161,17 @@ final class AgentStateIndicator: NSView {
 
     // MARK: - Public API
 
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        updateState(currentState)
+    }
+
     /// Updates the indicator to reflect a new agent state.
     ///
     /// - Parameter state: The new agent state.
     func updateState(_ state: AgentState) {
-        let config = Self.stateConfiguration(for: state)
+        currentState = state
+        let config = Self.stateConfiguration(for: state, localizer: localizer)
 
         currentColorName = config.colorName
         currentBadgeText = config.badgeText
@@ -362,48 +375,51 @@ final class AgentStateIndicator: NSView {
     }
 
     /// Returns the visual configuration for an agent state.
-    private static func stateConfiguration(for state: AgentState) -> StateConfig {
+    private static func stateConfiguration(for state: AgentState, localizer: AppLocalizer) -> StateConfig {
         switch state {
         case .idle:
             return StateConfig(
                 colorName: "tertiaryLabel",
                 badgeText: nil,
-                accessibilityLabel: "Agent state: idle",
+                accessibilityLabel: localizer.string("agentState.indicator.idle", fallback: "Agent state: idle"),
                 pulseEnabled: false
             )
         case .launched:
             return StateConfig(
                 colorName: "systemBlue",
                 badgeText: nil,
-                accessibilityLabel: "Agent state: launched",
+                accessibilityLabel: localizer.string("agentState.indicator.launched", fallback: "Agent state: launched"),
                 pulseEnabled: true
             )
         case .working:
             return StateConfig(
                 colorName: "systemBlue",
                 badgeText: nil,
-                accessibilityLabel: "Agent state: working",
+                accessibilityLabel: localizer.string("agentState.indicator.working", fallback: "Agent state: working"),
                 pulseEnabled: true
             )
         case .waitingInput:
             return StateConfig(
                 colorName: "systemYellow",
                 badgeText: "?",
-                accessibilityLabel: "Agent state: waiting for input",
+                accessibilityLabel: localizer.string(
+                    "agentState.indicator.waitingInput",
+                    fallback: "Agent state: waiting for input"
+                ),
                 pulseEnabled: false
             )
         case .finished:
             return StateConfig(
                 colorName: "systemGreen",
                 badgeText: "\u{2713}",
-                accessibilityLabel: "Agent state: finished",
+                accessibilityLabel: localizer.string("agentState.indicator.finished", fallback: "Agent state: finished"),
                 pulseEnabled: false
             )
         case .error:
             return StateConfig(
                 colorName: "systemRed",
                 badgeText: "!",
-                accessibilityLabel: "Agent state: error",
+                accessibilityLabel: localizer.string("agentState.indicator.error", fallback: "Agent state: error"),
                 pulseEnabled: false
             )
         }

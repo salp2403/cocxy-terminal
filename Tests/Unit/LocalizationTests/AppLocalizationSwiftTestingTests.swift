@@ -70,6 +70,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.github.defaultState.merged", fallback: "Merged (PRs only)") == "Fusionados (solo PRs)")
         #expect(spanish.string("preferences.about.subtitle", fallback: "Agent-aware terminal for macOS") == "Terminal para macOS con conciencia de agentes")
         #expect(spanish.string("preferences.about.checkForUpdates", fallback: "Check for Updates") == "Buscar actualizaciones")
+        #expect(spanish.string("agentState.indicator.waitingInput", fallback: "Agent state: waiting for input") == "Estado del agente: esperando entrada")
         #expect(spanish.string("app.crashRecovery.restore.button", fallback: "Restore") == "Restaurar")
         #expect(spanish.string("app.quit.message", fallback: "All terminal sessions will be closed.") == "Todas las sesiones de terminal se cerrarán.")
         #expect(spanish.string("common.cancel", fallback: "Cancel") == "Cancelar")

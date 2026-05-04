@@ -333,6 +333,12 @@
 "agentState.accessibility.waitingInput" = "Agent needs your input";
 "agentState.accessibility.finished" = "Agent completed task";
 "agentState.accessibility.error" = "Agent encountered an error";
+"agentState.indicator.idle" = "Agent state: idle";
+"agentState.indicator.launched" = "Agent state: launched";
+"agentState.indicator.working" = "Agent state: working";
+"agentState.indicator.waitingInput" = "Agent state: waiting for input";
+"agentState.indicator.finished" = "Agent state: finished";
+"agentState.indicator.error" = "Agent state: error";
 "agentAttachment.removeImage" = "Remove image";
 "keyboardShortcuts.title" = "Keyboard Shortcuts";
 "keyboardShortcuts.show" = "Show keyboard shortcuts";

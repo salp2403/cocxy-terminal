@@ -333,6 +333,12 @@
 "agentState.accessibility.waitingInput" = "El agente necesita tu entrada";
 "agentState.accessibility.finished" = "El agente completó la tarea";
 "agentState.accessibility.error" = "El agente encontró un error";
+"agentState.indicator.idle" = "Estado del agente: inactivo";
+"agentState.indicator.launched" = "Estado del agente: iniciado";
+"agentState.indicator.working" = "Estado del agente: trabajando";
+"agentState.indicator.waitingInput" = "Estado del agente: esperando entrada";
+"agentState.indicator.finished" = "Estado del agente: finalizado";
+"agentState.indicator.error" = "Estado del agente: error";
 "agentAttachment.removeImage" = "Eliminar imagen";
 "keyboardShortcuts.title" = "Atajos de teclado";
 "keyboardShortcuts.show" = "Mostrar atajos de teclado";

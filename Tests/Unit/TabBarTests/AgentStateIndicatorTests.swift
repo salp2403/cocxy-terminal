@@ -144,6 +144,18 @@ final class AgentStateIndicatorTests: XCTestCase {
         XCTAssertEqual(sut.currentAccessibilityLabel, "Agent state: error")
     }
 
+    func testAccessibilityLabelUsesUpdatedLocalizer() throws {
+        let bundle = try XCTUnwrap(Bundle(url: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)))
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        sut.updateState(.waitingInput)
+        sut.updateLocalizer(localizer)
+
+        XCTAssertEqual(sut.currentAccessibilityLabel, "Estado del agente: esperando entrada")
+        XCTAssertEqual(sut.accessibilityLabel(), "Estado del agente: esperando entrada")
+    }
+
     // MARK: - Pulse Animation Flag
 
     func testWorkingStateHasPulseEnabled() {
