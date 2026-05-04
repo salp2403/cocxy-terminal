@@ -933,12 +933,18 @@ final class PreferencesViewModel: ObservableObject {
     func saveICloudSyncMasterPasswordDraft() throws {
         try iCloudSyncSecrets.saveMasterPassword(iCloudSyncMasterPasswordDraft)
         iCloudSyncMasterPasswordDraft = ""
-        iCloudSyncMasterPasswordStatus = "iCloud Sync master password saved."
+        iCloudSyncMasterPasswordStatus = localizedString(
+            "preferences.iCloud.masterPassword.saved.status",
+            fallback: "iCloud Sync master password saved."
+        )
     }
 
     func deleteICloudSyncMasterPassword() throws {
         try iCloudSyncSecrets.deleteMasterPassword()
-        iCloudSyncMasterPasswordStatus = "iCloud Sync master password deleted."
+        iCloudSyncMasterPasswordStatus = localizedString(
+            "preferences.iCloud.masterPassword.deleted.status",
+            fallback: "iCloud Sync master password deleted."
+        )
     }
 
     func hasSavedICloudSyncMasterPassword() -> Bool {
@@ -948,7 +954,10 @@ final class PreferencesViewModel: ObservableObject {
     func exportICloudSyncArtifactsNow() throws -> ICloudSyncExportOutcome {
         let config = buildICloudSyncConfigFromViewModel()
         guard config.enabled else {
-            iCloudSyncExportStatus = "iCloud Sync is disabled."
+            iCloudSyncExportStatus = localizedString(
+                "preferences.iCloud.status.disabled",
+                fallback: "iCloud Sync is disabled."
+            )
             return .disabled
         }
         guard let password = try iCloudSyncSecrets.masterPassword() else {
@@ -962,13 +971,17 @@ final class PreferencesViewModel: ObservableObject {
         )
         switch outcome {
         case .disabled:
-            iCloudSyncExportStatus = "iCloud Sync is disabled."
+            iCloudSyncExportStatus = localizedString(
+                "preferences.iCloud.status.disabled",
+                fallback: "iCloud Sync is disabled."
+            )
         case .unavailable:
-            iCloudSyncExportStatus = "iCloud Drive is unavailable."
+            iCloudSyncExportStatus = localizedString(
+                "preferences.iCloud.status.unavailable",
+                fallback: "iCloud Drive is unavailable."
+            )
         case .exported(let result):
-            let count = result.writtenArtifactURLs.count
-            let noun = count == 1 ? "artifact" : "artifacts"
-            iCloudSyncExportStatus = "Exported \(count) encrypted \(noun)."
+            iCloudSyncExportStatus = localizedICloudExportStatus(count: result.writtenArtifactURLs.count)
         }
         return outcome
     }
@@ -976,7 +989,10 @@ final class PreferencesViewModel: ObservableObject {
     func importICloudSyncArtifactsNow() throws -> ICloudSyncImportOutcome {
         let config = buildICloudSyncConfigFromViewModel()
         guard config.enabled else {
-            iCloudSyncImportStatus = "iCloud Sync is disabled."
+            iCloudSyncImportStatus = localizedString(
+                "preferences.iCloud.status.disabled",
+                fallback: "iCloud Sync is disabled."
+            )
             iCloudSyncConflicts = []
             return .disabled
         }
@@ -991,21 +1007,28 @@ final class PreferencesViewModel: ObservableObject {
         )
         switch outcome {
         case .disabled:
-            iCloudSyncImportStatus = "iCloud Sync is disabled."
+            iCloudSyncImportStatus = localizedString(
+                "preferences.iCloud.status.disabled",
+                fallback: "iCloud Sync is disabled."
+            )
             iCloudSyncConflicts = []
         case .unavailable:
-            iCloudSyncImportStatus = "iCloud Drive is unavailable."
+            iCloudSyncImportStatus = localizedString(
+                "preferences.iCloud.status.unavailable",
+                fallback: "iCloud Drive is unavailable."
+            )
             iCloudSyncConflicts = []
         case .imported(let result):
             iCloudSyncConflicts = result.conflicts
-            let count = result.importedArtifactURLs.count
-            let noun = count == 1 ? "artifact" : "artifacts"
             if result.conflicts.isEmpty {
-                iCloudSyncImportStatus = "Imported \(count) encrypted \(noun)."
+                iCloudSyncImportStatus = localizedICloudImportStatus(
+                    artifactCount: result.importedArtifactURLs.count
+                )
             } else {
-                let conflictCount = result.conflicts.count
-                let conflictNoun = conflictCount == 1 ? "conflict requires" : "conflicts require"
-                iCloudSyncImportStatus = "Imported \(count) encrypted \(noun); \(conflictCount) \(conflictNoun) manual resolution."
+                iCloudSyncImportStatus = localizedICloudImportConflictStatus(
+                    artifactCount: result.importedArtifactURLs.count,
+                    conflictCount: result.conflicts.count
+                )
             }
         }
         return outcome
@@ -1017,7 +1040,10 @@ final class PreferencesViewModel: ObservableObject {
     ) throws -> ICloudSyncConflictResolutionOutcome {
         let config = buildICloudSyncConfigFromViewModel()
         guard config.enabled else {
-            iCloudSyncImportStatus = "iCloud Sync is disabled."
+            iCloudSyncImportStatus = localizedString(
+                "preferences.iCloud.status.disabled",
+                fallback: "iCloud Sync is disabled."
+            )
             return .disabled
         }
         let password: String
@@ -1040,14 +1066,96 @@ final class PreferencesViewModel: ObservableObject {
         )
         switch outcome {
         case .disabled:
-            iCloudSyncImportStatus = "iCloud Sync is disabled."
+            iCloudSyncImportStatus = localizedString(
+                "preferences.iCloud.status.disabled",
+                fallback: "iCloud Sync is disabled."
+            )
         case .unavailable:
-            iCloudSyncImportStatus = "iCloud Drive is unavailable."
+            iCloudSyncImportStatus = localizedString(
+                "preferences.iCloud.status.unavailable",
+                fallback: "iCloud Drive is unavailable."
+            )
         case .resolved(let result):
             iCloudSyncConflicts.removeAll { $0 == result.conflict }
-            iCloudSyncImportStatus = "Resolved conflict for \(result.conflict.remote.relativePath)."
+            iCloudSyncImportStatus = String(
+                format: localizedString(
+                    "preferences.iCloud.status.resolvedConflict",
+                    fallback: "Resolved conflict for %@."
+                ),
+                result.conflict.remote.relativePath
+            )
         }
         return outcome
+    }
+
+    private func localizedICloudExportStatus(count: Int) -> String {
+        if count == 1 {
+            return localizedString(
+                "preferences.iCloud.status.exported.one",
+                fallback: "Exported 1 encrypted artifact."
+            )
+        }
+        return String(
+            format: localizedString(
+                "preferences.iCloud.status.exported.many",
+                fallback: "Exported %d encrypted artifacts."
+            ),
+            count
+        )
+    }
+
+    private func localizedICloudImportStatus(artifactCount: Int) -> String {
+        if artifactCount == 1 {
+            return localizedString(
+                "preferences.iCloud.status.imported.one",
+                fallback: "Imported 1 encrypted artifact."
+            )
+        }
+        return String(
+            format: localizedString(
+                "preferences.iCloud.status.imported.many",
+                fallback: "Imported %d encrypted artifacts."
+            ),
+            artifactCount
+        )
+    }
+
+    private func localizedICloudImportConflictStatus(
+        artifactCount: Int,
+        conflictCount: Int
+    ) -> String {
+        switch (artifactCount == 1, conflictCount == 1) {
+        case (true, true):
+            return localizedString(
+                "preferences.iCloud.status.imported.conflict.oneOne",
+                fallback: "Imported 1 encrypted artifact; 1 conflict requires manual resolution."
+            )
+        case (true, false):
+            return String(
+                format: localizedString(
+                    "preferences.iCloud.status.imported.conflict.oneMany",
+                    fallback: "Imported 1 encrypted artifact; %d conflicts require manual resolution."
+                ),
+                conflictCount
+            )
+        case (false, true):
+            return String(
+                format: localizedString(
+                    "preferences.iCloud.status.imported.conflict.manyOne",
+                    fallback: "Imported %d encrypted artifacts; 1 conflict requires manual resolution."
+                ),
+                artifactCount
+            )
+        case (false, false):
+            return String(
+                format: localizedString(
+                    "preferences.iCloud.status.imported.conflict.manyMany",
+                    fallback: "Imported %d encrypted artifacts; %d conflicts require manual resolution."
+                ),
+                artifactCount,
+                conflictCount
+            )
+        }
     }
 
     // MARK: - MCP Config Editing

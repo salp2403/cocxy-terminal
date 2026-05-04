@@ -62,6 +62,10 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.agentMode.apiKey.saved", fallback: "A key is saved in the macOS Keychain for this provider.") == "Hay una llave guardada en Keychain de macOS para este provider.")
         #expect(spanish.string("preferences.mcp.configFile.section", fallback: "Config File") == "Archivo de configuración")
         #expect(spanish.string("preferences.mcp.noServers", fallback: "No MCP servers configured.") == "No hay servidores MCP configurados.")
+        #expect(spanish.string("preferences.iCloud.enable", fallback: "Enable iCloud Drive sync") == "Activar sincronización con iCloud Drive")
+        #expect(spanish.string("preferences.iCloud.artifact.settings", fallback: "Settings") == "Ajustes")
+        #expect(spanish.string("preferences.iCloud.export", fallback: "Export Encrypted Artifacts") == "Exportar artefactos cifrados")
+        #expect(spanish.string("preferences.iCloud.conflict.useRemote", fallback: "Use Remote") == "Usar remoto")
     }
 
     @Test
