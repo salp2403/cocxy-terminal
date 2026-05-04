@@ -63,7 +63,7 @@ struct GitHubPaneView: View {
         .frame(maxHeight: .infinity)
         .glassPanelBackground()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("GitHub pane")
+        .accessibilityLabel(localized("github.pane.accessibility", fallback: "GitHub pane"))
     }
 
     // MARK: Header
@@ -84,7 +84,15 @@ struct GitHubPaneView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } else if let login = viewModel.authStatus?.login {
-                    Text("Signed in as @\(login)")
+                    Text(
+                        String(
+                            format: localized(
+                                "github.pane.signedIn",
+                                fallback: "Signed in as @%@"
+                            ),
+                            login
+                        )
+                    )
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
@@ -97,7 +105,15 @@ struct GitHubPaneView: View {
                     Image(systemName: "arrow.up.right.square")
                 }
                 .buttonStyle(.borderless)
-                .help("Open \(repo.fullName) on GitHub")
+                .help(
+                    String(
+                        format: localized(
+                            "github.pane.openRepo.help",
+                            fallback: "Open %@ on GitHub"
+                        ),
+                        repo.fullName
+                    )
+                )
             }
 
             if let onDismiss {
@@ -105,8 +121,8 @@ struct GitHubPaneView: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("Close pane")
-                .help("Close pane (Cmd+Option+G)")
+                .accessibilityLabel(localized("github.pane.close", fallback: "Close pane"))
+                .help(localized("github.pane.close.help", fallback: "Close pane (Cmd+Option+G)"))
             }
         }
         .padding(.horizontal, 12)
@@ -116,9 +132,12 @@ struct GitHubPaneView: View {
     // MARK: Tab picker
 
     private var tabPicker: some View {
-        Picker("GitHub view", selection: $viewModel.selectedTab) {
+        Picker(
+            localized("github.pane.view", fallback: "GitHub view"),
+            selection: $viewModel.selectedTab
+        ) {
             ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
-                Label(tab.displayName, systemImage: tab.systemImage)
+                Label(tab.localizedTitle(using: localizer), systemImage: tab.systemImage)
                     .tag(tab)
             }
         }
@@ -139,17 +158,18 @@ struct GitHubPaneView: View {
         } else {
             VStack(spacing: 6) {
                 if let error = viewModel.lastErrorMessage {
-                    GitHubPaneBanner(message: error, kind: .error)
+                    GitHubPaneBanner(message: error, kind: .error, localizer: localizer)
                 }
                 if let mergeInfo = viewModel.lastMergeInfoMessage {
-                    GitHubPaneBanner(message: mergeInfo, kind: .info)
+                    GitHubPaneBanner(message: mergeInfo, kind: .info, localizer: localizer)
                 }
                 if let info = viewModel.lastInfoMessage {
                     GitHubPaneBanner(
                         message: info,
                         kind: .info,
-                        actionTitle: viewModel.setupAction?.buttonTitle,
-                        onAction: setupActionHandler
+                        actionTitle: viewModel.setupAction?.localizedButtonTitle(using: localizer),
+                        onAction: setupActionHandler,
+                        localizer: localizer
                     )
                 }
             }
@@ -180,7 +200,13 @@ struct GitHubPaneView: View {
     private var pullRequestsList: some View {
         Group {
             if viewModel.pullRequests.isEmpty {
-                emptyState(title: "No pull requests", systemImage: "arrow.triangle.pull")
+                emptyState(
+                    title: localized(
+                        "github.pane.empty.pullRequests",
+                        fallback: "No pull requests"
+                    ),
+                    systemImage: "arrow.triangle.pull"
+                )
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -188,13 +214,21 @@ struct GitHubPaneView: View {
                             Button(action: { didActivate(pr) }) {
                                 GitHubPullRequestRow(
                                     pullRequest: pr,
-                                    isSelected: viewModel.selectedPullRequestNumber == pr.number
+                                    isSelected: viewModel.selectedPullRequestNumber == pr.number,
+                                    localizer: localizer
                                 )
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button("Open in Browser") { viewModel.open(pr.url) }
-                                Button("Copy URL") {
+                                Button(
+                                    localized(
+                                        "github.pane.context.openInBrowser",
+                                        fallback: "Open in Browser"
+                                    )
+                                ) {
+                                    viewModel.open(pr.url)
+                                }
+                                Button(localized("github.pane.context.copyURL", fallback: "Copy URL")) {
                                     NSPasteboard.general.clearContents()
                                     NSPasteboard.general.setString(
                                         pr.url.absoluteString,
@@ -207,10 +241,19 @@ struct GitHubPaneView: View {
                                         presentMergeActionSheet(for: pr)
                                     } label: {
                                         if viewModel.isMerging(pr.number) {
-                                            Label("Merging…", systemImage: "hourglass")
+                                            Label(
+                                                localized(
+                                                    "github.pane.merge.inProgress",
+                                                    fallback: "Merging..."
+                                                ),
+                                                systemImage: "hourglass"
+                                            )
                                         } else {
                                             Label(
-                                                "Merge Pull Request…",
+                                                localized(
+                                                    "github.pane.merge.action",
+                                                    fallback: "Merge Pull Request..."
+                                                ),
                                                 systemImage: "arrow.triangle.merge"
                                             )
                                         }
@@ -231,18 +274,28 @@ struct GitHubPaneView: View {
     private var issuesList: some View {
         Group {
             if viewModel.issues.isEmpty {
-                emptyState(title: "No issues", systemImage: "exclamationmark.circle")
+                emptyState(
+                    title: localized("github.pane.empty.issues", fallback: "No issues"),
+                    systemImage: "exclamationmark.circle"
+                )
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(viewModel.issues) { issue in
                             Button(action: { viewModel.open(issue.url) }) {
-                                GitHubIssueRow(issue: issue)
+                                GitHubIssueRow(issue: issue, localizer: localizer)
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button("Open in Browser") { viewModel.open(issue.url) }
-                                Button("Copy URL") {
+                                Button(
+                                    localized(
+                                        "github.pane.context.openInBrowser",
+                                        fallback: "Open in Browser"
+                                    )
+                                ) {
+                                    viewModel.open(issue.url)
+                                }
+                                Button(localized("github.pane.context.copyURL", fallback: "Copy URL")) {
                                     NSPasteboard.general.clearContents()
                                     NSPasteboard.general.setString(
                                         issue.url.absoluteString,
@@ -265,8 +318,14 @@ struct GitHubPaneView: View {
             if viewModel.checks.isEmpty {
                 emptyState(
                     title: viewModel.selectedPullRequestNumber == nil
-                        ? "Select a pull request to see checks"
-                        : "No checks reported",
+                        ? localized(
+                            "github.pane.empty.selectPullRequest",
+                            fallback: "Select a pull request to see checks"
+                        )
+                        : localized(
+                            "github.pane.empty.noChecks",
+                            fallback: "No checks reported"
+                        ),
                     systemImage: "checkmark.circle"
                 )
             } else {
@@ -276,7 +335,7 @@ struct GitHubPaneView: View {
                             Button(action: {
                                 if let url = check.detailsUrl { viewModel.open(url) }
                             }) {
-                                GitHubCheckRow(check: check)
+                                GitHubCheckRow(check: check, localizer: localizer)
                             }
                             .buttonStyle(.plain)
                             .disabled(check.detailsUrl == nil)
@@ -311,12 +370,21 @@ struct GitHubPaneView: View {
                 ProgressView()
                     .controlSize(.small)
                     .progressViewStyle(.circular)
-                Text("Loading…")
+                Text(localized("github.pane.loading", fallback: "Loading..."))
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             } else if let auth = viewModel.authStatus, auth.isAuthenticated,
                       viewModel.pullRequests.count + viewModel.issues.count > 0 {
-                Text("\(viewModel.pullRequests.count) PRs · \(viewModel.issues.count) issues")
+                Text(
+                    String(
+                        format: localized(
+                            "github.pane.footer.counts",
+                            fallback: "%d PRs · %d issues"
+                        ),
+                        viewModel.pullRequests.count,
+                        viewModel.issues.count
+                    )
+                )
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
@@ -327,7 +395,7 @@ struct GitHubPaneView: View {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
-            .help("Refresh")
+            .help(localized("github.pane.refresh", fallback: "Refresh"))
             .keyboardShortcut("r", modifiers: [.command])
         }
         .padding(.horizontal, 12)
@@ -350,5 +418,9 @@ struct GitHubPaneView: View {
             method: decision.method,
             deleteBranch: decision.deleteBranch
         )
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

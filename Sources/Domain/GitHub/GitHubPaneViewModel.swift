@@ -31,6 +31,21 @@ enum GitHubPaneSetupAction: Equatable, Sendable {
             return "Sign In with GitHub"
         }
     }
+
+    func localizedButtonTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .installCLI:
+            return localizer.string(
+                "github.pane.setup.installCLI",
+                fallback: buttonTitle
+            )
+        case .signIn:
+            return localizer.string(
+                "github.pane.setup.signIn",
+                fallback: buttonTitle
+            )
+        }
+    }
 }
 
 // MARK: - GitHubPaneViewModel
@@ -54,6 +69,25 @@ final class GitHubPaneViewModel: ObservableObject {
             case .pullRequests: return "Pull Requests"
             case .issues: return "Issues"
             case .checks: return "Checks"
+            }
+        }
+        func localizedTitle(using localizer: AppLocalizer) -> String {
+            switch self {
+            case .pullRequests:
+                return localizer.string(
+                    "github.pane.tab.pullRequests",
+                    fallback: displayName
+                )
+            case .issues:
+                return localizer.string(
+                    "github.pane.tab.issues",
+                    fallback: displayName
+                )
+            case .checks:
+                return localizer.string(
+                    "github.pane.tab.checks",
+                    fallback: displayName
+                )
             }
         }
         var systemImage: String {
@@ -200,6 +234,7 @@ final class GitHubPaneViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let service: GitHubService
+    private var localizer: AppLocalizer
 
     // MARK: - Lifecycle / concurrency state
 
@@ -223,8 +258,12 @@ final class GitHubPaneViewModel: ObservableObject {
 
     // MARK: - Init
 
-    init(service: GitHubService) {
+    init(
+        service: GitHubService,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
+    ) {
         self.service = service
+        self.localizer = localizer
     }
 
     deinit {
@@ -253,6 +292,10 @@ final class GitHubPaneViewModel: ObservableObject {
         onOpenURL?(url)
     }
 
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+    }
+
     /// Runs a visible recovery action from a setup banner. Install
     /// opens the official GitHub CLI site; sign-in opens an interactive
     /// Cocxy tab and runs `gh auth login` in that PTY.
@@ -262,17 +305,26 @@ final class GitHubPaneViewModel: ObservableObject {
             guard let url = URL(string: "https://cli.github.com/") else { return }
             open(url)
             lastErrorMessage = nil
-            lastInfoMessage = "Opened the GitHub CLI install guide. After installing `gh`, press Refresh."
+            lastInfoMessage = localized(
+                "github.pane.status.installGuideOpened",
+                fallback: "Opened the GitHub CLI install guide. After installing `gh`, press Refresh."
+            )
         case .signIn:
             let workingDirectory = workingDirectoryProvider?()
                 ?? FileManager.default.homeDirectoryForCurrentUser
             guard onStartAuthentication?(workingDirectory) == true else {
-                lastErrorMessage = "Could not open a Cocxy tab for `gh auth login`."
+                lastErrorMessage = localized(
+                    "github.pane.error.openAuthTab",
+                    fallback: "Could not open a Cocxy tab for `gh auth login`."
+                )
                 return
             }
             setupAction = nil
             lastErrorMessage = nil
-            lastInfoMessage = "Complete `gh auth login` in the new tab, then press Refresh."
+            lastInfoMessage = localized(
+                "github.pane.status.authTabOpened",
+                fallback: "Complete `gh auth login` in the new tab, then press Refresh."
+            )
         }
     }
 
@@ -314,15 +366,24 @@ final class GitHubPaneViewModel: ObservableObject {
         body: String? = nil
     ) {
         guard configProvider().mergeEnabled else {
-            lastErrorMessage = "Pull request merge is disabled in [github].merge-enabled."
+            lastErrorMessage = localized(
+                "github.pane.merge.disabled",
+                fallback: "Pull request merge is disabled in [github].merge-enabled."
+            )
             return
         }
         guard let handler = mergePullRequestHandler else {
-            lastErrorMessage = "GitHub integration is not ready yet. Reload the pane to retry."
+            lastErrorMessage = localized(
+                "github.pane.merge.notReady",
+                fallback: "GitHub integration is not ready yet. Reload the pane to retry."
+            )
             return
         }
         guard let workingDirectory = pullRequestsWorkingDirectory else {
-            lastErrorMessage = "Reload the GitHub pane before merging this pull request."
+            lastErrorMessage = localized(
+                "github.pane.merge.reloadRequired",
+                fallback: "Reload the GitHub pane before merging this pull request."
+            )
             return
         }
         let mergeTabID = pullRequestsTabID
@@ -346,7 +407,10 @@ final class GitHubPaneViewModel: ObservableObject {
                 await MainActor.run {
                     guard let self else { return }
                     self.pullRequestsBeingMerged.remove(number)
-                    self.lastMergeInfoMessage = "Merged PR #\(merged.number) via \(method.displayName)."
+                    self.lastMergeInfoMessage = self.localizedMergeBannerHead(
+                        number: merged.number,
+                        method: method
+                    )
                     // v0.1.87: post-merge auto-pull. We capture the
                     // working directory used for the merge so the
                     // sync targets exactly the checkout we just
@@ -586,7 +650,10 @@ final class GitHubPaneViewModel: ObservableObject {
     private func performRefresh(generation: UInt64) async {
         guard configProvider().enabled else {
             applyState {
-                lastInfoMessage = "GitHub pane is disabled. Enable it in Preferences > GitHub."
+                lastInfoMessage = localized(
+                    "github.pane.status.disabled",
+                    fallback: "GitHub pane is disabled. Enable it in Preferences > GitHub."
+                )
                 repo = nil
                 authStatus = nil
                 pullRequests = []
@@ -603,7 +670,10 @@ final class GitHubPaneViewModel: ObservableObject {
 
         guard let workingDirectory = workingDirectoryProvider?() else {
             applyState {
-                lastInfoMessage = "Open a git repository to see pull requests and issues."
+                lastInfoMessage = localized(
+                    "github.pane.status.openRepository",
+                    fallback: "Open a git repository to see pull requests and issues."
+                )
                 repo = nil
                 authStatus = nil
                 pullRequests = []
@@ -645,7 +715,7 @@ final class GitHubPaneViewModel: ObservableObject {
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
                     pullRequestsTabID = nil
-                    lastInfoMessage = Self.banner(for: error)
+                    lastInfoMessage = Self.banner(for: error, using: localizer)
                     setupAction = .installCLI
                 case .notAuthenticated:
                     repo = nil
@@ -656,10 +726,10 @@ final class GitHubPaneViewModel: ObservableObject {
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
                     pullRequestsTabID = nil
-                    lastInfoMessage = Self.banner(for: error)
+                    lastInfoMessage = Self.banner(for: error, using: localizer)
                     setupAction = .signIn
                 default:
-                    lastErrorMessage = Self.banner(for: error)
+                    lastErrorMessage = Self.banner(for: error, using: localizer)
                     setupAction = nil
                 }
                 isLoading = false
@@ -679,7 +749,10 @@ final class GitHubPaneViewModel: ObservableObject {
         applyState { authStatus = auth }
         guard auth.isAuthenticated else {
             applyState {
-                lastInfoMessage = "Sign in with `gh auth login` to load GitHub data."
+                lastInfoMessage = localized(
+                    "github.pane.status.signInToLoad",
+                    fallback: "Sign in with `gh auth login` to load GitHub data."
+                )
                 setupAction = .signIn
                 repo = nil
                 pullRequests = []
@@ -710,11 +783,11 @@ final class GitHubPaneViewModel: ObservableObject {
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
                     pullRequestsTabID = nil
-                    lastInfoMessage = Self.banner(for: error)
+                    lastInfoMessage = Self.banner(for: error, using: localizer)
                     setupAction = nil
                 default:
                     clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
-                    lastErrorMessage = Self.banner(for: error)
+                    lastErrorMessage = Self.banner(for: error, using: localizer)
                     setupAction = nil
                 }
                 isLoading = false
@@ -790,7 +863,7 @@ final class GitHubPaneViewModel: ObservableObject {
             guard generation == refreshGeneration else { return }
             applyState {
                 clearLoadedDataIfNeeded(currentWorkingDirectory: workingDirectory)
-                lastErrorMessage = Self.banner(for: error)
+                lastErrorMessage = Self.banner(for: error, using: localizer)
                 isLoading = false
             }
         } catch {
@@ -870,5 +943,82 @@ final class GitHubPaneViewModel: ObservableObject {
             let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "The gh command failed." : trimmed
         }
+    }
+
+    nonisolated static func banner(
+        for error: GitHubCLIError,
+        using localizer: AppLocalizer
+    ) -> String {
+        switch error {
+        case .notInstalled:
+            return localizer.string(
+                "github.pane.banner.notInstalled",
+                fallback: banner(for: error)
+            )
+        case .notAuthenticated:
+            return localizer.string(
+                "github.pane.banner.notAuthenticated",
+                fallback: banner(for: error)
+            )
+        case .noRemote:
+            return localizer.string(
+                "github.pane.banner.noRemote",
+                fallback: banner(for: error)
+            )
+        case .notAGitRepository:
+            return localizer.string(
+                "github.pane.banner.notGitRepository",
+                fallback: banner(for: error)
+            )
+        case .rateLimited:
+            return localizer.string(
+                "github.pane.banner.rateLimited",
+                fallback: banner(for: error)
+            )
+        case .timeout(let seconds):
+            return String(
+                format: localizer.string(
+                    "github.pane.banner.timeout",
+                    fallback: "GitHub CLI timed out after %d s. Check your network."
+                ),
+                Int(seconds)
+            )
+        case .invalidJSON(let reason):
+            return String(
+                format: localizer.string(
+                    "github.pane.banner.invalidJSON",
+                    fallback: "Unexpected gh output: %@"
+                ),
+                reason
+            )
+        case .unsupportedVersion:
+            return localizer.string(
+                "github.pane.banner.unsupportedVersion",
+                fallback: banner(for: error)
+            )
+        case .commandFailed(_, let stderr, _):
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty
+                ? localizer.string(
+                    "github.pane.banner.commandFailed",
+                    fallback: "The gh command failed."
+                )
+                : trimmed
+        }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    private func localizedMergeBannerHead(number: Int, method: GitHubMergeMethod) -> String {
+        String(
+            format: localized(
+                "github.pane.merge.merged",
+                fallback: "Merged PR #%d via %@."
+            ),
+            number,
+            method.displayName
+        )
     }
 }

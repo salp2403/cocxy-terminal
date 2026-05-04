@@ -80,6 +80,7 @@ extension MainWindowController {
         updateMacroSnippetPanelLocalizers(localizer)
         updateBrowserPanelLocalizers(localizer)
         updateNotebookAndWorkflowPanelLocalizers(localizer)
+        gitHubPaneViewModel?.updateLocalizer(localizer)
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 

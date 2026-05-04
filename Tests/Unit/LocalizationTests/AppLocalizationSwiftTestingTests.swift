@@ -171,6 +171,22 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("macros.status.clipboard.many", fallback: "%d clipboard items") == "%d elementos del portapapeles")
     }
 
+    @Test
+    func gitHubPaneStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("github.pane.accessibility", fallback: "GitHub pane") == "Panel de GitHub")
+        #expect(spanish.string("github.pane.empty.pullRequests", fallback: "No pull requests") == "No hay pull requests")
+        #expect(spanish.string("github.pane.context.openInBrowser", fallback: "Open in Browser") == "Abrir en navegador")
+        #expect(spanish.string("github.pane.merge.action", fallback: "Merge Pull Request...") == "Fusionar pull request...")
+        #expect(GitHubPaneSetupAction.installCLI.localizedButtonTitle(using: spanish) == "Instalar GitHub CLI")
+        #expect(GitHubPaneViewModel.Tab.issues.localizedTitle(using: spanish) == "Issues")
+        #expect(GitHubBannerKind.info.localizedAccessibilityPrefix(using: spanish) == "Información")
+        #expect(GitHubCheckStatus.completed.localizedDisplayName(using: spanish) == "Completado")
+        #expect(GitHubCheckConclusion.success.localizedDisplayName(using: spanish) == "Correcto")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

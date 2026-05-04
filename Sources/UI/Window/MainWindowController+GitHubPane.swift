@@ -167,6 +167,7 @@ extension MainWindowController {
     /// effects. Called on first construction and again when the
     /// config service reloads so hot-swapped providers stay live.
     private func configureGitHubPaneViewModel(_ viewModel: GitHubPaneViewModel) {
+        viewModel.updateLocalizer(appLocalizer())
         viewModel.workingDirectoryProvider = { [weak self] in
             self?.currentGitHubPaneWorkingDirectory()
         }

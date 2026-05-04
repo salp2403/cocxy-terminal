@@ -46,6 +46,21 @@ enum GitHubBannerKind: Equatable {
         case .error: return "Error"
         }
     }
+
+    func localizedAccessibilityPrefix(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .info:
+            return localizer.string(
+                "github.pane.banner.prefix.info",
+                fallback: accessibilityPrefix
+            )
+        case .error:
+            return localizer.string(
+                "github.pane.banner.prefix.error",
+                fallback: accessibilityPrefix
+            )
+        }
+    }
 }
 
 // MARK: - Banner view
@@ -58,6 +73,7 @@ struct GitHubPaneBanner: View {
     var kind: GitHubBannerKind = .info
     var actionTitle: String?
     var onAction: (() -> Void)?
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -96,6 +112,6 @@ struct GitHubPaneBanner: View {
                 )
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(kind.accessibilityPrefix): \(message)")
+        .accessibilityLabel("\(kind.localizedAccessibilityPrefix(using: localizer)): \(message)")
     }
 }

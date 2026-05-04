@@ -14,6 +14,7 @@ import AppKit
 struct GitHubPullRequestRow: View {
     let pullRequest: GitHubPullRequest
     let isSelected: Bool
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -56,7 +57,22 @@ struct GitHubPullRequestRow: View {
         .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
         .cornerRadius(6)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("PR #\(pullRequest.number): \(pullRequest.title) by \(pullRequest.author.login)")
+        .accessibilityLabel(Self.accessibilityLabel(for: pullRequest, using: localizer))
+    }
+
+    static func accessibilityLabel(
+        for pullRequest: GitHubPullRequest,
+        using localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(
+                "github.pane.row.pr.accessibility",
+                fallback: "PR #%d: %@ by %@"
+            ),
+            pullRequest.number,
+            pullRequest.title,
+            pullRequest.author.login
+        )
     }
 
     private var statusSystemImage: String {
@@ -84,6 +100,7 @@ struct GitHubPullRequestRow: View {
 
 struct GitHubIssueRow: View {
     let issue: GitHubIssue
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -122,7 +139,22 @@ struct GitHubIssueRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Issue #\(issue.number): \(issue.title) by \(issue.author.login)")
+        .accessibilityLabel(Self.accessibilityLabel(for: issue, using: localizer))
+    }
+
+    static func accessibilityLabel(
+        for issue: GitHubIssue,
+        using localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(
+                "github.pane.row.issue.accessibility",
+                fallback: "Issue #%d: %@ by %@"
+            ),
+            issue.number,
+            issue.title,
+            issue.author.login
+        )
     }
 
     private var statusSystemImage: String {
@@ -146,6 +178,7 @@ struct GitHubIssueRow: View {
 
 struct GitHubCheckRow: View {
     let check: GitHubCheck
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -161,7 +194,7 @@ struct GitHubCheckRow: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("\(check.status.displayName) • \(check.conclusion.displayName)")
+                Text(Self.statusSummary(for: check, using: localizer))
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
@@ -170,7 +203,32 @@ struct GitHubCheckRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Check \(check.name): \(check.status.displayName), conclusion \(check.conclusion.displayName)")
+        .accessibilityLabel(Self.accessibilityLabel(for: check, using: localizer))
+    }
+
+    static func statusSummary(
+        for check: GitHubCheck,
+        using localizer: AppLocalizer
+    ) -> String {
+        [
+            check.status.localizedDisplayName(using: localizer),
+            check.conclusion.localizedDisplayName(using: localizer),
+        ].joined(separator: " • ")
+    }
+
+    static func accessibilityLabel(
+        for check: GitHubCheck,
+        using localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(
+                "github.pane.row.check.accessibility",
+                fallback: "Check %@: %@, conclusion %@"
+            ),
+            check.name,
+            check.status.localizedDisplayName(using: localizer),
+            check.conclusion.localizedDisplayName(using: localizer)
+        )
     }
 
     private var statusSystemImage: String {
@@ -201,6 +259,50 @@ struct GitHubCheckRow: View {
             return true
         case .completed, .unknown:
             return false
+        }
+    }
+}
+
+extension GitHubCheckStatus {
+    func localizedDisplayName(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .queued:
+            return localizer.string("github.pane.check.status.queued", fallback: displayName)
+        case .inProgress:
+            return localizer.string("github.pane.check.status.inProgress", fallback: displayName)
+        case .completed:
+            return localizer.string("github.pane.check.status.completed", fallback: displayName)
+        case .pending:
+            return localizer.string("github.pane.check.status.pending", fallback: displayName)
+        case .unknown:
+            return localizer.string("github.pane.check.status.unknown", fallback: displayName)
+        }
+    }
+}
+
+extension GitHubCheckConclusion {
+    func localizedDisplayName(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .success:
+            return localizer.string("github.pane.check.conclusion.success", fallback: displayName)
+        case .failure:
+            return localizer.string("github.pane.check.conclusion.failure", fallback: displayName)
+        case .neutral:
+            return localizer.string("github.pane.check.conclusion.neutral", fallback: displayName)
+        case .cancelled:
+            return localizer.string("github.pane.check.conclusion.cancelled", fallback: displayName)
+        case .skipped:
+            return localizer.string("github.pane.check.conclusion.skipped", fallback: displayName)
+        case .timedOut:
+            return localizer.string("github.pane.check.conclusion.timedOut", fallback: displayName)
+        case .actionRequired:
+            return localizer.string("github.pane.check.conclusion.actionRequired", fallback: displayName)
+        case .stale:
+            return localizer.string("github.pane.check.conclusion.stale", fallback: displayName)
+        case .startupFailure:
+            return localizer.string("github.pane.check.conclusion.startupFailure", fallback: displayName)
+        case .none:
+            return displayName
         }
     }
 }
