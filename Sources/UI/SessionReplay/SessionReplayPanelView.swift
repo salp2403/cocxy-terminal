@@ -6,8 +6,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SessionReplayPanelView: View {
-    @StateObject private var viewModel: SessionReplayPanelViewModel
-    private let localizer: AppLocalizer
+    @ObservedObject private var viewModel: SessionReplayPanelViewModel
+    var localizer: AppLocalizer
     let onClose: (() -> Void)?
 
     init(
@@ -15,9 +15,17 @@ struct SessionReplayPanelView: View {
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
         onClose: (() -> Void)? = nil
     ) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = ObservedObject(wrappedValue: viewModel)
         self.localizer = localizer
         self.onClose = onClose
+        viewModel.updateLocalizer(localizer)
+    }
+
+    func updatedLocalizer(_ localizer: AppLocalizer) -> SessionReplayPanelView {
+        var copy = self
+        copy.localizer = localizer
+        viewModel.updateLocalizer(localizer)
+        return copy
     }
 
     var body: some View {
@@ -42,7 +50,7 @@ struct SessionReplayPanelView: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Label("Session Replay", systemImage: "record.circle")
+            Label(localized("sessionReplay.title", fallback: "Session Replay"), systemImage: "record.circle")
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
 
@@ -65,14 +73,14 @@ struct SessionReplayPanelView: View {
                     try viewModel.refresh()
                 }
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label(localized("sessionReplay.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
             }
             .controlSize(.small)
 
             Button(role: .destructive) {
                 confirmDeleteAllRecordings()
             } label: {
-                Label("Delete All", systemImage: "trash")
+                Label(localized("sessionReplay.deleteAll.button", fallback: "Delete All"), systemImage: "trash")
             }
             .controlSize(.small)
             .disabled(viewModel.recordings.isEmpty)
@@ -82,7 +90,8 @@ struct SessionReplayPanelView: View {
                     Image(systemName: "xmark")
                 }
                 .controlSize(.small)
-                .help("Close")
+                .help(localized("common.close", fallback: "Close"))
+                .accessibilityLabel(localized("sessionReplay.close", fallback: "Close Session Replay"))
             }
         }
         .padding(.horizontal, 10)
@@ -129,7 +138,7 @@ struct SessionReplayPanelView: View {
             .listStyle(.sidebar)
 
             if viewModel.recordings.isEmpty {
-                Text("No recordings")
+                Text(localized("sessionReplay.status.noRecordings", fallback: "No recordings"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 12)
@@ -153,7 +162,7 @@ struct SessionReplayPanelView: View {
         } else {
             VStack {
                 Spacer()
-                Text("No recording selected")
+                Text(localized("sessionReplay.empty.noSelection", fallback: "No recording selected"))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -191,7 +200,7 @@ struct SessionReplayPanelView: View {
                         try viewModel.replaySelected()
                     }
                 } label: {
-                    Label("Replay", systemImage: "play.fill")
+                    Label(localized("sessionReplay.replay", fallback: "Replay"), systemImage: "play.fill")
                 }
                 .controlSize(.small)
                 .disabled(!viewModel.canReplay)
@@ -218,7 +227,10 @@ struct SessionReplayPanelView: View {
             }
 
             HStack(spacing: 8) {
-                TextField("Bookmark label", text: $viewModel.bookmarkLabel)
+                TextField(
+                    localized("sessionReplay.bookmark.placeholder", fallback: "Bookmark label"),
+                    text: $viewModel.bookmarkLabel
+                )
                     .textFieldStyle(.roundedBorder)
 
                 Button {
@@ -226,14 +238,14 @@ struct SessionReplayPanelView: View {
                         try viewModel.addBookmarkAtSeek()
                     }
                 } label: {
-                    Label("Bookmark", systemImage: "bookmark")
+                    Label(localized("sessionReplay.bookmark", fallback: "Bookmark"), systemImage: "bookmark")
                 }
                 .controlSize(.small)
 
                 Button {
                     exportRecording(recording)
                 } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
+                    Label(localized("sessionReplay.export", fallback: "Export"), systemImage: "square.and.arrow.up")
                 }
                 .controlSize(.small)
 
@@ -242,7 +254,7 @@ struct SessionReplayPanelView: View {
                         try viewModel.deleteSelected()
                     }
                 } label: {
-                    Label("Delete", systemImage: "trash")
+                    Label(localized("common.delete", fallback: "Delete"), systemImage: "trash")
                 }
                 .controlSize(.small)
             }
@@ -274,14 +286,17 @@ struct SessionReplayPanelView: View {
     private var searchPane: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                TextField("Search recording", text: $viewModel.searchQuery)
+                TextField(
+                    localized("sessionReplay.search.placeholder", fallback: "Search recording"),
+                    text: $viewModel.searchQuery
+                )
                     .textFieldStyle(.roundedBorder)
                 Button {
                     viewModel.perform {
                         try viewModel.searchSelectedRecording()
                     }
                 } label: {
-                    Label("Search", systemImage: "magnifyingglass")
+                    Label(localized("sessionReplay.search", fallback: "Search"), systemImage: "magnifyingglass")
                 }
                 .controlSize(.small)
             }
@@ -303,7 +318,7 @@ struct SessionReplayPanelView: View {
         _ bookmarks: [SessionReplayBookmarkPresentation]
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Bookmarks")
+            Text(localized("sessionReplay.bookmarks", fallback: "Bookmarks"))
                 .font(.system(size: 12, weight: .semibold))
                 .padding([.top, .horizontal], 10)
 
@@ -317,6 +332,10 @@ struct SessionReplayPanelView: View {
             }
             .listStyle(.plain)
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 

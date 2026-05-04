@@ -73,6 +73,7 @@ extension MainWindowController {
         let localizer = appLocalizer(for: config)
         tabBarView?.updateLocalizer(localizer)
         updateMarkdownPanelLocalizers(localizer)
+        updateSessionReplayPanelLocalizers(localizer)
         updateAIEditHistoryPanelLocalizers(localizer)
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
@@ -210,6 +211,22 @@ extension MainWindowController {
         for panelViews in savedTabPanelContentViews.values {
             for view in panelViews.values {
                 if let hostingView = view as? NSHostingView<AIEditHistoryPanelView> {
+                    hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+                }
+            }
+        }
+    }
+
+    private func updateSessionReplayPanelLocalizers(_ localizer: AppLocalizer) {
+        for view in panelContentViews.values {
+            if let hostingView = view as? NSHostingView<SessionReplayPanelView> {
+                hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+            }
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                if let hostingView = view as? NSHostingView<SessionReplayPanelView> {
                     hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
                 }
             }

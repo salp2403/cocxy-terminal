@@ -213,6 +213,47 @@ struct SessionReplayPanelViewModelSwiftTestingTests {
         #expect(playback.requests.isEmpty)
     }
 
+    @Test("Spanish localizer updates Session Replay status copy")
+    func spanishLocalizerUpdatesSessionReplayStatusCopy() throws {
+        let root = try makeTemporaryDirectory(named: "session-replay-panel-spanish")
+        let exportRoot = try makeTemporaryDirectory(named: "session-replay-panel-spanish-export")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: exportRoot)
+        }
+
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let store = SessionReplayStore(rootDirectory: root)
+        let recording = try makeRecording(store: store, title: "Demo")
+        let viewModel = SessionReplayPanelViewModel(
+            config: SessionReplayConfig(enabled: true),
+            store: store,
+            playback: nil,
+            targetSurfaceProvider: { nil },
+            localizer: spanish
+        )
+
+        try viewModel.refresh()
+
+        #expect(viewModel.selectedRecordingID == recording.id)
+        #expect(viewModel.statusText == "1 grabación")
+
+        viewModel.searchQuery = "swift test"
+        try viewModel.searchSelectedRecording()
+
+        #expect(viewModel.statusText == "1 coincidencia")
+
+        let exportURL = exportRoot.appendingPathComponent("demo.cast")
+        try viewModel.exportSelected(to: exportURL)
+
+        #expect(viewModel.statusText == "Exportado demo.cast")
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.statusText == "Exported demo.cast")
+    }
+
     @Test("delete-all Session Replay confirmation copy follows configured app language")
     func deleteAllSessionReplayConfirmationCopyFollowsConfiguredAppLanguage() throws {
         let localizer = AppLocalizer(

@@ -51,6 +51,17 @@ enum SessionReplayPanelError: Error, Equatable, LocalizedError {
 
 @MainActor
 final class SessionReplayPanelViewModel: ObservableObject {
+    private enum StatusState: Equatable {
+        case noRecordings
+        case recordings(Int)
+        case searchCleared
+        case matches(Int)
+        case bookmarkAdded
+        case exported(String)
+        case replaying(title: String, speed: String)
+        case actionFailed
+    }
+
     @Published private(set) var recordings: [SessionReplayRecordingPresentation] = []
     @Published var selectedRecordingID: UUID?
     @Published var searchQuery = ""
@@ -58,7 +69,7 @@ final class SessionReplayPanelViewModel: ObservableObject {
     @Published var seekNs: UInt64 = 0
     @Published var speedMultiplier: Float = 1
     @Published var bookmarkLabel = ""
-    @Published private(set) var statusText = "No recordings"
+    @Published private(set) var statusText: String
     @Published private(set) var errorText: String?
 
     let config: SessionReplayConfig
@@ -66,6 +77,9 @@ final class SessionReplayPanelViewModel: ObservableObject {
     private let store: SessionReplayStore
     private let playback: (any SessionReplayPlaybackControlling)?
     private let targetSurfaceProvider: () -> SurfaceID?
+    private var localizer: AppLocalizer
+    private var statusState: StatusState = .noRecordings
+    private var currentError: Error?
 
     var selectedRecording: SessionReplayRecordingPresentation? {
         guard let selectedRecordingID else { return nil }
@@ -101,12 +115,23 @@ final class SessionReplayPanelViewModel: ObservableObject {
         config: SessionReplayConfig,
         store: SessionReplayStore = SessionReplayStore(),
         playback: (any SessionReplayPlaybackControlling)?,
-        targetSurfaceProvider: @escaping () -> SurfaceID?
+        targetSurfaceProvider: @escaping () -> SurfaceID?,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.config = config
         self.store = store
         self.playback = playback
         self.targetSurfaceProvider = targetSurfaceProvider
+        self.localizer = localizer
+        self.statusText = Self.localizedStatusText(.noRecordings, localizer: localizer)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        statusText = Self.localizedStatusText(statusState, localizer: localizer)
+        if let currentError {
+            errorText = Self.localizedErrorDescription(currentError, localizer: localizer)
+        }
     }
 
     func refresh() throws {
@@ -135,10 +160,11 @@ final class SessionReplayPanelViewModel: ObservableObject {
 
         let count = recordings.count
         if count == 0 {
-            statusText = "No recordings"
+            setStatus(.noRecordings)
         } else {
-            statusText = count == 1 ? "1 recording" : "\(count) recordings"
+            setStatus(.recordings(count))
         }
+        currentError = nil
         errorText = nil
     }
 
@@ -156,14 +182,16 @@ final class SessionReplayPanelViewModel: ObservableObject {
         let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else {
             searchMatches = []
-            statusText = "Search cleared"
+            setStatus(.searchCleared)
+            currentError = nil
             errorText = nil
             return
         }
 
         searchMatches = try store.search(recordingID: recordingID, query: trimmedQuery)
             .map(Self.searchPresentation)
-        statusText = searchMatches.count == 1 ? "1 match" : "\(searchMatches.count) matches"
+        setStatus(.matches(searchMatches.count))
+        currentError = nil
         errorText = nil
     }
 
@@ -187,7 +215,7 @@ final class SessionReplayPanelViewModel: ObservableObject {
         )
         bookmarkLabel = ""
         try refresh()
-        statusText = "Bookmark added"
+        setStatus(.bookmarkAdded)
     }
 
     func exportSelected(to destinationURL: URL) throws {
@@ -195,7 +223,8 @@ final class SessionReplayPanelViewModel: ObservableObject {
             throw SessionReplayPanelError.noSelection
         }
         try store.exportCast(recordingID: recordingID, to: destinationURL)
-        statusText = "Exported \(destinationURL.lastPathComponent)"
+        setStatus(.exported(destinationURL.lastPathComponent))
+        currentError = nil
         errorText = nil
     }
 
@@ -205,7 +234,9 @@ final class SessionReplayPanelViewModel: ObservableObject {
         }
         try store.deleteRecording(id: recordingID)
         try refresh()
-        statusText = recordings.isEmpty ? "No recordings" : statusText
+        if recordings.isEmpty {
+            setStatus(.noRecordings)
+        }
     }
 
     func deleteAll() throws {
@@ -214,7 +245,8 @@ final class SessionReplayPanelViewModel: ObservableObject {
         selectedRecordingID = nil
         seekNs = 0
         searchMatches = []
-        statusText = "No recordings"
+        setStatus(.noRecordings)
+        currentError = nil
         errorText = nil
     }
 
@@ -239,7 +271,8 @@ final class SessionReplayPanelViewModel: ObservableObject {
             seekNs: min(seekNs, selectedRecording.durationNs),
             speedMultiplier: speed
         )
-        statusText = "Replaying \(selectedRecording.title) at \(Self.formatSpeed(speed))x"
+        setStatus(.replaying(title: selectedRecording.title, speed: Self.formatSpeed(speed)))
+        currentError = nil
         errorText = nil
     }
 
@@ -247,9 +280,15 @@ final class SessionReplayPanelViewModel: ObservableObject {
         do {
             try operation()
         } catch {
-            errorText = error.localizedDescription
-            statusText = "Session Replay action failed"
+            currentError = error
+            errorText = Self.localizedErrorDescription(error, localizer: localizer)
+            setStatus(.actionFailed)
         }
+    }
+
+    private func setStatus(_ status: StatusState) {
+        statusState = status
+        statusText = Self.localizedStatusText(status, localizer: localizer)
     }
 
     private func normalizedSpeedMultiplier() -> Float {
@@ -316,5 +355,86 @@ final class SessionReplayPanelViewModel: ObservableObject {
 
     private static func formatBytes(_ byteCount: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file)
+    }
+
+    private static func localizedStatusText(
+        _ status: StatusState,
+        localizer: AppLocalizer
+    ) -> String {
+        switch status {
+        case .noRecordings:
+            return localizer.string("sessionReplay.status.noRecordings", fallback: "No recordings")
+        case .recordings(let count):
+            return String(
+                format: localizer.string(
+                    count == 1
+                    ? "sessionReplay.count.recording.one"
+                    : "sessionReplay.count.recording.many",
+                    fallback: count == 1 ? "%d recording" : "%d recordings"
+                ),
+                count
+            )
+        case .searchCleared:
+            return localizer.string("sessionReplay.status.searchCleared", fallback: "Search cleared")
+        case .matches(let count):
+            return String(
+                format: localizer.string(
+                    count == 1
+                    ? "sessionReplay.count.match.one"
+                    : "sessionReplay.count.match.many",
+                    fallback: count == 1 ? "%d match" : "%d matches"
+                ),
+                count
+            )
+        case .bookmarkAdded:
+            return localizer.string("sessionReplay.status.bookmarkAdded", fallback: "Bookmark added")
+        case .exported(let fileName):
+            return String(
+                format: localizer.string("sessionReplay.status.exported", fallback: "Exported %@"),
+                fileName
+            )
+        case .replaying(let title, let speed):
+            return String(
+                format: localizer.string("sessionReplay.status.replaying", fallback: "Replaying %@ at %@x"),
+                title,
+                speed
+            )
+        case .actionFailed:
+            return localizer.string(
+                "sessionReplay.status.actionFailed",
+                fallback: "Session Replay action failed"
+            )
+        }
+    }
+
+    private static func localizedErrorDescription(
+        _ error: Error,
+        localizer: AppLocalizer
+    ) -> String {
+        if let panelError = error as? SessionReplayPanelError {
+            switch panelError {
+            case .noSelection:
+                return localizer.string(
+                    "sessionReplay.error.noSelection",
+                    fallback: "No session replay recording is selected."
+                )
+            case .replayDisabled:
+                return localizer.string(
+                    "sessionReplay.error.replayDisabled",
+                    fallback: "Session Replay is disabled in preferences."
+                )
+            case .playbackUnavailable:
+                return localizer.string(
+                    "sessionReplay.error.playbackUnavailable",
+                    fallback: "Session Replay playback is unavailable for this terminal engine."
+                )
+            case .targetSurfaceUnavailable:
+                return localizer.string(
+                    "sessionReplay.error.targetSurfaceUnavailable",
+                    fallback: "No terminal surface is available for replay."
+                )
+            }
+        }
+        return error.localizedDescription
     }
 }

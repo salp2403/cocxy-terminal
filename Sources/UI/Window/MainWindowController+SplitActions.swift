@@ -286,7 +286,8 @@ extension MainWindowController {
                 playback: sessionReplayPlaybackController(),
                 targetSurfaceProvider: { [weak self] in
                     self?.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
-                }
+                },
+                localizer: appLocalizer()
             )
             let view = SessionReplayPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
