@@ -127,6 +127,8 @@ struct PreferencesView: View {
             SessionReplayPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .iCloudSync:
             ICloudSyncPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .backup:
+            BackupPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .codeReview:
             CodeReviewPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .notifications:
@@ -169,6 +171,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case activity
     case sessionReplay
     case iCloudSync
+    case backup
     case codeReview
     case notifications
     case terminal
@@ -194,6 +197,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .activity: return "Activity"
         case .sessionReplay: return "Session Replay"
         case .iCloudSync: return "iCloud Sync"
+        case .backup: return "Backups"
         case .codeReview: return "Code Review"
         case .notifications: return "Notifications"
         case .terminal: return "Terminal"
@@ -219,6 +223,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .activity: return "chart.bar"
         case .sessionReplay: return "record.circle"
         case .iCloudSync: return "icloud"
+        case .backup: return "externaldrive"
         case .codeReview: return "doc.text.magnifyingglass"
         case .notifications: return "bell"
         case .terminal: return "terminal"
@@ -1445,6 +1450,91 @@ struct ICloudSyncPreferencesSection: View {
             _ = try viewModel.resolveICloudSyncConflict(conflict, resolution: resolution)
         } catch {
             viewModel.iCloudSyncImportStatus = "Failed to resolve conflict: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - Local Backups Section
+
+struct BackupPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section("Automatic Backups") {
+                Toggle("Enable local automatic backups", isOn: $viewModel.backupEnabled)
+                    .help("Writes timestamped backups to a local folder. No network service is used.")
+            }
+
+            Section("Location") {
+                TextField("Storage directory", text: $viewModel.backupStorageDirectory)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!viewModel.backupEnabled)
+                Text("Default location: \(BackupConfig.defaultStorageDirectory)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Section("Retention") {
+                Stepper(
+                    "Daily snapshots: \(viewModel.backupDailyRetentionCount)",
+                    value: $viewModel.backupDailyRetentionCount,
+                    in: 1...365
+                )
+                .disabled(!viewModel.backupEnabled)
+
+                Stepper(
+                    "Monthly snapshots: \(viewModel.backupMonthlyRetentionCount)",
+                    value: $viewModel.backupMonthlyRetentionCount,
+                    in: 0...120
+                )
+                .disabled(!viewModel.backupEnabled)
+            }
+
+            Section("Artifacts") {
+                ForEach(BackupArtifactKind.allCases, id: \.self) { kind in
+                    Toggle(
+                        backupArtifactTitle(kind),
+                        isOn: Binding(
+                            get: { viewModel.isBackupArtifactKindEnabled(kind) },
+                            set: { viewModel.setBackupArtifactKind(kind, enabled: $0) }
+                        )
+                    )
+                    .disabled(!viewModel.backupEnabled)
+                    .help(backupArtifactHelp(kind))
+                }
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Backups")
+    }
+
+    private func backupArtifactTitle(_ kind: BackupArtifactKind) -> String {
+        switch kind {
+        case .settings: return "Settings"
+        case .notebooks: return "Notebooks"
+        case .workflows: return "Workflows"
+        case .skills: return "Custom skills"
+        case .notes: return "Notes"
+        case .macros: return "Macros and snippets"
+        case .themes: return "Custom themes"
+        case .encryptedSSHHosts: return "Encrypted SSH hosts"
+        case .aiConversations: return "AI conversations"
+        }
+    }
+
+    private func backupArtifactHelp(_ kind: BackupArtifactKind) -> String {
+        switch kind {
+        case .aiConversations:
+            return "Off by default. Enable only when you want local conversation history included."
+        case .encryptedSSHHosts:
+            return "Backs up encrypted host metadata only. SSH keys remain in Keychain."
+        default:
+            return "Included in the local backup snapshot when the source exists."
         }
     }
 }

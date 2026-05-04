@@ -36,6 +36,7 @@ struct AppLaunchSignpostsSwiftTestingTests {
             "Auto update",
             "Session restore",
             "Session auto-save",
+            "Local backup",
             "App icon",
             "First launch setup",
             "Welcome",

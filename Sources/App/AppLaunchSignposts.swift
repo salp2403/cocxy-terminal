@@ -31,6 +31,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
     case autoUpdate
     case sessionRestore
     case autoSave
+    case backup
     case appIcon
     case firstLaunch
     case welcome
@@ -62,6 +63,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         case .autoUpdate: return "Auto update"
         case .sessionRestore: return "Session restore"
         case .autoSave: return "Session auto-save"
+        case .backup: return "Local backup"
         case .appIcon: return "App icon"
         case .firstLaunch: return "First launch setup"
         case .welcome: return "Welcome"
@@ -97,6 +99,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         .windowWarmup,
         .sessionRestore,
         .autoSave,
+        .backup,
         .portScanner,
         .plugins,
         .quickTerminal,
@@ -136,6 +139,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         case .autoUpdate: return "Auto update"
         case .sessionRestore: return "Session restore"
         case .autoSave: return "Session auto-save"
+        case .backup: return "Local backup"
         case .appIcon: return "App icon"
         case .firstLaunch: return "First launch setup"
         case .welcome: return "Welcome"

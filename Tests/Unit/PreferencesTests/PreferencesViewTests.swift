@@ -118,24 +118,32 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertEqual(section.iconName, "icloud")
     }
 
+    func test_backupSection_hasTitleAndIcon() {
+        let section = PreferencesSection.backup
+        XCTAssertEqual(section.title, "Backups")
+        XCTAssertEqual(section.iconName, "externaldrive")
+    }
+
     func test_sessionReplaySection_hasTitleAndIcon() {
         let section = PreferencesSection.sessionReplay
         XCTAssertEqual(section.title, "Session Replay")
         XCTAssertEqual(section.iconName, "record.circle")
     }
 
-    func test_sessionReplayAndICloudSyncSections_appearBetweenActivityAndCodeReview() {
+    func test_sessionReplayICloudSyncAndBackupSections_appearBetweenActivityAndCodeReview() {
         let allCases = PreferencesSection.allCases
         guard let activityIndex = allCases.firstIndex(of: .activity),
               let sessionReplayIndex = allCases.firstIndex(of: .sessionReplay),
               let iCloudSyncIndex = allCases.firstIndex(of: .iCloudSync),
+              let backupIndex = allCases.firstIndex(of: .backup),
               let codeReviewIndex = allCases.firstIndex(of: .codeReview) else {
-            XCTFail("activity, session replay, iCloud Sync, and code review sections must exist")
+            XCTFail("activity, session replay, iCloud Sync, backup, and code review sections must exist")
             return
         }
         XCTAssertLessThan(activityIndex, sessionReplayIndex)
         XCTAssertLessThan(sessionReplayIndex, iCloudSyncIndex)
-        XCTAssertLessThan(iCloudSyncIndex, codeReviewIndex)
+        XCTAssertLessThan(iCloudSyncIndex, backupIndex)
+        XCTAssertLessThan(backupIndex, codeReviewIndex)
     }
 
     func test_codeReviewSection_hasTitleAndIcon() {
@@ -222,7 +230,7 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertLessThan(editorIndex, keybindingsIndex)
     }
 
-    func test_agentModeMCPVoiceActivitySessionReplayAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
+    func test_agentModeMCPVoiceActivitySessionReplayBackupAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
         let allCases = PreferencesSection.allCases
         guard let agentIndex = allCases.firstIndex(of: .agentDetection),
               let agentModeIndex = allCases.firstIndex(of: .agentMode),
@@ -230,9 +238,10 @@ final class PreferencesSectionTests: XCTestCase {
               let voiceIndex = allCases.firstIndex(of: .voice),
               let activityIndex = allCases.firstIndex(of: .activity),
               let sessionReplayIndex = allCases.firstIndex(of: .sessionReplay),
+              let backupIndex = allCases.firstIndex(of: .backup),
               let codeReviewIndex = allCases.firstIndex(of: .codeReview),
               let notificationsIndex = allCases.firstIndex(of: .notifications) else {
-            XCTFail("agent detection, agent mode, MCP, voice, activity, session replay, code review, and notifications sections must exist")
+            XCTFail("agent detection, agent mode, MCP, voice, activity, session replay, backup, code review, and notifications sections must exist")
             return
         }
         XCTAssertLessThan(agentIndex, agentModeIndex)
@@ -240,7 +249,8 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertLessThan(mcpIndex, voiceIndex)
         XCTAssertLessThan(voiceIndex, activityIndex)
         XCTAssertLessThan(activityIndex, sessionReplayIndex)
-        XCTAssertLessThan(sessionReplayIndex, codeReviewIndex)
+        XCTAssertLessThan(sessionReplayIndex, backupIndex)
+        XCTAssertLessThan(backupIndex, codeReviewIndex)
         XCTAssertLessThan(agentModeIndex, codeReviewIndex)
         XCTAssertLessThan(codeReviewIndex, notificationsIndex)
     }

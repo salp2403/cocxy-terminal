@@ -307,6 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startSessionAutoSaveIfNeeded()
             observeSessionAutoSaveConfigChanges()
         }
+        AppLaunchSignposts.measure(.backup) { runAutomaticBackupIfNeeded() }
         AppLaunchSignposts.measure(.portScanner) { initializePortScanner() }
         AppLaunchSignposts.measure(.plugins) { setupPlugins() }
         AppLaunchSignposts.measure(.quickTerminal) { initializeQuickTerminal() }
@@ -1569,6 +1570,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 9. Request notification permissions.
         Task {
             await adapter.requestPermissionIfNeeded()
+        }
+    }
+
+    private func runAutomaticBackupIfNeeded() {
+        let config = configService?.current.backup ?? .defaults
+        guard config.enabled else { return }
+        let controller = AutomaticBackupController()
+        Task.detached(priority: .utility) {
+            do {
+                _ = try controller.runIfDue(config: config)
+            } catch {
+                NSLog("[AppDelegate] Local backup did not complete")
+            }
         }
     }
 

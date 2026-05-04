@@ -335,6 +335,16 @@ final class ConfigService: ConfigProviding {
         enabled = \(defaults.voice.enabled)
         locale = "\(defaults.voice.localeIdentifier)"
 
+        [backup]
+        # Local-only automatic backups. Enabled by default and stored on
+        # this Mac only. Secrets stay in Keychain; AI conversations are
+        # excluded unless the user explicitly adds "ai-conversations".
+        enabled = \(defaults.backup.enabled)
+        storage-directory = "\(defaults.backup.storageDirectory)"
+        daily-retention-count = \(defaults.backup.dailyRetentionCount)
+        monthly-retention-count = \(defaults.backup.monthlyRetentionCount)
+        artifact-kinds = \(tomlStringArray(defaults.backup.artifactKinds.map(\.rawValue)))
+
         [activity]
         # Local activity dashboard and token cost tracking. Disabled by
         # default; when enabled, data is stored only on this Mac and is
@@ -560,6 +570,7 @@ final class ConfigService: ConfigProviding {
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
+        let backup = parseBackupConfig(from: parsed)
         let activity = parseActivityConfig(from: parsed)
         let sessionReplay = parseSessionReplayConfig(from: parsed)
         let voice = parseVoiceConfig(from: parsed)
@@ -587,6 +598,7 @@ final class ConfigService: ConfigProviding {
             terminal: terminal,
             agentDetection: agentDetection,
             agent: agent,
+            backup: backup,
             activity: activity,
             sessionReplay: sessionReplay,
             voice: voice,
@@ -842,6 +854,33 @@ final class ConfigService: ConfigProviding {
         return VoiceConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
             localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier
+        )
+    }
+
+    /// Parses `[backup]` as a local-only data-safety feature. Repository
+    /// config never merges this section, AI conversations stay excluded by
+    /// default, and malformed artifact arrays fall back to the safe default
+    /// set instead of silently expanding what gets copied.
+    private func parseBackupConfig(from parsed: [String: TOMLValue]) -> BackupConfig {
+        let table = extractTable("backup", from: parsed)
+        let defaults = BackupConfig.defaults
+
+        let artifactKinds: [BackupArtifactKind]
+        if let rawKinds = strictStringArrayValue(table["artifact-kinds"]) {
+            let parsedKinds = rawKinds.compactMap(BackupArtifactKind.init(rawValue:))
+            artifactKinds = parsedKinds.count == rawKinds.count
+                ? parsedKinds
+                : defaults.artifactKinds
+        } else {
+            artifactKinds = defaults.artifactKinds
+        }
+
+        return BackupConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            storageDirectory: stringValue(table["storage-directory"]) ?? defaults.storageDirectory,
+            dailyRetentionCount: intValue(table["daily-retention-count"]) ?? defaults.dailyRetentionCount,
+            monthlyRetentionCount: intValue(table["monthly-retention-count"]) ?? defaults.monthlyRetentionCount,
+            artifactKinds: artifactKinds
         )
     }
 

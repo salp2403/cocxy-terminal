@@ -51,6 +51,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
     let agent: AgentModeConfig
+    let backup: BackupConfig
     let activity: ActivityConfig
     let sessionReplay: SessionReplayConfig
     let voice: VoiceConfig
@@ -74,6 +75,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         terminal: TerminalConfig,
         agentDetection: AgentDetectionConfig,
         agent: AgentModeConfig = .defaults,
+        backup: BackupConfig = .defaults,
         activity: ActivityConfig = .defaults,
         sessionReplay: SessionReplayConfig = .defaults,
         voice: VoiceConfig = .defaults,
@@ -96,6 +98,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = terminal
         self.agentDetection = agentDetection
         self.agent = agent
+        self.backup = backup
         self.activity = activity
         self.sessionReplay = sessionReplay
         self.voice = voice
@@ -122,6 +125,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             terminal: .defaults,
             agentDetection: .defaults,
             agent: .defaults,
+            backup: .defaults,
             activity: .defaults,
             sessionReplay: .defaults,
             voice: .defaults,
@@ -149,7 +153,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, agent, activity, sessionReplay, voice, iCloudSync, completions, codeReview
+        case general, appearance, terminal, agentDetection, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -161,6 +165,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
         self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
+            ?? .defaults
+        self.backup = try container.decodeIfPresent(BackupConfig.self, forKey: .backup)
             ?? .defaults
         self.activity = try container.decodeIfPresent(ActivityConfig.self, forKey: .activity)
             ?? .defaults
@@ -283,6 +289,9 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // overrides must not enable an LLM provider or auto-mode from
             // repository-local config.
             agent: agent,
+            // Local backups are global user data-safety preferences. Project
+            // config must not enable, disable, redirect, or expand artifacts.
+            backup: backup,
             // Activity tracking is a global user privacy preference. A
             // repository must not be able to enable local activity recording
             // or token cost tracking on behalf of the user.

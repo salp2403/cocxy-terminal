@@ -257,6 +257,23 @@ final class PreferencesViewModel: ObservableObject {
     /// Conflicts found during the last manual iCloud Sync import.
     @Published var iCloudSyncConflicts: [ICloudSyncImportConflict]
 
+    // MARK: - Local Backups
+
+    /// Master switch for local automatic backups.
+    @Published var backupEnabled: Bool
+
+    /// Local directory where timestamped backup snapshots are written.
+    @Published var backupStorageDirectory: String
+
+    /// Number of latest daily snapshots retained before monthly pruning.
+    @Published var backupDailyRetentionCount: Int
+
+    /// Number of older monthly representative snapshots retained.
+    @Published var backupMonthlyRetentionCount: Int
+
+    /// Artifact classes selected for local backup.
+    @Published var backupArtifactKinds: [BackupArtifactKind]
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -487,6 +504,7 @@ final class PreferencesViewModel: ObservableObject {
             || activityHasUnsavedChanges(comparedTo: c.activity)
             || sessionReplayHasUnsavedChanges(comparedTo: c.sessionReplay)
             || iCloudSyncHasUnsavedChanges(comparedTo: c.iCloudSync)
+            || backupHasUnsavedChanges(comparedTo: c.backup)
             || codeReviewAutoShowOnSessionEnd != c.codeReview.autoShowOnSessionEnd
             || macosNotifications != c.notifications.macosNotifications
             || sound != c.notifications.sound
@@ -566,6 +584,11 @@ final class PreferencesViewModel: ObservableObject {
         iCloudSyncDirectoryName = c.iCloudSync.syncDirectoryName
         iCloudSyncEncryptionRequired = c.iCloudSync.encryptionRequired
         iCloudSyncArtifactKinds = Set(c.iCloudSync.artifactKinds)
+        backupEnabled = c.backup.enabled
+        backupStorageDirectory = c.backup.storageDirectory
+        backupDailyRetentionCount = c.backup.dailyRetentionCount
+        backupMonthlyRetentionCount = c.backup.monthlyRetentionCount
+        backupArtifactKinds = c.backup.artifactKinds
         codeReviewAutoShowOnSessionEnd = c.codeReview.autoShowOnSessionEnd
         macosNotifications = c.notifications.macosNotifications
         sound = c.notifications.sound
@@ -768,6 +791,13 @@ final class PreferencesViewModel: ObservableObject {
         self.iCloudSyncExportStatus = nil
         self.iCloudSyncImportStatus = nil
         self.iCloudSyncConflicts = []
+
+        // Local Backups
+        self.backupEnabled = config.backup.enabled
+        self.backupStorageDirectory = config.backup.storageDirectory
+        self.backupDailyRetentionCount = config.backup.dailyRetentionCount
+        self.backupMonthlyRetentionCount = config.backup.monthlyRetentionCount
+        self.backupArtifactKinds = config.backup.artifactKinds
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -1180,6 +1210,7 @@ final class PreferencesViewModel: ObservableObject {
         let activity = buildActivityConfigFromViewModel()
         let sessionReplay = buildSessionReplayConfigFromViewModel()
         let iCloudSync = buildICloudSyncConfigFromViewModel()
+        let backup = buildBackupConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
@@ -1239,6 +1270,7 @@ final class PreferencesViewModel: ObservableObject {
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
             agent: agent,
+            backup: backup,
             activity: activity,
             sessionReplay: sessionReplay,
             voice: voice,
@@ -1279,6 +1311,10 @@ final class PreferencesViewModel: ObservableObject {
         iCloudSyncDirectoryName = iCloudSync.syncDirectoryName
         iCloudSyncEncryptionRequired = iCloudSync.encryptionRequired
         iCloudSyncArtifactKinds = Set(iCloudSync.artifactKinds)
+        backupStorageDirectory = backup.storageDirectory
+        backupDailyRetentionCount = backup.dailyRetentionCount
+        backupMonthlyRetentionCount = backup.monthlyRetentionCount
+        backupArtifactKinds = backup.artifactKinds
         voiceLocaleIdentifier = voice.localeIdentifier
         completionIdleDelaySeconds = completions.idleDelaySeconds
         completionMaxContextUTF16Length = completions.maxContextUTF16Length
@@ -1419,6 +1455,40 @@ final class PreferencesViewModel: ObservableObject {
             || sync.encryptionRequired != config.encryptionRequired
             || sync.artifactKinds != config.artifactKinds
             || sync.conflictPolicy != config.conflictPolicy
+    }
+
+    private func buildBackupConfigFromViewModel() -> BackupConfig {
+        BackupConfig(
+            enabled: backupEnabled,
+            storageDirectory: backupStorageDirectory,
+            dailyRetentionCount: backupDailyRetentionCount,
+            monthlyRetentionCount: backupMonthlyRetentionCount,
+            artifactKinds: backupArtifactKinds
+        )
+    }
+
+    private func backupHasUnsavedChanges(comparedTo config: BackupConfig) -> Bool {
+        let backup = buildBackupConfigFromViewModel()
+        return backup.enabled != config.enabled
+            || backup.storageDirectory != config.storageDirectory
+            || backup.dailyRetentionCount != config.dailyRetentionCount
+            || backup.monthlyRetentionCount != config.monthlyRetentionCount
+            || backup.artifactKinds != config.artifactKinds
+    }
+
+    func isBackupArtifactKindEnabled(_ kind: BackupArtifactKind) -> Bool {
+        backupArtifactKinds.contains(kind)
+    }
+
+    func setBackupArtifactKind(_ kind: BackupArtifactKind, enabled: Bool) {
+        var next = backupArtifactKinds
+        if enabled {
+            next.append(kind)
+        } else {
+            guard next.count > 1 else { return }
+            next.removeAll { $0 == kind }
+        }
+        backupArtifactKinds = BackupConfig.normalizedArtifactKinds(next)
     }
 
     func isICloudSyncArtifactKindEnabled(_ kind: ICloudSyncArtifactKind) -> Bool {
@@ -1623,6 +1693,7 @@ final class PreferencesViewModel: ObservableObject {
         let activity = buildActivityConfigFromViewModel()
         let sessionReplay = buildSessionReplayConfigFromViewModel()
         let iCloudSync = buildICloudSyncConfigFromViewModel()
+        let backup = buildBackupConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
@@ -1726,6 +1797,13 @@ final class PreferencesViewModel: ObservableObject {
         encryption-required = \(iCloudSync.encryptionRequired)
         artifact-kinds = \(Self.tomlStringArray(iCloudSync.artifactKinds.map(\.rawValue)))
         conflict-policy = "\(iCloudSync.conflictPolicy.rawValue)"
+
+        [backup]
+        enabled = \(backup.enabled)
+        storage-directory = "\(backup.storageDirectory)"
+        daily-retention-count = \(backup.dailyRetentionCount)
+        monthly-retention-count = \(backup.monthlyRetentionCount)
+        artifact-kinds = \(Self.tomlStringArray(backup.artifactKinds.map(\.rawValue)))
 
         [code-review]
         auto-show-on-session-end = \(codeReviewAutoShowOnSessionEnd)
