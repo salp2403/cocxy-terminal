@@ -160,6 +160,40 @@ struct MarkdownFileExplorerTests {
         #expect(!FileManager.default.fileExists(atPath: original.path))
     }
 
+    @Test("file explorer destructive prompts localize to configured app language")
+    func fileExplorerPromptCopyLocalizes() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        let rename = MarkdownFileExplorerView.localizedRenameCopy(
+            localizer: localizer,
+            itemName: "README.md"
+        )
+        let trash = MarkdownFileExplorerView.localizedMoveToTrashCopy(
+            localizer: localizer,
+            itemName: "README.md"
+        )
+
+        #expect(rename.messageText == "Renombrar \"README.md\"")
+        #expect(rename.informativeText == "Ingresa un nombre nuevo.")
+        #expect(rename.primaryButton == "Renombrar")
+        #expect(rename.secondaryButton == "Cancelar")
+        #expect(trash.messageText == "¿Mover \"README.md\" a la papelera?")
+        #expect(trash.informativeText == "Puedes deshacerlo desde la papelera.")
+        #expect(trash.primaryButton == "Mover a la papelera")
+        #expect(trash.secondaryButton == "Cancelar")
+    }
+
+    @Test("markdown sidebar tabs localize to configured app language")
+    func sidebarTabsLocalize() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(MarkdownSidebarTab.files.localizedTitle(using: localizer) == "Archivos")
+        #expect(MarkdownSidebarTab.outline.localizedTitle(using: localizer) == "Esquema")
+        #expect(MarkdownSidebarTab.search.localizedTitle(using: localizer) == "Buscar")
+    }
+
     // MARK: - Helpers
 
     private func createTempDir() -> URL {
@@ -171,5 +205,10 @@ struct MarkdownFileExplorerTests {
 
     private func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

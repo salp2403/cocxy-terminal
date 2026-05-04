@@ -51,7 +51,7 @@ final class MarkdownContentView: NSView {
     // MARK: - Properties (new)
 
     private let toolbar = MarkdownToolbarView()
-    private let sidebar = MarkdownSidebarView()
+    private let sidebar: MarkdownSidebarView
     let sourceView: MarkdownSourceView
     let previewView: MarkdownPreviewView
     let diffView = MarkdownDiffView()
@@ -111,9 +111,14 @@ final class MarkdownContentView: NSView {
     /// Image file extensions accepted for drag-and-drop insertion.
     static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "tiff"]
 
-    init(filePath: URL? = nil, workspaceDirectory: URL? = nil) {
+    init(
+        filePath: URL? = nil,
+        workspaceDirectory: URL? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.filePath = filePath
         self.workspaceDirectory = workspaceDirectory
+        self.sidebar = MarkdownSidebarView(localizer: localizer)
         self.sourceView = MarkdownSourceView()
         self.previewView = MarkdownPreviewView()
         super.init(frame: .zero)
@@ -193,6 +198,10 @@ final class MarkdownContentView: NSView {
 
     internal var sourceViewForTesting: MarkdownSourceView { sourceView }
     internal var sidebarViewForTesting: MarkdownSidebarView { sidebar }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        sidebar.updateLocalizer(localizer)
+    }
 
     // MARK: - Loading / Saving
 

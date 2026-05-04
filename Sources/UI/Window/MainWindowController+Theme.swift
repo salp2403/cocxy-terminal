@@ -70,6 +70,7 @@ extension MainWindowController {
 
         // Apply notification toggle changes to tab bar.
         tabBarView?.updateLocalizer(appLocalizer(for: config))
+        updateMarkdownPanelLocalizers(appLocalizer(for: config))
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
@@ -173,6 +174,18 @@ extension MainWindowController {
 
         if old?.completions != config.completions {
             rewireVisibleEditorCompletions()
+        }
+    }
+
+    private func updateMarkdownPanelLocalizers(_ localizer: AppLocalizer) {
+        for view in panelContentViews.values {
+            (view as? MarkdownContentView)?.updateLocalizer(localizer)
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                (view as? MarkdownContentView)?.updateLocalizer(localizer)
+            }
         }
     }
 

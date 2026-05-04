@@ -233,7 +233,11 @@ extension MainWindowController {
             return hostingView
         case .markdown:
             let workspaceDir = workspaceDirectory(for: tabID)
-            return MarkdownContentView(filePath: panel.filePath, workspaceDirectory: workspaceDir)
+            return MarkdownContentView(
+                filePath: panel.filePath,
+                workspaceDirectory: workspaceDir,
+                localizer: appLocalizer()
+            )
         case .editor:
             let editorView = EditorView(fileURL: panel.filePath)
             wireEditorVimMode(editorView: editorView, tabID: tabID)

@@ -19,6 +19,7 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
     private let contextMenu = NSMenu()
     private var dataSource: FileTreeDataSource?
     private var delegateObject: FileTreeDelegate?
+    private var localizer: AppLocalizer
 
     /// Invoked when a file is clicked. The URL points to the selected .md file.
     var onFileSelected: ((URL) -> Void)?
@@ -39,7 +40,8 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
 
     // MARK: - Init
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+        self.localizer = localizer
         super.init(frame: .zero)
         setupUI()
     }
@@ -60,6 +62,11 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
         outlineView.expandItem(nil, expandChildren: true)
     }
 
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        outlineView.tableColumns.first?.title = localized("markdown.explorer.filesColumn", fallback: "Files")
+    }
+
     // MARK: - Setup
 
     private func setupUI() {
@@ -75,7 +82,7 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         column.width = 180
-        column.title = "Files"
+        column.title = localized("markdown.explorer.filesColumn", fallback: "Files")
         outlineView.addTableColumn(column)
         outlineView.outlineTableColumn = column
         outlineView.headerView = nil
@@ -120,23 +127,35 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
         menu.removeAllItems()
         guard let node = contextualNode() else { return }
 
-        let rename = NSMenuItem(title: "Rename", action: #selector(renameContextNode), keyEquivalent: "")
+        let rename = NSMenuItem(
+            title: localized("markdown.explorer.menu.rename", fallback: "Rename"),
+            action: #selector(renameContextNode),
+            keyEquivalent: ""
+        )
         rename.target = self
         menu.addItem(rename)
 
-        let delete = NSMenuItem(title: "Move to Trash", action: #selector(deleteContextNode), keyEquivalent: "")
+        let delete = NSMenuItem(
+            title: localized("markdown.explorer.menu.moveToTrash", fallback: "Move to Trash"),
+            action: #selector(deleteContextNode),
+            keyEquivalent: ""
+        )
         delete.target = self
         menu.addItem(delete)
 
         menu.addItem(.separator())
 
-        let reveal = NSMenuItem(title: "Reveal in Finder", action: #selector(revealContextNode), keyEquivalent: "")
+        let reveal = NSMenuItem(
+            title: localized("markdown.explorer.menu.revealInFinder", fallback: "Reveal in Finder"),
+            action: #selector(revealContextNode),
+            keyEquivalent: ""
+        )
         reveal.target = self
         menu.addItem(reveal)
 
         if node.isDirectory {
-            rename.title = "Rename Folder"
-            delete.title = "Move Folder to Trash"
+            rename.title = localized("markdown.explorer.menu.renameFolder", fallback: "Rename Folder")
+            delete.title = localized("markdown.explorer.menu.moveFolderToTrash", fallback: "Move Folder to Trash")
         }
     }
 
@@ -185,11 +204,12 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
         guard let node = contextualNode() else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Rename \"\(node.name)\""
-        alert.informativeText = "Enter a new name."
+        let copy = Self.localizedRenameCopy(localizer: localizer, itemName: node.name)
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
 
         let field = NSTextField(string: node.name)
         field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
@@ -207,11 +227,12 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
         guard let node = contextualNode() else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Move \"\(node.name)\" to Trash?"
-        alert.informativeText = "This can be undone from the Trash."
+        let copy = Self.localizedMoveToTrashCopy(localizer: localizer, itemName: node.name)
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Move to Trash")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
@@ -224,6 +245,37 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
     @objc private func revealContextNode() {
         guard let node = contextualNode() else { return }
         revealInFinder(node.url)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    static func localizedRenameCopy(localizer: AppLocalizer, itemName: String) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: String(
+                format: localizer.string("markdown.explorer.rename.title", fallback: "Rename \"%@\""),
+                itemName
+            ),
+            informativeText: localizer.string("markdown.explorer.rename.message", fallback: "Enter a new name."),
+            primaryButton: localizer.string("markdown.explorer.rename.button", fallback: "Rename"),
+            secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
+    }
+
+    static func localizedMoveToTrashCopy(localizer: AppLocalizer, itemName: String) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: String(
+                format: localizer.string("markdown.explorer.trash.title", fallback: "Move \"%@\" to Trash?"),
+                itemName
+            ),
+            informativeText: localizer.string(
+                "markdown.explorer.trash.message",
+                fallback: "This can be undone from the Trash."
+            ),
+            primaryButton: localizer.string("markdown.explorer.trash.button", fallback: "Move to Trash"),
+            secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
     }
 }
 

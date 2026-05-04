@@ -11,6 +11,17 @@ enum MarkdownSidebarTab: String, CaseIterable {
     case outline = "Outline"
     case search = "Search"
 
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .files:
+            return localizer.string("markdown.sidebar.files", fallback: rawValue)
+        case .outline:
+            return localizer.string("markdown.sidebar.outline", fallback: rawValue)
+        case .search:
+            return localizer.string("markdown.sidebar.search", fallback: rawValue)
+        }
+    }
+
     var iconName: String {
         switch self {
         case .files: return "folder"
@@ -38,8 +49,9 @@ final class MarkdownSidebarView: NSView {
     private let tabBar = NSView()
     private var tabButtons: [NSButton] = []
     private let contentContainer = NSView()
+    private var localizer: AppLocalizer
 
-    let fileExplorer = MarkdownFileExplorerView()
+    let fileExplorer: MarkdownFileExplorerView
     let outlineView = MarkdownOutlineView()
     let searchView = MarkdownSearchView()
 
@@ -54,7 +66,9 @@ final class MarkdownSidebarView: NSView {
 
     // MARK: - Init
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+        self.localizer = localizer
+        self.fileExplorer = MarkdownFileExplorerView(localizer: localizer)
         super.init(frame: .zero)
         setupUI()
         applyActiveTab()
@@ -70,6 +84,15 @@ final class MarkdownSidebarView: NSView {
     /// Switches to the specified tab.
     func selectTab(_ tab: MarkdownSidebarTab) {
         activeTab = tab
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        fileExplorer.updateLocalizer(localizer)
+        for (index, button) in tabButtons.enumerated() {
+            let tab = MarkdownSidebarTab.allCases[index]
+            button.title = tab.localizedTitle(using: localizer)
+        }
     }
 
     // MARK: - Setup
@@ -140,7 +163,7 @@ final class MarkdownSidebarView: NSView {
         button.bezelStyle = .accessoryBarAction
         button.isBordered = false
         button.setButtonType(.toggle)
-        button.title = tab.rawValue
+        button.title = tab.localizedTitle(using: localizer)
         button.font = .systemFont(ofSize: 10, weight: .medium)
         button.contentTintColor = CocxyColors.subtext0
         button.tag = tag

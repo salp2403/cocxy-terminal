@@ -447,6 +447,21 @@
 "sessionReplay.deleteAll.title" = "Delete All Recordings?";
 "sessionReplay.deleteAll.message" = "This removes every local Session Replay recording from this Mac.";
 "sessionReplay.deleteAll.button" = "Delete All";
+"markdown.sidebar.files" = "Files";
+"markdown.sidebar.outline" = "Outline";
+"markdown.sidebar.search" = "Search";
+"markdown.explorer.filesColumn" = "Files";
+"markdown.explorer.menu.rename" = "Rename";
+"markdown.explorer.menu.renameFolder" = "Rename Folder";
+"markdown.explorer.menu.moveToTrash" = "Move to Trash";
+"markdown.explorer.menu.moveFolderToTrash" = "Move Folder to Trash";
+"markdown.explorer.menu.revealInFinder" = "Reveal in Finder";
+"markdown.explorer.rename.title" = "Rename \"%@\"";
+"markdown.explorer.rename.message" = "Enter a new name.";
+"markdown.explorer.rename.button" = "Rename";
+"markdown.explorer.trash.title" = "Move \"%@\" to Trash?";
+"markdown.explorer.trash.message" = "This can be undone from the Trash.";
+"markdown.explorer.trash.button" = "Move to Trash";
 
 "welcome.accessibilityLabel" = "Welcome to Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";
