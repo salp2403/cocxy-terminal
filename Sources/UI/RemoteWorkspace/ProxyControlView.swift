@@ -15,6 +15,7 @@ struct ProxyControlView: View {
     let profileID: UUID
     @ObservedObject var viewModel: RemoteConnectionViewModel
     @ObservedObject var proxyManager: ProxyManagerImpl
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var socksPort: String = "1080"
     @State private var httpPort: String = "8888"
@@ -69,7 +70,7 @@ struct ProxyControlView: View {
                 Image(systemName: "network.badge.shield.half.filled")
                     .font(.system(size: 24))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-                Text("Connect to the profile first to enable proxy")
+                Text(localized("remoteWorkspace.proxy.connectFirst", fallback: "Connect to the profile first to enable proxy"))
                     .font(.system(size: 11))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 Spacer()
@@ -104,13 +105,26 @@ struct ProxyControlView: View {
 
     private var statusText: String {
         switch proxyManager.state {
-        case .off: return "Proxy Off"
-        case .starting: return "Starting..."
+        case .off: return localized("remoteWorkspace.proxy.status.off", fallback: "Proxy Off")
+        case .starting: return localized("remoteWorkspace.proxy.status.starting", fallback: "Starting...")
         case .active(let socks, let http):
-            if let http { return "Active — SOCKS5:\(socks) HTTP:\(http)" }
-            return "Active — SOCKS5:\(socks)"
-        case .failing(let reason): return "Failing: \(reason)"
-        case .failover: return "Failover in progress..."
+            if let http {
+                return String(
+                    format: localized("remoteWorkspace.proxy.status.active.socksHttp", fallback: "Active - SOCKS5:%d HTTP:%d"),
+                    socks,
+                    http
+                )
+            }
+            return String(
+                format: localized("remoteWorkspace.proxy.status.active.socks", fallback: "Active - SOCKS5:%d"),
+                socks
+            )
+        case .failing(let reason):
+            return String(
+                format: localized("remoteWorkspace.proxy.status.failing", fallback: "Failing: %@"),
+                reason
+            )
+        case .failover: return localized("remoteWorkspace.proxy.status.failover", fallback: "Failover in progress...")
         }
     }
 
@@ -124,7 +138,7 @@ struct ProxyControlView: View {
     private var socksSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("SOCKS5 Proxy")
+                Text(localized("remoteWorkspace.proxy.socksTitle", fallback: "SOCKS5 Proxy"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -144,7 +158,7 @@ struct ProxyControlView: View {
 
             if isSOCKSActive {
                 HStack(spacing: 4) {
-                    Text("Port:")
+                    Text(localized("remoteWorkspace.proxy.port", fallback: "Port:"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     Text(socksPort)
@@ -153,7 +167,7 @@ struct ProxyControlView: View {
                 }
             } else {
                 HStack(spacing: 4) {
-                    Text("Port:")
+                    Text(localized("remoteWorkspace.proxy.port", fallback: "Port:"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     TextField("1080", text: $socksPort)
@@ -175,7 +189,7 @@ struct ProxyControlView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("HTTP CONNECT")
+                Text(localized("remoteWorkspace.proxy.httpTitle", fallback: "HTTP CONNECT"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -194,12 +208,12 @@ struct ProxyControlView: View {
             }
 
             if !isSOCKSActive {
-                Text("Enable SOCKS5 first")
+                Text(localized("remoteWorkspace.proxy.enableSocksFirst", fallback: "Enable SOCKS5 first"))
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
             } else if !httpActive {
                 HStack(spacing: 4) {
-                    Text("Port:")
+                    Text(localized("remoteWorkspace.proxy.port", fallback: "Port:"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     TextField("8888", text: $httpPort)
@@ -216,7 +230,7 @@ struct ProxyControlView: View {
     private var systemWideSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("System-Wide Proxy")
+                Text(localized("remoteWorkspace.proxy.systemWideTitle", fallback: "System-Wide Proxy"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -236,7 +250,12 @@ struct ProxyControlView: View {
             }
 
             if isSOCKSActive {
-                Text("Routes all macOS traffic through the SSH tunnel. Requires admin password.")
+                Text(
+                    localized(
+                        "remoteWorkspace.proxy.systemWide.detail",
+                        fallback: "Routes all macOS traffic through the SSH tunnel. Requires admin password."
+                    )
+                )
                     .font(.system(size: 9))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                     .lineLimit(2)
@@ -248,13 +267,16 @@ struct ProxyControlView: View {
 
     private var statsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Stats")
+            Text(localized("remoteWorkspace.proxy.stats", fallback: "Stats"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
 
             HStack(spacing: 12) {
-                statItem(label: "Uptime", value: formatUptime(proxyManager.uptimeSeconds))
-                statItem(label: "HTTP Connections", value: "\(proxyManager.httpConnectProxy?.activeConnectionCount ?? 0)")
+                statItem(label: localized("remoteWorkspace.proxy.stats.uptime", fallback: "Uptime"), value: formatUptime(proxyManager.uptimeSeconds))
+                statItem(
+                    label: localized("remoteWorkspace.proxy.stats.httpConnections", fallback: "HTTP Connections"),
+                    value: "\(proxyManager.httpConnectProxy?.activeConnectionCount ?? 0)"
+                )
             }
         }
     }
@@ -287,7 +309,7 @@ struct ProxyControlView: View {
 
     private var exclusionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Bypass List")
+            Text(localized("remoteWorkspace.proxy.bypassList", fallback: "Bypass List"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
 
@@ -349,7 +371,7 @@ struct ProxyControlView: View {
 
     private func enableSOCKS() {
         guard let port = Int(socksPort), (1...65535).contains(port) else {
-            errorMessage = "Invalid port number"
+            errorMessage = localized("remoteWorkspace.proxy.error.invalidPort", fallback: "Invalid port number")
             return
         }
         errorMessage = nil
@@ -364,7 +386,7 @@ struct ProxyControlView: View {
 
     private func enableHTTPConnect() {
         guard let port = Int(httpPort), (1...65535).contains(port) else {
-            errorMessage = "Invalid HTTP port number"
+            errorMessage = localized("remoteWorkspace.proxy.error.invalidHTTPPort", fallback: "Invalid HTTP port number")
             return
         }
         errorMessage = nil
@@ -403,7 +425,10 @@ struct ProxyControlView: View {
                 )
                 systemWideEnabled = true
             } catch {
-                errorMessage = "System proxy: \(error.localizedDescription)"
+                errorMessage = String(
+                    format: localized("remoteWorkspace.proxy.error.systemProxy", fallback: "System proxy: %@"),
+                    error.localizedDescription
+                )
                 systemWideEnabled = false
             }
         }
@@ -416,7 +441,10 @@ struct ProxyControlView: View {
                 let interface = try SystemNetworkConfigurator().detectActiveInterface()
                 try systemProxyConfigurator.deactivateProxy(interface: interface)
             } catch {
-                errorMessage = "System proxy restore: \(error.localizedDescription)"
+                errorMessage = String(
+                    format: localized("remoteWorkspace.proxy.error.systemProxyRestore", fallback: "System proxy restore: %@"),
+                    error.localizedDescription
+                )
             }
             systemWideEnabled = false
         }
@@ -427,5 +455,9 @@ struct ProxyControlView: View {
         guard !trimmed.isEmpty, !exclusions.contains(trimmed) else { return }
         exclusions.append(trimmed)
         newExclusion = ""
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

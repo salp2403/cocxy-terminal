@@ -64,6 +64,14 @@ final class RemoteConnectionViewModel: ObservableObject {
             case .sftp: return "Remote file browser"
             }
         }
+
+        func localizedLabel(using localizer: AppLocalizer) -> String {
+            localizer.string("remoteWorkspace.subPanel.\(rawValue)", fallback: label)
+        }
+
+        func localizedDetail(using localizer: AppLocalizer) -> String {
+            localizer.string("remoteWorkspace.subPanel.\(rawValue).detail", fallback: detail)
+        }
     }
 
     // MARK: - Published State
@@ -81,17 +89,24 @@ final class RemoteConnectionViewModel: ObservableObject {
     let connectionManager: RemoteConnectionManager
     let tunnelManager: SSHTunnelManager
     private let profileStore: RemoteProfileStore
+    private var localizer: AppLocalizer
 
     // MARK: - Initialization
 
     init(
         profileStore: RemoteProfileStore,
         connectionManager: RemoteConnectionManager,
-        tunnelManager: SSHTunnelManager
+        tunnelManager: SSHTunnelManager,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.profileStore = profileStore
         self.connectionManager = connectionManager
         self.tunnelManager = tunnelManager
+        self.localizer = localizer
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
     }
 
     // MARK: - Computed Properties
@@ -206,7 +221,7 @@ final class RemoteConnectionViewModel: ObservableObject {
 
     func duplicateProfile(_ profile: RemoteConnectionProfile) {
         let copy = RemoteConnectionProfile(
-            name: "\(profile.name) (copy)",
+            name: "\(profile.name) (\(localizer.string("remoteWorkspace.profile.copySuffix", fallback: "copy")))",
             host: profile.host,
             user: profile.user,
             port: profile.port,
@@ -285,6 +300,7 @@ struct RemoteConnectionView: View {
 
     @ObservedObject var viewModel: RemoteConnectionViewModel
     var onDismiss: () -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Injected SSH key manager for the keys sub-panel.
     var sshKeyManager: SSHKeyManager?
@@ -323,7 +339,13 @@ struct RemoteConnectionView: View {
         .frame(width: Self.panelWidth)
         .frame(maxHeight: .infinity)
         .glassPanelBackground()
-        .onAppear { viewModel.loadProfiles() }
+        .onAppear {
+            viewModel.updateLocalizer(localizer)
+            viewModel.loadProfiles()
+        }
+        .onChange(of: localizer.resolvedLanguage) { _, _ in
+            viewModel.updateLocalizer(localizer)
+        }
         .onChange(of: viewModel.selectedProfileID) { _, _ in
             sftpBrowserVM = nil
         }
@@ -331,14 +353,14 @@ struct RemoteConnectionView: View {
             editorSheet
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Remote Workspaces")
+        .accessibilityLabel(localized("remoteWorkspace.accessibility", fallback: "Remote Workspaces"))
     }
 
     // MARK: - Header
 
     private var headerView: some View {
         HStack {
-            Text("Remote Workspaces")
+            Text(localized("remoteWorkspace.title", fallback: "Remote Workspaces"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
 
@@ -351,7 +373,7 @@ struct RemoteConnectionView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Add new remote profile")
+            .accessibilityLabel(localized("remoteWorkspace.addProfile.accessibility", fallback: "Add new remote profile"))
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
@@ -360,7 +382,7 @@ struct RemoteConnectionView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Close remote workspaces panel")
+            .accessibilityLabel(localized("remoteWorkspace.closePanel.accessibility", fallback: "Close remote workspaces panel"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -374,7 +396,10 @@ struct RemoteConnectionView: View {
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
 
-            TextField("Quick Connect (user@host:port)", text: $viewModel.quickConnectText)
+            TextField(
+                localized("remoteWorkspace.quickConnect.placeholder", fallback: "Quick Connect (user@host:port)"),
+                text: $viewModel.quickConnectText
+            )
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .onSubmit { viewModel.quickConnect() }
@@ -390,12 +415,12 @@ struct RemoteConnectionView: View {
             }
             .buttonStyle(.plain)
             .disabled(viewModel.quickConnectText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityLabel("Connect to quick connect host")
+            .accessibilityLabel(localized("remoteWorkspace.quickConnect.connect.accessibility", fallback: "Connect to quick connect host"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color(nsColor: CocxyColors.crust).opacity(0.5))
-        .help("Type user@host:port, then press Return or the arrow to connect.")
+        .help(localized("remoteWorkspace.quickConnect.help", fallback: "Type user@host:port, then press Return or the arrow to connect."))
     }
 
     // MARK: - Profile List
@@ -423,7 +448,9 @@ struct RemoteConnectionView: View {
         group: String,
         profiles: [RemoteConnectionProfile]
     ) -> some View {
-        let displayName = group.isEmpty ? "ungrouped" : group
+        let displayName = group.isEmpty
+            ? localized("remoteWorkspace.group.ungrouped", fallback: "ungrouped")
+            : group
         let isCollapsed = viewModel.collapsedGroups.contains(group)
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -439,7 +466,8 @@ struct RemoteConnectionView: View {
                         onToggleConnection: { viewModel.toggleConnection(for: profile) },
                         onEdit: { viewModel.presentEditProfile(profile) },
                         onDuplicate: { viewModel.duplicateProfile(profile) },
-                        onDelete: { viewModel.deleteProfile(profile) }
+                        onDelete: { viewModel.deleteProfile(profile) },
+                        localizer: localizer
                     )
                 }
             }
@@ -473,7 +501,13 @@ struct RemoteConnectionView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .accessibilityLabel("\(displayName), \(count) profiles")
+        .accessibilityLabel(
+            String(
+                format: localized("remoteWorkspace.group.accessibility", fallback: "%@, %d profiles"),
+                displayName,
+                count
+            )
+        )
     }
 
     // MARK: - Profile Empty State
@@ -484,10 +518,15 @@ struct RemoteConnectionView: View {
             Image(systemName: "network")
                 .font(.system(size: 28))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No remote profiles yet")
+            Text(localized("remoteWorkspace.empty.title", fallback: "No remote profiles yet"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Save SSH hosts for repeat work, or use Quick Connect above for a one-off connection.")
+            Text(
+                localized(
+                    "remoteWorkspace.empty.message",
+                    fallback: "Save SSH hosts for repeat work, or use Quick Connect above for a one-off connection."
+                )
+            )
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -495,7 +534,7 @@ struct RemoteConnectionView: View {
                 .padding(.horizontal, 24)
 
             Button(action: { viewModel.presentNewProfile() }) {
-                Label("Add Profile", systemImage: "plus.circle.fill")
+                Label(localized("remoteWorkspace.empty.addProfile", fallback: "Add Profile"), systemImage: "plus.circle.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
@@ -506,7 +545,7 @@ struct RemoteConnectionView: View {
             }
             .buttonStyle(.plain)
             .foregroundColor(Color(nsColor: CocxyColors.blue))
-            .accessibilityLabel("Add remote profile")
+            .accessibilityLabel(localized("remoteWorkspace.empty.addProfile.accessibility", fallback: "Add remote profile"))
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -535,7 +574,7 @@ struct RemoteConnectionView: View {
             HStack(spacing: 6) {
                 Image(systemName: panel.icon)
                     .font(.system(size: 11, weight: .semibold))
-                Text(panel.label)
+                Text(panel.localizedLabel(using: localizer))
                     .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -560,9 +599,14 @@ struct RemoteConnectionView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(panel.label) sub-panel")
+        .accessibilityLabel(
+            String(
+                format: localized("remoteWorkspace.subPanel.accessibility", fallback: "%@ sub-panel"),
+                panel.localizedLabel(using: localizer)
+            )
+        )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .help(panel.detail)
+        .help(panel.localizedDetail(using: localizer))
     }
 
     // MARK: - Sub-Panel Content
@@ -594,12 +638,13 @@ struct RemoteConnectionView: View {
                     viewModel: RemoteSessionListViewModel(
                         connectionManager: viewModel.connectionManager,
                         profileID: profileID
-                    )
+                    ),
+                    localizer: localizer
                 )
             } else {
                 selectProfilePlaceholder(
                     icon: "terminal",
-                    text: "Select a profile to manage persistent sessions"
+                    text: localized("remoteWorkspace.placeholder.sessions", fallback: "Select a profile to manage persistent sessions")
                 )
             }
         }
@@ -616,10 +661,14 @@ struct RemoteConnectionView: View {
                     },
                     onCancelForward: { forward, profID in
                         try? viewModel.connectionManager.cancelForward(forward, for: profID)
-                    }
+                    },
+                    localizer: localizer
                 )
             } else {
-                selectProfilePlaceholder(icon: "arrow.left.arrow.right", text: "Select a profile to manage tunnels")
+                selectProfilePlaceholder(
+                    icon: "arrow.left.arrow.right",
+                    text: localized("remoteWorkspace.placeholder.tunnels", fallback: "Select a profile to manage tunnels")
+                )
             }
         }
     }
@@ -631,12 +680,13 @@ struct RemoteConnectionView: View {
                 ProxyControlView(
                     profileID: profileID,
                     viewModel: viewModel,
-                    proxyManager: proxyManager
+                    proxyManager: proxyManager,
+                    localizer: localizer
                 )
             } else {
                 selectProfilePlaceholder(
                     icon: "network.badge.shield.half.filled",
-                    text: "Select a profile to manage proxy"
+                    text: localized("remoteWorkspace.placeholder.proxy", fallback: "Select a profile to manage proxy")
                 )
             }
         }
@@ -649,12 +699,13 @@ struct RemoteConnectionView: View {
                 RelayControlView(
                     profileID: profileID,
                     viewModel: viewModel,
-                    relayManager: relayManager
+                    relayManager: relayManager,
+                    localizer: localizer
                 )
             } else {
                 selectProfilePlaceholder(
                     icon: "point.3.connected.trianglepath.dotted",
-                    text: "Select a profile to manage relay channels"
+                    text: localized("remoteWorkspace.placeholder.relay", fallback: "Select a profile to manage relay channels")
                 )
             }
         }
@@ -667,12 +718,13 @@ struct RemoteConnectionView: View {
                 DaemonControlView(
                     profileID: profileID,
                     viewModel: viewModel,
-                    daemonManager: daemonManager
+                    daemonManager: daemonManager,
+                    localizer: localizer
                 )
             } else {
                 selectProfilePlaceholder(
                     icon: "server.rack",
-                    text: "Select a profile to manage remote daemon"
+                    text: localized("remoteWorkspace.placeholder.daemon", fallback: "Select a profile to manage remote daemon")
                 )
             }
         }
@@ -681,14 +733,14 @@ struct RemoteConnectionView: View {
     private var keysSubPanel: some View {
         Group {
             if let vm = keyManagerVM {
-                SSHKeyManagerView(viewModel: vm)
+                SSHKeyManagerView(viewModel: vm, localizer: localizer)
             } else if let keyManager = sshKeyManager {
                 Color.clear.onAppear {
-                    keyManagerVM = SSHKeyManagerViewModel(keyManager: keyManager)
+                    keyManagerVM = SSHKeyManagerViewModel(keyManager: keyManager, localizer: localizer)
                     keyManagerVM?.loadKeys()
                 }
             } else {
-                selectProfilePlaceholder(icon: "key", text: "SSH key management")
+                selectProfilePlaceholder(icon: "key", text: localized("remoteWorkspace.placeholder.keys", fallback: "SSH key management"))
             }
         }
     }
@@ -696,7 +748,7 @@ struct RemoteConnectionView: View {
     private var sftpSubPanel: some View {
         Group {
             if let vm = sftpBrowserVM {
-                SFTPBrowserView(viewModel: vm)
+                SFTPBrowserView(viewModel: vm, localizer: localizer)
             } else if let profileID = viewModel.selectedProfileID,
                       let profile = viewModel.profiles.first(where: { $0.id == profileID }),
                       let executor = sftpExecutor {
@@ -707,7 +759,10 @@ struct RemoteConnectionView: View {
                     vm.loadDirectory()
                 }
             } else {
-                selectProfilePlaceholder(icon: "folder", text: "Select a connected profile to browse files")
+                selectProfilePlaceholder(
+                    icon: "folder",
+                    text: localized("remoteWorkspace.placeholder.sftp", fallback: "Select a connected profile to browse files")
+                )
             }
         }
     }
@@ -738,7 +793,11 @@ struct RemoteConnectionView: View {
         editorVM.onSave = { [weak viewModel] profile in
             viewModel?.saveProfile(profile)
         }
-        return RemoteProfileEditor(viewModel: editorVM)
+        return RemoteProfileEditor(viewModel: editorVM, localizer: localizer)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
@@ -755,12 +814,13 @@ struct ProfileRow: View {
     let onEdit: () -> Void
     let onDuplicate: () -> Void
     let onDelete: () -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 8) {
-            RemoteStatusIndicator(state: state)
+            RemoteStatusIndicator(state: state, localizer: localizer)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(profile.name)
@@ -790,7 +850,13 @@ struct ProfileRow: View {
         }
         .contextMenu { contextMenuContent }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(profile.name), \(stateDescription)")
+        .accessibilityLabel(
+            String(
+                format: localized("remoteWorkspace.profile.accessibility", fallback: "%@, %@"),
+                profile.name,
+                stateDescription
+            )
+        )
     }
 
     // MARK: - Background
@@ -854,11 +920,20 @@ struct ProfileRow: View {
     private var connectionButtonLabel: String {
         switch state {
         case .connected:
-            return "Disconnect from \(profile.name)"
+            return String(
+                format: localized("remoteWorkspace.profile.action.disconnect", fallback: "Disconnect from %@"),
+                profile.name
+            )
         case .connecting, .reconnecting:
-            return "Cancel connection to \(profile.name)"
+            return String(
+                format: localized("remoteWorkspace.profile.action.cancel", fallback: "Cancel connection to %@"),
+                profile.name
+            )
         case .disconnected, .failed:
-            return "Connect to \(profile.name)"
+            return String(
+                format: localized("remoteWorkspace.profile.action.connect", fallback: "Connect to %@"),
+                profile.name
+            )
         }
     }
 
@@ -867,14 +942,14 @@ struct ProfileRow: View {
     @ViewBuilder
     private var contextMenuContent: some View {
         Button(action: onEdit) {
-            Label("Edit", systemImage: "pencil")
+            Label(localized("remoteWorkspace.profile.menu.edit", fallback: "Edit"), systemImage: "pencil")
         }
         Button(action: onDuplicate) {
-            Label("Duplicate", systemImage: "doc.on.doc")
+            Label(localized("remoteWorkspace.profile.menu.duplicate", fallback: "Duplicate"), systemImage: "doc.on.doc")
         }
         Divider()
         Button(role: .destructive, action: onDelete) {
-            Label("Delete", systemImage: "trash")
+            Label(localized("remoteWorkspace.profile.menu.delete", fallback: "Delete"), systemImage: "trash")
         }
     }
 
@@ -884,17 +959,30 @@ struct ProfileRow: View {
         switch state {
         case .connected(let latencyMs):
             if let ms = latencyMs {
-                return "connected, \(ms)ms"
+                return String(
+                    format: localized("remoteWorkspace.profile.state.connectedLatency", fallback: "connected, %dms"),
+                    ms
+                )
             }
-            return "connected"
+            return localized("remoteWorkspace.profile.state.connected", fallback: "connected")
         case .connecting:
-            return "connecting"
+            return localized("remoteWorkspace.profile.state.connecting", fallback: "connecting")
         case .reconnecting(let attempt):
-            return "reconnecting, attempt \(attempt)"
+            return String(
+                format: localized("remoteWorkspace.profile.state.reconnecting", fallback: "reconnecting, attempt %d"),
+                attempt
+            )
         case .disconnected:
-            return "disconnected"
+            return localized("remoteWorkspace.profile.state.disconnected", fallback: "disconnected")
         case .failed(let reason):
-            return "failed: \(reason)"
+            return String(
+                format: localized("remoteWorkspace.profile.state.failed", fallback: "failed: %@"),
+                reason
+            )
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

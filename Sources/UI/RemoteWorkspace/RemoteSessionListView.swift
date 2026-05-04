@@ -74,6 +74,7 @@ final class RemoteSessionListViewModel: ObservableObject {
 struct RemoteSessionListView: View {
 
     @ObservedObject var viewModel: RemoteSessionListViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -93,7 +94,7 @@ struct RemoteSessionListView: View {
         HStack {
             Image(systemName: "terminal")
                 .foregroundColor(.secondary)
-            Text("Persistent Sessions")
+            Text(localized("remoteWorkspace.sessions.title", fallback: "Persistent Sessions"))
                 .font(.headline)
             Spacer()
 
@@ -108,7 +109,7 @@ struct RemoteSessionListView: View {
                         .font(.body)
                 }
                 .buttonStyle(.borderless)
-                .help("Refresh sessions")
+                .help(localized("remoteWorkspace.sessions.refresh.help", fallback: "Refresh sessions"))
             }
         }
     }
@@ -117,13 +118,16 @@ struct RemoteSessionListView: View {
 
     private var createSessionSection: some View {
         HStack(spacing: 8) {
-            TextField("Session name", text: $viewModel.newSessionName)
+            TextField(
+                localized("remoteWorkspace.sessions.name.placeholder", fallback: "Session name"),
+                text: $viewModel.newSessionName
+            )
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
                     Task { try? await viewModel.createSession() }
                 }
 
-            Button("Create") {
+            Button(localized("common.create", fallback: "Create")) {
                 Task { try? await viewModel.createSession() }
             }
             .disabled(viewModel.newSessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -152,9 +156,14 @@ struct RemoteSessionListView: View {
             Image(systemName: "server.rack")
                 .font(.largeTitle)
                 .foregroundColor(.secondary)
-            Text("No active sessions")
+            Text(localized("remoteWorkspace.sessions.empty.title", fallback: "No active sessions"))
                 .foregroundColor(.secondary)
-            Text("Create a session to persist your remote work across SSH disconnects.")
+            Text(
+                localized(
+                    "remoteWorkspace.sessions.empty.message",
+                    fallback: "Create a session to persist your remote work across SSH disconnects."
+                )
+            )
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -191,7 +200,7 @@ struct RemoteSessionListView: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
-                .help("Copy attach command")
+                .help(localized("remoteWorkspace.sessions.copyAttach.help", fallback: "Copy attach command"))
             }
 
             // Kill session.
@@ -203,11 +212,15 @@ struct RemoteSessionListView: View {
                     .foregroundColor(.red.opacity(0.8))
             }
             .buttonStyle(.borderless)
-            .help("Kill session")
+            .help(localized("remoteWorkspace.sessions.kill.help", fallback: "Kill session"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.primary.opacity(0.04))
         .cornerRadius(6)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

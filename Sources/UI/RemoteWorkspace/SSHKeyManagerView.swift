@@ -24,11 +24,20 @@ final class SSHKeyManagerViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let keyManager: SSHKeyManager
+    private var localizer: AppLocalizer
 
     // MARK: - Initialization
 
-    init(keyManager: SSHKeyManager) {
+    init(
+        keyManager: SSHKeyManager,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.keyManager = keyManager
+        self.localizer = localizer
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
     }
 
     // MARK: - Actions
@@ -45,7 +54,10 @@ final class SSHKeyManagerViewModel: ObservableObject {
     func generateKey() {
         let trimmedName = newKeyName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            errorMessage = "Key name is required."
+            errorMessage = localizer.string(
+                "remoteWorkspace.keys.error.nameRequired",
+                fallback: "Key name is required."
+            )
             return
         }
 
@@ -105,6 +117,7 @@ final class SSHKeyManagerViewModel: ObservableObject {
 struct SSHKeyManagerView: View {
 
     @ObservedObject var viewModel: SSHKeyManagerViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     // MARK: - Body
 
@@ -114,7 +127,13 @@ struct SSHKeyManagerView: View {
             Divider()
             keyListContent
         }
-        .onAppear { viewModel.loadKeys() }
+        .onAppear {
+            viewModel.updateLocalizer(localizer)
+            viewModel.loadKeys()
+        }
+        .onChange(of: localizer.resolvedLanguage) { _, _ in
+            viewModel.updateLocalizer(localizer)
+        }
         .sheet(isPresented: $viewModel.isGenerateSheetPresented) {
             generateKeySheet
         }
@@ -124,7 +143,7 @@ struct SSHKeyManagerView: View {
 
     private var sectionHeader: some View {
         HStack {
-            Text("SSH Keys")
+            Text(localized("remoteWorkspace.keys.title", fallback: "SSH Keys"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
 
@@ -134,13 +153,13 @@ struct SSHKeyManagerView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "plus.circle")
                         .font(.system(size: 10))
-                    Text("Generate")
+                    Text(localized("common.generate", fallback: "Generate"))
                         .font(.system(size: 10, weight: .medium))
                 }
                 .foregroundColor(Color(nsColor: CocxyColors.blue))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Generate new SSH key")
+            .accessibilityLabel(localized("remoteWorkspace.keys.generate.accessibility", fallback: "Generate new SSH key"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -162,7 +181,7 @@ struct SSHKeyManagerView: View {
                         ForEach(viewModel.keys) { key in
                             SSHKeyRow(key: key, onAddToAgent: {
                                 viewModel.addToAgent(keyPath: key.id)
-                            })
+                            }, localizer: localizer)
                             Divider()
                                 .padding(.leading, 40)
                         }
@@ -180,10 +199,15 @@ struct SSHKeyManagerView: View {
             Image(systemName: "key")
                 .font(.system(size: 28))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No SSH keys found")
+            Text(localized("remoteWorkspace.keys.empty.title", fallback: "No SSH keys found"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Generate a new key or add existing\nkeys to ~/.ssh/ to see them here.")
+            Text(
+                localized(
+                    "remoteWorkspace.keys.empty.message",
+                    fallback: "Generate a new key or add existing\nkeys to ~/.ssh/ to see them here."
+                )
+            )
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -227,18 +251,18 @@ struct SSHKeyManagerView: View {
 
     private var generateKeySheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Generate SSH Key")
+            Text(localized("remoteWorkspace.keys.generate.title", fallback: "Generate SSH Key"))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
 
             VStack(alignment: .leading, spacing: 10) {
-                formField(label: "Name") {
+                formField(label: localized("remoteWorkspace.keys.field.name", fallback: "Name")) {
                     TextField("my-key", text: $viewModel.newKeyName)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12))
                 }
 
-                formField(label: "Type") {
+                formField(label: localized("remoteWorkspace.keys.field.type", fallback: "Type")) {
                     Picker("", selection: $viewModel.newKeyType) {
                         Text("Ed25519").tag(SSHKeyType.ed25519)
                         Text("RSA").tag(SSHKeyType.rsa)
@@ -248,8 +272,8 @@ struct SSHKeyManagerView: View {
                     .labelsHidden()
                 }
 
-                formField(label: "Passphrase") {
-                    SecureField("Optional", text: $viewModel.newKeyPassphrase)
+                formField(label: localized("remoteWorkspace.keys.field.passphrase", fallback: "Passphrase")) {
+                    SecureField(localized("remoteWorkspace.keys.passphrase.placeholder", fallback: "Optional"), text: $viewModel.newKeyPassphrase)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12))
                 }
@@ -258,13 +282,13 @@ struct SSHKeyManagerView: View {
             HStack {
                 Spacer()
 
-                Button("Cancel") {
+                Button(localized("common.cancel", fallback: "Cancel")) {
                     viewModel.isGenerateSheetPresented = false
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
 
-                Button("Generate") {
+                Button(localized("common.generate", fallback: "Generate")) {
                     viewModel.generateKey()
                 }
                 .buttonStyle(.borderedProminent)
@@ -290,6 +314,10 @@ struct SSHKeyManagerView: View {
             content()
         }
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 // MARK: - SSH Key Row
@@ -299,6 +327,7 @@ struct SSHKeyRow: View {
 
     let key: SSHKeyInfo
     let onAddToAgent: () -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         HStack(spacing: 8) {
@@ -332,8 +361,13 @@ struct SSHKeyRow: View {
                     .foregroundColor(Color(nsColor: CocxyColors.subtext0))
             }
             .buttonStyle(.plain)
-            .help("Add to SSH agent")
-            .accessibilityLabel("Add \(key.name) to SSH agent")
+            .help(localized("remoteWorkspace.keys.addToAgent.help", fallback: "Add to SSH agent"))
+            .accessibilityLabel(
+                String(
+                    format: localized("remoteWorkspace.keys.addToAgent.accessibility", fallback: "Add %@ to SSH agent"),
+                    key.name
+                )
+            )
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -367,5 +401,9 @@ struct SSHKeyRow: View {
         case .unknown:
             return Color(nsColor: CocxyColors.overlay1)
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

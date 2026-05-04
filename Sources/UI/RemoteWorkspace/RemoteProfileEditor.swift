@@ -70,6 +70,13 @@ final class RemoteProfileEditorViewModel: ObservableObject {
 
     var title: String { isEditing ? "Edit Profile" : "New Profile" }
 
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        if isEditing {
+            return localizer.string("remoteWorkspace.profileEditor.title.edit", fallback: "Edit Profile")
+        }
+        return localizer.string("remoteWorkspace.profileEditor.title.new", fallback: "New Profile")
+    }
+
     var isValid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -145,9 +152,12 @@ final class RemoteProfileEditorViewModel: ObservableObject {
 
     // MARK: - Identity File Picker
 
-    func pickIdentityFile() {
+    func pickIdentityFile(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
         let panel = NSOpenPanel()
-        panel.title = "Select SSH Identity File"
+        panel.title = localizer.string(
+            "remoteWorkspace.profileEditor.identityPanel.title",
+            fallback: "Select SSH Identity File"
+        )
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -251,6 +261,7 @@ struct EditableKeyValue: Identifiable {
 struct RemoteProfileEditor: View {
 
     @ObservedObject var viewModel: RemoteProfileEditorViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     @Environment(\.dismiss) private var dismiss
 
     // MARK: - Body
@@ -280,7 +291,7 @@ struct RemoteProfileEditor: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        Text(viewModel.title)
+        Text(viewModel.localizedTitle(using: localizer))
             .font(.system(size: 14, weight: .semibold))
             .foregroundColor(Color(nsColor: CocxyColors.text))
             .padding(.horizontal, 16)
@@ -291,13 +302,29 @@ struct RemoteProfileEditor: View {
 
     private var connectionFields: some View {
         VStack(alignment: .leading, spacing: 10) {
-            editorField(label: "Name", placeholder: "production-web", text: $viewModel.name)
+            editorField(
+                label: localized("remoteWorkspace.profileEditor.field.name", fallback: "Name"),
+                placeholder: "production-web",
+                text: $viewModel.name
+            )
 
-            editorField(label: "Host", placeholder: "192.168.1.100 or host.example.com", text: $viewModel.host)
+            editorField(
+                label: localized("remoteWorkspace.profileEditor.field.host", fallback: "Host"),
+                placeholder: "192.168.1.100 or host.example.com",
+                text: $viewModel.host
+            )
 
-            editorField(label: "Username", placeholder: "deploy", text: $viewModel.username)
+            editorField(
+                label: localized("remoteWorkspace.profileEditor.field.username", fallback: "Username"),
+                placeholder: "deploy",
+                text: $viewModel.username
+            )
 
-            editorField(label: "Port", placeholder: "22", text: $viewModel.port)
+            editorField(
+                label: localized("remoteWorkspace.profileEditor.field.port", fallback: "Port"),
+                placeholder: "22",
+                text: $viewModel.port
+            )
                 .frame(width: 100)
 
             identityFileField
@@ -308,7 +335,7 @@ struct RemoteProfileEditor: View {
 
     private var identityFileField: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Identity File")
+            Text(localized("remoteWorkspace.profileEditor.field.identityFile", fallback: "Identity File"))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
 
@@ -317,7 +344,7 @@ struct RemoteProfileEditor: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12, design: .monospaced))
 
-                Button(action: { viewModel.pickIdentityFile() }) {
+                Button(action: { viewModel.pickIdentityFile(localizer: localizer) }) {
                     Image(systemName: "folder")
                         .font(.system(size: 11))
                         .foregroundColor(Color(nsColor: CocxyColors.subtext0))
@@ -326,7 +353,7 @@ struct RemoteProfileEditor: View {
                 .frame(width: 28, height: 28)
                 .background(Color(nsColor: CocxyColors.surface0))
                 .cornerRadius(6)
-                .accessibilityLabel("Browse for identity file")
+                .accessibilityLabel(localized("remoteWorkspace.profileEditor.identity.browse.accessibility", fallback: "Browse for identity file"))
             }
         }
     }
@@ -335,7 +362,11 @@ struct RemoteProfileEditor: View {
 
     private var groupField: some View {
         VStack(alignment: .leading, spacing: 4) {
-            editorField(label: "Group", placeholder: "production, staging, personal...", text: $viewModel.group)
+            editorField(
+                label: localized("remoteWorkspace.profileEditor.field.group", fallback: "Group"),
+                placeholder: "production, staging, personal...",
+                text: $viewModel.group
+            )
 
             if !viewModel.existingGroups.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -362,7 +393,7 @@ struct RemoteProfileEditor: View {
 
     private var jumpHostsSection: some View {
         listSection(
-            title: "Jump Hosts",
+            title: localized("remoteWorkspace.profileEditor.section.jumpHosts", fallback: "Jump Hosts"),
             count: viewModel.jumpHosts.count,
             onAdd: { viewModel.addJumpHost() }
         ) {
@@ -382,7 +413,7 @@ struct RemoteProfileEditor: View {
 
     private var portForwardsSection: some View {
         listSection(
-            title: "Port Forwards",
+            title: localized("remoteWorkspace.profileEditor.section.portForwards", fallback: "Port Forwards"),
             count: viewModel.portForwards.count,
             onAdd: { viewModel.addPortForward() }
         ) {
@@ -397,7 +428,10 @@ struct RemoteProfileEditor: View {
                     .frame(width: 100)
                     .labelsHidden()
 
-                    TextField("Local", text: $viewModel.portForwards[index].localPort)
+                    TextField(
+                        localized("remoteWorkspace.forwardType.local", fallback: "Local"),
+                        text: $viewModel.portForwards[index].localPort
+                    )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11, design: .monospaced))
                         .frame(width: 60)
@@ -407,7 +441,10 @@ struct RemoteProfileEditor: View {
                             .font(.system(size: 8))
                             .foregroundColor(Color(nsColor: CocxyColors.overlay1))
 
-                        TextField("Remote", text: $viewModel.portForwards[index].remotePort)
+                        TextField(
+                            localized("remoteWorkspace.forwardType.remote", fallback: "Remote"),
+                            text: $viewModel.portForwards[index].remotePort
+                        )
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11, design: .monospaced))
                             .frame(width: 60)
@@ -424,7 +461,7 @@ struct RemoteProfileEditor: View {
 
     private var environmentSection: some View {
         listSection(
-            title: "Environment Variables",
+            title: localized("remoteWorkspace.profileEditor.section.environment", fallback: "Environment Variables"),
             count: viewModel.environmentVariables.count,
             onAdd: { viewModel.addEnvironmentVariable() }
         ) {
@@ -453,12 +490,12 @@ struct RemoteProfileEditor: View {
 
     private var advancedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Advanced")
+            Text(localized("remoteWorkspace.profileEditor.section.advanced", fallback: "Advanced"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
 
             HStack {
-                Text("Keep Alive Interval")
+                Text(localized("remoteWorkspace.profileEditor.keepAlive", fallback: "Keep Alive Interval"))
                     .font(.system(size: 11))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -472,7 +509,7 @@ struct RemoteProfileEditor: View {
             }
 
             HStack {
-                Text("Auto Reconnect")
+                Text(localized("remoteWorkspace.profileEditor.autoReconnect", fallback: "Auto Reconnect"))
                     .font(.system(size: 11))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -490,11 +527,14 @@ struct RemoteProfileEditor: View {
         HStack {
             Spacer()
 
-            Button("Cancel") { dismiss() }
+            Button(localized("common.cancel", fallback: "Cancel")) { dismiss() }
                 .buttonStyle(.plain)
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
 
-            Button(viewModel.isEditing ? "Save" : "Create") {
+            Button(viewModel.isEditing
+                ? localized("common.save", fallback: "Save")
+                : localized("remoteWorkspace.profileEditor.create", fallback: "Create")
+            ) {
                 viewModel.save()
                 dismiss()
             }
@@ -566,6 +606,10 @@ struct RemoteProfileEditor: View {
                 .foregroundColor(Color(nsColor: CocxyColors.red).opacity(0.7))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Remove")
+        .accessibilityLabel(localized("remoteWorkspace.profileEditor.remove.accessibility", fallback: "Remove"))
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

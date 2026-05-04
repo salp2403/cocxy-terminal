@@ -81,6 +81,7 @@ extension MainWindowController {
         updateBrowserPanelLocalizers(localizer)
         updateNotebookAndWorkflowPanelLocalizers(localizer)
         gitHubPaneViewModel?.updateLocalizer(localizer)
+        updateRemoteWorkspacePanelLocalizer(localizer)
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
@@ -323,6 +324,14 @@ extension MainWindowController {
                 }
             }
         }
+    }
+
+    private func updateRemoteWorkspacePanelLocalizer(_ localizer: AppLocalizer) {
+        remoteConnectionViewModel?.updateLocalizer(localizer)
+        guard let hostingView = remoteWorkspaceHostingView as? NSHostingView<RemoteConnectionView> else { return }
+        var root = hostingView.rootView
+        root.localizer = localizer
+        hostingView.rootView = root
     }
 
     private func updateNotebookAndWorkflowPanelLocalizers(_ localizer: AppLocalizer) {

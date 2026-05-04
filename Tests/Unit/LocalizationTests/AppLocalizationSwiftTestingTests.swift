@@ -213,6 +213,25 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("codeReview.openSuggestion.title", fallback: "Agent changes are ready to review") == "Cambios del agente listos para revisar")
     }
 
+    @Test
+    func remoteWorkspaceStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("remoteWorkspace.title", fallback: "Remote Workspaces") == "Workspaces remotos")
+        #expect(spanish.string("remoteWorkspace.quickConnect.placeholder", fallback: "Quick Connect (user@host:port)") == "Conexión rápida (user@host:port)")
+        #expect(spanish.string("remoteWorkspace.empty.title", fallback: "No remote profiles yet") == "Aún no hay perfiles remotos")
+        #expect(spanish.string("remoteWorkspace.profile.action.connect", fallback: "Connect to %@") == "Conectar a %@")
+        #expect(spanish.string("remoteWorkspace.profileEditor.title.new", fallback: "New Profile") == "Nuevo perfil")
+        #expect(spanish.string("remoteWorkspace.proxy.systemWide.detail", fallback: "Routes all macOS traffic through the SSH tunnel. Requires admin password.") == "Enruta todo el tráfico de macOS por el túnel SSH. Requiere contraseña de administrador.")
+        #expect(spanish.string("remoteWorkspace.daemon.controls", fallback: "Controls") == "Controles")
+        #expect(spanish.string("remoteWorkspace.relay.activeChannels", fallback: "Active Channels") == "Canales activos")
+        #expect(spanish.string("remoteWorkspace.sftp.emptyDirectory", fallback: "Empty directory") == "Directorio vacío")
+        #expect(RemoteConnectionViewModel.SubPanel.sessions.localizedLabel(using: spanish) == "Sesiones")
+        #expect(RemoteConnectionViewModel.SubPanel.tunnels.localizedDetail(using: spanish) == "Redirigir puertos locales y remotos")
+        #expect(ForwardTypeOption.dynamic.localizedLabel(using: spanish) == "Dinámico")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

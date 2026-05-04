@@ -26,6 +26,7 @@ struct RemoteStatusIndicator: View {
 
     /// The current connection state to represent visually.
     let state: RemoteConnectionManager.ConnectionState
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Diameter of the indicator circle.
     private let diameter: CGFloat
@@ -33,9 +34,14 @@ struct RemoteStatusIndicator: View {
     /// Controls the pulse animation for transient states.
     @State private var isPulsing = false
 
-    init(state: RemoteConnectionManager.ConnectionState, diameter: CGFloat = 8) {
+    init(
+        state: RemoteConnectionManager.ConnectionState,
+        diameter: CGFloat = 8,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.state = state
         self.diameter = diameter
+        self.localizer = localizer
     }
 
     // MARK: - Body
@@ -92,17 +98,30 @@ struct RemoteStatusIndicator: View {
         switch state {
         case .connected(let latencyMs):
             if let ms = latencyMs {
-                return "Connected, latency \(ms)ms"
+                return String(
+                    format: localized("remoteWorkspace.status.connectedLatency", fallback: "Connected, latency %dms"),
+                    ms
+                )
             }
-            return "Connected"
+            return localized("remoteWorkspace.status.connected", fallback: "Connected")
         case .connecting:
-            return "Connecting"
+            return localized("remoteWorkspace.status.connecting", fallback: "Connecting")
         case .reconnecting(let attempt):
-            return "Reconnecting, attempt \(attempt)"
+            return String(
+                format: localized("remoteWorkspace.status.reconnecting", fallback: "Reconnecting, attempt %d"),
+                attempt
+            )
         case .disconnected:
-            return "Disconnected"
+            return localized("remoteWorkspace.status.disconnected", fallback: "Disconnected")
         case .failed(let reason):
-            return "Connection failed: \(reason)"
+            return String(
+                format: localized("remoteWorkspace.status.failed", fallback: "Connection failed: %@"),
+                reason
+            )
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

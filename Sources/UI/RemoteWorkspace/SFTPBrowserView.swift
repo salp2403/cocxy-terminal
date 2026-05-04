@@ -128,6 +128,7 @@ final class SFTPBrowserViewModel: ObservableObject {
 struct SFTPBrowserView: View {
 
     @ObservedObject var viewModel: SFTPBrowserViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Formatter for file modification dates.
     private static let dateFormatter: DateFormatter = {
@@ -165,7 +166,12 @@ struct SFTPBrowserView: View {
             .foregroundColor(Color(nsColor: CocxyColors.text))
             .lineLimit(1)
             .truncationMode(.head)
-            .accessibilityLabel("Current path: \(viewModel.currentPath)")
+            .accessibilityLabel(
+                String(
+                    format: localized("remoteWorkspace.sftp.currentPath.accessibility", fallback: "Current path: %@"),
+                    viewModel.currentPath
+                )
+            )
     }
 
     private var navigationButtons: some View {
@@ -177,7 +183,7 @@ struct SFTPBrowserView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Navigate to parent directory")
+            .accessibilityLabel(localized("remoteWorkspace.sftp.navigateParent.accessibility", fallback: "Navigate to parent directory"))
 
             Button(action: { viewModel.refresh() }) {
                 if viewModel.isLoading {
@@ -192,7 +198,11 @@ struct SFTPBrowserView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel(viewModel.isLoading ? "Loading" : "Refresh directory listing")
+            .accessibilityLabel(
+                viewModel.isLoading
+                    ? localized("remoteWorkspace.sftp.loading", fallback: "Loading...")
+                    : localized("remoteWorkspace.sftp.refresh.accessibility", fallback: "Refresh directory listing")
+            )
         }
     }
 
@@ -216,10 +226,11 @@ struct SFTPBrowserView: View {
         ScrollView(.vertical, showsIndicators: true) {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(viewModel.entries) { entry in
-                    FileEntryRow(
-                        entry: entry,
-                        dateFormatter: Self.dateFormatter
-                    )
+                            FileEntryRow(
+                                entry: entry,
+                                dateFormatter: Self.dateFormatter,
+                                localizer: localizer
+                            )
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
                         if entry.isDirectory {
@@ -242,7 +253,7 @@ struct SFTPBrowserView: View {
             Spacer()
             ProgressView()
                 .controlSize(.small)
-            Text("Loading...")
+            Text(localized("remoteWorkspace.sftp.loading", fallback: "Loading..."))
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
             Spacer()
@@ -256,7 +267,7 @@ struct SFTPBrowserView: View {
             Image(systemName: "folder")
                 .font(.system(size: 28))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("Empty directory")
+            Text(localized("remoteWorkspace.sftp.emptyDirectory", fallback: "Empty directory"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
             Spacer()
@@ -271,7 +282,7 @@ struct SFTPBrowserView: View {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 28))
                 .foregroundColor(Color(nsColor: CocxyColors.red))
-            Text("Failed to list directory")
+            Text(localized("remoteWorkspace.sftp.failedToList", fallback: "Failed to list directory"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
             Text(message)
@@ -280,7 +291,7 @@ struct SFTPBrowserView: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
 
-            Button("Retry") { viewModel.refresh() }
+            Button(localized("common.retry", fallback: "Retry")) { viewModel.refresh() }
                 .buttonStyle(.borderedProminent)
                 .tint(Color(nsColor: CocxyColors.blue))
                 .controlSize(.small)
@@ -288,6 +299,10 @@ struct SFTPBrowserView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
@@ -298,6 +313,7 @@ struct FileEntryRow: View {
 
     let entry: RemoteFileEntry
     let dateFormatter: DateFormatter
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         HStack(spacing: 8) {
@@ -325,7 +341,16 @@ struct FileEntryRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.isDirectory ? "Folder" : "File"): \(entry.name), \(formattedSize)")
+        .accessibilityLabel(
+            String(
+                format: localized("remoteWorkspace.sftp.entry.accessibility", fallback: "%@: %@, %@"),
+                entry.isDirectory
+                    ? localized("remoteWorkspace.sftp.entry.folder", fallback: "Folder")
+                    : localized("remoteWorkspace.sftp.entry.file", fallback: "File"),
+                entry.name,
+                formattedSize
+            )
+        )
     }
 
     // MARK: - Icon
@@ -353,5 +378,9 @@ struct FileEntryRow: View {
         }
         let megabytes = kilobytes / 1024.0
         return String(format: "%.1f MB", megabytes)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

@@ -39,6 +39,7 @@ struct PortForwardingView: View {
     /// Cancels the real SSH port forward via ControlMaster.
     /// Called before the tunnel is removed from the manager.
     var onCancelForward: ((RemoteConnectionProfile.PortForward, UUID) -> Void)?
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Whether the inline "add tunnel" form is expanded.
     @State private var isAddFormVisible = false
@@ -64,13 +65,18 @@ struct PortForwardingView: View {
 
     private var sectionHeader: some View {
         HStack {
-            Text("Port Forwards")
+            Text(localized("remoteWorkspace.portForward.title", fallback: "Port Forwards"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
 
             Spacer()
 
-            Text("\(tunnels.count) active")
+            Text(
+                String(
+                    format: localized("remoteWorkspace.portForward.activeCount", fallback: "%d active"),
+                    tunnels.count
+                )
+            )
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
         }
@@ -97,7 +103,8 @@ struct PortForwardingView: View {
                                 onRemove: {
                                     onCancelForward?(tunnel.forward, profileID)
                                     tunnelManager.removeTunnel(id: tunnel.id)
-                                }
+                                },
+                                localizer: localizer
                             )
                             Divider()
                                 .padding(.leading, 40)
@@ -116,10 +123,15 @@ struct PortForwardingView: View {
             Image(systemName: "arrow.left.arrow.right")
                 .font(.system(size: 24))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No active tunnels")
+            Text(localized("remoteWorkspace.portForward.empty.title", fallback: "No active tunnels"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Add a port forward to tunnel\ntraffic through this connection.")
+            Text(
+                localized(
+                    "remoteWorkspace.portForward.empty.message",
+                    fallback: "Add a port forward to tunnel\ntraffic through this connection."
+                )
+            )
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -147,7 +159,7 @@ struct PortForwardingView: View {
             HStack(spacing: 4) {
                 Image(systemName: "plus.circle")
                     .font(.system(size: 11))
-                Text("Add Tunnel")
+                Text(localized("remoteWorkspace.portForward.addTunnel", fallback: "Add Tunnel"))
                     .font(.system(size: 11, weight: .medium))
             }
             .foregroundColor(Color(nsColor: CocxyColors.blue))
@@ -155,14 +167,14 @@ struct PortForwardingView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .accessibilityLabel("Add port forward tunnel")
+        .accessibilityLabel(localized("remoteWorkspace.portForward.addTunnel.accessibility", fallback: "Add port forward tunnel"))
     }
 
     private var addTunnelForm: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Type", selection: $newForwardType) {
+            Picker(localized("remoteWorkspace.portForward.type", fallback: "Type"), selection: $newForwardType) {
                 ForEach(ForwardTypeOption.allCases) { option in
-                    Text(option.label).tag(option)
+                    Text(option.localizedLabel(using: localizer)).tag(option)
                 }
             }
             .pickerStyle(.segmented)
@@ -170,7 +182,7 @@ struct PortForwardingView: View {
 
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Local Port")
+                    Text(localized("remoteWorkspace.portForward.localPort", fallback: "Local Port"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.subtext0))
                     TextField("8080", text: $newLocalPort)
@@ -181,7 +193,7 @@ struct PortForwardingView: View {
 
                 if newForwardType != .dynamic {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Remote Port")
+                        Text(localized("remoteWorkspace.portForward.remotePort", fallback: "Remote Port"))
                             .font(.system(size: 10))
                             .foregroundColor(Color(nsColor: CocxyColors.subtext0))
                         TextField("8080", text: $newRemotePort)
@@ -195,7 +207,7 @@ struct PortForwardingView: View {
             HStack {
                 Spacer()
 
-                Button("Cancel") {
+                Button(localized("common.cancel", fallback: "Cancel")) {
                     withAnimation(.easeOut(duration: 0.15)) {
                         isAddFormVisible = false
                         resetAddForm()
@@ -205,7 +217,7 @@ struct PortForwardingView: View {
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
 
-                Button("Add") { addTunnel() }
+                Button(localized("common.add", fallback: "Add")) { addTunnel() }
                     .buttonStyle(.borderedProminent)
                     .tint(Color(nsColor: CocxyColors.blue))
                     .font(.system(size: 11))
@@ -266,6 +278,10 @@ struct PortForwardingView: View {
         newLocalPort = ""
         newRemotePort = ""
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 // MARK: - Forward Type Option
@@ -285,6 +301,17 @@ enum ForwardTypeOption: String, CaseIterable, Identifiable {
         case .dynamic: return "Dynamic"
         }
     }
+
+    func localizedLabel(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .local:
+            return localizer.string("remoteWorkspace.forwardType.local", fallback: label)
+        case .remote:
+            return localizer.string("remoteWorkspace.forwardType.remote", fallback: label)
+        case .dynamic:
+            return localizer.string("remoteWorkspace.forwardType.dynamic", fallback: label)
+        }
+    }
 }
 
 // MARK: - Tunnel Row
@@ -294,6 +321,7 @@ struct TunnelRow: View {
 
     let tunnel: ActiveTunnel
     let onRemove: () -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var isHovered = false
 
@@ -315,7 +343,7 @@ struct TunnelRow: View {
                 }
                 .buttonStyle(.plain)
                 .transition(.opacity)
-                .accessibilityLabel("Remove tunnel")
+                .accessibilityLabel(localized("remoteWorkspace.portForward.remove.accessibility", fallback: "Remove tunnel"))
             }
         }
         .padding(.horizontal, 12)
@@ -409,11 +437,26 @@ struct TunnelRow: View {
     private var accessibilityDescription: String {
         switch tunnel.forward {
         case let .local(localPort, remotePort, _):
-            return "Local forward, port \(localPort) to \(remotePort)"
+            return String(
+                format: localized("remoteWorkspace.portForward.accessibility.local", fallback: "Local forward, port %d to %d"),
+                localPort,
+                remotePort
+            )
         case let .remote(remotePort, localPort, _):
-            return "Remote forward, port \(remotePort) to \(localPort)"
+            return String(
+                format: localized("remoteWorkspace.portForward.accessibility.remote", fallback: "Remote forward, port %d to %d"),
+                remotePort,
+                localPort
+            )
         case let .dynamic(localPort):
-            return "Dynamic SOCKS proxy on port \(localPort)"
+            return String(
+                format: localized("remoteWorkspace.portForward.accessibility.dynamic", fallback: "Dynamic SOCKS proxy on port %d"),
+                localPort
+            )
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

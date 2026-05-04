@@ -2515,9 +2515,11 @@ extension MainWindowController {
         var view = RemoteConnectionView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
+            localizer: appLocalizer(),
             sshKeyManager: sshKeyManager,
             sftpExecutor: SystemSFTPExecutor()
         )
+        viewModel.updateLocalizer(appLocalizer())
         view.vibrancyAppearanceOverride = override
         hostingView.rootView = view
     }

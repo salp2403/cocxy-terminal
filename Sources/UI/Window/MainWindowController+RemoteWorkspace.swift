@@ -41,17 +41,20 @@ extension MainWindowController {
             remoteConnectionViewModel = RemoteConnectionViewModel(
                 profileStore: profileStore,
                 connectionManager: connectionManager,
-                tunnelManager: tunnelManager
+                tunnelManager: tunnelManager,
+                localizer: appLocalizer()
             )
             remoteConnectionViewModel?.loadProfiles()
         }
 
         guard let viewModel = remoteConnectionViewModel else { return }
+        viewModel.updateLocalizer(appLocalizer())
 
         remoteWorkspaceHostingView?.removeFromSuperview()
         var swiftUIView = RemoteConnectionView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
+            localizer: appLocalizer(),
             sshKeyManager: sshKeyManager,
             sftpExecutor: SystemSFTPExecutor()
         )

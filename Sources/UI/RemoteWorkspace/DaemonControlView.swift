@@ -15,6 +15,7 @@ struct DaemonControlView: View {
     let profileID: UUID
     @ObservedObject var viewModel: RemoteConnectionViewModel
     @ObservedObject var daemonManager: DaemonManagerImpl
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var errorMessage: String?
     @State private var isDeploying = false
@@ -59,7 +60,7 @@ struct DaemonControlView: View {
                 Image(systemName: "server.rack")
                     .font(.system(size: 24))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-                Text("Connect to the profile first to manage the daemon")
+                Text(localized("remoteWorkspace.daemon.connectFirst", fallback: "Connect to the profile first to manage the daemon"))
                     .font(.system(size: 11))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 Spacer()
@@ -94,14 +95,18 @@ struct DaemonControlView: View {
 
     private var stateText: String {
         switch daemonManager.state {
-        case .notDeployed: return "Not Deployed"
-        case .deploying: return "Deploying..."
+        case .notDeployed: return localized("remoteWorkspace.daemon.status.notDeployed", fallback: "Not Deployed")
+        case .deploying: return localized("remoteWorkspace.daemon.status.deploying", fallback: "Deploying...")
         case .running(let version, let uptime):
             let uptimeStr = formatUptime(uptime)
-            return "Running v\(version) (\(uptimeStr))"
-        case .stopped: return "Stopped"
-        case .upgrading: return "Upgrading..."
-        case .unreachable: return "Unreachable"
+            return String(
+                format: localized("remoteWorkspace.daemon.status.running", fallback: "Running v%@ (%@)"),
+                version,
+                uptimeStr
+            )
+        case .stopped: return localized("remoteWorkspace.daemon.status.stopped", fallback: "Stopped")
+        case .upgrading: return localized("remoteWorkspace.daemon.status.upgrading", fallback: "Upgrading...")
+        case .unreachable: return localized("remoteWorkspace.daemon.status.unreachable", fallback: "Unreachable")
         }
     }
 
@@ -109,21 +114,21 @@ struct DaemonControlView: View {
 
     private var controlSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Controls")
+            Text(localized("remoteWorkspace.daemon.controls", fallback: "Controls"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
 
             HStack(spacing: 8) {
                 switch daemonManager.state {
                 case .notDeployed, .stopped, .unreachable:
-                    actionButton("Deploy & Start", icon: "arrow.up.circle", action: deployDaemon)
+                    actionButton(localized("remoteWorkspace.daemon.deployStart", fallback: "Deploy & Start"), icon: "arrow.up.circle", action: deployDaemon)
                 case .running:
-                    actionButton("Stop", icon: "stop.circle", action: stopDaemon)
-                    actionButton("Upgrade", icon: "arrow.triangle.2.circlepath", action: upgradeDaemon)
+                    actionButton(localized("remoteWorkspace.daemon.stop", fallback: "Stop"), icon: "stop.circle", action: stopDaemon)
+                    actionButton(localized("remoteWorkspace.daemon.upgrade", fallback: "Upgrade"), icon: "arrow.triangle.2.circlepath", action: upgradeDaemon)
                 case .deploying, .upgrading:
                     ProgressView()
                         .controlSize(.small)
-                    Text("Please wait...")
+                    Text(localized("remoteWorkspace.daemon.pleaseWait", fallback: "Please wait..."))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 }
@@ -150,7 +155,7 @@ struct DaemonControlView: View {
     private var sessionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Remote Sessions")
+                Text(localized("remoteWorkspace.daemon.remoteSessions", fallback: "Remote Sessions"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -168,7 +173,7 @@ struct DaemonControlView: View {
             if isDaemonRunning {
                 // Create session form.
                 HStack(spacing: 4) {
-                    TextField("Session name", text: $newSessionTitle)
+                    TextField(localized("remoteWorkspace.sessions.name.placeholder", fallback: "Session name"), text: $newSessionTitle)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 10))
                         .frame(maxWidth: 120)
@@ -185,7 +190,7 @@ struct DaemonControlView: View {
                     ProgressView()
                         .controlSize(.small)
                 } else if sessions.isEmpty {
-                    Text("No active sessions")
+                    Text(localized("remoteWorkspace.sessions.empty.title", fallback: "No active sessions"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 } else {
@@ -194,7 +199,7 @@ struct DaemonControlView: View {
                     }
                 }
             } else {
-                Text("Deploy the daemon to manage persistent sessions.")
+                Text(localized("remoteWorkspace.daemon.deploySessions", fallback: "Deploy the daemon to manage persistent sessions."))
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
             }
@@ -209,7 +214,7 @@ struct DaemonControlView: View {
             Text(session.title)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
-            Text("PID \(session.pid)")
+            Text(String(format: localized("remoteWorkspace.daemon.pid", fallback: "PID %d"), session.pid))
                 .font(.system(size: 9))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
             Spacer()
@@ -227,7 +232,7 @@ struct DaemonControlView: View {
     private var forwardsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Persistent Forwards")
+                Text(localized("remoteWorkspace.daemon.persistentForwards", fallback: "Persistent Forwards"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -257,7 +262,7 @@ struct DaemonControlView: View {
                 }
 
                 if forwards.isEmpty {
-                    Text("No persistent forwards")
+                    Text(localized("remoteWorkspace.daemon.noPersistentForwards", fallback: "No persistent forwards"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 } else {
@@ -266,7 +271,7 @@ struct DaemonControlView: View {
                     }
                 }
             } else {
-                Text("Deploy the daemon to manage persistent forwards.")
+                Text(localized("remoteWorkspace.daemon.deployForwards", fallback: "Deploy the daemon to manage persistent forwards."))
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
             }
@@ -302,7 +307,7 @@ struct DaemonControlView: View {
     private var syncSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("File Sync Watch")
+                Text(localized("remoteWorkspace.daemon.fileSyncWatch", fallback: "File Sync Watch"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -318,7 +323,7 @@ struct DaemonControlView: View {
 
             if isDaemonRunning {
                 HStack(spacing: 4) {
-                    TextField("Remote path to watch", text: $newSyncPath)
+                    TextField(localized("remoteWorkspace.daemon.syncPath.placeholder", fallback: "Remote path to watch"), text: $newSyncPath)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 10))
                         .frame(maxWidth: 180)
@@ -332,7 +337,7 @@ struct DaemonControlView: View {
                 }
 
                 if syncChanges.isEmpty {
-                    Text("No recent changes detected")
+                    Text(localized("remoteWorkspace.daemon.noRecentChanges", fallback: "No recent changes detected"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 } else {
@@ -341,7 +346,7 @@ struct DaemonControlView: View {
                     }
                 }
             } else {
-                Text("Deploy the daemon to use file sync.")
+                Text(localized("remoteWorkspace.daemon.deploySync", fallback: "Deploy the daemon to use file sync."))
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
             }
@@ -554,5 +559,9 @@ struct DaemonControlView: View {
             return "\(hours)h \(minutes)m"
         }
         return "\(minutes)m"
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
