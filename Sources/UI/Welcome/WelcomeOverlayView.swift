@@ -51,6 +51,8 @@ struct WelcomeOverlayView: View {
     /// Callback invoked when the user dismisses the overlay.
     let onDismiss: () -> Void
 
+    private let localizer: AppLocalizer
+
     /// Fixed overlay width.
     private static let overlayWidth: CGFloat = 540
 
@@ -59,6 +61,14 @@ struct WelcomeOverlayView: View {
 
     /// Controls the entrance animation state.
     @State private var isVisible = false
+
+    init(
+        onDismiss: @escaping () -> Void,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
+        self.onDismiss = onDismiss
+        self.localizer = localizer
+    }
 
     // MARK: - Body
 
@@ -87,7 +97,7 @@ struct WelcomeOverlayView: View {
                 )
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Welcome to Cocxy Terminal")
+        .accessibilityLabel(localized("welcome.accessibilityLabel", fallback: "Welcome to Cocxy Terminal"))
         .onAppear { isVisible = true }
     }
 
@@ -139,7 +149,7 @@ struct WelcomeOverlayView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Cocxy Terminal")
+                Text(localized("welcome.title", fallback: "Cocxy Terminal"))
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.text))
 
@@ -148,7 +158,7 @@ struct WelcomeOverlayView: View {
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
             }
 
-            Text("Agent-aware terminal for macOS")
+            Text(localized("welcome.subtitle", fallback: "Agent-aware terminal for macOS"))
                 .font(.system(size: 14))
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
         }
@@ -158,7 +168,7 @@ struct WelcomeOverlayView: View {
 
     private var highlightsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("HIGHLIGHTS")
+            sectionTitle(localized("welcome.highlights.title", fallback: "HIGHLIGHTS"))
             sectionDivider
 
             let columns = [
@@ -170,26 +180,38 @@ struct WelcomeOverlayView: View {
                 highlightCard(
                     icon: "bolt.fill",
                     color: CocxyColors.blue,
-                    title: "Agent Detection",
-                    subtitle: "Auto-detects Claude, Codex, Aider and more"
+                    title: localized("welcome.highlight.agentDetection.title", fallback: "Agent Detection"),
+                    subtitle: localized(
+                        "welcome.highlight.agentDetection.subtitle",
+                        fallback: "Auto-detects local coding agents"
+                    )
                 )
                 highlightCard(
                     icon: "rectangle.split.2x1",
                     color: CocxyColors.green,
-                    title: "Subagent Panels",
-                    subtitle: "Live split panels for each subagent"
+                    title: localized("welcome.highlight.subagentPanels.title", fallback: "Subagent Panels"),
+                    subtitle: localized(
+                        "welcome.highlight.subagentPanels.subtitle",
+                        fallback: "Live split panels for each subagent"
+                    )
                 )
                 highlightCard(
                     icon: "chart.bar.fill",
                     color: CocxyColors.mauve,
-                    title: "Dashboard",
-                    subtitle: "Tools, errors, files and activity at a glance"
+                    title: localized("welcome.highlight.dashboard.title", fallback: "Dashboard"),
+                    subtitle: localized(
+                        "welcome.highlight.dashboard.subtitle",
+                        fallback: "Tools, errors, files and activity at a glance"
+                    )
                 )
                 highlightCard(
                     icon: "arrow.triangle.branch",
                     color: CocxyColors.teal,
-                    title: "Smart Routing",
-                    subtitle: "Switch between agents instantly"
+                    title: localized("welcome.highlight.smartRouting.title", fallback: "Smart Routing"),
+                    subtitle: localized(
+                        "welcome.highlight.smartRouting.subtitle",
+                        fallback: "Switch between agent sessions instantly"
+                    )
                 )
             }
         }
@@ -199,21 +221,21 @@ struct WelcomeOverlayView: View {
 
     private var keyboardShortcutsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("KEYBOARD SHORTCUTS")
+            sectionTitle(localized("welcome.shortcuts.title", fallback: "KEYBOARD SHORTCUTS"))
             sectionDivider
 
             VStack(alignment: .leading, spacing: 4) {
-                shortcutRow("Cmd+T", "New Tab")
-                shortcutRow("Cmd+W", "Close Tab")
-                shortcutRow("Cmd+D", "Split Side by Side")
-                shortcutRow("Cmd+Shift+D", "Split Stacked")
-                shortcutRow("Cmd+Shift+P", "Command Palette")
-                shortcutRow("Cmd+Option+A", "Agent Dashboard")
-                shortcutRow("Cmd+Shift+T", "Agent Timeline")
-                shortcutRow("Cmd+F", "Search")
-                shortcutRow("Cmd+`", "Quick Terminal")
-                shortcutRow("Cmd+1-9", "Switch Tab")
-                shortcutRow("Esc", "Dismiss Overlay")
+                shortcutRow("Cmd+T", localized("welcome.shortcut.newTab", fallback: "New Tab"))
+                shortcutRow("Cmd+W", localized("welcome.shortcut.closeTab", fallback: "Close Tab"))
+                shortcutRow("Cmd+D", localized("welcome.shortcut.splitSideBySide", fallback: "Split Side by Side"))
+                shortcutRow("Cmd+Shift+D", localized("welcome.shortcut.splitStacked", fallback: "Split Stacked"))
+                shortcutRow("Cmd+Shift+P", localized("welcome.shortcut.commandPalette", fallback: "Command Palette"))
+                shortcutRow("Cmd+Option+A", localized("welcome.shortcut.agentDashboard", fallback: "Agent Dashboard"))
+                shortcutRow("Cmd+Shift+T", localized("welcome.shortcut.agentTimeline", fallback: "Agent Timeline"))
+                shortcutRow("Cmd+F", localized("welcome.shortcut.search", fallback: "Search"))
+                shortcutRow("Cmd+`", localized("welcome.shortcut.quickTerminal", fallback: "Quick Terminal"))
+                shortcutRow("Cmd+1-9", localized("welcome.shortcut.switchTab", fallback: "Switch Tab"))
+                shortcutRow("Esc", localized("welcome.shortcut.dismissOverlay", fallback: "Dismiss Overlay"))
             }
         }
     }
@@ -222,7 +244,7 @@ struct WelcomeOverlayView: View {
 
     private var dismissButton: some View {
         Button(action: onDismiss) {
-            Text("Get Started")
+            Text(localized("welcome.getStarted", fallback: "Get Started"))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.crust))
                 .padding(.horizontal, 28)
@@ -231,7 +253,7 @@ struct WelcomeOverlayView: View {
                 .cornerRadius(8)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Dismiss welcome overlay")
+        .accessibilityLabel(localized("welcome.dismiss.accessibilityLabel", fallback: "Dismiss welcome overlay"))
     }
 
     // MARK: - Reusable Components
@@ -301,5 +323,9 @@ struct WelcomeOverlayView: View {
             forInfoDictionaryKey: "CFBundleShortVersionString"
         ) as? String ?? "dev"
         return "v\(version)"
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

@@ -13,6 +13,48 @@
 "commandPalette.footer.action.singular" = "action";
 "commandPalette.footer.action.plural" = "actions";
 
+"common.ok" = "OK";
+
+"welcome.accessibilityLabel" = "Welcome to Cocxy Terminal";
+"welcome.title" = "Cocxy Terminal";
+"welcome.subtitle" = "Agent-aware terminal for macOS";
+"welcome.highlights.title" = "HIGHLIGHTS";
+"welcome.highlight.agentDetection.title" = "Agent Detection";
+"welcome.highlight.agentDetection.subtitle" = "Auto-detects local coding agents";
+"welcome.highlight.subagentPanels.title" = "Subagent Panels";
+"welcome.highlight.subagentPanels.subtitle" = "Live split panels for each subagent";
+"welcome.highlight.dashboard.title" = "Dashboard";
+"welcome.highlight.dashboard.subtitle" = "Tools, errors, files and activity at a glance";
+"welcome.highlight.smartRouting.title" = "Smart Routing";
+"welcome.highlight.smartRouting.subtitle" = "Switch between agent sessions instantly";
+"welcome.shortcuts.title" = "KEYBOARD SHORTCUTS";
+"welcome.shortcut.newTab" = "New Tab";
+"welcome.shortcut.closeTab" = "Close Tab";
+"welcome.shortcut.splitSideBySide" = "Split Side by Side";
+"welcome.shortcut.splitStacked" = "Split Stacked";
+"welcome.shortcut.commandPalette" = "Command Palette";
+"welcome.shortcut.agentDashboard" = "Agent Dashboard";
+"welcome.shortcut.agentTimeline" = "Agent Timeline";
+"welcome.shortcut.search" = "Search";
+"welcome.shortcut.quickTerminal" = "Quick Terminal";
+"welcome.shortcut.switchTab" = "Switch Tab";
+"welcome.shortcut.dismissOverlay" = "Dismiss Overlay";
+"welcome.getStarted" = "Get Started";
+"welcome.dismiss.accessibilityLabel" = "Dismiss welcome overlay";
+
+"onboarding.accessibilityLabel" = "Cocxy onboarding";
+"onboarding.title" = "Cocxy Setup";
+"onboarding.subtitle" = "Choose local defaults for this Mac";
+"onboarding.theme" = "Theme";
+"onboarding.enableLanguageServers" = "Enable language servers";
+"onboarding.agentAutoMode" = "Agent auto mode";
+"onboarding.createStarterTabConfig" = "Create starter tab config";
+"onboarding.createPrimerSkill" = "Create primer skill";
+"onboarding.createFirstWorkflow" = "Create first workflow";
+"onboarding.skip" = "Skip";
+"onboarding.apply" = "Apply";
+"onboarding.error.apply" = "Unable to apply onboarding settings.";
+
 "command.category.tabs" = "Tabs";
 "command.category.splits" = "Splits";
 "command.category.navigation" = "Navigation";

@@ -2141,7 +2141,8 @@ extension MainWindowController {
         dismissOnboarding()
         welcomeHostingView?.removeFromSuperview()
         let swiftUIView = WelcomeOverlayView(
-            onDismiss: { [weak self] in self?.dismissWelcome() }
+            onDismiss: { [weak self] in self?.dismissWelcome() },
+            localizer: appLocalizer()
         )
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.frame = overlayContainer.bounds
@@ -2190,7 +2191,8 @@ extension MainWindowController {
                     (NSApp.delegate as? AppDelegate)?.skipGuidedOnboarding()
                     self?.dismissOnboarding()
                 }
-            }
+            },
+            localizer: appLocalizer()
         )
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.frame = overlayContainer.bounds
@@ -2218,9 +2220,13 @@ extension MainWindowController {
 
     private func showOnboardingError() {
         let alert = NSAlert()
+        let localizer = appLocalizer()
         alert.alertStyle = .warning
-        alert.messageText = "Unable to apply onboarding settings."
-        alert.addButton(withTitle: "OK")
+        alert.messageText = localizer.string(
+            "onboarding.error.apply",
+            fallback: "Unable to apply onboarding settings."
+        )
+        alert.addButton(withTitle: localizer.string("common.ok", fallback: "OK"))
         alert.runModal()
     }
 

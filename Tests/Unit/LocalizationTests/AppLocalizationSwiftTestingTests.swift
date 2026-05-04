@@ -71,6 +71,21 @@ struct AppLocalizationSwiftTestingTests {
         #expect(strings.actionCountLabel(for: 2) == "2 acciones")
     }
 
+    @Test
+    func localizerLoadsWelcomeAndOnboardingResources() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("welcome.subtitle", fallback: "Agent-aware terminal for macOS") == "Terminal para macOS con conciencia de agentes")
+        #expect(spanish.string("welcome.getStarted", fallback: "Get Started") == "Comenzar")
+        #expect(spanish.string("welcome.shortcut.commandPalette", fallback: "Command Palette") == "Paleta de comandos")
+        #expect(spanish.string("onboarding.title", fallback: "Cocxy Setup") == "Configuración de Cocxy")
+        #expect(spanish.string("onboarding.subtitle", fallback: "Choose local defaults for this Mac") == "Elige valores predeterminados locales para esta Mac")
+        #expect(spanish.string("onboarding.enableLanguageServers", fallback: "Enable language servers") == "Activar servidores de lenguaje")
+        #expect(spanish.string("onboarding.apply", fallback: "Apply") == "Aplicar")
+        #expect(spanish.string("onboarding.error.apply", fallback: "Unable to apply onboarding settings.") == "No se pudieron aplicar los ajustes de onboarding.")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

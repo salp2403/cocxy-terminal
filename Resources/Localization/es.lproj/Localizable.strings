@@ -13,6 +13,48 @@
 "commandPalette.footer.action.singular" = "acción";
 "commandPalette.footer.action.plural" = "acciones";
 
+"common.ok" = "OK";
+
+"welcome.accessibilityLabel" = "Bienvenida a Cocxy Terminal";
+"welcome.title" = "Cocxy Terminal";
+"welcome.subtitle" = "Terminal para macOS con conciencia de agentes";
+"welcome.highlights.title" = "DESTACADOS";
+"welcome.highlight.agentDetection.title" = "Detección de agentes";
+"welcome.highlight.agentDetection.subtitle" = "Detecta agentes de código locales";
+"welcome.highlight.subagentPanels.title" = "Paneles de subagentes";
+"welcome.highlight.subagentPanels.subtitle" = "Paneles divididos en vivo para cada subagente";
+"welcome.highlight.dashboard.title" = "Dashboard";
+"welcome.highlight.dashboard.subtitle" = "Herramientas, errores, archivos y actividad de un vistazo";
+"welcome.highlight.smartRouting.title" = "Ruteo inteligente";
+"welcome.highlight.smartRouting.subtitle" = "Cambia entre sesiones de agentes al instante";
+"welcome.shortcuts.title" = "ATAJOS DE TECLADO";
+"welcome.shortcut.newTab" = "Nueva pestaña";
+"welcome.shortcut.closeTab" = "Cerrar pestaña";
+"welcome.shortcut.splitSideBySide" = "Dividir lado a lado";
+"welcome.shortcut.splitStacked" = "Dividir apilado";
+"welcome.shortcut.commandPalette" = "Paleta de comandos";
+"welcome.shortcut.agentDashboard" = "Dashboard de agentes";
+"welcome.shortcut.agentTimeline" = "Línea de tiempo de agentes";
+"welcome.shortcut.search" = "Buscar";
+"welcome.shortcut.quickTerminal" = "Terminal rápido";
+"welcome.shortcut.switchTab" = "Cambiar pestaña";
+"welcome.shortcut.dismissOverlay" = "Cerrar overlay";
+"welcome.getStarted" = "Comenzar";
+"welcome.dismiss.accessibilityLabel" = "Cerrar bienvenida";
+
+"onboarding.accessibilityLabel" = "Onboarding de Cocxy";
+"onboarding.title" = "Configuración de Cocxy";
+"onboarding.subtitle" = "Elige valores predeterminados locales para esta Mac";
+"onboarding.theme" = "Tema";
+"onboarding.enableLanguageServers" = "Activar servidores de lenguaje";
+"onboarding.agentAutoMode" = "Modo agente automático";
+"onboarding.createStarterTabConfig" = "Crear configuración inicial de pestaña";
+"onboarding.createPrimerSkill" = "Crear skill inicial";
+"onboarding.createFirstWorkflow" = "Crear primer workflow";
+"onboarding.skip" = "Omitir";
+"onboarding.apply" = "Aplicar";
+"onboarding.error.apply" = "No se pudieron aplicar los ajustes de onboarding.";
+
 "command.category.tabs" = "Pestañas";
 "command.category.splits" = "Paneles";
 "command.category.navigation" = "Navegación";
