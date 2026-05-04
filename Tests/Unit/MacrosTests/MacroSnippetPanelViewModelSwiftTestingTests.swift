@@ -29,7 +29,14 @@ struct MacroSnippetPanelViewModelSwiftTestingTests {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let manager = SnippetManager(store: SnippetStore(fileURL: root.appendingPathComponent("snippets.json")))
-        let viewModel = MacroSnippetPanelViewModel(snippetManager: manager)
+        var replayedPlans: [MacroPlaybackPlan] = []
+        let viewModel = MacroSnippetPanelViewModel(
+            snippetManager: manager,
+            macroPlaybackHandler: { plan in
+                replayedPlans.append(plan)
+                return plan.events.count
+            }
+        )
 
         try viewModel.startRecordingMacro(named: "Build")
         try viewModel.recordTextEvent("swift build")
@@ -46,6 +53,15 @@ struct MacroSnippetPanelViewModelSwiftTestingTests {
             "text: swift build",
             "key: return",
         ])
+        #expect(replayedPlans.map(\.events) == [
+            [
+                .text("swift build"),
+                .key("return"),
+                .text("swift build"),
+                .key("return"),
+            ],
+        ])
+        #expect(viewModel.statusText == "Replayed 4 events")
 
         viewModel.snippetName = "Swift Function"
         viewModel.snippetTrigger = "fn"
@@ -59,20 +75,28 @@ struct MacroSnippetPanelViewModelSwiftTestingTests {
 
     @Test("renders aliases and keeps clipboard history local and searchable")
     func rendersAliasesAndKeepsClipboardHistoryLocalAndSearchable() throws {
-        let viewModel = MacroSnippetPanelViewModel()
+        var terminalText: [String] = []
+        let viewModel = MacroSnippetPanelViewModel(
+            terminalTextHandler: { text in
+                terminalText.append(text)
+            }
+        )
 
         viewModel.aliasName = "gs"
         viewModel.aliasValue = "git status"
         try viewModel.saveAliasDraft()
         viewModel.selectedShell = .zsh
         try viewModel.renderAliases()
+        try viewModel.applyAliasesToTerminal()
         viewModel.clipboardDraft = "alpha"
         viewModel.recordClipboardDraft()
         viewModel.clipboardDraft = "beta"
         viewModel.recordClipboardDraft()
         viewModel.clipboardQuery = "alp"
 
+        #expect(viewModel.renderedAliasBlock.contains("# Cocxy aliases begin"))
         #expect(viewModel.renderedAliasBlock.contains("alias gs='git status'"))
+        #expect(terminalText == ["alias gs='git status'\n"])
         #expect(viewModel.filteredClipboardItems.map(\.text) == ["alpha"])
         #expect(viewModel.statusText == "2 clipboard items")
     }

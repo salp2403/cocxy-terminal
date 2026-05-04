@@ -60,6 +60,40 @@ struct MacroSnippetSwiftTestingTests {
         ])
     }
 
+    @Test("terminal input replayer maps macro events to PTY text")
+    @MainActor
+    func terminalInputReplayerMapsMacroEventsToPTYText() throws {
+        let plan = MacroPlaybackPlan(
+            macroID: "build",
+            events: [
+                .text("swift build"),
+                .key("return"),
+                .command("git status"),
+                .key("ctrl-c"),
+            ]
+        )
+        var sentText: [String] = []
+        let replayer = MacroTerminalInputReplayer { text in
+            sentText.append(text)
+        }
+
+        let replayedCount = try replayer.replay(plan)
+
+        #expect(replayedCount == 4)
+        #expect(sentText == ["swift build", "\r", "git status\r", "\u{03}"])
+    }
+
+    @Test("terminal input replayer rejects unsupported keys")
+    @MainActor
+    func terminalInputReplayerRejectsUnsupportedKeys() throws {
+        let plan = MacroPlaybackPlan(macroID: "bad", events: [.key("hyper-space")])
+        let replayer = MacroTerminalInputReplayer { _ in }
+
+        #expect(throws: MacroTerminalInputReplayError.unsupportedKey("hyper-space")) {
+            _ = try replayer.replay(plan)
+        }
+    }
+
     @Test("player rejects empty macros and invalid repeat counts")
     func playerRejectsEmptyMacrosAndInvalidRepeatCounts() throws {
         let empty = TerminalMacro(id: "empty", name: "Empty", events: [])

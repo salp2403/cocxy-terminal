@@ -1623,6 +1623,30 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testMacroPlaybackPlanSendsEventsToTargetTerminalSurface() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+        guard let tabID = controller.tabManager.activeTabID,
+              let surfaceID = controller.tabSurfaceMap[tabID] else {
+            XCTFail("Expected active terminal surface")
+            return
+        }
+        let plan = MacroPlaybackPlan(
+            macroID: "build",
+            events: [.text("pwd"), .key("return"), .command("git status")]
+        )
+
+        let replayedCount = try controller.replayMacroPlaybackPlan(plan, preferredSurfaceID: surfaceID)
+
+        XCTAssertEqual(replayedCount, 3)
+        XCTAssertEqual(bridge.sentTexts.map(\.surface), [surfaceID, surfaceID, surfaceID])
+        XCTAssertEqual(bridge.sentTexts.map(\.text), ["pwd", "\r", "git status\r"])
+    }
+
     func testToolbarSplitButtonsMapToVisualOrientation() {
         let sideBySideController = MainWindowController(bridge: MockTerminalEngine())
         sideBySideController.showWindow(nil)

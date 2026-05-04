@@ -279,6 +279,14 @@ struct MacroSnippetPanelView: View {
                     } label: {
                         Label("Render", systemImage: "doc.text")
                     }
+
+                    Button {
+                        viewModel.perform {
+                            try viewModel.applyAliasesToTerminal()
+                        }
+                    } label: {
+                        Label("Apply", systemImage: "terminal")
+                    }
                 }
                 .controlSize(.small)
 

@@ -160,6 +160,34 @@ extension MainWindowController {
         )
     }
 
+    func replayMacroPlaybackPlan(
+        _ plan: MacroPlaybackPlan,
+        preferredSurfaceID: SurfaceID? = nil
+    ) throws -> Int {
+        guard let surfaceID = preferredSurfaceID
+            ?? focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+            ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
+            throw MacroTerminalInputReplayError.noTargetSurface
+        }
+        let engine = terminalEngine(for: surfaceID)
+        let replayer = MacroTerminalInputReplayer { text in
+            engine.sendText(text, to: surfaceID)
+        }
+        return try replayer.replay(plan)
+    }
+
+    func sendMacroTextToTerminal(
+        _ text: String,
+        preferredSurfaceID: SurfaceID? = nil
+    ) throws {
+        guard let surfaceID = preferredSurfaceID
+            ?? focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+            ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
+            throw MacroTerminalInputReplayError.noTargetSurface
+        }
+        terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
+    }
+
     // MARK: - Split with Panel
 
     /// Creates a visual split with a non-terminal panel.
@@ -310,7 +338,21 @@ extension MainWindowController {
             }
             panelView = NSHostingView(rootView: view)
         case .macros:
-            let viewModel = MacroSnippetPanelViewModel()
+            let targetSurfaceID = focusedSurface.terminalViewModel?.surfaceID
+            let viewModel = MacroSnippetPanelViewModel(
+                macroPlaybackHandler: { [weak self] plan in
+                    guard let self else {
+                        throw MacroTerminalInputReplayError.noTargetSurface
+                    }
+                    return try self.replayMacroPlaybackPlan(plan, preferredSurfaceID: targetSurfaceID)
+                },
+                terminalTextHandler: { [weak self] text in
+                    guard let self else {
+                        throw MacroTerminalInputReplayError.noTargetSurface
+                    }
+                    try self.sendMacroTextToTerminal(text, preferredSurfaceID: targetSurfaceID)
+                }
+            )
             let view = MacroSnippetPanelView(viewModel: viewModel) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }

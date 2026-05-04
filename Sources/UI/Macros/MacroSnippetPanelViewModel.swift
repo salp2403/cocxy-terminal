@@ -58,6 +58,8 @@ final class MacroSnippetPanelViewModel: ObservableObject {
     private let snippetManager: SnippetManager
     private let aliasManager: AliasManager
     private let player: MacroPlayer
+    private let macroPlaybackHandler: ((MacroPlaybackPlan) throws -> Int)?
+    private let terminalTextHandler: ((String) throws -> Void)?
     private var recorder = MacroRecorder()
     private var macroLibrary: [TerminalMacro] = []
     private var clipboardHistory: ClipboardHistoryStore
@@ -66,11 +68,15 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         snippetManager: SnippetManager = SnippetManager(),
         aliasManager: AliasManager = AliasManager(),
         player: MacroPlayer = MacroPlayer(),
-        clipboardHistory: ClipboardHistoryStore = ClipboardHistoryStore()
+        clipboardHistory: ClipboardHistoryStore = ClipboardHistoryStore(),
+        macroPlaybackHandler: ((MacroPlaybackPlan) throws -> Int)? = nil,
+        terminalTextHandler: ((String) throws -> Void)? = nil
     ) {
         self.snippetManager = snippetManager
         self.aliasManager = aliasManager
         self.player = player
+        self.macroPlaybackHandler = macroPlaybackHandler
+        self.terminalTextHandler = terminalTextHandler
         self.clipboardHistory = clipboardHistory
         self.clipboardItems = clipboardHistory.items
     }
@@ -165,8 +171,13 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         }
         let plan = try player.playback(macro, repeatCount: repeatCount)
         playbackEvents = plan.events.map(formatMacroEvent)
+        if let macroPlaybackHandler {
+            let replayedCount = try macroPlaybackHandler(plan)
+            statusText = "Replayed \(replayedCount) \(replayedCount == 1 ? "event" : "events")"
+        } else {
+            statusText = "Prepared \(playbackEvents.count) playback events"
+        }
         errorText = nil
-        statusText = "Prepared \(playbackEvents.count) playback events"
     }
 
     func saveSnippetDraft() throws {
@@ -214,6 +225,25 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         renderedAliasBlock = try aliasManager.renderBlock(aliases: aliases, shell: selectedShell)
         errorText = nil
         statusText = "Rendered aliases for \(selectedShell.rawValue)"
+    }
+
+    func applyAliasesToTerminal() throws {
+        if renderedAliasBlock.isEmpty {
+            try renderAliases()
+        }
+        guard let terminalTextHandler else {
+            statusText = "Rendered aliases for \(selectedShell.rawValue)"
+            return
+        }
+        let terminalInput = terminalAliasInput(from: renderedAliasBlock)
+        guard !terminalInput.isEmpty else {
+            errorText = nil
+            statusText = "No aliases to apply"
+            return
+        }
+        try terminalTextHandler(terminalInput)
+        errorText = nil
+        statusText = "Applied aliases to terminal"
     }
 
     func recordClipboardDraft() {
@@ -289,5 +319,16 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         case .delay(let milliseconds):
             return "delay: \(milliseconds)ms"
         }
+    }
+
+    private func terminalAliasInput(from renderedBlock: String) -> String {
+        let executableLines = renderedBlock
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                return !trimmed.isEmpty && !trimmed.hasPrefix("#")
+            }
+        return executableLines.isEmpty ? "" : executableLines.joined(separator: "\n") + "\n"
     }
 }
