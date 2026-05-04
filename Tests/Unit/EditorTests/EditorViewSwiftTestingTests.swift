@@ -143,6 +143,69 @@ struct EditorViewSwiftTestingTests {
         #expect(repairedFont == EditorTextView.defaultEditorFont)
     }
 
+    @Test("text view repairs readable foreground when AppKit changes appearance directly")
+    func textViewAppearanceChangeRepairsReadableForeground() throws {
+        let textView = EditorTextView()
+        textView.applyDefaultConfiguration()
+        textView.string = "alpha beta\n"
+        textView.applyReadableTextTheme()
+        let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
+
+        textView.textColor = .black
+        textView.insertionPointColor = .black
+        textView.typingAttributes[.foregroundColor] = NSColor.black
+        textView.textStorage?.addAttribute(.foregroundColor, value: NSColor.black, range: fullRange)
+
+        textView.viewDidChangeEffectiveAppearance()
+
+        let repairedColor = textView.textStorage?.attribute(
+            .foregroundColor,
+            at: 0,
+            effectiveRange: nil
+        ) as? NSColor
+
+        #expect(repairedColor?.isEqual(CocxyColors.text) == true)
+        #expect(textView.textColor == CocxyColors.text)
+        #expect(textView.insertionPointColor == CocxyColors.text)
+        #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
+    }
+
+    @Test("editor appearance repair preserves syntax colors while restoring base text")
+    func editorAppearanceRepairPreservesSyntaxDecorations() throws {
+        let view = EditorView(text: "let value = 1\n")
+        let textView: EditorTextView = try #require(findSubview(in: view))
+        let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
+
+        view.syntaxDecorationProvider = { _ in
+            [
+                EditorDecoration(
+                    id: "syntax.keyword",
+                    range: EditorTextRange(location: 0, length: 3),
+                    kind: .syntaxToken,
+                    message: "syntax.keyword"
+                ),
+            ]
+        }
+        textView.textStorage?.addAttribute(.foregroundColor, value: NSColor.black, range: fullRange)
+
+        textView.viewDidChangeEffectiveAppearance()
+
+        let keywordColor = textView.textStorage?.attribute(
+            .foregroundColor,
+            at: 0,
+            effectiveRange: nil
+        ) as? NSColor
+        let baseColor = textView.textStorage?.attribute(
+            .foregroundColor,
+            at: 4,
+            effectiveRange: nil
+        ) as? NSColor
+
+        #expect(keywordColor?.isEqual(CocxyColors.mauve) == true)
+        #expect(baseColor?.isEqual(CocxyColors.text) == true)
+        #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
+    }
+
     @Test("editor view applies real bundled syntax decorations for first smoke languages")
     func editorViewAppliesRealBundledSyntaxDecorationsForSmokeLanguages() throws {
         let resourcesURL = repositoryRoot().appendingPathComponent("Resources", isDirectory: true)

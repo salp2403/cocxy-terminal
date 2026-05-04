@@ -18,6 +18,7 @@ final class EditorTextView: NSTextView {
     var deleteBackwardHandler: (() -> Bool)?
     var additiveCursorHandler: ((Int) -> Bool)?
     var inlineCompletionKeyHandler: ((EditorTextKeyCommand) -> Bool)?
+    var appearanceRepairHandler: (() -> Void)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
@@ -80,7 +81,11 @@ final class EditorTextView: NSTextView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        applyReadableTextTheme(reapplyStorageForeground: false)
+        if let appearanceRepairHandler {
+            appearanceRepairHandler()
+        } else {
+            applyReadableTextTheme()
+        }
     }
 
     func applyDefaultConfiguration() {

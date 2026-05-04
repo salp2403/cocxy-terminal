@@ -115,8 +115,15 @@ final class EditorView: NSView, NSTextViewDelegate {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        applyEditorTheme()
-        applyDecorations()
+        repairEditorTextTheme()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        repairEditorTextTheme()
+        DispatchQueue.main.async { [weak self] in
+            self?.repairEditorTextTheme()
+        }
     }
 
     deinit {
@@ -725,6 +732,9 @@ final class EditorView: NSView, NSTextViewDelegate {
         textView.inlineCompletionKeyHandler = { [weak self] command in
             self?.handleInlineCompletionCommand(command) ?? false
         }
+        textView.appearanceRepairHandler = { [weak self] in
+            self?.repairEditorTextTheme()
+        }
     }
 
     private func configureIconButton(_ button: NSButton, symbolName: String, tooltip: String, action: Selector) {
@@ -998,17 +1008,22 @@ final class EditorView: NSView, NSTextViewDelegate {
     }
 
     private func applyDecorations() {
+        textView.applyReadableTextTheme(reapplyStorageForeground: false)
         guard let textStorage = textView.textStorage else { return }
         let length = (textView.string as NSString).length
         EditorDecorationLayer.apply(session.decorations, to: textStorage, textLength: length)
-        textView.applyReadableTextTheme(reapplyStorageForeground: false)
     }
 
-    private func applyEditorTheme() {
+    private func applyEditorTheme(reapplyStorageForeground: Bool = false) {
         layer?.backgroundColor = CocxyColors.base.cgColor
         scrollView.backgroundColor = CocxyColors.base
         scrollView.contentView.backgroundColor = CocxyColors.base
-        textView.applyReadableTextTheme(reapplyStorageForeground: false)
+        textView.applyReadableTextTheme(reapplyStorageForeground: reapplyStorageForeground)
+    }
+
+    private func repairEditorTextTheme() {
+        applyEditorTheme(reapplyStorageForeground: true)
+        applyDecorations()
     }
 
     private func applySoftWrapConfiguration() {
