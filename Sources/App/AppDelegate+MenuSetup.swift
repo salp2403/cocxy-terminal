@@ -28,67 +28,73 @@ import AppKit
 extension AppDelegate {
 
     /// Creates the application menu bar with standard menus.
-    func setupMainMenu() {
+    func setupMainMenu(localizer overrideLocalizer: AppLocalizer? = nil) {
+        let localizer = overrideLocalizer ?? appLocalizer()
         let mainMenu = NSMenu()
 
-        mainMenu.addItem(createApplicationMenu())
-        mainMenu.addItem(createFileMenu())
-        mainMenu.addItem(createEditMenu())
-        mainMenu.addItem(createViewMenu())
-        mainMenu.addItem(createWindowMenu())
-        mainMenu.addItem(createHelpMenu())
+        mainMenu.addItem(createApplicationMenu(localizer: localizer))
+        mainMenu.addItem(createFileMenu(localizer: localizer))
+        mainMenu.addItem(createEditMenu(localizer: localizer))
+        mainMenu.addItem(createViewMenu(localizer: localizer))
+        mainMenu.addItem(createWindowMenu(localizer: localizer))
+        mainMenu.addItem(createHelpMenu(localizer: localizer))
 
         NSApplication.shared.mainMenu = mainMenu
     }
 
     // MARK: - Menu Construction
 
-    private func createApplicationMenu() -> NSMenuItem {
+    private func menuString(_ key: String, _ fallback: String, _ localizer: AppLocalizer) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    private func createApplicationMenu(localizer: AppLocalizer) -> NSMenuItem {
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
 
-        appMenu.addItem(withTitle: "About Cocxy Terminal",
+        appMenu.addItem(withTitle: menuString("menu.application.about", "About Cocxy Terminal", localizer),
                         action: #selector(MainWindowController.showAboutPanel(_:)),
                         keyEquivalent: "")
 
         appMenu.addItem(NSMenuItem.separator())
 
         let preferencesItem = NSMenuItem(
-            title: "Settings...",
+            title: menuString("menu.application.settings", "Settings...", localizer),
             action: #selector(MainWindowController.openPreferences(_:)),
             keyEquivalent: ""
         )
         MenuKeybindingsBinder.tag(preferencesItem, with: KeybindingActionCatalog.windowPreferences)
         appMenu.addItem(preferencesItem)
 
-        appMenu.addItem(withTitle: "Check for Updates...",
+        appMenu.addItem(withTitle: menuString("menu.application.checkForUpdates", "Check for Updates...", localizer),
                         action: #selector(AppDelegate.checkForUpdatesMenu(_:)),
                         keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
 
-        let servicesMenuItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
-        let servicesMenu = NSMenu(title: "Services")
+        let servicesTitle = menuString("menu.application.services", "Services", localizer)
+        let servicesMenuItem = NSMenuItem(title: servicesTitle, action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: servicesTitle)
         servicesMenuItem.submenu = servicesMenu
         NSApplication.shared.servicesMenu = servicesMenu
         appMenu.addItem(servicesMenuItem)
 
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Hide Cocxy Terminal",
+        appMenu.addItem(withTitle: menuString("menu.application.hide", "Hide Cocxy Terminal", localizer),
                         action: #selector(NSApplication.hide(_:)),
                         keyEquivalent: "h")
 
         let hideOthersItem = appMenu.addItem(
-            withTitle: "Hide Others",
+            withTitle: menuString("menu.application.hideOthers", "Hide Others", localizer),
             action: #selector(NSApplication.hideOtherApplications(_:)),
             keyEquivalent: "h"
         )
         hideOthersItem.keyEquivalentModifierMask = [.command, .option]
 
-        appMenu.addItem(withTitle: "Show All",
+        appMenu.addItem(withTitle: menuString("menu.application.showAll", "Show All", localizer),
                         action: #selector(NSApplication.unhideAllApplications(_:)),
                         keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Quit Cocxy Terminal",
+        appMenu.addItem(withTitle: menuString("menu.application.quit", "Quit Cocxy Terminal", localizer),
                         action: #selector(NSApplication.terminate(_:)),
                         keyEquivalent: "q")
 
@@ -96,12 +102,12 @@ extension AppDelegate {
         return appMenuItem
     }
 
-    private func createFileMenu() -> NSMenuItem {
+    private func createFileMenu(localizer: AppLocalizer) -> NSMenuItem {
         let fileMenuItem = NSMenuItem()
-        let fileMenu = NSMenu(title: "File")
+        let fileMenu = NSMenu(title: menuString("menu.file.title", "File", localizer))
 
         let newTabItem = NSMenuItem(
-            title: "New Tab",
+            title: menuString("menu.file.newTab", "New Tab", localizer),
             action: #selector(MainWindowController.newTabAction(_:)),
             keyEquivalent: ""
         )
@@ -109,7 +115,7 @@ extension AppDelegate {
         fileMenu.addItem(newTabItem)
 
         let newWindowItem = NSMenuItem(
-            title: "New Window",
+            title: menuString("menu.file.newWindow", "New Window", localizer),
             action: #selector(MainWindowController.newWindowAction(_:)),
             keyEquivalent: ""
         )
@@ -117,7 +123,7 @@ extension AppDelegate {
         fileMenu.addItem(newWindowItem)
 
         let moveTabItem = NSMenuItem(
-            title: "Move Tab to New Window",
+            title: menuString("menu.file.moveTabToNewWindow", "Move Tab to New Window", localizer),
             action: #selector(MainWindowController.moveActiveTabToNewWindowAction(_:)),
             keyEquivalent: ""
         )
@@ -127,12 +133,12 @@ extension AppDelegate {
         fileMenu.addItem(NSMenuItem.separator())
 
         fileMenu.addItem(
-            withTitle: "Save Current Tab as Config...",
+            withTitle: menuString("menu.file.saveCurrentTabAsConfig", "Save Current Tab as Config...", localizer),
             action: #selector(MainWindowController.saveCurrentTabConfigAction(_:)),
             keyEquivalent: ""
         )
         fileMenu.addItem(
-            withTitle: "Open Tab from Config...",
+            withTitle: menuString("menu.file.openTabFromConfig", "Open Tab from Config...", localizer),
             action: #selector(MainWindowController.openTabConfigAction(_:)),
             keyEquivalent: ""
         )
@@ -140,7 +146,7 @@ extension AppDelegate {
         fileMenu.addItem(NSMenuItem.separator())
 
         let closeTabItem = NSMenuItem(
-            title: "Close Tab",
+            title: menuString("menu.file.closeTab", "Close Tab", localizer),
             action: #selector(MainWindowController.closeTabAction(_:)),
             keyEquivalent: ""
         )
@@ -151,33 +157,33 @@ extension AppDelegate {
         return fileMenuItem
     }
 
-    private func createEditMenu() -> NSMenuItem {
+    private func createEditMenu(localizer: AppLocalizer) -> NSMenuItem {
         let editMenuItem = NSMenuItem()
-        let editMenu = NSMenu(title: "Edit")
+        let editMenu = NSMenu(title: menuString("menu.edit.title", "Edit", localizer))
 
-        editMenu.addItem(withTitle: "Undo",
+        editMenu.addItem(withTitle: menuString("common.undo", "Undo", localizer),
                          action: Selector(("undo:")),
                          keyEquivalent: "z")
-        editMenu.addItem(withTitle: "Redo",
+        editMenu.addItem(withTitle: menuString("common.redo", "Redo", localizer),
                          action: Selector(("redo:")),
                          keyEquivalent: "Z")
         editMenu.addItem(NSMenuItem.separator())
-        editMenu.addItem(withTitle: "Cut",
+        editMenu.addItem(withTitle: menuString("common.cut", "Cut", localizer),
                          action: #selector(NSText.cut(_:)),
                          keyEquivalent: "x")
-        editMenu.addItem(withTitle: "Copy",
+        editMenu.addItem(withTitle: menuString("common.copy", "Copy", localizer),
                          action: #selector(NSText.copy(_:)),
                          keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Paste",
+        editMenu.addItem(withTitle: menuString("common.paste", "Paste", localizer),
                          action: #selector(NSText.paste(_:)),
                          keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Select All",
+        editMenu.addItem(withTitle: menuString("common.selectAll", "Select All", localizer),
                          action: #selector(NSText.selectAll(_:)),
                          keyEquivalent: "a")
         editMenu.addItem(NSMenuItem.separator())
 
         let findItem = NSMenuItem(
-            title: "Find...",
+            title: menuString("menu.edit.find", "Find...", localizer),
             action: #selector(MainWindowController.toggleSearchBarAction(_:)),
             keyEquivalent: ""
         )
@@ -187,7 +193,7 @@ extension AppDelegate {
         // Escape key: dismiss active overlay.
         // Not rebindable — Escape is a reserved UX contract.
         let escapeItem = NSMenuItem(
-            title: "Dismiss Overlay",
+            title: menuString("menu.edit.dismissOverlay", "Dismiss Overlay", localizer),
             action: #selector(MainWindowController.dismissActiveOverlay(_:)),
             keyEquivalent: "\u{1b}" // Escape key
         )
@@ -199,12 +205,12 @@ extension AppDelegate {
         return editMenuItem
     }
 
-    private func createViewMenu() -> NSMenuItem {
+    private func createViewMenu(localizer: AppLocalizer) -> NSMenuItem {
         let viewMenuItem = NSMenuItem()
-        let viewMenu = NSMenu(title: "View")
+        let viewMenu = NSMenu(title: menuString("menu.view.title", "View", localizer))
 
         let commandPaletteItem = NSMenuItem(
-            title: "Command Palette",
+            title: menuString("menu.view.commandPalette", "Command Palette", localizer),
             action: #selector(MainWindowController.toggleCommandPaletteAction(_:)),
             keyEquivalent: ""
         )
@@ -212,7 +218,7 @@ extension AppDelegate {
         viewMenu.addItem(commandPaletteItem)
 
         let voiceInputItem = NSMenuItem(
-            title: "Voice Input",
+            title: menuString("menu.view.voiceInput", "Voice Input", localizer),
             action: #selector(MainWindowController.startVoiceInputAction(_:)),
             keyEquivalent: ""
         )
@@ -220,7 +226,7 @@ extension AppDelegate {
         viewMenu.addItem(voiceInputItem)
 
         let dashboardItem = NSMenuItem(
-            title: "Agent Dashboard",
+            title: menuString("menu.view.agentDashboard", "Agent Dashboard", localizer),
             action: #selector(MainWindowController.toggleDashboardAction(_:)),
             keyEquivalent: ""
         )
@@ -228,7 +234,7 @@ extension AppDelegate {
         viewMenu.addItem(dashboardItem)
 
         let agentModeItem = NSMenuItem(
-            title: "Agent Mode",
+            title: menuString("menu.view.agentMode", "Agent Mode", localizer),
             action: #selector(MainWindowController.toggleAgentModeAction(_:)),
             keyEquivalent: ""
         )
@@ -236,7 +242,7 @@ extension AppDelegate {
         viewMenu.addItem(agentModeItem)
 
         let codeReviewItem = NSMenuItem(
-            title: "Agent Code Review",
+            title: menuString("menu.view.agentCodeReview", "Agent Code Review", localizer),
             action: #selector(MainWindowController.toggleCodeReviewAction(_:)),
             keyEquivalent: ""
         )
@@ -244,7 +250,7 @@ extension AppDelegate {
         viewMenu.addItem(codeReviewItem)
 
         let githubPaneItem = NSMenuItem(
-            title: "GitHub Pane",
+            title: menuString("menu.view.githubPane", "GitHub Pane", localizer),
             action: #selector(MainWindowController.toggleGitHubPaneAction(_:)),
             keyEquivalent: ""
         )
@@ -252,7 +258,7 @@ extension AppDelegate {
         viewMenu.addItem(githubPaneItem)
 
         let notesItem = NSMenuItem(
-            title: "Notes",
+            title: menuString("menu.view.notes", "Notes", localizer),
             action: #selector(MainWindowController.toggleNotesAction(_:)),
             keyEquivalent: ""
         )
@@ -260,7 +266,7 @@ extension AppDelegate {
         viewMenu.addItem(notesItem)
 
         let quickSwitchItem = NSMenuItem(
-            title: "Quick Switch",
+            title: menuString("menu.view.quickSwitch", "Quick Switch", localizer),
             action: #selector(MainWindowController.quickSwitchAction(_:)),
             keyEquivalent: ""
         )
@@ -268,18 +274,18 @@ extension AppDelegate {
         viewMenu.addItem(quickSwitchItem)
 
         let smartRoutingItem = NSMenuItem(
-            title: "Smart Routing",
+            title: menuString("menu.view.smartRouting", "Smart Routing", localizer),
             action: #selector(MainWindowController.showSmartRoutingAction(_:)),
             keyEquivalent: ""
         )
         viewMenu.addItem(smartRoutingItem)
 
-        viewMenu.addItem(withTitle: "Remote Workspaces...",
+        viewMenu.addItem(withTitle: menuString("menu.view.remoteWorkspaces", "Remote Workspaces...", localizer),
                          action: #selector(MainWindowController.toggleRemoteWorkspacePanelAction(_:)),
                          keyEquivalent: "")
 
         let timelineItem = NSMenuItem(
-            title: "Agent Timeline",
+            title: menuString("menu.view.agentTimeline", "Agent Timeline", localizer),
             action: #selector(MainWindowController.toggleTimelineAction(_:)),
             keyEquivalent: ""
         )
@@ -287,7 +293,7 @@ extension AppDelegate {
         viewMenu.addItem(timelineItem)
 
         let notificationPanelItem = NSMenuItem(
-            title: "Notifications",
+            title: menuString("menu.view.notifications", "Notifications", localizer),
             action: #selector(MainWindowController.toggleNotificationPanelAction(_:)),
             keyEquivalent: ""
         )
@@ -295,58 +301,58 @@ extension AppDelegate {
         viewMenu.addItem(notificationPanelItem)
 
         let browserItem = NSMenuItem(
-            title: "Browser",
+            title: menuString("menu.view.browser", "Browser", localizer),
             action: #selector(MainWindowController.toggleBrowserAction(_:)),
             keyEquivalent: ""
         )
         MenuKeybindingsBinder.tag(browserItem, with: KeybindingActionCatalog.markdownBrowser)
         viewMenu.addItem(browserItem)
 
-        viewMenu.addItem(withTitle: "Open Markdown Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openMarkdownPanel", "Open Markdown Panel", localizer),
                          action: #selector(MainWindowController.splitWithMarkdownAction(_:)),
                          keyEquivalent: "")
 
-        viewMenu.addItem(withTitle: "Open Text Editor Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openTextEditorPanel", "Open Text Editor Panel", localizer),
                          action: #selector(MainWindowController.splitWithEditorAction(_:)),
                          keyEquivalent: "")
 
-        viewMenu.addItem(withTitle: "Open Notebook Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openNotebookPanel", "Open Notebook Panel", localizer),
                          action: #selector(MainWindowController.splitWithNotebookAction(_:)),
                          keyEquivalent: "")
 
-        viewMenu.addItem(withTitle: "Open Workflow Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openWorkflowPanel", "Open Workflow Panel", localizer),
                          action: #selector(MainWindowController.splitWithWorkflowAction(_:)),
                          keyEquivalent: "")
 
-        viewMenu.addItem(withTitle: "Open Session Replay Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openSessionReplayPanel", "Open Session Replay Panel", localizer),
                          action: #selector(MainWindowController.splitWithSessionReplayAction(_:)),
                          keyEquivalent: "")
 
-        viewMenu.addItem(withTitle: "Open Edit History Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openEditHistoryPanel", "Open Edit History Panel", localizer),
                          action: #selector(MainWindowController.splitWithAIEditHistoryAction(_:)),
                          keyEquivalent: "")
 
-        viewMenu.addItem(withTitle: "Open Templates Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openTemplatesPanel", "Open Templates Panel", localizer),
                          action: #selector(MainWindowController.splitWithTemplatesAction(_:)),
                          keyEquivalent: "")
 
-        viewMenu.addItem(withTitle: "Open Macros Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openMacrosPanel", "Open Macros Panel", localizer),
                          action: #selector(MainWindowController.splitWithMacrosAction(_:)),
                          keyEquivalent: "")
 
-        viewMenu.addItem(withTitle: "Open DB/Cloud Helpers Panel",
+        viewMenu.addItem(withTitle: menuString("menu.view.openDBCloudHelpersPanel", "Open DB/Cloud Helpers Panel", localizer),
                          action: #selector(MainWindowController.splitWithDBCloudAction(_:)),
                          keyEquivalent: "")
 
         viewMenu.addItem(NSMenuItem.separator())
 
         // Toggle Tab Bar: not rebindable (no catalog entry, no default shortcut).
-        viewMenu.addItem(withTitle: "Toggle Tab Bar",
+        viewMenu.addItem(withTitle: menuString("menu.view.toggleTabBar", "Toggle Tab Bar", localizer),
                          action: #selector(MainWindowController.toggleTabBarAction(_:)),
                          keyEquivalent: "")
 
         let splitHorizontalItem = NSMenuItem(
-            title: "Split Side by Side",
+            title: menuString("menu.view.splitSideBySide", "Split Side by Side", localizer),
             action: #selector(MainWindowController.splitHorizontalAction(_:)),
             keyEquivalent: ""
         )
@@ -354,7 +360,7 @@ extension AppDelegate {
         viewMenu.addItem(splitHorizontalItem)
 
         let splitVerticalItem = NSMenuItem(
-            title: "Split Stacked",
+            title: menuString("menu.view.splitStacked", "Split Stacked", localizer),
             action: #selector(MainWindowController.splitVerticalAction(_:)),
             keyEquivalent: ""
         )
@@ -362,7 +368,7 @@ extension AppDelegate {
         viewMenu.addItem(splitVerticalItem)
 
         let closeSplitItem = NSMenuItem(
-            title: "Close Split",
+            title: menuString("menu.view.closeSplit", "Close Split", localizer),
             action: #selector(MainWindowController.closeSplitAction(_:)),
             keyEquivalent: ""
         )
@@ -370,7 +376,7 @@ extension AppDelegate {
         viewMenu.addItem(closeSplitItem)
 
         let equalizeSplitsItem = NSMenuItem(
-            title: "Equalize Splits",
+            title: menuString("menu.view.equalizeSplits", "Equalize Splits", localizer),
             action: #selector(MainWindowController.equalizeSplitsAction(_:)),
             keyEquivalent: ""
         )
@@ -378,7 +384,7 @@ extension AppDelegate {
         viewMenu.addItem(equalizeSplitsItem)
 
         let toggleZoomItem = NSMenuItem(
-            title: "Toggle Split Zoom",
+            title: menuString("menu.view.toggleSplitZoom", "Toggle Split Zoom", localizer),
             action: #selector(MainWindowController.toggleSplitZoomAction(_:)),
             keyEquivalent: ""
         )
@@ -388,7 +394,7 @@ extension AppDelegate {
         viewMenu.addItem(NSMenuItem.separator())
 
         let navLeftItem = NSMenuItem(
-            title: "Navigate Split Left",
+            title: menuString("menu.view.navigateSplitLeft", "Navigate Split Left", localizer),
             action: #selector(MainWindowController.navigateSplitLeftAction(_:)),
             keyEquivalent: ""
         )
@@ -396,7 +402,7 @@ extension AppDelegate {
         viewMenu.addItem(navLeftItem)
 
         let navRightItem = NSMenuItem(
-            title: "Navigate Split Right",
+            title: menuString("menu.view.navigateSplitRight", "Navigate Split Right", localizer),
             action: #selector(MainWindowController.navigateSplitRightAction(_:)),
             keyEquivalent: ""
         )
@@ -404,7 +410,7 @@ extension AppDelegate {
         viewMenu.addItem(navRightItem)
 
         let navUpItem = NSMenuItem(
-            title: "Navigate Split Up",
+            title: menuString("menu.view.navigateSplitUp", "Navigate Split Up", localizer),
             action: #selector(MainWindowController.navigateSplitUpAction(_:)),
             keyEquivalent: ""
         )
@@ -412,7 +418,7 @@ extension AppDelegate {
         viewMenu.addItem(navUpItem)
 
         let navDownItem = NSMenuItem(
-            title: "Navigate Split Down",
+            title: menuString("menu.view.navigateSplitDown", "Navigate Split Down", localizer),
             action: #selector(MainWindowController.navigateSplitDownAction(_:)),
             keyEquivalent: ""
         )
@@ -422,7 +428,7 @@ extension AppDelegate {
         viewMenu.addItem(NSMenuItem.separator())
 
         let zoomInItem = NSMenuItem(
-            title: "Zoom In",
+            title: menuString("menu.view.zoomIn", "Zoom In", localizer),
             action: #selector(MainWindowController.zoomInAction(_:)),
             keyEquivalent: ""
         )
@@ -430,7 +436,7 @@ extension AppDelegate {
         viewMenu.addItem(zoomInItem)
 
         let zoomOutItem = NSMenuItem(
-            title: "Zoom Out",
+            title: menuString("menu.view.zoomOut", "Zoom Out", localizer),
             action: #selector(MainWindowController.zoomOutAction(_:)),
             keyEquivalent: ""
         )
@@ -438,7 +444,7 @@ extension AppDelegate {
         viewMenu.addItem(zoomOutItem)
 
         let resetZoomItem = NSMenuItem(
-            title: "Reset Zoom",
+            title: menuString("menu.view.resetZoom", "Reset Zoom", localizer),
             action: #selector(MainWindowController.resetZoomAction(_:)),
             keyEquivalent: ""
         )
@@ -448,7 +454,7 @@ extension AppDelegate {
         viewMenu.addItem(NSMenuItem.separator())
 
         let fullScreenItem = NSMenuItem(
-            title: "Enter Full Screen",
+            title: menuString("menu.view.enterFullScreen", "Enter Full Screen", localizer),
             action: #selector(NSWindow.toggleFullScreen(_:)),
             keyEquivalent: ""
         )
@@ -459,12 +465,12 @@ extension AppDelegate {
         return viewMenuItem
     }
 
-    private func createWindowMenu() -> NSMenuItem {
+    private func createWindowMenu(localizer: AppLocalizer) -> NSMenuItem {
         let windowMenuItem = NSMenuItem()
-        let windowMenu = NSMenu(title: "Window")
+        let windowMenu = NSMenu(title: menuString("menu.window.title", "Window", localizer))
 
         let minimizeItem = NSMenuItem(
-            title: "Minimize",
+            title: menuString("menu.window.minimize", "Minimize", localizer),
             action: #selector(NSWindow.performMiniaturize(_:)),
             keyEquivalent: ""
         )
@@ -472,13 +478,13 @@ extension AppDelegate {
         windowMenu.addItem(minimizeItem)
 
         // Zoom: not rebindable, no catalog entry (macOS-native window zoom).
-        windowMenu.addItem(withTitle: "Zoom",
+        windowMenu.addItem(withTitle: menuString("menu.window.zoom", "Zoom", localizer),
                            action: #selector(NSWindow.performZoom(_:)),
                            keyEquivalent: "")
         windowMenu.addItem(NSMenuItem.separator())
 
         let nextTabItem = NSMenuItem(
-            title: "Next Tab",
+            title: menuString("menu.window.nextTab", "Next Tab", localizer),
             action: #selector(MainWindowController.nextTabAction(_:)),
             keyEquivalent: ""
         )
@@ -486,7 +492,7 @@ extension AppDelegate {
         windowMenu.addItem(nextTabItem)
 
         let prevTabItem = NSMenuItem(
-            title: "Previous Tab",
+            title: menuString("menu.window.previousTab", "Previous Tab", localizer),
             action: #selector(MainWindowController.previousTabAction(_:)),
             keyEquivalent: ""
         )
@@ -520,7 +526,10 @@ extension AppDelegate {
         ]
         for index in 0..<gotoSelectors.count {
             let gotoItem = NSMenuItem(
-                title: "Tab \(index + 1)",
+                title: String(
+                    format: menuString("menu.window.tabNumber", "Tab %d", localizer),
+                    index + 1
+                ),
                 action: gotoSelectors[index],
                 keyEquivalent: ""
             )
@@ -529,7 +538,7 @@ extension AppDelegate {
         }
 
         windowMenu.addItem(NSMenuItem.separator())
-        windowMenu.addItem(withTitle: "Bring All to Front",
+        windowMenu.addItem(withTitle: menuString("menu.window.bringAllToFront", "Bring All to Front", localizer),
                            action: #selector(NSApplication.arrangeInFront(_:)),
                            keyEquivalent: "")
 
@@ -538,15 +547,15 @@ extension AppDelegate {
         return windowMenuItem
     }
 
-    private func createHelpMenu() -> NSMenuItem {
+    private func createHelpMenu(localizer: AppLocalizer) -> NSMenuItem {
         let helpMenuItem = NSMenuItem()
-        let helpMenu = NSMenu(title: "Help")
+        let helpMenu = NSMenu(title: menuString("menu.help.title", "Help", localizer))
 
-        helpMenu.addItem(withTitle: "Cocxy Terminal Help",
+        helpMenu.addItem(withTitle: menuString("menu.help.cocxyTerminalHelp", "Cocxy Terminal Help", localizer),
                          action: #selector(MainWindowController.showWelcomeAction(_:)),
                          keyEquivalent: "?")
         helpMenu.addItem(
-            withTitle: "Show Onboarding",
+            withTitle: menuString("menu.help.showOnboarding", "Show Onboarding", localizer),
             action: #selector(MainWindowController.showOnboardingAction(_:)),
             keyEquivalent: ""
         )

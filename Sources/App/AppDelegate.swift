@@ -489,7 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Subscribes to `ConfigService.configChangedPublisher` so menu shortcuts
-    /// are refreshed whenever `~/.config/cocxy/config.toml` is edited.
+    /// and app-language menu titles refresh whenever config.toml changes.
     ///
     /// Drops the first emission (the initial value) because
     /// `applyKeybindingsToMainMenu()` already ran synchronously after
@@ -499,22 +499,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let service = configService else { return }
 
         menuKeybindingsCancellable?.cancel()
+        var lastLanguage = service.current.appearance.appLanguage
         menuKeybindingsCancellable = service.configChangedPublisher
             .dropFirst()
-            .map(\.keybindings)
-            .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] keybindings in
-                // `self` is captured weakly so the observer does not
-                // outlive the delegate. Reading the instance in the
-                // guard binds the lifetime and also satisfies the
-                // compiler's unused-capture warning without a no-op
-                // assignment. Binding is local-only — no instance
-                // access is required beyond the guard, so we
-                // intentionally do not touch `self` in the body.
-                guard self != nil,
-                      let mainMenu = NSApplication.shared.mainMenu else { return }
-                MenuKeybindingsBinder.apply(keybindings, to: mainMenu)
+            .sink { [weak self] config in
+                guard let self else { return }
+                if config.appearance.appLanguage != lastLanguage {
+                    setupMainMenu()
+                    lastLanguage = config.appearance.appLanguage
+                }
+                guard let mainMenu = NSApplication.shared.mainMenu else { return }
+                MenuKeybindingsBinder.apply(config.keybindings, to: mainMenu)
             }
     }
 
@@ -1490,8 +1486,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Exposes menu setup for testing without triggering full app launch.
-    func setupMainMenuForTesting() {
-        setupMainMenu()
+    func setupMainMenuForTesting(
+        languagePreference: AppLanguage = .english,
+        bundle: Bundle = .main
+    ) {
+        setupMainMenu(
+            localizer: AppLocalizer(
+                languagePreference: languagePreference,
+                bundle: bundle
+            )
+        )
     }
 
     // MARK: - Notification Stack Initialization

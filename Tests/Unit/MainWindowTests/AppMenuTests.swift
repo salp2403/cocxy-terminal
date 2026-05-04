@@ -66,6 +66,34 @@ final class AppMenuStructureTests: XCTestCase {
         let helpMenu = mainMenu?.items.first(where: { $0.submenu?.title == "Help" })
         XCTAssertNotNil(helpMenu, "Help menu must exist")
     }
+
+    func testMenuTitlesLocalizeToSpanish() throws {
+        let bundle = try XCTUnwrap(localizationBundle())
+        appDelegate.setupMainMenuForTesting(languagePreference: .spanish, bundle: bundle)
+
+        let mainMenu = try XCTUnwrap(NSApplication.shared.mainMenu)
+        XCTAssertNotNil(mainMenu.items.first(where: { $0.submenu?.title == "Archivo" }))
+        XCTAssertNotNil(mainMenu.items.first(where: { $0.submenu?.title == "Edición" }))
+        XCTAssertNotNil(mainMenu.items.first(where: { $0.submenu?.title == "Vista" }))
+        XCTAssertNotNil(mainMenu.items.first(where: { $0.submenu?.title == "Ventana" }))
+        XCTAssertNotNil(mainMenu.items.first(where: { $0.submenu?.title == "Ayuda" }))
+
+        let fileMenu = try XCTUnwrap(mainMenu.items.first(where: { $0.submenu?.title == "Archivo" })?.submenu)
+        let viewMenu = try XCTUnwrap(mainMenu.items.first(where: { $0.submenu?.title == "Vista" })?.submenu)
+        let helpMenu = try XCTUnwrap(mainMenu.items.first(where: { $0.submenu?.title == "Ayuda" })?.submenu)
+
+        XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Nueva pestaña" }))
+        XCTAssertNotNil(viewMenu.items.first(where: { $0.title == "Abrir panel Notebook" }))
+        XCTAssertEqual(
+            helpMenu.items.first(where: { $0.title == "Ayuda de Cocxy Terminal" })?.action,
+            #selector(MainWindowController.showWelcomeAction(_:))
+        )
+    }
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
 
 // MARK: - File Menu Tests
