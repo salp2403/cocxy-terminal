@@ -195,10 +195,84 @@ struct SessionReplayControllerSwiftTestingTests {
         ])
     }
 
+    @Test("sixty second local recording smoke exports and replays deterministically")
+    func sixtySecondLocalRecordingSmokeExportsAndReplaysDeterministically() throws {
+        let root = try makeTemporaryDirectory(named: "session-replay-controller-sixty-second-smoke")
+        let exportRoot = try makeTemporaryDirectory(named: "session-replay-controller-sixty-second-export")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: exportRoot)
+        }
+
+        let bridge = RecordingSessionReplayBridge()
+        let store = SessionReplayStore(rootDirectory: root)
+        let controller = SessionReplayController(
+            config: SessionReplayConfig(enabled: true),
+            store: store,
+            bridge: bridge
+        )
+        let sourceSurface = SurfaceID(rawValue: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!)
+        let targetSurface = SurfaceID(rawValue: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!)
+        let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let prepared = try controller.startRecording(
+            surfaceID: sourceSurface,
+            title: "Deterministic smoke",
+            mode: .manual,
+            startedAt: startedAt
+        )
+        let cast = sixtySecondCast()
+        try cast.write(to: prepared.castURL, atomically: true, encoding: .utf8)
+        bridge.handle.bytesWrittenValue = cast.utf8.count
+
+        let recording = try controller.stopRecording(
+            surfaceID: sourceSurface,
+            endedAt: startedAt.addingTimeInterval(60)
+        )
+
+        #expect(recording.durationNs == 60_000_000_000)
+        #expect(recording.byteCount == cast.utf8.count)
+        #expect(recording.surfaceID == sourceSurface)
+        #expect(try store.recording(id: recording.id) == recording)
+
+        let matches = try store.search(recordingID: recording.id, query: "final marker")
+        #expect(matches.map(\.offsetNs) == [60_000_000_000])
+
+        let exportURL = exportRoot.appendingPathComponent("deterministic-smoke.cast")
+        try store.exportCast(recordingID: recording.id, to: exportURL)
+        #expect(try String(contentsOf: exportURL, encoding: .utf8) == cast)
+
+        try controller.replay(
+            recordingID: recording.id,
+            to: targetSurface,
+            seekNs: 30_000_000_000,
+            speedMultiplier: 2
+        )
+
+        #expect(bridge.replayRequests == [
+            RecordingSessionReplayBridge.ReplayRequest(
+                recordingURL: prepared.castURL,
+                surfaceID: targetSurface,
+                seekNs: 30_000_000_000,
+                speedMultiplier: 2
+            ),
+        ])
+    }
+
     private func sampleCast() -> String {
         """
         {"version":2,"width":80,"height":24,"timestamp":1800000000}
         [0.0,"o","hello"]
+
+        """
+    }
+
+    private func sixtySecondCast() -> String {
+        """
+        {"version":2,"width":120,"height":32,"timestamp":1800000000}
+        [0.0,"o","start marker\\r\\n"]
+        [30.0,"o","midpoint marker\\r\\n"]
+        [60.0,"o","final marker\\r\\n"]
 
         """
     }
