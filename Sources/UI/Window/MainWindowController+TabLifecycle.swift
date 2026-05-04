@@ -74,7 +74,7 @@ extension MainWindowController {
 
         recordLocalActivity(
             kind: .tabOpened,
-            summary: "New tab",
+            summary: Self.localizedNewTabActivitySummary(localizer: appLocalizer()),
             workingDirectory: dir,
             sessionID: sessionID.rawValue.uuidString
         )

@@ -46,6 +46,15 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
             MainWindowController.localizedStuckPaneNotificationBody(reason: .ptyWriteFailed, localizer: localizer) ==
                 "El shell de este panel no acepta pulsaciones. Ciérralo con Cmd+Shift+W y abre un split nuevo."
         )
+        #expect(MainWindowController.localizedNewTabActivitySummary(localizer: localizer) == "Nueva pestaña")
+        #expect(
+            MainWindowController.localizedSplitCreatedActivitySummary(isVertical: true, localizer: localizer) ==
+                "Split lado a lado"
+        )
+        #expect(
+            MainWindowController.localizedSplitCreatedActivitySummary(isVertical: false, localizer: localizer) ==
+                "Split apilado"
+        )
     }
 
     @Test("worktree and tab config alert copy follows configured app language")

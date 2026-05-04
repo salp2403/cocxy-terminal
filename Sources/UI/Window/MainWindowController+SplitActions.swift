@@ -673,7 +673,7 @@ extension MainWindowController {
 
         recordLocalActivity(
             kind: .splitCreated,
-            summary: isVertical ? "Split side by side" : "Split stacked",
+            summary: Self.localizedSplitCreatedActivitySummary(isVertical: isVertical, localizer: appLocalizer()),
             workingDirectory: workingDirectory,
             sessionID: currentTabID.map { sessionIDForTab($0).rawValue.uuidString },
             metadata: ["orientation": isVertical ? "side_by_side" : "stacked"]

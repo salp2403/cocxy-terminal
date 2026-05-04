@@ -108,6 +108,16 @@ extension MainWindowController {
         localizer.string("window.stuckPane.title", fallback: "Pane stopped accepting input")
     }
 
+    static func localizedNewTabActivitySummary(localizer: AppLocalizer) -> String {
+        localizer.string("window.activity.tabOpened", fallback: "New tab")
+    }
+
+    static func localizedSplitCreatedActivitySummary(isVertical: Bool, localizer: AppLocalizer) -> String {
+        isVertical
+            ? localizer.string("window.activity.splitSideBySide", fallback: "Split side by side")
+            : localizer.string("window.activity.splitStacked", fallback: "Split stacked")
+    }
+
     static func localizedStuckPaneNotificationBody(
         reason: InputDropReason,
         localizer: AppLocalizer

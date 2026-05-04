@@ -927,6 +927,9 @@
 "window.closePane.message.one" = "This will close the focused %@. The workspace tab stays open with %d pane remaining.";
 "window.closePane.message.many" = "This will close the focused %@. The workspace tab stays open with %d panes remaining.";
 "window.closePane.button" = "Close Pane";
+"window.activity.tabOpened" = "New tab";
+"window.activity.splitSideBySide" = "Split side by side";
+"window.activity.splitStacked" = "Split stacked";
 "window.pane.terminalSplit" = "terminal split";
 "window.pane.browserPanel" = "browser panel";
 "window.pane.markdownPanel" = "markdown panel";

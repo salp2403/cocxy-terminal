@@ -927,6 +927,9 @@
 "window.closePane.message.one" = "Esto cerrará el %@ enfocado. La pestaña de workspace queda abierta con %d panel restante.";
 "window.closePane.message.many" = "Esto cerrará el %@ enfocado. La pestaña de workspace queda abierta con %d paneles restantes.";
 "window.closePane.button" = "Cerrar panel";
+"window.activity.tabOpened" = "Nueva pestaña";
+"window.activity.splitSideBySide" = "Split lado a lado";
+"window.activity.splitStacked" = "Split apilado";
 "window.pane.terminalSplit" = "split de terminal";
 "window.pane.browserPanel" = "panel de navegador";
 "window.pane.markdownPanel" = "panel de markdown";
