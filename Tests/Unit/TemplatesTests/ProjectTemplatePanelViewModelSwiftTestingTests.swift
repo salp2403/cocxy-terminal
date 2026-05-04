@@ -1,0 +1,120 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// ProjectTemplatePanelViewModelSwiftTestingTests.swift - UI state for local project scaffolds.
+
+import Foundation
+import Testing
+@testable import CocxyTerminal
+
+@MainActor
+@Suite("Project template panel view model")
+struct ProjectTemplatePanelViewModelSwiftTestingTests {
+    @Test("refresh loads templates and selects the first with default values")
+    func refreshLoadsTemplatesAndSelectsFirstWithDefaultValues() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let templatesRoot = root.appendingPathComponent("templates", isDirectory: true)
+        try writeTemplate(
+            id: "swift-package",
+            name: "Swift Package",
+            summary: "Create a Swift package",
+            in: templatesRoot
+        )
+
+        let viewModel = ProjectTemplatePanelViewModel(
+            registry: ProjectTemplateRegistry(
+                directories: [ProjectTemplateDirectory(url: templatesRoot, source: .builtIn)]
+            ),
+            destinationRootURL: root.appendingPathComponent("output", isDirectory: true)
+        )
+
+        try viewModel.refresh()
+
+        #expect(viewModel.templates.map(\.id) == ["swift-package"])
+        #expect(viewModel.selectedTemplateID == "swift-package")
+        #expect(viewModel.value(for: "project_name") == "Demo")
+        #expect(viewModel.value(for: "module_name") == "Demo")
+        #expect(viewModel.statusText == "1 template")
+    }
+
+    @Test("scaffold selected template writes files and reports progress")
+    func scaffoldSelectedTemplateWritesFilesAndReportsProgress() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let templatesRoot = root.appendingPathComponent("templates", isDirectory: true)
+        let outputRoot = root.appendingPathComponent("output", isDirectory: true)
+        try writeTemplate(
+            id: "swift-package",
+            name: "Swift Package",
+            summary: "Create a Swift package",
+            files: [
+                "README.md": "# {{project_name}}\n",
+                "Sources/{{module_name}}/main.swift": "print(\"{{project_name}}\")\n",
+            ],
+            hooks: ProjectTemplateHooks(post: ["swift test"]),
+            in: templatesRoot
+        )
+        let viewModel = ProjectTemplatePanelViewModel(
+            registry: ProjectTemplateRegistry(
+                directories: [ProjectTemplateDirectory(url: templatesRoot, source: .builtIn)]
+            ),
+            destinationRootURL: outputRoot
+        )
+        try viewModel.refresh()
+        viewModel.destinationName = "Generated"
+        viewModel.setValue("Generated", for: "project_name")
+        viewModel.setValue("GeneratedCore", for: "module_name")
+
+        try viewModel.scaffoldSelected()
+
+        #expect(viewModel.progress == 1)
+        #expect(viewModel.createdFiles == ["README.md", "Sources/GeneratedCore/main.swift"])
+        #expect(viewModel.pendingHookCommands == ["swift test"])
+        #expect(viewModel.statusText == "Created 2 files")
+        #expect(try String(
+            contentsOf: outputRoot.appendingPathComponent("Generated/README.md"),
+            encoding: .utf8
+        ) == "# Generated\n")
+    }
+
+    private func makeTemporaryDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-template-panel-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private func writeTemplate(
+        id: String,
+        name: String,
+        summary: String,
+        variables: [ProjectTemplateVariable] = [
+            ProjectTemplateVariable(name: "project_name", prompt: "Project name", defaultValue: "Demo"),
+            ProjectTemplateVariable(name: "module_name", prompt: "Module name", defaultValue: "Demo"),
+        ],
+        files: [String: String] = ["README.md": "# {{project_name}}\n"],
+        hooks: ProjectTemplateHooks = ProjectTemplateHooks(),
+        in root: URL
+    ) throws {
+        let directory = root.appendingPathComponent(id, isDirectory: true)
+        let filesRoot = directory.appendingPathComponent("files", isDirectory: true)
+        try FileManager.default.createDirectory(at: filesRoot, withIntermediateDirectories: true)
+        let manifest = ProjectTemplateManifest(
+            id: id,
+            name: name,
+            description: summary,
+            variables: variables,
+            hooks: hooks
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(manifest).write(to: directory.appendingPathComponent("template.json"))
+        for (relativePath, content) in files {
+            let fileURL = filesRoot.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try content.write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+    }
+}
