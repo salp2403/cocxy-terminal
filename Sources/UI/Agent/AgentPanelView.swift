@@ -330,64 +330,7 @@ struct AgentPanelView: View {
     }
 
     private var localizedStatusText: String {
-        switch viewModel.statusText {
-        case "Ready.":
-            return localized("agent.panel.status.ready", fallback: "Ready.")
-        case "Agent Mode is disabled.":
-            return localized("agent.panel.status.disabled", fallback: "Agent Mode is disabled.")
-        case "Running...":
-            return localized("agent.panel.status.running", fallback: "Running...")
-        case "Running approved tool...":
-            return localized(
-                "agent.panel.status.runningApprovedTool",
-                fallback: "Running approved tool..."
-            )
-        case "Completed.":
-            return localized("agent.panel.status.completed", fallback: "Completed.")
-        case "Request rejected.":
-            return localized("agent.panel.status.rejected", fallback: "Request rejected.")
-        case "Stopped at max iterations.":
-            return localized(
-                "agent.panel.status.maxIterations",
-                fallback: "Stopped at max iterations."
-            )
-        default:
-            return localizedDynamicStatusText(viewModel.statusText)
-        }
-    }
-
-    private func localizedDynamicStatusText(_ text: String) -> String {
-        if text.hasPrefix("Failed to load skills: ") {
-            let reason = String(text.dropFirst("Failed to load skills: ".count))
-            return String(
-                format: localized(
-                    "agent.panel.status.loadSkillsFailed",
-                    fallback: "Failed to load skills: %@"
-                ),
-                reason
-            )
-        }
-
-        if let imageCount = Self.imageAttachmentCount(from: text) {
-            let key = imageCount == 1
-                ? "agent.panel.status.images.one"
-                : "agent.panel.status.images.many"
-            let fallback = imageCount == 1
-                ? "%d image attached."
-                : "%d images attached."
-            return String(format: localized(key, fallback: fallback), imageCount)
-        }
-
-        return text
-    }
-
-    private static func imageAttachmentCount(from text: String) -> Int? {
-        guard text.hasSuffix(" attached."),
-              text.contains(" image") else {
-            return nil
-        }
-        let firstToken = text.split(separator: " ").first
-        return firstToken.flatMap { Int($0) }
+        AgentPanelLocalization.statusText(viewModel.statusText, using: localizer)
     }
 
     private func localized(_ key: String, fallback: String) -> String {
@@ -437,6 +380,206 @@ struct AgentPanelView: View {
         case .userInput:
             return "questionmark.bubble"
         }
+    }
+}
+
+enum AgentPanelLocalization {
+    static func statusText(_ text: String, using localizer: AppLocalizer) -> String {
+        switch text {
+        case "Ready.":
+            return localizer.string("agent.panel.status.ready", fallback: "Ready.")
+        case "Agent Mode is disabled.":
+            return localizer.string(
+                "agent.panel.status.disabled",
+                fallback: "Agent Mode is disabled."
+            )
+        case "Running...":
+            return localizer.string("agent.panel.status.running", fallback: "Running...")
+        case "Running approved tool...":
+            return localizer.string(
+                "agent.panel.status.runningApprovedTool",
+                fallback: "Running approved tool..."
+            )
+        case "Completed.":
+            return localizer.string("agent.panel.status.completed", fallback: "Completed.")
+        case "Request rejected.":
+            return localizer.string("agent.panel.status.rejected", fallback: "Request rejected.")
+        case "Stopped at max iterations.":
+            return localizer.string(
+                "agent.panel.status.maxIterations",
+                fallback: "Stopped at max iterations."
+            )
+        case "Provider unavailable.":
+            return localizer.string(
+                "agent.panel.status.providerUnavailable",
+                fallback: "Provider unavailable."
+            )
+        case "Current Agent runner does not support image attachments.":
+            return localizer.string(
+                "agent.panel.status.attachmentRunnerUnavailable",
+                fallback: "Current Agent runner does not support image attachments."
+            )
+        case "Approval is unavailable for this Agent runner.":
+            return localizer.string(
+                "agent.panel.status.approvalUnavailable",
+                fallback: "Approval is unavailable for this Agent runner."
+            )
+        default:
+            return dynamicStatusText(text, using: localizer)
+        }
+    }
+
+    private static func dynamicStatusText(_ text: String, using localizer: AppLocalizer) -> String {
+        if text.hasPrefix("Failed to load skills: ") {
+            let reason = String(text.dropFirst("Failed to load skills: ".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.loadSkillsFailed",
+                    fallback: "Failed to load skills: %@"
+                ),
+                reason
+            )
+        }
+
+        if let imageCount = imageAttachmentCount(from: text) {
+            let key = imageCount == 1
+                ? "agent.panel.status.images.one"
+                : "agent.panel.status.images.many"
+            let fallback = imageCount == 1
+                ? "%d image attached."
+                : "%d images attached."
+            return String(format: localizer.string(key, fallback: fallback), imageCount)
+        }
+
+        if text.hasPrefix("Approve command: ") {
+            let command = String(text.dropFirst("Approve command: ".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.approveCommand",
+                    fallback: "Approve command: %@"
+                ),
+                command
+            )
+        }
+
+        if text.hasPrefix("Review diff for "), text.hasSuffix(".") {
+            let toolID = String(text.dropFirst("Review diff for ".count).dropLast())
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.reviewDiff",
+                    fallback: "Review diff for %@."
+                ),
+                toolID
+            )
+        }
+
+        if text.hasPrefix("Approve computer action "), text.hasSuffix(".") {
+            let toolID = String(text.dropFirst("Approve computer action ".count).dropLast())
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.approveComputerAction",
+                    fallback: "Approve computer action %@."
+                ),
+                toolID
+            )
+        }
+
+        if text.hasPrefix("Approve external tool "), text.hasSuffix(".") {
+            let toolID = String(text.dropFirst("Approve external tool ".count).dropLast())
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.approveExternalTool",
+                    fallback: "Approve external tool %@."
+                ),
+                toolID
+            )
+        }
+
+        if text.hasPrefix("Agent requested input for "), text.hasSuffix(".") {
+            let toolID = String(text.dropFirst("Agent requested input for ".count).dropLast())
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.requestedInput",
+                    fallback: "Agent requested input for %@."
+                ),
+                toolID
+            )
+        }
+
+        if text.hasPrefix("Blocked "), text.hasSuffix(" without a command.") {
+            let toolID = String(
+                text.dropFirst("Blocked ".count).dropLast(" without a command.".count)
+            )
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.blockedMissingCommand",
+                    fallback: "Blocked %@ without a command."
+                ),
+                toolID
+            )
+        }
+
+        if text.hasPrefix("Blocked dangerous command: ") {
+            let command = String(text.dropFirst("Blocked dangerous command: ".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.blockedDangerousCommand",
+                    fallback: "Blocked dangerous command: %@"
+                ),
+                command
+            )
+        }
+
+        if text.hasPrefix("Blocked "),
+           text.hasSuffix(" because a preview could not be generated.") {
+            let toolID = String(
+                text
+                    .dropFirst("Blocked ".count)
+                    .dropLast(" because a preview could not be generated.".count)
+            )
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.blockedPreviewUnavailable",
+                    fallback: "Blocked %@ because a preview could not be generated."
+                ),
+                toolID
+            )
+        }
+
+        if text.hasPrefix("Tool protocol error: ") {
+            let error = String(text.dropFirst("Tool protocol error: ".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.toolProtocolError",
+                    fallback: "Tool protocol error: %@"
+                ),
+                error
+            )
+        }
+
+        if text.hasSuffix(" does not support image attachments in Agent Mode.") {
+            let provider = String(
+                text.dropLast(" does not support image attachments in Agent Mode.".count)
+            )
+            return String(
+                format: localizer.string(
+                    "agent.panel.status.imageAttachmentsUnsupported",
+                    fallback: "%@ does not support image attachments in Agent Mode."
+                ),
+                provider
+            )
+        }
+
+        return text
+    }
+
+    private static func imageAttachmentCount(from text: String) -> Int? {
+        guard text.hasSuffix(" attached."),
+              text.contains(" image") else {
+            return nil
+        }
+        let firstToken = text.split(separator: " ").first
+        return firstToken.flatMap { Int($0) }
     }
 }
 
