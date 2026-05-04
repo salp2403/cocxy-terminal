@@ -535,6 +535,11 @@ final class PreferencesViewModel: ObservableObject {
         AppLocalizer(languagePreference: appLanguage, bundle: appLocalizationBundle).string(key)
     }
 
+    func localizedString(_ key: String, fallback: String) -> String {
+        AppLocalizer(languagePreference: appLanguage, bundle: appLocalizationBundle)
+            .string(key, fallback: fallback)
+    }
+
     var mcpConfigPath: String {
         mcpConfigURL.path
     }
@@ -1127,6 +1132,46 @@ final class PreferencesViewModel: ObservableObject {
             return "\"\(fontFamily)\" is not installed. Cocxy will fall back to bundled \(effective)."
         }
         return "\"\(fontFamily)\" is not installed. Cocxy will fall back to \(effective)."
+    }
+
+    var localizedFontResolutionSummary: String {
+        let effective = effectiveFontFamily
+        if isSelectedFontInstalled, isSelectedFontBundled {
+            return String(
+                format: localizedString(
+                    "preferences.appearance.fontResolution.included",
+                    fallback: "Included with Cocxy: %@"
+                ),
+                effective
+            )
+        }
+        if isSelectedFontInstalled {
+            return String(
+                format: localizedString(
+                    "preferences.appearance.fontResolution.installed",
+                    fallback: "Using installed font: %@"
+                ),
+                effective
+            )
+        }
+        if isEffectiveFontBundled {
+            return String(
+                format: localizedString(
+                    "preferences.appearance.fontResolution.fallbackBundled",
+                    fallback: "\"%@\" is not installed. Cocxy will fall back to bundled %@."
+                ),
+                fontFamily,
+                effective
+            )
+        }
+        return String(
+            format: localizedString(
+                "preferences.appearance.fontResolution.fallback",
+                fallback: "\"%@\" is not installed. Cocxy will fall back to %@."
+            ),
+            fontFamily,
+            effective
+        )
     }
 
     // MARK: - Save

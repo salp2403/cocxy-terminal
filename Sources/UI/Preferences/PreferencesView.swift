@@ -97,7 +97,7 @@ struct PreferencesView: View {
 
     private var sidebarContent: some View {
         List(PreferencesSection.allCases, selection: $selectedSection) { section in
-            Label(section.title, systemImage: section.iconName)
+            Label(section.localizedTitle(viewModel), systemImage: section.iconName)
                 .tag(section)
         }
         .listStyle(.sidebar)
@@ -185,6 +185,11 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    @MainActor
+    func localizedTitle(_ viewModel: PreferencesViewModel) -> String {
+        viewModel.localizedString("preferences.section.\(rawValue)", fallback: title)
+    }
+
     /// Human-readable title for the sidebar label.
     var title: String {
         switch self {
@@ -248,12 +253,19 @@ struct PreferencesSaveButton: View {
     var body: some View {
         Section {
             HStack {
-                Button("Save") {
+                Button(viewModel.localizedString("preferences.save.button", fallback: "Save")) {
                     do {
                         try viewModel.save()
-                        saveStatus = "Settings saved."
+                        saveStatus = viewModel.localizedString(
+                            "preferences.save.status.saved",
+                            fallback: "Settings saved."
+                        )
                     } catch {
-                        saveStatus = "Failed to save: \(error.localizedDescription)"
+                        let format = viewModel.localizedString(
+                            "preferences.save.status.failed",
+                            fallback: "Failed to save: %@"
+                        )
+                        saveStatus = String(format: format, error.localizedDescription)
                     }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                         saveStatus = nil
@@ -263,8 +275,14 @@ struct PreferencesSaveButton: View {
                 .disabled(!viewModel.hasUnsavedChanges)
                 .help(
                     viewModel.hasUnsavedChanges
-                        ? "Save the modified settings to config.toml."
-                        : "No settings have changed."
+                        ? viewModel.localizedString(
+                            "preferences.save.help.changed",
+                            fallback: "Save the modified settings to config.toml."
+                        )
+                        : viewModel.localizedString(
+                            "preferences.save.help.unchanged",
+                            fallback: "No settings have changed."
+                        )
                 )
 
                 if let status = saveStatus {
@@ -276,7 +294,7 @@ struct PreferencesSaveButton: View {
 
                 Spacer()
 
-                Button("Open config.toml") {
+                Button(viewModel.localizedString("preferences.save.openConfig", fallback: "Open config.toml")) {
                     let configPath = FileManager.default.homeDirectoryForCurrentUser
                         .appendingPathComponent(".config/cocxy/config.toml")
                     NSWorkspace.shared.open(configPath)
@@ -297,18 +315,30 @@ struct EditableGeneralSection: View {
 
     var body: some View {
         Form {
-            Section("Shell") {
-                TextField("Shell path", text: $viewModel.shell)
+            Section(viewModel.localizedString("preferences.general.shell.section", fallback: "Shell")) {
+                TextField(
+                    viewModel.localizedString("preferences.general.shellPath", fallback: "Shell path"),
+                    text: $viewModel.shell
+                )
                     .textFieldStyle(.roundedBorder)
-                TextField("Working directory", text: $viewModel.workingDirectory)
+                TextField(
+                    viewModel.localizedString("preferences.general.workingDirectory", fallback: "Working directory"),
+                    text: $viewModel.workingDirectory
+                )
                     .textFieldStyle(.roundedBorder)
-                Toggle("Confirm before closing", isOn: $viewModel.confirmCloseProcess)
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.general.confirmBeforeClosing",
+                        fallback: "Confirm before closing"
+                    ),
+                    isOn: $viewModel.confirmCloseProcess
+                )
             }
 
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("General")
+        .navigationTitle(viewModel.localizedString("preferences.section.general", fallback: "General"))
     }
 }
 
@@ -321,8 +351,11 @@ struct EditableAppearanceSection: View {
 
     var body: some View {
         Form {
-            Section("Theme") {
-                Picker("Active theme", selection: $viewModel.theme) {
+            Section(viewModel.localizedString("preferences.appearance.theme.section", fallback: "Theme")) {
+                Picker(
+                    viewModel.localizedString("preferences.appearance.activeTheme", fallback: "Active theme"),
+                    selection: $viewModel.theme
+                ) {
                     ForEach(viewModel.availableThemes, id: \.self) { name in
                         Text(name).tag(name)
                     }
@@ -345,20 +378,37 @@ struct EditableAppearanceSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Font") {
+            Section(viewModel.localizedString("preferences.appearance.font.section", fallback: "Font")) {
                 FontFamilyComboBox(
                     text: $viewModel.fontFamily,
-                    options: viewModel.availableFontFamilies
+                    options: viewModel.availableFontFamilies,
+                    accessibilityLabel: viewModel.localizedString(
+                        "preferences.appearance.fontFamily",
+                        fallback: "Font family"
+                    )
                 )
                 .frame(height: 24)
 
-                Text("Choose any installed monospaced font. The dropdown is filtered to terminal-safe families, but you can still type a custom family name manually.")
+                Text(
+                    viewModel.localizedString(
+                        "preferences.appearance.fontHelp",
+                        fallback: "Choose any installed monospaced font. The dropdown is filtered to terminal-safe families, but you can still type a custom family name manually."
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !viewModel.bundledFontFamilies.isEmpty {
-                    Text("Included with Cocxy: \(viewModel.bundledFontFamilies.joined(separator: ", "))")
+                    Text(
+                        String(
+                            format: viewModel.localizedString(
+                                "preferences.appearance.includedFonts",
+                                fallback: "Included with Cocxy: %@"
+                            ),
+                            viewModel.bundledFontFamilies.joined(separator: ", ")
+                        )
+                    )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -366,7 +416,7 @@ struct EditableAppearanceSection: View {
 
                 if !viewModel.recommendedFontFamilies.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Recommended")
+                        Text(viewModel.localizedString("preferences.appearance.recommended", fallback: "Recommended"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
@@ -378,7 +428,11 @@ struct EditableAppearanceSection: View {
                                         isSelected: viewModel.fontFamily == family,
                                         isBundled: viewModel.bundledFontFamilies.contains { bundled in
                                             bundled.caseInsensitiveCompare(family) == .orderedSame
-                                        }
+                                        },
+                                        bundledLabel: viewModel.localizedString(
+                                            "preferences.appearance.bundled",
+                                            fallback: "Bundled"
+                                        )
                                     ) {
                                         viewModel.fontFamily = family
                                     }
@@ -392,17 +446,24 @@ struct EditableAppearanceSection: View {
                 FontPreviewCard(viewModel: viewModel)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Enable ligatures", isOn: $viewModel.ligatures)
+                    Toggle(
+                        viewModel.localizedString(
+                            "preferences.appearance.enableLigatures",
+                            fallback: "Enable ligatures"
+                        ),
+                        isOn: $viewModel.ligatures
+                    )
                         .help(
-                            "Some fonts combine symbol pairs like --, ==, -> "
-                            + "into a single wider glyph. Disable this option "
-                            + "if command text such as --dangerously-skip-permissions "
-                            + "looks misaligned or crowded in your prompt."
+                            viewModel.localizedString(
+                                "preferences.appearance.enableLigatures.help",
+                                fallback: "Some fonts combine symbol pairs like --, ==, -> into a single wider glyph. Disable this option if command text such as --dangerously-skip-permissions looks misaligned or crowded in your prompt."
+                            )
                         )
                     Text(
-                        "Some fonts combine symbol pairs like --, ==, -> "
-                        + "into a single glyph. Disable if command text "
-                        + "appears misaligned in the prompt."
+                        viewModel.localizedString(
+                            "preferences.appearance.enableLigatures.caption",
+                            fallback: "Some fonts combine symbol pairs like --, ==, -> into a single glyph. Disable if command text appears misaligned in the prompt."
+                        )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -410,16 +471,24 @@ struct EditableAppearanceSection: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Thicken font strokes", isOn: $viewModel.fontThicken)
+                    Toggle(
+                        viewModel.localizedString(
+                            "preferences.appearance.thickenFontStrokes",
+                            fallback: "Thicken font strokes"
+                        ),
+                        isOn: $viewModel.fontThicken
+                    )
                         .help(
-                            "Enables CoreText font smoothing during glyph rasterization, "
-                            + "which boosts perceived stroke weight. Off by default for a "
-                            + "cleaner, thinner look. Turn on if the rendered text looks "
-                            + "too thin on your display."
+                            viewModel.localizedString(
+                                "preferences.appearance.thickenFontStrokes.help",
+                                fallback: "Enables CoreText font smoothing during glyph rasterization, which boosts perceived stroke weight. Off by default for a cleaner, thinner look. Turn on if the rendered text looks too thin on your display."
+                            )
                         )
                     Text(
-                        "Boosts stroke weight via font smoothing. Off keeps glyphs "
-                        + "thin and crisp; on makes them look heavier."
+                        viewModel.localizedString(
+                            "preferences.appearance.thickenFontStrokes.caption",
+                            fallback: "Boosts stroke weight via font smoothing. Off keeps glyphs thin and crisp; on makes them look heavier."
+                        )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -428,7 +497,7 @@ struct EditableAppearanceSection: View {
 
                 VStack(alignment: .leading) {
                     HStack {
-                        Text("Font size")
+                        Text(viewModel.localizedString("preferences.appearance.fontSize", fallback: "Font size"))
                         Spacer()
                         Text("\(Int(viewModel.fontSize)) pt")
                             .foregroundStyle(.secondary)
@@ -438,23 +507,44 @@ struct EditableAppearanceSection: View {
                 }
             }
 
-            Section("Layout") {
-                Picker("Classic tab position", selection: $viewModel.tabPosition) {
-                    Text("Left").tag("left")
-                    Text("Top").tag("top")
-                    Text("Hidden").tag("hidden")
+            Section(viewModel.localizedString("preferences.appearance.layout.section", fallback: "Layout")) {
+                Picker(
+                    viewModel.localizedString(
+                        "preferences.appearance.classicTabPosition",
+                        fallback: "Classic tab position"
+                    ),
+                    selection: $viewModel.tabPosition
+                ) {
+                    Text(viewModel.localizedString("preferences.appearance.tabPosition.left", fallback: "Left"))
+                        .tag("left")
+                    Text(viewModel.localizedString("preferences.appearance.tabPosition.top", fallback: "Top"))
+                        .tag("top")
+                    Text(viewModel.localizedString("preferences.appearance.tabPosition.hidden", fallback: "Hidden"))
+                        .tag("hidden")
                 }
                 .disabled(!viewModel.isClassicTabPositionEditable)
                 .help(
                     viewModel.isClassicTabPositionEditable
-                        ? "Controls the classic tab navigation: left sidebar, top strip, or hidden tabs."
-                        : "Aurora uses its own workspace sidebar. This classic tab position is preserved and applies again when Aurora is disabled."
+                        ? viewModel.localizedString(
+                            "preferences.appearance.classicTabPosition.help.enabled",
+                            fallback: "Controls the classic tab navigation: left sidebar, top strip, or hidden tabs."
+                        )
+                        : viewModel.localizedString(
+                            "preferences.appearance.classicTabPosition.help.disabled",
+                            fallback: "Aurora uses its own workspace sidebar. This classic tab position is preserved and applies again when Aurora is disabled."
+                        )
                 )
 
                 Text(
                     viewModel.isClassicTabPositionEditable
-                        ? "Top shows the classic horizontal tab strip and collapses the left tab sidebar. Hidden keeps only terminal chrome controls visible."
-                        : "Aurora is enabled, so Cocxy keeps the workspace sidebar visible and ignores the classic Left/Top/Hidden layout until Aurora is turned off."
+                        ? viewModel.localizedString(
+                            "preferences.appearance.classicTabPosition.caption.enabled",
+                            fallback: "Top shows the classic horizontal tab strip and collapses the left tab sidebar. Hidden keeps only terminal chrome controls visible."
+                        )
+                        : viewModel.localizedString(
+                            "preferences.appearance.classicTabPosition.caption.disabled",
+                            fallback: "Aurora is enabled, so Cocxy keeps the workspace sidebar visible and ignores the classic Left/Top/Hidden layout until Aurora is turned off."
+                        )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -462,7 +552,12 @@ struct EditableAppearanceSection: View {
 
                 VStack(alignment: .leading) {
                     HStack {
-                        Text("Window padding")
+                        Text(
+                            viewModel.localizedString(
+                                "preferences.appearance.windowPadding",
+                                fallback: "Window padding"
+                            )
+                        )
                         Spacer()
                         Text("\(Int(viewModel.windowPadding)) pt")
                             .foregroundStyle(.secondary)
@@ -472,50 +567,75 @@ struct EditableAppearanceSection: View {
                 }
             }
 
-            Section("Aurora") {
+            Section(viewModel.localizedString("preferences.appearance.aurora.section", fallback: "Aurora")) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Enable Aurora chrome", isOn: $viewModel.auroraEnabled)
+                    Toggle(
+                        viewModel.localizedString(
+                            "preferences.appearance.enableAurora",
+                            fallback: "Enable Aurora chrome"
+                        ),
+                        isOn: $viewModel.auroraEnabled
+                    )
                         .help(
-                            "Switches the window chrome to the experimental Aurora "
-                            + "sidebar, status bar, and command palette. Save to "
-                            + "apply through the normal config hot-reload path."
+                            viewModel.localizedString(
+                                "preferences.appearance.enableAurora.help",
+                                fallback: "Switches the window chrome to the experimental Aurora sidebar, status bar, and command palette. Save to apply through the normal config hot-reload path."
+                            )
                         )
                     Text(
-                        "Aurora is an opt-in preview of the redesigned chrome. "
-                        + "Turn it off to return to the classic sidebar and status bar."
+                        viewModel.localizedString(
+                            "preferences.appearance.enableAurora.caption",
+                            fallback: "Aurora is an opt-in preview of the redesigned chrome. Turn it off to return to the classic sidebar and status bar."
+                        )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
-                Picker("Sidebar density", selection: $viewModel.auroraSidebarDisplayMode) {
+                Picker(
+                    viewModel.localizedString(
+                        "preferences.appearance.sidebarDensity",
+                        fallback: "Sidebar density"
+                    ),
+                    selection: $viewModel.auroraSidebarDisplayMode
+                ) {
                     ForEach(AuroraSidebarDisplayMode.allCases, id: \.self) { mode in
-                        Text(mode.preferencesLabel).tag(mode)
+                        Text(mode.localizedPreferencesLabel(viewModel)).tag(mode)
                     }
                 }
-                Picker("Sidebar row detail", selection: $viewModel.auroraSidebarPrimaryInfo) {
+                Picker(
+                    viewModel.localizedString(
+                        "preferences.appearance.sidebarRowDetail",
+                        fallback: "Sidebar row detail"
+                    ),
+                    selection: $viewModel.auroraSidebarPrimaryInfo
+                ) {
                     ForEach(AuroraSidebarPrimaryInfo.allCases, id: \.self) { info in
-                        Text(info.preferencesLabel).tag(info)
+                        Text(info.localizedPreferencesLabel(viewModel)).tag(info)
                     }
                 }
             }
 
-            Section("Status bar") {
+            Section(viewModel.localizedString("preferences.appearance.statusBar.section", fallback: "Status bar")) {
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(
-                        "Show rate-limit indicator",
+                        viewModel.localizedString(
+                            "preferences.appearance.showRateLimitIndicator",
+                            fallback: "Show rate-limit indicator"
+                        ),
                         isOn: $viewModel.rateLimitIndicatorEnabled
                     )
                     .help(
-                        "Displays a status-bar pill with locally-estimated "
-                        + "usage for the active agent. The pill only appears "
-                        + "when the active agent has a registered local "
-                        + "provider with available data — turning this off "
-                        + "hides it for every agent."
+                        viewModel.localizedString(
+                            "preferences.appearance.showRateLimitIndicator.help",
+                            fallback: "Displays a status-bar pill with locally-estimated usage for the active agent. The pill only appears when the active agent has a registered local provider with available data; turning this off hides it for every agent."
+                        )
                     )
                     Text(
-                        "Reads only local files the agent's CLI already keeps "
-                        + "on disk. No data leaves your machine."
+                        viewModel.localizedString(
+                            "preferences.appearance.showRateLimitIndicator.caption",
+                            fallback: "Reads only local files the agent's CLI already keeps on disk. No data leaves your machine."
+                        )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -523,37 +643,74 @@ struct EditableAppearanceSection: View {
                 }
             }
 
-            Section("Notes") {
+            Section(viewModel.localizedString("preferences.appearance.notes.section", fallback: "Notes")) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Toggle("Enable workspace notes", isOn: $viewModel.notesEnabled)
-                        .help("Shows the Notes panel and enables the configured notes shortcut.")
+                    Toggle(
+                        viewModel.localizedString(
+                            "preferences.appearance.enableWorkspaceNotes",
+                            fallback: "Enable workspace notes"
+                        ),
+                        isOn: $viewModel.notesEnabled
+                    )
+                    .help(
+                        viewModel.localizedString(
+                            "preferences.appearance.enableWorkspaceNotes.help",
+                            fallback: "Shows the Notes panel and enables the configured notes shortcut."
+                        )
+                    )
 
-                    Picker("Format", selection: $viewModel.notesFormat) {
+                    Picker(
+                        viewModel.localizedString("preferences.appearance.notesFormat", fallback: "Format"),
+                        selection: $viewModel.notesFormat
+                    ) {
                         ForEach(NoteFormat.allCases, id: \.rawValue) { format in
                             Text(format.rawValue).tag(format.rawValue)
                         }
                     }
                     .disabled(!viewModel.notesEnabled)
 
-                    Picker("Search", selection: $viewModel.notesSearchEngine) {
+                    Picker(
+                        viewModel.localizedString("preferences.appearance.notesSearch", fallback: "Search"),
+                        selection: $viewModel.notesSearchEngine
+                    ) {
                         ForEach(NoteSearchEngineKind.allCases, id: \.rawValue) { engine in
                             Text(engine.rawValue).tag(engine.rawValue)
                         }
                     }
                     .disabled(!viewModel.notesEnabled)
 
-                    TextField("Storage directory", text: $viewModel.notesStorageDir)
+                    TextField(
+                        viewModel.localizedString(
+                            "preferences.appearance.notesStorageDirectory",
+                            fallback: "Storage directory"
+                        ),
+                        text: $viewModel.notesStorageDir
+                    )
                         .disabled(!viewModel.notesEnabled)
 
-                    TextField("Shortcut", text: $viewModel.notesShortcut)
+                    TextField(
+                        viewModel.localizedString("preferences.appearance.notesShortcut", fallback: "Shortcut"),
+                        text: $viewModel.notesShortcut
+                    )
                         .disabled(!viewModel.notesEnabled)
 
-                    Toggle("Auto-save notes", isOn: $viewModel.notesAutoSave)
+                    Toggle(
+                        viewModel.localizedString(
+                            "preferences.appearance.autoSaveNotes",
+                            fallback: "Auto-save notes"
+                        ),
+                        isOn: $viewModel.notesAutoSave
+                    )
                         .disabled(!viewModel.notesEnabled)
 
                     VStack(alignment: .leading) {
                         HStack {
-                            Text("Auto-save interval")
+                            Text(
+                                viewModel.localizedString(
+                                    "preferences.appearance.autoSaveInterval",
+                                    fallback: "Auto-save interval"
+                                )
+                            )
                             Spacer()
                             Text("\(viewModel.notesAutoSaveIntervalSeconds, specifier: "%.1f") s")
                                 .foregroundStyle(.secondary)
@@ -567,17 +724,27 @@ struct EditableAppearanceSection: View {
                         .disabled(!viewModel.notesEnabled || !viewModel.notesAutoSave)
                     }
 
-                    Text("Notes are stored per workspace under the configured local folder.")
+                    Text(
+                        viewModel.localizedString(
+                            "preferences.appearance.notes.caption",
+                            fallback: "Notes are stored per workspace under the configured local folder."
+                        )
+                    )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Section("Transparency") {
+            Section(viewModel.localizedString("preferences.appearance.transparency.section", fallback: "Transparency")) {
                 VStack(alignment: .leading) {
                     HStack {
-                        Text("Background opacity")
+                        Text(
+                            viewModel.localizedString(
+                                "preferences.appearance.backgroundOpacity",
+                                fallback: "Background opacity"
+                            )
+                        )
                         Spacer()
                         Text("\(Int(viewModel.backgroundOpacity * 100))%")
                             .foregroundStyle(.secondary)
@@ -585,32 +752,56 @@ struct EditableAppearanceSection: View {
                     }
                     Slider(value: $viewModel.backgroundOpacity, in: 0.3...1.0, step: 0.05)
                 }
-                Text("Lower values enable a glass effect on the sidebar, tab strip, and status bar.")
+                Text(
+                    viewModel.localizedString(
+                        "preferences.appearance.backgroundOpacity.caption",
+                        fallback: "Lower values enable a glass effect on the sidebar, tab strip, and status bar."
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.tertiary)
 
                 Picker(
-                    "Glass chrome tint",
+                    viewModel.localizedString(
+                        "preferences.appearance.glassChromeTint",
+                        fallback: "Glass chrome tint"
+                    ),
                     selection: $viewModel.transparencyChromeTheme
                 ) {
-                    Text("Follow System").tag(TransparencyChromeTheme.followSystem)
-                    Text("Light").tag(TransparencyChromeTheme.light)
-                    Text("Dark").tag(TransparencyChromeTheme.dark)
+                    Text(
+                        viewModel.localizedString(
+                            "preferences.appearance.glassChromeTint.followSystem",
+                            fallback: "Follow System"
+                        )
+                    )
+                    .tag(TransparencyChromeTheme.followSystem)
+                    Text(viewModel.localizedString("preferences.appearance.glassChromeTint.light", fallback: "Light"))
+                        .tag(TransparencyChromeTheme.light)
+                    Text(viewModel.localizedString("preferences.appearance.glassChromeTint.dark", fallback: "Dark"))
+                        .tag(TransparencyChromeTheme.dark)
                 }
                 .help(
                     viewModel.isTransparencyChromeThemeEditable
-                        ? "Pin the translucent sidebar, tab strip, and status bar "
-                        + "to a light or dark tint independently of macOS. Only "
-                        + "visible while the window is transparent."
-                        : "Selection is saved but only takes effect while the "
-                        + "window is transparent. Lower the background opacity "
-                        + "above to see it live."
+                        ? viewModel.localizedString(
+                            "preferences.appearance.glassChromeTint.help.enabled",
+                            fallback: "Pin the translucent sidebar, tab strip, and status bar to a light or dark tint independently of macOS. Only visible while the window is transparent."
+                        )
+                        : viewModel.localizedString(
+                            "preferences.appearance.glassChromeTint.help.disabled",
+                            fallback: "Selection is saved but only takes effect while the window is transparent. Lower the background opacity above to see it live."
+                        )
                 )
-                .accessibilityLabel("Glass chrome tint")
+                .accessibilityLabel(
+                    viewModel.localizedString(
+                        "preferences.appearance.glassChromeTint",
+                        fallback: "Glass chrome tint"
+                    )
+                )
                 .accessibilityHint(
-                    "Choose whether the translucent sidebar, tab strip, and "
-                    + "status bar follow the system appearance or stay "
-                    + "pinned to a light or dark tint."
+                    viewModel.localizedString(
+                        "preferences.appearance.glassChromeTint.accessibilityHint",
+                        fallback: "Choose whether the translucent sidebar, tab strip, and status bar follow the system appearance or stay pinned to a light or dark tint."
+                    )
                 )
 
                 if !viewModel.isTransparencyChromeThemeEditable {
@@ -620,9 +811,10 @@ struct EditableAppearanceSection: View {
                             .foregroundStyle(.orange)
                             .accessibilityHidden(true)
                         Text(
-                            "Your selection is saved, but you'll only see the "
-                            + "tint once the window is transparent. Drop the "
-                            + "background opacity above 100% to preview it live."
+                            viewModel.localizedString(
+                                "preferences.appearance.glassChromeTint.hidden.caption",
+                                fallback: "Your selection is saved, but you'll only see the tint once the window is transparent. Drop the background opacity below 100% to preview it live."
+                            )
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -630,14 +822,17 @@ struct EditableAppearanceSection: View {
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(
-                        "Information: the glass chrome tint is saved but "
-                        + "only visible while the window is transparent."
+                        viewModel.localizedString(
+                            "preferences.appearance.glassChromeTint.hidden.accessibilityLabel",
+                            fallback: "Information: the glass chrome tint is saved but only visible while the window is transparent."
+                        )
                     )
                 } else {
                     Text(
-                        "Pins the sidebar, tab strip, and status bar to a "
-                        + "light or dark tint independently of macOS, as "
-                        + "long as the window stays transparent."
+                        viewModel.localizedString(
+                            "preferences.appearance.glassChromeTint.pinned.caption",
+                            fallback: "Pins the sidebar, tab strip, and status bar to a light or dark tint independently of macOS, as long as the window stays transparent."
+                        )
                     )
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -648,7 +843,7 @@ struct EditableAppearanceSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Appearance")
+        .navigationTitle(viewModel.localizedString("preferences.section.appearance", fallback: "Appearance"))
     }
 }
 
@@ -658,6 +853,7 @@ struct EditableAppearanceSection: View {
 struct FontFamilyComboBox: NSViewRepresentable {
     @Binding var text: String
     let options: [String]
+    let accessibilityLabel: String
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -670,8 +866,8 @@ struct FontFamilyComboBox: NSViewRepresentable {
         comboBox.completes = true
         comboBox.numberOfVisibleItems = min(max(options.count, 8), 14)
         comboBox.delegate = context.coordinator
-        comboBox.setAccessibilityLabel("Font family")
-        comboBox.placeholderString = "Font family"
+        comboBox.setAccessibilityLabel(accessibilityLabel)
+        comboBox.placeholderString = accessibilityLabel
         comboBox.addItems(withObjectValues: options)
         comboBox.stringValue = text
         return comboBox
@@ -729,7 +925,7 @@ struct FontPreviewCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Preview")
+            Text(viewModel.localizedString("preferences.appearance.preview", fallback: "Preview"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -740,7 +936,7 @@ struct FontPreviewCard: View {
                 .font(previewFont)
                 .textSelection(.enabled)
 
-            Text(viewModel.fontResolutionSummary)
+            Text(viewModel.localizedFontResolutionSummary)
                 .font(.caption)
                 .foregroundStyle(summaryColor)
                 .fixedSize(horizontal: false, vertical: true)
@@ -754,6 +950,7 @@ private struct FontQuickPickButton: View {
     let family: String
     let isSelected: Bool
     let isBundled: Bool
+    let bundledLabel: String
     let action: () -> Void
 
     var body: some View {
@@ -763,7 +960,7 @@ private struct FontQuickPickButton: View {
                     .font(.caption)
                     .lineLimit(1)
                 if isBundled {
-                    Text("Bundled")
+                    Text(bundledLabel)
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -2085,6 +2282,14 @@ private extension AuroraSidebarDisplayMode {
         case .compact: return "Compact"
         }
     }
+
+    @MainActor
+    func localizedPreferencesLabel(_ viewModel: PreferencesViewModel) -> String {
+        viewModel.localizedString(
+            "preferences.appearance.sidebarDensity.\(rawValue)",
+            fallback: preferencesLabel
+        )
+    }
 }
 
 private extension AuroraSidebarPrimaryInfo {
@@ -2095,5 +2300,13 @@ private extension AuroraSidebarPrimaryInfo {
         case .process: return "Process"
         case .command: return "Command"
         }
+    }
+
+    @MainActor
+    func localizedPreferencesLabel(_ viewModel: PreferencesViewModel) -> String {
+        viewModel.localizedString(
+            "preferences.appearance.sidebarRowDetail.\(rawValue)",
+            fallback: preferencesLabel
+        )
     }
 }

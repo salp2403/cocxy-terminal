@@ -36,6 +36,14 @@ struct AppLocalizationSwiftTestingTests {
         #expect(english.string(.preferencesAppearanceLanguageTitle) == "Language")
         #expect(spanish.string(.preferencesAppearanceLanguageTitle) == "Idioma")
         #expect(spanish.string(.preferencesAppearanceLanguagePicker) == "Idioma de la app")
+        #expect(spanish.string("preferences.section.appearance", fallback: "Appearance") == "Apariencia")
+        #expect(spanish.string("preferences.save.button", fallback: "Save") == "Guardar")
+        #expect(spanish.string("preferences.general.shellPath", fallback: "Shell path") == "Ruta del shell")
+        #expect(spanish.string("preferences.appearance.fontSize", fallback: "Font size") == "Tamaño de fuente")
+        #expect(spanish.string("preferences.appearance.glassChromeTint.dark", fallback: "Dark") == "Oscuro")
+        #expect(spanish.string("preferences.appearance.fontResolution.included", fallback: "Included with Cocxy: %@") == "Incluida con Cocxy: %@")
+        #expect(spanish.string("preferences.appearance.sidebarDensity.detailed", fallback: "Detailed") == "Detallada")
+        #expect(spanish.string("preferences.appearance.sidebarRowDetail.state", fallback: "State") == "Estado")
     }
 
     @Test

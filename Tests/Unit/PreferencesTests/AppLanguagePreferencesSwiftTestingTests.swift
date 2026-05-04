@@ -112,6 +112,10 @@ struct AppLanguagePreferencesSwiftTestingTests {
 
         #expect(vm.localizedString(.preferencesAppearanceLanguageTitle) == "Idioma")
         #expect(vm.localizedString(.preferencesAppearanceLanguagePicker) == "Idioma de la app")
+        #expect(vm.localizedString("preferences.save.button", fallback: "Save") == "Guardar")
+        #expect(vm.localizedString("preferences.general.shellPath", fallback: "Shell path") == "Ruta del shell")
+        #expect(vm.localizedString("preferences.appearance.activeTheme", fallback: "Active theme") == "Tema activo")
+        #expect(PreferencesSection.appearance.localizedTitle(vm) == "Apariencia")
     }
 
     private func localizationBundle() -> Bundle? {
