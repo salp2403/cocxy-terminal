@@ -329,6 +329,8 @@ struct TerminalEngineConfig: Sendable {
     let windowPaddingY: Double
     /// Policy for OSC 52 clipboard reads initiated by terminal programs.
     let clipboardReadAccess: ClipboardReadAccess
+    /// App language used for terminal-engine-owned UI prompts.
+    let appLanguage: AppLanguage
     /// Whether typographic ligatures should be enabled.
     let ligaturesEnabled: Bool
     /// Whether font thickening is enabled (maps to font-thicken / CGContextSetShouldSmoothFonts).
@@ -358,6 +360,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingX: Double = 8,
         windowPaddingY: Double = 4,
         clipboardReadAccess: ClipboardReadAccess = .prompt,
+        appLanguage: AppLanguage = .system,
         ligaturesEnabled: Bool = true,
         fontThickenEnabled: Bool = false,
         imageMemoryLimitBytes: UInt64 = 256 * 1024 * 1024,
@@ -377,6 +380,7 @@ struct TerminalEngineConfig: Sendable {
         self.windowPaddingX = windowPaddingX
         self.windowPaddingY = windowPaddingY
         self.clipboardReadAccess = clipboardReadAccess
+        self.appLanguage = appLanguage
         self.ligaturesEnabled = ligaturesEnabled
         self.fontThickenEnabled = fontThickenEnabled
         self.imageMemoryLimitBytes = imageMemoryLimitBytes
@@ -398,6 +402,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingX: Double? = nil,
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
+        appLanguage: AppLanguage? = nil,
         ligaturesEnabled: Bool? = nil,
         fontThickenEnabled: Bool? = nil,
         imageMemoryLimitBytes: UInt64? = nil,
@@ -419,6 +424,7 @@ struct TerminalEngineConfig: Sendable {
             windowPaddingX: windowPaddingX ?? self.windowPaddingX,
             windowPaddingY: windowPaddingY ?? self.windowPaddingY,
             clipboardReadAccess: clipboardReadAccess ?? self.clipboardReadAccess,
+            appLanguage: appLanguage ?? self.appLanguage,
             ligaturesEnabled: ligaturesEnabled ?? self.ligaturesEnabled,
             fontThickenEnabled: fontThickenEnabled ?? self.fontThickenEnabled,
             imageMemoryLimitBytes: imageMemoryLimitBytes ?? self.imageMemoryLimitBytes,

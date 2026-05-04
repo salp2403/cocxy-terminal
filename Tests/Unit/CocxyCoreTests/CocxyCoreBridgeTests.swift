@@ -829,6 +829,21 @@ struct CocxyCoreBridgeTests {
         #expect(clipboard.readCallCount == 1)
     }
 
+    @Test("clipboard read authorization copy follows configured app language")
+    func clipboardReadAuthorizationCopyFollowsConfiguredAppLanguage() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+
+        let copy = CocxyCoreBridge.localizedClipboardReadAuthorizationCopy(localizer: localizer)
+
+        #expect(copy.messageText == "¿Permitir lectura del portapapeles?")
+        #expect(copy.informativeText.contains("OSC 52"))
+        #expect(copy.primaryButton == "Permitir")
+        #expect(copy.secondaryButton == "Denegar")
+    }
+
     @Test("parseWorkingDirectoryURL accepts file URLs and plain paths")
     func parseWorkingDirectoryURLAcceptsFileURLsAndPaths() throws {
         let bridge = try makeBridge()
@@ -1108,6 +1123,11 @@ private func makeConfig() -> TerminalEngineConfig {
         windowPaddingX: 8,
         windowPaddingY: 4
     )
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
 
 private func makeUXPolishPalette() -> ThemePalette {

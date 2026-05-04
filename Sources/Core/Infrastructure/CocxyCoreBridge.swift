@@ -2566,6 +2566,7 @@ final class CocxyCoreBridge: TerminalEngine {
         windowPaddingX: Double? = nil,
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
+        appLanguage: AppLanguage? = nil,
         ligaturesEnabled: Bool? = nil,
         fontThickenEnabled: Bool? = nil,
         imageMemoryLimitBytes: UInt64? = nil,
@@ -2587,6 +2588,7 @@ final class CocxyCoreBridge: TerminalEngine {
             windowPaddingX: windowPaddingX,
             windowPaddingY: windowPaddingY,
             clipboardReadAccess: clipboardReadAccess,
+            appLanguage: appLanguage,
             ligaturesEnabled: ligaturesEnabled,
             fontThickenEnabled: fontThickenEnabled,
             imageMemoryLimitBytes: imageMemoryLimitBytes,
@@ -3338,19 +3340,34 @@ final class CocxyCoreBridge: TerminalEngine {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Allow clipboard read?"
-        alert.informativeText = """
-        A terminal program requested access to the system clipboard via OSC 52.
-        Allowing this will send your current clipboard contents to the running shell.
-        """
-        alert.addButton(withTitle: "Allow")
-        alert.addButton(withTitle: "Deny")
+        let copy = Self.localizedClipboardReadAuthorizationCopy(
+            localizer: AppLocalizer(languagePreference: config?.appLanguage ?? .system)
+        )
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
 
         if let window {
             window.makeKeyAndOrderFront(nil)
         }
 
         return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    static func localizedClipboardReadAuthorizationCopy(localizer: AppLocalizer) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: localizer.string("terminal.clipboardRead.title", fallback: "Allow clipboard read?"),
+            informativeText: localizer.string(
+                "terminal.clipboardRead.message",
+                fallback: """
+                A terminal program requested access to the system clipboard via OSC 52. \
+                Allowing this will send your current clipboard contents to the running shell.
+                """
+            ),
+            primaryButton: localizer.string("terminal.clipboardRead.allow", fallback: "Allow"),
+            secondaryButton: localizer.string("terminal.clipboardRead.deny", fallback: "Deny")
+        )
     }
 
     private func sendClipboardResponse(

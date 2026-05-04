@@ -437,6 +437,10 @@
 "window.tabConfig.open.error" = "No se pudo abrir la configuración de pestaña.";
 "preferences.unsaved.title" = "Cambios sin guardar";
 "preferences.unsaved.message" = "Tienes ajustes sin guardar. ¿Quieres guardarlos antes de cerrar?";
+"terminal.clipboardRead.title" = "¿Permitir lectura del portapapeles?";
+"terminal.clipboardRead.message" = "Un programa de terminal solicitó acceso al portapapeles del sistema mediante OSC 52. Permitirlo enviará el contenido actual del portapapeles al shell en ejecución.";
+"terminal.clipboardRead.allow" = "Permitir";
+"terminal.clipboardRead.deny" = "Denegar";
 
 "welcome.accessibilityLabel" = "Bienvenida a Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";

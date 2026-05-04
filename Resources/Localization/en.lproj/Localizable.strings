@@ -437,6 +437,10 @@
 "window.tabConfig.open.error" = "Unable to open tab config.";
 "preferences.unsaved.title" = "Unsaved Changes";
 "preferences.unsaved.message" = "You have unsaved settings. Would you like to save them before closing?";
+"terminal.clipboardRead.title" = "Allow clipboard read?";
+"terminal.clipboardRead.message" = "A terminal program requested access to the system clipboard via OSC 52. Allowing this will send your current clipboard contents to the running shell.";
+"terminal.clipboardRead.allow" = "Allow";
+"terminal.clipboardRead.deny" = "Deny";
 
 "welcome.accessibilityLabel" = "Welcome to Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";
