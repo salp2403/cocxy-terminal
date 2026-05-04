@@ -23,6 +23,11 @@ enum CommandCategory: String, Codable, Sendable, CaseIterable {
     case cli        = "CLI"
     case worktree   = "Worktree"
     case editor     = "Editor"
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        let key = "command.category.\(rawValue.lowercased())"
+        return localizer.string(key, fallback: rawValue)
+    }
 }
 
 // MARK: - Command Action
@@ -58,4 +63,26 @@ struct CommandAction: Identifiable, Sendable {
     /// Handlers run on the MainActor since command actions typically
     /// trigger UI mutations (new tab, split, theme change, etc.).
     let handler: @MainActor @Sendable () -> Void
+
+    func localized(using localizer: AppLocalizer) -> CommandAction {
+        let nameKey = "command.\(id).name"
+        return CommandAction(
+            id: id,
+            name: localizer.string(nameKey, fallback: name),
+            description: localizer.string(localizedDescriptionKey, fallback: description),
+            shortcut: shortcut,
+            category: category,
+            handler: handler
+        )
+    }
+
+    private var localizedDescriptionKey: String {
+        if id == "window.pictureInPicture" {
+            if description.hasPrefix("Enable [experimental].pip-enabled") {
+                return "command.window.pictureInPicture.description.disabled"
+            }
+            return "command.window.pictureInPicture.description.enabled"
+        }
+        return "command.\(id).description"
+    }
 }

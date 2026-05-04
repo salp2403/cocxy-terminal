@@ -49,7 +49,10 @@ extension MainWindowController {
     func showTransientCommandPaletteOverlay(engine: any CommandPaletteSearching) {
         guard let overlayContainer = overlayContainerView else { return }
 
-        commandPaletteViewModel = CommandPaletteViewModel(engine: engine)
+        commandPaletteViewModel = CommandPaletteViewModel(
+            engine: engine,
+            localizer: appLocalizer()
+        )
         guard let viewModel = commandPaletteViewModel else { return }
         viewModel.isVisible = true
 

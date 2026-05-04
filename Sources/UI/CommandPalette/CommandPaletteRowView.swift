@@ -33,6 +33,9 @@ struct CommandPaletteRowView: View {
     /// The current search query, used to highlight matching characters.
     let query: String
 
+    /// Localized display name for the action category.
+    let categoryTitle: String
+
     // MARK: - Body
 
     var body: some View {
@@ -60,7 +63,7 @@ struct CommandPaletteRowView: View {
         .cornerRadius(6)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(action.name), \(action.category.rawValue)")
+        .accessibilityLabel("\(action.name), \(categoryTitle)")
         .accessibilityValue(action.shortcut ?? "")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -68,7 +71,7 @@ struct CommandPaletteRowView: View {
     // MARK: - Category Badge
 
     private var categoryBadge: some View {
-        Text(action.category.rawValue)
+        Text(categoryTitle)
             .font(.system(size: 9, weight: .medium))
             .foregroundColor(Color(nsColor: CocxyColors.text))
             .padding(.horizontal, 6)

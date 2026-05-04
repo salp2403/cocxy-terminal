@@ -75,6 +75,105 @@ extension Design {
         }
     }
 
+    // MARK: - Localized strings
+
+    /// Localized chrome copy for the Aurora command palette.
+    ///
+    /// The action rows are localized by the integration layer because
+    /// they come from the live command registry. Static palette chrome
+    /// lives here so the view stays deterministic and previews/tests can
+    /// render without depending on the app bundle.
+    struct AuroraPaletteStrings: Equatable, Sendable {
+        let accessibilityLabel: String
+        let searchPlaceholder: String
+        let searchAccessibilityLabel: String
+        let emptyMessage: String
+        let navigateHint: String
+        let selectHint: String
+        let closeHint: String
+        let actionSingular: String
+        let actionPlural: String
+
+        static let english = AuroraPaletteStrings(
+            accessibilityLabel: "Command palette",
+            searchPlaceholder: "Type a command...",
+            searchAccessibilityLabel: "Command palette search",
+            emptyMessage: "No matches",
+            navigateHint: "Navigate",
+            selectHint: "Select",
+            closeHint: "Close",
+            actionSingular: "action",
+            actionPlural: "actions"
+        )
+
+        init(
+            accessibilityLabel: String,
+            searchPlaceholder: String,
+            searchAccessibilityLabel: String,
+            emptyMessage: String,
+            navigateHint: String,
+            selectHint: String,
+            closeHint: String,
+            actionSingular: String,
+            actionPlural: String
+        ) {
+            self.accessibilityLabel = accessibilityLabel
+            self.searchPlaceholder = searchPlaceholder
+            self.searchAccessibilityLabel = searchAccessibilityLabel
+            self.emptyMessage = emptyMessage
+            self.navigateHint = navigateHint
+            self.selectHint = selectHint
+            self.closeHint = closeHint
+            self.actionSingular = actionSingular
+            self.actionPlural = actionPlural
+        }
+
+        init(localizer: AppLocalizer) {
+            self.init(
+                accessibilityLabel: localizer.string(
+                    "commandPalette.accessibilityLabel",
+                    fallback: Self.english.accessibilityLabel
+                ),
+                searchPlaceholder: localizer.string(
+                    "commandPalette.search.placeholder",
+                    fallback: Self.english.searchPlaceholder
+                ),
+                searchAccessibilityLabel: localizer.string(
+                    "commandPalette.search.accessibilityLabel",
+                    fallback: Self.english.searchAccessibilityLabel
+                ),
+                emptyMessage: localizer.string(
+                    "commandPalette.empty",
+                    fallback: Self.english.emptyMessage
+                ),
+                navigateHint: localizer.string(
+                    "commandPalette.footer.navigate",
+                    fallback: Self.english.navigateHint
+                ),
+                selectHint: localizer.string(
+                    "commandPalette.footer.select",
+                    fallback: Self.english.selectHint
+                ),
+                closeHint: localizer.string(
+                    "commandPalette.footer.close",
+                    fallback: Self.english.closeHint
+                ),
+                actionSingular: localizer.string(
+                    "commandPalette.footer.action.singular",
+                    fallback: Self.english.actionSingular
+                ),
+                actionPlural: localizer.string(
+                    "commandPalette.footer.action.plural",
+                    fallback: Self.english.actionPlural
+                )
+            )
+        }
+
+        func actionCountLabel(for count: Int) -> String {
+            "\(count) \(count == 1 ? actionSingular : actionPlural)"
+        }
+    }
+
     // MARK: - Command palette view
 
     /// Aurora-styled command palette overlay.
@@ -105,6 +204,7 @@ extension Design {
         @Binding var selectedIndex: Int
 
         let actions: [AuroraPaletteAction]
+        let strings: AuroraPaletteStrings
         let onSelect: (AuroraPaletteAction) -> Void
         let onDismiss: () -> Void
 
@@ -123,7 +223,7 @@ extension Design {
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .accessibilityElement(children: .contain)
-                .accessibilityLabel("Command palette")
+                .accessibilityLabel(strings.accessibilityLabel)
                 // Swallow arrow navigation and Escape so keystrokes
                 // never reach the terminal surface while the palette
                 // is up, and so the palette has first-class keyboard
@@ -197,11 +297,11 @@ extension Design {
                     .font(.system(size: 14, design: .monospaced))
                     .foregroundStyle(palette.textLow.resolvedColor())
 
-                TextField("Type a command…", text: $query)
+                TextField(strings.searchPlaceholder, text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundStyle(palette.textHigh.resolvedColor())
-                    .accessibilityLabel("Command palette search")
+                    .accessibilityLabel(strings.searchAccessibilityLabel)
                     .focused($searchFieldFocused)
                     .onSubmit { submitCurrentSelection() }
             }
@@ -264,7 +364,7 @@ extension Design {
         private var emptyState: some View {
             HStack {
                 Spacer()
-                Text("No matches")
+                Text(strings.emptyMessage)
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(palette.textLow.resolvedColor())
                 Spacer()
@@ -274,11 +374,11 @@ extension Design {
 
         private var footerHint: some View {
             HStack(spacing: Spacing.xSmall) {
-                hintChip("↑↓", "Navigate")
-                hintChip("⏎", "Select")
-                hintChip("⎋", "Close")
+                hintChip("↑↓", strings.navigateHint)
+                hintChip("⏎", strings.selectHint)
+                hintChip("⎋", strings.closeHint)
                 Spacer()
-                Text("\(filteredActions.count) action\(filteredActions.count == 1 ? "" : "s")")
+                Text(strings.actionCountLabel(for: filteredActions.count))
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(palette.textLow.resolvedColor())
             }

@@ -14,6 +14,11 @@ import SwiftUI
 /// window management, tabs, and terminal surface lifecycle.
 extension MainWindowController {
 
+    func appLocalizer(for config: CocxyConfig? = nil) -> AppLocalizer {
+        let resolvedConfig = config ?? configService?.current ?? .defaults
+        return AppLocalizer(languagePreference: resolvedConfig.appearance.appLanguage)
+    }
+
     // MARK: - Command Palette (Cmd+Shift+P)
 
     func toggleCommandPalette() {
@@ -58,7 +63,10 @@ extension MainWindowController {
             engine,
             config: configService?.current ?? .defaults
         )
-        commandPaletteViewModel = CommandPaletteViewModel(engine: engine)
+        commandPaletteViewModel = CommandPaletteViewModel(
+            engine: engine,
+            localizer: appLocalizer()
+        )
 
         guard let viewModel = commandPaletteViewModel else { return }
         viewModel.isVisible = true
@@ -162,8 +170,10 @@ extension MainWindowController {
     func refreshCommandPaletteRuntimeStateIfNeeded(_ config: CocxyConfig) {
         guard let engine = commandPaletteEngine else { return }
         refreshCommandPaletteRuntimeState(engine, config: config)
+        commandPaletteViewModel?.updateLocalizer(appLocalizer(for: config))
         commandPaletteViewModel?.refreshResults()
         if auroraChromeController?.isPaletteVisible == true {
+            refreshAuroraPaletteStrings(for: config)
             auroraChromeController?.setPaletteActions(buildAuroraPaletteActions())
         }
     }
@@ -2073,7 +2083,10 @@ extension MainWindowController {
         )
         let hostingController = NSHostingController(rootView: prefsView)
         let prefsWindow = NSWindow(contentViewController: hostingController)
-        prefsWindow.title = "Cocxy Terminal Settings"
+        prefsWindow.title = appLocalizer(for: config).string(
+            "preferences.window.title",
+            fallback: "Cocxy Terminal Settings"
+        )
         prefsWindow.styleMask = [.titled, .closable, .resizable]
         prefsWindow.setContentSize(NSSize(width: 600, height: 400))
         prefsWindow.center()

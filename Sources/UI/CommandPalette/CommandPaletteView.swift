@@ -33,6 +33,9 @@ final class CommandPaletteViewModel: ObservableObject {
     /// The search engine providing fuzzy matching and action execution.
     private let engine: CommandPaletteSearching
 
+    /// Local language resolver for user-facing palette labels.
+    private var localizer: AppLocalizer
+
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
 
@@ -41,8 +44,12 @@ final class CommandPaletteViewModel: ObservableObject {
     /// Creates a ViewModel backed by the given search engine.
     ///
     /// - Parameter engine: The command palette engine for search and execution.
-    init(engine: CommandPaletteSearching) {
+    init(
+        engine: CommandPaletteSearching,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.engine = engine
+        self.localizer = localizer
         observeQueryChanges()
     }
 
@@ -58,11 +65,14 @@ final class CommandPaletteViewModel: ObservableObject {
                 // Show recents first, then all actions excluding duplicates.
                 let recentIds = Set(recents.map { $0.id })
                 let remaining = engine.allActions.filter { !recentIds.contains($0.id) }
-                return recents + remaining
+                return (recents + remaining).map { $0.localized(using: localizer) }
             }
-            return engine.allActions
+            return engine.allActions.map { $0.localized(using: localizer) }
         }
-        return engine.search(query: query)
+        if localizer.resolvedLanguage == .english {
+            return engine.search(query: query).map { $0.localized(using: localizer) }
+        }
+        return localizedSearch(query: query)
     }
 
     // MARK: - Actions
@@ -91,6 +101,19 @@ final class CommandPaletteViewModel: ObservableObject {
     /// need an explicit redraw when their metadata changes.
     func refreshResults() {
         objectWillChange.send()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        objectWillChange.send()
+    }
+
+    func localizedString(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    func localizedCategoryTitle(_ category: CommandCategory) -> String {
+        category.localizedTitle(using: localizer)
     }
 
     /// Executes the currently selected action and dismisses the palette.
@@ -127,6 +150,42 @@ final class CommandPaletteViewModel: ObservableObject {
                 self?.selectedIndex = 0
             }
             .store(in: &cancellables)
+    }
+
+    private func localizedSearch(query: String) -> [CommandAction] {
+        let actions = engine.allActions.map { original in
+            (original: original, localized: original.localized(using: localizer))
+        }
+        var scoredResults: [(action: CommandAction, score: Int)] = []
+
+        for pair in actions {
+            let categoryTitle = pair.original.category.localizedTitle(using: localizer)
+            let targets = [
+                pair.localized.name,
+                pair.localized.description,
+                categoryTitle,
+                pair.original.name,
+                pair.original.description,
+                pair.original.category.rawValue,
+            ]
+
+            let bestScore = targets.compactMap { target in
+                FuzzyMatcher.fuzzyMatch(query: query, target: target)?.score
+            }.max()
+
+            if let bestScore {
+                scoredResults.append((pair.localized, bestScore))
+            }
+        }
+
+        scoredResults.sort { lhs, rhs in
+            if lhs.score != rhs.score {
+                return lhs.score > rhs.score
+            }
+            return lhs.action.name < rhs.action.name
+        }
+
+        return scoredResults.map(\.action)
     }
 }
 
@@ -218,7 +277,12 @@ struct CommandPaletteView: View {
             }
             .transition(.opacity.combined(with: .scale(scale: 0.95)))
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Command Palette")
+            .accessibilityLabel(
+                viewModel.localizedString(
+                    "commandPalette.accessibilityLabel",
+                    fallback: "Command Palette"
+                )
+            )
         }
     }
 
@@ -240,7 +304,13 @@ struct CommandPaletteView: View {
                 .font(.system(size: 14))
                 .foregroundColor(.secondary)
 
-            TextField("Type a command...", text: $viewModel.query)
+            TextField(
+                viewModel.localizedString(
+                    "commandPalette.search.placeholder",
+                    fallback: "Type a command..."
+                ),
+                text: $viewModel.query
+            )
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
                 .focused($isSearchFocused)
@@ -270,7 +340,12 @@ struct CommandPaletteView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if viewModel.filteredActions.isEmpty && !viewModel.query.isEmpty {
-                        Text("No commands found")
+                        Text(
+                            viewModel.localizedString(
+                                "commandPalette.empty",
+                                fallback: "No commands found"
+                            )
+                        )
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                             .padding()
@@ -280,7 +355,8 @@ struct CommandPaletteView: View {
                         CommandPaletteRowView(
                             action: action,
                             isSelected: index == viewModel.selectedIndex,
-                            query: viewModel.query
+                            query: viewModel.query,
+                            categoryTitle: viewModel.localizedCategoryTitle(action.category)
                         )
                         .id(action.id)
                         .onTapGesture {

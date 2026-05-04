@@ -999,6 +999,20 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], AppearanceConfig.defaults.quickSwitchMode.rawValue)
     }
 
+    func test_configGet_appLanguageKey_returnsDefault() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-app-language",
+            command: "config-get",
+            params: ["key": "appearance.app-language"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "appearance.app-language")
+        XCTAssertEqual(response.data?["value"], AppearanceConfig.defaults.appLanguage.rawValue)
+    }
+
     func test_configList_includesNewNotesAndRateLimitKeys() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(id: "cl-new-keys", command: "config-list", params: nil))
@@ -1015,6 +1029,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             response.data?["appearance.quickswitch-mode"],
             AppearanceConfig.defaults.quickSwitchMode.rawValue
         )
+        XCTAssertEqual(response.data?["appearance.app-language"], AppearanceConfig.defaults.appLanguage.rawValue)
         XCTAssertEqual(response.data?["worktree.enabled"], "\(WorktreeConfig.defaults.enabled)")
         XCTAssertEqual(response.data?["worktree.on-close"], WorktreeConfig.defaults.onClose.rawValue)
         XCTAssertEqual(response.data?["experimental.pip-enabled"], "\(ExperimentalConfig.defaults.pipEnabled)")

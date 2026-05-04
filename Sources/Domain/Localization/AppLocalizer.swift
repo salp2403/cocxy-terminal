@@ -50,12 +50,20 @@ struct AppLocalizer {
         self.fallbackStrings = fallbackStrings
     }
 
+    var resolvedLanguage: AppLanguage {
+        language
+    }
+
     func string(_ key: AppLocalizationKey) -> String {
         let fallback = fallbackStrings[key] ?? key.rawValue
+        return string(key.rawValue, fallback: fallback)
+    }
+
+    func string(_ key: String, fallback: String) -> String {
         guard let localizedBundle = localizedBundle(for: language) else {
             return fallback
         }
-        return localizedBundle.localizedString(forKey: key.rawValue, value: fallback, table: nil)
+        return localizedBundle.localizedString(forKey: key, value: fallback, table: nil)
     }
 
     private func localizedBundle(for language: AppLanguage) -> Bundle? {

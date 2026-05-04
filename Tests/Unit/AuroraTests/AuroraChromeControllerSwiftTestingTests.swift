@@ -377,6 +377,30 @@ struct AuroraChromeControllerSwiftTestingTests {
     }
 
     @Test
+    func setPaletteStringsPublishesLocalizedChromeCopyWithoutResettingPaletteState() {
+        let harness = makeHarness()
+        harness.controller.paletteQuery = "tab"
+        harness.controller.paletteSelectedIndex = 2
+        let strings = Design.AuroraPaletteStrings(
+            accessibilityLabel: "Paleta de comandos",
+            searchPlaceholder: "Escribe un comando...",
+            searchAccessibilityLabel: "Buscar en la paleta",
+            emptyMessage: "Sin resultados",
+            navigateHint: "Navegar",
+            selectHint: "Seleccionar",
+            closeHint: "Cerrar",
+            actionSingular: "acción",
+            actionPlural: "acciones"
+        )
+
+        harness.controller.setPaletteStrings(strings)
+
+        #expect(harness.controller.paletteStrings == strings)
+        #expect(harness.controller.paletteQuery == "tab")
+        #expect(harness.controller.paletteSelectedIndex == 2)
+    }
+
+    @Test
     func showPaletteResetsQueryAndSelection() {
         let harness = makeHarness()
         harness.controller.paletteQuery = "stale query"

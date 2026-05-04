@@ -52,6 +52,7 @@ final class AuroraChromeController: ObservableObject {
 
     /// Palette data mirrored from the production engine.
     @Published var paletteActions: [Design.AuroraPaletteAction] = []
+    @Published var paletteStrings: Design.AuroraPaletteStrings = .english
     @Published var isPaletteVisible: Bool = false
     @Published var paletteQuery: String = ""
     @Published var paletteSelectedIndex: Int = 0
@@ -456,6 +457,13 @@ final class AuroraChromeController: ObservableObject {
         }
     }
 
+    /// Replaces localized palette chrome copy without touching query,
+    /// selection or action state. Called on config reload and before
+    /// showing the palette so a language change applies immediately.
+    func setPaletteStrings(_ strings: Design.AuroraPaletteStrings) {
+        paletteStrings = strings
+    }
+
     /// Shows the palette overlay and resets selection/query so the user
     /// starts with an empty matcher every time.
     ///
@@ -777,6 +785,7 @@ struct AuroraPaletteHost: View {
                 controller.paletteActions,
                 by: controller.paletteQuery
             ),
+            strings: controller.paletteStrings,
             onSelect: { action in
                 controller.onExecutePaletteAction?(action.id)
                 controller.hidePalette()

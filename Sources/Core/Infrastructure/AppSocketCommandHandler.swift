@@ -1665,6 +1665,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.appearance.rateLimitIndicatorEnabled)"
         case "appearance.quickswitch-mode":
             return config.appearance.quickSwitchMode.rawValue
+        case "appearance.app-language":
+            return config.appearance.appLanguage.rawValue
 
         // Terminal
         case "terminal.scrollback-lines":
@@ -1833,6 +1835,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     private func renderedConfigValue(key: String, rawValue: String) -> String? {
         switch key {
+        case "appearance.app-language":
+            guard let language = AppLanguage.normalized(rawValue) else { return nil }
+            return AppSocketConfigTOMLUpdater.renderedScalarValue(language.rawValue)
         case "completions.inline-ai":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
             return value
@@ -3132,7 +3137,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "appearance.tab-position", "appearance.window-padding", "appearance.ligatures",
             "appearance.background-opacity", "appearance.background-blur-radius",
             "appearance.aurora-enabled", "appearance.rate-limit-indicator-enabled",
-            "appearance.quickswitch-mode",
+            "appearance.quickswitch-mode", "appearance.app-language",
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",

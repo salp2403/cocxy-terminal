@@ -53,6 +53,7 @@ extension MainWindowController {
         if appearance.auroraEnabled {
             installAuroraChromeIfNeeded()
             reconcileAuroraAgentStateFromVisibleBuffers()
+            refreshAuroraPaletteStrings(for: configService?.current ?? .defaults)
             auroraChromeController?.setPaletteActions(buildAuroraPaletteActions())
             refreshAuroraShortcutLabels()
             // The notes tray button visibility tracks `[notes].enabled`
@@ -809,6 +810,7 @@ extension MainWindowController {
     func toggleAuroraPalette() {
         guard let controller = auroraChromeController else { return }
         if !controller.isPaletteVisible {
+            refreshAuroraPaletteStrings()
             controller.setPaletteActions(buildAuroraPaletteActions())
         }
         controller.togglePalette()
@@ -840,6 +842,18 @@ extension MainWindowController {
 
     // MARK: - Palette action translation
 
+    /// Builds localized static chrome copy for the Aurora palette from
+    /// the same app-language preference used by the classic palette.
+    func buildAuroraPaletteStrings(for config: CocxyConfig? = nil) -> Design.AuroraPaletteStrings {
+        Design.AuroraPaletteStrings(localizer: appLocalizer(for: config))
+    }
+
+    /// Pushes localized Aurora palette chrome copy into the mounted
+    /// controller. Safe no-op while Aurora is disabled.
+    func refreshAuroraPaletteStrings(for config: CocxyConfig? = nil) {
+        auroraChromeController?.setPaletteStrings(buildAuroraPaletteStrings(for: config))
+    }
+
     /// Builds the Aurora palette action list from the live
     /// `CommandPaletteEngine`. Falls back to an empty list when the
     /// engine has not been initialised yet so the overlay can still
@@ -860,13 +874,15 @@ extension MainWindowController {
             commandPaletteEngine = engine
         }
         refreshCommandPaletteRuntimeState(engine, config: config)
+        let localizer = appLocalizer(for: config)
         return engine.allActions.map { action in
-            Design.AuroraPaletteAction(
-                id: action.id,
-                label: action.name,
-                category: action.category.rawValue,
-                subtitle: action.description,
-                shortcut: action.shortcut
+            let localizedAction = action.localized(using: localizer)
+            return Design.AuroraPaletteAction(
+                id: localizedAction.id,
+                label: localizedAction.name,
+                category: action.category.localizedTitle(using: localizer),
+                subtitle: localizedAction.description,
+                shortcut: localizedAction.shortcut
             )
         }
     }
