@@ -334,6 +334,10 @@ extension AppDelegate {
                          action: #selector(MainWindowController.splitWithMacrosAction(_:)),
                          keyEquivalent: "")
 
+        viewMenu.addItem(withTitle: "Open DB/Cloud Helpers Panel",
+                         action: #selector(MainWindowController.splitWithDBCloudAction(_:)),
+                         keyEquivalent: "")
+
         viewMenu.addItem(NSMenuItem.separator())
 
         // Toggle Tab Bar: not rebindable (no catalog entry, no default shortcut).

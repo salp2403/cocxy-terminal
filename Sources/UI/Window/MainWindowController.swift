@@ -946,6 +946,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onAddAIEditHistory = { [weak self] in self?.splitWithAIEditHistoryAction(nil) }
         strip.onAddTemplates = { [weak self] in self?.splitWithTemplatesAction(nil) }
         strip.onAddMacros = { [weak self] in self?.splitWithMacrosAction(nil) }
+        strip.onAddDBCloud = { [weak self] in self?.splitWithDBCloudAction(nil) }
         strip.onSplitSideBySide = { [weak self] in self?.performVisualSplit(isVertical: true) }
         strip.onSplitStacked = { [weak self] in self?.performVisualSplit(isVertical: false) }
         strip.onOpenBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
@@ -957,6 +958,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onOpenAIEditHistory = { [weak self] in self?.splitWithAIEditHistoryAction(nil) }
         strip.onOpenTemplates = { [weak self] in self?.splitWithTemplatesAction(nil) }
         strip.onOpenMacros = { [weak self] in self?.splitWithMacrosAction(nil) }
+        strip.onOpenDBCloud = { [weak self] in self?.splitWithDBCloudAction(nil) }
         strip.onReload = { [weak self] in self?.reloadFocusedBrowserPanel() }
         strip.onGoBack = { [weak self] in self?.goBackFocusedBrowserPanel() }
         strip.onGoForward = { [weak self] in self?.goForwardFocusedBrowserPanel() }
@@ -1188,6 +1190,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             paneName = "templates panel"
         case .macros:
             paneName = "macros panel"
+        case .dbCloud:
+            paneName = "DB/cloud helpers panel"
         case .subagent:
             paneName = "subagent panel"
         }

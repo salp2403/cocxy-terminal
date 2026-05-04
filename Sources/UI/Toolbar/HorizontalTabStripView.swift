@@ -64,6 +64,9 @@ final class HorizontalTabStripView: NSView {
     /// Callback when "Macros" is selected from the add menu.
     var onAddMacros: (() -> Void)?
 
+    /// Callback when "DB/Cloud Helpers" is selected from the add menu.
+    var onAddDBCloud: (() -> Void)?
+
     /// Callback when the close button is clicked on a tab by index.
     var onCloseTab: ((Int) -> Void)?
 
@@ -105,6 +108,9 @@ final class HorizontalTabStripView: NSView {
 
     /// Callback when the "Open Macros" action icon is clicked.
     var onOpenMacros: (() -> Void)?
+
+    /// Callback when the "Open DB/Cloud Helpers" action icon is clicked.
+    var onOpenDBCloud: (() -> Void)?
 
     /// Callback when the "Reload" action icon is clicked.
     var onReload: (() -> Void)?
@@ -659,6 +665,13 @@ final class HorizontalTabStripView: NSView {
         }
         menu.addItem(macrosItem)
 
+        let dbCloudItem = NSMenuItem(title: "DB/Cloud Helpers", action: #selector(addDBCloud), keyEquivalent: "")
+        dbCloudItem.target = self
+        if let img = NSImage(systemSymbolName: "externaldrive.connected.to.line.below", accessibilityDescription: nil) {
+            dbCloudItem.image = img
+        }
+        menu.addItem(dbCloudItem)
+
         let point = NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 4)
         menu.popUp(positioning: nil, at: point, in: button)
     }
@@ -674,6 +687,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func addAIEditHistory() { onAddAIEditHistory?() }
     @objc private func addTemplates() { onAddTemplates?() }
     @objc private func addMacros() { onAddMacros?() }
+    @objc private func addDBCloud() { onAddDBCloud?() }
 
     // MARK: - Contextual Action Icons
 
@@ -782,6 +796,14 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleOpenMacros)
                 )
             )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "externaldrive.connected.to.line.below",
+                    tooltip: "Open DB/Cloud Helpers",
+                    accessibilityID: "action:openDBCloud",
+                    action: #selector(handleOpenDBCloud)
+                )
+            )
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
@@ -807,7 +829,7 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .templates, .macros, .subagent:
+        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .templates, .macros, .dbCloud, .subagent:
             break
         }
 
@@ -862,6 +884,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleOpenAIEditHistory() { onOpenAIEditHistory?() }
     @objc private func handleOpenTemplates() { onOpenTemplates?() }
     @objc private func handleOpenMacros() { onOpenMacros?() }
+    @objc private func handleOpenDBCloud() { onOpenDBCloud?() }
     @objc private func handleReload() { onReload?() }
     @objc private func handleGoBack() { onGoBack?() }
     @objc private func handleGoForward() { onGoForward?() }

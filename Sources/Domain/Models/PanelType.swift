@@ -44,6 +44,9 @@ enum PanelType: String, Codable, Sendable, Equatable {
     /// A local macro, snippet, alias, and clipboard manager.
     case macros
 
+    /// A local DB/cloud helper panel that runs user-triggered local CLIs.
+    case dbCloud = "db-cloud"
+
     /// A live subagent activity panel.
     case subagent
 }
@@ -106,6 +109,9 @@ struct PanelInfo: Equatable, Sendable {
     }
     static func macros(workingDirectory: URL? = nil) -> PanelInfo {
         PanelInfo(type: .macros, filePath: workingDirectory)
+    }
+    static func dbCloud(workingDirectory: URL? = nil) -> PanelInfo {
+        PanelInfo(type: .dbCloud, filePath: workingDirectory)
     }
     static func subagent(id: String, sessionId: String) -> PanelInfo {
         PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)

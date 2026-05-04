@@ -64,6 +64,11 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertNil(strip.onAddMacros)
     }
 
+    func testOnAddDBCloudCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onAddDBCloud)
+    }
+
     func testOnOpenEditorCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onOpenEditor)
@@ -97,6 +102,11 @@ final class HorizontalTabStripActionTests: XCTestCase {
     func testOnOpenMacrosCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onOpenMacros)
+    }
+
+    func testOnOpenDBCloudCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onOpenDBCloud)
     }
 
     func testOnReloadCallbackDefaultIsNil() {
@@ -214,6 +224,14 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertTrue(called)
     }
 
+    func testOnAddDBCloudCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onAddDBCloud = { called = true }
+        strip.onAddDBCloud?()
+        XCTAssertTrue(called)
+    }
+
     func testOnOpenEditorCallbackFires() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         var called = false
@@ -270,6 +288,14 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertTrue(called)
     }
 
+    func testOnOpenDBCloudCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onOpenDBCloud = { called = true }
+        strip.onOpenDBCloud?()
+        XCTAssertTrue(called)
+    }
+
     func testOnReloadCallbackFires() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         var called = false
@@ -323,20 +349,20 @@ final class HorizontalTabStripActionTests: XCTestCase {
 
     // MARK: - Action Icons Update
 
-    func testUpdateActionIconsForTerminalPanelShowsElevenActions() {
+    func testUpdateActionIconsForTerminalPanelShowsTwelveActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
         let actionButtons = findActionButtons(in: strip)
-        XCTAssertEqual(actionButtons.count, 11)
+        XCTAssertEqual(actionButtons.count, 12)
     }
 
-    func testUpdateActionIconsForTerminalWithCloseShowsTwelveActions() {
+    func testUpdateActionIconsForTerminalWithCloseShowsThirteenActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: true)
 
         let actionButtons = findActionButtons(in: strip)
-        XCTAssertEqual(actionButtons.count, 12)
+        XCTAssertEqual(actionButtons.count, 13)
     }
 
     func testUpdateActionIconsForBrowserPanelShowsFiveActions() {
@@ -450,12 +476,23 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertEqual(macrosButton?.toolTip, "Open Macros")
     }
 
+    func testTerminalActionIconsIncludeDBCloudButton() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(panelType: .terminal, canClose: false)
+
+        let dbCloudButton = findActionButtons(in: strip).first {
+            $0.accessibilityLabel() == "action:openDBCloud"
+        }
+
+        XCTAssertEqual(dbCloudButton?.toolTip, "Open DB/Cloud Helpers")
+    }
+
     func testUpdateActionIconsReplacesOldButtons() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
 
         strip.updateActionIcons(panelType: .terminal, canClose: true)
         let terminalButtons = findActionButtons(in: strip)
-        XCTAssertEqual(terminalButtons.count, 12)
+        XCTAssertEqual(terminalButtons.count, 13)
 
         strip.updateActionIcons(panelType: .browser, canClose: false)
         let browserButtons = findActionButtons(in: strip)

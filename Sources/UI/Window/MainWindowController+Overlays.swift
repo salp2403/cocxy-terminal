@@ -650,6 +650,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "workspace.dbCloud",
+                name: "Open DB/Cloud Helpers Panel",
+                description: "Open local DB and cloud CLI helper queries",
+                shortcut: nil,
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.splitWithDBCloudAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "remote.toggle",
                 name: "Toggle Remote Workspaces",
                 description: "Show or hide the remote workspace panel",

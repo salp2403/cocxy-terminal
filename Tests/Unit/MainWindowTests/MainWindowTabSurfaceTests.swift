@@ -1623,6 +1623,43 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testDBCloudPanelActionInstallsRealHostedPanel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithDBCloudAction(nil)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after opening DB/Cloud helpers panel")
+            return
+        }
+
+        let leaves = splitManager.rootNode.allLeafIDs()
+        guard let dbCloudLeaf = leaves.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .dbCloud
+        }) else {
+            XCTFail("Expected DB/Cloud helpers panel leaf")
+            return
+        }
+
+        XCTAssertTrue(
+            controller.panelContentViews[dbCloudLeaf.terminalID] is NSHostingView<DBCloudHelperPanelView>,
+            "DB/Cloud split must host the real local helper panel"
+        )
+
+        let panelTabs = (controller.horizontalTabStripView as? HorizontalTabStripView)?.tabs.map(\.title) ?? []
+        XCTAssertTrue(panelTabs.contains("DB/Cloud"))
+        XCTAssertEqual(
+            splitManager.focusedLeafID,
+            dbCloudLeaf.leafID,
+            "Opening DB/Cloud should leave the helper panel selected"
+        )
+    }
+
     func testMacroPlaybackPlanSendsEventsToTargetTerminalSurface() throws {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

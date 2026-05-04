@@ -268,6 +268,23 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testOpenDBCloudPanelHasAction() {
+        let dbCloud = viewMenu.items.first(where: { $0.title == "Open DB/Cloud Helpers Panel" })
+        XCTAssertNotNil(
+            dbCloud?.action,
+            "Open DB/Cloud Helpers Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenDBCloudPanelActionPointsToCorrectSelector() {
+        let dbCloud = viewMenu.items.first(where: { $0.title == "Open DB/Cloud Helpers Panel" })
+        XCTAssertEqual(
+            dbCloud?.action,
+            #selector(MainWindowController.splitWithDBCloudAction(_:)),
+            "Open DB/Cloud Helpers Panel must create the real local helper split panel"
+        )
+    }
+
     // MARK: - New Window
 
     func testNewWindowHasAction() {

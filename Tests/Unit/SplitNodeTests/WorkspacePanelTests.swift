@@ -22,6 +22,7 @@ final class PanelTypeTests: XCTestCase {
         XCTAssertEqual(PanelType.aiEditHistory.rawValue, "ai-edit-history")
         XCTAssertEqual(PanelType.templates.rawValue, "templates")
         XCTAssertEqual(PanelType.macros.rawValue, "macros")
+        XCTAssertEqual(PanelType.dbCloud.rawValue, "db-cloud")
     }
 
     func testPanelTypeCodable() throws {

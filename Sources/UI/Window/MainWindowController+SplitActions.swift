@@ -160,6 +160,17 @@ extension MainWindowController {
         )
     }
 
+    /// Opens local DB/cloud helper commands and query previews.
+    @objc func splitWithDBCloudAction(_ sender: Any?) {
+        let dir = workspaceDirectoryForCurrentTab()
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .dbCloud(workingDirectory: dir),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
+    }
+
     func replayMacroPlaybackPlan(
         _ plan: MacroPlaybackPlan,
         preferredSurfaceID: SurfaceID? = nil
@@ -354,6 +365,11 @@ extension MainWindowController {
                 }
             )
             let view = MacroSnippetPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            panelView = NSHostingView(rootView: view)
+        case .dbCloud:
+            let view = DBCloudHelperPanelView { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             panelView = NSHostingView(rootView: view)

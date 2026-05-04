@@ -73,6 +73,7 @@ extension MainWindowController {
                     case .aiEditHistory: icon = "clock.arrow.circlepath"
                     case .templates: icon = "square.grid.2x2"
                     case .macros: icon = "keyboard"
+                    case .dbCloud: icon = "externaldrive.connected.to.line.below"
                     case .subagent: icon = "person.2"
                     }
                 } else {
@@ -109,6 +110,9 @@ extension MainWindowController {
                     case .macros:
                         title = "Macros"
                         icon = "keyboard"
+                    case .dbCloud:
+                        title = "DB/Cloud"
+                        icon = "externaldrive.connected.to.line.below"
                     case .subagent:
                         title = "Agent"
                         icon = "person.2"
