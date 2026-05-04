@@ -257,7 +257,10 @@ struct SSHKeyManagerView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 formField(label: localized("remoteWorkspace.keys.field.name", fallback: "Name")) {
-                    TextField("my-key", text: $viewModel.newKeyName)
+                    TextField(
+                        Self.localizedNewKeyNamePlaceholder(using: localizer),
+                        text: $viewModel.newKeyName
+                    )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12))
                 }
@@ -317,6 +320,10 @@ struct SSHKeyManagerView: View {
 
     private func localized(_ key: String, fallback: String) -> String {
         localizer.string(key, fallback: fallback)
+    }
+
+    static func localizedNewKeyNamePlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("remoteWorkspace.keys.name.placeholder", fallback: "my-key")
     }
 }
 

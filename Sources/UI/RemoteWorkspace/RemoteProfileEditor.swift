@@ -399,7 +399,10 @@ struct RemoteProfileEditor: View {
         ) {
             ForEach(viewModel.jumpHosts.indices, id: \.self) { index in
                 HStack(spacing: 6) {
-                    TextField("bastion.example.com", text: $viewModel.jumpHosts[index])
+                    TextField(
+                        Self.localizedJumpHostPlaceholder(using: localizer),
+                        text: $viewModel.jumpHosts[index]
+                    )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12))
 
@@ -467,7 +470,10 @@ struct RemoteProfileEditor: View {
         ) {
             ForEach(viewModel.environmentVariables.indices, id: \.self) { index in
                 HStack(spacing: 6) {
-                    TextField("KEY", text: $viewModel.environmentVariables[index].key)
+                    TextField(
+                        Self.localizedEnvironmentKeyPlaceholder(using: localizer),
+                        text: $viewModel.environmentVariables[index].key
+                    )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11, design: .monospaced))
                         .frame(width: 100)
@@ -476,7 +482,10 @@ struct RemoteProfileEditor: View {
                         .font(.system(size: 11))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
 
-                    TextField("value", text: $viewModel.environmentVariables[index].value)
+                    TextField(
+                        Self.localizedEnvironmentValuePlaceholder(using: localizer),
+                        text: $viewModel.environmentVariables[index].value
+                    )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11, design: .monospaced))
 
@@ -607,6 +616,27 @@ struct RemoteProfileEditor: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(localized("remoteWorkspace.profileEditor.remove.accessibility", fallback: "Remove"))
+    }
+
+    static func localizedJumpHostPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "remoteWorkspace.profileEditor.placeholder.jumpHost",
+            fallback: "bastion.example.com"
+        )
+    }
+
+    static func localizedEnvironmentKeyPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "remoteWorkspace.profileEditor.placeholder.environmentKey",
+            fallback: "KEY"
+        )
+    }
+
+    static func localizedEnvironmentValuePlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "remoteWorkspace.profileEditor.placeholder.environmentValue",
+            fallback: "value"
+        )
     }
 
     private func localized(_ key: String, fallback: String) -> String {

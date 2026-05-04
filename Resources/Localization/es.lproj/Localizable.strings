@@ -2109,6 +2109,9 @@
 "remoteWorkspace.profileEditor.placeholder.username" = "deploy";
 "remoteWorkspace.profileEditor.placeholder.port" = "22";
 "remoteWorkspace.profileEditor.placeholder.group" = "producción, pruebas, personal...";
+"remoteWorkspace.profileEditor.placeholder.jumpHost" = "bastion.ejemplo.com";
+"remoteWorkspace.profileEditor.placeholder.environmentKey" = "CLAVE";
+"remoteWorkspace.profileEditor.placeholder.environmentValue" = "valor";
 "remoteWorkspace.profileEditor.identity.browse.accessibility" = "Buscar archivo de identidad";
 "remoteWorkspace.profileEditor.section.jumpHosts" = "Jump hosts";
 "remoteWorkspace.profileEditor.section.portForwards" = "Redirecciones de puerto";
@@ -2174,6 +2177,7 @@
 "remoteWorkspace.keys.field.name" = "Nombre";
 "remoteWorkspace.keys.field.type" = "Tipo";
 "remoteWorkspace.keys.field.passphrase" = "Passphrase";
+"remoteWorkspace.keys.name.placeholder" = "mi-llave";
 "remoteWorkspace.keys.passphrase.placeholder" = "Opcional";
 "remoteWorkspace.keys.addToAgent.help" = "Agregar al agente SSH";
 "remoteWorkspace.keys.addToAgent.accessibility" = "Agregar %@ al agente SSH";
@@ -2195,6 +2199,7 @@
 "remoteWorkspace.daemon.pid" = "PID %d";
 "remoteWorkspace.daemon.deploySessions" = "Despliega el daemon para gestionar sesiones persistentes.";
 "remoteWorkspace.daemon.persistentForwards" = "Redirecciones persistentes";
+"remoteWorkspace.daemon.forwardSpec.placeholder" = "local:remoto";
 "remoteWorkspace.daemon.noPersistentForwards" = "No hay redirecciones persistentes";
 "remoteWorkspace.daemon.deployForwards" = "Despliega el daemon para gestionar redirecciones persistentes.";
 "remoteWorkspace.daemon.fileSyncWatch" = "Observación de sincronización";

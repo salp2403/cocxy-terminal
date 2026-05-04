@@ -2109,6 +2109,9 @@
 "remoteWorkspace.profileEditor.placeholder.username" = "deploy";
 "remoteWorkspace.profileEditor.placeholder.port" = "22";
 "remoteWorkspace.profileEditor.placeholder.group" = "production, staging, personal...";
+"remoteWorkspace.profileEditor.placeholder.jumpHost" = "bastion.example.com";
+"remoteWorkspace.profileEditor.placeholder.environmentKey" = "KEY";
+"remoteWorkspace.profileEditor.placeholder.environmentValue" = "value";
 "remoteWorkspace.profileEditor.identity.browse.accessibility" = "Browse for identity file";
 "remoteWorkspace.profileEditor.section.jumpHosts" = "Jump Hosts";
 "remoteWorkspace.profileEditor.section.portForwards" = "Port Forwards";
@@ -2174,6 +2177,7 @@
 "remoteWorkspace.keys.field.name" = "Name";
 "remoteWorkspace.keys.field.type" = "Type";
 "remoteWorkspace.keys.field.passphrase" = "Passphrase";
+"remoteWorkspace.keys.name.placeholder" = "my-key";
 "remoteWorkspace.keys.passphrase.placeholder" = "Optional";
 "remoteWorkspace.keys.addToAgent.help" = "Add to SSH agent";
 "remoteWorkspace.keys.addToAgent.accessibility" = "Add %@ to SSH agent";
@@ -2195,6 +2199,7 @@
 "remoteWorkspace.daemon.pid" = "PID %d";
 "remoteWorkspace.daemon.deploySessions" = "Deploy the daemon to manage persistent sessions.";
 "remoteWorkspace.daemon.persistentForwards" = "Persistent Forwards";
+"remoteWorkspace.daemon.forwardSpec.placeholder" = "local:remote";
 "remoteWorkspace.daemon.noPersistentForwards" = "No persistent forwards";
 "remoteWorkspace.daemon.deployForwards" = "Deploy the daemon to manage persistent forwards.";
 "remoteWorkspace.daemon.fileSyncWatch" = "File Sync Watch";

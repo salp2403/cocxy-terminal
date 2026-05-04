@@ -248,7 +248,10 @@ struct DaemonControlView: View {
 
             if isDaemonRunning {
                 HStack(spacing: 4) {
-                    TextField("local:remote", text: $newForwardSpec)
+                    TextField(
+                        Self.localizedForwardSpecPlaceholder(using: localizer),
+                        text: $newForwardSpec
+                    )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 10))
                         .frame(maxWidth: 120)
@@ -563,5 +566,9 @@ struct DaemonControlView: View {
 
     private func localized(_ key: String, fallback: String) -> String {
         localizer.string(key, fallback: fallback)
+    }
+
+    static func localizedForwardSpecPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("remoteWorkspace.daemon.forwardSpec.placeholder", fallback: "local:remote")
     }
 }

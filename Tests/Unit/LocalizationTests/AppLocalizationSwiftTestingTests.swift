@@ -247,6 +247,7 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    @MainActor
     func remoteWorkspaceStringsLocalizeSpanish() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
@@ -266,6 +267,11 @@ struct AppLocalizationSwiftTestingTests {
         #expect(RemoteConnectionViewModel.SubPanel.sessions.localizedLabel(using: spanish) == "Sesiones")
         #expect(RemoteConnectionViewModel.SubPanel.tunnels.localizedDetail(using: spanish) == "Redirigir puertos locales y remotos")
         #expect(ForwardTypeOption.dynamic.localizedLabel(using: spanish) == "Dinámico")
+        #expect(RemoteProfileEditor.localizedJumpHostPlaceholder(using: spanish) == "bastion.ejemplo.com")
+        #expect(RemoteProfileEditor.localizedEnvironmentKeyPlaceholder(using: spanish) == "CLAVE")
+        #expect(RemoteProfileEditor.localizedEnvironmentValuePlaceholder(using: spanish) == "valor")
+        #expect(SSHKeyManagerView.localizedNewKeyNamePlaceholder(using: spanish) == "mi-llave")
+        #expect(DaemonControlView.localizedForwardSpecPlaceholder(using: spanish) == "local:remoto")
     }
 
     @Test
