@@ -130,6 +130,8 @@ struct AppLanguagePreferencesSwiftTestingTests {
         #expect(vm.localizedString("preferences.mcp.save", fallback: "Save MCP Config") == "Guardar configuración MCP")
         #expect(vm.localizedString("preferences.iCloud.status.exported.many", fallback: "Exported %d encrypted artifacts.") == "%d artefactos cifrados exportados.")
         #expect(vm.localizedString("preferences.iCloud.conflict.versionsDiffer", fallback: "Local and remote versions differ.") == "Las versiones local y remota son diferentes.")
+        #expect(vm.localizedString("preferences.github.autoRefresh", fallback: "Auto-refresh every %d s") == "Auto-refrescar cada %d s")
+        #expect(vm.localizedString("preferences.about.updates", fallback: "Updates") == "Actualizaciones")
         #expect(PreferencesSection.appearance.localizedTitle(vm) == "Apariencia")
     }
 

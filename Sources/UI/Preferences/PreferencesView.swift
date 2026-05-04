@@ -153,7 +153,7 @@ struct PreferencesView: View {
                 onOpenGitHubCLIInstallGuide: onOpenGitHubCLIInstallGuide
             )
         case .about:
-            AboutPreferencesSection()
+            AboutPreferencesSection(viewModel: viewModel)
         }
     }
 }
@@ -2664,89 +2664,148 @@ struct GitHubPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Feature") {
-                Toggle("Enable GitHub pane", isOn: $viewModel.githubEnabled)
+            Section(viewModel.localizedString("preferences.github.feature.section", fallback: "Feature")) {
+                Toggle(
+                    viewModel.localizedString("preferences.github.enable", fallback: "Enable GitHub pane"),
+                    isOn: $viewModel.githubEnabled
+                )
                 Text(
-                    "Powers Cmd+Option+G and the `cocxy github` CLI verbs. Turning this off stops every `gh` subprocess invocation and hides the pane. Authentication is delegated to `gh auth status`; Cocxy never stores GitHub tokens of its own."
+                    viewModel.localizedString(
+                        "preferences.github.feature.caption",
+                        fallback: "Powers Cmd+Option+G and the `cocxy github` CLI verbs. Turning this off stops every `gh` subprocess invocation and hides the pane. Authentication is delegated to `gh auth status`; Cocxy never stores GitHub tokens of its own."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Authentication") {
+            Section(viewModel.localizedString("preferences.github.authentication.section", fallback: "Authentication")) {
                 Button {
                     onGitHubSignIn?()
                 } label: {
-                    Label("Sign In with GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                    Label(
+                        viewModel.localizedString("preferences.github.signIn", fallback: "Sign In with GitHub"),
+                        systemImage: "person.crop.circle.badge.checkmark"
+                    )
                 }
                 .disabled(onGitHubSignIn == nil)
-                .help("Open a Cocxy tab and run gh auth login.")
+                .help(
+                    viewModel.localizedString(
+                        "preferences.github.signIn.help",
+                        fallback: "Open a Cocxy tab and run gh auth login."
+                    )
+                )
 
                 Button {
                     openGitHubCLIInstallGuide()
                 } label: {
-                    Label("Install GitHub CLI", systemImage: "arrow.down.circle")
+                    Label(
+                        viewModel.localizedString("preferences.github.installCLI", fallback: "Install GitHub CLI"),
+                        systemImage: "arrow.down.circle"
+                    )
                 }
-                .help("Open the official GitHub CLI install guide.")
+                .help(
+                    viewModel.localizedString(
+                        "preferences.github.installCLI.help",
+                        fallback: "Open the official GitHub CLI install guide."
+                    )
+                )
 
                 Text(
-                    "Cocxy uses the official GitHub CLI login. Tokens stay in gh/keychain storage; Cocxy only reads `gh auth status`."
+                    viewModel.localizedString(
+                        "preferences.github.authentication.caption",
+                        fallback: "Cocxy uses the official GitHub CLI login. Tokens stay in gh/keychain storage; Cocxy only reads `gh auth status`."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Refresh") {
+            Section(viewModel.localizedString("preferences.github.refresh.section", fallback: "Refresh")) {
                 Stepper(
-                    "Auto-refresh every \(viewModel.githubAutoRefreshInterval) s",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.github.autoRefresh",
+                            fallback: "Auto-refresh every %d s"
+                        ),
+                        viewModel.githubAutoRefreshInterval
+                    ),
                     value: $viewModel.githubAutoRefreshInterval,
                     in: GitHubConfig.minAutoRefreshInterval...GitHubConfig.maxAutoRefreshInterval,
                     step: 15
                 )
                 Text(
-                    "Seconds between silent background refreshes while the pane is visible. Set to 0 to disable auto-refresh entirely (the pane still reloads on manual toggle)."
+                    viewModel.localizedString(
+                        "preferences.github.autoRefresh.caption",
+                        fallback: "Seconds between silent background refreshes while the pane is visible. Set to 0 to disable auto-refresh entirely (the pane still reloads on manual toggle)."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
                 Stepper(
-                    "Max rows per list: \(viewModel.githubMaxItems)",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.github.maxRows",
+                            fallback: "Max rows per list: %d"
+                        ),
+                        viewModel.githubMaxItems
+                    ),
                     value: $viewModel.githubMaxItems,
                     in: GitHubConfig.minMaxItems...GitHubConfig.maxMaxItems,
                     step: 5
                 )
                 Text(
-                    "Maximum rows requested from `gh pr list` / `gh issue list` on each refresh. Clamped to the upstream gh CLI hard cap."
+                    viewModel.localizedString(
+                        "preferences.github.maxRows.caption",
+                        fallback: "Maximum rows requested from `gh pr list` / `gh issue list` on each refresh. Clamped to the upstream gh CLI hard cap."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Filters") {
-                Toggle("Include draft pull requests", isOn: $viewModel.githubIncludeDrafts)
+            Section(viewModel.localizedString("preferences.github.filters.section", fallback: "Filters")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.github.includeDrafts",
+                        fallback: "Include draft pull requests"
+                    ),
+                    isOn: $viewModel.githubIncludeDrafts
+                )
                 Text(
-                    "When off, drafts are filtered out client-side because `gh` does not expose a --hide-drafts flag."
+                    viewModel.localizedString(
+                        "preferences.github.includeDrafts.caption",
+                        fallback: "When off, drafts are filtered out client-side because `gh` does not expose a --hide-drafts flag."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-                Picker("Default state", selection: $viewModel.githubDefaultState) {
-                    Text("Open").tag("open")
-                    Text("Closed").tag("closed")
-                    Text("Merged (PRs only)").tag("merged")
-                    Text("All").tag("all")
+                Picker(
+                    viewModel.localizedString("preferences.github.defaultState", fallback: "Default state"),
+                    selection: $viewModel.githubDefaultState
+                ) {
+                    Text(viewModel.localizedString("preferences.github.defaultState.open", fallback: "Open"))
+                        .tag("open")
+                    Text(viewModel.localizedString("preferences.github.defaultState.closed", fallback: "Closed"))
+                        .tag("closed")
+                    Text(viewModel.localizedString("preferences.github.defaultState.merged", fallback: "Merged (PRs only)"))
+                        .tag("merged")
+                    Text(viewModel.localizedString("preferences.github.defaultState.all", fallback: "All"))
+                        .tag("all")
                 }
             }
 
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("GitHub")
+        .navigationTitle(viewModel.localizedString("preferences.section.github", fallback: "GitHub"))
     }
 
     private func openGitHubCLIInstallGuide() {
@@ -2763,6 +2822,7 @@ struct GitHubPreferencesSection: View {
 
 /// Displays application info: version, license, author.
 struct AboutPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
 
     var body: some View {
         VStack(spacing: 20) {
@@ -2772,11 +2832,16 @@ struct AboutPreferencesSection: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
 
-            Text("Version \(CocxyVersion.current)")
+            Text(
+                String(
+                    format: viewModel.localizedString("preferences.about.version", fallback: "Version %@"),
+                    CocxyVersion.current
+                )
+            )
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
-            Text("Agent-aware terminal for macOS")
+            Text(viewModel.localizedString("preferences.about.subtitle", fallback: "Agent-aware terminal for macOS"))
                 .font(.body)
                 .foregroundStyle(.secondary)
 
@@ -2784,13 +2849,18 @@ struct AboutPreferencesSection: View {
                 .frame(width: 200)
 
             VStack(spacing: 4) {
-                Text("Created by Said Arturo Lopez")
+                Text(
+                    viewModel.localizedString(
+                        "preferences.about.createdBy",
+                        fallback: "Created by Said Arturo Lopez"
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("MIT License")
+                Text(viewModel.localizedString("preferences.about.license", fallback: "MIT License"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                Text("Zero telemetry. Zero tracking.")
+                Text(viewModel.localizedString("preferences.about.zeroTelemetry", fallback: "Zero telemetry. Zero tracking."))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -2799,17 +2869,22 @@ struct AboutPreferencesSection: View {
                 .padding(.vertical, 8)
 
             VStack(spacing: 8) {
-                Text("Updates")
+                Text(viewModel.localizedString("preferences.about.updates", fallback: "Updates"))
                     .font(.headline)
 
-                Button("Check for Updates") {
+                Button(viewModel.localizedString("preferences.about.checkForUpdates", fallback: "Check for Updates")) {
                     if let appDelegate = NSApp.delegate as? AppDelegate {
                         appDelegate.sparkleUpdater?.checkForUpdates()
                     }
                 }
                 .buttonStyle(.borderedProminent)
 
-                Text("Cocxy checks for updates automatically.")
+                Text(
+                    viewModel.localizedString(
+                        "preferences.about.autoUpdates",
+                        fallback: "Cocxy checks for updates automatically."
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -2817,7 +2892,7 @@ struct AboutPreferencesSection: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .navigationTitle("About")
+        .navigationTitle(viewModel.localizedString("preferences.section.about", fallback: "About"))
     }
 }
 

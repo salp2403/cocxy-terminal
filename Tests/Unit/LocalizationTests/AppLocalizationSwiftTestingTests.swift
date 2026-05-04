@@ -66,6 +66,10 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.iCloud.artifact.settings", fallback: "Settings") == "Ajustes")
         #expect(spanish.string("preferences.iCloud.export", fallback: "Export Encrypted Artifacts") == "Exportar artefactos cifrados")
         #expect(spanish.string("preferences.iCloud.conflict.useRemote", fallback: "Use Remote") == "Usar remoto")
+        #expect(spanish.string("preferences.github.enable", fallback: "Enable GitHub pane") == "Activar panel de GitHub")
+        #expect(spanish.string("preferences.github.defaultState.merged", fallback: "Merged (PRs only)") == "Fusionados (solo PRs)")
+        #expect(spanish.string("preferences.about.subtitle", fallback: "Agent-aware terminal for macOS") == "Terminal para macOS con conciencia de agentes")
+        #expect(spanish.string("preferences.about.checkForUpdates", fallback: "Check for Updates") == "Buscar actualizaciones")
     }
 
     @Test
