@@ -52,6 +52,7 @@ struct StatusBarView: View {
     /// behaviour (inherit from the window chain); `.aqua` / `.darkAqua`
     /// pin the status bar tint independently of the system appearance.
     var vibrancyAppearanceOverride: NSAppearance?
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         HStack(spacing: 0) {
@@ -99,7 +100,10 @@ struct StatusBarView: View {
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundColor(CocxyColors.swiftUI(CocxyColors.green))
                 }
-                .accessibilityLabel("SSH session: \(ssh.displayTitle)")
+                .accessibilityLabel(String(
+                    format: localizer.string("statusBar.sshSession", fallback: "SSH session: %@"),
+                    ssh.displayTitle
+                ))
             }
 
             // Command duration badge
@@ -108,11 +112,11 @@ struct StatusBarView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "terminal")
                         .font(.system(size: 9, weight: .semibold))
-                    Text("running...")
+                    Text(localizer.string("statusBar.command.running", fallback: "running..."))
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                 }
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.blue))
-                .accessibilityLabel("Command running")
+                .accessibilityLabel(Self.localizedCommandRunning(using: localizer))
             } else if let duration = lastCommandDuration {
                 statusDivider
                 HStack(spacing: 4) {
@@ -132,8 +136,14 @@ struct StatusBarView: View {
                         : CocxyColors.swiftUI(CocxyColors.red)
                 )
                 .accessibilityLabel(
-                    "Last command: \(CommandDurationFormatter.format(duration)), "
-                    + "exit code \(lastCommandExitCode ?? 0)"
+                    String(
+                        format: localizer.string(
+                            "statusBar.command.last.accessibility",
+                            fallback: "Last command: %@, exit code %d"
+                        ),
+                        CommandDurationFormatter.format(duration),
+                        lastCommandExitCode ?? 0
+                    )
                 )
             }
 
@@ -158,7 +168,7 @@ struct StatusBarView: View {
             }
 
             // Keyboard shortcuts popover
-            KeyboardShortcutsButton()
+            KeyboardShortcutsButton(localizer: localizer)
                 .padding(.trailing, 6)
 
             // Per-split mini-matrix: shown only when the active tab has
@@ -181,8 +191,13 @@ struct StatusBarView: View {
                     }
                 }
                 .padding(.trailing, 8)
-                .accessibilityLabel(
-                    "\(agentSummary.perSurfaceSnapshots.count) active agents across splits"
+                .accessibilityLabel(String(
+                    format: localizer.string(
+                        "statusBar.agentsAcrossSplits",
+                        fallback: "%d active agents across splits"
+                    ),
+                    agentSummary.perSurfaceSnapshots.count
+                )
                 )
             }
 
@@ -224,21 +239,21 @@ struct StatusBarView: View {
                 if agentSummary.working > 0 {
                     AgentCountPill(
                         count: agentSummary.working,
-                        label: "working",
+                        label: localizer.string("statusBar.agent.working", fallback: "working"),
                         color: CocxyColors.swiftUI(CocxyColors.blue)
                     )
                 }
                 if agentSummary.waiting > 0 {
                     AgentCountPill(
                         count: agentSummary.waiting,
-                        label: "waiting",
+                        label: localizer.string("statusBar.agent.waiting", fallback: "waiting"),
                         color: CocxyColors.swiftUI(CocxyColors.yellow)
                     )
                 }
                 if agentSummary.errors > 0 {
                     AgentCountPill(
                         count: agentSummary.errors,
-                        label: "error",
+                        label: localizer.string("statusBar.agent.error", fallback: "error"),
                         color: CocxyColors.swiftUI(CocxyColors.red)
                     )
                 }
@@ -263,7 +278,7 @@ struct StatusBarView: View {
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.surface0).opacity(0.4))
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Status bar")
+        .accessibilityLabel(localizer.string("statusBar.accessibility", fallback: "Status bar"))
     }
 
     /// Subtle vertical divider between status bar sections.
@@ -272,6 +287,10 @@ struct StatusBarView: View {
             .fill(CocxyColors.swiftUI(CocxyColors.surface1).opacity(0.4))
             .frame(width: 1, height: 14)
             .padding(.horizontal, 10)
+    }
+
+    static func localizedCommandRunning(using localizer: AppLocalizer) -> String {
+        localizer.string("statusBar.command.running.accessibility", fallback: "Command running")
     }
 }
 

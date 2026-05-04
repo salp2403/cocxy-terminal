@@ -316,6 +316,17 @@ struct AppLocalizationSwiftTestingTests {
         #expect(DashboardStateIndicator.localizedAccessibilityLabel(for: .working, using: spanish) == "Trabajando")
     }
 
+    @Test
+    func statusBarUtilityStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(StatusBarView.localizedCommandRunning(using: spanish) == "Comando ejecutándose")
+        #expect(KeyboardShortcutsButton.localizedTitle(using: spanish) == "Atajos de teclado")
+        #expect(spanish.string("keyboardShortcuts.terminal.interrupt", fallback: "Interrupt process") == "Interrumpir proceso")
+        #expect(AgentAttachmentBar.localizedRemoveImage(using: spanish) == "Eliminar imagen")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

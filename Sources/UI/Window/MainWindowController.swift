@@ -1013,7 +1013,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             agentSummary: computeAgentSummary(),
             rateLimitSnapshot: rateLimitProbeService.snapshot,
             activePorts: [],
-            sshSession: tabManager.activeTab?.sshSession
+            sshSession: tabManager.activeTab?.sshSession,
+            localizer: appLocalizer()
         )
         statusBar.useVibrancy = isTransparent
         statusBar.vibrancyAppearanceOverride = isTransparent

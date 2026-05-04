@@ -83,6 +83,7 @@ extension MainWindowController {
         updateSubagentPanelLocalizers(localizer)
         updateSearchBarLocalizer(localizer)
         updateDashboardPanelLocalizer(localizer)
+        updateStatusBarLocalizer(localizer)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         updateRemoteWorkspacePanelLocalizer(localizer)
         refreshVisibleActivityDashboardLocalizer()
@@ -384,6 +385,13 @@ extension MainWindowController {
 
     private func updateDashboardPanelLocalizer(_ localizer: AppLocalizer) {
         guard let hostingView = dashboardHostingView else { return }
+        var root = hostingView.rootView
+        root.localizer = localizer
+        hostingView.rootView = root
+    }
+
+    private func updateStatusBarLocalizer(_ localizer: AppLocalizer) {
+        guard let hostingView = statusBarHostingView else { return }
         var root = hostingView.rootView
         root.localizer = localizer
         hostingView.rootView = root

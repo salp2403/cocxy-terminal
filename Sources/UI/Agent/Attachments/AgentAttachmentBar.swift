@@ -7,6 +7,7 @@ import SwiftUI
 struct AgentAttachmentBar: View {
     let attachments: [AgentImageAttachment]
     let onRemove: (String) -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         if !attachments.isEmpty {
@@ -45,8 +46,8 @@ struct AgentAttachmentBar: View {
             }
             .buttonStyle(.borderless)
             .frame(width: 22, height: 22)
-            .help("Remove image")
-            .accessibilityLabel("Remove image")
+            .help(Self.localizedRemoveImage(using: localizer))
+            .accessibilityLabel(Self.localizedRemoveImage(using: localizer))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -73,5 +74,9 @@ struct AgentAttachmentBar: View {
                 .padding(8)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    static func localizedRemoveImage(using localizer: AppLocalizer) -> String {
+        localizer.string("agentAttachment.removeImage", fallback: "Remove image")
     }
 }

@@ -102,7 +102,8 @@ struct AgentPanelView: View {
 
             AgentAttachmentBar(
                 attachments: viewModel.imageAttachments,
-                onRemove: viewModel.removeImageAttachment(id:)
+                onRemove: viewModel.removeImageAttachment(id:),
+                localizer: localizer
             )
 
             HStack(alignment: .bottom, spacing: 8) {

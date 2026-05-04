@@ -123,7 +123,8 @@ extension MainWindowController {
             sshSession: activeTab?.sshSession,
             lastCommandDuration: activeTab?.lastCommandDuration,
             lastCommandExitCode: activeTab?.lastCommandExitCode,
-            isCommandRunning: activeTab?.isCommandRunning ?? false
+            isCommandRunning: activeTab?.isCommandRunning ?? false,
+            localizer: appLocalizer()
         )
         statusBar.useVibrancy = isTransparent
         statusBar.vibrancyAppearanceOverride = isTransparent
