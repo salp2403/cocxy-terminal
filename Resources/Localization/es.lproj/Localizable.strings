@@ -910,6 +910,9 @@
 "window.sshUpload.complete.title" = "Subida completada";
 "window.sshUpload.failed.title" = "Falló la subida";
 "window.sshUpload.unknownError" = "Error desconocido";
+"window.stuckPane.title" = "El panel dejó de aceptar entrada";
+"window.stuckPane.body.surfaceMissing" = "Este panel perdió su terminal y ya no enruta la entrada. Ciérralo con Cmd+Shift+W.";
+"window.stuckPane.body.ptyWriteFailed" = "El shell de este panel no acepta pulsaciones. Ciérralo con Cmd+Shift+W y abre un split nuevo.";
 "preferences.unsaved.title" = "Cambios sin guardar";
 "preferences.unsaved.message" = "Tienes ajustes sin guardar. ¿Quieres guardarlos antes de cerrar?";
 "terminal.clipboardRead.title" = "¿Permitir lectura del portapapeles?";

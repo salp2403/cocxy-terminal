@@ -104,6 +104,28 @@ extension MainWindowController {
         localizer.string("window.sshUpload.unknownError", fallback: "Unknown error")
     }
 
+    static func localizedStuckPaneNotificationTitle(localizer: AppLocalizer) -> String {
+        localizer.string("window.stuckPane.title", fallback: "Pane stopped accepting input")
+    }
+
+    static func localizedStuckPaneNotificationBody(
+        reason: InputDropReason,
+        localizer: AppLocalizer
+    ) -> String {
+        switch reason {
+        case .surfaceMissing:
+            return localizer.string(
+                "window.stuckPane.body.surfaceMissing",
+                fallback: "This pane lost its terminal and is no longer routing input. Close it with Cmd+Shift+W."
+            )
+        case .ptyWriteFailed:
+            return localizer.string(
+                "window.stuckPane.body.ptyWriteFailed",
+                fallback: "This pane's shell is not accepting keystrokes. Close it with Cmd+Shift+W and open a fresh split."
+            )
+        }
+    }
+
     static func localizedOpenInDefaultEditorTitle(localizer: AppLocalizer) -> String {
         localizer.string("codeReview.externalEditor.openDefault", fallback: "Open in Default Editor")
     }

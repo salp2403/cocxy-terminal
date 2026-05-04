@@ -910,6 +910,9 @@
 "window.sshUpload.complete.title" = "Upload Complete";
 "window.sshUpload.failed.title" = "Upload Failed";
 "window.sshUpload.unknownError" = "Unknown error";
+"window.stuckPane.title" = "Pane stopped accepting input";
+"window.stuckPane.body.surfaceMissing" = "This pane lost its terminal and is no longer routing input. Close it with Cmd+Shift+W.";
+"window.stuckPane.body.ptyWriteFailed" = "This pane's shell is not accepting keystrokes. Close it with Cmd+Shift+W and open a fresh split.";
 "preferences.unsaved.title" = "Unsaved Changes";
 "preferences.unsaved.message" = "You have unsaved settings. Would you like to save them before closing?";
 "terminal.clipboardRead.title" = "Allow clipboard read?";

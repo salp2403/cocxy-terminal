@@ -295,18 +295,13 @@ extension MainWindowController {
         let targetTabID = tabID(for: surfaceID) ?? tabManager.activeTabID
         guard let tabID = targetTabID else { return }
 
-        let body: String
-        switch reason {
-        case .surfaceMissing:
-            body = "This pane lost its terminal and is no longer routing input. Close it with Cmd+Shift+W."
-        case .ptyWriteFailed:
-            body = "This pane's shell is not accepting keystrokes. Close it with Cmd+Shift+W and open a fresh split."
-        }
+        let localizer = appLocalizer()
+        let body = Self.localizedStuckPaneNotificationBody(reason: reason, localizer: localizer)
 
         let notification = CocxyNotification(
             type: .custom("input-stuck-pane"),
             tabId: tabID,
-            title: "Pane stopped accepting input",
+            title: Self.localizedStuckPaneNotificationTitle(localizer: localizer),
             body: body
         )
         injectedNotificationManager?.notify(notification)

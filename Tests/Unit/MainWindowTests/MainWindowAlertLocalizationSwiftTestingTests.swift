@@ -33,6 +33,19 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
         )
         #expect(closePane.primaryButton == "Cerrar panel")
         #expect(closePane.secondaryButton == "Cancelar")
+
+        #expect(
+            MainWindowController.localizedStuckPaneNotificationTitle(localizer: localizer) ==
+                "El panel dejó de aceptar entrada"
+        )
+        #expect(
+            MainWindowController.localizedStuckPaneNotificationBody(reason: .surfaceMissing, localizer: localizer) ==
+                "Este panel perdió su terminal y ya no enruta la entrada. Ciérralo con Cmd+Shift+W."
+        )
+        #expect(
+            MainWindowController.localizedStuckPaneNotificationBody(reason: .ptyWriteFailed, localizer: localizer) ==
+                "El shell de este panel no acepta pulsaciones. Ciérralo con Cmd+Shift+W y abre un split nuevo."
+        )
     }
 
     @Test("worktree and tab config alert copy follows configured app language")
