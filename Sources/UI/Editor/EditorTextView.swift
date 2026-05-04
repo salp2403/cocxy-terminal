@@ -88,6 +88,11 @@ final class EditorTextView: NSTextView {
         }
     }
 
+    override func viewWillDraw() {
+        super.viewWillDraw()
+        repairReadableTextThemeIfNeeded()
+    }
+
     func applyDefaultConfiguration() {
         isRichText = false
         isAutomaticQuoteSubstitutionEnabled = false
@@ -126,6 +131,92 @@ final class EditorTextView: NSTextView {
             ],
             range: NSRange(location: 0, length: textStorage.length)
         )
+    }
+
+    func repairReadableTextThemeIfNeeded() {
+        guard needsReadableTextThemeRepair() else { return }
+        if let appearanceRepairHandler {
+            appearanceRepairHandler()
+        } else {
+            applyReadableTextTheme()
+        }
+    }
+
+    private func needsReadableTextThemeRepair() -> Bool {
+        if !drawsBackground || !isUsableEditorBackground(backgroundColor) {
+            return true
+        }
+        if !isReadableOnEditorBackground(textColor) {
+            return true
+        }
+        if !isReadableOnEditorBackground(insertionPointColor) {
+            return true
+        }
+        if let typingForeground = typingAttributes[.foregroundColor] as? NSColor,
+           !isReadableOnEditorBackground(typingForeground) {
+            return true
+        }
+
+        guard let textStorage, textStorage.length > 0 else { return false }
+        for location in sampledAttributeLocations(textLength: textStorage.length) {
+            let foreground = textStorage.attribute(
+                .foregroundColor,
+                at: location,
+                effectiveRange: nil
+            ) as? NSColor
+            if let foreground, !isReadableOnEditorBackground(foreground) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func sampledAttributeLocations(textLength: Int) -> [Int] {
+        let last = max(0, textLength - 1)
+        return Array(Set([0, last / 2, last])).sorted()
+    }
+
+    private func isReadableOnEditorBackground(_ color: NSColor?) -> Bool {
+        guard let color else { return true }
+        guard let foreground = relativeLuminance(color),
+              let background = relativeLuminance(CocxyColors.base)
+        else {
+            return true
+        }
+
+        let lighter = max(foreground, background)
+        let darker = min(foreground, background)
+        let contrastRatio = (lighter + 0.05) / (darker + 0.05)
+        return contrastRatio >= 3.0
+    }
+
+    private func isUsableEditorBackground(_ color: NSColor?) -> Bool {
+        guard let color else { return true }
+        guard let background = relativeLuminance(color),
+              let foreground = relativeLuminance(CocxyColors.text)
+        else {
+            return true
+        }
+
+        let lighter = max(foreground, background)
+        let darker = min(foreground, background)
+        let contrastRatio = (lighter + 0.05) / (darker + 0.05)
+        return contrastRatio >= 3.0
+    }
+
+    private func relativeLuminance(_ color: NSColor) -> CGFloat? {
+        guard let rgb = color.usingColorSpace(NSColorSpace.sRGB) else { return nil }
+
+        func adjusted(_ component: CGFloat) -> CGFloat {
+            if component <= 0.03928 {
+                return component / 12.92
+            }
+            return pow((component + 0.055) / 1.055, 2.4)
+        }
+
+        return 0.2126 * adjusted(rgb.redComponent)
+            + 0.7152 * adjusted(rgb.greenComponent)
+            + 0.0722 * adjusted(rgb.blueComponent)
     }
 
     private func requestsAdditiveCursor(_ event: NSEvent) -> Bool {

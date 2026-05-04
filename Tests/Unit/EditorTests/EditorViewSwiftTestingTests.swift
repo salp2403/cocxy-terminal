@@ -170,6 +170,33 @@ struct EditorViewSwiftTestingTests {
         #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
     }
 
+    @Test("text view repairs dark foreground before AppKit draws")
+    func textViewPreDrawRepairsDarkForeground() throws {
+        let textView = EditorTextView()
+        textView.applyDefaultConfiguration()
+        textView.string = "alpha beta\n"
+        textView.applyReadableTextTheme()
+        let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
+
+        textView.textColor = .black
+        textView.insertionPointColor = .black
+        textView.typingAttributes[.foregroundColor] = NSColor.black
+        textView.textStorage?.addAttribute(.foregroundColor, value: NSColor.black, range: fullRange)
+
+        textView.viewWillDraw()
+
+        let repairedColor = textView.textStorage?.attribute(
+            .foregroundColor,
+            at: 0,
+            effectiveRange: nil
+        ) as? NSColor
+
+        #expect(repairedColor?.isEqual(CocxyColors.text) == true)
+        #expect(textView.textColor == CocxyColors.text)
+        #expect(textView.insertionPointColor == CocxyColors.text)
+        #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
+    }
+
     @Test("editor appearance repair preserves syntax colors while restoring base text")
     func editorAppearanceRepairPreservesSyntaxDecorations() throws {
         let view = EditorView(text: "let value = 1\n")
