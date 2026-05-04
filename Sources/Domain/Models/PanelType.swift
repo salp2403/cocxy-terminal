@@ -57,7 +57,7 @@ enum PanelType: String, Codable, Sendable, Equatable {
 ///
 /// Carries the content type and an optional initial configuration
 /// (e.g., the URL for a browser panel or the file path for markdown).
-struct PanelInfo: Equatable, Sendable {
+struct PanelInfo: Codable, Equatable, Sendable {
     /// The type of content this panel displays.
     let type: PanelType
 

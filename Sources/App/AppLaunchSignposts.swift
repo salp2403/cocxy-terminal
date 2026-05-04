@@ -29,6 +29,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
     case remoteWorkspace
     case browserPro
     case autoUpdate
+    case crashRecovery
     case sessionRestore
     case autoSave
     case backup
@@ -61,6 +62,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         case .remoteWorkspace: return "Remote workspace"
         case .browserPro: return "Browser Pro"
         case .autoUpdate: return "Auto update"
+        case .crashRecovery: return "Crash recovery"
         case .sessionRestore: return "Session restore"
         case .autoSave: return "Session auto-save"
         case .backup: return "Local backup"
@@ -97,6 +99,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         .menuSetup,
         .keybindings,
         .windowWarmup,
+        .crashRecovery,
         .sessionRestore,
         .autoSave,
         .backup,
@@ -137,6 +140,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         case .remoteWorkspace: return "Remote workspace"
         case .browserPro: return "Browser Pro"
         case .autoUpdate: return "Auto update"
+        case .crashRecovery: return "Crash recovery"
         case .sessionRestore: return "Session restore"
         case .autoSave: return "Session auto-save"
         case .backup: return "Local backup"

@@ -179,7 +179,8 @@ enum SessionRestorer {
             worktreeRoot: shouldClearWorktreeMetadata ? nil : tabState.worktreeRoot,
             worktreeOriginRepo: shouldClearWorktreeMetadata ? nil : tabState.worktreeOriginRepo,
             worktreeBranch: shouldClearWorktreeMetadata ? nil : tabState.worktreeBranch,
-            terminalEnginePreference: tabState.terminalEnginePreference
+            terminalEnginePreference: tabState.terminalEnginePreference,
+            paneStates: tabState.paneStates
         )
     }
 
@@ -326,4 +327,6 @@ struct RestoredTab: Sendable {
     let worktreeBranch: String?
     /// Optional per-tab engine override restored from the session file.
     let terminalEnginePreference: TerminalEnginePreference?
+    /// Per-leaf pane metadata in split-tree leaf order.
+    let paneStates: [SplitPaneState]
 }

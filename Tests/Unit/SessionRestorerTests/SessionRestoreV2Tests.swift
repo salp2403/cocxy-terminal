@@ -14,15 +14,15 @@ struct SessionModelV2Tests {
 
     // MARK: - Version
 
-    @Test("Session current version is 2")
-    func currentVersionIs2() {
-        #expect(Session.currentVersion == 2)
+    @Test("Session current version is 3")
+    func currentVersionIs3() {
+        #expect(Session.currentVersion == 3)
     }
 
-    @Test("New session defaults to version 2")
-    func newSessionDefaultsToV2() {
+    @Test("New session defaults to version 3")
+    func newSessionDefaultsToV3() {
         let session = Session(windows: [])
-        #expect(session.version == 2)
+        #expect(session.version == 3)
     }
 
     // MARK: - Focused Window Index
@@ -134,7 +134,7 @@ struct SessionModelV2Tests {
         let data = try encoder.encode(session)
         let decoded = try JSONDecoder().decode(Session.self, from: data)
 
-        #expect(decoded.version == 2)
+        #expect(decoded.version == 3)
         #expect(decoded.focusedWindowIndex == 0)
         #expect(decoded.windows.count == 1)
         #expect(decoded.windows[0].windowID == windowID)
@@ -142,6 +142,84 @@ struct SessionModelV2Tests {
         #expect(decoded.windows[0].tabs.count == 1)
         #expect(decoded.windows[0].tabs[0].id == tabID)
         #expect(decoded.windows[0].tabs[0].sessionID == sessionID)
+    }
+
+    @Test("legacy tab state decodes with empty pane states")
+    func legacyTabStateDecodesWithEmptyPaneStates() throws {
+        let json = """
+        {
+            "id": {"rawValue": "\(UUID().uuidString)"},
+            "sessionID": {"rawValue": "\(UUID().uuidString)"},
+            "title": "Terminal",
+            "workingDirectory": "file:///tmp/",
+            "splitTree": {
+                "leaf": {
+                    "workingDirectory": "file:///tmp/",
+                    "command": null
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let tab = try JSONDecoder().decode(TabState.self, from: data)
+        #expect(tab.paneStates.isEmpty)
+    }
+
+    @Test("tab state round-trips panel and scroll pane metadata")
+    func tabStateRoundTripsPaneMetadata() throws {
+        let notebook = URL(fileURLWithPath: "/tmp/notebook.cocxynb")
+        let tab = TabState(
+            id: TabID(),
+            title: "Workspace",
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            splitTree: .split(
+                direction: .horizontal,
+                first: .leaf(workingDirectory: URL(fileURLWithPath: "/tmp"), command: nil),
+                second: .leaf(workingDirectory: URL(fileURLWithPath: "/tmp"), command: nil),
+                ratio: 0.65
+            ),
+            paneStates: [
+                SplitPaneState(scrollPosition: TerminalScrollPosition(visibleStartRow: 42)),
+                SplitPaneState(panelInfo: .notebook(path: notebook), title: "Notebook")
+            ]
+        )
+
+        let data = try JSONEncoder().encode(tab)
+        let decoded = try JSONDecoder().decode(TabState.self, from: data)
+
+        #expect(decoded.paneStates.count == 2)
+        #expect(decoded.paneStates[0].panelInfo.type == .terminal)
+        #expect(decoded.paneStates[0].scrollPosition?.visibleStartRow == 42)
+        #expect(decoded.paneStates[1].panelInfo.type == .notebook)
+        #expect(decoded.paneStates[1].panelInfo.filePath == notebook)
+        #expect(decoded.paneStates[1].title == "Notebook")
+    }
+
+    @Test("SessionRestorer propagates pane metadata")
+    func sessionRestorerPropagatesPaneMetadata() {
+        let tab = TabState(
+            id: TabID(),
+            title: "Workspace",
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            splitTree: .leaf(workingDirectory: URL(fileURLWithPath: "/tmp"), command: nil),
+            paneStates: [
+                SplitPaneState(
+                    panelInfo: .editor(path: URL(fileURLWithPath: "/tmp/README.md")),
+                    title: "README"
+                )
+            ]
+        )
+        let window = WindowState(
+            frame: CodableRect(x: 100, y: 100, width: 1000, height: 700),
+            isFullScreen: false,
+            tabs: [tab],
+            activeTabIndex: 0
+        )
+
+        let restored = SessionRestorer.restoreWindow(from: window, screenBounds: screenBounds)
+
+        #expect(restored.restoredTabs.first?.paneStates.first?.panelInfo.type == .editor)
+        #expect(restored.restoredTabs.first?.paneStates.first?.title == "README")
     }
 
     // MARK: - Multi-Window Restoration

@@ -16,6 +16,7 @@ import CocxyShared
 /// - Window frame (position and size).
 /// - Tab list with working directory, title and last detected agent name.
 /// - Split tree (recursive binary tree of panes).
+/// - Per-pane content metadata for workspace panels.
 /// - Quick terminal state (open/closed, directory).
 ///
 /// What is NOT persisted:
@@ -77,7 +78,7 @@ struct Session: Codable, Sendable {
     let focusedWindowIndex: Int
 
     /// Current schema version. Increment when the format changes.
-    static let currentVersion = 2
+    static let currentVersion = 3
 
     init(
         version: Int = Self.currentVersion,
@@ -169,6 +170,8 @@ struct TabState: Codable, Sendable {
     let worktreeBranch: String?
     /// Optional per-tab engine override used by daemon dogfood tabs.
     let terminalEnginePreference: TerminalEnginePreference?
+    /// Per-leaf pane metadata in split-tree leaf order.
+    let paneStates: [SplitPaneState]
 
     init(
         id: TabID,
@@ -180,7 +183,8 @@ struct TabState: Codable, Sendable {
         worktreeRoot: URL? = nil,
         worktreeOriginRepo: URL? = nil,
         worktreeBranch: String? = nil,
-        terminalEnginePreference: TerminalEnginePreference? = nil
+        terminalEnginePreference: TerminalEnginePreference? = nil,
+        paneStates: [SplitPaneState] = []
     ) {
         self.id = id
         self.sessionID = sessionID
@@ -192,6 +196,7 @@ struct TabState: Codable, Sendable {
         self.worktreeOriginRepo = worktreeOriginRepo
         self.worktreeBranch = worktreeBranch
         self.terminalEnginePreference = terminalEnginePreference
+        self.paneStates = paneStates
     }
 
     init(from decoder: Decoder) throws {
@@ -213,7 +218,30 @@ struct TabState: Codable, Sendable {
             TerminalEnginePreference.self,
             forKey: .terminalEnginePreference
         )
+        paneStates = try container.decodeIfPresent([SplitPaneState].self, forKey: .paneStates) ?? []
     }
+}
+
+/// Serializable metadata for one split leaf, stored in split-tree leaf order.
+struct SplitPaneState: Codable, Sendable, Equatable {
+    let panelInfo: PanelInfo
+    let title: String?
+    let scrollPosition: TerminalScrollPosition?
+
+    init(
+        panelInfo: PanelInfo = .terminal,
+        title: String? = nil,
+        scrollPosition: TerminalScrollPosition? = nil
+    ) {
+        self.panelInfo = panelInfo
+        self.title = title
+        self.scrollPosition = scrollPosition
+    }
+}
+
+/// Terminal viewport state for best-effort scroll restoration.
+struct TerminalScrollPosition: Codable, Sendable, Equatable {
+    let visibleStartRow: UInt32
 }
 
 /// Recursive tree structure representing split pane layouts.

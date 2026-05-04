@@ -166,6 +166,12 @@ extension AppDelegate {
                     )[terminalID] ?? tab.workingDirectory
                 }
             )
+            let paneStates = capturePaneStates(
+                for: tab.id,
+                in: controller,
+                rootNode: splitManager.rootNode,
+                splitManager: splitManager
+            )
 
             tabStates.append(TabState(
                 id: tab.id,
@@ -180,7 +186,8 @@ extension AppDelegate {
                 worktreeRoot: tab.worktreeRoot,
                 worktreeOriginRepo: tab.worktreeOriginRepo,
                 worktreeBranch: tab.worktreeBranch,
-                terminalEnginePreference: tab.terminalEnginePreference
+                terminalEnginePreference: tab.terminalEnginePreference,
+                paneStates: paneStates
             ))
         }
 
@@ -450,8 +457,33 @@ extension AppDelegate {
         var viewsByTerminalID: [UUID: NSView] = [:]
         var storedSplitSurfaces: [SurfaceID: TerminalHostView] = [:]
         var storedSplitViewModels: [SurfaceID: TerminalViewModel] = [:]
+        var tabPanelContentViews: [UUID: NSView] = [:]
+        var restoredPanelTypes: [UUID: PanelInfo] = [:]
+        var restoredPanelTitles: [UUID: String] = [:]
 
         for (index, leafInfo) in leafInfos.enumerated() {
+            let paneState = index < restoredTab.paneStates.count
+                ? restoredTab.paneStates[index]
+                : SplitPaneState()
+            let panelInfo = paneState.panelInfo
+
+            if panelInfo.type != .terminal {
+                guard let panelView = controller.makeWorkspacePanelView(
+                    panel: panelInfo,
+                    contentID: leafInfo.terminalID,
+                    tabID: restoredTab.tabID
+                ) else {
+                    continue
+                }
+                viewsByTerminalID[leafInfo.terminalID] = panelView
+                tabPanelContentViews[leafInfo.terminalID] = panelView
+                restoredPanelTypes[leafInfo.terminalID] = panelInfo
+                if let title = paneState.title, !title.isEmpty {
+                    restoredPanelTitles[leafInfo.terminalID] = title
+                }
+                continue
+            }
+
             let workingDirectory = index < leafDirectories.count
                 ? leafDirectories[index]
                 : restoredTab.workingDirectory
@@ -517,6 +549,10 @@ extension AppDelegate {
                     storedSplitViewModels[surfaceID] = viewModel
                 }
 
+                if let scrollPosition = paneState.scrollPosition {
+                    _ = controller.cocxyCoreBridge(forSurface: surfaceID)?
+                        .setHistoryVisibleStart(scrollPosition.visibleStartRow, for: surfaceID)
+                }
                 viewsByTerminalID[leafInfo.terminalID] = surfaceView
             } catch {
                 NSLog(
@@ -531,8 +567,14 @@ extension AppDelegate {
         let splitManager = controller.tabSplitCoordinator.splitManager(for: restoredTab.tabID)
         splitManager.restoreLayout(
             rootNode: restoredTab.splitNode,
-            focusedLeafID: restoredTab.splitNode.allLeafIDs().first?.leafID
+            focusedLeafID: restoredTab.splitNode.allLeafIDs().first?.leafID,
+            panelTypes: restoredPanelTypes,
+            panelTitles: restoredPanelTitles
         )
+
+        if !tabPanelContentViews.isEmpty {
+            controller.savedTabPanelContentViews[restoredTab.tabID] = tabPanelContentViews
+        }
 
         guard leafInfos.count > 1 else { return }
 
@@ -600,6 +642,34 @@ extension AppDelegate {
         }
     }
 
+    private func capturePaneStates(
+        for tabID: TabID,
+        in controller: MainWindowController,
+        rootNode: SplitNode,
+        splitManager: SplitManager
+    ) -> [SplitPaneState] {
+        let surfaceMap = leafSurfaceMap(for: tabID, in: controller, rootNode: rootNode)
+
+        return rootNode.allLeafIDs().map { leafInfo in
+            let panelInfo = splitManager.panelInfo(for: leafInfo.terminalID)
+            let scrollPosition: TerminalScrollPosition?
+            if panelInfo.type == .terminal,
+               let surfaceID = surfaceMap[leafInfo.terminalID],
+               let visibleStart = controller.cocxyCoreBridge(forSurface: surfaceID)?
+                .historyVisibleStart(for: surfaceID) {
+                scrollPosition = TerminalScrollPosition(visibleStartRow: visibleStart)
+            } else {
+                scrollPosition = nil
+            }
+
+            return SplitPaneState(
+                panelInfo: panelInfo,
+                title: splitManager.panelTitle(for: leafInfo.terminalID),
+                scrollPosition: scrollPosition
+            )
+        }
+    }
+
     private func leafDirectoryMap(
         for tabID: TabID,
         in controller: MainWindowController,
@@ -650,6 +720,48 @@ extension AppDelegate {
             mapping[leafInfo.terminalID] = fallbackDirectory
         }
 
+        return mapping
+    }
+
+    private func leafSurfaceMap(
+        for tabID: TabID,
+        in controller: MainWindowController,
+        rootNode: SplitNode
+    ) -> [UUID: SurfaceID] {
+        let leafInfos = rootNode.allLeafIDs()
+        guard !leafInfos.isEmpty else { return [:] }
+
+        let isDisplayed = controller.displayedTabID == tabID
+        let primaryView = controller.tabSurfaceViews[tabID]
+        let primarySurfaceID = controller.tabSurfaceMap[tabID]
+        let splitSurfaces = isDisplayed
+            ? controller.splitSurfaceViews
+            : (controller.savedTabSplitSurfaceViews[tabID] ?? [:])
+
+        let orderedViews: [NSView]
+        if isDisplayed {
+            orderedViews = controller.collectLeafViews()
+        } else if let savedSplitView = controller.savedTabSplitViews[tabID] {
+            orderedViews = collectLeafViews(from: savedSplitView)
+        } else if let primaryView {
+            orderedViews = [primaryView]
+        } else {
+            orderedViews = []
+        }
+
+        var mapping: [UUID: SurfaceID] = [:]
+        for (leafInfo, view) in zip(leafInfos, orderedViews) {
+            guard let terminalView = view as? TerminalHostView else { continue }
+            if let primaryView,
+               terminalView === primaryView,
+               let primarySurfaceID {
+                mapping[leafInfo.terminalID] = primarySurfaceID
+                continue
+            }
+            if let surfaceID = splitSurfaces.first(where: { $0.value === terminalView })?.key {
+                mapping[leafInfo.terminalID] = surfaceID
+            }
+        }
         return mapping
     }
 

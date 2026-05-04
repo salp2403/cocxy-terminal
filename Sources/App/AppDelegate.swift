@@ -256,6 +256,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// critical path has returned to the main run loop.
     private var hasScheduledDeferredLaunchWork = false
 
+    /// Local-only crash recovery state and periodic session snapshots.
+    var crashRecoveryManager: CrashRecoveryManager?
+    var pendingCrashRecoverySnapshot: CrashRecoverySnapshot?
+    var crashRecoverySnapshotTimer: Timer?
+
     // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -302,7 +307,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 configureSharedServices(for: controller, registerWindow: false)
             }
         }
+        AppLaunchSignposts.measure(.crashRecovery) { initializeCrashRecovery() }
         AppLaunchSignposts.measure(.sessionRestore) { restoreSessionOnLaunch() }
+        presentCrashRecoveryOfferIfNeeded()
+        startCrashRecoverySnapshotsIfNeeded()
         AppLaunchSignposts.measure(.autoSave) {
             startSessionAutoSaveIfNeeded()
             observeSessionAutoSaveConfigChanges()
@@ -322,6 +330,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        stopCrashRecoverySnapshots()
+        writeCrashRecoverySnapshot()
         stopSessionAutoSave()
         sessionAutoSaveConfigCancellable?.cancel()
         sessionAutoSaveConfigCancellable = nil
@@ -385,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowEventBus = nil
         sessionRegistry = nil
         bridge = nil
+        markCrashRecoveryCleanShutdown()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

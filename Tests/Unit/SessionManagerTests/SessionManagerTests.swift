@@ -434,8 +434,8 @@ final class SessionManagerTests: XCTestCase {
 
     func testVersionFieldIsCurrentVersion() {
         let session = makeSimpleSession()
-        XCTAssertEqual(session.version, 2)
-        XCTAssertEqual(Session.currentVersion, 2)
+        XCTAssertEqual(session.version, Session.currentVersion)
+        XCTAssertEqual(Session.currentVersion, 3)
     }
 
     // MARK: - Test 19: Named session save and load independently

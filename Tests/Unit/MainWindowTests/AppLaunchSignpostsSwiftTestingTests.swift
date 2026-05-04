@@ -34,6 +34,7 @@ struct AppLaunchSignpostsSwiftTestingTests {
             "Remote workspace",
             "Browser Pro",
             "Auto update",
+            "Crash recovery",
             "Session restore",
             "Session auto-save",
             "Local backup",

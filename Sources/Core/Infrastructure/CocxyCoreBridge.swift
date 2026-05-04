@@ -2409,6 +2409,21 @@ final class CocxyCoreBridge: TerminalEngine {
         return cocxycore_terminal_history_visible_start(state.terminal)
     }
 
+    /// Sets the visible-history top row for best-effort session restore.
+    @discardableResult
+    func setHistoryVisibleStart(_ row: UInt32, for surface: SurfaceID) -> Bool {
+        let restored = withTerminalLock(surface) { state in
+            cocxycore_terminal_history_set_visible_start(state.terminal, row)
+        } ?? false
+        guard restored else { return false }
+
+        if surfaces[surface]?.protocolV2Observed == true {
+            _ = sendProtocolV2Viewport(for: surface, requestID: nil)
+        }
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        return true
+    }
+
     /// Scroll the surface viewport by a signed number of rows.
     /// Positive values move upward into older scrollback.
     func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {

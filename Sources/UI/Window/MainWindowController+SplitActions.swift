@@ -201,6 +201,160 @@ extension MainWindowController {
 
     // MARK: - Split with Panel
 
+    func makeWorkspacePanelView(panel: PanelInfo, contentID: UUID, tabID: TabID?) -> NSView? {
+        func workspaceDirectory(for tabID: TabID?) -> URL? {
+            tabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+                ?? visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
+                ?? tabManager.activeTab?.workingDirectory
+        }
+
+        switch panel.type {
+        case .terminal:
+            return nil
+        case .browser:
+            let browserVM = BrowserViewModel()
+            browserVM.historyStore = browserHistoryStore
+            browserVM.activeProfileID = browserProfileManager?.activeProfileID
+            wireDOMGrabCallback(for: browserVM)
+            if let url = panel.initialURL {
+                browserVM.urlString = url.absoluteString
+            }
+            var browserView = BrowserPanelView(
+                viewModel: browserVM,
+                profileManager: browserProfileManager,
+                onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
+                onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
+                onDismiss: { [weak self] in self?.closePanel(contentID: contentID) },
+                layout: .splitPane
+            )
+            browserView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
+            let hostingView = NSHostingView(rootView: browserView)
+            hostingView.wantsLayer = true
+            return hostingView
+        case .markdown:
+            let workspaceDir = workspaceDirectory(for: tabID)
+            return MarkdownContentView(filePath: panel.filePath, workspaceDirectory: workspaceDir)
+        case .editor:
+            let editorView = EditorView(fileURL: panel.filePath)
+            wireEditorVimMode(editorView: editorView, tabID: tabID)
+            wireEditorSyntaxIfAvailable(editorView: editorView)
+            wireEditorCompletionIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: tabID)
+            editorView.onQuitRequested = { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            editorView.onFileLoaded = { [weak self, weak editorView] url in
+                guard let editorView else { return }
+                self?.wireEditorVimMode(editorView: editorView, tabID: tabID)
+                self?.wireEditorLSPIfNeeded(editorView: editorView, fileURL: url, tabID: tabID)
+                self?.wireEditorCompletionIfNeeded(editorView: editorView, fileURL: url, tabID: tabID)
+            }
+            wireEditorLSPIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: tabID)
+            return editorView
+        case .notebook:
+            let workspaceDir = workspaceDirectory(for: tabID)
+                ?? panel.filePath?.deletingLastPathComponent()
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            let viewModel = NotebookPanelViewModel(
+                fileURL: panel.filePath,
+                workingDirectory: workspaceDir
+            )
+            let view = NotebookPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            return NSHostingView(rootView: view)
+        case .workflow:
+            let workspaceDir = workspaceDirectory(for: tabID)
+                ?? panel.filePath?.deletingLastPathComponent()
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            let viewModel = WorkflowPanelViewModel(
+                fileURL: panel.filePath,
+                workspaceRoot: workspaceDir
+            )
+            let view = WorkflowPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            return NSHostingView(rootView: view)
+        case .sessionReplay:
+            let config = configService?.current.sessionReplay ?? .defaults
+            let viewModel = SessionReplayPanelViewModel(
+                config: config,
+                store: sessionReplayStore(from: config),
+                playback: sessionReplayPlaybackController(),
+                targetSurfaceProvider: { [weak self] in
+                    self?.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+                }
+            )
+            let view = SessionReplayPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            return NSHostingView(rootView: view)
+        case .aiEditHistory:
+            let workspaceDir = panel.filePath ?? workspaceDirectory(for: tabID) ?? workspaceDirectoryForCurrentTab()
+            let repoRoot = (try? AIEditRepositoryIdentifier.repositoryRoot(for: workspaceDir)) ?? workspaceDir
+            let repoID = (try? AIEditRepositoryIdentifier.id(for: repoRoot)) ?? "local"
+            let sessionID = panel.sessionId ?? injectedSessionDiffTracker?.latestSessionId(for: workspaceDir)
+            let viewModel = AIEditHistoryPanelViewModel(
+                repoID: repoID,
+                sessionID: sessionID,
+                workingDirectory: repoRoot
+            )
+            let view = AIEditHistoryPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            return NSHostingView(rootView: view)
+        case .templates:
+            let workspaceDir = panel.filePath ?? workspaceDirectory(for: tabID) ?? workspaceDirectoryForCurrentTab()
+            let viewModel = ProjectTemplatePanelViewModel(
+                registry: .localDefault(projectRoot: workspaceDir),
+                destinationRootURL: workspaceDir
+            )
+            let view = ProjectTemplatePanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            return NSHostingView(rootView: view)
+        case .macros:
+            let targetSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+            let viewModel = MacroSnippetPanelViewModel(
+                macroPlaybackHandler: { [weak self] plan in
+                    guard let self else {
+                        throw MacroTerminalInputReplayError.noTargetSurface
+                    }
+                    return try self.replayMacroPlaybackPlan(plan, preferredSurfaceID: targetSurfaceID)
+                },
+                terminalTextHandler: { [weak self] text in
+                    guard let self else {
+                        throw MacroTerminalInputReplayError.noTargetSurface
+                    }
+                    try self.sendMacroTextToTerminal(text, preferredSurfaceID: targetSurfaceID)
+                }
+            )
+            let view = MacroSnippetPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            return NSHostingView(rootView: view)
+        case .dbCloud:
+            let view = DBCloudHelperPanelView { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            return NSHostingView(rootView: view)
+        case .subagent:
+            guard let dashboardVM = injectedDashboardViewModel,
+                  let subagentId = panel.subagentId,
+                  let sessionId = panel.sessionId else { return nil }
+            let subView = SubagentContentView(
+                viewModel: dashboardVM,
+                subagentId: subagentId,
+                sessionId: sessionId,
+                vibrancyAppearanceOverride: resolveVibrancyAppearanceOverride()
+            )
+            let capturedContentID = contentID
+            subView.onClose = { [weak self] in
+                self?.closeSubagentPanel(contentID: capturedContentID)
+            }
+            return subView
+        }
+    }
+
     /// Creates a visual split with a non-terminal panel.
     ///
     /// - Parameters:
@@ -212,6 +366,10 @@ extension MainWindowController {
     ///     model so the tab strip highlights it. Defaults to false.
     func performVisualSplitWithPanel(isVertical: Bool, panel: PanelInfo, appendToEnd: Bool = false, focusNewPanel: Bool = false) {
         guard let container = terminalContainerView else { return }
+        if panel.type == .terminal {
+            performVisualSplit(isVertical: isVertical)
+            return
+        }
         let currentPaneCount = countSplitPanes()
         guard currentPaneCount < Self.maxPaneCount else { return }
         guard let focusedSurface = focusedSplitSurfaceView else { return }
@@ -236,158 +394,8 @@ extension MainWindowController {
             return
         }
 
-        // Create the panel view based on type.
-        let panelView: NSView
-        switch panel.type {
-        case .terminal:
-            // Fallback: create a terminal (should use performVisualSplit instead).
-            performVisualSplit(isVertical: isVertical)
+        guard let panelView = makeWorkspacePanelView(panel: panel, contentID: contentID, tabID: currentTabID) else {
             return
-        case .browser:
-            let browserVM = BrowserViewModel()
-            browserVM.historyStore = browserHistoryStore
-            browserVM.activeProfileID = browserProfileManager?.activeProfileID
-            wireDOMGrabCallback(for: browserVM)
-            if let url = panel.initialURL {
-                browserVM.urlString = url.absoluteString
-            }
-            var browserView = BrowserPanelView(
-                viewModel: browserVM,
-                profileManager: browserProfileManager,
-                onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
-                onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
-                onDismiss: { [weak self] in self?.closePanel(contentID: contentID) },
-                layout: .splitPane
-            )
-            browserView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-            let hostingView = NSHostingView(rootView: browserView)
-            hostingView.wantsLayer = true
-            panelView = hostingView
-        case .markdown:
-            let workspaceDir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
-                ?? tabManager.activeTab?.workingDirectory
-            let mdView = MarkdownContentView(filePath: panel.filePath, workspaceDirectory: workspaceDir)
-            panelView = mdView
-        case .editor:
-            let editorView = EditorView(fileURL: panel.filePath)
-            wireEditorVimMode(editorView: editorView, tabID: currentTabID)
-            wireEditorSyntaxIfAvailable(editorView: editorView)
-            wireEditorCompletionIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: currentTabID)
-            editorView.onQuitRequested = { [weak self] in
-                self?.closePanel(contentID: contentID)
-            }
-            editorView.onFileLoaded = { [weak self, weak editorView] url in
-                guard let editorView else { return }
-                self?.wireEditorVimMode(editorView: editorView, tabID: currentTabID)
-                self?.wireEditorLSPIfNeeded(editorView: editorView, fileURL: url, tabID: currentTabID)
-                self?.wireEditorCompletionIfNeeded(editorView: editorView, fileURL: url, tabID: currentTabID)
-            }
-            wireEditorLSPIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: currentTabID)
-            panelView = editorView
-        case .notebook:
-            let workspaceDir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
-                ?? tabManager.activeTab?.workingDirectory
-                ?? panel.filePath?.deletingLastPathComponent()
-                ?? FileManager.default.homeDirectoryForCurrentUser
-            let viewModel = NotebookPanelViewModel(
-                fileURL: panel.filePath,
-                workingDirectory: workspaceDir
-            )
-            let view = NotebookPanelView(viewModel: viewModel) { [weak self] in
-                self?.closePanel(contentID: contentID)
-            }
-            panelView = NSHostingView(rootView: view)
-        case .workflow:
-            let workspaceDir = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
-                ?? tabManager.activeTab?.workingDirectory
-                ?? panel.filePath?.deletingLastPathComponent()
-                ?? FileManager.default.homeDirectoryForCurrentUser
-            let viewModel = WorkflowPanelViewModel(
-                fileURL: panel.filePath,
-                workspaceRoot: workspaceDir
-            )
-            let view = WorkflowPanelView(viewModel: viewModel) { [weak self] in
-                self?.closePanel(contentID: contentID)
-            }
-            panelView = NSHostingView(rootView: view)
-        case .sessionReplay:
-            let config = configService?.current.sessionReplay ?? .defaults
-            let viewModel = SessionReplayPanelViewModel(
-                config: config,
-                store: sessionReplayStore(from: config),
-                playback: sessionReplayPlaybackController(),
-                targetSurfaceProvider: { [weak self] in
-                    self?.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
-                }
-            )
-            let view = SessionReplayPanelView(viewModel: viewModel) { [weak self] in
-                self?.closePanel(contentID: contentID)
-            }
-            panelView = NSHostingView(rootView: view)
-        case .aiEditHistory:
-            let workspaceDir = panel.filePath ?? workspaceDirectoryForCurrentTab()
-            let repoRoot = (try? AIEditRepositoryIdentifier.repositoryRoot(for: workspaceDir)) ?? workspaceDir
-            let repoID = (try? AIEditRepositoryIdentifier.id(for: repoRoot)) ?? "local"
-            let sessionID = panel.sessionId ?? injectedSessionDiffTracker?.latestSessionId(for: workspaceDir)
-            let viewModel = AIEditHistoryPanelViewModel(
-                repoID: repoID,
-                sessionID: sessionID,
-                workingDirectory: repoRoot
-            )
-            let view = AIEditHistoryPanelView(viewModel: viewModel) { [weak self] in
-                self?.closePanel(contentID: contentID)
-            }
-            panelView = NSHostingView(rootView: view)
-        case .templates:
-            let workspaceDir = panel.filePath ?? workspaceDirectoryForCurrentTab()
-            let viewModel = ProjectTemplatePanelViewModel(
-                registry: .localDefault(projectRoot: workspaceDir),
-                destinationRootURL: workspaceDir
-            )
-            let view = ProjectTemplatePanelView(viewModel: viewModel) { [weak self] in
-                self?.closePanel(contentID: contentID)
-            }
-            panelView = NSHostingView(rootView: view)
-        case .macros:
-            let targetSurfaceID = focusedSurface.terminalViewModel?.surfaceID
-            let viewModel = MacroSnippetPanelViewModel(
-                macroPlaybackHandler: { [weak self] plan in
-                    guard let self else {
-                        throw MacroTerminalInputReplayError.noTargetSurface
-                    }
-                    return try self.replayMacroPlaybackPlan(plan, preferredSurfaceID: targetSurfaceID)
-                },
-                terminalTextHandler: { [weak self] text in
-                    guard let self else {
-                        throw MacroTerminalInputReplayError.noTargetSurface
-                    }
-                    try self.sendMacroTextToTerminal(text, preferredSurfaceID: targetSurfaceID)
-                }
-            )
-            let view = MacroSnippetPanelView(viewModel: viewModel) { [weak self] in
-                self?.closePanel(contentID: contentID)
-            }
-            panelView = NSHostingView(rootView: view)
-        case .dbCloud:
-            let view = DBCloudHelperPanelView { [weak self] in
-                self?.closePanel(contentID: contentID)
-            }
-            panelView = NSHostingView(rootView: view)
-        case .subagent:
-            guard let dashboardVM = injectedDashboardViewModel,
-                  let subagentId = panel.subagentId,
-                  let sessionId = panel.sessionId else { return }
-            let subView = SubagentContentView(
-                viewModel: dashboardVM,
-                subagentId: subagentId,
-                sessionId: sessionId,
-                vibrancyAppearanceOverride: resolveVibrancyAppearanceOverride()
-            )
-            let capturedContentID = contentID
-            subView.onClose = { [weak self] in
-                self?.closeSubagentPanel(contentID: capturedContentID)
-            }
-            panelView = subView
         }
 
         panelContentViews[contentID] = panelView
