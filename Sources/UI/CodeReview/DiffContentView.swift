@@ -4,6 +4,93 @@
 import AppKit
 import SwiftUI
 
+enum DiffContentLocalization {
+    static func emptyMessage(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "codeReview.diff.empty",
+            fallback: "Select a changed file to review it here"
+        )
+    }
+
+    static func noTextualHunks(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "codeReview.diff.noTextualHunks",
+            fallback: "No textual hunks are available for this file."
+        )
+    }
+
+    static func largeDiffTruncated(lineLimit: Int, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string(
+                "codeReview.diff.largeTruncated",
+                fallback: "Large diff detected. Showing the first %@ lines to keep review responsive."
+            ),
+            lineLimit.formatted()
+        )
+    }
+
+    static func acceptHunk(using localizer: AppLocalizer) -> String {
+        localizer.string("codeReview.diff.hunk.accept", fallback: "Accept hunk")
+    }
+
+    static func rejectHunk(using localizer: AppLocalizer) -> String {
+        localizer.string("codeReview.diff.hunk.reject", fallback: "Reject hunk")
+    }
+
+    static func hunkAccessibilityLabel(_ header: String, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string("codeReview.diff.hunk.accessibility", fallback: "Diff hunk %@"),
+            header
+        )
+    }
+
+    static func hunkAccessibilityHelp(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "codeReview.diff.hunk.help",
+            fallback: "Select this hunk, or use the accept and reject buttons"
+        )
+    }
+
+    static func lineAccessibilityHelp(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "codeReview.diff.line.help",
+            fallback: "Select this diff line to anchor an inline comment"
+        )
+    }
+
+    static func lineAccessibilityLabel(_ line: DiffLine, using localizer: AppLocalizer) -> String {
+        let lineLabel: String
+        if let number = line.displayLineNumber {
+            lineLabel = String(
+                format: localizer.string("codeReview.diff.line.number", fallback: "line %d"),
+                number
+            )
+        } else {
+            lineLabel = localizer.string(
+                "codeReview.diff.line.nonCommentable",
+                fallback: "non-commentable line"
+            )
+        }
+
+        let kindDescription: String
+        switch line.kind {
+        case .context:
+            kindDescription = localizer.string("codeReview.diff.line.kind.context", fallback: "Context")
+        case .addition:
+            kindDescription = localizer.string("codeReview.diff.line.kind.addition", fallback: "Addition")
+        case .deletion:
+            kindDescription = localizer.string("codeReview.diff.line.kind.deletion", fallback: "Deletion")
+        }
+
+        return String(
+            format: localizer.string("codeReview.diff.line.accessibility", fallback: "%@ %@: %@"),
+            kindDescription,
+            lineLabel,
+            line.content
+        )
+    }
+}
+
 @MainActor
 final class DiffContentView: NSView {
     private static let maximumRenderableLines = 4_000
@@ -11,11 +98,12 @@ final class DiffContentView: NSView {
     private let scrollView = NSScrollView()
     private let containerView = NSView()
     private let stackView = NSStackView()
-    private let emptyLabel = NSTextField(labelWithString: "Select a changed file to review it here")
+    private let emptyLabel = NSTextField(labelWithString: "")
     private var hunkHeaderViewsByID: [String: HunkHeaderView] = [:]
     private var lineRowsByNumber: [Int: [DiffLineRowView]] = [:]
     private var appliedSelectedLineNumber: Int?
     private var appliedSelectedHunkID: String?
+    private var localizer = AppLocalizer(languagePreference: .system)
 
     var fileDiff: FileDiff? { didSet { if fileDiff != oldValue { renderContent() } } }
     var comments: [ReviewComment] = [] { didSet { if comments != oldValue { renderContent() } } }
@@ -35,6 +123,14 @@ final class DiffContentView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("DiffContentView does not support NSCoding")
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        let oldLanguage = self.localizer.resolvedLanguage
+        self.localizer = localizer
+        guard oldLanguage != localizer.resolvedLanguage else { return }
+        applyLocalizedStaticText()
+        renderContent()
     }
 
     private func setupUI() {
@@ -60,6 +156,7 @@ final class DiffContentView: NSView {
         emptyLabel.textColor = CocxyColors.overlay1
         emptyLabel.alignment = .center
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        applyLocalizedStaticText()
         addSubview(emptyLabel)
 
         NSLayoutConstraint.activate([
@@ -78,6 +175,10 @@ final class DiffContentView: NSView {
             emptyLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+    }
+
+    private func applyLocalizedStaticText() {
+        emptyLabel.stringValue = DiffContentLocalization.emptyMessage(using: localizer)
     }
 
     private func renderContent() {
@@ -105,7 +206,9 @@ final class DiffContentView: NSView {
 
         if fileDiff.hunks.isEmpty {
             if fileDiff.reviewNote == nil {
-                addArrangedSubviewFillingWidth(makeNoticeView("No textual hunks are available for this file."))
+                addArrangedSubviewFillingWidth(
+                    makeNoticeView(DiffContentLocalization.noTextualHunks(using: localizer))
+                )
             }
             return
         }
@@ -146,7 +249,10 @@ final class DiffContentView: NSView {
         if didTruncateLargeDiff {
             addArrangedSubviewFillingWidth(
                 makeNoticeView(
-                    "Large diff detected. Showing the first \(Self.maximumRenderableLines.formatted()) lines to keep review responsive."
+                    DiffContentLocalization.largeDiffTruncated(
+                        lineLimit: Self.maximumRenderableLines,
+                        using: localizer
+                    )
                 )
             )
         }
@@ -222,7 +328,7 @@ final class DiffContentView: NSView {
     }
 
     private func makeHunkHeaderView(_ hunk: DiffHunk) -> HunkHeaderView {
-        let header = HunkHeaderView(hunk: hunk)
+        let header = HunkHeaderView(hunk: hunk, localizer: localizer)
         header.setSelected(hunk.id == selectedHunkID)
         header.onAccept = { [weak self] in
             self?.onAcceptHunk?(hunk)
@@ -241,7 +347,8 @@ final class DiffContentView: NSView {
         row.configure(
             filePath: filePath,
             line: line,
-            isSelected: selectedLineNumber == line.displayLineNumber
+            isSelected: selectedLineNumber == line.displayLineNumber,
+            localizer: localizer
         )
         row.onActivate = { [weak self] filePath, lineNumber in
             self?.onLineClicked?(filePath, lineNumber)
@@ -289,7 +396,12 @@ final class DiffContentView: NSView {
 private final class ClosureButton: NSButton {
     private let handler: () -> Void
 
-    init(symbolName: String, tintColor: NSColor, handler: @escaping () -> Void) {
+    init(
+        symbolName: String,
+        tintColor: NSColor,
+        accessibilityLabel: String,
+        handler: @escaping () -> Void
+    ) {
         self.handler = handler
         super.init(frame: .zero)
         image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
@@ -300,7 +412,7 @@ private final class ClosureButton: NSButton {
         translatesAutoresizingMaskIntoConstraints = false
         target = self
         action = #selector(handlePress)
-        setAccessibilityLabel(symbolName == "checkmark.circle" ? "Accept hunk" : "Reject hunk")
+        setAccessibilityLabel(accessibilityLabel)
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: 18),
             heightAnchor.constraint(equalToConstant: 18)
@@ -376,7 +488,12 @@ private final class DiffLineRowView: NSView {
         addGestureRecognizer(recognizer)
     }
 
-    func configure(filePath: String, line: DiffLine, isSelected: Bool) {
+    func configure(
+        filePath: String,
+        line: DiffLine,
+        isSelected: Bool,
+        localizer: AppLocalizer
+    ) {
         self.filePath = filePath
         self.lineNumber = line.displayLineNumber
         self.lineKind = line.kind
@@ -403,8 +520,8 @@ private final class DiffLineRowView: NSView {
         }
         setSelected(isSelected)
         setAccessibilityRole(.button)
-        setAccessibilityLabel(accessibilityDescription(for: line))
-        setAccessibilityHelp("Select this diff line to anchor an inline comment")
+        setAccessibilityLabel(DiffContentLocalization.lineAccessibilityLabel(line, using: localizer))
+        setAccessibilityHelp(DiffContentLocalization.lineAccessibilityHelp(using: localizer))
     }
 
     func setSelected(_ isSelected: Bool) {
@@ -427,26 +544,6 @@ private final class DiffLineRowView: NSView {
         onActivate?(filePath, lineNumber)
     }
 
-    private func accessibilityDescription(for line: DiffLine) -> String {
-        let lineLabel: String
-        if let number = line.displayLineNumber {
-            lineLabel = "line \(number)"
-        } else {
-            lineLabel = "non-commentable line"
-        }
-
-        let kindDescription: String
-        switch line.kind {
-        case .context:
-            kindDescription = "context"
-        case .addition:
-            kindDescription = "addition"
-        case .deletion:
-            kindDescription = "deletion"
-        }
-
-        return "\(kindDescription.capitalized) \(lineLabel): \(line.content)"
-    }
 }
 
 @MainActor
@@ -457,14 +554,18 @@ struct DiffContentBridge: NSViewRepresentable {
     let selectedHunkID: String?
     var onLineClicked: ((String, Int) -> Void)?
     var onSelectHunk: ((DiffHunk) -> Void)?
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     var onAcceptHunk: ((DiffHunk) -> Void)?
     var onRejectHunk: ((DiffHunk) -> Void)?
 
     func makeNSView(context: Context) -> DiffContentView {
-        DiffContentView()
+        let view = DiffContentView()
+        view.updateLocalizer(localizer)
+        return view
     }
 
     func updateNSView(_ nsView: DiffContentView, context: Context) {
+        nsView.updateLocalizer(localizer)
         nsView.fileDiff = fileDiff
         nsView.comments = comments
         nsView.selectedLineNumber = selectedLineNumber
@@ -481,16 +582,26 @@ private final class HunkHeaderView: NSView {
     var onReject: (() -> Void)?
     var onSelect: (() -> Void)?
 
+    private let localizer: AppLocalizer
     private let title = NSTextField(labelWithString: "")
     private let stats = NSTextField(labelWithString: "")
-    private lazy var acceptButton = ClosureButton(symbolName: "checkmark.circle", tintColor: CocxyColors.green) { [weak self] in
+    private lazy var acceptButton = ClosureButton(
+        symbolName: "checkmark.circle",
+        tintColor: CocxyColors.green,
+        accessibilityLabel: DiffContentLocalization.acceptHunk(using: localizer)
+    ) { [weak self] in
         self?.onAccept?()
     }
-    private lazy var rejectButton = ClosureButton(symbolName: "xmark.circle", tintColor: CocxyColors.red) { [weak self] in
+    private lazy var rejectButton = ClosureButton(
+        symbolName: "xmark.circle",
+        tintColor: CocxyColors.red,
+        accessibilityLabel: DiffContentLocalization.rejectHunk(using: localizer)
+    ) { [weak self] in
         self?.onReject?()
     }
 
-    init(hunk: DiffHunk) {
+    init(hunk: DiffHunk, localizer: AppLocalizer) {
+        self.localizer = localizer
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 8
@@ -531,8 +642,8 @@ private final class HunkHeaderView: NSView {
         let tap = NSClickGestureRecognizer(target: self, action: #selector(handleTap))
         addGestureRecognizer(tap)
         setAccessibilityRole(.button)
-        setAccessibilityLabel("Diff hunk \(hunk.header)")
-        setAccessibilityHelp("Select this hunk, or use the accept and reject buttons")
+        setAccessibilityLabel(DiffContentLocalization.hunkAccessibilityLabel(hunk.header, using: localizer))
+        setAccessibilityHelp(DiffContentLocalization.hunkAccessibilityHelp(using: localizer))
     }
 
     @available(*, unavailable)

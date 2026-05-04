@@ -236,6 +236,7 @@ struct CodeReviewPanelView: View {
             onSelectHunk: { hunk in
                 viewModel.selectHunk(hunk)
             },
+            localizer: localizer,
             onAcceptHunk: { hunk in
                 if let fileDiff = viewModel.selectedFileDiff {
                     viewModel.accept(hunk: hunk, in: fileDiff)

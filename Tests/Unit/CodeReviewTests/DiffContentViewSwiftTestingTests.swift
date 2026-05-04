@@ -41,6 +41,30 @@ struct DiffContentViewSwiftTestingTests {
 
         #expect(stackView.arrangedSubviews.count == 4_002)
     }
+
+    @Test("diff renderer accessibility strings localize")
+    func diffRendererAccessibilityStringsLocalize() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let view = DiffContentView(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+        let hunk = sampleHunk(lineCount: 1)
+        let fileDiff = FileDiff(filePath: "foo.swift", status: .modified, hunks: [hunk])
+
+        view.updateLocalizer(spanish)
+        view.fileDiff = fileDiff
+
+        let labels = accessibilityLabels(in: view)
+        #expect(DiffContentLocalization.emptyMessage(using: spanish) == "Selecciona un archivo modificado para revisarlo aquí")
+        #expect(DiffContentLocalization.noTextualHunks(using: spanish) == "No hay hunks textuales disponibles para este archivo.")
+        #expect(
+            DiffContentLocalization.largeDiffTruncated(lineLimit: 10, using: spanish)
+                == "Diff grande detectado. Se muestran las primeras 10 líneas para mantener la revisión fluida."
+        )
+        #expect(labels.contains("Hunk de diff \(hunk.header)"))
+        #expect(labels.contains("Aceptar hunk"))
+        #expect(labels.contains("Rechazar hunk"))
+        #expect(labels.contains("Adición línea 1: line 1"))
+    }
 }
 
 @MainActor
@@ -69,4 +93,21 @@ private func findStackView(in root: NSView) -> NSStackView? {
         }
     }
     return nil
+}
+
+@MainActor
+private func accessibilityLabels(in root: NSView) -> [String] {
+    var labels: [String] = []
+    if let label = root.accessibilityLabel(), !label.isEmpty {
+        labels.append(label)
+    }
+    for subview in root.subviews {
+        labels.append(contentsOf: accessibilityLabels(in: subview))
+    }
+    return labels
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
