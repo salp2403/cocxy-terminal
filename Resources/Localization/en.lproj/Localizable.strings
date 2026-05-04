@@ -220,6 +220,16 @@
 "agentDashboard.state.idle" = "Idle";
 "agentDashboard.state.finished" = "Finished";
 "agentDashboard.state.launching" = "Launching";
+"menuBar.showCocxy" = "Show Cocxy";
+"menuBar.showDashboard" = "Show Dashboard";
+"menuBar.quitCocxy" = "Quit Cocxy";
+"terminal.smartCopy.openURL" = "Open URL";
+"terminal.smartCopy.openPath" = "Open Path";
+"terminal.smartCopy.copyIPAddress" = "Copy IP Address";
+"terminal.smartCopy.copyGitHash" = "Copy Git Hash";
+"terminal.smartCopy.copyEmail" = "Copy Email";
+"terminal.smartCopy.copyLine" = "Copy Line";
+"terminal.smartCopy.detectedTitle" = "%@: %@";
 "statusBar.accessibility" = "Status bar";
 "statusBar.sshSession" = "SSH session: %@";
 "statusBar.command.running" = "running...";
@@ -576,6 +586,7 @@
 "common.save" = "Save";
 "common.open" = "Open";
 "common.copy" = "Copy";
+"common.paste" = "Paste";
 "common.delete" = "Delete";
 "common.clear" = "Clear";
 "common.discard" = "Discard";

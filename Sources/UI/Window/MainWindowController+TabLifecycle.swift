@@ -35,7 +35,11 @@ extension MainWindowController {
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         viewModel.setDefaultFontSize(configuredFontSize)
-        let surfaceView = TerminalHostViewFactory.make(viewModel: viewModel, engine: engine)
+        let surfaceView = TerminalHostViewFactory.make(
+            viewModel: viewModel,
+            engine: engine,
+            localizer: appLocalizer()
+        )
 
         tabViewModels[newTab.id] = viewModel
         tabSurfaceViews[newTab.id] = surfaceView

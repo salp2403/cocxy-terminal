@@ -133,4 +133,27 @@ final class SmartCopyMenuBuilderTests: XCTestCase {
         }
         XCTAssertLessThan(firstURL, firstEmail, "URLs should appear before emails in results")
     }
+
+    func testBuildMenuLocalizesSpanishTitles() throws {
+        let bundle = try XCTUnwrap(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let menu = SmartCopyMenuBuilder.buildMenu(
+            nearText: "Open https://example.com from 127.0.0.1",
+            clipboardService: MockClipboardService(),
+            paste: {},
+            localizer: spanish
+        )
+
+        let titles = menu.items.map(\.title)
+        XCTAssertTrue(titles.contains("Abrir URL: https://example.com"))
+        XCTAssertTrue(titles.contains("Copiar dirección IP: 127.0.0.1"))
+        XCTAssertTrue(titles.contains("Copiar"))
+        XCTAssertTrue(titles.contains("Pegar"))
+        XCTAssertTrue(titles.contains("Copiar línea"))
+    }
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }

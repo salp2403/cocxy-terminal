@@ -578,7 +578,11 @@ extension MainWindowController {
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
         newViewModel.setDefaultFontSize(configuredFontSize)
-        let newSurfaceView = TerminalHostViewFactory.make(viewModel: newViewModel, engine: engine)
+        let newSurfaceView = TerminalHostViewFactory.make(
+            viewModel: newViewModel,
+            engine: engine,
+            localizer: appLocalizer()
+        )
 
         let workingDirectory = currentTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
             ?? tabManager.activeTab?.workingDirectory

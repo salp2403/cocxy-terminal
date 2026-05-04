@@ -499,7 +499,8 @@ extension AppDelegate {
                 viewModel.setDefaultFontSize(configuredFontSize)
                 let freshPrimarySurfaceView = TerminalHostViewFactory.make(
                     viewModel: viewModel,
-                    engine: engine
+                    engine: engine,
+                    localizer: appLocalizer()
                 )
                 controller.terminalSurfaceView = freshPrimarySurfaceView
                 surfaceView = freshPrimarySurfaceView
@@ -507,7 +508,11 @@ extension AppDelegate {
                 let newViewModel = TerminalViewModel(engine: engine)
                 newViewModel.setDefaultFontSize(configuredFontSize)
                 viewModel = newViewModel
-                surfaceView = TerminalHostViewFactory.make(viewModel: newViewModel, engine: engine)
+                surfaceView = TerminalHostViewFactory.make(
+                    viewModel: newViewModel,
+                    engine: engine,
+                    localizer: appLocalizer()
+                )
             }
 
             do {

@@ -892,7 +892,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     private func buildTerminalSurface() -> TerminalHostView {
         let surfaceView = TerminalHostViewFactory.make(
             viewModel: terminalViewModel,
-            engine: bridge
+            engine: bridge,
+            localizer: appLocalizer(for: configService?.current)
         )
         self.terminalSurfaceView = surfaceView
         return surfaceView

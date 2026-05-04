@@ -30,12 +30,18 @@ final class MenuBarStatusItem {
 
     private var statusItem: NSStatusItem?
     private var agentMenu: NSMenu?
+    private var localizer: AppLocalizer
+    private var lastSessions: [(name: String, state: String, activity: String?)] = []
 
     /// Callback invoked when "Show Cocxy" is selected from the menu.
     var onShowApp: (() -> Void)?
 
     /// Callback invoked when "Show Dashboard" is selected.
     var onShowDashboard: (() -> Void)?
+
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+        self.localizer = localizer
+    }
 
     // MARK: - Install
 
@@ -54,35 +60,13 @@ final class MenuBarStatusItem {
             button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         }
 
-        let menu = NSMenu()
-        menu.addItem(withTitle: "No active agents", action: nil, keyEquivalent: "")
-        menu.addItem(.separator())
-
-        let showApp = menu.addItem(
-            withTitle: "Show Cocxy",
-            action: #selector(handleShowApp),
-            keyEquivalent: ""
-        )
-        showApp.target = self
-
-        let showDashboard = menu.addItem(
-            withTitle: "Show Dashboard",
-            action: #selector(handleShowDashboard),
-            keyEquivalent: ""
-        )
-        showDashboard.target = self
-
-        menu.addItem(.separator())
-        let quit = menu.addItem(
-            withTitle: "Quit Cocxy",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        quit.keyEquivalentModifierMask = [.command]
-
-        item.menu = menu
         self.statusItem = item
-        self.agentMenu = menu
+        rebuildMenu()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        rebuildMenu()
     }
 
     // MARK: - Update
@@ -106,7 +90,8 @@ final class MenuBarStatusItem {
 
         if total == 0 {
             button.title = ""
-            updateMenuSessions([])
+            lastSessions = []
+            rebuildMenu()
         } else {
             // Show count next to icon with color hint.
             var parts: [String] = []
@@ -114,55 +99,149 @@ final class MenuBarStatusItem {
             if waiting > 0 { parts.append("\(waiting)⏳") }
             if errors > 0 { parts.append("\(errors)⚠") }
             button.title = " " + parts.joined(separator: " ")
-            updateMenuSessions(sessions)
+            lastSessions = sessions
+            rebuildMenu()
         }
     }
 
     // MARK: - Private
 
-    private func updateMenuSessions(
-        _ sessions: [(name: String, state: String, activity: String?)]
-    ) {
-        guard let menu = agentMenu else { return }
+    private func rebuildMenu() {
+        let menu = NSMenu()
 
-        // Remove old session items (everything before the first separator).
-        while menu.items.count > 0 && !menu.items[0].isSeparatorItem {
-            menu.removeItem(at: 0)
-        }
-
-        if sessions.isEmpty {
-            let noAgents = NSMenuItem(title: "No active agents", action: nil, keyEquivalent: "")
+        if lastSessions.isEmpty {
+            let noAgents = NSMenuItem(
+                title: Self.localizedNoActiveAgents(using: localizer),
+                action: nil,
+                keyEquivalent: ""
+            )
             noAgents.isEnabled = false
-            menu.insertItem(noAgents, at: 0)
+            menu.addItem(noAgents)
         } else {
-            for session in sessions.reversed() {
-                let title: String
-                if let activity = session.activity {
-                    title = "\(session.name) — \(session.state) — \(activity)"
-                } else {
-                    title = "\(session.name) — \(session.state)"
-                }
-                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            for session in lastSessions.reversed() {
+                let item = NSMenuItem(
+                    title: Self.localizedSessionTitle(
+                        name: session.name,
+                        state: session.state,
+                        activity: session.activity,
+                        using: localizer
+                    ),
+                    action: nil,
+                    keyEquivalent: ""
+                )
                 item.isEnabled = false
 
                 // State icon
-                let iconName: String
-                switch session.state.lowercased() {
-                case "working": iconName = "circle.fill"
-                case "waiting": iconName = "questionmark.circle.fill"
-                case "error": iconName = "exclamationmark.triangle.fill"
-                case "finished": iconName = "checkmark.circle.fill"
-                default: iconName = "circle"
-                }
                 let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
                 item.image = NSImage(
-                    systemSymbolName: iconName,
-                    accessibilityDescription: session.state
+                    systemSymbolName: Self.symbolName(forAgentState: session.state),
+                    accessibilityDescription: Self.localizedAgentState(session.state, using: localizer)
                 )?.withSymbolConfiguration(config)
 
-                menu.insertItem(item, at: 0)
+                menu.addItem(item)
             }
         }
+
+        menu.addItem(.separator())
+
+        let showApp = menu.addItem(
+            withTitle: Self.localizedShowCocxy(using: localizer),
+            action: #selector(handleShowApp),
+            keyEquivalent: ""
+        )
+        showApp.target = self
+
+        let showDashboard = menu.addItem(
+            withTitle: Self.localizedShowDashboard(using: localizer),
+            action: #selector(handleShowDashboard),
+            keyEquivalent: ""
+        )
+        showDashboard.target = self
+
+        menu.addItem(.separator())
+        let quit = menu.addItem(
+            withTitle: Self.localizedQuitCocxy(using: localizer),
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        quit.keyEquivalentModifierMask = [.command]
+
+        statusItem?.menu = menu
+        agentMenu = menu
+    }
+
+    static func localizedNoActiveAgents(using localizer: AppLocalizer) -> String {
+        localizer.string("agentDashboard.empty.all.title", fallback: "No active agents")
+    }
+
+    static func localizedShowCocxy(using localizer: AppLocalizer) -> String {
+        localizer.string("menuBar.showCocxy", fallback: "Show Cocxy")
+    }
+
+    static func localizedShowDashboard(using localizer: AppLocalizer) -> String {
+        localizer.string("menuBar.showDashboard", fallback: "Show Dashboard")
+    }
+
+    static func localizedQuitCocxy(using localizer: AppLocalizer) -> String {
+        localizer.string("menuBar.quitCocxy", fallback: "Quit Cocxy")
+    }
+
+    static func localizedAgentState(_ state: String, using localizer: AppLocalizer) -> String {
+        switch normalizedAgentStateToken(state) {
+        case "idle":
+            return localizer.string("agentDashboard.state.idle", fallback: "Idle")
+        case "launching", "launched":
+            return localizer.string("agentDashboard.state.launching", fallback: "Launching")
+        case "working":
+            return localizer.string("agentDashboard.state.working", fallback: "Working")
+        case "waiting", "waitinginput", "waitingforinput":
+            return localizer.string("agentDashboard.state.waitingForInput", fallback: "Waiting for input")
+        case "blocked":
+            return localizer.string("agentDashboard.state.blocked", fallback: "Blocked")
+        case "error":
+            return localizer.string("agentDashboard.state.error", fallback: "Error")
+        case "finished":
+            return localizer.string("agentDashboard.state.finished", fallback: "Finished")
+        default:
+            return state
+        }
+    }
+
+    static func localizedSessionTitle(
+        name: String,
+        state: String,
+        activity: String?,
+        using localizer: AppLocalizer
+    ) -> String {
+        let localizedState = localizedAgentState(state, using: localizer)
+        if let activity {
+            return "\(name) — \(localizedState) — \(activity)"
+        }
+        return "\(name) — \(localizedState)"
+    }
+
+    static func symbolName(forAgentState state: String) -> String {
+        switch normalizedAgentStateToken(state) {
+        case "working":
+            return "circle.fill"
+        case "waiting", "waitinginput", "waitingforinput":
+            return "questionmark.circle.fill"
+        case "blocked", "error":
+            return "exclamationmark.triangle.fill"
+        case "finished":
+            return "checkmark.circle.fill"
+        case "launching", "launched":
+            return "circle.dotted"
+        default:
+            return "circle"
+        }
+    }
+
+    private static func normalizedAgentStateToken(_ state: String) -> String {
+        state
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
     }
 
     @objc private func handleShowApp() {

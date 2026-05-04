@@ -86,6 +86,7 @@ extension MainWindowController {
         updateSearchBarLocalizer(localizer)
         updateDashboardPanelLocalizer(localizer)
         updateStatusBarLocalizer(localizer)
+        updateTerminalHostLocalizers(localizer)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         updateRemoteWorkspacePanelLocalizer(localizer)
         refreshVisibleActivityDashboardLocalizer()
@@ -397,6 +398,23 @@ extension MainWindowController {
         var root = hostingView.rootView
         root.localizer = localizer
         hostingView.rootView = root
+    }
+
+    private func updateTerminalHostLocalizers(_ localizer: AppLocalizer) {
+        var seen = Set<ObjectIdentifier>()
+
+        func update(_ view: TerminalHostView?) {
+            guard let view else { return }
+            guard seen.insert(ObjectIdentifier(view)).inserted else { return }
+            (view as? CocxyCoreView)?.updateLocalizer(localizer)
+        }
+
+        update(terminalSurfaceView)
+        for view in tabSurfaceViews.values { update(view) }
+        for view in splitSurfaceViews.values { update(view) }
+        for savedSplits in savedTabSplitSurfaceViews.values {
+            for view in savedSplits.values { update(view) }
+        }
     }
 
     // MARK: - Tab Position

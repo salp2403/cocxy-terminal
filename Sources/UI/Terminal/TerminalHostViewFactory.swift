@@ -7,11 +7,12 @@ import Foundation
 enum TerminalHostViewFactory {
     static func make(
         viewModel: TerminalViewModel,
-        engine: (any TerminalEngine)?
+        engine: (any TerminalEngine)?,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) -> TerminalHostView {
         if engine is PTYDaemonClient {
             return PTYDaemonHostView(viewModel: viewModel)
         }
-        return CocxyCoreView(viewModel: viewModel)
+        return CocxyCoreView(viewModel: viewModel, localizer: localizer)
     }
 }

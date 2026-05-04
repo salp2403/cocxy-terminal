@@ -53,6 +53,9 @@ final class CocxyCoreView: NSView {
     /// Clipboard service for Cmd+C/V operations.
     var clipboardService: ClipboardServiceProtocol = SystemClipboardService()
 
+    /// Localized copy for native context menus owned by this view.
+    private var localizer: AppLocalizer
+
     /// Closure called when the user submits input (Enter key).
     var onUserInputSubmitted: (() -> Void)?
 
@@ -157,8 +160,12 @@ final class CocxyCoreView: NSView {
 
     // MARK: - Initialization
 
-    init(viewModel: TerminalViewModel? = nil) {
+    init(
+        viewModel: TerminalViewModel? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.viewModel = viewModel
+        self.localizer = localizer
         super.init(frame: .zero)
         wantsLayer = true
         registerForDraggedTypes([.fileURL])
@@ -167,6 +174,10 @@ final class CocxyCoreView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("CocxyCoreView does not support NSCoding")
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
     }
 
     deinit {
@@ -848,7 +859,8 @@ final class CocxyCoreView: NSView {
                 if let text = self.clipboardService.read(), !text.isEmpty {
                     bridge.sendText(text, to: sid)
                 }
-            }
+            },
+            localizer: localizer
         )
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }

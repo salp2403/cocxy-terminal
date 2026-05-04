@@ -997,7 +997,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let configuredFontSize = configService?.current.appearance.fontSize
                 ?? AppearanceConfig.defaults.fontSize
             viewModel.setDefaultFontSize(configuredFontSize)
-            let surfaceView = TerminalHostViewFactory.make(viewModel: viewModel, engine: engine)
+            let surfaceView = TerminalHostViewFactory.make(
+                viewModel: viewModel,
+                engine: engine,
+                localizer: appLocalizer()
+            )
 
             wc.tabViewModels[tab.id] = viewModel
             wc.tabSurfaceViews[tab.id] = surfaceView
@@ -2513,7 +2517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Installs the macOS menu bar status item and wires it to agent state.
     private func initializeMenuBarItem() {
-        let item = MenuBarStatusItem()
+        let item = MenuBarStatusItem(localizer: appLocalizer())
         item.install()
         item.onShowApp = {
             NSApp.activate(ignoringOtherApps: true)
@@ -2550,6 +2554,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     errors: errors,
                     sessions: summaries
                 )
+            }
+            .store(in: &hookCancellables)
+
+        configService?.configChangedPublisher
+            .map(\.appearance.appLanguage)
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak item] _ in
+                guard let self else { return }
+                item?.updateLocalizer(self.appLocalizer())
             }
             .store(in: &hookCancellables)
     }

@@ -37,7 +37,8 @@ enum SmartCopyMenuBuilder {
     static func buildMenu(
         nearText text: String,
         clipboardService: ClipboardServiceProtocol,
-        paste: (() -> Void)? = nil
+        paste: (() -> Void)? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) -> NSMenu {
         let menu = NSMenu()
         let detections = detectContent(in: text)
@@ -45,14 +46,18 @@ enum SmartCopyMenuBuilder {
         // Smart options first — grouped by type.
         if !detections.isEmpty {
             for detection in detections {
-                let item = menuItem(for: detection, clipboard: clipboardService)
+                let item = menuItem(for: detection, clipboard: clipboardService, localizer: localizer)
                 menu.addItem(item)
             }
             menu.addItem(NSMenuItem.separator())
         }
 
         // Standard terminal actions.
-        let copyItem = NSMenuItem(title: "Copy", action: nil, keyEquivalent: "c")
+        let copyItem = NSMenuItem(
+            title: localizer.string("common.copy", fallback: "Copy"),
+            action: nil,
+            keyEquivalent: "c"
+        )
         copyItem.keyEquivalentModifierMask = [.command]
         let copyAction = SmartCopyAction(clipboard: clipboardService) {
             clipboardService.write(text)
@@ -62,7 +67,11 @@ enum SmartCopyMenuBuilder {
         copyItem.representedObject = copyAction
         menu.addItem(copyItem)
 
-        let pasteItem = NSMenuItem(title: "Paste", action: nil, keyEquivalent: "v")
+        let pasteItem = NSMenuItem(
+            title: localizer.string("common.paste", fallback: "Paste"),
+            action: nil,
+            keyEquivalent: "v"
+        )
         pasteItem.keyEquivalentModifierMask = [.command]
         if let paste {
             let pasteAction = SmartCopyAction(clipboard: clipboardService) {
@@ -77,7 +86,11 @@ enum SmartCopyMenuBuilder {
         menu.addItem(NSMenuItem.separator())
 
         // Copy entire visible line.
-        let copyLineItem = NSMenuItem(title: "Copy Line", action: nil, keyEquivalent: "")
+        let copyLineItem = NSMenuItem(
+            title: localizer.string("terminal.smartCopy.copyLine", fallback: "Copy Line"),
+            action: nil,
+            keyEquivalent: ""
+        )
         let copyLineAction = SmartCopyAction(clipboard: clipboardService) {
             clipboardService.write(text.trimmingCharacters(in: .whitespacesAndNewlines))
         }
@@ -152,26 +165,27 @@ enum SmartCopyMenuBuilder {
     /// Creates a menu item for a detected content pattern.
     private static func menuItem(
         for detection: DetectedContent,
-        clipboard: ClipboardServiceProtocol
+        clipboard: ClipboardServiceProtocol,
+        localizer: AppLocalizer
     ) -> NSMenuItem {
         let title: String
         let icon: String
 
         switch detection.type {
         case .url:
-            title = "Open URL"
+            title = localizedActionTitle(for: detection.type, using: localizer)
             icon = "link"
         case .filePath:
-            title = "Open Path"
+            title = localizedActionTitle(for: detection.type, using: localizer)
             icon = "folder"
         case .ipAddress:
-            title = "Copy IP Address"
+            title = localizedActionTitle(for: detection.type, using: localizer)
             icon = "network"
         case .gitHash:
-            title = "Copy Git Hash"
+            title = localizedActionTitle(for: detection.type, using: localizer)
             icon = "number"
         case .email:
-            title = "Copy Email"
+            title = localizedActionTitle(for: detection.type, using: localizer)
             icon = "envelope"
         }
 
@@ -179,7 +193,11 @@ enum SmartCopyMenuBuilder {
             ? String(detection.value.prefix(37)) + "..."
             : detection.value
 
-        let item = NSMenuItem(title: "\(title): \(truncatedValue)", action: nil, keyEquivalent: "")
+        let item = NSMenuItem(
+            title: localizedDetectedTitle(actionTitle: title, value: truncatedValue, using: localizer),
+            action: nil,
+            keyEquivalent: ""
+        )
         if let image = NSImage(systemSymbolName: icon, accessibilityDescription: title) {
             item.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
         }
@@ -203,6 +221,36 @@ enum SmartCopyMenuBuilder {
         item.action = #selector(SmartCopyAction.execute)
         item.representedObject = action
         return item
+    }
+
+    static func localizedActionTitle(
+        for type: DetectedContent.ContentType,
+        using localizer: AppLocalizer
+    ) -> String {
+        switch type {
+        case .url:
+            return localizer.string("terminal.smartCopy.openURL", fallback: "Open URL")
+        case .filePath:
+            return localizer.string("terminal.smartCopy.openPath", fallback: "Open Path")
+        case .ipAddress:
+            return localizer.string("terminal.smartCopy.copyIPAddress", fallback: "Copy IP Address")
+        case .gitHash:
+            return localizer.string("terminal.smartCopy.copyGitHash", fallback: "Copy Git Hash")
+        case .email:
+            return localizer.string("terminal.smartCopy.copyEmail", fallback: "Copy Email")
+        }
+    }
+
+    static func localizedDetectedTitle(
+        actionTitle: String,
+        value: String,
+        using localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string("terminal.smartCopy.detectedTitle", fallback: "%@: %@"),
+            actionTitle,
+            value
+        )
     }
 }
 
