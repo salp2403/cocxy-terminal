@@ -21,6 +21,7 @@ struct DashboardSessionRow: View {
     let session: AgentSessionInfo
     let onNavigate: () -> Void
     var onSetPriority: ((AgentPriority) -> Void)?
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var isPulsing = false
 
@@ -59,7 +60,7 @@ struct DashboardSessionRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint("Activate to switch to this tab")
+        .accessibilityHint(localized("agentDashboard.row.activateHint", fallback: "Activate to switch to this tab"))
         .contextMenu {
             priorityMenu
         }
@@ -73,25 +74,25 @@ struct DashboardSessionRow: View {
         Button {
             onSetPriority?(.focus)
         } label: {
-            Label("Focus", systemImage: "star.fill")
+            Label(localized("agentDashboard.priority.focus", fallback: "Focus"), systemImage: "star.fill")
         }
 
         Button {
             onSetPriority?(.priority)
         } label: {
-            Label("Priority", systemImage: "arrow.up.circle")
+            Label(localized("agentDashboard.priority.priority", fallback: "Priority"), systemImage: "arrow.up.circle")
         }
 
         Button {
             onSetPriority?(.standard)
         } label: {
-            Label("Standard", systemImage: "minus.circle")
+            Label(localized("agentDashboard.priority.standard", fallback: "Standard"), systemImage: "minus.circle")
         }
 
         Divider()
 
         Button(action: onNavigate) {
-            Label("Go to Tab", systemImage: "arrow.right.square")
+            Label(localized("agentDashboard.goToTab", fallback: "Go to Tab"), systemImage: "arrow.right.square")
         }
     }
 
@@ -206,7 +207,7 @@ struct DashboardSessionRow: View {
                 HStack(spacing: 2) {
                     Image(systemName: "doc")
                         .font(.system(size: 7))
-                    Text(verbatim: "\(session.filesTouched.count) files")
+                    Text(verbatim: Self.localizedFilesCount(session.filesTouched.count, using: localizer))
                         .font(.system(size: 8, design: .monospaced))
                 }
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
@@ -230,7 +231,7 @@ struct DashboardSessionRow: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 8))
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.yellow))
-            Text("File conflict: \(session.fileConflicts.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: ", "))")
+            Text("\(Self.localizedFileConflictPrefix(using: localizer)): \(conflictFileNames)")
                 .font(.system(size: 8, weight: .medium))
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.yellow))
                 .lineLimit(1)
@@ -263,16 +264,16 @@ struct DashboardSessionRow: View {
                 Circle()
                     .fill(subagentColor(sub.state))
                     .frame(width: 5, height: 5)
-                Text(sub.type ?? "Subagent")
+                Text(sub.type ?? localized("agentDashboard.subagent.fallback", fallback: "Subagent"))
                     .font(.system(size: 9, weight: .medium))
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
                 if sub.toolUseCount > 0 {
-                    Text(verbatim: "\(sub.toolUseCount) tools")
+                    Text(verbatim: Self.localizedToolsCount(sub.toolUseCount, using: localizer))
                         .font(.system(size: 8, design: .monospaced))
                         .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
                 }
                 if sub.errorCount > 0 {
-                    Text(verbatim: "\(sub.errorCount) err")
+                    Text(verbatim: Self.localizedErrorsCount(sub.errorCount, using: localizer))
                         .font(.system(size: 8, weight: .medium))
                         .foregroundColor(CocxyColors.swiftUI(CocxyColors.red))
                 }
@@ -409,18 +410,26 @@ struct DashboardSessionRow: View {
         var parts = [session.projectName]
         if let windowLabel = session.windowLabel { parts.append(windowLabel) }
         if let agent = session.agentName { parts.append(agent) }
-        if let branch = session.gitBranch { parts.append("branch \(branch)") }
-        parts.append(DashboardStateIndicator.accessibilityLabel(for: session.state))
+        if let branch = session.gitBranch {
+            parts.append(String(
+                format: localized("agentDashboard.accessibility.branch", fallback: "branch %@"),
+                branch
+            ))
+        }
+        parts.append(DashboardStateIndicator.localizedAccessibilityLabel(for: session.state, using: localizer))
         if let activity = session.lastActivity { parts.append(activity) }
         if !session.subagents.isEmpty {
-            parts.append("\(session.subagents.count) subagents")
+            parts.append(String(
+                format: localized("agentDashboard.accessibility.subagents", fallback: "%d subagents"),
+                session.subagents.count
+            ))
         }
         return parts.joined(separator: ", ")
     }
 
     private func relativeTimeString(from date: Date) -> String {
         let interval = Date().timeIntervalSince(date)
-        if interval < 60 { return "now" }
+        if interval < 60 { return localized("agentDashboard.relative.now", fallback: "now") }
         if interval < 3600 { return "\(Int(interval / 60))m" }
         if interval < 86400 { return "\(Int(interval / 3600))h" }
         return "\(Int(interval / 86400))d"
@@ -448,5 +457,31 @@ struct DashboardSessionRow: View {
         let hours = Int(interval / 3600)
         let minutes = (Int(interval) % 3600) / 60
         return "\(hours)h\(minutes)m"
+    }
+
+    static func localizedFilesCount(_ count: Int, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("agentDashboard.files.count", fallback: "%d files"), count)
+    }
+
+    static func localizedFileConflictPrefix(using localizer: AppLocalizer) -> String {
+        localizer.string("agentDashboard.fileConflict.prefix", fallback: "File conflict")
+    }
+
+    private static func localizedToolsCount(_ count: Int, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("agentDashboard.tools.count", fallback: "%d tools"), count)
+    }
+
+    private static func localizedErrorsCount(_ count: Int, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("agentDashboard.errors.count", fallback: "%d err"), count)
+    }
+
+    private var conflictFileNames: String {
+        session.fileConflicts
+            .map { URL(fileURLWithPath: $0).lastPathComponent }
+            .joined(separator: ", ")
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

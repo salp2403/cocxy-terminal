@@ -304,6 +304,18 @@ struct AppLocalizationSwiftTestingTests {
         #expect(viewModel.localizedResultCountDisplay(using: spanish) == "2 de 2 coincidencias")
     }
 
+    @Test
+    func agentDashboardStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(DashboardPanelView.localizedPanelTitle(using: spanish) == "Dashboard de agentes")
+        #expect(DashboardPanelView.localizedCurrentWindowScopeTitle(using: spanish) == "Esta ventana")
+        #expect(DashboardSessionRow.localizedFilesCount(2, using: spanish) == "2 archivos")
+        #expect(DashboardSessionRow.localizedFileConflictPrefix(using: spanish) == "Conflicto de archivo")
+        #expect(DashboardStateIndicator.localizedAccessibilityLabel(for: .working, using: spanish) == "Trabajando")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

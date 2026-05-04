@@ -87,4 +87,29 @@ enum DashboardStateIndicator {
             return "Launching"
         }
     }
+
+    static func localizedAccessibilityLabel(
+        for state: AgentDashboardState,
+        using localizer: AppLocalizer
+    ) -> String {
+        switch state {
+        case .working:
+            return localizer.string("agentDashboard.state.working", fallback: accessibilityLabel(for: state))
+        case .waitingForInput:
+            return localizer.string(
+                "agentDashboard.state.waitingForInput",
+                fallback: accessibilityLabel(for: state)
+            )
+        case .blocked:
+            return localizer.string("agentDashboard.state.blocked", fallback: accessibilityLabel(for: state))
+        case .error:
+            return localizer.string("agentDashboard.state.error", fallback: accessibilityLabel(for: state))
+        case .idle:
+            return localizer.string("agentDashboard.state.idle", fallback: accessibilityLabel(for: state))
+        case .finished:
+            return localizer.string("agentDashboard.state.finished", fallback: accessibilityLabel(for: state))
+        case .launching:
+            return localizer.string("agentDashboard.state.launching", fallback: accessibilityLabel(for: state))
+        }
+    }
 }

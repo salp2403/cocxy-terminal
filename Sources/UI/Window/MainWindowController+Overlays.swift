@@ -990,7 +990,8 @@ extension MainWindowController {
         var swiftUIView = DashboardPanelView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissDashboard() },
-            currentWindowID: windowID
+            currentWindowID: windowID,
+            localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
@@ -2397,7 +2398,8 @@ extension MainWindowController {
         var view = DashboardPanelView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissDashboard() },
-            currentWindowID: windowID
+            currentWindowID: windowID,
+            localizer: appLocalizer()
         )
         view.vibrancyAppearanceOverride = override
         hostingView.rootView = view

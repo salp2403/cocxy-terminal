@@ -46,12 +46,12 @@ struct DashboardPanelView: View {
 
         var id: String { rawValue }
 
-        var title: String {
+        func title(using localizer: AppLocalizer) -> String {
             switch self {
             case .all:
-                return "All Windows"
+                return localizer.string("agentDashboard.scope.allWindows", fallback: "All Windows")
             case .current:
-                return "This Window"
+                return localizer.string("agentDashboard.scope.currentWindow", fallback: "This Window")
             }
         }
     }
@@ -65,6 +65,7 @@ struct DashboardPanelView: View {
 
     /// The window hosting this panel. Used for local filtering.
     var currentWindowID: WindowID? = nil
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -100,14 +101,14 @@ struct DashboardPanelView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Agent Dashboard")
+        .accessibilityLabel(localized("agentDashboard.accessibility", fallback: "Agent Dashboard"))
     }
 
     // MARK: - Header
 
     private var headerView: some View {
         HStack {
-            Text("Agent Dashboard")
+            Text(Self.localizedPanelTitle(using: localizer))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
 
@@ -130,7 +131,7 @@ struct DashboardPanelView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Close dashboard")
+            .accessibilityLabel(localized("agentDashboard.close", fallback: "Close dashboard"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -139,7 +140,7 @@ struct DashboardPanelView: View {
     private var scopePicker: some View {
         HStack(spacing: 4) {
             ForEach(WindowScope.allCases) { scope in
-                Button(scope.title) {
+                Button(scope.title(using: localizer)) {
                     selectedScope = scope
                 }
                 .buttonStyle(.plain)
@@ -174,7 +175,8 @@ struct DashboardPanelView: View {
                                 },
                                 onSetPriority: { priority in
                                     viewModel.setPriority(priority, for: session.id)
-                                }
+                                },
+                                localizer: localizer
                             )
                             Divider()
                                 .padding(.leading, 32)
@@ -193,14 +195,10 @@ struct DashboardPanelView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 32))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text(selectedScope == .current ? "No agents in this window" : "No active agents")
+            Text(localizedEmptyTitle)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text(
-                selectedScope == .current
-                ? "Switch to All Windows to see activity\nfrom the rest of the app."
-                : "Run an AI agent in the terminal\nto see its activity here."
-            )
+            Text(localizedEmptyMessage)
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -216,6 +214,36 @@ struct DashboardPanelView: View {
             return viewModel.sessions
         }
         return viewModel.sessions.filter { $0.windowID == currentWindowID }
+    }
+
+    static func localizedPanelTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("agentDashboard.title", fallback: "Agent Dashboard")
+    }
+
+    static func localizedCurrentWindowScopeTitle(using localizer: AppLocalizer) -> String {
+        WindowScope.current.title(using: localizer)
+    }
+
+    private var localizedEmptyTitle: String {
+        selectedScope == .current
+            ? localized("agentDashboard.empty.current.title", fallback: "No agents in this window")
+            : localized("agentDashboard.empty.all.title", fallback: "No active agents")
+    }
+
+    private var localizedEmptyMessage: String {
+        selectedScope == .current
+            ? localized(
+                "agentDashboard.empty.current.message",
+                fallback: "Switch to All Windows to see activity\nfrom the rest of the app."
+            )
+            : localized(
+                "agentDashboard.empty.all.message",
+                fallback: "Run an AI agent in the terminal\nto see its activity here."
+            )
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
