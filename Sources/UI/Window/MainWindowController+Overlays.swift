@@ -2459,7 +2459,8 @@ extension MainWindowController {
                 self?.dismissBrowserHistory()
                 self?.activeBrowserViewModel()?.navigate(to: url)
             },
-            onDismiss: { [weak self] in self?.dismissBrowserHistory() }
+            onDismiss: { [weak self] in self?.dismissBrowserHistory() },
+            localizer: appLocalizer()
         )
         view.vibrancyAppearanceOverride = override
         hostingView.rootView = view
@@ -2485,7 +2486,8 @@ extension MainWindowController {
                     url: urlString
                 ))
             },
-            onDismiss: { [weak self] in self?.dismissBrowserBookmarks() }
+            onDismiss: { [weak self] in self?.dismissBrowserBookmarks() },
+            localizer: appLocalizer()
         )
         view.vibrancyAppearanceOverride = override
         hostingView.rootView = view

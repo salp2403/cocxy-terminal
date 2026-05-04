@@ -13,6 +13,28 @@ enum HistoryClearRange: String, CaseIterable, Identifiable {
     case all = "All History"
 
     var id: String { rawValue }
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .lastHour:
+            return localizer.string("browser.history.range.lastHour", fallback: rawValue)
+        case .today:
+            return localizer.string("browser.history.range.today", fallback: rawValue)
+        case .all:
+            return localizer.string("browser.history.range.all", fallback: rawValue)
+        }
+    }
+
+    func localizedDeletionScope(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .lastHour:
+            return localizer.string("browser.history.scope.lastHour", fallback: "the last hour of browsing history")
+        case .today:
+            return localizer.string("browser.history.scope.today", fallback: "today's browsing history")
+        case .all:
+            return localizer.string("browser.history.scope.all", fallback: "all browsing history")
+        }
+    }
 }
 
 // MARK: - Browser History View
@@ -71,6 +93,9 @@ struct BrowserHistoryView: View {
     /// rest of the chrome when the user forces a transparency theme.
     var vibrancyAppearanceOverride: NSAppearance?
 
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     /// Search query text.
     @State private var searchText: String = ""
 
@@ -112,14 +137,14 @@ struct BrowserHistoryView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Browsing History")
+        .accessibilityLabel(localized("browser.history.accessibility", fallback: "Browsing History"))
         .onAppear { loadHistory() }
         .onChange(of: searchText) { performSearch() }
-        .alert("Clear History", isPresented: $showClearConfirmation) {
-            Button("Clear", role: .destructive) { clearHistory() }
-            Button("Cancel", role: .cancel) {}
+        .alert(clearConfirmationCopy.messageText, isPresented: $showClearConfirmation) {
+            Button(clearConfirmationCopy.primaryButton, role: .destructive) { clearHistory() }
+            Button(clearConfirmationCopy.secondaryButton, role: .cancel) {}
         } message: {
-            Text("This will permanently delete \(selectedClearRange.rawValue.lowercased()) of browsing history.")
+            Text(clearConfirmationCopy.informativeText)
         }
     }
 
@@ -127,7 +152,7 @@ struct BrowserHistoryView: View {
 
     private var headerView: some View {
         HStack {
-            Text("History")
+            Text(localized("browser.history.title", fallback: "History"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
 
@@ -140,7 +165,7 @@ struct BrowserHistoryView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Close history")
+            .accessibilityLabel(localized("browser.history.close", fallback: "Close history"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -154,7 +179,7 @@ struct BrowserHistoryView: View {
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
 
-            TextField("Search history...", text: $searchText)
+            TextField(localized("browser.history.search.placeholder", fallback: "Search history..."), text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
@@ -186,8 +211,11 @@ struct BrowserHistoryView: View {
             if searchResults.isEmpty {
                 historyEmptyState(
                     symbol: "magnifyingglass",
-                    title: "No results",
-                    detail: "No history entries match your search."
+                    title: localized("browser.history.empty.search.title", fallback: "No results"),
+                    detail: localized(
+                        "browser.history.empty.search.detail",
+                        fallback: "No history entries match your search."
+                    )
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
@@ -210,8 +238,8 @@ struct BrowserHistoryView: View {
             if dateGroups.isEmpty {
                 historyEmptyState(
                     symbol: "clock",
-                    title: "No history",
-                    detail: "Pages you visit will appear here."
+                    title: localized("browser.history.empty.title", fallback: "No history"),
+                    detail: localized("browser.history.empty.detail", fallback: "Pages you visit will appear here.")
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
@@ -269,7 +297,7 @@ struct BrowserHistoryView: View {
         .onTapGesture { onNavigate(entry.url) }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(entry.title ?? entry.url)")
-        .accessibilityHint("Navigate to this page")
+        .accessibilityHint(localized("browser.history.entry.navigate", fallback: "Navigate to this page"))
     }
 
     // MARK: - Footer
@@ -278,7 +306,7 @@ struct BrowserHistoryView: View {
         HStack {
             Menu {
                 ForEach(HistoryClearRange.allCases) { range in
-                    Button(range.rawValue) {
+                    Button(range.localizedTitle(using: localizer)) {
                         selectedClearRange = range
                         showClearConfirmation = true
                     }
@@ -287,13 +315,13 @@ struct BrowserHistoryView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "trash")
                         .font(.system(size: 10))
-                    Text("Clear History")
+                    Text(localized("browser.history.clear", fallback: "Clear History"))
                         .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundColor(Color(nsColor: CocxyColors.red))
             }
             .menuStyle(.borderlessButton)
-            .accessibilityLabel("Clear browsing history")
+            .accessibilityLabel(localized("browser.history.clear.accessibility", fallback: "Clear browsing history"))
 
             Spacer()
         }
@@ -370,6 +398,33 @@ struct BrowserHistoryView: View {
     /// Extracts the host from a URL string for display when no title is available.
     private func displayHost(_ urlString: String) -> String {
         URL(string: urlString)?.host ?? urlString
+    }
+
+    private var clearConfirmationCopy: AppAlertCopy {
+        Self.localizedClearConfirmationCopy(localizer: localizer, range: selectedClearRange)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    static func localizedClearConfirmationCopy(
+        localizer: AppLocalizer,
+        range: HistoryClearRange
+    ) -> AppAlertCopy {
+        let scope = range.localizedDeletionScope(using: localizer)
+        return AppAlertCopy(
+            messageText: localizer.string("browser.history.clear.title", fallback: "Clear History"),
+            informativeText: String(
+                format: localizer.string(
+                    "browser.history.clear.message",
+                    fallback: "This will permanently delete %@."
+                ),
+                scope
+            ),
+            primaryButton: localizer.string("browser.history.clear.button", fallback: "Clear"),
+            secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
     }
 
     private static let timeFormatter: DateFormatter = {

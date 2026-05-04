@@ -57,6 +57,9 @@ struct BrowserBookmarksView: View {
     /// rest of the chrome when the user forces a transparency theme.
     var vibrancyAppearanceOverride: NSAppearance?
 
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     /// Search query text.
     @State private var searchText: String = ""
 
@@ -94,23 +97,20 @@ struct BrowserBookmarksView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Bookmarks")
-        .alert("Delete Bookmark", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
+        .accessibilityLabel(localized("browser.bookmarks.accessibility", fallback: "Bookmarks"))
+        .alert(deleteConfirmationCopy.messageText, isPresented: $showDeleteConfirmation) {
+            Button(deleteConfirmationCopy.primaryButton, role: .destructive) {
                 if let bookmark = bookmarkToDelete {
                     try? bookmarkStore.delete(id: bookmark.id)
                     bookmarkToDelete = nil
                     storeRevision &+= 1
                 }
             }
-            Button("Cancel", role: .cancel) {
+            Button(deleteConfirmationCopy.secondaryButton, role: .cancel) {
                 bookmarkToDelete = nil
             }
         } message: {
-            if let bookmark = bookmarkToDelete {
-                let itemType = bookmark.isFolder ? "folder and all its contents" : "bookmark"
-                Text("Are you sure you want to delete this \(itemType)?")
-            }
+            Text(deleteConfirmationCopy.informativeText)
         }
     }
 
@@ -118,7 +118,7 @@ struct BrowserBookmarksView: View {
 
     private var headerView: some View {
         HStack {
-            Text("Bookmarks")
+            Text(localized("browser.bookmarks.title", fallback: "Bookmarks"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
 
@@ -134,7 +134,7 @@ struct BrowserBookmarksView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Add bookmark")
+            .accessibilityLabel(localized("browser.bookmarks.add", fallback: "Add bookmark"))
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
@@ -143,7 +143,7 @@ struct BrowserBookmarksView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Close bookmarks")
+            .accessibilityLabel(localized("browser.bookmarks.close", fallback: "Close bookmarks"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -157,7 +157,7 @@ struct BrowserBookmarksView: View {
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
 
-            TextField("Search bookmarks...", text: $searchText)
+            TextField(localized("browser.bookmarks.search.placeholder", fallback: "Search bookmarks..."), text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
@@ -193,8 +193,8 @@ struct BrowserBookmarksView: View {
             if results.isEmpty {
                 bookmarksEmptyState(
                     symbol: "magnifyingglass",
-                    title: "No results",
-                    detail: "No bookmarks match your search."
+                    title: localized("browser.bookmarks.empty.search.title", fallback: "No results"),
+                    detail: localized("browser.bookmarks.empty.search.detail", fallback: "No bookmarks match your search.")
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
@@ -219,8 +219,11 @@ struct BrowserBookmarksView: View {
             if rootItems.isEmpty {
                 bookmarksEmptyState(
                     symbol: "bookmark",
-                    title: "No bookmarks",
-                    detail: "Add bookmarks to quickly access your favorite pages."
+                    title: localized("browser.bookmarks.empty.title", fallback: "No bookmarks"),
+                    detail: localized(
+                        "browser.bookmarks.empty.detail",
+                        fallback: "Add bookmarks to quickly access your favorite pages."
+                    )
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
@@ -286,14 +289,23 @@ struct BrowserBookmarksView: View {
             toggleFolder(folder.id)
         }
         .contextMenu {
-            Button("Delete Folder") {
+            Button(localized("browser.bookmarks.deleteFolder", fallback: "Delete Folder")) {
                 bookmarkToDelete = folder
                 showDeleteConfirmation = true
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Folder: \(folder.title)")
-        .accessibilityHint(isExpanded ? "Expanded" : "Collapsed")
+        .accessibilityLabel(
+            String(
+                format: localized("browser.bookmarks.folder.accessibility", fallback: "Folder: %@"),
+                folder.title
+            )
+        )
+        .accessibilityHint(
+            isExpanded
+                ? localized("browser.bookmarks.folder.expanded", fallback: "Expanded")
+                : localized("browser.bookmarks.folder.collapsed", fallback: "Collapsed")
+        )
     }
 
     // MARK: - Bookmark Row
@@ -335,15 +347,20 @@ struct BrowserBookmarksView: View {
         }
         .contextMenu {
             if let url = bookmark.url {
-                Button("Open") { onNavigate(url) }
+                Button(localized("common.open", fallback: "Open")) { onNavigate(url) }
             }
-            Button("Delete", role: .destructive) {
+            Button(localized("browser.bookmarks.delete", fallback: "Delete"), role: .destructive) {
                 bookmarkToDelete = bookmark
                 showDeleteConfirmation = true
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Bookmark: \(bookmark.title)")
+        .accessibilityLabel(
+            String(
+                format: localized("browser.bookmarks.bookmark.accessibility", fallback: "Bookmark: %@"),
+                bookmark.title
+            )
+        )
     }
 
     // MARK: - Empty State
@@ -375,5 +392,33 @@ struct BrowserBookmarksView: View {
         } else {
             expandedFolderIDs.insert(folderID)
         }
+    }
+
+    private var deleteConfirmationCopy: AppAlertCopy {
+        Self.localizedDeleteConfirmationCopy(localizer: localizer, bookmark: bookmarkToDelete)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    static func localizedDeleteConfirmationCopy(
+        localizer: AppLocalizer,
+        bookmark: BrowserBookmark?
+    ) -> AppAlertCopy {
+        let isFolder = bookmark?.isFolder == true
+        let messageKey = isFolder
+            ? "browser.bookmarks.delete.folder.message"
+            : "browser.bookmarks.delete.bookmark.message"
+        let fallback = isFolder
+            ? "Are you sure you want to delete this folder and all its contents?"
+            : "Are you sure you want to delete this bookmark?"
+
+        return AppAlertCopy(
+            messageText: localizer.string("browser.bookmarks.delete.title", fallback: "Delete Bookmark"),
+            informativeText: localizer.string(messageKey, fallback: fallback),
+            primaryButton: localizer.string("browser.bookmarks.delete", fallback: "Delete"),
+            secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
     }
 }

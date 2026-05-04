@@ -165,7 +165,8 @@ extension MainWindowController {
                 self?.dismissBrowserHistory()
                 self?.activeBrowserViewModel()?.navigate(to: url)
             },
-            onDismiss: { [weak self] in self?.dismissBrowserHistory() }
+            onDismiss: { [weak self] in self?.dismissBrowserHistory() },
+            localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
@@ -240,7 +241,8 @@ extension MainWindowController {
                     url: urlString
                 ))
             },
-            onDismiss: { [weak self] in self?.dismissBrowserBookmarks() }
+            onDismiss: { [weak self] in self?.dismissBrowserBookmarks() },
+            localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
