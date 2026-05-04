@@ -18,6 +18,17 @@ enum DBCloudHelperKind: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .database:
+            return localizer.string("dbCloud.kind.database", fallback: title)
+        case .cloud:
+            return localizer.string("dbCloud.kind.cloud", fallback: title)
+        case .container:
+            return localizer.string("dbCloud.kind.container", fallback: title)
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .database: return "cylinder.split.1x2"

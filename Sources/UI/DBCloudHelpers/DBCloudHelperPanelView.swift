@@ -4,15 +4,26 @@
 import SwiftUI
 
 struct DBCloudHelperPanelView: View {
-    @StateObject private var viewModel: DBCloudHelperPanelViewModel
+    @ObservedObject private var viewModel: DBCloudHelperPanelViewModel
+    var localizer: AppLocalizer
     private let onClose: () -> Void
 
     init(
         viewModel: DBCloudHelperPanelViewModel = DBCloudHelperPanelViewModel(),
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
         onClose: @escaping () -> Void = {}
     ) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = ObservedObject(wrappedValue: viewModel)
+        self.localizer = localizer
         self.onClose = onClose
+        viewModel.updateLocalizer(localizer)
+    }
+
+    func updatedLocalizer(_ localizer: AppLocalizer) -> DBCloudHelperPanelView {
+        var copy = self
+        copy.localizer = localizer
+        viewModel.updateLocalizer(localizer)
+        return copy
     }
 
     var body: some View {
@@ -33,7 +44,7 @@ struct DBCloudHelperPanelView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Label("DB/Cloud", systemImage: "externaldrive.connected.to.line.below")
+            Label(localized("dbCloud.title", fallback: "DB/Cloud"), systemImage: "externaldrive.connected.to.line.below")
                 .font(.headline)
             Text(viewModel.statusText)
                 .font(.caption)
@@ -43,14 +54,15 @@ struct DBCloudHelperPanelView: View {
             Button {
                 viewModel.refresh()
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label(localized("dbCloud.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
             }
             .controlSize(.small)
             Button(action: onClose) {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.plain)
-            .help("Close")
+            .help(localized("common.close", fallback: "Close"))
+            .accessibilityLabel(localized("dbCloud.close", fallback: "Close DB/Cloud helpers"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -60,7 +72,7 @@ struct DBCloudHelperPanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("Kind", selection: $viewModel.selectedKind) {
                 ForEach(DBCloudHelperKind.allCases) { kind in
-                    Label(kind.title, systemImage: kind.systemImage).tag(kind)
+                    Label(kind.localizedTitle(using: localizer), systemImage: kind.systemImage).tag(kind)
                 }
             }
             .pickerStyle(.segmented)
@@ -122,7 +134,7 @@ struct DBCloudHelperPanelView: View {
                 actionFields(for: descriptor.id)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Command")
+                    Text(localized("dbCloud.command", fallback: "Command"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Text(viewModel.commandPreview)
@@ -138,7 +150,7 @@ struct DBCloudHelperPanelView: View {
                     Button {
                         perform { try viewModel.runSelectedAction() }
                     } label: {
-                        Label("Run", systemImage: "play.fill")
+                        Label(localized("dbCloud.run", fallback: "Run"), systemImage: "play.fill")
                     }
                     .keyboardShortcut(.return, modifiers: [.command])
                     Spacer()
@@ -146,7 +158,10 @@ struct DBCloudHelperPanelView: View {
 
                 outputArea
             } else {
-                ContentUnavailableView("No helpers", systemImage: "externaldrive.badge.xmark")
+                ContentUnavailableView(
+                    localized("dbCloud.empty.noHelpers", fallback: "No helpers"),
+                    systemImage: "externaldrive.badge.xmark"
+                )
             }
         }
         .padding(16)
@@ -156,7 +171,10 @@ struct DBCloudHelperPanelView: View {
     private func actionFields(for helperID: String) -> some View {
         switch helperID {
         case "cocxy-db-postgres":
-            TextField("Database URL or service", text: $viewModel.postgresDatabase)
+            TextField(
+                localized("dbCloud.field.postgres", fallback: "Database URL or service"),
+                text: $viewModel.postgresDatabase
+            )
                 .textFieldStyle(.roundedBorder)
             TextEditor(text: $viewModel.sqlText)
                 .font(.system(.body, design: .monospaced))
@@ -165,7 +183,10 @@ struct DBCloudHelperPanelView: View {
                 .background(Color(nsColor: CocxyColors.surface0))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case "cocxy-db-sqlite":
-            TextField("SQLite database path", text: $viewModel.sqliteDatabasePath)
+            TextField(
+                localized("dbCloud.field.sqlite", fallback: "SQLite database path"),
+                text: $viewModel.sqliteDatabasePath
+            )
                 .textFieldStyle(.roundedBorder)
             TextEditor(text: $viewModel.sqlText)
                 .font(.system(.body, design: .monospaced))
@@ -174,23 +195,27 @@ struct DBCloudHelperPanelView: View {
                 .background(Color(nsColor: CocxyColors.surface0))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case "cocxy-aws-cli-helper":
-            TextField("AWS profile", text: $viewModel.awsProfile)
+            TextField(localized("dbCloud.field.awsProfile", fallback: "AWS profile"), text: $viewModel.awsProfile)
                 .textFieldStyle(.roundedBorder)
-            TextField("Region", text: $viewModel.awsRegion)
+            TextField(localized("dbCloud.field.region", fallback: "Region"), text: $viewModel.awsRegion)
                 .textFieldStyle(.roundedBorder)
         default:
-            Text("Visual action pending for this helper.")
+            Text(localized("dbCloud.action.pending", fallback: "Visual action pending for this helper."))
                 .foregroundStyle(.secondary)
         }
     }
 
     private var outputArea: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Output")
+            Text(localized("dbCloud.output", fallback: "Output"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             ScrollView {
-                Text(viewModel.outputText.isEmpty ? "No output yet." : viewModel.outputText)
+                Text(
+                    viewModel.outputText.isEmpty
+                    ? localized("dbCloud.output.empty", fallback: "No output yet.")
+                    : viewModel.outputText
+                )
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -208,5 +233,9 @@ struct DBCloudHelperPanelView: View {
         } catch {
             viewModel.recordFailure(error)
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

@@ -109,6 +109,36 @@ struct DBCloudHelperSwiftTestingTests {
         #expect(viewModel.outputText == "{\"Buckets\":[]}\n")
         #expect(viewModel.statusText == "S3 bucket listing finished.")
     }
+
+    @Test("Spanish localizer updates DB and cloud helper statuses")
+    @MainActor
+    func spanishLocalizerUpdatesDBCloudHelperStatuses() throws {
+        let manifests = try BundledPluginCatalog(
+            pluginsDirectory: repositoryRoot().appendingPathComponent("Resources/Plugins", isDirectory: true)
+        ).loadManifests()
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let viewModel = DBCloudHelperPanelViewModel(
+            manifestProvider: { manifests },
+            runner: { _ in DBCloudHelperRunResult(exitCode: 0, stdout: "ok\n", stderr: "") },
+            localizer: spanish
+        )
+
+        #expect(DBCloudHelperKind.database.localizedTitle(using: spanish) == "Base de datos")
+        #expect(viewModel.statusText == "10 ayudantes cargados.")
+
+        viewModel.selectedHelperID = "cocxy-db-sqlite"
+        viewModel.sqliteDatabasePath = "/tmp/cocxy.sqlite"
+        viewModel.sqlText = "select 1"
+
+        try viewModel.runSelectedAction()
+
+        #expect(viewModel.statusText == "Consulta SQLite finalizada.")
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.statusText == "SQLite query finished.")
+    }
 }
 
 private func repositoryRoot() -> URL {
@@ -121,4 +151,9 @@ private func repositoryRoot() -> URL {
         current.deleteLastPathComponent()
     }
     return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }

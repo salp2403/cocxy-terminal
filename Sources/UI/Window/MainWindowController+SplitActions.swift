@@ -339,7 +339,8 @@ extension MainWindowController {
             }
             return NSHostingView(rootView: view)
         case .dbCloud:
-            let view = DBCloudHelperPanelView { [weak self] in
+            let viewModel = DBCloudHelperPanelViewModel(localizer: appLocalizer())
+            let view = DBCloudHelperPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             return NSHostingView(rootView: view)
