@@ -348,6 +348,27 @@ struct AppLocalizationSwiftTestingTests {
 
     @MainActor
     @Test
+    func tabBarAndAuroraSidebarStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let update = CocxyUpdateAvailability(displayVersion: "0.2.0", buildVersion: "200", isCritical: true)
+
+        #expect(spanish.string("tabbar.workspaces", fallback: "WORKSPACES") == "ESPACIOS")
+        #expect(TabItemView.localizedPinned(using: spanish) == "Fijada")
+        #expect(TabItemView.localizedMoreActiveAgents(3, using: spanish) == "3 agentes activos más")
+        #expect(TabItemView.localizedRenamePlaceholder(using: spanish) == "Nombre de pestaña")
+        #expect(Design.VerticalTabSearchBar.localizedPlaceholder(using: spanish) == "Filtrar sesiones...")
+        #expect(AuroraSidebarDisplayMode.summary.verticalTabShortLabel(using: spanish) == "R")
+        #expect(AuroraSidebarPrimaryInfo.process.verticalTabMenuLabel(using: spanish) == "Proceso en primer plano")
+        #expect(Design.VerticalTabControlBar.localizedPrimaryDetailHelp(using: spanish) == "Detalle principal de fila")
+        #expect(Design.AuroraSidebarView.localizedCommandPaletteHelp(shortcut: "⇧⌘P", using: spanish) == "Paleta de comandos (⇧⌘P)")
+        #expect(Design.AuroraSidebarView.localizedUpdateButton(using: spanish) == "Actualizar")
+        #expect(Design.AuroraSidebarView.localizedUpdateTitle(update, using: spanish) == "Actualización crítica")
+        #expect(Design.SessionNodeView.localizedCloseTabAccessibility("README.md", using: spanish) == "Cerrar README.md")
+    }
+
+    @MainActor
+    @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {
         let bundle = try #require(localizationBundle())
         let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)

@@ -53,7 +53,10 @@ extension MainWindowController {
         if appearance.auroraEnabled {
             installAuroraChromeIfNeeded()
             reconcileAuroraAgentStateFromVisibleBuffers()
-            refreshAuroraPaletteStrings(for: configService?.current ?? .defaults)
+            let currentConfig = configService?.current ?? .defaults
+            let localizer = appLocalizer(for: currentConfig)
+            auroraChromeController?.updateLocalizer(localizer)
+            refreshAuroraPaletteStrings(for: currentConfig)
             auroraChromeController?.setPaletteActions(buildAuroraPaletteActions())
             refreshAuroraShortcutLabels()
             // The notes tray button visibility tracks `[notes].enabled`
@@ -211,6 +214,7 @@ extension MainWindowController {
         if let variant = (NSApp.delegate as? AppDelegate)?.themeEngine?.activeTheme.metadata.variant {
             controller.themeIdentity = Self.auroraThemeIdentity(for: variant)
         }
+        controller.updateLocalizer(appLocalizer())
 
         controller.surfaceIDsByTabProvider = { [weak self] in
             guard let self = self else { return [:] }

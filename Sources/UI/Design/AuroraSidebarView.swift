@@ -98,6 +98,7 @@ extension Design {
         var onPrimaryInfoChange: ((AuroraSidebarPrimaryInfo) -> Void)? = nil
         var paletteShortcutLabel: String = "⇧⌘P"
         var newTabShortcutLabel: String = "⌘T"
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.designThemePalette) private var palette
 
@@ -105,10 +106,11 @@ extension Design {
             GlassSurface(cornerRadius: .large) {
                 VStack(alignment: .leading, spacing: Spacing.small) {
                     sidebarHeader
-                    VerticalTabSearchBar(query: $query)
+                    VerticalTabSearchBar(query: $query, localizer: localizer)
                     VerticalTabControlBar(
                         displayMode: displayMode,
                         primaryInfo: primaryInfo,
+                        localizer: localizer,
                         onDisplayModeChange: onDisplayModeChange,
                         onPrimaryInfoChange: onPrimaryInfoChange
                     )
@@ -151,7 +153,7 @@ extension Design {
 
         private var sidebarHeader: some View {
             HStack(spacing: Spacing.hairline) {
-                Text("WORKSPACES")
+                Text(Self.localizedWorkspacesTitle(using: localizer))
                     .font(.system(size: 10.5, weight: .semibold))
                     .tracking(1.7)
                     .foregroundStyle(palette.textLow.resolvedColor())
@@ -160,26 +162,26 @@ extension Design {
 
                 trayIconButton(
                     systemImage: "command",
-                    help: "Command palette (\(paletteShortcutLabel))",
+                    help: Self.localizedCommandPaletteHelp(shortcut: paletteShortcutLabel, using: localizer),
                     action: onTogglePalette
                 )
                 if let onToggleNotes {
                     trayIconButton(
                         systemImage: "note.text",
-                        help: "Toggle notes for this workspace",
+                        help: Self.localizedToggleNotesHelp(using: localizer),
                         action: onToggleNotes
                     )
                 }
                 if let onToggleNotifications {
                     trayIconButton(
                         systemImage: "bell",
-                        help: "Notifications",
+                        help: Self.localizedNotificationsHelp(using: localizer),
                         action: onToggleNotifications
                     )
                 }
                 trayIconButton(
                     systemImage: "plus",
-                    help: "New tab (\(newTabShortcutLabel))",
+                    help: Self.localizedNewTabHelp(shortcut: newTabShortcutLabel, using: localizer),
                     action: onCreateTab
                 )
             }
@@ -225,7 +227,7 @@ extension Design {
                     .frame(width: 18, height: 18)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(update.sidebarTitle)
+                    Text(Self.localizedUpdateTitle(update, using: localizer))
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(palette.textHigh.resolvedColor())
                         .lineLimit(1)
@@ -238,7 +240,7 @@ extension Design {
                 Spacer(minLength: Spacing.xSmall)
 
                 Button(action: action) {
-                    Text("Update")
+                    Text(Self.localizedUpdateButton(using: localizer))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(palette.backgroundPrimary.resolvedColor())
                         .padding(.horizontal, 9)
@@ -249,8 +251,8 @@ extension Design {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(update.sidebarAccessibilityLabel)
-                .help("Update Cocxy Terminal to \(update.sidebarVersionLabel)")
+                .accessibilityLabel(Self.localizedUpdateAccessibility(update, using: localizer))
+                .help(Self.localizedUpdateHelp(update, using: localizer))
             }
             .padding(.horizontal, Spacing.small)
             .padding(.vertical, 8)
@@ -261,6 +263,56 @@ extension Design {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(palette.accent.resolvedColor().opacity(0.45), lineWidth: 1)
                     )
+            )
+        }
+
+        static func localizedWorkspacesTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.workspaces", fallback: "WORKSPACES")
+        }
+
+        static func localizedCommandPaletteHelp(shortcut: String, using localizer: AppLocalizer) -> String {
+            String(
+                format: localizer.string("auroraSidebar.commandPalette.help", fallback: "Command palette (%@)"),
+                shortcut
+            )
+        }
+
+        static func localizedToggleNotesHelp(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.notes.help", fallback: "Toggle notes for this workspace")
+        }
+
+        static func localizedNotificationsHelp(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.notifications.title", fallback: "Notifications")
+        }
+
+        static func localizedNewTabHelp(shortcut: String, using localizer: AppLocalizer) -> String {
+            String(
+                format: localizer.string("auroraSidebar.newTab.help", fallback: "New tab (%@)"),
+                shortcut
+            )
+        }
+
+        static func localizedUpdateTitle(_ update: CocxyUpdateAvailability, using localizer: AppLocalizer) -> String {
+            update.isCritical
+                ? localizer.string("update.critical.title", fallback: "Critical update")
+                : localizer.string("update.available.title", fallback: "Update available")
+        }
+
+        static func localizedUpdateButton(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.update.button", fallback: "Update")
+        }
+
+        static func localizedUpdateAccessibility(
+            _ update: CocxyUpdateAvailability,
+            using localizer: AppLocalizer
+        ) -> String {
+            "\(localizedUpdateTitle(update, using: localizer)): \(update.sidebarVersionLabel)"
+        }
+
+        static func localizedUpdateHelp(_ update: CocxyUpdateAvailability, using localizer: AppLocalizer) -> String {
+            String(
+                format: localizer.string("tabbar.update.help", fallback: "Update Cocxy Terminal to %@"),
+                update.sidebarVersionLabel
             )
         }
 
@@ -320,7 +372,8 @@ extension Design {
                                         hoveredSession = nil
                                         onHoverSession?(nil)
                                     }
-                                }
+                                },
+                                localizer: localizer
                             )
                         }
                         notesSection(for: workspace)
@@ -453,6 +506,7 @@ extension Design {
         var onMoveSessionBefore: ((String) -> Void)? = nil
         var onMovePaneToSession: ((String) -> Void)? = nil
         var onHoverChange: (Bool) -> Void = { _ in }
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.designThemePalette) private var palette
         @State private var isHovered = false
@@ -476,14 +530,14 @@ extension Design {
                         Image(systemName: "pin.fill")
                             .font(.system(size: 9.5, weight: .semibold))
                             .foregroundStyle(palette.textLow.resolvedColor())
-                            .accessibilityLabel("Pinned")
+                            .accessibilityLabel(TabItemView.localizedPinned(using: localizer))
                     }
                     if session.hasWorktree {
                         Image(systemName: "arrow.triangle.branch")
                             .font(.system(size: 9.5, weight: .semibold))
                             .foregroundStyle(palette.accent.resolvedColor())
-                            .help("Attached to a cocxy-managed worktree")
-                            .accessibilityLabel("Worktree")
+                            .help(Self.localizedWorktreeHelp(using: localizer))
+                            .accessibilityLabel(TabItemView.localizedWorktree(using: localizer))
                     }
                     Spacer()
                     if layout.showsPaneMatrix {
@@ -505,8 +559,8 @@ extension Design {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
-                        .help("Close tab")
-                        .accessibilityLabel("Close \(session.name)")
+                        .help(Self.localizedCloseTabHelp(using: localizer))
+                        .accessibilityLabel(Self.localizedCloseTabAccessibility(session.name, using: localizer))
                         .opacity(isActive || isHovered ? 0.95 : 0.55)
                     }
                 }
@@ -606,24 +660,63 @@ extension Design {
         @ViewBuilder
         private var contextMenuContent: some View {
             if let onTogglePin {
-                Button(session.isPinned ? "Unpin Tab" : "Pin Tab", action: onTogglePin)
+                Button(session.isPinned ? Self.localizedUnpinTab(using: localizer) : Self.localizedPinTab(using: localizer), action: onTogglePin)
             }
             if let onClose {
-                Button("Close Tab", action: onClose)
+                Button(Self.localizedCloseTab(using: localizer), action: onClose)
                     .disabled(session.isPinned)
             }
             if let onCloseOthers {
-                Button("Close Other Tabs", action: onCloseOthers)
+                Button(Self.localizedCloseOtherTabs(using: localizer), action: onCloseOthers)
             }
             if onMoveUp != nil || onMoveDown != nil {
                 Divider()
             }
             if let onMoveUp {
-                Button("Move Tab Up", action: onMoveUp)
+                Button(Self.localizedMoveTabUp(using: localizer), action: onMoveUp)
             }
             if let onMoveDown {
-                Button("Move Tab Down", action: onMoveDown)
+                Button(Self.localizedMoveTabDown(using: localizer), action: onMoveDown)
             }
+        }
+
+        static func localizedWorktreeHelp(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.session.worktree.help", fallback: "Attached to a cocxy-managed worktree")
+        }
+
+        static func localizedCloseTabHelp(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.session.close.help", fallback: "Close tab")
+        }
+
+        static func localizedCloseTabAccessibility(_ name: String, using localizer: AppLocalizer) -> String {
+            String(
+                format: localizer.string("auroraSidebar.session.close.accessibility", fallback: "Close %@"),
+                name
+            )
+        }
+
+        static func localizedPinTab(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.context.pin", fallback: "Pin Tab")
+        }
+
+        static func localizedUnpinTab(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.context.unpin", fallback: "Unpin Tab")
+        }
+
+        static func localizedCloseTab(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.context.close", fallback: "Close Tab")
+        }
+
+        static func localizedCloseOtherTabs(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.context.closeOthers", fallback: "Close Other Tabs")
+        }
+
+        static func localizedMoveTabUp(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.context.moveUp", fallback: "Move Tab Up")
+        }
+
+        static func localizedMoveTabDown(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.context.moveDown", fallback: "Move Tab Down")
         }
     }
 

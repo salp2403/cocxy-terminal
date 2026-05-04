@@ -78,7 +78,7 @@ final class TabItemView: NSView {
     /// Pin icon shown when the tab is pinned.
     private let pinIcon: NSImageView = {
         let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
-        let image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")?
+        let image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: nil)?
             .withSymbolConfiguration(config)
         let iv = NSImageView(image: image ?? NSImage())
         iv.contentTintColor = CocxyColors.yellow
@@ -96,7 +96,7 @@ final class TabItemView: NSView {
         let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         let image = NSImage(
             systemSymbolName: "arrow.triangle.branch",
-            accessibilityDescription: "Worktree"
+            accessibilityDescription: nil
         )?.withSymbolConfiguration(config)
         let iv = NSImageView(image: image ?? NSImage())
         iv.contentTintColor = CocxyColors.teal
@@ -154,12 +154,11 @@ final class TabItemView: NSView {
         let button = NSButton()
         button.bezelStyle = .inline
         button.isBordered = false
-        if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Tab") {
+        if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) {
             button.image = img.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
         }
         button.contentTintColor = CocxyColors.subtext1
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.setAccessibilityLabel("Close Tab")
         button.isHidden = true
         button.wantsLayer = true
         button.layer?.cornerRadius = 8
@@ -206,7 +205,6 @@ final class TabItemView: NSView {
         stack.spacing = 3
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.isHidden = true
-        stack.setAccessibilityLabel("Additional active agents")
         return stack
     }()
 
@@ -556,7 +554,7 @@ final class TabItemView: NSView {
             overflowLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
             overflowLabel.textColor = CocxyColors.subtext1
             overflowLabel.translatesAutoresizingMaskIntoConstraints = false
-            overflowLabel.setAccessibilityLabel("\(overflow) more active agents")
+            overflowLabel.setAccessibilityLabel(Self.localizedMoreActiveAgents(overflow, using: localizer))
             miniIndicatorsStack.addArrangedSubview(overflowLabel)
         }
     }
@@ -744,6 +742,32 @@ final class TabItemView: NSView {
         let closeTitle = localizer.string("tabbar.context.close", fallback: "Close Tab")
         closeButton.toolTip = closeTitle
         closeButton.setAccessibilityLabel(closeTitle)
+        pinIcon.setAccessibilityLabel(Self.localizedPinned(using: localizer))
+        worktreeBadge.setAccessibilityLabel(Self.localizedWorktree(using: localizer))
+        miniIndicatorsStack.setAccessibilityLabel(Self.localizedAdditionalActiveAgents(using: localizer))
+    }
+
+    static func localizedAdditionalActiveAgents(using localizer: AppLocalizer) -> String {
+        localizer.string("tabbar.tab.additionalAgents", fallback: "Additional active agents")
+    }
+
+    static func localizedMoreActiveAgents(_ count: Int, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string("tabbar.tab.moreActiveAgents", fallback: "%d more active agents"),
+            count
+        )
+    }
+
+    static func localizedPinned(using localizer: AppLocalizer) -> String {
+        localizer.string("tabbar.tab.pinned", fallback: "Pinned")
+    }
+
+    static func localizedWorktree(using localizer: AppLocalizer) -> String {
+        localizer.string("tabbar.tab.worktree", fallback: "Worktree")
+    }
+
+    static func localizedRenamePlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("tabbar.tab.renamePlaceholder", fallback: "Tab name")
     }
 
     // MARK: - Mouse Interaction
@@ -835,7 +859,7 @@ final class TabItemView: NSView {
         RenameSheetController.present(
             on: parentWindow,
             currentName: titleLabel.stringValue,
-            placeholder: "Tab name",
+            placeholder: Self.localizedRenamePlaceholder(using: localizer),
             icon: "terminal.fill",
             onComplete: { [weak self] newTitle in
                 self?.isEditing = false

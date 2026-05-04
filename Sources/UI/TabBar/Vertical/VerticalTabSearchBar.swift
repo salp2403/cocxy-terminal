@@ -7,6 +7,7 @@ extension Design {
 
     struct VerticalTabSearchBar: View {
         @Binding var query: String
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.designThemePalette) private var palette
 
@@ -15,7 +16,7 @@ extension Design {
                 Text("⌕")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(palette.textLow.resolvedColor())
-                TextField("Filter sessions…", text: $query)
+                TextField(Self.localizedPlaceholder(using: localizer), text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundStyle(palette.textHigh.resolvedColor())
@@ -30,6 +31,10 @@ extension Design {
                             .strokeBorder(palette.glassBorder.resolvedColor(), lineWidth: 1)
                     )
             )
+        }
+
+        static func localizedPlaceholder(using localizer: AppLocalizer) -> String {
+            localizer.string("verticalTab.search.placeholder", fallback: "Filter sessions...")
         }
     }
 }

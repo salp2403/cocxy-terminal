@@ -8,6 +8,7 @@ extension Design {
     struct VerticalTabControlBar: View {
         let displayMode: AuroraSidebarDisplayMode
         let primaryInfo: AuroraSidebarPrimaryInfo
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
         var onDisplayModeChange: ((AuroraSidebarDisplayMode) -> Void)? = nil
         var onPrimaryInfoChange: ((AuroraSidebarPrimaryInfo) -> Void)? = nil
 
@@ -23,17 +24,17 @@ extension Design {
                     )
                 ) {
                     ForEach(AuroraSidebarDisplayMode.allCases, id: \.self) { mode in
-                        Text(mode.verticalTabShortLabel).tag(mode)
+                        Text(mode.verticalTabShortLabel(using: localizer)).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 88)
-                .help("Sidebar density")
+                .help(Self.localizedSidebarDensityHelp(using: localizer))
 
                 Menu {
                     ForEach(AuroraSidebarPrimaryInfo.allCases, id: \.self) { info in
-                        Button(info.verticalTabMenuLabel) {
+                        Button(info.verticalTabMenuLabel(using: localizer)) {
                             onPrimaryInfoChange?(info)
                         }
                     }
@@ -41,7 +42,7 @@ extension Design {
                     HStack(spacing: 5) {
                         Image(systemName: primaryInfo.verticalTabSystemImage)
                             .font(.system(size: 11, weight: .semibold))
-                        Text(primaryInfo.verticalTabShortLabel)
+                        Text(primaryInfo.verticalTabShortLabel(using: localizer))
                             .font(.system(size: 10.5, weight: .semibold))
                     }
                     .foregroundStyle(palette.textMedium.resolvedColor())
@@ -54,39 +55,59 @@ extension Design {
                 }
                 .menuStyle(.borderlessButton)
                 .frame(maxWidth: .infinity)
-                .help("Primary row detail")
+                .help(Self.localizedPrimaryDetailHelp(using: localizer))
             }
             .padding(.horizontal, 1)
+        }
+
+        static func localizedSidebarDensityHelp(using localizer: AppLocalizer) -> String {
+            localizer.string("verticalTab.controls.sidebarDensity", fallback: "Sidebar density")
+        }
+
+        static func localizedPrimaryDetailHelp(using localizer: AppLocalizer) -> String {
+            localizer.string("verticalTab.controls.primaryRowDetail", fallback: "Primary row detail")
         }
     }
 }
 
 extension AuroraSidebarDisplayMode {
     var verticalTabShortLabel: String {
+        verticalTabShortLabel(using: AppLocalizer(languagePreference: .english))
+    }
+
+    func verticalTabShortLabel(using localizer: AppLocalizer) -> String {
         switch self {
-        case .detailed: return "D"
-        case .summary: return "S"
-        case .compact: return "C"
+        case .detailed: return localizer.string("verticalTab.density.detailed.short", fallback: "D")
+        case .summary: return localizer.string("verticalTab.density.summary.short", fallback: "S")
+        case .compact: return localizer.string("verticalTab.density.compact.short", fallback: "C")
         }
     }
 }
 
 extension AuroraSidebarPrimaryInfo {
     var verticalTabShortLabel: String {
-        switch self {
-        case .state: return "State"
-        case .directory: return "Dir"
-        case .process: return "Proc"
-        case .command: return "Cmd"
-        }
+        verticalTabShortLabel(using: AppLocalizer(languagePreference: .english))
     }
 
     var verticalTabMenuLabel: String {
+        verticalTabMenuLabel(using: AppLocalizer(languagePreference: .english))
+    }
+
+    func verticalTabShortLabel(using localizer: AppLocalizer) -> String {
         switch self {
-        case .state: return "State and panes"
-        case .directory: return "Directory"
-        case .process: return "Foreground process"
-        case .command: return "Last command"
+        case .state: return localizer.string("verticalTab.primary.state.short", fallback: "State")
+        case .directory: return localizer.string("verticalTab.primary.directory.short", fallback: "Dir")
+        case .process: return localizer.string("verticalTab.primary.process.short", fallback: "Proc")
+        case .command: return localizer.string("verticalTab.primary.command.short", fallback: "Cmd")
+        }
+    }
+
+    func verticalTabMenuLabel(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .state: return localizer.string("verticalTab.primary.state.menu", fallback: "State and panes")
+        case .directory: return localizer.string("verticalTab.primary.directory.menu", fallback: "Directory")
+        case .process: return localizer.string("verticalTab.primary.process.menu", fallback: "Foreground process")
+        case .command: return localizer.string("verticalTab.primary.command.menu", fallback: "Last command")
         }
     }
 

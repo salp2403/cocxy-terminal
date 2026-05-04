@@ -83,6 +83,12 @@ final class AuroraChromeController: ObservableObject {
     /// User-selected metadata signal shown in Aurora session rows.
     @Published var sidebarPrimaryInfo: AuroraSidebarPrimaryInfo = .state
 
+    /// Local app-language resolver mirrored from the window controller.
+    /// Aurora hosts are SwiftUI overlays, so publishing this value lets
+    /// language config reloads repaint sidebar chrome without rebuilding
+    /// the AppKit mount points.
+    @Published var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     /// Sidebar hover inspector rendered by a separate passthrough host
     /// on the window overlay layer. Keeping it outside the sidebar's
     /// hosting view prevents the card from covering rows while the user
@@ -245,6 +251,10 @@ final class AuroraChromeController: ObservableObject {
     func applyAppearance(_ appearance: AppearanceConfig) {
         sidebarDisplayMode = appearance.auroraSidebarDisplayMode
         sidebarPrimaryInfo = appearance.auroraSidebarPrimaryInfo
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
     }
 
     func updateSidebarDisplayMode(_ mode: AuroraSidebarDisplayMode) {
@@ -724,7 +734,8 @@ struct AuroraSidebarHost: View {
                 controller.updateSidebarPrimaryInfo(info)
             },
             paletteShortcutLabel: controller.paletteShortcutLabel,
-            newTabShortcutLabel: controller.newTabShortcutLabel
+            newTabShortcutLabel: controller.newTabShortcutLabel,
+            localizer: controller.localizer
         )
         .designThemePalette(Design.palette(for: controller.themeIdentity))
     }
