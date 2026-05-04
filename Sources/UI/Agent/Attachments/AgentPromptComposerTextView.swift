@@ -84,14 +84,9 @@ struct AgentPromptComposerTextView: NSViewRepresentable {
 }
 
 private final class AgentPromptNSTextView: NSTextView {
-    static let jpegPasteboardType = NSPasteboard.PasteboardType("public.jpeg")
-    static let supportedPasteboardTypes: [NSPasteboard.PasteboardType] = [
-        .fileURL,
-        .png,
-        .tiff,
-        jpegPasteboardType,
-    ]
+    static let supportedPasteboardTypes = AgentPromptAttachmentPasteboardReader.supportedPasteboardTypes
 
+    private let pasteboardReader = AgentPromptAttachmentPasteboardReader()
     var onSubmit: (() -> Void)?
     var onImageData: ((Data, String?) -> Void)?
     var onFileURLs: (([URL]) -> Void)?
@@ -132,52 +127,19 @@ private final class AgentPromptNSTextView: NSTextView {
     }
 
     private func handlePasteboard(_ pasteboard: NSPasteboard) -> Bool {
-        let fileURLs = fileURLs(from: pasteboard)
-        if !fileURLs.isEmpty {
+        switch pasteboardReader.payload(from: pasteboard) {
+        case .fileURLs(let fileURLs):
             onFileURLs?(fileURLs)
             return true
+        case .imageData(let data, let filename):
+            onImageData?(data, filename)
+            return true
+        case nil:
+            return false
         }
-
-        for imageType in Self.imagePasteboardTypes {
-            if let data = pasteboard.data(forType: imageType.type) {
-                onImageData?(data, imageType.filename)
-                return true
-            }
-        }
-
-        return false
     }
 
     private func pasteboardContainsSupportedAttachment(_ pasteboard: NSPasteboard) -> Bool {
-        if !fileURLs(from: pasteboard).isEmpty {
-            return true
-        }
-        return Self.imagePasteboardTypes.contains { pasteboard.availableType(from: [$0.type]) != nil }
+        pasteboardReader.containsSupportedAttachment(pasteboard)
     }
-
-    private func fileURLs(from pasteboard: NSPasteboard) -> [URL] {
-        let options: [NSPasteboard.ReadingOptionKey: Any] = [
-            .urlReadingFileURLsOnly: true,
-        ]
-        let objects = pasteboard.readObjects(
-            forClasses: [NSURL.self],
-            options: options
-        ) ?? []
-        return objects.compactMap { object -> URL? in
-            if let url = object as? URL {
-                return url.isFileURL ? url : nil
-            }
-            if let nsURL = object as? NSURL {
-                let url = nsURL as URL
-                return url.isFileURL ? url : nil
-            }
-            return nil
-        }
-    }
-
-    private static let imagePasteboardTypes: [(type: NSPasteboard.PasteboardType, filename: String)] = [
-        (.png, "pasted-image.png"),
-        (jpegPasteboardType, "pasted-image.jpg"),
-        (.tiff, "pasted-image.tiff"),
-    ]
 }
