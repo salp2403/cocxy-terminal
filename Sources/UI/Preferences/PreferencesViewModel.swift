@@ -889,12 +889,18 @@ final class PreferencesViewModel: ObservableObject {
     func saveAgentAPIKeyDraft(for provider: AgentProviderKind) throws {
         try agentSecrets.saveAPIKey(agentAPIKeyDraft, for: provider)
         agentAPIKeyDraft = ""
-        agentAPIKeyStatus = "\(Self.agentProviderDisplayName(provider)) API key saved."
+        agentAPIKeyStatus = String(
+            format: localizedString("preferences.agentMode.apiKey.saved.status", fallback: "%@ API key saved."),
+            Self.agentProviderDisplayName(provider)
+        )
     }
 
     func deleteAgentAPIKey(for provider: AgentProviderKind) throws {
         try agentSecrets.deleteAPIKey(for: provider)
-        agentAPIKeyStatus = "\(Self.agentProviderDisplayName(provider)) API key deleted."
+        agentAPIKeyStatus = String(
+            format: localizedString("preferences.agentMode.apiKey.deleted.status", fallback: "%@ API key deleted."),
+            Self.agentProviderDisplayName(provider)
+        )
     }
 
     func hasSavedAgentAPIKey(for provider: AgentProviderKind) -> Bool {
@@ -904,12 +910,18 @@ final class PreferencesViewModel: ObservableObject {
     func saveAgentConversationMasterPasswordDraft() throws {
         try agentSecrets.saveConversationMasterPassword(agentConversationMasterPasswordDraft)
         agentConversationMasterPasswordDraft = ""
-        agentConversationMasterPasswordStatus = "Conversation master password saved."
+        agentConversationMasterPasswordStatus = localizedString(
+            "preferences.agentMode.masterPassword.saved.status",
+            fallback: "Conversation master password saved."
+        )
     }
 
     func deleteAgentConversationMasterPassword() throws {
         try agentSecrets.deleteConversationMasterPassword()
-        agentConversationMasterPasswordStatus = "Conversation master password deleted."
+        agentConversationMasterPasswordStatus = localizedString(
+            "preferences.agentMode.masterPassword.deleted.status",
+            fallback: "Conversation master password deleted."
+        )
     }
 
     func hasSavedAgentConversationMasterPassword() -> Bool {
@@ -1043,7 +1055,13 @@ final class PreferencesViewModel: ObservableObject {
     func validateMCPConfigDraft() throws {
         let servers = try mcpConfigLoader.validateConfigText(mcpConfigText)
         mcpConfiguredServers = servers
-        mcpConfigStatus = mcpStatusMessage(prefix: "Valid", serverCount: servers.count)
+        mcpConfigStatus = mcpStatusMessage(
+            singularKey: "preferences.mcp.status.valid.one",
+            pluralKey: "preferences.mcp.status.valid.many",
+            fallbackSingular: "Valid 1 MCP server.",
+            fallbackPlural: "Valid %d MCP servers.",
+            serverCount: servers.count
+        )
     }
 
     func reloadMCPConfig() {
@@ -1054,11 +1072,19 @@ final class PreferencesViewModel: ObservableObject {
         let servers = try mcpConfigLoader.writeConfigText(mcpConfigText, to: mcpConfigURL)
         savedMCPConfigText = mcpConfigText
         mcpConfiguredServers = servers
-        mcpConfigStatus = mcpStatusMessage(prefix: "Saved", serverCount: servers.count)
+        mcpConfigStatus = mcpStatusMessage(
+            singularKey: "preferences.mcp.status.saved.one",
+            pluralKey: "preferences.mcp.status.saved.many",
+            fallbackSingular: "Saved 1 MCP server.",
+            fallbackPlural: "Saved %d MCP servers.",
+            serverCount: servers.count
+        )
     }
 
     func mcpServerSummary(for server: MCPServer) -> String {
-        let state = server.enabled ? "Enabled" : "Disabled"
+        let state = server.enabled
+            ? localizedString("preferences.mcp.server.enabled", fallback: "Enabled")
+            : localizedString("preferences.mcp.server.disabled", fallback: "Disabled")
         switch server.transport {
         case .stdio:
             return "\(state) stdio"
@@ -1239,7 +1265,13 @@ final class PreferencesViewModel: ObservableObject {
             savedMCPConfigText = MCPServerConfigLoader.defaultConfigText
             mcpConfigText = savedMCPConfigText
             mcpConfiguredServers = []
-            mcpConfigStatus = "Failed to load MCP config: \(error.localizedDescription)"
+            mcpConfigStatus = String(
+                format: localizedString(
+                    "preferences.mcp.load.failed",
+                    fallback: "Failed to load MCP config: %@"
+                ),
+                error.localizedDescription
+            )
         }
     }
 
@@ -1248,18 +1280,39 @@ final class PreferencesViewModel: ObservableObject {
         do {
             let servers = try mcpConfigLoader.validateConfigText(savedMCPConfigText)
             mcpConfiguredServers = servers
-            mcpConfigStatus = mcpStatusMessage(prefix: "Loaded", serverCount: servers.count)
+            mcpConfigStatus = mcpStatusMessage(
+                singularKey: "preferences.mcp.status.loaded.one",
+                pluralKey: "preferences.mcp.status.loaded.many",
+                fallbackSingular: "Loaded 1 MCP server.",
+                fallbackPlural: "Loaded %d MCP servers.",
+                serverCount: servers.count
+            )
         } catch {
             mcpConfiguredServers = []
-            mcpConfigStatus = "Invalid MCP config: \(error.localizedDescription)"
+            mcpConfigStatus = String(
+                format: localizedString(
+                    "preferences.mcp.validate.failed",
+                    fallback: "Invalid MCP config: %@"
+                ),
+                error.localizedDescription
+            )
         }
     }
 
-    private func mcpStatusMessage(prefix: String, serverCount: Int) -> String {
+    private func mcpStatusMessage(
+        singularKey: String,
+        pluralKey: String,
+        fallbackSingular: String,
+        fallbackPlural: String,
+        serverCount: Int
+    ) -> String {
         if serverCount == 1 {
-            return "\(prefix) 1 MCP server."
+            return localizedString(singularKey, fallback: fallbackSingular)
         }
-        return "\(prefix) \(serverCount) MCP servers."
+        return String(
+            format: localizedString(pluralKey, fallback: fallbackPlural),
+            serverCount
+        )
     }
 
     /// Updates the saved config snapshot to match the current editable values.

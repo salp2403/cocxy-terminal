@@ -126,6 +126,8 @@ struct AppLanguagePreferencesSwiftTestingTests {
         #expect(vm.localizedString("preferences.lsp.languages.section", fallback: "Languages") == "Lenguajes")
         #expect(vm.localizedString("preferences.editor.inlineCompletions.section", fallback: "Inline Completions") == "Completados inline")
         #expect(vm.localizedString("preferences.worktrees.randomIDLength", fallback: "Random id length: %d") == "Longitud de id aleatorio: %d")
+        #expect(vm.localizedString("preferences.agentMode.provider.detail.remote", fallback: "Uses your provider API key from the macOS Keychain. Requests go directly from this Mac to the selected provider.") == "Usa la llave API del provider guardada en Keychain de macOS. Las solicitudes van directamente desde esta Mac al provider seleccionado.")
+        #expect(vm.localizedString("preferences.mcp.save", fallback: "Save MCP Config") == "Guardar configuración MCP")
         #expect(PreferencesSection.appearance.localizedTitle(vm) == "Apariencia")
     }
 

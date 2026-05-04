@@ -1044,19 +1044,49 @@ struct AgentModePreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Feature") {
-                Toggle("Enable Agent Mode", isOn: $viewModel.agentModeEnabled)
-                    .help("Enables the built-in local Agent Mode entry points.")
+            Section(viewModel.localizedString("preferences.agentMode.feature.section", fallback: "Feature")) {
+                Toggle(
+                    viewModel.localizedString("preferences.agentMode.enable", fallback: "Enable Agent Mode"),
+                    isOn: $viewModel.agentModeEnabled
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.agentMode.enable.help",
+                        fallback: "Enables the built-in local Agent Mode entry points."
+                    )
+                )
 
-                Toggle("Auto mode", isOn: $viewModel.agentAutoMode)
-                    .help("Allows the agent loop to continue after approved actions without changing write or command approval rules.")
+                Toggle(
+                    viewModel.localizedString("preferences.agentMode.autoMode", fallback: "Auto mode"),
+                    isOn: $viewModel.agentAutoMode
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.agentMode.autoMode.help",
+                        fallback: "Allows the agent loop to continue after approved actions without changing write or command approval rules."
+                    )
+                )
 
-                Toggle("Confirm computer actions", isOn: $viewModel.agentComputerUseConfirm)
-                    .help("Requires explicit approval before local mouse, keyboard, or screenshot actions run.")
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.agentMode.confirmComputerActions",
+                        fallback: "Confirm computer actions"
+                    ),
+                    isOn: $viewModel.agentComputerUseConfirm
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.agentMode.confirmComputerActions.help",
+                        fallback: "Requires explicit approval before local mouse, keyboard, or screenshot actions run."
+                    )
+                )
             }
 
-            Section("Provider") {
-                Picker("Preferred provider", selection: $viewModel.agentPreferredProvider) {
+            Section(viewModel.localizedString("preferences.agentMode.provider.section", fallback: "Provider")) {
+                Picker(
+                    viewModel.localizedString("preferences.agentMode.preferredProvider", fallback: "Preferred provider"),
+                    selection: $viewModel.agentPreferredProvider
+                ) {
                     ForEach(AgentProviderKind.allCases, id: \.self) { provider in
                         Text(providerTitle(provider)).tag(provider)
                     }
@@ -1068,18 +1098,26 @@ struct AgentModePreferencesSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("API Key") {
+            Section(viewModel.localizedString("preferences.agentMode.apiKey.section", fallback: "API Key")) {
                 if viewModel.agentPreferredProvider.requiresAPIKey {
-                    SecureField("API key", text: $viewModel.agentAPIKeyDraft)
+                    SecureField(
+                        viewModel.localizedString("preferences.agentMode.apiKey", fallback: "API key"),
+                        text: $viewModel.agentAPIKeyDraft
+                    )
                         .textFieldStyle(.roundedBorder)
 
                     HStack {
-                        Button("Save API Key") {
+                        Button(viewModel.localizedString("preferences.agentMode.apiKey.save", fallback: "Save API Key")) {
                             saveAPIKey()
                         }
                         .disabled(trimmedAPIKeyDraft.isEmpty)
 
-                        Button("Delete Saved Key") {
+                        Button(
+                            viewModel.localizedString(
+                                "preferences.agentMode.apiKey.delete",
+                                fallback: "Delete Saved Key"
+                            )
+                        ) {
                             deleteAPIKey()
                         }
                         .disabled(!viewModel.hasSavedAgentAPIKey(for: viewModel.agentPreferredProvider))
@@ -1089,13 +1127,24 @@ struct AgentModePreferencesSection: View {
 
                     Text(
                         viewModel.hasSavedAgentAPIKey(for: viewModel.agentPreferredProvider)
-                            ? "A key is saved in the macOS Keychain for this provider."
-                            : "No key is saved for this provider."
+                            ? viewModel.localizedString(
+                                "preferences.agentMode.apiKey.saved",
+                                fallback: "A key is saved in the macOS Keychain for this provider."
+                            )
+                            : viewModel.localizedString(
+                                "preferences.agentMode.apiKey.notSaved",
+                                fallback: "No key is saved for this provider."
+                            )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 } else {
-                    Text("Foundation Models does not use an API key.")
+                    Text(
+                        viewModel.localizedString(
+                            "preferences.agentMode.apiKey.foundationModels.none",
+                            fallback: "Foundation Models does not use an API key."
+                        )
+                    )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1108,35 +1157,66 @@ struct AgentModePreferencesSection: View {
                 }
             }
 
-            Section("Limits") {
+            Section(viewModel.localizedString("preferences.agentMode.limits.section", fallback: "Limits")) {
                 Stepper(
-                    "Max iterations: \(viewModel.agentMaxIterations)",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.agentMode.maxIterations",
+                            fallback: "Max iterations: %d"
+                        ),
+                        viewModel.agentMaxIterations
+                    ),
                     value: $viewModel.agentMaxIterations,
                     in: AgentModeConfig.minMaxIterations...AgentModeConfig.maxMaxIterations
                 )
             }
 
-            Section("Storage") {
-                TextField("Conversation storage", text: $viewModel.agentConversationStorageDir)
+            Section(viewModel.localizedString("preferences.agentMode.storage.section", fallback: "Storage")) {
+                TextField(
+                    viewModel.localizedString(
+                        "preferences.agentMode.conversationStorage",
+                        fallback: "Conversation storage"
+                    ),
+                    text: $viewModel.agentConversationStorageDir
+                )
                     .textFieldStyle(.roundedBorder)
 
-                Picker("Conversation encryption", selection: $viewModel.agentConversationEncryption) {
+                Picker(
+                    viewModel.localizedString(
+                        "preferences.agentMode.conversationEncryption",
+                        fallback: "Conversation encryption"
+                    ),
+                    selection: $viewModel.agentConversationEncryption
+                ) {
                     ForEach(AgentConversationEncryptionMode.allCases, id: \.self) { mode in
                         Text(conversationEncryptionTitle(mode)).tag(mode)
                     }
                 }
 
                 if viewModel.agentConversationEncryption == .masterPassword {
-                    SecureField("Master password", text: $viewModel.agentConversationMasterPasswordDraft)
+                    SecureField(
+                        viewModel.localizedString("preferences.agentMode.masterPassword", fallback: "Master password"),
+                        text: $viewModel.agentConversationMasterPasswordDraft
+                    )
                         .textFieldStyle(.roundedBorder)
 
                     HStack {
-                        Button("Save Master Password") {
+                        Button(
+                            viewModel.localizedString(
+                                "preferences.agentMode.masterPassword.save",
+                                fallback: "Save Master Password"
+                            )
+                        ) {
                             saveConversationMasterPassword()
                         }
                         .disabled(trimmedConversationMasterPasswordDraft.isEmpty)
 
-                        Button("Delete Saved Password") {
+                        Button(
+                            viewModel.localizedString(
+                                "preferences.agentMode.masterPassword.delete",
+                                fallback: "Delete Saved Password"
+                            )
+                        ) {
                             deleteConversationMasterPassword()
                         }
                         .disabled(!viewModel.hasSavedAgentConversationMasterPassword())
@@ -1146,8 +1226,14 @@ struct AgentModePreferencesSection: View {
 
                     Text(
                         viewModel.hasSavedAgentConversationMasterPassword()
-                            ? "A master password is saved in the macOS Keychain."
-                            : "No master password is saved."
+                            ? viewModel.localizedString(
+                                "preferences.agentMode.masterPassword.saved",
+                                fallback: "A master password is saved in the macOS Keychain."
+                            )
+                            : viewModel.localizedString(
+                                "preferences.agentMode.masterPassword.notSaved",
+                                fallback: "No master password is saved."
+                            )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1164,7 +1250,7 @@ struct AgentModePreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Agent Mode")
+        .navigationTitle(viewModel.localizedString("preferences.section.agentMode", fallback: "Agent Mode"))
     }
 
     private var trimmedAPIKeyDraft: String {
@@ -1179,7 +1265,13 @@ struct AgentModePreferencesSection: View {
         do {
             try viewModel.saveAgentAPIKeyDraft(for: viewModel.agentPreferredProvider)
         } catch {
-            viewModel.agentAPIKeyStatus = "Failed to save API key: \(error.localizedDescription)"
+            viewModel.agentAPIKeyStatus = String(
+                format: viewModel.localizedString(
+                    "preferences.agentMode.apiKey.save.failed",
+                    fallback: "Failed to save API key: %@"
+                ),
+                error.localizedDescription
+            )
         }
     }
 
@@ -1187,7 +1279,13 @@ struct AgentModePreferencesSection: View {
         do {
             try viewModel.deleteAgentAPIKey(for: viewModel.agentPreferredProvider)
         } catch {
-            viewModel.agentAPIKeyStatus = "Failed to delete API key: \(error.localizedDescription)"
+            viewModel.agentAPIKeyStatus = String(
+                format: viewModel.localizedString(
+                    "preferences.agentMode.apiKey.delete.failed",
+                    fallback: "Failed to delete API key: %@"
+                ),
+                error.localizedDescription
+            )
         }
     }
 
@@ -1195,7 +1293,13 @@ struct AgentModePreferencesSection: View {
         do {
             try viewModel.saveAgentConversationMasterPasswordDraft()
         } catch {
-            viewModel.agentConversationMasterPasswordStatus = "Failed to save master password: \(error.localizedDescription)"
+            viewModel.agentConversationMasterPasswordStatus = String(
+                format: viewModel.localizedString(
+                    "preferences.agentMode.masterPassword.save.failed",
+                    fallback: "Failed to save master password: %@"
+                ),
+                error.localizedDescription
+            )
         }
     }
 
@@ -1203,16 +1307,22 @@ struct AgentModePreferencesSection: View {
         do {
             try viewModel.deleteAgentConversationMasterPassword()
         } catch {
-            viewModel.agentConversationMasterPasswordStatus = "Failed to delete master password: \(error.localizedDescription)"
+            viewModel.agentConversationMasterPasswordStatus = String(
+                format: viewModel.localizedString(
+                    "preferences.agentMode.masterPassword.delete.failed",
+                    fallback: "Failed to delete master password: %@"
+                ),
+                error.localizedDescription
+            )
         }
     }
 
     private func conversationEncryptionTitle(_ mode: AgentConversationEncryptionMode) -> String {
         switch mode {
         case .disabled:
-            return "Disabled"
+            return viewModel.localizedString("preferences.agentMode.encryption.disabled", fallback: "Disabled")
         case .masterPassword:
-            return "Master Password"
+            return viewModel.localizedString("preferences.agentMode.encryption.masterPassword", fallback: "Master Password")
         }
     }
 
@@ -1232,9 +1342,15 @@ struct AgentModePreferencesSection: View {
     private func providerDetail(_ provider: AgentProviderKind) -> String {
         switch provider {
         case .foundationModelsOnDevice:
-            return "Runs on device when supported. If unavailable, Cocxy asks you to choose another provider instead of falling back silently."
+            return viewModel.localizedString(
+                "preferences.agentMode.provider.detail.foundationModels",
+                fallback: "Runs on device when supported. If unavailable, Cocxy asks you to choose another provider instead of falling back silently."
+            )
         case .anthropic, .openai, .google:
-            return "Uses your provider API key from the macOS Keychain. Requests go directly from this Mac to the selected provider."
+            return viewModel.localizedString(
+                "preferences.agentMode.provider.detail.remote",
+                fallback: "Uses your provider API key from the macOS Keychain. Requests go directly from this Mac to the selected provider."
+            )
         }
     }
 }
@@ -1247,8 +1363,8 @@ struct MCPServersPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Config File") {
-                LabeledContent("Path") {
+            Section(viewModel.localizedString("preferences.mcp.configFile.section", fallback: "Config File")) {
+                LabeledContent(viewModel.localizedString("preferences.mcp.path", fallback: "Path")) {
                     Text(viewModel.mcpConfigPath)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1256,11 +1372,11 @@ struct MCPServersPreferencesSection: View {
                 }
 
                 HStack {
-                    Button("Reload") {
+                    Button(viewModel.localizedString("preferences.mcp.reload", fallback: "Reload")) {
                         viewModel.reloadMCPConfig()
                     }
 
-                    Button("Open Folder") {
+                    Button(viewModel.localizedString("preferences.mcp.openFolder", fallback: "Open Folder")) {
                         let url = URL(fileURLWithPath: viewModel.mcpConfigPath)
                             .deletingLastPathComponent()
                         NSWorkspace.shared.open(url)
@@ -1270,9 +1386,9 @@ struct MCPServersPreferencesSection: View {
                 }
             }
 
-            Section("Configured Servers") {
+            Section(viewModel.localizedString("preferences.mcp.configuredServers.section", fallback: "Configured Servers")) {
                 if viewModel.mcpConfiguredServers.isEmpty {
-                    Text("No MCP servers configured.")
+                    Text(viewModel.localizedString("preferences.mcp.noServers", fallback: "No MCP servers configured."))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(viewModel.mcpConfiguredServers) { server in
@@ -1297,11 +1413,11 @@ struct MCPServersPreferencesSection: View {
                     .frame(minHeight: 240)
 
                 HStack {
-                    Button("Validate") {
+                    Button(viewModel.localizedString("preferences.mcp.validate", fallback: "Validate")) {
                         validate()
                     }
 
-                    Button("Save MCP Config") {
+                    Button(viewModel.localizedString("preferences.mcp.save", fallback: "Save MCP Config")) {
                         save()
                     }
                     .disabled(!viewModel.hasUnsavedMCPConfigChanges)
@@ -1318,14 +1434,20 @@ struct MCPServersPreferencesSection: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("MCP Servers")
+        .navigationTitle(viewModel.localizedString("preferences.section.mcpServers", fallback: "MCP Servers"))
     }
 
     private func validate() {
         do {
             try viewModel.validateMCPConfigDraft()
         } catch {
-            viewModel.mcpConfigStatus = "Invalid MCP config: \(error.localizedDescription)"
+            viewModel.mcpConfigStatus = String(
+                format: viewModel.localizedString(
+                    "preferences.mcp.validate.failed",
+                    fallback: "Invalid MCP config: %@"
+                ),
+                error.localizedDescription
+            )
         }
     }
 
@@ -1333,7 +1455,13 @@ struct MCPServersPreferencesSection: View {
         do {
             try viewModel.saveMCPConfig()
         } catch {
-            viewModel.mcpConfigStatus = "Failed to save MCP config: \(error.localizedDescription)"
+            viewModel.mcpConfigStatus = String(
+                format: viewModel.localizedString(
+                    "preferences.mcp.save.failed",
+                    fallback: "Failed to save MCP config: %@"
+                ),
+                error.localizedDescription
+            )
         }
     }
 }
