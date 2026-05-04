@@ -3,6 +3,7 @@
 // checks for the docked Notes panel.
 
 import CoreGraphics
+import Foundation
 import SwiftUI
 import Testing
 @testable import CocxyTerminal
@@ -93,6 +94,19 @@ struct NotesOverlayViewSwiftTestingTests {
         #expect(view.themeIdentity == .paper)
     }
 
+    @Test("delete confirmation copy localizes to configured app language")
+    func deleteConfirmationCopyLocalizes() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        let copy = NotesOverlayView.localizedDeleteNoteCopy(localizer: localizer)
+
+        #expect(copy.messageText == "¿Eliminar nota?")
+        #expect(copy.informativeText == "Esto elimina la nota de este workspace.")
+        #expect(copy.primaryButton == "Eliminar nota")
+        #expect(copy.secondaryButton == "Cancelar")
+    }
+
     // MARK: - Test helpers
 
     @MainActor
@@ -108,5 +122,10 @@ struct NotesOverlayViewSwiftTestingTests {
             resolver: DefaultNoteWorkspaceResolver(),
             searchEngine: NoteSearchGrep(store: store)
         )
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

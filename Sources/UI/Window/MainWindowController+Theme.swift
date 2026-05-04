@@ -154,6 +154,7 @@ extension MainWindowController {
         if old?.appearance.appLanguage != config.appearance.appLanguage {
             syncCodeReviewPanelRootView(panelWidth: codeReviewPanelWidth)
             syncGitHubPaneRootView(panelWidth: gitHubPanePanelWidth)
+            syncNotesRootView()
         }
 
         if old?.keybindings != config.keybindings

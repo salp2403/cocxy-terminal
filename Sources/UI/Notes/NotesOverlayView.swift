@@ -30,6 +30,7 @@ struct NotesOverlayView: View {
     /// Production hosts pass the live identity (resolved from the
     /// active theme variant) so the overlay tracks light/dark mode.
     var themeIdentity: Design.ThemeIdentity = .aurora
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     var onDismiss: (() -> Void)?
 
     @State private var pendingDeleteNote: Note?
@@ -69,26 +70,26 @@ struct NotesOverlayView: View {
         .frame(maxHeight: .infinity)
         .designThemePalette(Design.palette(for: themeIdentity))
         .confirmationDialog(
-            "Delete note?",
+            deleteNoteCopy.messageText,
             isPresented: Binding(
                 get: { pendingDeleteNote != nil },
                 set: { if !$0 { pendingDeleteNote = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button("Delete Note", role: .destructive) {
+            Button(deleteNoteCopy.primaryButton, role: .destructive) {
                 guard let note = pendingDeleteNote else { return }
                 pendingDeleteNote = nil
                 Task { await viewModel.deleteNote(note) }
             }
-            Button("Cancel", role: .cancel) {
+            Button(deleteNoteCopy.secondaryButton, role: .cancel) {
                 pendingDeleteNote = nil
             }
         } message: {
-            Text("This removes the note from this workspace.")
+            Text(deleteNoteCopy.informativeText)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Notes panel")
+        .accessibilityLabel(localized("notes.panel.accessibility", fallback: "Notes panel"))
     }
 
     private var header: some View {
@@ -103,9 +104,9 @@ struct NotesOverlayView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Notes")
+                Text(localized("notes.title", fallback: "Notes"))
                     .font(.system(size: 14, weight: .semibold))
-                Text(viewModel.workspace?.displayName ?? "No workspace")
+                Text(viewModel.workspace?.displayName ?? localized("notes.noWorkspace", fallback: "No workspace"))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -117,13 +118,13 @@ struct NotesOverlayView: View {
             Button {
                 Task { await viewModel.createNote() }
             } label: {
-                Label("New Note", systemImage: "square.and.pencil")
+                Label(localized("notes.newNote", fallback: "New Note"), systemImage: "square.and.pencil")
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .help("New note")
-            .accessibilityLabel("New note")
+            .help(localized("notes.newNote.help", fallback: "New note"))
+            .accessibilityLabel(localized("notes.newNote.help", fallback: "New note"))
             .disabled(viewModel.workspace == nil)
 
             if let onDismiss {
@@ -132,8 +133,8 @@ struct NotesOverlayView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .accessibilityLabel("Close notes")
-                .help("Close notes")
+                .accessibilityLabel(localized("notes.close", fallback: "Close notes"))
+                .help(localized("notes.close", fallback: "Close notes"))
             }
         }
         .padding(.horizontal, 14)
@@ -144,9 +145,9 @@ struct NotesOverlayView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search notes", text: $viewModel.searchQuery)
+            TextField(localized("notes.search.placeholder", fallback: "Search notes"), text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
-                .accessibilityLabel("Search notes")
+                .accessibilityLabel(localized("notes.search.accessibility", fallback: "Search notes"))
             if !viewModel.searchQuery.isEmpty {
                 Button {
                     viewModel.searchQuery = ""
@@ -156,7 +157,7 @@ struct NotesOverlayView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.borderless)
-                .help("Clear search")
+                .help(localized("notes.search.clear", fallback: "Clear search"))
             }
         }
         .padding(.horizontal, 10)
@@ -177,8 +178,8 @@ struct NotesOverlayView: View {
     private var content: some View {
         if viewModel.workspace == nil {
             emptyState(
-                title: "No workspace",
-                message: "Open a terminal tab before using notes."
+                title: localized("notes.noWorkspace", fallback: "No workspace"),
+                message: localized("notes.empty.noWorkspace", fallback: "Open a terminal tab before using notes.")
             )
         } else {
             GeometryReader { proxy in
@@ -210,7 +211,10 @@ struct NotesOverlayView: View {
             Divider().opacity(0.25)
             if showingSearch {
                 if viewModel.searchResults.isEmpty {
-                    emptyState(title: "No matches", message: "Try a different search.")
+                    emptyState(
+                        title: localized("notes.empty.noMatches.title", fallback: "No matches"),
+                        message: localized("notes.empty.noMatches.message", fallback: "Try a different search.")
+                    )
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 3) {
@@ -222,7 +226,10 @@ struct NotesOverlayView: View {
                     }
                 }
             } else if viewModel.notes.isEmpty {
-                emptyState(title: "No notes", message: "Create a note for this workspace.")
+                emptyState(
+                    title: localized("notes.empty.noNotes.title", fallback: "No notes"),
+                    message: localized("notes.empty.noNotes.message", fallback: "Create a note for this workspace.")
+                )
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 3) {
@@ -245,7 +252,7 @@ struct NotesOverlayView: View {
                         Text(selected.derivedTitle)
                             .font(.system(size: 14, weight: .semibold))
                             .lineLimit(1)
-                        Text("Edited \(selected.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                        Text(localizedEditedDate(selected.updatedAt))
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -254,31 +261,34 @@ struct NotesOverlayView: View {
                     Button {
                         Task { await viewModel.saveSelectedNote() }
                     } label: {
-                        Label("Save", systemImage: "square.and.arrow.down")
+                        Label(localized("common.save", fallback: "Save"), systemImage: "square.and.arrow.down")
                     }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .help("Save note")
-                    .accessibilityLabel("Save note")
+                    .help(localized("notes.save", fallback: "Save note"))
+                    .accessibilityLabel(localized("notes.save", fallback: "Save note"))
 
                     Button(role: .destructive) {
                         pendingDeleteNote = selected
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        Label(localized("notes.delete", fallback: "Delete"), systemImage: "trash")
                     }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .help("Delete note")
-                    .accessibilityLabel("Delete note")
+                    .help(localized("notes.deleteNote", fallback: "Delete note"))
+                    .accessibilityLabel(localized("notes.deleteNote", fallback: "Delete note"))
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 Divider().opacity(0.35)
                 ZStack(alignment: .topLeading) {
                     if selected.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Start writing. Use a Markdown heading for the title.")
+                        Text(localized(
+                            "notes.editor.placeholder",
+                            fallback: "Start writing. Use a Markdown heading for the title."
+                        ))
                             .font(.system(size: 13))
                             .foregroundStyle(.tertiary)
                             .padding(.horizontal, 18)
@@ -291,7 +301,13 @@ struct NotesOverlayView: View {
                         .padding(10)
                 }
             } else {
-                emptyState(title: "Select a note", message: "Pick one from the list or create a new note.")
+                emptyState(
+                    title: localized("notes.empty.select.title", fallback: "Select a note"),
+                    message: localized(
+                        "notes.empty.select.message",
+                        fallback: "Pick one from the list or create a new note."
+                    )
+                )
             }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.10))
@@ -423,7 +439,10 @@ struct NotesOverlayView: View {
 
     private func listHeader(showingSearch: Bool) -> some View {
         HStack(spacing: 8) {
-            Text(showingSearch ? "Results" : "Workspace Notes")
+            Text(showingSearch
+                ? localized("notes.results", fallback: "Results")
+                : localized("notes.workspaceNotes", fallback: "Workspace Notes")
+            )
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
@@ -455,10 +474,43 @@ struct NotesOverlayView: View {
                 Capsule(style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.7)
             )
-            .accessibilityLabel("\(count) notes")
+            .accessibilityLabel(localizedCountLabel(count))
     }
 
     private func stackedListHeight(for availableHeight: CGFloat) -> CGFloat {
         min(max(180, availableHeight * 0.36), 280)
+    }
+
+    private var deleteNoteCopy: AppAlertCopy {
+        Self.localizedDeleteNoteCopy(localizer: localizer)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    private func localizedEditedDate(_ date: Date) -> String {
+        String(
+            format: localized("notes.edited", fallback: "Edited %@"),
+            date.formatted(date: .abbreviated, time: .shortened)
+        )
+    }
+
+    private func localizedCountLabel(_ count: Int) -> String {
+        let key = count == 1 ? "notes.count.one" : "notes.count.many"
+        let fallback = count == 1 ? "%d note" : "%d notes"
+        return String(format: localized(key, fallback: fallback), count)
+    }
+
+    static func localizedDeleteNoteCopy(localizer: AppLocalizer) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: localizer.string("notes.delete.confirm.title", fallback: "Delete note?"),
+            informativeText: localizer.string(
+                "notes.delete.confirm.message",
+                fallback: "This removes the note from this workspace."
+            ),
+            primaryButton: localizer.string("notes.delete.confirm.button", fallback: "Delete Note"),
+            secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
     }
 }

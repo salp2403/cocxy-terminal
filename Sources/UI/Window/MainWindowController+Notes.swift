@@ -233,6 +233,7 @@ extension MainWindowController {
             viewModel: viewModel,
             panelWidth: panelWidth,
             themeIdentity: currentAuroraThemeIdentity(),
+            localizer: appLocalizer(),
             onDismiss: { [weak self] in
                 self?.dismissNotes()
             }
