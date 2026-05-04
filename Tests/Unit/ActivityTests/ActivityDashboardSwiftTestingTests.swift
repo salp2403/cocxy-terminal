@@ -129,6 +129,83 @@ struct ActivityDashboardSwiftTestingTests {
         #expect(presenter.requestedDefaultFilename == "cocxy-activity.json")
     }
 
+    @Test("dashboard export smoke writes every format and preserves local insights")
+    func dashboardExportSmokeWritesEveryFormatAndPreservesLocalInsights() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-activity-export-smoke-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let project = ActivityProjectRef(id: "project-1", name: "Project One")
+        try store.recordEvent(ActivityEvent(
+            timestamp: date(hour: 8),
+            kind: .commandExecuted,
+            project: project,
+            summary: "swift test",
+            metadata: ["duration_ms": "42000"]
+        ))
+        try store.recordEvent(ActivityEvent(
+            timestamp: date(hour: 8, minute: 30),
+            kind: .commandExecuted,
+            project: project,
+            summary: "swift test",
+            metadata: ["duration_ms": "18000"]
+        ))
+        try store.recordEvent(ActivityEvent(
+            timestamp: date(hour: 9),
+            kind: .commandExecuted,
+            project: project,
+            summary: "swift build",
+            metadata: ["duration_ms": "30000"]
+        ))
+        try store.recordEvent(ActivityEvent(
+            timestamp: date(hour: 10),
+            kind: .projectSwitched,
+            project: project,
+            summary: "Project One"
+        ))
+        try store.recordTokenUsage(TokenUsageRecord(
+            timestamp: date(hour: 11),
+            provider: "local-provider",
+            model: "small",
+            project: project,
+            inputTokens: 120,
+            outputTokens: 80,
+            estimatedCostMicros: 44
+        ))
+        let viewModel = ActivityDashboardViewModel(
+            store: store,
+            privacyPolicy: .enabled,
+            calendar: utcCalendar(),
+            now: { date(hour: 12) }
+        )
+
+        #expect(viewModel.snapshot.insights.mostUsedCommands == ["swift test", "swift build"])
+        #expect(viewModel.snapshot.insights.peakHourLabel == "08:00")
+        #expect(viewModel.snapshot.insights.projectSwitches == 1)
+        #expect(viewModel.snapshot.projectTimeRows.map(\.durationText) == ["1m 30s"])
+
+        let cases: [(ActivityDashboardExportFormat, String, String, String)] = [
+            (.json, "activity.json", "cocxy-activity.json", "\"swift test\""),
+            (.eventsCSV, "events.csv", "cocxy-activity-events.csv", "command_executed"),
+            (.tokenUsageCSV, "token-usage.csv", "cocxy-activity-token-usage.csv", "local-provider,small"),
+        ]
+
+        for (format, filename, defaultFilename, expectedText) in cases {
+            let destination = root.appendingPathComponent(filename)
+            let presenter = ActivityDashboardTestPresenter(destinationURL: destination)
+            let actions = ActivityDashboardFileActions(viewModel: viewModel, presenter: presenter)
+
+            actions.export(format)
+
+            let exported = try String(contentsOf: destination, encoding: .utf8)
+            #expect(exported.contains(expectedText))
+            #expect(actions.errorMessage == nil)
+            #expect(actions.lastExportedURL == destination)
+            #expect(presenter.requestedDefaultFilename == defaultFilename)
+        }
+    }
+
     @Test("file actions clear local data only after destructive confirmation")
     func fileActionsClearLocalDataOnlyAfterDestructiveConfirmation() throws {
         let presenter = ActivityDashboardTestPresenter(confirmedDelete: false)
