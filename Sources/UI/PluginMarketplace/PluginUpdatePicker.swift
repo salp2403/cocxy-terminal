@@ -5,6 +5,7 @@ import SwiftUI
 
 struct PluginUpdatePicker: View {
     let updates: [PluginUpdateCandidate]
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     let onRefresh: () -> Void
 
     var body: some View {
@@ -12,7 +13,7 @@ struct PluginUpdatePicker: View {
             Button {
                 onRefresh()
             } label: {
-                Label("Check Updates", systemImage: "arrow.triangle.2.circlepath")
+                Label(localized("plugins.checkUpdates", fallback: "Check Updates"), systemImage: "arrow.triangle.2.circlepath")
             }
 
             ForEach(updates) { update in
@@ -30,5 +31,9 @@ struct PluginUpdatePicker: View {
                 }
             }
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

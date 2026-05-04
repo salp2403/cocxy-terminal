@@ -97,4 +97,37 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
         #expect(viewModel.plugins[0].id == "cocxy-bundled")
         #expect(viewModel.statusMessage == "Installed cocxy-bundled.")
     }
+
+    @Test("Spanish localizer updates plugin marketplace statuses")
+    @MainActor
+    func spanishLocalizerUpdatesPluginMarketplaceStatuses() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let viewModel = PluginMarketplaceViewModel(
+            sourceStore: PluginSourceStore(fileURL: root.appendingPathComponent("sources.json")),
+            installer: PluginInstaller(pluginsDirectory: root.appendingPathComponent("plugins", isDirectory: true)),
+            pluginManager: PluginManager(pluginsDirectory: root.appendingPathComponent("plugins", isDirectory: true).path),
+            bundledCatalog: BundledPluginCatalog(pluginsDirectory: nil),
+            localizer: spanish
+        )
+
+        viewModel.checkForPluginUpdates()
+
+        #expect(viewModel.statusMessage == "No se encontraron actualizaciones.")
+        #expect(
+            viewModel.localizedErrorDescription(PluginMarketplaceViewModelError.missingURL)
+                == "Ingresa una URL de plugin o una ruta local."
+        )
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.statusMessage == "No updates found.")
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
 }

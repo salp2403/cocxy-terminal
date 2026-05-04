@@ -15,6 +15,18 @@ enum PluginMarketplaceViewModelError: Error, LocalizedError, Equatable {
 
 @MainActor
 final class PluginMarketplaceViewModel: ObservableObject {
+    private enum StatusState: Equatable {
+        case failedLoadSources
+        case failedLoadBundledPlugins
+        case sourceAdded
+        case installed(String)
+        case uninstalled(String)
+        case enabled(String)
+        case disabled(String)
+        case noUpdates
+        case updatesFound(Int)
+    }
+
     @Published var sourceURLText: String = ""
     @Published var sourceDisplayName: String = ""
     @Published var installURLText: String = ""
@@ -29,20 +41,31 @@ final class PluginMarketplaceViewModel: ObservableObject {
     private let pluginManager: PluginManager
     private let bundledCatalog: BundledPluginCatalog
     private let updater: PluginUpdater
+    private var localizer: AppLocalizer
+    private var statusState: StatusState?
 
     init(
         sourceStore: PluginSourceStore = PluginSourceStore(),
         installer: PluginInstaller = PluginInstaller(),
         pluginManager: PluginManager? = nil,
         bundledCatalog: BundledPluginCatalog = BundledPluginCatalog(),
-        updater: PluginUpdater = PluginUpdater()
+        updater: PluginUpdater = PluginUpdater(),
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.sourceStore = sourceStore
         self.installer = installer
         self.pluginManager = pluginManager ?? PluginManager(pluginsDirectory: installer.pluginsDirectory.path)
         self.bundledCatalog = bundledCatalog
         self.updater = updater
+        self.localizer = localizer
         refresh()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        if let statusState {
+            statusMessage = Self.localizedStatusText(statusState, localizer: localizer)
+        }
     }
 
     func refresh() {
@@ -50,13 +73,13 @@ final class PluginMarketplaceViewModel: ObservableObject {
             sources = try sourceStore.load()
         } catch {
             sources = []
-            statusMessage = "Failed to load sources."
+            setStatus(.failedLoadSources)
         }
         do {
             bundledPlugins = try bundledCatalog.loadManifests()
         } catch {
             bundledPlugins = []
-            statusMessage = "Failed to load bundled plugins."
+            setStatus(.failedLoadBundledPlugins)
         }
         pluginManager.scanPlugins()
         plugins = pluginManager.plugins
@@ -74,7 +97,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
         sourceURLText = ""
         sourceDisplayName = ""
         refresh()
-        statusMessage = "Plugin source added."
+        setStatus(.sourceAdded)
     }
 
     func installPlugin(replaceExisting: Bool) throws {
@@ -82,7 +105,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
         let receipt = try installer.install(from: url, replaceExisting: replaceExisting)
         installURLText = ""
         refresh()
-        statusMessage = "Installed \(receipt.pluginID)."
+        setStatus(.installed(receipt.pluginID))
     }
 
     func installBundledPlugin(id: String, replaceExisting: Bool) throws {
@@ -94,13 +117,13 @@ final class PluginMarketplaceViewModel: ObservableObject {
             replaceExisting: replaceExisting
         )
         refresh()
-        statusMessage = "Installed \(receipt.pluginID)."
+        setStatus(.installed(receipt.pluginID))
     }
 
     func uninstallPlugin(id: String) throws {
         try installer.uninstall(id: id)
         refresh()
-        statusMessage = "Uninstalled \(id)."
+        setStatus(.uninstalled(id))
     }
 
     func setPlugin(_ id: String, enabled: Bool) throws {
@@ -110,14 +133,25 @@ final class PluginMarketplaceViewModel: ObservableObject {
             try pluginManager.disablePlugin(id: id)
         }
         refresh()
-        statusMessage = enabled ? "Enabled \(id)." : "Disabled \(id)."
+        setStatus(enabled ? .enabled(id) : .disabled(id))
     }
 
     func checkForPluginUpdates() {
         availableUpdates = updater.availableUpdates(for: pluginManager.plugins.map(\.manifest))
-        statusMessage = availableUpdates.isEmpty
-            ? "No updates found."
-            : "\(availableUpdates.count) update\(availableUpdates.count == 1 ? "" : "s") found."
+        setStatus(availableUpdates.isEmpty ? .noUpdates : .updatesFound(availableUpdates.count))
+    }
+
+    func localizedErrorDescription(_ error: Error) -> String {
+        if let viewModelError = error as? PluginMarketplaceViewModelError {
+            switch viewModelError {
+            case .missingURL:
+                return localizer.string(
+                    "plugins.error.missingURL",
+                    fallback: "Enter a plugin URL or local path."
+                )
+            }
+        }
+        return error.localizedDescription
     }
 
     private func makeURL(from rawValue: String) throws -> URL {
@@ -126,40 +160,87 @@ final class PluginMarketplaceViewModel: ObservableObject {
         }
         return url
     }
+
+    private func setStatus(_ state: StatusState) {
+        statusState = state
+        statusMessage = Self.localizedStatusText(state, localizer: localizer)
+    }
+
+    private static func localizedStatusText(_ state: StatusState, localizer: AppLocalizer) -> String {
+        switch state {
+        case .failedLoadSources:
+            return localizer.string("plugins.status.failedLoadSources", fallback: "Failed to load sources.")
+        case .failedLoadBundledPlugins:
+            return localizer.string("plugins.status.failedLoadBundledPlugins", fallback: "Failed to load bundled plugins.")
+        case .sourceAdded:
+            return localizer.string("plugins.status.sourceAdded", fallback: "Plugin source added.")
+        case .installed(let pluginID):
+            return String(format: localizer.string("plugins.status.installed", fallback: "Installed %@."), pluginID)
+        case .uninstalled(let pluginID):
+            return String(format: localizer.string("plugins.status.uninstalled", fallback: "Uninstalled %@."), pluginID)
+        case .enabled(let pluginID):
+            return String(format: localizer.string("plugins.status.enabled", fallback: "Enabled %@."), pluginID)
+        case .disabled(let pluginID):
+            return String(format: localizer.string("plugins.status.disabled", fallback: "Disabled %@."), pluginID)
+        case .noUpdates:
+            return localizer.string("plugins.status.noUpdates", fallback: "No updates found.")
+        case .updatesFound(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "plugins.status.updatesFound.one" : "plugins.status.updatesFound.many",
+                    fallback: count == 1 ? "%d update found." : "%d updates found."
+                ),
+                count
+            )
+        }
+    }
 }
 
 struct PluginMarketplaceView: View {
     @StateObject private var viewModel: PluginMarketplaceViewModel
     @State private var replaceExisting = false
     @State private var pendingUninstallID: String?
+    var localizer: AppLocalizer
 
-    init(pluginManager: PluginManager? = nil) {
+    init(
+        pluginManager: PluginManager? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         _viewModel = StateObject(
-            wrappedValue: PluginMarketplaceViewModel(pluginManager: pluginManager)
+            wrappedValue: PluginMarketplaceViewModel(
+                pluginManager: pluginManager,
+                localizer: localizer
+            )
         )
+        self.localizer = localizer
     }
 
-    init(viewModel: PluginMarketplaceViewModel) {
+    init(
+        viewModel: PluginMarketplaceViewModel,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.localizer = localizer
+        viewModel.updateLocalizer(localizer)
     }
 
     var body: some View {
         Form {
-            Section("Sources") {
-                TextField("URL or local path", text: $viewModel.sourceURLText)
+            Section(localized("plugins.sources", fallback: "Sources")) {
+                TextField(localized("plugins.urlOrPath", fallback: "URL or local path"), text: $viewModel.sourceURLText)
                     .textFieldStyle(.roundedBorder)
-                TextField("Name", text: $viewModel.sourceDisplayName)
+                TextField(localized("plugins.name", fallback: "Name"), text: $viewModel.sourceDisplayName)
                     .textFieldStyle(.roundedBorder)
                 HStack {
                     Button {
                         perform { try viewModel.addSource() }
                     } label: {
-                        Label("Add", systemImage: "plus")
+                        Label(localized("plugins.add", fallback: "Add"), systemImage: "plus")
                     }
                     Button {
                         viewModel.refresh()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(localized("plugins.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
                     }
                     Spacer()
                 }
@@ -174,18 +255,19 @@ struct PluginMarketplaceView: View {
                 }
             }
 
-            Section("Install") {
+            Section(localized("plugins.install.section", fallback: "Install")) {
                 PluginInstallSheet(
                     urlText: $viewModel.installURLText,
-                    replaceExisting: $replaceExisting
+                    replaceExisting: $replaceExisting,
+                    localizer: localizer
                 ) {
                     perform { try viewModel.installPlugin(replaceExisting: replaceExisting) }
                 }
             }
 
-            Section("Built-in") {
+            Section(localized("plugins.bundled.section", fallback: "Built-in")) {
                 if viewModel.bundledPlugins.isEmpty {
-                    Text("No bundled plugins available.")
+                    Text(localized("plugins.empty.bundled", fallback: "No bundled plugins available."))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(viewModel.bundledPlugins) { plugin in
@@ -195,7 +277,7 @@ struct PluginMarketplaceView: View {
                             detail: plugin.description,
                             capabilities: plugin.capabilities,
                             primaryAction: PluginCardAction(
-                                title: "Install",
+                                title: localized("plugins.install", fallback: "Install"),
                                 systemImage: "square.and.arrow.down",
                                 perform: {
                                     perform {
@@ -211,9 +293,9 @@ struct PluginMarketplaceView: View {
                 }
             }
 
-            Section("Installed") {
+            Section(localized("plugins.installed.section", fallback: "Installed")) {
                 if viewModel.plugins.isEmpty {
-                    Text("No plugins installed.")
+                    Text(localized("plugins.empty.installed", fallback: "No plugins installed."))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(viewModel.plugins) { plugin in
@@ -223,7 +305,9 @@ struct PluginMarketplaceView: View {
                             detail: plugin.manifest.description,
                             capabilities: plugin.manifest.capabilities,
                             primaryAction: PluginCardAction(
-                                title: plugin.isEnabled ? "Disable" : "Enable",
+                                title: plugin.isEnabled
+                                    ? localized("plugins.disable", fallback: "Disable")
+                                    : localized("plugins.enable", fallback: "Enable"),
                                 systemImage: plugin.isEnabled ? "pause.circle" : "play.circle",
                                 perform: {
                                     perform {
@@ -232,7 +316,7 @@ struct PluginMarketplaceView: View {
                                 }
                             ),
                             secondaryAction: PluginCardAction(
-                                title: "Uninstall",
+                                title: localized("plugins.uninstall", fallback: "Uninstall"),
                                 systemImage: "trash",
                                 role: .destructive,
                                 perform: {
@@ -244,9 +328,10 @@ struct PluginMarketplaceView: View {
                 }
             }
 
-            Section("Updates") {
+            Section(localized("plugins.updates.section", fallback: "Updates")) {
                 PluginUpdatePicker(
                     updates: viewModel.availableUpdates,
+                    localizer: localizer,
                     onRefresh: {
                         viewModel.checkForPluginUpdates()
                     }
@@ -263,20 +348,26 @@ struct PluginMarketplaceView: View {
         }
         .padding(20)
         .glassPanelBackground()
+        .onAppear {
+            viewModel.updateLocalizer(localizer)
+        }
+        .onChange(of: localizer.resolvedLanguage) {
+            viewModel.updateLocalizer(localizer)
+        }
         .confirmationDialog(
-            "Uninstall Plugin",
+            localized("plugins.uninstall.title", fallback: "Uninstall Plugin"),
             isPresented: Binding(
                 get: { pendingUninstallID != nil },
                 set: { if !$0 { pendingUninstallID = nil } }
             )
         ) {
-            Button("Uninstall", role: .destructive) {
+            Button(localized("plugins.uninstall", fallback: "Uninstall"), role: .destructive) {
                 if let id = pendingUninstallID {
                     perform { try viewModel.uninstallPlugin(id: id) }
                 }
                 pendingUninstallID = nil
             }
-            Button("Cancel", role: .cancel) {
+            Button(localized("common.cancel", fallback: "Cancel"), role: .cancel) {
                 pendingUninstallID = nil
             }
         } message: {
@@ -290,7 +381,11 @@ struct PluginMarketplaceView: View {
         do {
             try action()
         } catch {
-            viewModel.statusMessage = error.localizedDescription
+            viewModel.statusMessage = viewModel.localizedErrorDescription(error)
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

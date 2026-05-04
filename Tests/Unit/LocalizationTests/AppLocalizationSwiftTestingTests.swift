@@ -138,6 +138,17 @@ struct AppLocalizationSwiftTestingTests {
         #expect(DevToolsTab.dom.localizedTitle(using: spanish) == "DOM")
     }
 
+    @Test
+    func pluginMarketplaceStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("plugins.sources", fallback: "Sources") == "Fuentes")
+        #expect(spanish.string("plugins.replaceExisting", fallback: "Replace existing") == "Reemplazar existente")
+        #expect(spanish.string("plugins.empty.installed", fallback: "No plugins installed.") == "No hay plugins instalados.")
+        #expect(spanish.string("plugins.status.noUpdates", fallback: "No updates found.") == "No se encontraron actualizaciones.")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

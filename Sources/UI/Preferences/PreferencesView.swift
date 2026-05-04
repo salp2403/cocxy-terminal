@@ -144,7 +144,10 @@ struct PreferencesView: View {
         case .worktrees:
             WorktreesPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .plugins:
-            PluginMarketplaceView(pluginManager: pluginManager)
+            PluginMarketplaceView(
+                pluginManager: pluginManager,
+                localizer: viewModel.appLocalizer()
+            )
         case .github:
             GitHubPreferencesSection(
                 viewModel: viewModel,
