@@ -50,14 +50,15 @@ final class MarkdownContentView: NSView {
 
     // MARK: - Properties (new)
 
-    private let toolbar = MarkdownToolbarView()
+    private let toolbar: MarkdownToolbarView
     private let sidebar: MarkdownSidebarView
     let sourceView: MarkdownSourceView
     let previewView: MarkdownPreviewView
     let diffView = MarkdownDiffView()
     private let splitContainer = NSSplitView()
     let contentContainer = NSView()
-    let statusBar = MarkdownStatusBarView()
+    let statusBar: MarkdownStatusBarView
+    private var localizer: AppLocalizer
 
     /// Whether the diff view is currently shown instead of the normal content.
     var isDiffVisible = false
@@ -118,9 +119,12 @@ final class MarkdownContentView: NSView {
     ) {
         self.filePath = filePath
         self.workspaceDirectory = workspaceDirectory
+        self.localizer = localizer
+        self.toolbar = MarkdownToolbarView(localizer: localizer)
         self.sidebar = MarkdownSidebarView(localizer: localizer)
         self.sourceView = MarkdownSourceView()
         self.previewView = MarkdownPreviewView()
+        self.statusBar = MarkdownStatusBarView(localizer: localizer)
         super.init(frame: .zero)
         setupUI()
         wireToolbarCallbacks()
@@ -200,7 +204,13 @@ final class MarkdownContentView: NSView {
     internal var sidebarViewForTesting: MarkdownSidebarView { sidebar }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        toolbar.updateLocalizer(localizer)
         sidebar.updateLocalizer(localizer)
+        statusBar.updateLocalizer(localizer)
+        if filePath == nil {
+            showEmptyState()
+        }
     }
 
     // MARK: - Loading / Saving
@@ -214,7 +224,10 @@ final class MarkdownContentView: NSView {
         }
 
         guard let rawContent = try? String(contentsOf: url, encoding: .utf8) else {
-            let errorText = "Failed to load file: \(url.lastPathComponent)"
+            let errorText = Self.localizedLoadFailure(
+                fileName: url.lastPathComponent,
+                using: localizer
+            )
             document = MarkdownDocument(
                 source: errorText,
                 frontmatter: MarkdownFrontmatter(),
@@ -474,8 +487,8 @@ final class MarkdownContentView: NSView {
     }
 
     private func showEmptyState() {
-        toolbar.fileName = "No file"
-        let placeholder = "Drop a .md file here or choose one from the Files sidebar."
+        toolbar.fileName = Self.localizedNoFile(using: localizer)
+        let placeholder = Self.localizedEmptyPlaceholder(using: localizer)
         document = MarkdownDocument(
             source: placeholder,
             frontmatter: MarkdownFrontmatter(),
@@ -483,6 +496,27 @@ final class MarkdownContentView: NSView {
             parseResult: MarkdownParser().parse(placeholder),
             outline: .empty,
             bodyLineOffset: 0
+        )
+    }
+
+    static func localizedNoFile(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.empty.noFile", fallback: "No file")
+    }
+
+    static func localizedEmptyPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "markdown.empty.placeholder",
+            fallback: "Drop a .md file here or choose one from the Files sidebar."
+        )
+    }
+
+    static func localizedLoadFailure(fileName: String, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string(
+                "markdown.loadFailed",
+                fallback: "Failed to load file: %@"
+            ),
+            fileName
         )
     }
 

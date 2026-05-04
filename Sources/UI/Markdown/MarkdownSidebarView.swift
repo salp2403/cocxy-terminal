@@ -52,8 +52,8 @@ final class MarkdownSidebarView: NSView {
     private var localizer: AppLocalizer
 
     let fileExplorer: MarkdownFileExplorerView
-    let outlineView = MarkdownOutlineView()
-    let searchView = MarkdownSearchView()
+    let outlineView: MarkdownOutlineView
+    let searchView: MarkdownSearchView
 
     /// Current active tab.
     private(set) var activeTab: MarkdownSidebarTab = .outline {
@@ -69,6 +69,8 @@ final class MarkdownSidebarView: NSView {
     init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
         self.localizer = localizer
         self.fileExplorer = MarkdownFileExplorerView(localizer: localizer)
+        self.outlineView = MarkdownOutlineView(localizer: localizer)
+        self.searchView = MarkdownSearchView(localizer: localizer)
         super.init(frame: .zero)
         setupUI()
         applyActiveTab()
@@ -89,6 +91,8 @@ final class MarkdownSidebarView: NSView {
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
         fileExplorer.updateLocalizer(localizer)
+        outlineView.updateLocalizer(localizer)
+        searchView.updateLocalizer(localizer)
         for (index, button) in tabButtons.enumerated() {
             let tab = MarkdownSidebarTab.allCases[index]
             button.title = tab.localizedTitle(using: localizer)

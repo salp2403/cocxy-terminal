@@ -18,6 +18,7 @@ final class MarkdownOutlineView: NSView {
     private let outlineView = NSOutlineView()
     private var dataSource: MarkdownOutlineDataSource?
     private var delegateObject: MarkdownOutlineDelegate?
+    private var localizer: AppLocalizer
 
     /// Invoked when a heading is clicked. The parameter is the entry's
     /// source line (0-based, body-relative) plus its plain title so the
@@ -31,7 +32,8 @@ final class MarkdownOutlineView: NSView {
 
     // MARK: - Init
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+        self.localizer = localizer
         super.init(frame: .zero)
         setupUI()
     }
@@ -56,7 +58,7 @@ final class MarkdownOutlineView: NSView {
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("title"))
         column.width = 180
-        column.title = "Outline"
+        column.title = Self.localizedTitle(using: localizer)
         outlineView.addTableColumn(column)
         outlineView.outlineTableColumn = column
         outlineView.headerView = nil
@@ -83,6 +85,15 @@ final class MarkdownOutlineView: NSView {
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        outlineView.tableColumns.first?.title = Self.localizedTitle(using: localizer)
+    }
+
+    static func localizedTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.outline.title", fallback: "Outline")
     }
 
     // MARK: - Reload

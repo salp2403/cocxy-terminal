@@ -28,6 +28,7 @@ final class MarkdownToolbarView: NSView {
     private var exportSlidesButton: NSButton!
     private let outlineToggleButton = NSButton()
     private let reloadButton = NSButton()
+    private var localizer: AppLocalizer
 
     /// Height of the toolbar.
     static let height: CGFloat = 34
@@ -93,7 +94,8 @@ final class MarkdownToolbarView: NSView {
 
     // MARK: - Init
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+        self.localizer = localizer
         super.init(frame: .zero)
         setupUI()
     }
@@ -131,11 +133,11 @@ final class MarkdownToolbarView: NSView {
         modeSegmented.segmentStyle = .rounded
         modeSegmented.segmentCount = 3
         for (index, mode) in MarkdownViewMode.allCases.enumerated() {
-            modeSegmented.setLabel(mode.label, forSegment: index)
+            modeSegmented.setLabel(mode.localizedLabel(using: localizer), forSegment: index)
             modeSegmented.setWidth(60, forSegment: index)
         }
         modeSegmented.selectedSegment = 0
-        modeSegmented.toolTip = "Switch between Source, Preview, and Split view"
+        modeSegmented.toolTip = Self.localizedModeTooltip(using: localizer)
         modeSegmented.target = self
         modeSegmented.action = #selector(modeChanged(_:))
         modeSegmented.translatesAutoresizingMaskIntoConstraints = false
@@ -145,7 +147,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             blameButton,
             systemName: "person.text.rectangle",
-            accessibility: "Show Git Blame",
+            accessibility: Self.localizedShowGitBlame(using: localizer),
             action: #selector(blameClicked)
         )
         addSubview(blameButton)
@@ -154,7 +156,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             diffButton,
             systemName: "arrow.left.arrow.right",
-            accessibility: "Show Git Diff",
+            accessibility: Self.localizedShowGitDiff(using: localizer),
             action: #selector(diffClicked)
         )
         addSubview(diffButton)
@@ -163,7 +165,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             copyButton,
             systemName: "doc.on.clipboard",
-            accessibility: "Copy As",
+            accessibility: Self.localizedCopyAs(using: localizer),
             action: #selector(copyClicked(_:))
         )
         addSubview(copyButton)
@@ -172,7 +174,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             exportPDFButton,
             systemName: "arrow.down.doc",
-            accessibility: "Export PDF (Cmd+Shift+E)",
+            accessibility: Self.localizedExportPDF(using: localizer),
             action: #selector(exportPDFClicked)
         )
         addSubview(exportPDFButton)
@@ -181,7 +183,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             exportHTMLButton,
             systemName: "globe",
-            accessibility: "Export HTML (Cmd+Shift+H)",
+            accessibility: Self.localizedExportHTML(using: localizer),
             action: #selector(exportHTMLClicked)
         )
         addSubview(exportHTMLButton)
@@ -191,7 +193,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             exportSlidesButton,
             systemName: "rectangle.split.3x1",
-            accessibility: "Export Slides (Cmd+Shift+S)",
+            accessibility: Self.localizedExportSlides(using: localizer),
             action: #selector(exportSlidesClicked)
         )
         addSubview(exportSlidesButton)
@@ -201,7 +203,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             outlineToggleButton,
             systemName: "sidebar.left",
-            accessibility: "Toggle Sidebar (Cmd+Shift+O)",
+            accessibility: Self.localizedToggleSidebar(using: localizer),
             action: #selector(outlineToggleClicked)
         )
         addSubview(outlineToggleButton)
@@ -210,7 +212,7 @@ final class MarkdownToolbarView: NSView {
         configureIconButton(
             reloadButton,
             systemName: "arrow.clockwise",
-            accessibility: "Reload File (Cmd+R)",
+            accessibility: Self.localizedReloadFile(using: localizer),
             action: #selector(reloadClicked)
         )
         addSubview(reloadButton)
@@ -270,6 +272,22 @@ final class MarkdownToolbarView: NSView {
         ])
     }
 
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        for (index, mode) in MarkdownViewMode.allCases.enumerated() {
+            modeSegmented.setLabel(mode.localizedLabel(using: localizer), forSegment: index)
+        }
+        modeSegmented.toolTip = Self.localizedModeTooltip(using: localizer)
+        applyButtonCopy(blameButton, Self.localizedShowGitBlame(using: localizer))
+        applyButtonCopy(diffButton, Self.localizedShowGitDiff(using: localizer))
+        applyButtonCopy(copyButton, Self.localizedCopyAs(using: localizer))
+        applyButtonCopy(exportPDFButton, Self.localizedExportPDF(using: localizer))
+        applyButtonCopy(exportHTMLButton, Self.localizedExportHTML(using: localizer))
+        applyButtonCopy(exportSlidesButton, Self.localizedExportSlides(using: localizer))
+        applyButtonCopy(outlineToggleButton, Self.localizedToggleSidebar(using: localizer))
+        applyButtonCopy(reloadButton, Self.localizedReloadFile(using: localizer))
+    }
+
     private func configureIconButton(
         _ button: NSButton,
         systemName: String,
@@ -289,6 +307,12 @@ final class MarkdownToolbarView: NSView {
         button.target = self
         button.action = action
         button.translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    private func applyButtonCopy(_ button: NSButton, _ copy: String) {
+        button.toolTip = copy
+        button.setAccessibilityLabel(copy)
+        button.image?.accessibilityDescription = copy
     }
 
     // MARK: - Actions
@@ -316,10 +340,26 @@ final class MarkdownToolbarView: NSView {
 
     @objc private func copyClicked(_ sender: NSButton) {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Copy as Markdown", action: #selector(copyMarkdownClicked), keyEquivalent: "")
-        menu.addItem(withTitle: "Copy as HTML", action: #selector(copyHTMLClicked), keyEquivalent: "")
-        menu.addItem(withTitle: "Copy as Rich Text", action: #selector(copyRichTextClicked), keyEquivalent: "")
-        menu.addItem(withTitle: "Copy as Plain Text", action: #selector(copyPlainTextClicked), keyEquivalent: "")
+        menu.addItem(
+            withTitle: Self.localizedCopyAsMarkdown(using: localizer),
+            action: #selector(copyMarkdownClicked),
+            keyEquivalent: ""
+        )
+        menu.addItem(
+            withTitle: Self.localizedCopyAsHTML(using: localizer),
+            action: #selector(copyHTMLClicked),
+            keyEquivalent: ""
+        )
+        menu.addItem(
+            withTitle: Self.localizedCopyAsRichText(using: localizer),
+            action: #selector(copyRichTextClicked),
+            keyEquivalent: ""
+        )
+        menu.addItem(
+            withTitle: Self.localizedCopyAsPlainText(using: localizer),
+            action: #selector(copyPlainTextClicked),
+            keyEquivalent: ""
+        )
         menu.items.forEach { $0.target = self }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
@@ -356,5 +396,57 @@ final class MarkdownToolbarView: NSView {
 
     private func modeIndex(for mode: MarkdownViewMode) -> Int {
         MarkdownViewMode.allCases.firstIndex(of: mode) ?? 0
+    }
+
+    static func localizedModeTooltip(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.mode.tooltip", fallback: "Switch between Source, Preview, and Split view")
+    }
+
+    static func localizedShowGitBlame(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.gitBlame", fallback: "Show Git Blame")
+    }
+
+    static func localizedShowGitDiff(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.gitDiff", fallback: "Show Git Diff")
+    }
+
+    static func localizedCopyAs(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.copyAs", fallback: "Copy As")
+    }
+
+    static func localizedExportPDF(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.exportPDF", fallback: "Export PDF (Cmd+Shift+E)")
+    }
+
+    static func localizedExportHTML(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.exportHTML", fallback: "Export HTML (Cmd+Shift+H)")
+    }
+
+    static func localizedExportSlides(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.exportSlides", fallback: "Export Slides (Cmd+Shift+S)")
+    }
+
+    static func localizedToggleSidebar(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.toggleSidebar", fallback: "Toggle Sidebar (Cmd+Shift+O)")
+    }
+
+    static func localizedReloadFile(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.reloadFile", fallback: "Reload File (Cmd+R)")
+    }
+
+    static func localizedCopyAsMarkdown(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.copyAs.markdown", fallback: "Copy as Markdown")
+    }
+
+    static func localizedCopyAsHTML(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.copyAs.html", fallback: "Copy as HTML")
+    }
+
+    static func localizedCopyAsRichText(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.copyAs.richText", fallback: "Copy as Rich Text")
+    }
+
+    static func localizedCopyAsPlainText(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.copyAs.plainText", fallback: "Copy as Plain Text")
     }
 }

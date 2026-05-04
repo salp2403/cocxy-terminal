@@ -205,6 +205,28 @@ struct MarkdownContentViewTests {
         #expect(buttons.allSatisfy { !($0.toolTip ?? "").isEmpty })
     }
 
+    @Test("Markdown chrome strings localize to Spanish")
+    func markdownChromeStringsLocalize() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(MarkdownViewMode.source.localizedLabel(using: localizer) == "Fuente")
+        #expect(MarkdownToolbarView.localizedCopyAsMarkdown(using: localizer) == "Copiar como Markdown")
+        #expect(MarkdownToolbarView.localizedReloadFile(using: localizer) == "Recargar archivo (Cmd+R)")
+        #expect(MarkdownContentView.localizedNoFile(using: localizer) == "Sin archivo")
+        #expect(
+            MarkdownContentView.localizedLoadFailure(fileName: "README.md", using: localizer)
+                == "No se pudo cargar el archivo: README.md"
+        )
+        #expect(MarkdownStatusBarView.localizedWords(3, using: localizer) == "Palabras: 3")
+        #expect(MarkdownOutlineView.localizedTitle(using: localizer) == "Esquema")
+        #expect(MarkdownSearchView.localizedPlaceholder(using: localizer) == "Buscar en archivos...")
+        #expect(
+            MarkdownSearchView.localizedMatches(matches: 2, files: 1, using: localizer)
+                == "2 coincidencias en 1 archivo"
+        )
+    }
+
     // MARK: - Helpers
 
     private func createTempMarkdownFile(content: String) -> URL {
@@ -511,6 +533,11 @@ struct MarkdownContentViewTests {
         } else {
             try? FileManager.default.removeItem(at: url)
         }
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 
     private func makeKeyEvent(

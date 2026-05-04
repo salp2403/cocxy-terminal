@@ -19,6 +19,7 @@ final class MarkdownStatusBarView: NSView {
     private let wordsLabel = NSTextField(labelWithString: "Words: 0")
     private let charsLabel = NSTextField(labelWithString: "Chars: 0")
     private let linesLabel = NSTextField(labelWithString: "Lines: 0")
+    private var localizer: AppLocalizer
 
     /// Height of the status bar.
     static let height: CGFloat = 22
@@ -30,9 +31,11 @@ final class MarkdownStatusBarView: NSView {
 
     // MARK: - Init
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+        self.localizer = localizer
         super.init(frame: .zero)
         setupUI()
+        updateLabels()
     }
 
     @available(*, unavailable)
@@ -85,8 +88,25 @@ final class MarkdownStatusBarView: NSView {
     // MARK: - Update
 
     private func updateLabels() {
-        wordsLabel.stringValue = "Words: \(wordCount.words)"
-        charsLabel.stringValue = "Chars: \(wordCount.characters)"
-        linesLabel.stringValue = "Lines: \(wordCount.lines)"
+        wordsLabel.stringValue = Self.localizedWords(wordCount.words, using: localizer)
+        charsLabel.stringValue = Self.localizedCharacters(wordCount.characters, using: localizer)
+        linesLabel.stringValue = Self.localizedLines(wordCount.lines, using: localizer)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        updateLabels()
+    }
+
+    static func localizedWords(_ count: Int, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("markdown.status.words", fallback: "Words: %d"), count)
+    }
+
+    static func localizedCharacters(_ count: Int, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("markdown.status.characters", fallback: "Chars: %d"), count)
+    }
+
+    static func localizedLines(_ count: Int, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("markdown.status.lines", fallback: "Lines: %d"), count)
     }
 }

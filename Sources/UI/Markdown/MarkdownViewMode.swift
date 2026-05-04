@@ -27,6 +27,17 @@ public enum MarkdownViewMode: String, CaseIterable, Sendable, Equatable {
         }
     }
 
+    func localizedLabel(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .source:
+            return localizer.string("markdown.mode.source", fallback: label)
+        case .preview:
+            return localizer.string("markdown.mode.preview", fallback: label)
+        case .split:
+            return localizer.string("markdown.mode.split", fallback: label)
+        }
+    }
+
     /// Keyboard shortcut key (used alongside ⌘ in menu items and tooltips).
     public var shortcutKey: String {
         switch self {

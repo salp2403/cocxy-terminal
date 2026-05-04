@@ -23,6 +23,8 @@ final class MarkdownSearchView: NSView, NSSearchFieldDelegate, NSTableViewDataSo
     private var results: [MarkdownSearchResult] = []
     private var searchWorkItem: DispatchWorkItem?
     private var searchGeneration: UInt64 = 0
+    private var localizer: AppLocalizer
+    private var isSearching = false
 
     /// Root directory to search in. Changing clears stale results and
     /// re-runs the active query against the new root.
@@ -31,6 +33,7 @@ final class MarkdownSearchView: NSView, NSSearchFieldDelegate, NSTableViewDataSo
             if oldValue != rootDirectory {
                 searchWorkItem?.cancel()
                 searchGeneration &+= 1
+                isSearching = false
                 results = []
                 statusLabel.stringValue = ""
                 tableView.reloadData()
@@ -47,7 +50,8 @@ final class MarkdownSearchView: NSView, NSSearchFieldDelegate, NSTableViewDataSo
 
     // MARK: - Init
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+        self.localizer = localizer
         super.init(frame: .zero)
         setupUI()
     }
@@ -64,7 +68,7 @@ final class MarkdownSearchView: NSView, NSSearchFieldDelegate, NSTableViewDataSo
         layer?.backgroundColor = CocxyColors.mantle.cgColor
 
         // Search field
-        searchField.placeholderString = "Search in files..."
+        searchField.placeholderString = Self.localizedPlaceholder(using: localizer)
         searchField.font = .systemFont(ofSize: 11)
         searchField.delegate = self
         searchField.translatesAutoresizingMaskIntoConstraints = false
@@ -127,6 +131,7 @@ final class MarkdownSearchView: NSView, NSSearchFieldDelegate, NSTableViewDataSo
         let query = searchField.stringValue
         guard !query.isEmpty, let root = rootDirectory else {
             searchGeneration &+= 1
+            isSearching = false
             results = []
             statusLabel.stringValue = ""
             tableView.reloadData()
@@ -135,7 +140,8 @@ final class MarkdownSearchView: NSView, NSSearchFieldDelegate, NSTableViewDataSo
 
         searchGeneration &+= 1
         let generation = searchGeneration
-        statusLabel.stringValue = "Searching..."
+        isSearching = true
+        statusLabel.stringValue = Self.localizedSearching(using: localizer)
 
         let workItem = DispatchWorkItem { [weak self] in
             let found = MarkdownFileSearch.search(query: query, in: root)
@@ -143,16 +149,63 @@ final class MarkdownSearchView: NSView, NSSearchFieldDelegate, NSTableViewDataSo
                 guard let self else { return }
                 // Discard results from a stale search that was superseded
                 guard self.searchGeneration == generation else { return }
+                self.isSearching = false
                 self.results = found
-                let fileCount = Set(found.map(\.fileName)).count
-                self.statusLabel.stringValue = found.isEmpty
-                    ? "No results"
-                    : "\(found.count) matches in \(fileCount) files"
+                self.updateResultStatus()
                 self.tableView.reloadData()
             }
         }
         searchWorkItem = workItem
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.2, execute: workItem)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        searchField.placeholderString = Self.localizedPlaceholder(using: localizer)
+        if isSearching {
+            statusLabel.stringValue = Self.localizedSearching(using: localizer)
+        } else {
+            updateResultStatus()
+        }
+    }
+
+    private func updateResultStatus() {
+        guard !searchField.stringValue.isEmpty else {
+            statusLabel.stringValue = ""
+            return
+        }
+        if results.isEmpty {
+            statusLabel.stringValue = Self.localizedNoResults(using: localizer)
+        } else {
+            let fileCount = Set(results.map(\.fileName)).count
+            statusLabel.stringValue = Self.localizedMatches(
+                matches: results.count,
+                files: fileCount,
+                using: localizer
+            )
+        }
+    }
+
+    static func localizedPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.search.placeholder", fallback: "Search in files...")
+    }
+
+    static func localizedSearching(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.search.searching", fallback: "Searching...")
+    }
+
+    static func localizedNoResults(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.search.noResults", fallback: "No results")
+    }
+
+    static func localizedMatches(matches: Int, files: Int, using localizer: AppLocalizer) -> String {
+        let matchSegment = matches == 1 ? "one" : "many"
+        let fileSegment = files == 1 ? "oneFile" : "manyFiles"
+        let matchFallback = matches == 1 ? "match" : "matches"
+        let fileFallback = files == 1 ? "file" : "files"
+        let matchKey = "markdown.search.matches.\(matchSegment).\(fileSegment)"
+        let fallback = "%d \(matchFallback) in %d \(fileFallback)"
+        return String(format: localizer.string(matchKey, fallback: fallback), matches, files)
     }
 
     // MARK: - NSTableViewDataSource
