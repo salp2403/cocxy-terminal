@@ -79,6 +79,65 @@ struct ComputerUseSwiftTestingTests {
         #expect(!log.contains("secret-token"))
     }
 
+    @Test("approved mouse actions execute and write coordinate-only audit events")
+    func approvedMouseActionsExecuteAndAuditCoordinates() async throws {
+        let logURL = temporaryLogURL()
+        let permission = RecordingComputerUsePermissionChecker(isTrusted: true)
+        let mouse = RecordingMouseController()
+        let actor = ComputerUseActor(
+            permissionChecker: permission,
+            mouseController: mouse,
+            keyboardController: RecordingKeyboardController(),
+            screenshotCapture: RecordingScreenshotCapture(),
+            auditLog: ComputerUseAuditLog(fileURL: logURL)
+        )
+
+        let move = try await actor.perform(.mouse(.move(x: 10, y: 20)))
+        let click = try await actor.perform(.mouse(.click(
+            x: 30,
+            y: 40,
+            button: .right,
+            clickCount: 2
+        )))
+
+        #expect(move == .mouseMoved(x: 10, y: 20))
+        #expect(click == .mouseClicked(x: 30, y: 40, button: .right, clickCount: 2))
+        #expect(await permission.promptFlags == [false, false])
+        #expect(await mouse.actions == [
+            .move(x: 10, y: 20),
+            .click(x: 30, y: 40, button: .right, clickCount: 2),
+        ])
+
+        let log = try String(contentsOf: logURL, encoding: .utf8)
+        #expect(log.contains("\"action\":\"mouse.move\""))
+        #expect(log.contains("\"action\":\"mouse.click\""))
+        #expect(log.contains("\"outcome\":\"success\""))
+        #expect(log.contains("\"button\":\"right\""))
+        #expect(log.contains("\"clickCount\":2"))
+    }
+
+    @Test("mouse driver failures are audited before propagating")
+    func mouseDriverFailuresAreAudited() async throws {
+        let logURL = temporaryLogURL()
+        let actor = ComputerUseActor(
+            permissionChecker: RecordingComputerUsePermissionChecker(isTrusted: true),
+            mouseController: FailingMouseController(error: ComputerUseError.mouseEventCreationFailed),
+            keyboardController: RecordingKeyboardController(),
+            screenshotCapture: RecordingScreenshotCapture(),
+            auditLog: ComputerUseAuditLog(fileURL: logURL)
+        )
+
+        await #expect(throws: ComputerUseError.mouseEventCreationFailed) {
+            _ = try await actor.perform(.mouse(.move(x: 15, y: 25)))
+        }
+
+        let log = try String(contentsOf: logURL, encoding: .utf8)
+        #expect(log.contains("\"action\":\"mouse.move\""))
+        #expect(log.contains("\"outcome\":\"failure\""))
+        #expect(log.contains("\"x\":15"))
+        #expect(log.contains("\"y\":25"))
+    }
+
     @Test("screenshot capture does not require Accessibility permission and returns local metadata")
     func screenshotCaptureDoesNotRequireAccessibilityPermission() async throws {
         let logURL = temporaryLogURL()
@@ -130,6 +189,15 @@ private actor RecordingMouseController: ComputerUseMouseControlling {
 
     func perform(_ action: ComputerUseMouseAction) async throws {
         actions.append(action)
+    }
+}
+
+private struct FailingMouseController: ComputerUseMouseControlling {
+    let error: Error
+
+    func perform(_ action: ComputerUseMouseAction) async throws {
+        _ = action
+        throw error
     }
 }
 
