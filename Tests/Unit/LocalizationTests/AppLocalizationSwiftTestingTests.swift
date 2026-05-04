@@ -327,6 +327,17 @@ struct AppLocalizationSwiftTestingTests {
         #expect(AgentAttachmentBar.localizedRemoveImage(using: spanish) == "Eliminar imagen")
     }
 
+    @Test
+    func keybindingsEditorStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(KeybindingsEditorView.localizedSaveButton(using: spanish) == "Guardar")
+        #expect(KeybindingsEditorView.localizedResetAllButton(using: spanish) == "Restablecer todo")
+        #expect(KeybindingsEditorView.localizedConflictsDetected(using: spanish) == "Conflictos detectados")
+        #expect(KeybindingCaptureSheet.localizedCaptureHint(using: spanish) == "Presiona el nuevo atajo...")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

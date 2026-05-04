@@ -25,6 +25,7 @@ struct KeybindingsEditorView: View {
 
     /// Editable state exposed by the parent preferences window.
     @ObservedObject var viewModel: KeybindingsEditorViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Action whose capture modal is currently presented. `nil` when the
     /// modal is hidden.
@@ -49,7 +50,8 @@ struct KeybindingsEditorView: View {
                                 excluding: action.id
                             ).isEmpty,
                             onEdit: { capturingAction = action },
-                            onReset: { viewModel.reset(action.id) }
+                            onReset: { viewModel.reset(action.id) },
+                            localizer: localizer
                         )
                     }
                 }
@@ -57,16 +59,16 @@ struct KeybindingsEditorView: View {
 
             Section {
                 HStack(spacing: 12) {
-                    Button("Save") { performSave() }
+                    Button(Self.localizedSaveButton(using: localizer)) { performSave() }
                         .keyboardShortcut(.return, modifiers: .command)
                         .disabled(!viewModel.hasUnsavedChanges || viewModel.hasConflicts)
 
-                    Button("Reset All") { viewModel.resetAll() }
+                    Button(Self.localizedResetAllButton(using: localizer)) { viewModel.resetAll() }
 
                     Spacer()
 
                     if let status = saveStatus ?? viewModel.statusMessage {
-                        Text(status)
+                        Text(localizedStatus(status))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
@@ -76,13 +78,14 @@ struct KeybindingsEditorView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Keybindings")
+        .navigationTitle(localized("keybindings.title", fallback: "Keybindings"))
         .sheet(item: $capturingAction) { action in
             KeybindingCaptureSheet(
                 action: action,
                 currentShortcut: viewModel.rawShortcut(for: action.id),
                 viewModel: viewModel,
-                onDismiss: { capturingAction = nil }
+                onDismiss: { capturingAction = nil },
+                localizer: localizer
             )
         }
     }
@@ -95,7 +98,7 @@ struct KeybindingsEditorView: View {
         if !groups.isEmpty {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("Conflicts detected", systemImage: "exclamationmark.triangle.fill")
+                    Label(Self.localizedConflictsDetected(using: localizer), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                         .font(.headline)
                     ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
@@ -104,7 +107,7 @@ struct KeybindingsEditorView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text("Resolve conflicts before saving.")
+                    Text(localized("keybindings.resolveConflicts", fallback: "Resolve conflicts before saving."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -128,6 +131,32 @@ struct KeybindingsEditorView: View {
             saveStatus = nil
         }
     }
+
+    static func localizedSaveButton(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.save", fallback: "Save")
+    }
+
+    static func localizedResetAllButton(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.resetAll", fallback: "Reset All")
+    }
+
+    static func localizedConflictsDetected(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.conflictsDetected", fallback: "Conflicts detected")
+    }
+
+    private func localizedStatus(_ status: String) -> String {
+        if status == "Keybindings saved." {
+            return localizer.string("keybindings.saved", fallback: status)
+        }
+        if status == KeybindingsEditorViewModel.SaveError.conflictsUnresolved.errorDescription {
+            return localizer.string("keybindings.resolveConflicts", fallback: status)
+        }
+        return status
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 // MARK: - Keybinding Row
@@ -141,6 +170,7 @@ private struct KeybindingRow: View {
     let isConflicting: Bool
     let onEdit: () -> Void
     let onReset: () -> Void
+    let localizer: AppLocalizer
 
     private var prettyLabel: String {
         guard let shortcut = KeybindingShortcut.parse(shortcutString) else {
@@ -169,12 +199,15 @@ private struct KeybindingRow: View {
                 .padding(.vertical, 4)
                 .background(shortcutBackground, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .foregroundStyle(isConflicting ? .red : .primary)
-                .accessibilityLabel("Shortcut: \(prettyLabel)")
+                .accessibilityLabel(String(
+                    format: localizer.string("keybindings.shortcut.accessibility", fallback: "Shortcut: %@"),
+                    prettyLabel
+                ))
 
-            Button("Edit", action: onEdit)
+            Button(localizer.string("keybindings.edit", fallback: "Edit"), action: onEdit)
                 .buttonStyle(.bordered)
 
-            Button("Reset", action: onReset)
+            Button(localizer.string("keybindings.reset", fallback: "Reset"), action: onReset)
                 .buttonStyle(.bordered)
                 .disabled(!isCustomized)
         }
@@ -202,9 +235,10 @@ struct KeybindingCaptureSheet: View {
     let currentShortcut: String
     @ObservedObject var viewModel: KeybindingsEditorViewModel
     let onDismiss: () -> Void
+    let localizer: AppLocalizer
 
     @State private var capturedShortcut: KeybindingShortcut?
-    @State private var captureHint: String = "Press the new shortcut..."
+    @State private var captureHint: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -217,7 +251,7 @@ struct KeybindingCaptureSheet: View {
             }
 
             HStack(spacing: 10) {
-                Text("Current:")
+                Text(localizer.string("keybindings.current", fallback: "Current:"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(renderPretty(currentShortcut))
@@ -241,14 +275,14 @@ struct KeybindingCaptureSheet: View {
             }
 
             HStack {
-                Button("Clear") {
+                Button(localizer.string("keybindings.clear", fallback: "Clear")) {
                     viewModel.clear(action.id)
                     onDismiss()
                 }
                 Spacer()
-                Button("Cancel") { onDismiss() }
+                Button(localizer.string("keybindings.cancel", fallback: "Cancel")) { onDismiss() }
                     .keyboardShortcut(.escape)
-                Button("Save") {
+                Button(localizer.string("keybindings.capture.save", fallback: "Save")) {
                     if let captured = capturedShortcut,
                        viewModel.assign(captured, to: action.id) {
                         onDismiss()
@@ -261,6 +295,11 @@ struct KeybindingCaptureSheet: View {
         }
         .padding(20)
         .frame(minWidth: 420)
+        .onAppear {
+            if captureHint.isEmpty {
+                captureHint = Self.localizedCaptureHint(using: localizer)
+            }
+        }
     }
 
     private var canSave: Bool {
@@ -280,7 +319,17 @@ struct KeybindingCaptureSheet: View {
     private func conflictMessage(for ids: [String]) -> String {
         let names = ids.compactMap { KeybindingAction.catalogEntry(for: $0)?.displayName }
         let list = names.joined(separator: ", ")
-        return "Also bound to: \(list). Save will be blocked until this is resolved."
+        return String(
+            format: localizer.string(
+                "keybindings.conflict.alsoBound",
+                fallback: "Also bound to: %@. Save will be blocked until this is resolved."
+            ),
+            list
+        )
+    }
+
+    static func localizedCaptureHint(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.capture.hint", fallback: "Press the new shortcut...")
     }
 }
 
@@ -298,7 +347,7 @@ struct KeybindingCaptureField: NSViewRepresentable {
         view.onCaptured = { shortcut in
             DispatchQueue.main.async {
                 capturedShortcut = shortcut
-                hint = shortcut?.prettyLabel ?? "Press the new shortcut..."
+                hint = shortcut?.prettyLabel ?? hint
             }
         }
         return view
@@ -315,7 +364,7 @@ struct KeybindingCaptureField: NSViewRepresentable {
     final class CaptureNSView: NSView {
 
         /// Text currently drawn in the center of the field.
-        var displayText: String = "Press the new shortcut..." {
+        var displayText: String = "" {
             didSet { needsDisplay = true }
         }
 

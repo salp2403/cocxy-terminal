@@ -140,7 +140,10 @@ struct PreferencesView: View {
         case .editor:
             EditorPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .keybindings:
-            KeybindingsEditorView(viewModel: viewModel.keybindingsEditor)
+            KeybindingsEditorView(
+                viewModel: viewModel.keybindingsEditor,
+                localizer: viewModel.appLocalizer()
+            )
         case .worktrees:
             WorktreesPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .plugins:
