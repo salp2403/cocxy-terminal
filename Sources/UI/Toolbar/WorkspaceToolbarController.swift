@@ -80,10 +80,16 @@ final class WorkspaceToolbarController: NSObject {
     /// Whether the toolbar is currently visible.
     private(set) var isVisible: Bool = false
 
+    private var localizer: AppLocalizer
+
     // MARK: - Initialization
 
-    init(window: NSWindow) {
+    init(
+        window: NSWindow,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.window = window
+        self.localizer = localizer
         super.init()
         setupToolbar()
     }
@@ -113,21 +119,7 @@ final class WorkspaceToolbarController: NSObject {
 
         panelTabs = leaves.enumerated().map { index, leaf in
             let type = splitManager.panelType(for: leaf.terminalID)
-            let title: String
-            switch type {
-            case .terminal: title = "Terminal \(index + 1)"
-            case .browser: title = "Browser"
-            case .markdown: title = "Markdown"
-            case .editor: title = "Editor"
-            case .notebook: title = "Notebook"
-            case .workflow: title = "Workflow"
-            case .sessionReplay: title = "Replay"
-            case .aiEditHistory: title = "Edit History"
-            case .templates: title = "Templates"
-            case .macros: title = "Macros"
-            case .dbCloud: title = "DB/Cloud"
-            case .subagent: title = "Agent"
-            }
+            let title = Self.localizedPanelTitle(for: type, index: index, using: localizer)
             return PanelTabInfo(
                 leafID: leaf.leafID,
                 contentID: leaf.terminalID,
@@ -140,6 +132,20 @@ final class WorkspaceToolbarController: NSObject {
         // Always show the toolbar — even with 1 panel, show the tab.
         if !isVisible {
             showToolbar()
+        }
+        rebuildToolbarItems()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        panelTabs = panelTabs.enumerated().map { index, tab in
+            PanelTabInfo(
+                leafID: tab.leafID,
+                contentID: tab.contentID,
+                panelType: tab.panelType,
+                title: Self.localizedPanelTitle(for: tab.panelType, index: index, using: localizer),
+                isFocused: tab.isFocused
+            )
         }
         rebuildToolbarItems()
     }
@@ -234,13 +240,14 @@ final class WorkspaceToolbarController: NSObject {
 
     private func createAddPanelItem() -> NSToolbarItem {
         let item = NSToolbarItem(itemIdentifier: .addPanel)
-        item.label = "Add Panel"
-        item.toolTip = "Split with a new panel"
+        let label = Self.localizedAddPanel(using: localizer)
+        item.label = label
+        item.toolTip = Self.localizedAddPanelTooltip(using: localizer)
 
         let button = NSButton()
         button.bezelStyle = .accessoryBarAction
         button.isBordered = false
-        if let image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add panel") {
+        if let image = NSImage(systemSymbolName: "plus", accessibilityDescription: label) {
             button.image = image.withSymbolConfiguration(
                 .init(pointSize: 11, weight: .medium)
             )
@@ -257,6 +264,50 @@ final class WorkspaceToolbarController: NSObject {
         ])
 
         return item
+    }
+
+    static func localizedPanelTitle(
+        for panelType: PanelType,
+        index: Int,
+        using localizer: AppLocalizer
+    ) -> String {
+        switch panelType {
+        case .terminal:
+            return String(
+                format: localizer.string("workspaceToolbar.panel.terminal", fallback: "Terminal %d"),
+                index + 1
+            )
+        case .browser:
+            return localizer.string("workspaceToolbar.panel.browser", fallback: "Browser")
+        case .markdown:
+            return localizer.string("workspaceToolbar.panel.markdown", fallback: "Markdown")
+        case .editor:
+            return localizer.string("workspaceToolbar.panel.editor", fallback: "Editor")
+        case .notebook:
+            return localizer.string("workspaceToolbar.panel.notebook", fallback: "Notebook")
+        case .workflow:
+            return localizer.string("workspaceToolbar.panel.workflow", fallback: "Workflow")
+        case .sessionReplay:
+            return localizer.string("workspaceToolbar.panel.sessionReplay", fallback: "Replay")
+        case .aiEditHistory:
+            return localizer.string("workspaceToolbar.panel.aiEditHistory", fallback: "Edit History")
+        case .templates:
+            return localizer.string("workspaceToolbar.panel.templates", fallback: "Templates")
+        case .macros:
+            return localizer.string("workspaceToolbar.panel.macros", fallback: "Macros")
+        case .dbCloud:
+            return localizer.string("workspaceToolbar.panel.dbCloud", fallback: "DB/Cloud")
+        case .subagent:
+            return localizer.string("workspaceToolbar.panel.subagent", fallback: "Agent")
+        }
+    }
+
+    static func localizedAddPanel(using localizer: AppLocalizer) -> String {
+        localizer.string("workspaceToolbar.addPanel.label", fallback: "Add Panel")
+    }
+
+    static func localizedAddPanelTooltip(using localizer: AppLocalizer) -> String {
+        localizer.string("workspaceToolbar.addPanel.tooltip", fallback: "Split with a new panel")
     }
 
     // MARK: - Actions

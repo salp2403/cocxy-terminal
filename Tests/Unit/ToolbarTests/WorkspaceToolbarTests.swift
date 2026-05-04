@@ -178,6 +178,26 @@ final class WorkspaceToolbarTests: XCTestCase {
         XCTAssertTrue(titles.contains("Browser"))
     }
 
+    func testPanelTabTitlesLocalizeToSpanish() throws {
+        let bundle = try XCTUnwrap(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window, localizer: localizer)
+        let manager = SplitManager()
+        manager.splitFocusedWithPanel(direction: .horizontal, panel: .browser())
+
+        controller.update(splitManager: manager)
+
+        let titles = controller.panelTabs.map(\.title)
+        XCTAssertTrue(titles.contains("Terminal 1"))
+        XCTAssertTrue(titles.contains("Navegador"))
+        XCTAssertEqual(WorkspaceToolbarController.localizedAddPanel(using: localizer), "Agregar panel")
+        XCTAssertEqual(
+            WorkspaceToolbarController.localizedAddPanelTooltip(using: localizer),
+            "Dividir con un panel nuevo"
+        )
+    }
+
     func testEditorPanelTabTitle() {
         let window = NSWindow()
         let controller = WorkspaceToolbarController(window: window)
@@ -290,5 +310,17 @@ final class WorkspaceToolbarTests: XCTestCase {
 
         controller.hide()
         XCTAssertFalse(controller.isVisible)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        Bundle(url: repositoryRoot().appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
+
+    private func repositoryRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 }

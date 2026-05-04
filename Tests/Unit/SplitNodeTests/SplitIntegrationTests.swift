@@ -223,4 +223,30 @@ final class SplitIntegrationTests: XCTestCase {
 
         XCTAssertEqual(container.focusedLeafID, leafID)
     }
+
+    func testSplitContainerAccessibilityLocalizesToSpanish() throws {
+        let bundle = try XCTUnwrap(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        XCTAssertEqual(
+            SplitContainer.localizedSplitPanesAccessibility(using: localizer),
+            "Paneles divididos de terminal"
+        )
+        XCTAssertEqual(
+            SplitContainer.localizedTerminalPaneAccessibility(using: localizer),
+            "Panel de terminal"
+        )
+    }
+
+    private func localizationBundle() -> Bundle? {
+        Bundle(url: repositoryRoot().appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
+
+    private func repositoryRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
 }

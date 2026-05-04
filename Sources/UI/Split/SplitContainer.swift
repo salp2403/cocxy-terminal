@@ -52,6 +52,7 @@ final class SplitContainer: NSView {
 
     /// Provider that returns a terminal view for a given terminal UUID.
     private let terminalViewProvider: TerminalViewProvider
+    private var localizer: AppLocalizer
 
     /// Callback invoked when a divider drag changes a split's ratio.
     /// Parameters: (splitID: UUID, newRatio: CGFloat)
@@ -75,13 +76,18 @@ final class SplitContainer: NSView {
     /// - Parameters:
     ///   - node: The root split node to render.
     ///   - terminalViewProvider: Closure that provides a terminal view for each leaf.
-    init(node: SplitNode, terminalViewProvider: @escaping TerminalViewProvider) {
+    init(
+        node: SplitNode,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        terminalViewProvider: @escaping TerminalViewProvider
+    ) {
         self.currentNode = node
+        self.localizer = localizer
         self.terminalViewProvider = terminalViewProvider
         super.init(frame: .zero)
 
         setAccessibilityRole(.splitGroup)
-        setAccessibilityLabel("Terminal split panes")
+        setAccessibilityLabel(Self.localizedSplitPanesAccessibility(using: localizer))
 
         buildHierarchy(from: node)
     }
@@ -101,6 +107,12 @@ final class SplitContainer: NSView {
     /// - Parameter node: The new root split node.
     func updateNode(_ node: SplitNode) {
         currentNode = node
+        rebuildHierarchy()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        setAccessibilityLabel(Self.localizedSplitPanesAccessibility(using: localizer))
         rebuildHierarchy()
     }
 
@@ -140,7 +152,7 @@ final class SplitContainer: NSView {
 
             // Accessibility: group role for each terminal pane.
             wrapper.setAccessibilityRole(.group)
-            wrapper.setAccessibilityLabel("Terminal pane")
+            wrapper.setAccessibilityLabel(Self.localizedTerminalPaneAccessibility(using: localizer))
 
             let terminalView = terminalViewProvider(terminalID)
             terminalView.translatesAutoresizingMaskIntoConstraints = false
@@ -258,6 +270,14 @@ final class SplitContainer: NSView {
             }
         }
         return nil
+    }
+
+    static func localizedSplitPanesAccessibility(using localizer: AppLocalizer) -> String {
+        localizer.string("split.accessibility.panes", fallback: "Terminal split panes")
+    }
+
+    static func localizedTerminalPaneAccessibility(using localizer: AppLocalizer) -> String {
+        localizer.string("split.accessibility.pane", fallback: "Terminal pane")
     }
 }
 
