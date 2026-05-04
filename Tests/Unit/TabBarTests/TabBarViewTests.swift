@@ -157,6 +157,18 @@ final class TabBarViewTests: XCTestCase {
 
         XCTAssertEqual(spanishTabBarView.accessibilityLabel(), "Pestañas de terminal")
 
+        let notificationsButton = findButton(accessibilityLabel: "Notificaciones", in: spanishTabBarView)
+        XCTAssertEqual(notificationsButton?.toolTip, "Notificaciones (Cmd+Shift+I)")
+
+        let commandPaletteButton = findButton(accessibilityLabel: "Paleta de comandos", in: spanishTabBarView)
+        XCTAssertEqual(commandPaletteButton?.toolTip, "Paleta de comandos (Cmd+Shift+P)")
+        XCTAssertEqual(commandPaletteButton?.accessibilityHelp(), "Abrir la paleta de comandos (Cmd+Shift+P)")
+
+        let newTabButton = findButton(accessibilityLabel: "Nueva pestaña", in: spanishTabBarView)
+        XCTAssertEqual(newTabButton?.title, " Nueva pestaña")
+        XCTAssertEqual(newTabButton?.toolTip, "Nueva pestaña (Cmd+T)")
+        XCTAssertEqual(newTabButton?.accessibilityHelp(), "Crear una pestaña de terminal nueva (Cmd+T)")
+
         let updateButton = findButton(accessibilityLabel: "Actualizar Cocxy Terminal", in: spanishTabBarView)
         spanishTabBarView.setAvailableUpdate(
             CocxyUpdateAvailability(
@@ -165,6 +177,8 @@ final class TabBarViewTests: XCTestCase {
             )
         )
         XCTAssertEqual(updateButton?.title, "  Actualizar v0.1.83")
+        XCTAssertEqual(updateButton?.toolTip, "Actualizar Cocxy Terminal a v0.1.83")
+        XCTAssertEqual(updateButton?.accessibilityHelp(), "Actualizar Cocxy Terminal a v0.1.83")
 
         let menu = spanishTabBarView.buildContextMenu(for: tabManager.tabs[0].id)
         XCTAssertNotNil(menu.items.first { $0.title == "Cerrar pestaña" })

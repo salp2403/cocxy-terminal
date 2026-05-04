@@ -74,15 +74,9 @@ final class TabBarView: NSView {
     }()
 
     private let headerTitleLabel: NSTextField = {
-        let label = NSTextField(labelWithString: "WORKSPACES")
+        let label = NSTextField(labelWithString: "")
         label.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         label.textColor = CocxyColors.overlay1
-        let attributes: [NSAttributedString.Key: Any] = [
-            .kern: 1.5,
-            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
-            .foregroundColor: CocxyColors.overlay1,
-        ]
-        label.attributedStringValue = NSAttributedString(string: "WORKSPACES", attributes: attributes)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -92,13 +86,11 @@ final class TabBarView: NSView {
         button.bezelStyle = .inline
         button.isBordered = false
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
-        if let image = NSImage(systemSymbolName: "bell.fill", accessibilityDescription: "Notifications") {
+        if let image = NSImage(systemSymbolName: "bell.fill", accessibilityDescription: nil) {
             button.image = image.withSymbolConfiguration(config)
         }
         button.contentTintColor = CocxyColors.overlay1
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.toolTip = "Notifications (Cmd+Shift+I)"
-        button.setAccessibilityLabel("Notifications")
         return button
     }()
 
@@ -120,14 +112,11 @@ final class TabBarView: NSView {
         button.bezelStyle = .inline
         button.isBordered = false
         let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
-        if let image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Command Palette") {
+        if let image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil) {
             button.image = image.withSymbolConfiguration(config)
         }
         button.contentTintColor = CocxyColors.overlay1
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.toolTip = "Command Palette (Cmd+Shift+P)"
-        button.setAccessibilityLabel("Command Palette")
-        button.setAccessibilityHelp("Open the command palette (Cmd+Shift+P)")
         return button
     }()
 
@@ -181,7 +170,7 @@ final class TabBarView: NSView {
         let button = NSButton()
         button.bezelStyle = .inline
         button.isBordered = false
-        if let image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Update") {
+        if let image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil) {
             let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
             button.image = image.withSymbolConfiguration(config)
             button.imagePosition = .imageLeading
@@ -193,7 +182,6 @@ final class TabBarView: NSView {
         button.layer?.cornerRadius = 7
         button.translatesAutoresizingMaskIntoConstraints = false
         button.isHidden = true
-        button.setAccessibilityLabel("Update Cocxy Terminal")
         return button
     }()
 
@@ -201,24 +189,18 @@ final class TabBarView: NSView {
         let button = NSButton()
         button.bezelStyle = .inline
         button.isBordered = false
-        if let image = NSImage(systemSymbolName: "plus", accessibilityDescription: "New Tab") {
+        if let image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil) {
             let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
             button.image = image.withSymbolConfiguration(config)
-            button.title = " New Tab"
             button.imagePosition = .imageLeading
-            button.font = NSFont.systemFont(ofSize: 11, weight: .medium)
-        } else {
-            button.title = "+ New Tab"
-            button.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         }
+        button.title = ""
+        button.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         button.contentTintColor = CocxyColors.subtext0
         button.wantsLayer = true
         button.layer?.backgroundColor = CocxyColors.surface0.withAlphaComponent(0.4).cgColor
         button.layer?.cornerRadius = 6
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.toolTip = "New Tab (Cmd+T)"
-        button.setAccessibilityLabel("New Tab")
-        button.setAccessibilityHelp("Create a new terminal tab (Cmd+T)")
         return button
     }()
 
@@ -500,6 +482,7 @@ final class TabBarView: NSView {
         updateButton.setAccessibilityLabel(
             localized("tabbar.update.accessibility", fallback: "Update Cocxy Terminal")
         )
+        needsLayout = true
     }
 
     // MARK: - Update Badge
