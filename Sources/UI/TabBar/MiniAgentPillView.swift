@@ -39,7 +39,11 @@ final class MiniAgentPillView: NSView {
     private let abbreviationLabel: NSTextField
     private let backgroundColor = CocxyColors.surface1.withAlphaComponent(0.35)
 
-    init(snapshot: SurfaceAgentSnapshot, stateColor: NSColor) {
+    init(
+        snapshot: SurfaceAgentSnapshot,
+        stateColor: NSColor,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.surfaceID = snapshot.surfaceID
 
         let label = NSTextField(labelWithString: snapshot.agentAbbreviation)
@@ -78,9 +82,11 @@ final class MiniAgentPillView: NSView {
 
         let agentName = snapshot.state.detectedAgent?.displayName
             ?? snapshot.state.detectedAgent?.name
-            ?? "unknown agent"
-        let stateLabel = snapshot.state.agentState.accessibilityDescription
-        let focusSuffix = snapshot.isFocused ? ", focused" : ""
+            ?? localizer.string("tabbar.agentPill.unknownAgent", fallback: "unknown agent")
+        let stateLabel = snapshot.state.agentState.accessibilityDescription(using: localizer)
+        let focusSuffix = snapshot.isFocused
+            ? localizer.string("tabbar.agentPill.focusedSuffix", fallback: ", focused")
+            : ""
         setAccessibilityLabel("\(agentName), \(stateLabel)\(focusSuffix)")
         toolTip = "\(agentName) — \(stateLabel)"
     }

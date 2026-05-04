@@ -339,6 +339,9 @@ struct AppLocalizationSwiftTestingTests {
         #expect(StatusBarView.localizedCommandRunning(using: spanish) == "Comando ejecutándose")
         #expect(KeyboardShortcutsButton.localizedTitle(using: spanish) == "Atajos de teclado")
         #expect(spanish.string("keyboardShortcuts.terminal.interrupt", fallback: "Interrupt process") == "Interrumpir proceso")
+        #expect(AgentState.waitingInput.accessibilityDescription(using: spanish) == "El agente necesita tu entrada")
+        #expect(AgentState.error.accessibilityDescription(using: spanish) == "El agente encontró un error")
+        #expect(spanish.string("statusBar.agentDot.focusedSuffix", fallback: " (focused)") == " (con foco)")
         #expect(AgentAttachmentBar.localizedRemoveImage(using: spanish) == "Eliminar imagen")
     }
 
@@ -371,7 +374,10 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("tabbar.workspaces", fallback: "WORKSPACES") == "ESPACIOS")
         #expect(TabItemView.localizedPinned(using: spanish) == "Fijada")
         #expect(TabItemView.localizedMoreActiveAgents(3, using: spanish) == "3 agentes activos más")
+        #expect(TabItemView.localizedAgentAccessibilityValue(.working, using: spanish) == "Agente: El agente está trabajando")
         #expect(TabItemView.localizedRenamePlaceholder(using: spanish) == "Nombre de pestaña")
+        #expect(spanish.string("tabbar.tab.ready", fallback: "Ready") == "Listo")
+        #expect(spanish.string("tabbar.agentPill.focusedSuffix", fallback: ", focused") == ", con foco")
         #expect(Design.VerticalTabSearchBar.localizedPlaceholder(using: spanish) == "Filtrar sesiones...")
         #expect(AuroraSidebarDisplayMode.summary.verticalTabShortLabel(using: spanish) == "R")
         #expect(AuroraSidebarPrimaryInfo.process.verticalTabMenuLabel(using: spanish) == "Proceso en primer plano")

@@ -338,7 +338,7 @@ final class TabItemView: NSView {
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
         applyLocalizedChrome()
-        setAccessibilityHelp(localizer.string("tabbar.tab.activate.help", fallback: "Activate this tab"))
+        configure(with: displayItem)
     }
 
     private func configure(with item: TabDisplayItem) {
@@ -354,7 +354,7 @@ final class TabItemView: NSView {
             if let process = item.processName, process != "zsh" && process != "bash" && process != "fish" {
                 statusText = process
             } else {
-                statusText = "Ready"
+                statusText = localizer.string("tabbar.tab.ready", fallback: "Ready")
             }
         } else {
             statusText = item.agentStatusText
@@ -465,7 +465,7 @@ final class TabItemView: NSView {
 
         setAccessibilityRole(.button)
         setAccessibilityLabel(item.displayTitle)
-        setAccessibilityValue("Agent: \(item.agentState.accessibilityDescription)")
+        setAccessibilityValue(Self.localizedAgentAccessibilityValue(item.agentState, using: localizer))
         setAccessibilityHelp(localizer.string("tabbar.tab.activate.help", fallback: "Activate this tab"))
     }
 
@@ -567,7 +567,8 @@ final class TabItemView: NSView {
     ) -> NSView {
         let pill = MiniAgentPillView(
             snapshot: snapshot,
-            stateColor: color
+            stateColor: color,
+            localizer: localizer
         )
         pill.onClick = { [weak self] surfaceID in
             self?.onFocusSplit?(surfaceID)
@@ -764,6 +765,13 @@ final class TabItemView: NSView {
 
     static func localizedWorktree(using localizer: AppLocalizer) -> String {
         localizer.string("tabbar.tab.worktree", fallback: "Worktree")
+    }
+
+    static func localizedAgentAccessibilityValue(_ state: AgentState, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string("tabbar.tab.agentAccessibilityValue", fallback: "Agent: %@"),
+            state.accessibilityDescription(using: localizer)
+        )
     }
 
     static func localizedRenamePlaceholder(using localizer: AppLocalizer) -> String {

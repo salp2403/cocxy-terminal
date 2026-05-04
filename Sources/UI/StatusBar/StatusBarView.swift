@@ -182,7 +182,7 @@ struct StatusBarView: View {
                         Array(agentSummary.perSurfaceSnapshots.prefix(6).enumerated()),
                         id: \.offset
                     ) { _, snapshot in
-                        PerSurfaceAgentDot(snapshot: snapshot)
+                        PerSurfaceAgentDot(snapshot: snapshot, localizer: localizer)
                     }
                     if agentSummary.perSurfaceSnapshots.count > 6 {
                         Text(verbatim: "+\(agentSummary.perSurfaceSnapshots.count - 6)")
@@ -341,6 +341,7 @@ private struct AgentMetricPill: View {
 /// name and state for additional context.
 private struct PerSurfaceAgentDot: View {
     let snapshot: SurfaceAgentSnapshot
+    let localizer: AppLocalizer
 
     private var dotColor: Color {
         switch snapshot.state.agentState {
@@ -356,9 +357,11 @@ private struct PerSurfaceAgentDot: View {
     private var tooltipText: String {
         let agentName = snapshot.state.detectedAgent?.displayName
             ?? snapshot.state.detectedAgent?.name
-            ?? "Agent"
-        let stateLabel = snapshot.state.agentState.accessibilityDescription
-        let focusSuffix = snapshot.isFocused ? " (focused)" : ""
+            ?? localizer.string("statusBar.agentDot.defaultAgent", fallback: "Agent")
+        let stateLabel = snapshot.state.agentState.accessibilityDescription(using: localizer)
+        let focusSuffix = snapshot.isFocused
+            ? localizer.string("statusBar.agentDot.focusedSuffix", fallback: " (focused)")
+            : ""
         return "\(agentName) \u{2022} \(stateLabel)\(focusSuffix)"
     }
 
