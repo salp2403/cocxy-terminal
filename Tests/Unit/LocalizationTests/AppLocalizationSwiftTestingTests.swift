@@ -44,6 +44,10 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.appearance.fontResolution.included", fallback: "Included with Cocxy: %@") == "Incluida con Cocxy: %@")
         #expect(spanish.string("preferences.appearance.sidebarDensity.detailed", fallback: "Detailed") == "Detallada")
         #expect(spanish.string("preferences.appearance.sidebarRowDetail.state", fallback: "State") == "Estado")
+        #expect(spanish.string("preferences.agentDetection.idleTimeout", fallback: "Idle timeout: %d s") == "Timeout de inactividad: %d s")
+        #expect(spanish.string("preferences.voice.recognitionLocale", fallback: "Recognition locale") == "Idioma de reconocimiento")
+        #expect(spanish.string("preferences.activity.trackCosts", fallback: "Track token usage and estimated costs") == "Registrar uso de tokens y costos estimados")
+        #expect(spanish.string("preferences.sessionReplay.storageDirectory", fallback: "Storage directory") == "Directorio de almacenamiento")
     }
 
     @Test

@@ -115,6 +115,10 @@ struct AppLanguagePreferencesSwiftTestingTests {
         #expect(vm.localizedString("preferences.save.button", fallback: "Save") == "Guardar")
         #expect(vm.localizedString("preferences.general.shellPath", fallback: "Shell path") == "Ruta del shell")
         #expect(vm.localizedString("preferences.appearance.activeTheme", fallback: "Active theme") == "Tema activo")
+        #expect(vm.localizedString("preferences.agentDetection.enabled", fallback: "Enabled") == "Activada")
+        #expect(vm.localizedString("preferences.voice.systemLocale", fallback: "System") == "Sistema")
+        #expect(vm.localizedString("preferences.activity.localDirectory", fallback: "Local directory") == "Directorio local")
+        #expect(vm.localizedString("preferences.sessionReplay.enable", fallback: "Enable Session Replay") == "Activar reproducción de sesiones")
         #expect(PreferencesSection.appearance.localizedTitle(vm) == "Apariencia")
     }
 

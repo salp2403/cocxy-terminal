@@ -989,16 +989,40 @@ struct EditableAgentDetectionSection: View {
 
     var body: some View {
         Form {
-            Section("Detection") {
-                Toggle("Enabled", isOn: $viewModel.agentDetectionEnabled)
-                Toggle("OSC notifications", isOn: $viewModel.oscNotifications)
-                Toggle("Pattern matching", isOn: $viewModel.patternMatching)
-                Toggle("Timing heuristics", isOn: $viewModel.timingHeuristics)
+            Section(viewModel.localizedString("preferences.agentDetection.detection.section", fallback: "Detection")) {
+                Toggle(
+                    viewModel.localizedString("preferences.agentDetection.enabled", fallback: "Enabled"),
+                    isOn: $viewModel.agentDetectionEnabled
+                )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.agentDetection.oscNotifications",
+                        fallback: "OSC notifications"
+                    ),
+                    isOn: $viewModel.oscNotifications
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.agentDetection.patternMatching", fallback: "Pattern matching"),
+                    isOn: $viewModel.patternMatching
+                )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.agentDetection.timingHeuristics",
+                        fallback: "Timing heuristics"
+                    ),
+                    isOn: $viewModel.timingHeuristics
+                )
             }
 
-            Section("Timing") {
+            Section(viewModel.localizedString("preferences.agentDetection.timing.section", fallback: "Timing")) {
                 Stepper(
-                    "Idle timeout: \(viewModel.idleTimeoutSeconds) s",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.agentDetection.idleTimeout",
+                            fallback: "Idle timeout: %d s"
+                        ),
+                        viewModel.idleTimeoutSeconds
+                    ),
                     value: $viewModel.idleTimeoutSeconds,
                     in: 1...300
                 )
@@ -1007,7 +1031,7 @@ struct EditableAgentDetectionSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Agent Detection")
+        .navigationTitle(viewModel.localizedString("preferences.section.agentDetection", fallback: "Agent Detection"))
     }
 }
 
@@ -1323,13 +1347,24 @@ struct VoicePreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Feature") {
-                Toggle("Enable Voice input", isOn: $viewModel.voiceEnabled)
-                    .help("Enables local dictation entry points when supported by macOS.")
+            Section(viewModel.localizedString("preferences.voice.feature.section", fallback: "Feature")) {
+                Toggle(
+                    viewModel.localizedString("preferences.voice.enable", fallback: "Enable Voice input"),
+                    isOn: $viewModel.voiceEnabled
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.voice.enable.help",
+                        fallback: "Enables local dictation entry points when supported by macOS."
+                    )
+                )
             }
 
-            Section("Locale") {
-                Picker("Recognition locale", selection: $viewModel.voiceLocaleIdentifier) {
+            Section(viewModel.localizedString("preferences.voice.locale.section", fallback: "Locale")) {
+                Picker(
+                    viewModel.localizedString("preferences.voice.recognitionLocale", fallback: "Recognition locale"),
+                    selection: $viewModel.voiceLocaleIdentifier
+                ) {
                     Text(systemLocaleTitle).tag(VoiceConfig.systemLocaleIdentifier)
                     ForEach(viewModel.availableVoiceLocales) { option in
                         Text(optionTitle(option)).tag(option.identifier)
@@ -1345,7 +1380,7 @@ struct VoicePreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Voice")
+        .navigationTitle(viewModel.localizedString("preferences.section.voice", fallback: "Voice"))
     }
 
     private var systemLocaleTitle: String {
@@ -1353,25 +1388,49 @@ struct VoicePreferencesSection: View {
         guard viewModel.voiceLocaleIdentifier == VoiceConfig.systemLocaleIdentifier,
               let localeIdentifier = resolution.localeIdentifier
         else {
-            return "System"
+            return viewModel.localizedString("preferences.voice.systemLocale", fallback: "System")
         }
-        return "System (\(localeIdentifier))"
+        return String(
+            format: viewModel.localizedString("preferences.voice.systemLocaleFormat", fallback: "System (%@)"),
+            localeIdentifier
+        )
     }
 
     private var resolutionDetail: String {
         switch viewModel.resolvedVoiceLocale.source {
         case .systemExact:
-            return "Using the current system locale."
+            return viewModel.localizedString(
+                "preferences.voice.resolution.systemExact",
+                fallback: "Using the current system locale."
+            )
         case .systemLanguageFallback:
-            return "Using the nearest supported locale for the current system language."
+            return viewModel.localizedString(
+                "preferences.voice.resolution.systemLanguageFallback",
+                fallback: "Using the nearest supported locale for the current system language."
+            )
         case .systemUnsupportedFallback:
-            return "The current system language is not listed by Speech; using the first supported local recognizer."
+            return viewModel.localizedString(
+                "preferences.voice.resolution.systemUnsupportedFallback",
+                fallback: "The current system language is not listed by Speech; using the first supported local recognizer."
+            )
         case .manualOverride:
-            return "Using the selected locale override."
+            return viewModel.localizedString(
+                "preferences.voice.resolution.manualOverride",
+                fallback: "Using the selected locale override."
+            )
         case .manualUnsupportedSystemFallback(let requested):
-            return "\(requested) is not listed by Speech; using the system locale fallback."
+            return String(
+                format: viewModel.localizedString(
+                    "preferences.voice.resolution.manualUnsupportedSystemFallback",
+                    fallback: "%@ is not listed by Speech; using the system locale fallback."
+                ),
+                requested
+            )
         case .unavailable:
-            return "macOS did not report any local Speech recognition locales."
+            return viewModel.localizedString(
+                "preferences.voice.resolution.unavailable",
+                fallback: "macOS did not report any local Speech recognition locales."
+            )
         }
     }
 
@@ -1389,16 +1448,38 @@ struct ActivityPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Privacy") {
-                Toggle("Enable local Activity dashboard", isOn: $viewModel.activityTrackingEnabled)
-                    .help("Stores activity data locally for dashboards and manual export.")
-                Toggle("Track token usage and estimated costs", isOn: $viewModel.activityCostTrackingEnabled)
+            Section(viewModel.localizedString("preferences.activity.privacy.section", fallback: "Privacy")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.activity.enable",
+                        fallback: "Enable local Activity dashboard"
+                    ),
+                    isOn: $viewModel.activityTrackingEnabled
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.activity.enable.help",
+                        fallback: "Stores activity data locally for dashboards and manual export."
+                    )
+                )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.activity.trackCosts",
+                        fallback: "Track token usage and estimated costs"
+                    ),
+                    isOn: $viewModel.activityCostTrackingEnabled
+                )
                     .disabled(!viewModel.activityTrackingEnabled)
-                    .help("Uses local token counts and model rates; no data is uploaded.")
+                    .help(
+                        viewModel.localizedString(
+                            "preferences.activity.trackCosts.help",
+                            fallback: "Uses local token counts and model rates; no data is uploaded."
+                        )
+                    )
             }
 
-            Section("Cost Rates") {
-                LabeledContent("Input / 1M tokens") {
+            Section(viewModel.localizedString("preferences.activity.costRates.section", fallback: "Cost Rates")) {
+                LabeledContent(viewModel.localizedString("preferences.activity.inputCost", fallback: "Input / 1M tokens")) {
                     TextField(
                         "0",
                         value: $viewModel.activityInputCostMicrosPerMillionTokens,
@@ -1407,7 +1488,7 @@ struct ActivityPreferencesSection: View {
                     .textFieldStyle(.roundedBorder)
                     .disabled(!viewModel.activityTrackingEnabled || !viewModel.activityCostTrackingEnabled)
                 }
-                LabeledContent("Output / 1M tokens") {
+                LabeledContent(viewModel.localizedString("preferences.activity.outputCost", fallback: "Output / 1M tokens")) {
                     TextField(
                         "0",
                         value: $viewModel.activityOutputCostMicrosPerMillionTokens,
@@ -1416,15 +1497,28 @@ struct ActivityPreferencesSection: View {
                     .textFieldStyle(.roundedBorder)
                     .disabled(!viewModel.activityTrackingEnabled || !viewModel.activityCostTrackingEnabled)
                 }
-                Text("Rates are micro-dollars per one million tokens and stay local in config.")
+                Text(
+                    viewModel.localizedString(
+                        "preferences.activity.costRates.caption",
+                        fallback: "Rates are micro-dollars per one million tokens and stay local in config."
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Storage") {
-                LabeledContent("Local directory", value: ActivityConfig.defaults.storageDirectory)
-                Text("Disable the Activity dashboard to stop future writes. Existing local records can be cleared from the Activity dashboard.")
+            Section(viewModel.localizedString("preferences.activity.storage.section", fallback: "Storage")) {
+                LabeledContent(
+                    viewModel.localizedString("preferences.activity.localDirectory", fallback: "Local directory"),
+                    value: ActivityConfig.defaults.storageDirectory
+                )
+                Text(
+                    viewModel.localizedString(
+                        "preferences.activity.storage.caption",
+                        fallback: "Disable the Activity dashboard to stop future writes. Existing local records can be cleared from the Activity dashboard."
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1433,7 +1527,7 @@ struct ActivityPreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Activity")
+        .navigationTitle(viewModel.localizedString("preferences.section.activity", fallback: "Activity"))
     }
 }
 
@@ -1446,19 +1540,48 @@ struct SessionReplayPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Privacy") {
-                Toggle("Enable Session Replay", isOn: $viewModel.sessionReplayEnabled)
-                Toggle("Record new terminal sessions automatically", isOn: $viewModel.sessionReplayAutoRecord)
+            Section(viewModel.localizedString("preferences.sessionReplay.privacy.section", fallback: "Privacy")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.sessionReplay.enable",
+                        fallback: "Enable Session Replay"
+                    ),
+                    isOn: $viewModel.sessionReplayEnabled
+                )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.sessionReplay.autoRecord",
+                        fallback: "Record new terminal sessions automatically"
+                    ),
+                    isOn: $viewModel.sessionReplayAutoRecord
+                )
                     .disabled(!viewModel.sessionReplayEnabled)
-                Toggle("Allow automatic recording", isOn: $viewModel.sessionReplayConsentGranted)
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.sessionReplay.consent",
+                        fallback: "Allow automatic recording"
+                    ),
+                    isOn: $viewModel.sessionReplayConsentGranted
+                )
                     .disabled(!viewModel.sessionReplayEnabled || !viewModel.sessionReplayAutoRecord)
             }
 
-            Section("Storage") {
-                TextField("Storage directory", text: $viewModel.sessionReplayStorageDirectory)
+            Section(viewModel.localizedString("preferences.sessionReplay.storage.section", fallback: "Storage")) {
+                TextField(
+                    viewModel.localizedString(
+                        "preferences.sessionReplay.storageDirectory",
+                        fallback: "Storage directory"
+                    ),
+                    text: $viewModel.sessionReplayStorageDirectory
+                )
                     .textFieldStyle(.roundedBorder)
                     .disabled(!viewModel.sessionReplayEnabled)
-                LabeledContent("Max recording bytes") {
+                LabeledContent(
+                    viewModel.localizedString(
+                        "preferences.sessionReplay.maxRecordingBytes",
+                        fallback: "Max recording bytes"
+                    )
+                ) {
                     TextField(
                         "536870912",
                         value: $viewModel.sessionReplayMaxRecordingBytes,
@@ -1467,7 +1590,12 @@ struct SessionReplayPreferencesSection: View {
                     .textFieldStyle(.roundedBorder)
                     .disabled(!viewModel.sessionReplayEnabled)
                 }
-                Text("Recordings stay local unless exported manually.")
+                Text(
+                    viewModel.localizedString(
+                        "preferences.sessionReplay.storage.caption",
+                        fallback: "Recordings stay local unless exported manually."
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1476,7 +1604,7 @@ struct SessionReplayPreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Session Replay")
+        .navigationTitle(viewModel.localizedString("preferences.section.sessionReplay", fallback: "Session Replay"))
     }
 }
 
