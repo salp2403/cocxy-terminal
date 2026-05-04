@@ -65,6 +65,39 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
 
         #expect(delegate.pendingCrashRecoverySnapshot?.session.windows.first?.tabs.first?.title == "Pending")
     }
+
+    @Test("crash recovery alert copy follows configured app language")
+    func crashRecoveryAlertCopyFollowsConfiguredAppLanguage() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        let copy = AppDelegate.localizedCrashRecoveryOfferCopy(localizer: localizer)
+
+        #expect(copy.messageText == "¿Restaurar sesión anterior?")
+        #expect(copy.informativeText == "Cocxy no se cerró correctamente la última vez. Hay una instantánea local de recuperación disponible.")
+        #expect(copy.primaryButton == "Restaurar")
+        #expect(copy.secondaryButton == "Mantener actual")
+    }
+
+    @Test("quit confirmation alert copy follows configured app language")
+    func quitConfirmationAlertCopyFollowsConfiguredAppLanguage() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        let copy = AppDelegate.localizedQuitConfirmationCopy(localizer: localizer)
+
+        #expect(copy.messageText == "¿Cerrar Cocxy Terminal?")
+        #expect(copy.informativeText == "Todas las sesiones de terminal se cerrarán.")
+        #expect(copy.primaryButton == "Cerrar")
+        #expect(copy.secondaryButton == "Cancelar")
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
 }
 
 private struct AppCrashRecoveryFixture {

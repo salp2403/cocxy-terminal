@@ -62,11 +62,12 @@ extension AppDelegate {
         pendingCrashRecoverySnapshot = nil
 
         let alert = NSAlert()
-        alert.messageText = "Restore Previous Session?"
-        alert.informativeText = "Cocxy did not shut down cleanly last time. A local crash-recovery snapshot is available."
+        let copy = Self.localizedCrashRecoveryOfferCopy(localizer: appLocalizer())
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Restore")
-        alert.addButton(withTitle: "Keep Current")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
 
         if alert.runModal() == .alertFirstButtonReturn {
             _ = restoreSession(snapshot.session, into: controller)

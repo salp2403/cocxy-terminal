@@ -370,7 +370,15 @@
 "commandPalette.footer.action.singular" = "action";
 "commandPalette.footer.action.plural" = "actions";
 
+"app.crashRecovery.restore.title" = "Restore Previous Session?";
+"app.crashRecovery.restore.message" = "Cocxy did not shut down cleanly last time. A local crash-recovery snapshot is available.";
+"app.crashRecovery.restore.button" = "Restore";
+"app.crashRecovery.keepCurrent.button" = "Keep Current";
+"app.quit.title" = "Quit Cocxy Terminal?";
+"app.quit.message" = "All terminal sessions will be closed.";
+"app.quit.button" = "Quit";
 "common.ok" = "OK";
+"common.cancel" = "Cancel";
 
 "welcome.accessibilityLabel" = "Welcome to Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";

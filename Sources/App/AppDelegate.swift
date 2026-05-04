@@ -400,12 +400,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let alert = NSAlert()
-        alert.messageText = "Quit Cocxy Terminal?"
-        alert.informativeText = "All terminal sessions will be closed."
+        let copy = Self.localizedQuitConfirmationCopy(localizer: appLocalizer())
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.alertStyle = .warning
         alert.icon = AppIconGenerator.generatePlaceholderIcon()
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
         let response = alert.runModal()
         return response == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
     }
