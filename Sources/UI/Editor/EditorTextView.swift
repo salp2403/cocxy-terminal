@@ -10,6 +10,8 @@ enum EditorTextKeyCommand: Equatable {
 
 @MainActor
 final class EditorTextView: NSTextView {
+    static let defaultEditorFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+
     var saveHandler: (() -> Void)?
     var keyDownHandler: ((VimInput) -> Bool)?
     var insertTextHandler: ((String) -> Bool)?
@@ -76,6 +78,11 @@ final class EditorTextView: NSTextView {
         super.mouseDown(with: event)
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyReadableTextTheme(reapplyStorageForeground: false)
+    }
+
     func applyDefaultConfiguration() {
         isRichText = false
         isAutomaticQuoteSubstitutionEnabled = false
@@ -83,15 +90,37 @@ final class EditorTextView: NSTextView {
         isAutomaticTextReplacementEnabled = false
         isAutomaticSpellingCorrectionEnabled = false
         allowsUndo = true
-        drawsBackground = false
-        font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        drawsBackground = true
+        backgroundColor = CocxyColors.base
+        font = Self.defaultEditorFont
+        usesFontPanel = false
+        usesFindPanel = true
+        applyReadableTextTheme()
+    }
+
+    func applyReadableTextTheme(reapplyStorageForeground: Bool = true) {
+        let editorFont = Self.defaultEditorFont
+        backgroundColor = CocxyColors.base
+        drawsBackground = true
+        font = editorFont
         textColor = CocxyColors.text
         insertionPointColor = CocxyColors.text
+        typingAttributes[.font] = editorFont
         typingAttributes[.foregroundColor] = CocxyColors.text
         selectedTextAttributes = [
             .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.28),
             .foregroundColor: CocxyColors.text,
         ]
+
+        guard reapplyStorageForeground else { return }
+        guard let textStorage, textStorage.length > 0 else { return }
+        textStorage.addAttributes(
+            [
+                .font: editorFont,
+                .foregroundColor: CocxyColors.text,
+            ],
+            range: NSRange(location: 0, length: textStorage.length)
+        )
     }
 
     private func requestsAdditiveCursor(_ event: NSEvent) -> Bool {

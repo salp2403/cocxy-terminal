@@ -113,6 +113,12 @@ final class EditorView: NSView, NSTextViewDelegate {
         inlineGhostText.layout()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyEditorTheme()
+        applyDecorations()
+    }
+
     deinit {
         inlineCompletionTask?.cancel()
     }
@@ -743,6 +749,7 @@ final class EditorView: NSView, NSTextViewDelegate {
         let selectedRange = textView.selectedRange()
         isApplyingProgrammaticUpdate = true
         textView.string = text
+        textView.applyReadableTextTheme()
         if preserveSelection {
             let maxLength = (text as NSString).length
             textView.setSelectedRange(NSRange(
@@ -760,6 +767,7 @@ final class EditorView: NSView, NSTextViewDelegate {
         isApplyingProgrammaticUpdate = true
         if textView.string != session.document.buffer.text {
             textView.string = session.document.buffer.text
+            textView.applyReadableTextTheme()
         }
         let maximumLength = (textView.string as NSString).length
         textView.selectedRanges = session.selection
@@ -993,6 +1001,14 @@ final class EditorView: NSView, NSTextViewDelegate {
         guard let textStorage = textView.textStorage else { return }
         let length = (textView.string as NSString).length
         EditorDecorationLayer.apply(session.decorations, to: textStorage, textLength: length)
+        textView.applyReadableTextTheme(reapplyStorageForeground: false)
+    }
+
+    private func applyEditorTheme() {
+        layer?.backgroundColor = CocxyColors.base.cgColor
+        scrollView.backgroundColor = CocxyColors.base
+        scrollView.contentView.backgroundColor = CocxyColors.base
+        textView.applyReadableTextTheme(reapplyStorageForeground: false)
     }
 
     private func applySoftWrapConfiguration() {

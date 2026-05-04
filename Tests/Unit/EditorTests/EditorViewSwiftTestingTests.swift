@@ -100,6 +100,7 @@ struct EditorViewSwiftTestingTests {
     func plainTextKeepsReadableForegroundWithoutSyntaxTokens() throws {
         let view = EditorView(text: "alpha beta\n")
         let textView: EditorTextView = try #require(findSubview(in: view))
+        let scrollView: EditorScrollView = try #require(findSubview(in: view))
 
         let color = textView.textStorage?.attribute(
             .foregroundColor,
@@ -109,6 +110,37 @@ struct EditorViewSwiftTestingTests {
 
         #expect(color?.isEqual(CocxyColors.text) == true)
         #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
+        #expect(textView.drawsBackground)
+        #expect(textView.backgroundColor == CocxyColors.base)
+        #expect(scrollView.drawsBackground)
+        #expect(scrollView.backgroundColor == CocxyColors.base)
+    }
+
+    @Test("editor theme repair restores readable text after AppKit color reset")
+    func editorThemeRepairRestoresReadableTextAfterAppKitColorReset() throws {
+        let view = EditorView(text: "alpha beta\n")
+        let textView: EditorTextView = try #require(findSubview(in: view))
+        let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
+
+        textView.textColor = .black
+        textView.insertionPointColor = .black
+        textView.typingAttributes[.foregroundColor] = NSColor.black
+        textView.textStorage?.addAttribute(.foregroundColor, value: NSColor.black, range: fullRange)
+
+        textView.applyReadableTextTheme()
+
+        let repairedColor = textView.textStorage?.attribute(
+            .foregroundColor,
+            at: 0,
+            effectiveRange: nil
+        ) as? NSColor
+        let repairedFont = textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+
+        #expect(repairedColor?.isEqual(CocxyColors.text) == true)
+        #expect(textView.textColor == CocxyColors.text)
+        #expect(textView.insertionPointColor == CocxyColors.text)
+        #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
+        #expect(repairedFont == EditorTextView.defaultEditorFont)
     }
 
     @Test("editor view applies real bundled syntax decorations for first smoke languages")

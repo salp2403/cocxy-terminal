@@ -12,7 +12,10 @@ final class EditorScrollView: NSScrollView {
         hasVerticalScroller = true
         hasHorizontalScroller = true
         autohidesScrollers = true
-        drawsBackground = false
+        drawsBackground = true
+        backgroundColor = CocxyColors.base
+        contentView.drawsBackground = true
+        contentView.backgroundColor = CocxyColors.base
 
         textView.minSize = NSSize(width: 0, height: contentSize.height)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
