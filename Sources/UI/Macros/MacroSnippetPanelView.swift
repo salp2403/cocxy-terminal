@@ -223,6 +223,14 @@ struct MacroSnippetPanelView: View {
                         } label: {
                             Label("Expand", systemImage: "text.append")
                         }
+
+                        Button {
+                            viewModel.perform {
+                                try viewModel.insertSelectedSnippetIntoTerminal()
+                            }
+                        } label: {
+                            Label("Insert", systemImage: "terminal")
+                        }
                     }
                     .controlSize(.small)
 

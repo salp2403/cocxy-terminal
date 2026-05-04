@@ -30,11 +30,15 @@ struct MacroSnippetPanelViewModelSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let manager = SnippetManager(store: SnippetStore(fileURL: root.appendingPathComponent("snippets.json")))
         var replayedPlans: [MacroPlaybackPlan] = []
+        var terminalText: [String] = []
         let viewModel = MacroSnippetPanelViewModel(
             snippetManager: manager,
             macroPlaybackHandler: { plan in
                 replayedPlans.append(plan)
                 return plan.events.count
+            },
+            terminalTextHandler: { text in
+                terminalText.append(text)
             }
         )
 
@@ -68,9 +72,11 @@ struct MacroSnippetPanelViewModelSwiftTestingTests {
         viewModel.snippetBody = "func ${1:name}(${2:value}) {\n\t$0\n}"
         try viewModel.saveSnippetDraft()
         try viewModel.expandSelectedSnippet()
+        try viewModel.insertSelectedSnippetIntoTerminal()
 
         #expect(viewModel.snippetExpansionText == "func name(value) {\n\t\n}")
         #expect(viewModel.snippetTabStopLabels == ["1: name", "2: value", "0"])
+        #expect(terminalText == ["func name(value) {\n\t\n}"])
     }
 
     @Test("renders aliases and keeps clipboard history local and searchable")

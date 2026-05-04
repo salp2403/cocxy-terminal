@@ -207,6 +207,19 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         statusText = "Expanded \(snippetTabStopLabels.count) tab stops"
     }
 
+    func insertSelectedSnippetIntoTerminal() throws {
+        if snippetExpansionText.isEmpty {
+            try expandSelectedSnippet()
+        }
+        guard let terminalTextHandler else {
+            statusText = "Expanded \(snippetTabStopLabels.count) tab stops"
+            return
+        }
+        try terminalTextHandler(snippetExpansionText)
+        errorText = nil
+        statusText = "Inserted snippet with \(snippetTabStopLabels.count) tab stops"
+    }
+
     func saveAliasDraft() throws {
         let alias = ShellAlias(
             name: aliasName.trimmingCharacters(in: .whitespacesAndNewlines),
