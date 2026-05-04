@@ -101,6 +101,25 @@ final class TabCloseConfirmationTests: XCTestCase {
         XCTAssertTrue(itemView.shouldConfirmClose,
                       "shouldConfirmClose must be settable to true")
     }
+
+    func testTabItemViewCloseConfirmationCopyFollowsConfiguredLanguage() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try XCTUnwrap(localizationBundle())
+        )
+
+        let copy = TabItemView.localizedCloseConfirmationCopy(localizer: localizer)
+
+        XCTAssertEqual(copy.messageText, "¿Cerrar esta pestaña?")
+        XCTAssertEqual(copy.informativeText, "Puede que todavía haya un proceso en ejecución en esta pestaña.")
+        XCTAssertEqual(copy.primaryButton, "Cerrar")
+        XCTAssertEqual(copy.secondaryButton, "Cancelar")
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
 }
 
 // MARK: - App Quit Confirmation Tests

@@ -255,19 +255,36 @@ final class TabBarView: NSView {
     /// Updates the "N in other windows" indicator in the sidebar footer.
     /// Called by MainWindowController when the aggregator publishes changes.
     func updateRemoteUnreadCount(_ count: Int) {
+        remoteUnreadCount = count
         if count > 0 {
             remoteUnreadLabel.isHidden = false
-            remoteUnreadLabel.stringValue = count == 1
+            let key = count == 1 ? "tabbar.remoteUnread.one" : "tabbar.remoteUnread.many"
+            let fallback = count == 1
                 ? "1 notification in other windows"
-                : "\(count) notifications in other windows"
+                : "%d notifications in other windows"
+            remoteUnreadLabel.stringValue = count == 1
+                ? localized(key, fallback: fallback)
+                : String(format: localized(key, fallback: fallback), count)
         } else {
             remoteUnreadLabel.isHidden = true
         }
     }
 
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        setupAccessibility()
+        applyLocalizedChrome()
+        tabItemViews.values.forEach { $0.updateLocalizer(localizer) }
+        updateRemoteUnreadCount(remoteUnreadCount)
+        applyAvailableUpdate()
+    }
+
     // MARK: - State
 
     private let viewModel: TabBarViewModel
+    private var localizer: AppLocalizer
+    private var availableUpdate: CocxyUpdateAvailability?
+    private var remoteUnreadCount: Int = 0
     private var cancellables = Set<AnyCancellable>()
     private var tabItemViews: [TabID: TabItemView] = [:]
     private var updateButtonHeightConstraint: NSLayoutConstraint?
@@ -275,12 +292,17 @@ final class TabBarView: NSView {
 
     // MARK: - Initialization
 
-    init(viewModel: TabBarViewModel) {
+    init(
+        viewModel: TabBarViewModel,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.viewModel = viewModel
+        self.localizer = localizer
         super.init(frame: .zero)
         setupAccessibility()
         setupLayout()
         setupActions()
+        applyLocalizedChrome()
         subscribeToChanges()
         rebuildTabItems()
         registerForDraggedTypes([.cocxySession])
@@ -295,7 +317,7 @@ final class TabBarView: NSView {
 
     private func setupAccessibility() {
         setAccessibilityRole(.list)
-        setAccessibilityLabel("Terminal tabs")
+        setAccessibilityLabel(localized("tabbar.accessibility.tabs", fallback: "Terminal tabs"))
     }
 
     // MARK: - Layout
@@ -441,10 +463,54 @@ final class TabBarView: NSView {
         }
     }
 
+    private func applyLocalizedChrome() {
+        let workspaces = localized("tabbar.workspaces", fallback: "WORKSPACES")
+        let attributes: [NSAttributedString.Key: Any] = [
+            .kern: 1.5,
+            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: CocxyColors.overlay1,
+        ]
+        headerTitleLabel.attributedStringValue = NSAttributedString(string: workspaces, attributes: attributes)
+
+        let notificationsTitle = localized("tabbar.notifications.title", fallback: "Notifications")
+        notificationBellButton.toolTip = localized(
+            "tabbar.notifications.tooltip",
+            fallback: "Notifications (Cmd+Shift+I)"
+        )
+        notificationBellButton.setAccessibilityLabel(notificationsTitle)
+
+        let commandPaletteTitle = localized("tabbar.commandPalette.title", fallback: "Command Palette")
+        commandPaletteButton.toolTip = localized(
+            "tabbar.commandPalette.tooltip",
+            fallback: "Command Palette (Cmd+Shift+P)"
+        )
+        commandPaletteButton.setAccessibilityLabel(commandPaletteTitle)
+        commandPaletteButton.setAccessibilityHelp(
+            localized("tabbar.commandPalette.help", fallback: "Open the command palette (Cmd+Shift+P)")
+        )
+
+        let newTabTitle = localized("tabbar.newTab.title", fallback: "New Tab")
+        newTabButton.title = " \(newTabTitle)"
+        newTabButton.toolTip = localized("tabbar.newTab.tooltip", fallback: "New Tab (Cmd+T)")
+        newTabButton.setAccessibilityLabel(newTabTitle)
+        newTabButton.setAccessibilityHelp(
+            localized("tabbar.newTab.help", fallback: "Create a new terminal tab (Cmd+T)")
+        )
+
+        updateButton.setAccessibilityLabel(
+            localized("tabbar.update.accessibility", fallback: "Update Cocxy Terminal")
+        )
+    }
+
     // MARK: - Update Badge
 
     func setAvailableUpdate(_ update: CocxyUpdateAvailability?) {
-        guard let update else {
+        availableUpdate = update
+        applyAvailableUpdate()
+    }
+
+    private func applyAvailableUpdate() {
+        guard let update = availableUpdate else {
             updateButton.isHidden = true
             updateButtonHeightConstraint?.constant = 0
             updateButtonBottomConstraint?.constant = 0
@@ -457,10 +523,20 @@ final class TabBarView: NSView {
         updateButton.isHidden = false
         updateButtonHeightConstraint?.constant = 30
         updateButtonBottomConstraint?.constant = -6
-        updateButton.title = "  Update \(update.sidebarVersionLabel)"
-        updateButton.toolTip = "Update Cocxy Terminal to \(update.sidebarVersionLabel)"
-        updateButton.setAccessibilityHelp(update.sidebarAccessibilityLabel)
+        updateButton.title = "  " + String(
+            format: localized("tabbar.update.title", fallback: "Update %@"),
+            update.sidebarVersionLabel
+        )
+        updateButton.toolTip = String(
+            format: localized("tabbar.update.help", fallback: "Update Cocxy Terminal to %@"),
+            update.sidebarVersionLabel
+        )
+        updateButton.setAccessibilityHelp(updateButton.toolTip)
         needsLayout = true
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 
     // MARK: - Actions
@@ -500,7 +576,9 @@ final class TabBarView: NSView {
         let isPinned = viewModel.tabItems.first(where: { $0.id == tabID })?.isPinned ?? false
 
         // Pin / Unpin toggle.
-        let pinTitle = isPinned ? "Unpin Tab" : "Pin Tab"
+        let pinTitle = isPinned
+            ? localized("tabbar.context.unpin", fallback: "Unpin Tab")
+            : localized("tabbar.context.pin", fallback: "Pin Tab")
         let pinItem = NSMenuItem(
             title: pinTitle,
             action: #selector(handleTogglePin(_:)),
@@ -516,7 +594,7 @@ final class TabBarView: NSView {
         menu.addItem(NSMenuItem.separator())
 
         let closeItem = NSMenuItem(
-            title: "Close Tab",
+            title: localized("tabbar.context.close", fallback: "Close Tab"),
             action: #selector(handleCloseTab(_:)),
             keyEquivalent: "w"
         )
@@ -527,7 +605,7 @@ final class TabBarView: NSView {
         menu.addItem(closeItem)
 
         let newTabItem = NSMenuItem(
-            title: "New Tab",
+            title: localized("tabbar.newTab.title", fallback: "New Tab"),
             action: #selector(handleNewTabButton),
             keyEquivalent: "t"
         )
@@ -537,7 +615,7 @@ final class TabBarView: NSView {
         menu.addItem(NSMenuItem.separator())
 
         let closeOthersItem = NSMenuItem(
-            title: "Close Other Tabs",
+            title: localized("tabbar.context.closeOthers", fallback: "Close Other Tabs"),
             action: #selector(handleCloseOtherTabs(_:)),
             keyEquivalent: ""
         )
@@ -548,7 +626,7 @@ final class TabBarView: NSView {
         menu.addItem(NSMenuItem.separator())
 
         let moveUpItem = NSMenuItem(
-            title: "Move Tab Up",
+            title: localized("tabbar.context.moveUp", fallback: "Move Tab Up"),
             action: #selector(handleMoveTabUp(_:)),
             keyEquivalent: ""
         )
@@ -557,7 +635,7 @@ final class TabBarView: NSView {
         menu.addItem(moveUpItem)
 
         let moveDownItem = NSMenuItem(
-            title: "Move Tab Down",
+            title: localized("tabbar.context.moveDown", fallback: "Move Tab Down"),
             action: #selector(handleMoveTabDown(_:)),
             keyEquivalent: ""
         )
@@ -631,6 +709,7 @@ final class TabBarView: NSView {
         for (index, item) in newItems.enumerated() {
             if let existingView = tabItemViews[item.id] {
                 existingView.update(with: item)
+                existingView.updateLocalizer(localizer)
                 existingView.shouldConfirmClose = confirmCloseProcess
                 existingView.flashTabEnabled = flashTabEnabled
                 existingView.badgeOnTabEnabled = badgeOnTabEnabled
@@ -641,7 +720,7 @@ final class TabBarView: NSView {
                     tabStackView.insertArrangedSubview(existingView, at: index)
                 }
             } else {
-                let itemView = TabItemView(displayItem: item)
+                let itemView = TabItemView(displayItem: item, localizer: localizer)
                 itemView.shouldConfirmClose = confirmCloseProcess
                 itemView.flashTabEnabled = flashTabEnabled
                 itemView.badgeOnTabEnabled = badgeOnTabEnabled

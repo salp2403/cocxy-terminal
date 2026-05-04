@@ -216,13 +216,19 @@ final class TabItemView: NSView {
     // MARK: - State
 
     private(set) var displayItem: TabDisplayItem
+    private var localizer: AppLocalizer
 
     // MARK: - Initialization
 
-    init(displayItem: TabDisplayItem) {
+    init(
+        displayItem: TabDisplayItem,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.displayItem = displayItem
+        self.localizer = localizer
         super.init(frame: .zero)
         setupSubviews()
+        applyLocalizedChrome()
         configure(with: displayItem)
     }
 
@@ -329,6 +335,12 @@ final class TabItemView: NSView {
     func update(with item: TabDisplayItem) {
         self.displayItem = item
         configure(with: item)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        applyLocalizedChrome()
+        setAccessibilityHelp(localizer.string("tabbar.tab.activate.help", fallback: "Activate this tab"))
     }
 
     private func configure(with item: TabDisplayItem) {
@@ -456,7 +468,7 @@ final class TabItemView: NSView {
         setAccessibilityRole(.button)
         setAccessibilityLabel(item.displayTitle)
         setAccessibilityValue("Agent: \(item.agentState.accessibilityDescription)")
-        setAccessibilityHelp("Activate this tab")
+        setAccessibilityHelp(localizer.string("tabbar.tab.activate.help", fallback: "Activate this tab"))
     }
 
     // MARK: - Stats Chips
@@ -695,11 +707,12 @@ final class TabItemView: NSView {
         }
 
         let alert = NSAlert()
-        alert.messageText = "Close this tab?"
-        alert.informativeText = "A process may still be running in this tab."
+        let copy = Self.localizedCloseConfirmationCopy(localizer: localizer)
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Close")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
 
         if let parentWindow = window {
             alert.beginSheetModal(for: parentWindow) { [weak self] response in
@@ -713,6 +726,24 @@ final class TabItemView: NSView {
                 onClose?()
             }
         }
+    }
+
+    static func localizedCloseConfirmationCopy(localizer: AppLocalizer) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: localizer.string("tabbar.close.title", fallback: "Close this tab?"),
+            informativeText: localizer.string(
+                "tabbar.close.message",
+                fallback: "A process may still be running in this tab."
+            ),
+            primaryButton: localizer.string("common.close", fallback: "Close"),
+            secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
+    }
+
+    private func applyLocalizedChrome() {
+        let closeTitle = localizer.string("tabbar.context.close", fallback: "Close Tab")
+        closeButton.toolTip = closeTitle
+        closeButton.setAccessibilityLabel(closeTitle)
     }
 
     // MARK: - Mouse Interaction

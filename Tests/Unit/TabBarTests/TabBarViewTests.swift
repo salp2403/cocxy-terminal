@@ -144,6 +144,36 @@ final class TabBarViewTests: XCTestCase {
                         "Context menu should have 'Close Other Tabs' item")
     }
 
+    func testLocalizedChromeAndContextMenuUseConfiguredLanguage() throws {
+        let spanishTabBarView = TabBarView(
+            viewModel: tabBarViewModel,
+            localizer: AppLocalizer(
+                languagePreference: .spanish,
+                bundle: try XCTUnwrap(localizationBundle())
+            )
+        )
+        spanishTabBarView.frame = NSRect(x: 0, y: 0, width: 200, height: 600)
+        spanishTabBarView.layout()
+
+        XCTAssertEqual(spanishTabBarView.accessibilityLabel(), "Pestañas de terminal")
+
+        let updateButton = findButton(accessibilityLabel: "Actualizar Cocxy Terminal", in: spanishTabBarView)
+        spanishTabBarView.setAvailableUpdate(
+            CocxyUpdateAvailability(
+                displayVersion: "0.1.83",
+                buildVersion: "0.1.83"
+            )
+        )
+        XCTAssertEqual(updateButton?.title, "  Actualizar v0.1.83")
+
+        let menu = spanishTabBarView.buildContextMenu(for: tabManager.tabs[0].id)
+        XCTAssertNotNil(menu.items.first { $0.title == "Cerrar pestaña" })
+        XCTAssertNotNil(menu.items.first { $0.title == "Nueva pestaña" })
+        XCTAssertNotNil(menu.items.first { $0.title == "Cerrar otras pestañas" })
+        XCTAssertNotNil(menu.items.first { $0.title == "Mover pestaña arriba" })
+        XCTAssertNotNil(menu.items.first { $0.title == "Mover pestaña abajo" })
+    }
+
     func testContextMenuHasSeparator() {
         let menu = tabBarView.buildContextMenu(for: tabManager.tabs[0].id)
 
@@ -178,5 +208,10 @@ final class TabBarViewTests: XCTestCase {
             }
         }
         return nil
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

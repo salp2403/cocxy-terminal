@@ -69,6 +69,7 @@ extension MainWindowController {
         }
 
         // Apply notification toggle changes to tab bar.
+        tabBarView?.updateLocalizer(appLocalizer(for: config))
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 

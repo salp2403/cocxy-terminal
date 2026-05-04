@@ -532,12 +532,15 @@ final class PreferencesViewModel: ObservableObject {
     }
 
     func localizedString(_ key: AppLocalizationKey) -> String {
-        AppLocalizer(languagePreference: appLanguage, bundle: appLocalizationBundle).string(key)
+        appLocalizer().string(key)
     }
 
     func localizedString(_ key: String, fallback: String) -> String {
+        appLocalizer().string(key, fallback: fallback)
+    }
+
+    func appLocalizer() -> AppLocalizer {
         AppLocalizer(languagePreference: appLanguage, bundle: appLocalizationBundle)
-            .string(key, fallback: fallback)
     }
 
     var mcpConfigPath: String {

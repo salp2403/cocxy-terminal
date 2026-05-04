@@ -864,7 +864,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             ).showBadge
         }
 
-        let sidebar = TabBarView(viewModel: tabBarVM)
+        let sidebar = TabBarView(
+            viewModel: tabBarVM,
+            localizer: appLocalizer(for: configService?.current)
+        )
         sidebar.onCommandPalette = { [weak self] in self?.toggleCommandPalette() }
         sidebar.onNotificationPanel = { [weak self] in self?.toggleNotificationPanel() }
         sidebar.onInstallUpdate = { [weak self] in self?.sparkleUpdater?.checkForUpdates() }

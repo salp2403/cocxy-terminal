@@ -132,7 +132,22 @@ struct AppLanguagePreferencesSwiftTestingTests {
         #expect(vm.localizedString("preferences.iCloud.conflict.versionsDiffer", fallback: "Local and remote versions differ.") == "Las versiones local y remota son diferentes.")
         #expect(vm.localizedString("preferences.github.autoRefresh", fallback: "Auto-refresh every %d s") == "Auto-refrescar cada %d s")
         #expect(vm.localizedString("preferences.about.updates", fallback: "Updates") == "Actualizaciones")
+        #expect(vm.localizedString("preferences.unsaved.title", fallback: "Unsaved Changes") == "Cambios sin guardar")
+        #expect(vm.localizedString("tabbar.context.close", fallback: "Close Tab") == "Cerrar pestaña")
         #expect(PreferencesSection.appearance.localizedTitle(vm) == "Apariencia")
+    }
+
+    @Test
+    func unsavedChangesAlertCopyFollowsSelectedLanguage() {
+        let (vm, _) = makeViewModel(appLanguage: .spanish)
+
+        let copy = PreferencesWindowDelegate.localizedUnsavedChangesCopy(localizer: vm.appLocalizer())
+
+        #expect(copy.messageText == "Cambios sin guardar")
+        #expect(copy.informativeText == "Tienes ajustes sin guardar. ¿Quieres guardarlos antes de cerrar?")
+        #expect(copy.primaryButton == "Guardar")
+        #expect(copy.secondaryButton == "Descartar")
+        #expect(copy.tertiaryButton == "Cancelar")
     }
 
     private func localizationBundle() -> Bundle? {

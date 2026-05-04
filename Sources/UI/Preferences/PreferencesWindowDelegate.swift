@@ -39,12 +39,15 @@ final class PreferencesWindowDelegate: NSObject, NSWindowDelegate {
         }
 
         let alert = NSAlert()
-        alert.messageText = "Unsaved Changes"
-        alert.informativeText = "You have unsaved settings. Would you like to save them before closing?"
+        let copy = Self.localizedUnsavedChangesCopy(localizer: viewModel.appLocalizer())
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Discard")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
+        if let tertiaryButton = copy.tertiaryButton {
+            alert.addButton(withTitle: tertiaryButton)
+        }
 
         alert.beginSheetModal(for: sender) { [weak self] response in
             guard let self else { return }
@@ -72,5 +75,18 @@ final class PreferencesWindowDelegate: NSObject, NSWindowDelegate {
 
         // Return false to prevent immediate close; the sheet handler closes if needed.
         return false
+    }
+
+    static func localizedUnsavedChangesCopy(localizer: AppLocalizer) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: localizer.string("preferences.unsaved.title", fallback: "Unsaved Changes"),
+            informativeText: localizer.string(
+                "preferences.unsaved.message",
+                fallback: "You have unsaved settings. Would you like to save them before closing?"
+            ),
+            primaryButton: localizer.string("common.save", fallback: "Save"),
+            secondaryButton: localizer.string("common.discard", fallback: "Discard"),
+            tertiaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
     }
 }
