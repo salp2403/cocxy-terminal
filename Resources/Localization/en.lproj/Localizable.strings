@@ -540,6 +540,31 @@
 "notes.delete.confirm.message" = "This removes the note from this workspace.";
 "notes.delete.confirm.button" = "Delete Note";
 
+"timeline.accessibility" = "Agent Timeline";
+"timeline.title" = "Agent Timeline";
+"timeline.scope.all" = "All Windows";
+"timeline.scope.current" = "This Window";
+"timeline.export.json" = "Export JSON";
+"timeline.export.markdown" = "Export Markdown";
+"timeline.export.accessibility" = "Export timeline";
+"timeline.close" = "Close timeline";
+"timeline.filter.all" = "All";
+"timeline.filter.tools" = "Tools";
+"timeline.filter.errors" = "Errors";
+"timeline.filter.agents" = "Agents";
+"timeline.filter.tasks" = "Tasks";
+"timeline.filter.session" = "Session";
+"timeline.filter.all.accessibility" = "All filter";
+"timeline.filter.tools.accessibility" = "Tools filter";
+"timeline.filter.errors.accessibility" = "Errors filter";
+"timeline.filter.agents.accessibility" = "Agents filter";
+"timeline.filter.tasks.accessibility" = "Tasks filter";
+"timeline.filter.session.accessibility" = "Session filter";
+"timeline.empty.current.title" = "No events in this window";
+"timeline.empty.current.detail" = "Switch to All Windows to inspect activity\nfrom every window.";
+"timeline.empty.all.title" = "No timeline events";
+"timeline.empty.all.detail" = "Agent actions will appear here\nas they happen in real-time.";
+
 "welcome.accessibilityLabel" = "Welcome to Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";
 "welcome.subtitle" = "Agent-aware terminal for macOS";

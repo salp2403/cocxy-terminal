@@ -1666,7 +1666,8 @@ extension MainWindowController {
         var swiftUIView = TimelineView(
             viewModel: vm,
             onDismiss: { [weak self] in self?.dismissTimeline() },
-            currentWindowID: windowID
+            currentWindowID: windowID,
+            localizer: appLocalizer()
         )
         swiftUIView.navigationDispatcher = timelineDispatcher
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
@@ -2398,6 +2399,10 @@ extension MainWindowController {
         hostingView.rootView = view
     }
 
+    func syncTimelineRootView() {
+        syncTimelineVibrancyOverride(resolveVibrancyAppearanceOverride())
+    }
+
     private func syncTimelineVibrancyOverride(_ override: NSAppearance?) {
         guard isTimelineVisible,
               let hostingView = timelineHostingView as? NSHostingView<TimelineView>,
@@ -2405,7 +2410,8 @@ extension MainWindowController {
         var view = TimelineView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissTimeline() },
-            currentWindowID: windowID
+            currentWindowID: windowID,
+            localizer: appLocalizer()
         )
         view.navigationDispatcher = timelineDispatcher
         view.vibrancyAppearanceOverride = override

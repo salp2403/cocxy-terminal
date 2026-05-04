@@ -540,6 +540,31 @@
 "notes.delete.confirm.message" = "Esto elimina la nota de este workspace.";
 "notes.delete.confirm.button" = "Eliminar nota";
 
+"timeline.accessibility" = "Línea de tiempo de agentes";
+"timeline.title" = "Línea de tiempo de agentes";
+"timeline.scope.all" = "Todas las ventanas";
+"timeline.scope.current" = "Esta ventana";
+"timeline.export.json" = "Exportar JSON";
+"timeline.export.markdown" = "Exportar Markdown";
+"timeline.export.accessibility" = "Exportar línea de tiempo";
+"timeline.close" = "Cerrar línea de tiempo";
+"timeline.filter.all" = "Todo";
+"timeline.filter.tools" = "Herramientas";
+"timeline.filter.errors" = "Errores";
+"timeline.filter.agents" = "Agentes";
+"timeline.filter.tasks" = "Tareas";
+"timeline.filter.session" = "Sesión";
+"timeline.filter.all.accessibility" = "Filtro Todo";
+"timeline.filter.tools.accessibility" = "Filtro Herramientas";
+"timeline.filter.errors.accessibility" = "Filtro Errores";
+"timeline.filter.agents.accessibility" = "Filtro Agentes";
+"timeline.filter.tasks.accessibility" = "Filtro Tareas";
+"timeline.filter.session.accessibility" = "Filtro Sesión";
+"timeline.empty.current.title" = "Sin eventos en esta ventana";
+"timeline.empty.current.detail" = "Cambia a Todas las ventanas para inspeccionar actividad\nde cada ventana.";
+"timeline.empty.all.title" = "Sin eventos de línea de tiempo";
+"timeline.empty.all.detail" = "Las acciones del agente aparecerán aquí\ncuando ocurran en tiempo real.";
+
 "welcome.accessibilityLabel" = "Bienvenida a Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";
 "welcome.subtitle" = "Terminal para macOS con conciencia de agentes";

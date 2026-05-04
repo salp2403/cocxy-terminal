@@ -42,12 +42,12 @@ struct TimelineView: View {
 
         var id: String { rawValue }
 
-        var title: String {
+        func localizedTitle(using localizer: AppLocalizer) -> String {
             switch self {
             case .all:
-                return "All Windows"
+                return localizer.string("timeline.scope.all", fallback: "All Windows")
             case .current:
-                return "This Window"
+                return localizer.string("timeline.scope.current", fallback: "This Window")
             }
         }
     }
@@ -72,6 +72,9 @@ struct TimelineView: View {
     /// values pin the vibrancy view so the timeline panel matches the
     /// rest of the chrome when the user forces a transparency theme.
     var vibrancyAppearanceOverride: NSAppearance?
+
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Currently selected event type filter. Nil means show all.
     @State private var selectedFilter: TimelineEventType? = nil
@@ -103,14 +106,14 @@ struct TimelineView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Agent Timeline")
+        .accessibilityLabel(localized("timeline.accessibility", fallback: "Agent Timeline"))
     }
 
     // MARK: - Header
 
     private var headerView: some View {
         HStack {
-            Text("Agent Timeline")
+            Text(localized("timeline.title", fallback: "Agent Timeline"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
 
@@ -121,8 +124,8 @@ struct TimelineView: View {
             }
 
             Menu {
-                Button("Export JSON") { viewModel.onExportJSON() }
-                Button("Export Markdown") { viewModel.onExportMarkdown() }
+                Button(localized("timeline.export.json", fallback: "Export JSON")) { viewModel.onExportJSON() }
+                Button(localized("timeline.export.markdown", fallback: "Export Markdown")) { viewModel.onExportMarkdown() }
             } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 11))
@@ -130,7 +133,7 @@ struct TimelineView: View {
             }
             .menuStyle(.borderlessButton)
             .frame(width: 24)
-            .accessibilityLabel("Export timeline")
+            .accessibilityLabel(localized("timeline.export.accessibility", fallback: "Export timeline"))
 
             if onDismiss != nil {
                 Button(action: { onDismiss?() }) {
@@ -140,7 +143,7 @@ struct TimelineView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(width: 24, height: 24)
-                .accessibilityLabel("Close timeline")
+                .accessibilityLabel(localized("timeline.close", fallback: "Close timeline"))
             }
         }
         .padding(.horizontal, 12)
@@ -150,7 +153,7 @@ struct TimelineView: View {
     private var scopePicker: some View {
         HStack(spacing: 4) {
             ForEach(WindowScope.allCases) { scope in
-                Button(scope.title) {
+                Button(scope.localizedTitle(using: localizer)) {
                     selectedScope = scope
                 }
                 .buttonStyle(.plain)
@@ -173,12 +176,36 @@ struct TimelineView: View {
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                filterChip(label: "All", type: nil)
-                filterChip(label: "Tools", type: .toolUse)
-                filterChip(label: "Errors", type: .toolFailure)
-                filterChip(label: "Agents", type: .subagentStart)
-                filterChip(label: "Tasks", type: .taskCompleted)
-                filterChip(label: "Session", type: .sessionStart)
+                filterChip(
+                    label: localized("timeline.filter.all", fallback: "All"),
+                    accessibilityLabel: localized("timeline.filter.all.accessibility", fallback: "All filter"),
+                    type: nil
+                )
+                filterChip(
+                    label: localized("timeline.filter.tools", fallback: "Tools"),
+                    accessibilityLabel: localized("timeline.filter.tools.accessibility", fallback: "Tools filter"),
+                    type: .toolUse
+                )
+                filterChip(
+                    label: localized("timeline.filter.errors", fallback: "Errors"),
+                    accessibilityLabel: localized("timeline.filter.errors.accessibility", fallback: "Errors filter"),
+                    type: .toolFailure
+                )
+                filterChip(
+                    label: localized("timeline.filter.agents", fallback: "Agents"),
+                    accessibilityLabel: localized("timeline.filter.agents.accessibility", fallback: "Agents filter"),
+                    type: .subagentStart
+                )
+                filterChip(
+                    label: localized("timeline.filter.tasks", fallback: "Tasks"),
+                    accessibilityLabel: localized("timeline.filter.tasks.accessibility", fallback: "Tasks filter"),
+                    type: .taskCompleted
+                )
+                filterChip(
+                    label: localized("timeline.filter.session", fallback: "Session"),
+                    accessibilityLabel: localized("timeline.filter.session.accessibility", fallback: "Session filter"),
+                    type: .sessionStart
+                )
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -186,7 +213,11 @@ struct TimelineView: View {
     }
 
     /// A single filter chip button.
-    private func filterChip(label: String, type: TimelineEventType?) -> some View {
+    private func filterChip(
+        label: String,
+        accessibilityLabel: String,
+        type: TimelineEventType?
+    ) -> some View {
         Button(action: { selectedFilter = type }) {
             Text(label)
                 .font(.system(size: 10, weight: selectedFilter == type ? .semibold : .regular))
@@ -200,7 +231,7 @@ struct TimelineView: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(label) filter")
+        .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(selectedFilter == type ? .isSelected : [])
     }
 
@@ -246,13 +277,23 @@ struct TimelineView: View {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 32))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text(selectedScope == .current ? "No events in this window" : "No timeline events")
+            Text(
+                selectedScope == .current
+                ? localized("timeline.empty.current.title", fallback: "No events in this window")
+                : localized("timeline.empty.all.title", fallback: "No timeline events")
+            )
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
             Text(
                 selectedScope == .current
-                ? "Switch to All Windows to inspect activity\nfrom every window."
-                : "Agent actions will appear here\nas they happen in real-time."
+                ? localized(
+                    "timeline.empty.current.detail",
+                    fallback: "Switch to All Windows to inspect activity\nfrom every window."
+                )
+                : localized(
+                    "timeline.empty.all.detail",
+                    fallback: "Agent actions will appear here\nas they happen in real-time."
+                )
             )
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
@@ -283,5 +324,9 @@ struct TimelineView: View {
             return scopedEvents.filter { $0.type == .subagentStart || $0.type == .subagentStop }
         }
         return scopedEvents.filter { $0.type == filter }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

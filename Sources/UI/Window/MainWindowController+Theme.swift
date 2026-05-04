@@ -155,6 +155,7 @@ extension MainWindowController {
             syncCodeReviewPanelRootView(panelWidth: codeReviewPanelWidth)
             syncGitHubPaneRootView(panelWidth: gitHubPanePanelWidth)
             syncNotesRootView()
+            syncTimelineRootView()
         }
 
         if old?.keybindings != config.keybindings
