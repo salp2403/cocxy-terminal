@@ -720,6 +720,17 @@
 "tabbar.tab.pinned" = "Fijada";
 "tabbar.tab.worktree" = "Worktree";
 "tabbar.tab.renamePlaceholder" = "Nombre de pestaña";
+"tabbar.agent.defaultName" = "Agente";
+"tabbar.agent.badge.launched" = "Iniciado";
+"tabbar.agent.badge.working" = "Trabajando";
+"tabbar.agent.badge.waitingInput" = "Entrada";
+"tabbar.agent.badge.finished" = "Listo";
+"tabbar.agent.badge.error" = "Error";
+"tabbar.agent.status.starting" = "%@ iniciando...";
+"tabbar.agent.status.working" = "%@ trabajando";
+"tabbar.agent.status.waitingInput" = "%@ esperando entrada";
+"tabbar.agent.status.finished" = "%@ finalizado";
+"tabbar.agent.status.error" = "%@ con error";
 "tabbar.agentPill.unknownAgent" = "agente desconocido";
 "tabbar.agentPill.focusedSuffix" = ", con foco";
 "tabbar.remoteUnread.one" = "1 notificación en otras ventanas";

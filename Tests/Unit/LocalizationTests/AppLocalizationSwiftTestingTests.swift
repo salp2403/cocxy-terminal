@@ -379,6 +379,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(TabItemView.localizedAgentAccessibilityValue(.working, using: spanish) == "Agente: El agente está trabajando")
         #expect(TabItemView.localizedRenamePlaceholder(using: spanish) == "Nombre de pestaña")
         #expect(spanish.string("tabbar.tab.ready", fallback: "Ready") == "Listo")
+        #expect(spanish.string("tabbar.agent.badge.waitingInput", fallback: "Input") == "Entrada")
+        #expect(spanish.string("tabbar.agent.status.waitingInput", fallback: "%@ waiting for input") == "%@ esperando entrada")
         #expect(spanish.string("tabbar.agentPill.focusedSuffix", fallback: ", focused") == ", con foco")
         #expect(Design.VerticalTabSearchBar.localizedPlaceholder(using: spanish) == "Filtrar sesiones...")
         #expect(AuroraSidebarDisplayMode.summary.verticalTabShortLabel(using: spanish) == "R")

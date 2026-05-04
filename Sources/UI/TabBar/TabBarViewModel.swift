@@ -110,6 +110,9 @@ final class TabBarViewModel: ObservableObject {
     /// notification stack is initialized after the window controller.
     private weak var notificationManager: NotificationManagerImpl?
 
+    /// Localizer used for display strings generated before the AppKit view layer.
+    private var localizer: AppLocalizer
+
     /// Closure invoked to create a new tab with full surface setup.
     /// Wired by `MainWindowController` to route through `createTab()` which
     /// creates the terminal surface, PTY, and view hierarchy.
@@ -179,10 +182,19 @@ final class TabBarViewModel: ObservableObject {
     /// subscribes to future changes.
     ///
     /// - Parameter tabManager: The domain tab manager to observe.
-    init(tabManager: TabManager) {
+    init(
+        tabManager: TabManager,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
+    ) {
         self.tabManager = tabManager
+        self.localizer = localizer
         syncWithManager()
         subscribeToChanges()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        syncWithManager()
     }
 
     /// Injects the notification manager and subscribes to notification changes.
@@ -471,15 +483,15 @@ final class TabBarViewModel: ObservableObject {
         case .idle:
             return nil
         case .launched:
-            return "Launched"
+            return localizer.string("tabbar.agent.badge.launched", fallback: "Launched")
         case .working:
-            return "Working"
+            return localizer.string("tabbar.agent.badge.working", fallback: "Working")
         case .waitingInput:
-            return "Input"
+            return localizer.string("tabbar.agent.badge.waitingInput", fallback: "Input")
         case .finished:
-            return "Done"
+            return localizer.string("tabbar.agent.badge.finished", fallback: "Done")
         case .error:
-            return "Error"
+            return localizer.string("tabbar.agent.badge.error", fallback: "Error")
         }
     }
 
@@ -492,21 +504,38 @@ final class TabBarViewModel: ObservableObject {
         activity: String?,
         detectedAgentName: String?
     ) -> String {
-        let agentLabel = detectedAgentName ?? processName ?? "Agent"
+        let agentLabel = detectedAgentName
+            ?? processName
+            ?? localizer.string("tabbar.agent.defaultName", fallback: "Agent")
         switch state {
         case .idle:
-            return processName ?? "Ready"
+            return processName ?? localizer.string("tabbar.tab.ready", fallback: "Ready")
         case .launched:
-            return "\(agentLabel) starting..."
+            return String(
+                format: localizer.string("tabbar.agent.status.starting", fallback: "%@ starting..."),
+                agentLabel
+            )
         case .working:
             // Show the actual tool + file when available, not just "Working..."
-            return activity ?? "\(agentLabel) working"
+            return activity ?? String(
+                format: localizer.string("tabbar.agent.status.working", fallback: "%@ working"),
+                agentLabel
+            )
         case .waitingInput:
-            return "\(agentLabel) waiting for input"
+            return String(
+                format: localizer.string("tabbar.agent.status.waitingInput", fallback: "%@ waiting for input"),
+                agentLabel
+            )
         case .finished:
-            return "\(agentLabel) finished"
+            return String(
+                format: localizer.string("tabbar.agent.status.finished", fallback: "%@ finished"),
+                agentLabel
+            )
         case .error:
-            return "\(agentLabel) error"
+            return String(
+                format: localizer.string("tabbar.agent.status.error", fallback: "%@ error"),
+                agentLabel
+            )
         }
     }
 

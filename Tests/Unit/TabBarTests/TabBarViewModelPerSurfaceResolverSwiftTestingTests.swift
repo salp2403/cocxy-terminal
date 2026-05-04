@@ -91,6 +91,46 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         #expect(item?.agentStatusText.contains("Codex CLI") == true)
     }
 
+    @Test("agent status text follows configured app language")
+    func agentStatusTextFollowsConfiguredAppLanguage() throws {
+        let manager = TabManager()
+        let viewModel = TabBarViewModel(tabManager: manager)
+        viewModel.agentStateResolver = { _ in
+            SurfaceAgentState(
+                agentState: .waitingInput,
+                detectedAgent: DetectedAgent(
+                    name: "codex",
+                    displayName: "Codex CLI",
+                    launchCommand: "codex",
+                    startedAt: Date()
+                )
+            )
+        }
+
+        let spanish = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        viewModel.updateLocalizer(spanish)
+
+        let item = viewModel.tabItems.first
+        #expect(item?.badgeText == "Entrada")
+        #expect(item?.agentStatusText == "Codex CLI esperando entrada")
+    }
+
+    @Test("idle status text localizes when no process is running")
+    func idleStatusTextLocalizesWhenNoProcessIsRunning() throws {
+        let manager = TabManager()
+        let spanish = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        let viewModel = TabBarViewModel(tabManager: manager, localizer: spanish)
+
+        let item = viewModel.tabItems.first
+        #expect(item?.agentStatusText == "Listo")
+    }
+
     @Test("resolver-driven duration follows the resolved detected agent")
     func resolverDrivenDuration() {
         let manager = TabManager()
@@ -297,5 +337,10 @@ struct TabBarViewModelPerSurfaceResolverSwiftTestingTests {
         #expect(item?.additionalActiveAgentStates == [.waitingInput])
         #expect(item?.perSurfaceAgents.count == 1)
         #expect(item?.perSurfaceAgents.first?.state.agentState == .working)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

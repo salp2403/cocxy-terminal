@@ -254,6 +254,7 @@ final class TabBarView: NSView {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        viewModel.updateLocalizer(localizer)
         setupAccessibility()
         applyLocalizedChrome()
         tabItemViews.values.forEach { $0.updateLocalizer(localizer) }

@@ -819,7 +819,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func buildSidebar() -> TabBarView {
-        let tabBarVM = TabBarViewModel(tabManager: tabManager)
+        let sidebarLocalizer = appLocalizer(for: configService?.current)
+        let tabBarVM = TabBarViewModel(tabManager: tabManager, localizer: sidebarLocalizer)
         tabBarVM.onAddTab = { [weak self] in self?.createTab() }
         tabBarVM.onCloseTab = { [weak self] tabID in self?.closeTab(tabID) }
         tabBarVM.dragDataProvider = { [weak self] tabID in
@@ -866,7 +867,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
         let sidebar = TabBarView(
             viewModel: tabBarVM,
-            localizer: appLocalizer(for: configService?.current)
+            localizer: sidebarLocalizer
         )
         sidebar.onCommandPalette = { [weak self] in self?.toggleCommandPalette() }
         sidebar.onNotificationPanel = { [weak self] in self?.toggleNotificationPanel() }

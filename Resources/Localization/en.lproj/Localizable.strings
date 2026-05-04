@@ -720,6 +720,17 @@
 "tabbar.tab.pinned" = "Pinned";
 "tabbar.tab.worktree" = "Worktree";
 "tabbar.tab.renamePlaceholder" = "Tab name";
+"tabbar.agent.defaultName" = "Agent";
+"tabbar.agent.badge.launched" = "Launched";
+"tabbar.agent.badge.working" = "Working";
+"tabbar.agent.badge.waitingInput" = "Input";
+"tabbar.agent.badge.finished" = "Done";
+"tabbar.agent.badge.error" = "Error";
+"tabbar.agent.status.starting" = "%@ starting...";
+"tabbar.agent.status.working" = "%@ working";
+"tabbar.agent.status.waitingInput" = "%@ waiting for input";
+"tabbar.agent.status.finished" = "%@ finished";
+"tabbar.agent.status.error" = "%@ error";
 "tabbar.agentPill.unknownAgent" = "unknown agent";
 "tabbar.agentPill.focusedSuffix" = ", focused";
 "tabbar.remoteUnread.one" = "1 notification in other windows";
