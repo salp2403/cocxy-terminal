@@ -1001,14 +1001,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         ))
         terminalArea.autoresizingMask = [.width, .height]
         terminalArea.wantsLayer = true
-        terminalArea.layer?.backgroundColor = (window?.backgroundColor ?? CocxyColors.base).cgColor
         outerContainer.addSubview(terminalArea)
         self.terminalContainerView = terminalArea
+        refreshTerminalContainerBackingBackground(color: window?.backgroundColor ?? CocxyColors.base)
 
         surfaceView.frame = terminalArea.bounds
         surfaceView.autoresizingMask = [.width, .height]
         terminalArea.addSubview(surfaceView)
         return terminalArea
+    }
+
+    func refreshTerminalContainerBackingBackground(color: NSColor? = nil) {
+        guard let terminalContainerView else { return }
+        terminalContainerView.wantsLayer = true
+        guard let layer = terminalContainerView.layer else { return }
+
+        let sourceColor = color ?? window?.backgroundColor ?? CocxyColors.base
+        let resolvedColor = sourceColor.usingColorSpace(.deviceRGB) ?? sourceColor
+        let opaqueColor = resolvedColor.withAlphaComponent(1.0)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.backgroundColor = opaqueColor.cgColor
+        layer.isOpaque = true
+        CATransaction.commit()
     }
 
     private func buildRootView(contentFrame: NSRect, splitView: NSSplitView) -> NSView {
@@ -2308,6 +2324,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         window.backgroundColor = window.backgroundColor?.withAlphaComponent(
             isTransparent ? appearance.backgroundOpacity : 1.0
         )
+        refreshTerminalContainerBackingBackground()
 
         // Resolve the forced NSAppearance once and fan it out to every
         // vibrancy site. The override is only meaningful while the chrome

@@ -116,6 +116,13 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         .menuBar,
     ]
 
+    /// Warm-up work is intentionally sliced across main-run-loop turns.
+    /// A single deferred block keeps socket readiness fast but can still
+    /// make the first restored window feel frozen while restore, plugins,
+    /// update checks and menu work run back-to-back.
+    static let deferredWarmupRunLoopBatches: [[AppLaunchStep]] =
+        deferredWarmupSteps.map { [$0] }
+
     var signpostName: StaticString {
         switch self {
         case .bundledFonts: return "Bundled fonts"

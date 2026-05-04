@@ -660,6 +660,7 @@ extension AppDelegate {
         }
 
         controller.destroyAllSurfaces()
+        controller.refreshTerminalContainerBackingBackground()
         controller.deferredRestoredTabs.removeAll()
         controller.deferredRestoredTabLoader = nil
         controller.terminalContainerView?.subviews.forEach { $0.removeFromSuperview() }
@@ -681,6 +682,7 @@ extension AppDelegate {
         controller.displayedTabID = nil
         controller.terminalSurfaceView?.removeFromSuperview()
         controller.terminalSurfaceView = nil
+        controller.refreshTerminalContainerBackingBackground()
         controller.terminalOutputBuffer = TerminalOutputBuffer()
 
         while let tabID = controller.tabManager.tabs.first?.id {

@@ -74,4 +74,16 @@ struct AppLaunchSignpostsSwiftTestingTests {
         #expect(AppLaunchStep.deferredWarmupSteps.contains(.bundledFonts))
         #expect(AppLaunchStep.deferredWarmupSteps.contains(.remoteWorkspace))
     }
+
+    @Test("deferred warm-up is sliced into one launch phase per run-loop turn")
+    func deferredWarmupBatchesKeepFirstRestoredWindowResponsive() {
+        let batches = AppLaunchStep.deferredWarmupRunLoopBatches
+        let flattened = batches.flatMap { $0 }
+
+        #expect(flattened == AppLaunchStep.deferredWarmupSteps)
+        #expect(batches.allSatisfy { $0.count == 1 })
+        #expect(flattened.first == .bundledFonts)
+        #expect(flattened.contains(.sessionRestore))
+        #expect(flattened.last == .menuBar)
+    }
 }

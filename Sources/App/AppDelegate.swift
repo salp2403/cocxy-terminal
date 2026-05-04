@@ -255,6 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Guards launch warm-up so it runs once after the socket-ready
     /// critical path has returned to the main run loop.
     private var hasScheduledDeferredLaunchWork = false
+    private var pendingDeferredLaunchWorkBatches: [[AppLaunchStep]] = []
 
     /// Local-only crash recovery state and periodic session snapshots.
     var crashRecoveryManager: CrashRecoveryManager?
@@ -286,47 +287,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func scheduleDeferredLaunchWork() {
         guard !hasScheduledDeferredLaunchWork else { return }
         hasScheduledDeferredLaunchWork = true
+        pendingDeferredLaunchWorkBatches = AppLaunchStep.deferredWarmupRunLoopBatches
 
         DispatchQueue.main.async { [weak self] in
-            self?.runDeferredLaunchWork()
+            self?.runNextDeferredLaunchWorkBatch()
         }
     }
 
-    private func runDeferredLaunchWork() {
-        AppLaunchSignposts.measure(.bundledFonts) {
-            BundledFontRegistry.ensureRegistered()
+    private func runNextDeferredLaunchWorkBatch() {
+        guard !pendingDeferredLaunchWorkBatches.isEmpty else { return }
+        let batch = pendingDeferredLaunchWorkBatches.removeFirst()
+
+        for step in batch {
+            runDeferredLaunchStep(step)
         }
-        AppLaunchSignposts.measure(.menuSetup) { setupMainMenu() }
-        AppLaunchSignposts.measure(.keybindings) {
-            applyKeybindingsToMainMenu()
-            startMenuKeybindingsObserver()
+
+        guard !pendingDeferredLaunchWorkBatches.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.runNextDeferredLaunchWorkBatch()
         }
-        AppLaunchSignposts.measure(.windowWarmup) {
-            if let controller = windowController {
-                controller.completeDeferredWindowSetupIfNeeded()
-                configureSharedServices(for: controller, registerWindow: false)
+    }
+
+    private func runDeferredLaunchStep(_ step: AppLaunchStep) {
+        switch step {
+        case .bundledFonts:
+            AppLaunchSignposts.measure(.bundledFonts) {
+                BundledFontRegistry.ensureRegistered()
             }
+        case .menuSetup:
+            AppLaunchSignposts.measure(.menuSetup) { setupMainMenu() }
+        case .keybindings:
+            AppLaunchSignposts.measure(.keybindings) {
+                applyKeybindingsToMainMenu()
+                startMenuKeybindingsObserver()
+            }
+        case .windowWarmup:
+            AppLaunchSignposts.measure(.windowWarmup) {
+                if let controller = windowController {
+                    controller.completeDeferredWindowSetupIfNeeded()
+                    configureSharedServices(for: controller, registerWindow: false)
+                }
+            }
+        case .crashRecovery:
+            AppLaunchSignposts.measure(.crashRecovery) { initializeCrashRecovery() }
+        case .sessionRestore:
+            AppLaunchSignposts.measure(.sessionRestore) { restoreSessionOnLaunch() }
+            presentCrashRecoveryOfferIfNeeded()
+            startCrashRecoverySnapshotsIfNeeded()
+        case .autoSave:
+            AppLaunchSignposts.measure(.autoSave) {
+                startSessionAutoSaveIfNeeded()
+                observeSessionAutoSaveConfigChanges()
+            }
+        case .backup:
+            AppLaunchSignposts.measure(.backup) { runAutomaticBackupIfNeeded() }
+        case .portScanner:
+            AppLaunchSignposts.measure(.portScanner) { initializePortScanner() }
+        case .plugins:
+            AppLaunchSignposts.measure(.plugins) { setupPlugins() }
+        case .quickTerminal:
+            AppLaunchSignposts.measure(.quickTerminal) { initializeQuickTerminal() }
+        case .appearanceObserver:
+            AppLaunchSignposts.measure(.appearanceObserver) { initializeAppearanceObserver() }
+        case .remoteWorkspace:
+            AppLaunchSignposts.measure(.remoteWorkspace) { setupRemoteWorkspace() }
+        case .browserPro:
+            AppLaunchSignposts.measure(.browserPro) { setupBrowserPro() }
+        case .autoUpdate:
+            AppLaunchSignposts.measure(.autoUpdate) { setupAutoUpdate() }
+        case .appIcon:
+            AppLaunchSignposts.measure(.appIcon) { applyPlaceholderAppIcon() }
+        case .firstLaunch:
+            AppLaunchSignposts.measure(.firstLaunch) { performFirstLaunchSetup() }
+        case .welcome:
+            AppLaunchSignposts.measure(.welcome) { showGuidedOnboardingOnFirstLaunch() }
+        case .menuBar:
+            AppLaunchSignposts.measure(.menuBar) { initializeMenuBarItem() }
+        case .themeEngine,
+             .configService,
+             .configWatcher,
+             .sessionManager,
+             .bridge,
+             .agentDetectionEngine,
+             .sessionRegistry,
+             .mainWindow,
+             .agentWiring,
+             .notifications,
+             .socketServer:
+            assertionFailure("Critical launch step scheduled as deferred warm-up: \(step)")
         }
-        AppLaunchSignposts.measure(.crashRecovery) { initializeCrashRecovery() }
-        AppLaunchSignposts.measure(.sessionRestore) { restoreSessionOnLaunch() }
-        presentCrashRecoveryOfferIfNeeded()
-        startCrashRecoverySnapshotsIfNeeded()
-        AppLaunchSignposts.measure(.autoSave) {
-            startSessionAutoSaveIfNeeded()
-            observeSessionAutoSaveConfigChanges()
-        }
-        AppLaunchSignposts.measure(.backup) { runAutomaticBackupIfNeeded() }
-        AppLaunchSignposts.measure(.portScanner) { initializePortScanner() }
-        AppLaunchSignposts.measure(.plugins) { setupPlugins() }
-        AppLaunchSignposts.measure(.quickTerminal) { initializeQuickTerminal() }
-        AppLaunchSignposts.measure(.appearanceObserver) { initializeAppearanceObserver() }
-        AppLaunchSignposts.measure(.remoteWorkspace) { setupRemoteWorkspace() }
-        AppLaunchSignposts.measure(.browserPro) { setupBrowserPro() }
-        AppLaunchSignposts.measure(.autoUpdate) { setupAutoUpdate() }
-        AppLaunchSignposts.measure(.appIcon) { applyPlaceholderAppIcon() }
-        AppLaunchSignposts.measure(.firstLaunch) { performFirstLaunchSetup() }
-        AppLaunchSignposts.measure(.welcome) { showGuidedOnboardingOnFirstLaunch() }
-        AppLaunchSignposts.measure(.menuBar) { initializeMenuBarItem() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1035,7 +1084,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyThemeUI(_ wc: MainWindowController, palette: ThemePalette) {
         let backgroundColor = CodableColor(hex: palette.background).nsColor
         wc.window?.backgroundColor = backgroundColor
-        wc.terminalContainerView?.layer?.backgroundColor = backgroundColor.cgColor
+        wc.refreshTerminalContainerBackingBackground(color: backgroundColor)
         wc.tabBarViewModel?.syncWithManager()
         wc.refreshStatusBar()
 

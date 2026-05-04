@@ -108,6 +108,23 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(controller.tabSurfaceMap[splitTabID] != nil)
     }
 
+    @Test("restore keeps terminal container opaque while rebuilding surfaces")
+    func restoreKeepsTerminalContainerOpaqueWhileRebuildingSurfaces() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let transparentBackground = CocxyColors.base.withAlphaComponent(0.35)
+        controller.window?.backgroundColor = transparentBackground
+        controller.terminalContainerView?.layer?.backgroundColor = transparentBackground.cgColor
+
+        let session = makeSession(tabIDs: [TabID(), TabID()], activeTabIndex: 0)
+
+        #expect(delegate.restoreSession(session, into: controller))
+        #expect(controller.terminalContainerView?.layer?.backgroundColor?.alpha == 1.0)
+    }
+
     private func makeSession(
         tabIDs: [TabID],
         activeTabIndex: Int,
