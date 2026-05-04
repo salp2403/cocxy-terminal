@@ -34,6 +34,7 @@ struct PanelTabInfo: Equatable {
         case .workflow: return "arrow.triangle.branch"
         case .sessionReplay: return "record.circle"
         case .aiEditHistory: return "clock.arrow.circlepath"
+        case .templates: return "square.grid.2x2"
         case .subagent: return "person.2"
         }
     }
@@ -120,6 +121,7 @@ final class WorkspaceToolbarController: NSObject {
             case .workflow: title = "Workflow"
             case .sessionReplay: title = "Replay"
             case .aiEditHistory: title = "Edit History"
+            case .templates: title = "Templates"
             case .subagent: title = "Agent"
             }
             return PanelTabInfo(

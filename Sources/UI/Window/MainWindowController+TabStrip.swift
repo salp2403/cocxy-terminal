@@ -71,6 +71,7 @@ extension MainWindowController {
                     case .workflow: icon = "arrow.triangle.branch"
                     case .sessionReplay: icon = "record.circle"
                     case .aiEditHistory: icon = "clock.arrow.circlepath"
+                    case .templates: icon = "square.grid.2x2"
                     case .subagent: icon = "person.2"
                     }
                 } else {
@@ -101,6 +102,9 @@ extension MainWindowController {
                     case .aiEditHistory:
                         title = "Edit History"
                         icon = "clock.arrow.circlepath"
+                    case .templates:
+                        title = "Templates"
+                        icon = "square.grid.2x2"
                     case .subagent:
                         title = "Agent"
                         icon = "person.2"

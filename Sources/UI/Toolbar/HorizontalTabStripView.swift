@@ -58,6 +58,9 @@ final class HorizontalTabStripView: NSView {
     /// Callback when "Edit History" is selected from the add menu.
     var onAddAIEditHistory: (() -> Void)?
 
+    /// Callback when "Templates" is selected from the add menu.
+    var onAddTemplates: (() -> Void)?
+
     /// Callback when the close button is clicked on a tab by index.
     var onCloseTab: ((Int) -> Void)?
 
@@ -93,6 +96,9 @@ final class HorizontalTabStripView: NSView {
 
     /// Callback when the "Open Edit History" action icon is clicked.
     var onOpenAIEditHistory: (() -> Void)?
+
+    /// Callback when the "Open Templates" action icon is clicked.
+    var onOpenTemplates: (() -> Void)?
 
     /// Callback when the "Reload" action icon is clicked.
     var onReload: (() -> Void)?
@@ -633,6 +639,13 @@ final class HorizontalTabStripView: NSView {
         }
         menu.addItem(historyItem)
 
+        let templatesItem = NSMenuItem(title: "Templates", action: #selector(addTemplates), keyEquivalent: "")
+        templatesItem.target = self
+        if let img = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil) {
+            templatesItem.image = img
+        }
+        menu.addItem(templatesItem)
+
         let point = NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 4)
         menu.popUp(positioning: nil, at: point, in: button)
     }
@@ -646,6 +659,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func addWorkflow() { onAddWorkflow?() }
     @objc private func addSessionReplay() { onAddSessionReplay?() }
     @objc private func addAIEditHistory() { onAddAIEditHistory?() }
+    @objc private func addTemplates() { onAddTemplates?() }
 
     // MARK: - Contextual Action Icons
 
@@ -738,6 +752,14 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleOpenAIEditHistory)
                 )
             )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "square.grid.2x2",
+                    tooltip: "Open Templates",
+                    accessibilityID: "action:openTemplates",
+                    action: #selector(handleOpenTemplates)
+                )
+            )
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
@@ -763,7 +785,7 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .subagent:
+        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .templates, .subagent:
             break
         }
 
@@ -816,6 +838,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleOpenWorkflow() { onOpenWorkflow?() }
     @objc private func handleOpenSessionReplay() { onOpenSessionReplay?() }
     @objc private func handleOpenAIEditHistory() { onOpenAIEditHistory?() }
+    @objc private func handleOpenTemplates() { onOpenTemplates?() }
     @objc private func handleReload() { onReload?() }
     @objc private func handleGoBack() { onGoBack?() }
     @objc private func handleGoForward() { onGoForward?() }

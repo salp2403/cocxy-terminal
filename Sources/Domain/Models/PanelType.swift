@@ -38,6 +38,9 @@ enum PanelType: String, Codable, Sendable, Equatable {
     /// A local timeline of recorded agent file edits.
     case aiEditHistory = "ai-edit-history"
 
+    /// A local project scaffold template picker.
+    case templates
+
     /// A live subagent activity panel.
     case subagent
 }
@@ -94,6 +97,9 @@ struct PanelInfo: Equatable, Sendable {
     }
     static func aiEditHistory(sessionID: String? = nil, workingDirectory: URL? = nil) -> PanelInfo {
         PanelInfo(type: .aiEditHistory, filePath: workingDirectory, sessionId: sessionID)
+    }
+    static func templates(workingDirectory: URL? = nil) -> PanelInfo {
+        PanelInfo(type: .templates, filePath: workingDirectory)
     }
     static func subagent(id: String, sessionId: String) -> PanelInfo {
         PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)

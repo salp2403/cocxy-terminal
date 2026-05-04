@@ -234,6 +234,23 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testOpenTemplatesPanelHasAction() {
+        let templates = viewMenu.items.first(where: { $0.title == "Open Templates Panel" })
+        XCTAssertNotNil(
+            templates?.action,
+            "Open Templates Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenTemplatesPanelActionPointsToCorrectSelector() {
+        let templates = viewMenu.items.first(where: { $0.title == "Open Templates Panel" })
+        XCTAssertEqual(
+            templates?.action,
+            #selector(MainWindowController.splitWithTemplatesAction(_:)),
+            "Open Templates Panel must create the real local scaffold split panel"
+        )
+    }
+
     // MARK: - New Window
 
     func testNewWindowHasAction() {

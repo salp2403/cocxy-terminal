@@ -138,6 +138,17 @@ extension MainWindowController {
         )
     }
 
+    /// Opens the local project scaffold template picker.
+    @objc func splitWithTemplatesAction(_ sender: Any?) {
+        let dir = workspaceDirectoryForCurrentTab()
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .templates(workingDirectory: dir),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
+    }
+
     // MARK: - Split with Panel
 
     /// Creates a visual split with a non-terminal panel.
@@ -274,6 +285,16 @@ extension MainWindowController {
                 workingDirectory: repoRoot
             )
             let view = AIEditHistoryPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            panelView = NSHostingView(rootView: view)
+        case .templates:
+            let workspaceDir = panel.filePath ?? workspaceDirectoryForCurrentTab()
+            let viewModel = ProjectTemplatePanelViewModel(
+                registry: .localDefault(projectRoot: workspaceDir),
+                destinationRootURL: workspaceDir
+            )
+            let view = ProjectTemplatePanelView(viewModel: viewModel) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             panelView = NSHostingView(rootView: view)

@@ -326,6 +326,10 @@ extension AppDelegate {
                          action: #selector(MainWindowController.splitWithAIEditHistoryAction(_:)),
                          keyEquivalent: "")
 
+        viewMenu.addItem(withTitle: "Open Templates Panel",
+                         action: #selector(MainWindowController.splitWithTemplatesAction(_:)),
+                         keyEquivalent: "")
+
         viewMenu.addItem(NSMenuItem.separator())
 
         // Toggle Tab Bar: not rebindable (no catalog entry, no default shortcut).

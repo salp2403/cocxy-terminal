@@ -73,6 +73,14 @@ final class WorkspaceToolbarTests: XCTestCase {
         XCTAssertEqual(tab.symbolName, "clock.arrow.circlepath")
     }
 
+    func testPanelTabInfoTemplatesSymbol() {
+        let tab = PanelTabInfo(
+            leafID: UUID(), contentID: UUID(),
+            panelType: .templates, title: "Templates", isFocused: false
+        )
+        XCTAssertEqual(tab.symbolName, "square.grid.2x2")
+    }
+
     // MARK: - Toolbar Visibility
 
     func testToolbarVisibleWithSinglePane() {
@@ -213,6 +221,19 @@ final class WorkspaceToolbarTests: XCTestCase {
         let historyTabs = controller.panelTabs.filter { $0.panelType == .aiEditHistory }
         XCTAssertEqual(historyTabs.count, 1)
         XCTAssertEqual(historyTabs.first?.title, "Edit History")
+    }
+
+    func testTemplatesPanelTabTitle() {
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window)
+        let manager = SplitManager()
+        manager.splitFocusedWithPanel(direction: .horizontal, panel: .templates())
+
+        controller.update(splitManager: manager)
+
+        let templateTabs = controller.panelTabs.filter { $0.panelType == .templates }
+        XCTAssertEqual(templateTabs.count, 1)
+        XCTAssertEqual(templateTabs.first?.title, "Templates")
     }
 
     // MARK: - Callbacks

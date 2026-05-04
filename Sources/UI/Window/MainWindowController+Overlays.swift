@@ -628,6 +628,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "workspace.templates",
+                name: "Open Templates Panel",
+                description: "Open local project scaffolds and template variables",
+                shortcut: nil,
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.splitWithTemplatesAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "remote.toggle",
                 name: "Toggle Remote Workspaces",
                 description: "Show or hide the remote workspace panel",

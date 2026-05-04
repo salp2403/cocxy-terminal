@@ -1549,6 +1549,43 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testTemplatesPanelActionInstallsRealHostedPanel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithTemplatesAction(nil)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after opening templates panel")
+            return
+        }
+
+        let leaves = splitManager.rootNode.allLeafIDs()
+        guard let templatesLeaf = leaves.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .templates
+        }) else {
+            XCTFail("Expected templates panel leaf")
+            return
+        }
+
+        XCTAssertTrue(
+            controller.panelContentViews[templatesLeaf.terminalID] is NSHostingView<ProjectTemplatePanelView>,
+            "Templates split must host the real local scaffold picker"
+        )
+
+        let panelTabs = (controller.horizontalTabStripView as? HorizontalTabStripView)?.tabs.map(\.title) ?? []
+        XCTAssertTrue(panelTabs.contains("Templates"))
+        XCTAssertEqual(
+            splitManager.focusedLeafID,
+            templatesLeaf.leafID,
+            "Opening Templates should leave the scaffold panel selected"
+        )
+    }
+
     func testToolbarSplitButtonsMapToVisualOrientation() {
         let sideBySideController = MainWindowController(bridge: MockTerminalEngine())
         sideBySideController.showWindow(nil)

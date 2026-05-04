@@ -131,6 +131,14 @@ final class ProjectTemplatePanelViewModel: ObservableObject {
         }
     }
 
+    func perform(_ action: () throws -> Void) {
+        do {
+            try action()
+        } catch {
+            errorText = error.localizedDescription
+        }
+    }
+
     private var selectedLoadedTemplate: ProjectTemplate? {
         guard let selectedTemplateID else { return nil }
         return loadedTemplates.first { $0.id == selectedTemplateID }

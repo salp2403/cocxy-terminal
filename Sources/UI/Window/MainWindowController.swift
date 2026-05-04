@@ -944,6 +944,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onAddWorkflow = { [weak self] in self?.splitWithWorkflowAction(nil) }
         strip.onAddSessionReplay = { [weak self] in self?.splitWithSessionReplayAction(nil) }
         strip.onAddAIEditHistory = { [weak self] in self?.splitWithAIEditHistoryAction(nil) }
+        strip.onAddTemplates = { [weak self] in self?.splitWithTemplatesAction(nil) }
         strip.onSplitSideBySide = { [weak self] in self?.performVisualSplit(isVertical: true) }
         strip.onSplitStacked = { [weak self] in self?.performVisualSplit(isVertical: false) }
         strip.onOpenBrowser = { [weak self] in self?.splitWithBrowserAction(nil) }
@@ -953,6 +954,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         strip.onOpenWorkflow = { [weak self] in self?.splitWithWorkflowAction(nil) }
         strip.onOpenSessionReplay = { [weak self] in self?.splitWithSessionReplayAction(nil) }
         strip.onOpenAIEditHistory = { [weak self] in self?.splitWithAIEditHistoryAction(nil) }
+        strip.onOpenTemplates = { [weak self] in self?.splitWithTemplatesAction(nil) }
         strip.onReload = { [weak self] in self?.reloadFocusedBrowserPanel() }
         strip.onGoBack = { [weak self] in self?.goBackFocusedBrowserPanel() }
         strip.onGoForward = { [weak self] in self?.goForwardFocusedBrowserPanel() }
@@ -1180,6 +1182,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             paneName = "session replay panel"
         case .aiEditHistory:
             paneName = "edit history panel"
+        case .templates:
+            paneName = "templates panel"
         case .subagent:
             paneName = "subagent panel"
         }
