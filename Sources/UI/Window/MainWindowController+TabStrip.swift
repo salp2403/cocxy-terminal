@@ -37,7 +37,11 @@ extension MainWindowController {
                     isActive: tab.id == activeID
                 )
             }
-            strip.updateTabs(tabEntries.isEmpty ? [(title: "Terminal", icon: "terminal.fill", isActive: true)] : tabEntries)
+            strip.updateTabs(
+                tabEntries.isEmpty
+                    ? [(title: Self.localizedTerminalTitle(using: localizer), icon: "terminal.fill", isActive: true)]
+                    : tabEntries
+            )
             updateHorizontalStripActionIcons(strip)
             return
         }
@@ -81,7 +85,8 @@ extension MainWindowController {
                     switch panelType {
                     case .terminal:
                         terminalIndex += 1
-                        let dirName = tabManager.tab(for: targetTabID)?.workingDirectory.lastPathComponent ?? "Terminal"
+                        let dirName = tabManager.tab(for: targetTabID)?.workingDirectory.lastPathComponent
+                            ?? Self.localizedTerminalTitle(using: localizer)
                         title = leaves.count > 1 ? "\(dirName) \(terminalIndex)" : dirName
                         icon = "terminal.fill"
                     case .browser:
@@ -127,7 +132,7 @@ extension MainWindowController {
         if tabEntries.isEmpty {
             let dirName = visibleTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory.lastPathComponent }
                 ?? tabManager.activeTab?.workingDirectory.lastPathComponent
-                ?? "Terminal"
+                ?? Self.localizedTerminalTitle(using: localizer)
             tabEntries = [(title: dirName, icon: "terminal.fill", isActive: true)]
         }
 
@@ -183,5 +188,9 @@ extension MainWindowController {
 
             strip.updateActionIcons(panelType: focusedType, canClose: canClose)
         }
+    }
+
+    static func localizedTerminalTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("workspaceToolbar.panel.terminal.default", fallback: "Terminal")
     }
 }

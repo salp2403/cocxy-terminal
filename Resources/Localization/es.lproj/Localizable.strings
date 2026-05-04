@@ -899,6 +899,7 @@
 "tabbar.close.title" = "¿Cerrar esta pestaña?";
 "tabbar.close.message" = "Puede que todavía haya un proceso en ejecución en esta pestaña.";
 "workspaceToolbar.panel.terminal" = "Terminal %d";
+"workspaceToolbar.panel.terminal.default" = "Terminal";
 "workspaceToolbar.panel.browser" = "Navegador";
 "workspaceToolbar.panel.markdown" = "Markdown";
 "workspaceToolbar.panel.editor" = "Editor";

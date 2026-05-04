@@ -899,6 +899,7 @@
 "tabbar.close.title" = "Close this tab?";
 "tabbar.close.message" = "A process may still be running in this tab.";
 "workspaceToolbar.panel.terminal" = "Terminal %d";
+"workspaceToolbar.panel.terminal.default" = "Terminal";
 "workspaceToolbar.panel.browser" = "Browser";
 "workspaceToolbar.panel.markdown" = "Markdown";
 "workspaceToolbar.panel.editor" = "Editor";

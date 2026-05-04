@@ -239,8 +239,7 @@ final class HorizontalTabStripView: NSView {
         super.init(frame: frame)
         setupUI()
         applyLocalizedChrome()
-        // Show a default "Terminal" tab.
-        updateTabs([(title: "Terminal", icon: "terminal.fill", isActive: true)])
+        updateTabs([(title: Self.localizedTerminalTitle(using: localizer), icon: "terminal.fill", isActive: true)])
     }
 
     @available(*, unavailable)
@@ -639,6 +638,10 @@ final class HorizontalTabStripView: NSView {
 
     static func localizedTerminalSideBySide(using localizer: AppLocalizer) -> String {
         localizer.string("horizontalTab.add.terminalSideBySide", fallback: "Terminal (Side by Side)")
+    }
+
+    static func localizedTerminalTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("workspaceToolbar.panel.terminal.default", fallback: "Terminal")
     }
 
     static func localizedTerminalStacked(using localizer: AppLocalizer) -> String {
