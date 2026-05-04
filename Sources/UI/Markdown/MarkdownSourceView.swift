@@ -643,6 +643,7 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         guard !isApplyingProgrammaticUpdate else { return }
+        textView.applyReadableSourceTheme(highlighter.theme, repairStorageForeground: true)
         scheduleHighlightRefresh()
         onSourceChanged?(textView.string)
     }
