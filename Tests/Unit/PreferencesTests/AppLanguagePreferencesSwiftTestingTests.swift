@@ -119,6 +119,10 @@ struct AppLanguagePreferencesSwiftTestingTests {
         #expect(vm.localizedString("preferences.voice.systemLocale", fallback: "System") == "Sistema")
         #expect(vm.localizedString("preferences.activity.localDirectory", fallback: "Local directory") == "Directorio local")
         #expect(vm.localizedString("preferences.sessionReplay.enable", fallback: "Enable Session Replay") == "Activar reproducción de sesiones")
+        #expect(vm.localizedString("preferences.backup.defaultLocation", fallback: "Default location: %@") == "Ubicación predeterminada: %@")
+        #expect(vm.localizedString("preferences.codeReview.panel.section", fallback: "Panel") == "Panel")
+        #expect(vm.localizedString("preferences.notifications.visual.section", fallback: "Visual Indicators") == "Indicadores visuales")
+        #expect(vm.localizedString("preferences.terminal.cursorBlink.on", fallback: "On") == "Activado")
         #expect(PreferencesSection.appearance.localizedTitle(vm) == "Apariencia")
     }
 

@@ -1803,38 +1803,75 @@ struct BackupPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Automatic Backups") {
-                Toggle("Enable local automatic backups", isOn: $viewModel.backupEnabled)
-                    .help("Writes timestamped backups to a local folder. No network service is used.")
+            Section(viewModel.localizedString("preferences.backup.automatic.section", fallback: "Automatic Backups")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.backup.enable",
+                        fallback: "Enable local automatic backups"
+                    ),
+                    isOn: $viewModel.backupEnabled
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.backup.enable.help",
+                        fallback: "Writes timestamped backups to a local folder. No network service is used."
+                    )
+                )
             }
 
-            Section("Location") {
-                TextField("Storage directory", text: $viewModel.backupStorageDirectory)
+            Section(viewModel.localizedString("preferences.backup.location.section", fallback: "Location")) {
+                TextField(
+                    viewModel.localizedString(
+                        "preferences.backup.storageDirectory",
+                        fallback: "Storage directory"
+                    ),
+                    text: $viewModel.backupStorageDirectory
+                )
                     .textFieldStyle(.roundedBorder)
                     .disabled(!viewModel.backupEnabled)
-                Text("Default location: \(BackupConfig.defaultStorageDirectory)")
+                Text(
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.backup.defaultLocation",
+                            fallback: "Default location: %@"
+                        ),
+                        BackupConfig.defaultStorageDirectory
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
 
-            Section("Retention") {
+            Section(viewModel.localizedString("preferences.backup.retention.section", fallback: "Retention")) {
                 Stepper(
-                    "Daily snapshots: \(viewModel.backupDailyRetentionCount)",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.backup.dailySnapshots",
+                            fallback: "Daily snapshots: %d"
+                        ),
+                        viewModel.backupDailyRetentionCount
+                    ),
                     value: $viewModel.backupDailyRetentionCount,
                     in: 1...365
                 )
                 .disabled(!viewModel.backupEnabled)
 
                 Stepper(
-                    "Monthly snapshots: \(viewModel.backupMonthlyRetentionCount)",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.backup.monthlySnapshots",
+                            fallback: "Monthly snapshots: %d"
+                        ),
+                        viewModel.backupMonthlyRetentionCount
+                    ),
                     value: $viewModel.backupMonthlyRetentionCount,
                     in: 0...120
                 )
                 .disabled(!viewModel.backupEnabled)
             }
 
-            Section("Artifacts") {
+            Section(viewModel.localizedString("preferences.backup.artifacts.section", fallback: "Artifacts")) {
                 ForEach(BackupArtifactKind.allCases, id: \.self) { kind in
                     Toggle(
                         backupArtifactTitle(kind),
@@ -1851,31 +1888,54 @@ struct BackupPreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Backups")
+        .navigationTitle(viewModel.localizedString("preferences.section.backup", fallback: "Backups"))
     }
 
+    @MainActor
     private func backupArtifactTitle(_ kind: BackupArtifactKind) -> String {
         switch kind {
-        case .settings: return "Settings"
-        case .notebooks: return "Notebooks"
-        case .workflows: return "Workflows"
-        case .skills: return "Custom skills"
-        case .notes: return "Notes"
-        case .macros: return "Macros and snippets"
-        case .themes: return "Custom themes"
-        case .encryptedSSHHosts: return "Encrypted SSH hosts"
-        case .aiConversations: return "AI conversations"
+        case .settings:
+            return viewModel.localizedString("preferences.backup.artifact.settings", fallback: "Settings")
+        case .notebooks:
+            return viewModel.localizedString("preferences.backup.artifact.notebooks", fallback: "Notebooks")
+        case .workflows:
+            return viewModel.localizedString("preferences.backup.artifact.workflows", fallback: "Workflows")
+        case .skills:
+            return viewModel.localizedString("preferences.backup.artifact.skills", fallback: "Custom skills")
+        case .notes:
+            return viewModel.localizedString("preferences.backup.artifact.notes", fallback: "Notes")
+        case .macros:
+            return viewModel.localizedString("preferences.backup.artifact.macros", fallback: "Macros and snippets")
+        case .themes:
+            return viewModel.localizedString("preferences.backup.artifact.themes", fallback: "Custom themes")
+        case .encryptedSSHHosts:
+            return viewModel.localizedString(
+                "preferences.backup.artifact.encryptedSSHHosts",
+                fallback: "Encrypted SSH hosts"
+            )
+        case .aiConversations:
+            return viewModel.localizedString("preferences.backup.artifact.aiConversations", fallback: "AI conversations")
         }
     }
 
+    @MainActor
     private func backupArtifactHelp(_ kind: BackupArtifactKind) -> String {
         switch kind {
         case .aiConversations:
-            return "Off by default. Enable only when you want local conversation history included."
+            return viewModel.localizedString(
+                "preferences.backup.artifact.help.aiConversations",
+                fallback: "Off by default. Enable only when you want local conversation history included."
+            )
         case .encryptedSSHHosts:
-            return "Backs up encrypted host metadata only. SSH keys remain in Keychain."
+            return viewModel.localizedString(
+                "preferences.backup.artifact.help.encryptedSSHHosts",
+                fallback: "Backs up encrypted host metadata only. SSH keys remain in Keychain."
+            )
         default:
-            return "Included in the local backup snapshot when the source exists."
+            return viewModel.localizedString(
+                "preferences.backup.artifact.help.default",
+                fallback: "Included in the local backup snapshot when the source exists."
+            )
         }
     }
 }
@@ -1889,13 +1949,19 @@ struct CodeReviewPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Panel") {
+            Section(viewModel.localizedString("preferences.codeReview.panel.section", fallback: "Panel")) {
                 Toggle(
-                    "Auto-show review panel when an agent session ends",
+                    viewModel.localizedString(
+                        "preferences.codeReview.autoShow",
+                        fallback: "Auto-show review panel when an agent session ends"
+                    ),
                     isOn: $viewModel.codeReviewAutoShowOnSessionEnd
                 )
                 Text(
-                    "When on, Cocxy opens the Code Review panel automatically after a tracked agent session produces changes. Turn it off if you prefer opening the panel manually with Cmd+Option+R."
+                    viewModel.localizedString(
+                        "preferences.codeReview.autoShow.caption",
+                        fallback: "When on, Cocxy opens the Code Review panel automatically after a tracked agent session produces changes. Turn it off if you prefer opening the panel manually with Cmd+Option+R."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1905,7 +1971,7 @@ struct CodeReviewPreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Code Review")
+        .navigationTitle(viewModel.localizedString("preferences.section.codeReview", fallback: "Code Review"))
     }
 }
 
@@ -1918,21 +1984,36 @@ struct EditableNotificationsSection: View {
 
     var body: some View {
         Form {
-            Section("System Notifications") {
-                Toggle("macOS notifications", isOn: $viewModel.macosNotifications)
-                Toggle("Sound", isOn: $viewModel.sound)
+            Section(viewModel.localizedString("preferences.notifications.system.section", fallback: "System Notifications")) {
+                Toggle(
+                    viewModel.localizedString("preferences.notifications.macos", fallback: "macOS notifications"),
+                    isOn: $viewModel.macosNotifications
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.notifications.sound", fallback: "Sound"),
+                    isOn: $viewModel.sound
+                )
             }
 
-            Section("Visual Indicators") {
-                Toggle("Badge on tab", isOn: $viewModel.badgeOnTab)
-                Toggle("Flash tab", isOn: $viewModel.flashTab)
-                Toggle("Dock badge", isOn: $viewModel.showDockBadge)
+            Section(viewModel.localizedString("preferences.notifications.visual.section", fallback: "Visual Indicators")) {
+                Toggle(
+                    viewModel.localizedString("preferences.notifications.badgeOnTab", fallback: "Badge on tab"),
+                    isOn: $viewModel.badgeOnTab
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.notifications.flashTab", fallback: "Flash tab"),
+                    isOn: $viewModel.flashTab
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.notifications.dockBadge", fallback: "Dock badge"),
+                    isOn: $viewModel.showDockBadge
+                )
             }
 
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Notifications")
+        .navigationTitle(viewModel.localizedString("preferences.section.notifications", fallback: "Notifications"))
     }
 }
 
@@ -1944,34 +2025,68 @@ struct TerminalPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Core Defaults") {
-                LabeledContent("Scrollback lines") {
+            Section(viewModel.localizedString("preferences.terminal.core.section", fallback: "Core Defaults")) {
+                LabeledContent(viewModel.localizedString("preferences.terminal.scrollbackLines", fallback: "Scrollback lines")) {
                     Text("\(viewModel.scrollbackLines)")
                         .foregroundStyle(.secondary)
                 }
-                LabeledContent("Cursor style") {
+                LabeledContent(viewModel.localizedString("preferences.terminal.cursorStyle", fallback: "Cursor style")) {
                     Text(viewModel.cursorStyle)
                         .foregroundStyle(.secondary)
                 }
-                LabeledContent("Cursor blink") {
-                    Text(viewModel.cursorBlink ? "On" : "Off")
+                LabeledContent(viewModel.localizedString("preferences.terminal.cursorBlink", fallback: "Cursor blink")) {
+                    Text(
+                        viewModel.cursorBlink
+                            ? viewModel.localizedString("preferences.terminal.cursorBlink.on", fallback: "On")
+                            : viewModel.localizedString("preferences.terminal.cursorBlink.off", fallback: "Off")
+                    )
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Inline Images") {
-                Toggle("Enable Sixel images", isOn: $viewModel.enableSixelImages)
-                Toggle("Enable Kitty images", isOn: $viewModel.enableKittyImages)
-                Toggle("Enable iTerm2 images", isOn: $viewModel.enableITerm2Images)
-                Toggle("Enable file transfer", isOn: $viewModel.imageFileTransfer)
+            Section(viewModel.localizedString("preferences.terminal.inlineImages.section", fallback: "Inline Images")) {
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.enableSixelImages", fallback: "Enable Sixel images"),
+                    isOn: $viewModel.enableSixelImages
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.enableKittyImages", fallback: "Enable Kitty images"),
+                    isOn: $viewModel.enableKittyImages
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.enableITerm2Images", fallback: "Enable iTerm2 images"),
+                    isOn: $viewModel.enableITerm2Images
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.enableFileTransfer", fallback: "Enable file transfer"),
+                    isOn: $viewModel.imageFileTransfer
+                )
                 Stepper(
-                    "Image memory budget: \(viewModel.imageMemoryLimitMB) MiB",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.terminal.imageMemoryBudget",
+                            fallback: "Image memory budget: %d MiB"
+                        ),
+                        viewModel.imageMemoryLimitMB
+                    ),
                     value: $viewModel.imageMemoryLimitMB,
                     in: 1...4096
                 )
-                TextField("Disk cache directory", text: $viewModel.imageDiskCacheDirectory)
+                TextField(
+                    viewModel.localizedString(
+                        "preferences.terminal.diskCacheDirectory",
+                        fallback: "Disk cache directory"
+                    ),
+                    text: $viewModel.imageDiskCacheDirectory
+                )
                 Stepper(
-                    "Disk cache budget: \(viewModel.imageDiskCacheLimitMB) MiB",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.terminal.diskCacheBudget",
+                            fallback: "Disk cache budget: %d MiB"
+                        ),
+                        viewModel.imageDiskCacheLimitMB
+                    ),
                     value: $viewModel.imageDiskCacheLimitMB,
                     in: 1...8192
                 )
@@ -1980,7 +2095,7 @@ struct TerminalPreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Terminal")
+        .navigationTitle(viewModel.localizedString("preferences.section.terminal", fallback: "Terminal"))
     }
 }
 
