@@ -27,7 +27,8 @@ extension MainWindowController {
 
         let swiftUIView = AgentPanelView(
             viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissAgentMode() }
+            onDismiss: { [weak self] in self?.dismissAgentMode() },
+            localizer: appLocalizer()
         )
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
@@ -44,6 +45,16 @@ extension MainWindowController {
         overlayContainer.addSubview(hostingView)
         isAgentModeVisible = true
         layoutRightDockedAgentPanels()
+    }
+
+    func refreshVisibleAgentModeLocalizer() {
+        guard let hostingView = agentModeHostingView,
+              let agentPanelViewModel else { return }
+        hostingView.rootView = AgentPanelView(
+            viewModel: agentPanelViewModel,
+            onDismiss: { [weak self] in self?.dismissAgentMode() },
+            localizer: appLocalizer()
+        )
     }
 
     func dismissAgentMode() {

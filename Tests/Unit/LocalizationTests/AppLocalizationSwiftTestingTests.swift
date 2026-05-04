@@ -246,6 +246,19 @@ struct AppLocalizationSwiftTestingTests {
         #expect(ActivityEventKind.projectSwitched.localizedDashboardTitle(using: spanish) == "Cambios de proyecto")
     }
 
+    @Test
+    func agentPanelStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("agent.panel.title", fallback: "Agent Mode") == "Modo agente")
+        #expect(spanish.string("agent.panel.prompt.placeholder", fallback: "Ask Agent Mode") == "Preguntar a Modo agente")
+        #expect(spanish.string("agent.panel.approval.approve", fallback: "Approve") == "Aprobar")
+        #expect(spanish.string("agent.panel.message.you", fallback: "You") == "Tú")
+        #expect(AgentPanelView.localizedSkillPickerTitle(selectedCount: 0, using: spanish) == "Skills")
+        #expect(AgentPanelView.localizedSkillPickerTitle(selectedCount: 2, using: spanish) == "2 skills")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

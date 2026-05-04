@@ -83,6 +83,7 @@ extension MainWindowController {
         gitHubPaneViewModel?.updateLocalizer(localizer)
         updateRemoteWorkspacePanelLocalizer(localizer)
         refreshVisibleActivityDashboardLocalizer()
+        refreshVisibleAgentModeLocalizer()
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 

@@ -6,6 +6,7 @@ import SwiftUI
 struct AgentPanelView: View {
     @ObservedObject var viewModel: AgentPanelViewModel
     var onDismiss: (() -> Void)? = nil
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     static let panelWidth: CGFloat = 380
 
@@ -21,7 +22,7 @@ struct AgentPanelView: View {
         .frame(maxHeight: .infinity)
         .glassPanelBackground()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Agent Mode")
+        .accessibilityLabel(localized("agent.panel.accessibility", fallback: "Agent Mode"))
     }
 
     private var header: some View {
@@ -29,7 +30,7 @@ struct AgentPanelView: View {
             Image(systemName: "sparkles")
                 .foregroundStyle(.secondary)
 
-            Text("Agent Mode")
+            Text(localized("agent.panel.title", fallback: "Agent Mode"))
                 .font(.system(size: 13, weight: .semibold))
 
             Spacer()
@@ -41,8 +42,8 @@ struct AgentPanelView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .help("Close Agent Mode")
-            .accessibilityLabel("Close Agent Mode")
+            .help(localized("agent.panel.close", fallback: "Close Agent Mode"))
+            .accessibilityLabel(localized("agent.panel.close", fallback: "Close Agent Mode"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -55,7 +56,7 @@ struct AgentPanelView: View {
                     emptyTranscript
                 } else {
                     ForEach(viewModel.messages) { message in
-                        AgentMessageRow(message: message)
+                        AgentMessageRow(message: message, localizer: localizer)
                     }
                 }
             }
@@ -70,7 +71,7 @@ struct AgentPanelView: View {
             Image(systemName: "text.bubble")
                 .font(.system(size: 28))
                 .foregroundStyle(.secondary)
-            Text(viewModel.statusText)
+            Text(localizedStatusText)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -81,7 +82,7 @@ struct AgentPanelView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(viewModel.statusText)
+            Text(localizedStatusText)
                 .font(.caption)
                 .foregroundStyle(statusColor)
                 .lineLimit(2)
@@ -116,7 +117,7 @@ struct AgentPanelView: View {
                     .frame(minHeight: 34, maxHeight: 88)
 
                     if viewModel.promptDraft.isEmpty {
-                        Text("Ask Agent Mode")
+                        Text(localized("agent.panel.prompt.placeholder", fallback: "Ask Agent Mode"))
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 10)
@@ -140,8 +141,8 @@ struct AgentPanelView: View {
                 }
                 .disabled(!viewModel.canSubmit)
                 .keyboardShortcut(.return, modifiers: [.command])
-                .help("Send prompt")
-                .accessibilityLabel("Send prompt")
+                .help(localized("agent.panel.sendPrompt", fallback: "Send prompt"))
+                .accessibilityLabel(localized("agent.panel.sendPrompt", fallback: "Send prompt"))
             }
         }
         .padding(12)
@@ -172,7 +173,10 @@ struct AgentPanelView: View {
         .menuStyle(.borderlessButton)
         .controlSize(.small)
         .disabled(viewModel.state == .running)
-        .help("Select local skills for the next Agent prompt")
+        .help(localized(
+            "agent.panel.skills.help",
+            fallback: "Select local skills for the next Agent prompt"
+        ))
         .accessibilityLabel(skillPickerTitle)
     }
 
@@ -232,7 +236,11 @@ struct AgentPanelView: View {
             .frame(maxHeight: 140)
 
             if request.preview.kind == .userInput {
-                TextField("Response", text: $viewModel.pendingApprovalResponseDraft, axis: .vertical)
+                TextField(
+                    localized("agent.panel.approval.response.placeholder", fallback: "Response"),
+                    text: $viewModel.pendingApprovalResponseDraft,
+                    axis: .vertical
+                )
                     .lineLimit(1...4)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12))
@@ -241,14 +249,19 @@ struct AgentPanelView: View {
             HStack(spacing: 8) {
                 Button(action: approvePendingTool) {
                     Label(
-                        request.preview.kind == .userInput ? "Send" : "Approve",
+                        request.preview.kind == .userInput
+                            ? localized("agent.panel.approval.send", fallback: "Send")
+                            : localized("agent.panel.approval.approve", fallback: "Approve"),
                         systemImage: request.preview.kind == .userInput ? "paperplane" : "checkmark"
                     )
                 }
                 .disabled(!viewModel.canApprovePendingTool)
 
                 Button(role: .cancel, action: viewModel.rejectPendingTool) {
-                    Label("Reject", systemImage: "xmark")
+                    Label(
+                        localized("agent.panel.approval.reject", fallback: "Reject"),
+                        systemImage: "xmark"
+                    )
                 }
 
                 Spacer()
@@ -276,13 +289,26 @@ struct AgentPanelView: View {
     }
 
     private var skillPickerTitle: String {
-        if viewModel.selectedSkillsCount == 0 {
-            return "Skills"
+        Self.localizedSkillPickerTitle(
+            selectedCount: viewModel.selectedSkillsCount,
+            using: localizer
+        )
+    }
+
+    static func localizedSkillPickerTitle(selectedCount: Int, using localizer: AppLocalizer) -> String {
+        if selectedCount == 0 {
+            return localizer.string("agent.panel.skills", fallback: "Skills")
         }
-        if viewModel.selectedSkillsCount == 1 {
-            return "1 Skill"
+        if selectedCount == 1 {
+            return String(
+                format: localizer.string("agent.panel.skills.one", fallback: "%d Skill"),
+                selectedCount
+            )
         }
-        return "\(viewModel.selectedSkillsCount) Skills"
+        return String(
+            format: localizer.string("agent.panel.skills.many", fallback: "%d Skills"),
+            selectedCount
+        )
     }
 
     private func skillMenuTitle(_ skill: AgentPanelSkillOption) -> String {
@@ -300,6 +326,71 @@ struct AgentPanelView: View {
         default:
             return .secondary
         }
+    }
+
+    private var localizedStatusText: String {
+        switch viewModel.statusText {
+        case "Ready.":
+            return localized("agent.panel.status.ready", fallback: "Ready.")
+        case "Agent Mode is disabled.":
+            return localized("agent.panel.status.disabled", fallback: "Agent Mode is disabled.")
+        case "Running...":
+            return localized("agent.panel.status.running", fallback: "Running...")
+        case "Running approved tool...":
+            return localized(
+                "agent.panel.status.runningApprovedTool",
+                fallback: "Running approved tool..."
+            )
+        case "Completed.":
+            return localized("agent.panel.status.completed", fallback: "Completed.")
+        case "Request rejected.":
+            return localized("agent.panel.status.rejected", fallback: "Request rejected.")
+        case "Stopped at max iterations.":
+            return localized(
+                "agent.panel.status.maxIterations",
+                fallback: "Stopped at max iterations."
+            )
+        default:
+            return localizedDynamicStatusText(viewModel.statusText)
+        }
+    }
+
+    private func localizedDynamicStatusText(_ text: String) -> String {
+        if text.hasPrefix("Failed to load skills: ") {
+            let reason = String(text.dropFirst("Failed to load skills: ".count))
+            return String(
+                format: localized(
+                    "agent.panel.status.loadSkillsFailed",
+                    fallback: "Failed to load skills: %@"
+                ),
+                reason
+            )
+        }
+
+        if let imageCount = Self.imageAttachmentCount(from: text) {
+            let key = imageCount == 1
+                ? "agent.panel.status.images.one"
+                : "agent.panel.status.images.many"
+            let fallback = imageCount == 1
+                ? "%d image attached."
+                : "%d images attached."
+            return String(format: localized(key, fallback: fallback), imageCount)
+        }
+
+        return text
+    }
+
+    private static func imageAttachmentCount(from text: String) -> Int? {
+        guard text.hasSuffix(" attached."),
+              text.contains(" image") else {
+            return nil
+        }
+        let firstToken = text.split(separator: " ").first
+        return firstToken.flatMap { Int($0) }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 
     private func submit() {
@@ -350,6 +441,7 @@ struct AgentPanelView: View {
 
 private struct AgentMessageRow: View {
     let message: AgentMessage
+    let localizer: AppLocalizer
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -372,13 +464,19 @@ private struct AgentMessageRow: View {
     private var title: String {
         switch message.role {
         case .system:
-            return "System"
+            return localizer.string("agent.panel.message.system", fallback: "System")
         case .user:
-            return "You"
+            return localizer.string("agent.panel.message.you", fallback: "You")
         case .assistant:
-            return "Agent"
+            return localizer.string("agent.panel.message.agent", fallback: "Agent")
         case .tool:
-            return message.toolName.map { "Tool: \($0)" } ?? "Tool"
+            if let toolName = message.toolName {
+                return String(
+                    format: localizer.string("agent.panel.message.toolNamed", fallback: "Tool: %@"),
+                    toolName
+                )
+            }
+            return localizer.string("agent.panel.message.tool", fallback: "Tool")
         }
     }
 
