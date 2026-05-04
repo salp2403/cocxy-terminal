@@ -213,7 +213,6 @@ final class NotebookPanelViewModel: ObservableObject {
         """
         ---
         cocxy-notebook: "1"
-        title: "Untitled Notebook"
         ---
 
         ```bash

@@ -64,6 +64,8 @@ struct NotebookPanelViewModelSwiftTestingTests {
         )
 
         #expect(viewModel.statusText == "Notebook nuevo")
+        #expect(viewModel.title == "Notebook sin título")
+        #expect(!viewModel.sourceText.contains("Untitled Notebook"))
         viewModel.sourceText = ""
         #expect(viewModel.title == "Notebook sin título")
         viewModel.sourceText = """
