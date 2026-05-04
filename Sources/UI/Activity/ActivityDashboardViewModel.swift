@@ -8,6 +8,37 @@ enum ActivityDashboardTrackingState: Sendable, Equatable {
     case enabled
     case activityOnly
     case disabled
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .enabled:
+            return localizer.string("activity.tracking.enabled.title", fallback: "Local tracking enabled")
+        case .activityOnly:
+            return localizer.string("activity.tracking.activityOnly.title", fallback: "Local activity enabled")
+        case .disabled:
+            return localizer.string("activity.tracking.disabled.title", fallback: "Local tracking disabled")
+        }
+    }
+
+    func localizedDetail(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .enabled:
+            return localizer.string(
+                "activity.tracking.enabled.detail",
+                fallback: "Activity and cost records stay on this Mac."
+            )
+        case .activityOnly:
+            return localizer.string(
+                "activity.tracking.activityOnly.detail",
+                fallback: "Activity records stay on this Mac; cost tracking is off."
+            )
+        case .disabled:
+            return localizer.string(
+                "activity.tracking.disabled.detail",
+                fallback: "Existing local records remain visible until deleted."
+            )
+        }
+    }
 }
 
 enum ActivityDashboardExportFormat: Sendable, Equatable {
@@ -288,5 +319,26 @@ final class ActivityDashboardViewModel: ObservableObject {
             return "Unknown"
         }
         return String(format: "%02d/%02d", month, day)
+    }
+}
+
+extension ActivityEventKind {
+    func localizedDashboardTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .commandExecuted:
+            return localizer.string("activity.event.commands", fallback: "Commands")
+        case .tabOpened:
+            return localizer.string("activity.event.tabs", fallback: "Tabs")
+        case .splitCreated:
+            return localizer.string("activity.event.splits", fallback: "Splits")
+        case .agentInvoked:
+            return localizer.string("activity.event.agents", fallback: "Agents")
+        case .blockFinished:
+            return localizer.string("activity.event.blocks", fallback: "Blocks")
+        case .errorEncountered:
+            return localizer.string("activity.event.errors", fallback: "Errors")
+        case .projectSwitched:
+            return localizer.string("activity.event.projectSwitches", fallback: "Project Switches")
+        }
     }
 }

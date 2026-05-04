@@ -232,6 +232,20 @@ struct AppLocalizationSwiftTestingTests {
         #expect(ForwardTypeOption.dynamic.localizedLabel(using: spanish) == "Dinámico")
     }
 
+    @Test
+    func activityDashboardStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("activity.title", fallback: "Activity") == "Actividad")
+        #expect(spanish.string("activity.metric.events", fallback: "Events") == "Eventos")
+        #expect(spanish.string("activity.section.projectTime", fallback: "Project Time") == "Tiempo por proyecto")
+        #expect(spanish.string("activity.empty.noCommands", fallback: "No commands yet") == "Aún no hay comandos")
+        #expect(ActivityDashboardTrackingState.enabled.localizedTitle(using: spanish) == "Registro local activado")
+        #expect(ActivityDashboardExportFormat.eventsCSV.localizedMenuTitle(using: spanish) == "Eventos CSV")
+        #expect(ActivityEventKind.projectSwitched.localizedDashboardTitle(using: spanish) == "Cambios de proyecto")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

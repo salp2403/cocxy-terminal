@@ -7,6 +7,7 @@ struct ActivityDashboardView: View {
     @ObservedObject var viewModel: ActivityDashboardViewModel
     @StateObject private var fileActions: ActivityDashboardFileActions
     var onDismiss: (() -> Void)? = nil
+    var localizer: AppLocalizer
 
     static let panelWidth: CGFloat = 400
 
@@ -18,6 +19,7 @@ struct ActivityDashboardView: View {
     ) {
         self.viewModel = viewModel
         self.onDismiss = onDismiss
+        self.localizer = localizer
         _fileActions = StateObject(
             wrappedValue: fileActions ?? ActivityDashboardFileActions(
                 viewModel: viewModel,
@@ -36,7 +38,7 @@ struct ActivityDashboardView: View {
         .frame(maxHeight: .infinity)
         .glassPanelBackground()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Activity Dashboard")
+        .accessibilityLabel(localized("activity.accessibility", fallback: "Activity Dashboard"))
     }
 
     private var header: some View {
@@ -44,19 +46,19 @@ struct ActivityDashboardView: View {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .foregroundStyle(.secondary)
 
-            Text("Activity")
+            Text(localized("activity.title", fallback: "Activity"))
                 .font(.system(size: 13, weight: .semibold))
 
             Spacer()
 
             Menu {
-                Button(ActivityDashboardExportFormat.json.menuTitle) {
+                Button(ActivityDashboardExportFormat.json.localizedMenuTitle(using: localizer)) {
                     fileActions.export(.json)
                 }
-                Button(ActivityDashboardExportFormat.eventsCSV.menuTitle) {
+                Button(ActivityDashboardExportFormat.eventsCSV.localizedMenuTitle(using: localizer)) {
                     fileActions.export(.eventsCSV)
                 }
-                Button(ActivityDashboardExportFormat.tokenUsageCSV.menuTitle) {
+                Button(ActivityDashboardExportFormat.tokenUsageCSV.localizedMenuTitle(using: localizer)) {
                     fileActions.export(.tokenUsageCSV)
                 }
             } label: {
@@ -66,8 +68,8 @@ struct ActivityDashboardView: View {
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
             .disabled(!hasLocalData)
-            .help("Export Activity")
-            .accessibilityLabel("Export Activity")
+            .help(localized("activity.export", fallback: "Export Activity"))
+            .accessibilityLabel(localized("activity.export", fallback: "Export Activity"))
 
             Button(role: .destructive, action: fileActions.confirmAndDeleteAllLocalData) {
                 Image(systemName: "trash")
@@ -76,8 +78,8 @@ struct ActivityDashboardView: View {
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
             .disabled(!hasLocalData)
-            .help("Delete Activity Data")
-            .accessibilityLabel("Delete Activity Data")
+            .help(localized("activity.deleteData", fallback: "Delete Activity Data"))
+            .accessibilityLabel(localized("activity.deleteData", fallback: "Delete Activity Data"))
 
             Button(action: viewModel.refresh) {
                 Image(systemName: "arrow.clockwise")
@@ -85,8 +87,8 @@ struct ActivityDashboardView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .help("Refresh")
-            .accessibilityLabel("Refresh Activity")
+            .help(localized("common.refresh", fallback: "Refresh"))
+            .accessibilityLabel(localized("activity.refresh", fallback: "Refresh Activity"))
 
             if let onDismiss {
                 Button(action: onDismiss) {
@@ -96,8 +98,8 @@ struct ActivityDashboardView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(width: 24, height: 24)
-                .help("Close Activity")
-                .accessibilityLabel("Close Activity")
+                .help(localized("activity.close", fallback: "Close Activity"))
+                .accessibilityLabel(localized("activity.close", fallback: "Close Activity"))
             }
         }
         .padding(.horizontal, 12)
@@ -107,11 +109,11 @@ struct ActivityDashboardView: View {
     private var content: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 12) {
-                ActivityPrivacyTogglesView(state: viewModel.trackingState)
+                ActivityPrivacyTogglesView(state: viewModel.trackingState, localizer: localizer)
 
                 if let error = viewModel.errorMessage {
                     ActivityInlineStatus(
-                        title: "Activity unavailable",
+                        title: localized("activity.unavailable.title", fallback: "Activity unavailable"),
                         detail: error,
                         symbolName: "exclamationmark.triangle"
                     )
@@ -119,18 +121,18 @@ struct ActivityDashboardView: View {
 
                 if let actionError = fileActions.errorMessage {
                     ActivityInlineStatus(
-                        title: "Activity action failed",
+                        title: localized("activity.actionFailed.title", fallback: "Activity action failed"),
                         detail: actionError,
                         symbolName: "exclamationmark.triangle"
                     )
                 }
 
                 metricsGrid
-                ProjectTimeBreakdownChart(rows: viewModel.snapshot.projectTimeRows)
-                TokenUsageGraph(rows: viewModel.snapshot.tokenRows)
-                CostBreakdownChart(rows: viewModel.snapshot.costRows)
-                ActivityEventCountsView(rows: viewModel.snapshot.eventRows)
-                ProductivityInsightsCard(insights: viewModel.snapshot.insights)
+                ProjectTimeBreakdownChart(rows: viewModel.snapshot.projectTimeRows, localizer: localizer)
+                TokenUsageGraph(rows: viewModel.snapshot.tokenRows, localizer: localizer)
+                CostBreakdownChart(rows: viewModel.snapshot.costRows, localizer: localizer)
+                ActivityEventCountsView(rows: viewModel.snapshot.eventRows, localizer: localizer)
+                ProductivityInsightsCard(insights: viewModel.snapshot.insights, localizer: localizer)
             }
             .padding(12)
         }
@@ -146,17 +148,17 @@ struct ActivityDashboardView: View {
             spacing: 8
         ) {
             ActivityMetricTile(
-                title: "Events",
+                title: localized("activity.metric.events", fallback: "Events"),
                 value: "\(viewModel.snapshot.totalEvents)",
                 symbolName: "list.bullet.rectangle"
             )
             ActivityMetricTile(
-                title: "Tokens",
+                title: localized("activity.metric.tokens", fallback: "Tokens"),
                 value: "\(viewModel.snapshot.totalTokens)",
                 symbolName: "number"
             )
             ActivityMetricTile(
-                title: "Cost",
+                title: localized("activity.metric.cost", fallback: "Cost"),
                 value: viewModel.snapshot.totalCostText,
                 symbolName: "creditcard"
             )
@@ -165,6 +167,10 @@ struct ActivityDashboardView: View {
 
     private var hasLocalData: Bool {
         viewModel.snapshot.totalEvents > 0 || viewModel.snapshot.totalTokens > 0
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
@@ -198,6 +204,7 @@ private struct ActivityMetricTile: View {
 
 struct ActivityPrivacyTogglesView: View {
     let state: ActivityDashboardTrackingState
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         ActivityInlineStatus(
@@ -208,25 +215,11 @@ struct ActivityPrivacyTogglesView: View {
     }
 
     private var title: String {
-        switch state {
-        case .enabled:
-            return "Local tracking enabled"
-        case .activityOnly:
-            return "Local activity enabled"
-        case .disabled:
-            return "Local tracking disabled"
-        }
+        state.localizedTitle(using: localizer)
     }
 
     private var detail: String {
-        switch state {
-        case .enabled:
-            return "Activity and cost records stay on this Mac."
-        case .activityOnly:
-            return "Activity records stay on this Mac; cost tracking is off."
-        case .disabled:
-            return "Existing local records remain visible until deleted."
-        }
+        state.localizedDetail(using: localizer)
     }
 
     private var symbolName: String {
@@ -271,11 +264,15 @@ private struct ActivityInlineStatus: View {
 
 struct ProjectTimeBreakdownChart: View {
     let rows: [ActivityDashboardProjectTimeRow]
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
-        ActivitySection(title: "Project Time", symbolName: "clock") {
+        ActivitySection(
+            title: localized("activity.section.projectTime", fallback: "Project Time"),
+            symbolName: "clock"
+        ) {
             if rows.isEmpty {
-                ActivityEmptyRow(title: "No project runtime")
+                ActivityEmptyRow(title: localized("activity.empty.noProjectRuntime", fallback: "No project runtime"))
             } else {
                 VStack(spacing: 8) {
                     ForEach(rows) { row in
@@ -303,15 +300,23 @@ struct ProjectTimeBreakdownChart: View {
         let maximum = max(rows.map(\.durationMilliseconds).max() ?? 1, 1)
         return Double(row.durationMilliseconds) / Double(maximum)
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 struct TokenUsageGraph: View {
     let rows: [ActivityDashboardTokenRow]
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
-        ActivitySection(title: "Token Usage", symbolName: "chart.bar.xaxis") {
+        ActivitySection(
+            title: localized("activity.section.tokenUsage", fallback: "Token Usage"),
+            symbolName: "chart.bar.xaxis"
+        ) {
             if rows.isEmpty {
-                ActivityEmptyRow(title: "No token usage")
+                ActivityEmptyRow(title: localized("activity.empty.noTokenUsage", fallback: "No token usage"))
             } else {
                 HStack(alignment: .bottom, spacing: 8) {
                     ForEach(rows.suffix(14)) { row in
@@ -341,15 +346,23 @@ struct TokenUsageGraph: View {
         let maximum = max(rows.map(\.totalTokens).max() ?? 1, 1)
         return max(4, availableHeight * CGFloat(row.totalTokens) / CGFloat(maximum))
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 struct CostBreakdownChart: View {
     let rows: [ActivityDashboardCostRow]
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
-        ActivitySection(title: "Cost Breakdown", symbolName: "creditcard") {
+        ActivitySection(
+            title: localized("activity.section.costBreakdown", fallback: "Cost Breakdown"),
+            symbolName: "creditcard"
+        ) {
             if rows.isEmpty {
-                ActivityEmptyRow(title: "No cost records")
+                ActivityEmptyRow(title: localized("activity.empty.noCostRecords", fallback: "No cost records"))
             } else {
                 VStack(spacing: 8) {
                     ForEach(rows) { row in
@@ -377,20 +390,25 @@ struct CostBreakdownChart: View {
         let maximum = max(rows.map(\.totalCostMicros).max() ?? 1, 1)
         return Double(row.totalCostMicros) / Double(maximum)
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 private struct ActivityEventCountsView: View {
     let rows: [ActivityDashboardEventRow]
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
-        ActivitySection(title: "Events", symbolName: "list.bullet") {
+        ActivitySection(title: localized("activity.section.events", fallback: "Events"), symbolName: "list.bullet") {
             if rows.isEmpty {
-                ActivityEmptyRow(title: "No activity events")
+                ActivityEmptyRow(title: localized("activity.empty.noActivityEvents", fallback: "No activity events"))
             } else {
                 VStack(spacing: 8) {
                     ForEach(rows) { row in
                         HStack {
-                            Text(row.title)
+                            Text(row.kind.localizedDashboardTitle(using: localizer))
                                 .font(.system(size: 11, weight: .medium))
                             Spacer()
                             Text("\(row.count)")
@@ -402,21 +420,32 @@ private struct ActivityEventCountsView: View {
             }
         }
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 struct ProductivityInsightsCard: View {
     let insights: ActivityDashboardInsights
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
-        ActivitySection(title: "Insights", symbolName: "sparkle.magnifyingglass") {
+        ActivitySection(title: localized("activity.section.insights", fallback: "Insights"), symbolName: "sparkle.magnifyingglass") {
             VStack(alignment: .leading, spacing: 8) {
-                insightRow("Peak hour", value: insights.peakHourLabel)
-                insightRow("Project switches", value: "\(insights.projectSwitches)")
+                insightRow(
+                    localized("activity.insight.peakHour", fallback: "Peak hour"),
+                    value: localizedPeakHour
+                )
+                insightRow(
+                    localized("activity.insight.projectSwitches", fallback: "Project switches"),
+                    value: "\(insights.projectSwitches)"
+                )
                 if insights.mostUsedCommands.isEmpty {
-                    ActivityEmptyRow(title: "No commands yet")
+                    ActivityEmptyRow(title: localized("activity.empty.noCommands", fallback: "No commands yet"))
                 } else {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("Top commands")
+                        Text(localized("activity.insight.topCommands", fallback: "Top commands"))
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.secondary)
                         ForEach(insights.mostUsedCommands, id: \.self) { command in
@@ -440,6 +469,17 @@ struct ProductivityInsightsCard: View {
             Text(value)
                 .font(.system(size: 11, weight: .semibold))
         }
+    }
+
+    private var localizedPeakHour: String {
+        if insights.peakHour == nil {
+            return localized("activity.insight.none", fallback: "None")
+        }
+        return insights.peakHourLabel
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 

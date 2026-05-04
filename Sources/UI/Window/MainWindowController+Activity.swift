@@ -115,6 +115,11 @@ extension MainWindowController {
         }
     }
 
+    func refreshVisibleActivityDashboardLocalizer() {
+        guard let activityDashboardViewModel else { return }
+        refreshVisibleActivityDashboardRootIfNeeded(activityDashboardViewModel)
+    }
+
     func recordLocalActivity(
         kind: ActivityEventKind,
         summary: String,

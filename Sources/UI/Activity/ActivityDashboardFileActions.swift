@@ -158,4 +158,15 @@ extension ActivityDashboardExportFormat {
             return "Token Usage CSV"
         }
     }
+
+    func localizedMenuTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .json:
+            return localizer.string("activity.export.json", fallback: menuTitle)
+        case .eventsCSV:
+            return localizer.string("activity.export.eventsCSV", fallback: menuTitle)
+        case .tokenUsageCSV:
+            return localizer.string("activity.export.tokenUsageCSV", fallback: menuTitle)
+        }
+    }
 }

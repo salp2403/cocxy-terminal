@@ -82,6 +82,7 @@ extension MainWindowController {
         updateNotebookAndWorkflowPanelLocalizers(localizer)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         updateRemoteWorkspacePanelLocalizer(localizer)
+        refreshVisibleActivityDashboardLocalizer()
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
