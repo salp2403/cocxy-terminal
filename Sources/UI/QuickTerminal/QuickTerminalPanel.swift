@@ -62,6 +62,10 @@ final class QuickTerminalPanel: NSPanel {
 
     /// Creates a QuickTerminalPanel configured for floating dropdown behavior.
     convenience init() {
+        self.init(localizer: AppLocalizer(languagePreference: .english))
+    }
+
+    convenience init(localizer: AppLocalizer) {
         let styleMask: NSWindow.StyleMask = [
             .nonactivatingPanel,
             .resizable,
@@ -77,13 +81,13 @@ final class QuickTerminalPanel: NSPanel {
             defer: true
         )
 
-        configurePanel()
+        configurePanel(localizer: localizer)
     }
 
     // MARK: - Panel Configuration
 
     /// Applies the floating panel settings required for a dropdown terminal.
-    private func configurePanel() {
+    private func configurePanel(localizer: AppLocalizer) {
         level = .floating
         isFloatingPanel = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -93,7 +97,7 @@ final class QuickTerminalPanel: NSPanel {
         hidesOnDeactivate = false  // We control this ourselves in the controller.
 
         // Accessibility: label for VoiceOver identification.
-        setAccessibilityLabel("Quick Terminal")
+        setAccessibilityLabel(Self.localizedAccessibilityLabel(using: localizer))
 
         // Hide the traffic light buttons.
         standardWindowButton(.closeButton)?.isHidden = true
@@ -103,6 +107,10 @@ final class QuickTerminalPanel: NSPanel {
         // Background for the panel.
         isOpaque = false
         backgroundColor = CocxyColors.base.withAlphaComponent(0.98)
+    }
+
+    static func localizedAccessibilityLabel(using localizer: AppLocalizer) -> String {
+        localizer.string("quickTerminal.accessibility", fallback: "Quick Terminal")
     }
 
     // MARK: - Frame Calculation

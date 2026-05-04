@@ -105,7 +105,9 @@ final class QuickTerminalController {
         workingDirectory = Self.resolveWorkingDirectory(from: config)
 
         // Create the panel.
-        let newPanel = QuickTerminalPanel()
+        let newPanel = QuickTerminalPanel(
+            localizer: AppLocalizer(languagePreference: config.appearance.appLanguage)
+        )
         newPanel.slideEdge = currentSlideEdge
         newPanel.heightPercent = currentHeightPercent
         self.panel = newPanel

@@ -5,6 +5,7 @@ import SwiftUI
 
 struct VoiceIndicator: View {
     @ObservedObject var handler: VoiceTriggerHandler
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         if handler.isVisible {
@@ -32,9 +33,13 @@ struct VoiceIndicator: View {
             )
             .shadow(color: .black.opacity(0.24), radius: 16, y: 8)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Voice input")
+            .accessibilityLabel(Self.localizedAccessibilityLabel(using: localizer))
             .accessibilityValue(handler.displayText)
         }
+    }
+
+    static func localizedAccessibilityLabel(using localizer: AppLocalizer) -> String {
+        localizer.string("voice.indicator.accessibility", fallback: "Voice input")
     }
 
     private var iconColor: Color {

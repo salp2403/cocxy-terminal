@@ -369,6 +369,22 @@ struct AppLocalizationSwiftTestingTests {
 
     @MainActor
     @Test
+    func utilityOverlayStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let viewModel = SmartRoutingOverlayViewModel(router: EmptySmartRoutingRouter())
+
+        #expect(QuickTerminalPanel.localizedAccessibilityLabel(using: spanish) == "Terminal rápido")
+        #expect(VoiceIndicator.localizedAccessibilityLabel(using: spanish) == "Entrada por voz")
+        #expect(SmartRoutingOverlayView.localizedTitle(using: spanish) == "Ruteo inteligente")
+        #expect(viewModel.localizedEmptyMessage(using: spanish) == "Ningún agente requiere atención")
+        #expect(SmartRoutingFilter.errorsOnly.localizedTitle(using: spanish) == "Errores")
+        #expect(SmartRoutingFilterView.localizedFilterAccessibility("Errores", using: spanish) == "Filtro: Errores")
+        #expect(SmartRoutingAgentRow.localizedStateDescription(.waitingForInput, using: spanish) == "Esperando entrada")
+    }
+
+    @MainActor
+    @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {
         let bundle = try #require(localizationBundle())
         let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
@@ -434,4 +450,11 @@ struct AppLocalizationSwiftTestingTests {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
+}
+
+private final class EmptySmartRoutingRouter: SmartAgentRouting {
+    func agentsNeedingAttention() -> [AgentSessionInfo] { [] }
+    func agents(withState state: AgentDashboardState) -> [AgentSessionInfo] { [] }
+    func mostUrgentAgent() -> AgentSessionInfo? { nil }
+    func navigateToAgent(_ sessionId: String) {}
 }

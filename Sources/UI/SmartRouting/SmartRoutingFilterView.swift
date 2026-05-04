@@ -20,18 +20,20 @@ struct SmartRoutingFilterView: View {
 
     let activeFilter: SmartRoutingFilter
     let onFilterSelected: (SmartRoutingFilter) -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         HStack(spacing: 8) {
-            filterBadge(label: "All", filter: .all)
-            filterBadge(label: "Errors", filter: .errorsOnly)
-            filterBadge(label: "Waiting", filter: .waitingOnly)
+            filterBadge(filter: .all)
+            filterBadge(filter: .errorsOnly)
+            filterBadge(filter: .waitingOnly)
         }
     }
 
     // MARK: - Private
 
-    private func filterBadge(label: String, filter: SmartRoutingFilter) -> some View {
+    private func filterBadge(filter: SmartRoutingFilter) -> some View {
+        let label = filter.localizedTitle(using: localizer)
         let isActive = activeFilter == filter
         return Text(label)
             .font(.caption2)
@@ -44,6 +46,23 @@ struct SmartRoutingFilterView: View {
             .contentShape(Capsule())
             .onTapGesture { onFilterSelected(filter) }
             .accessibilityAddTraits(isActive ? .isSelected : [])
-            .accessibilityLabel("Filter: \(label)")
+            .accessibilityLabel(Self.localizedFilterAccessibility(label, using: localizer))
+    }
+
+    static func localizedFilterAccessibility(_ label: String, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string("smartRouting.filter.accessibility", fallback: "Filter: %@"),
+            label
+        )
+    }
+}
+
+extension SmartRoutingFilter {
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .all: return localizer.string("smartRouting.filter.all", fallback: "All")
+        case .errorsOnly: return localizer.string("smartRouting.filter.errors", fallback: "Errors")
+        case .waitingOnly: return localizer.string("smartRouting.filter.waiting", fallback: "Waiting")
+        }
     }
 }

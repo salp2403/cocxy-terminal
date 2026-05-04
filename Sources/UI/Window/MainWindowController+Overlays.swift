@@ -1591,7 +1591,8 @@ extension MainWindowController {
             viewModel: viewModel,
             onDismiss: { [weak self] in
                 self?.dismissSmartRouting()
-            }
+            },
+            localizer: appLocalizer()
         )
         let overlayView = AnyView(
             ZStack {

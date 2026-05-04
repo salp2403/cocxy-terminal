@@ -76,12 +76,14 @@ extension MainWindowController {
         guard let overlayContainer = overlayContainerView else { return }
 
         if voiceIndicatorHostingView == nil {
-            let hostingView = NSHostingView(rootView: VoiceIndicator(handler: handler))
+            let hostingView = NSHostingView(rootView: VoiceIndicator(handler: handler, localizer: appLocalizer()))
             hostingView.wantsLayer = true
             hostingView.layer?.backgroundColor = NSColor.clear.cgColor
             hostingView.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]
             voiceIndicatorHostingView = hostingView
             overlayContainer.addSubview(hostingView)
+        } else {
+            voiceIndicatorHostingView?.rootView = VoiceIndicator(handler: handler, localizer: appLocalizer())
         }
 
         layoutVoiceIndicator()

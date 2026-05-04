@@ -30,6 +30,7 @@ struct SmartRoutingOverlayView: View {
 
     @ObservedObject var viewModel: SmartRoutingOverlayViewModel
     let onDismiss: () -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var selectedIndex: Int = 0
 
@@ -56,8 +57,8 @@ struct SmartRoutingOverlayView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Smart Routing")
-        .accessibilityHint("Navigate between AI agents. Use arrow keys to select, Enter to activate.")
+        .accessibilityLabel(Self.localizedTitle(using: localizer))
+        .accessibilityHint(Self.localizedAccessibilityHint(using: localizer))
         .focusable()
         .onKeyPress(.escape) {
             onDismiss()
@@ -112,7 +113,7 @@ struct SmartRoutingOverlayView: View {
 
     private var headerView: some View {
         HStack {
-            Text("Smart Routing")
+            Text(Self.localizedTitle(using: localizer))
                 .font(.headline)
                 .foregroundStyle(.primary)
 
@@ -122,7 +123,8 @@ struct SmartRoutingOverlayView: View {
                 activeFilter: viewModel.activeFilter,
                 onFilterSelected: { filter in
                     viewModel.applyFilter(filter)
-                }
+                },
+                localizer: localizer
             )
         }
         .padding(.horizontal, 16)
@@ -132,7 +134,7 @@ struct SmartRoutingOverlayView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        Text(viewModel.emptyMessage)
+        Text(viewModel.localizedEmptyMessage(using: localizer))
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .padding(32)
@@ -147,7 +149,8 @@ struct SmartRoutingOverlayView: View {
                     SmartRoutingAgentRow(
                         agent: agent,
                         number: index + 1,
-                        isSelected: index == selectedIndex
+                        isSelected: index == selectedIndex,
+                        localizer: localizer
                     )
                     .onTapGesture {
                         viewModel.selectAgentByNumber(index + 1)
@@ -158,6 +161,17 @@ struct SmartRoutingOverlayView: View {
             .padding(.vertical, 4)
         }
     }
+
+    static func localizedTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("smartRouting.title", fallback: "Smart Routing")
+    }
+
+    static func localizedAccessibilityHint(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "smartRouting.accessibility.hint",
+            fallback: "Navigate between AI agents. Use arrow keys to select, Enter to activate."
+        )
+    }
 }
 
 // MARK: - Agent Row
@@ -167,6 +181,7 @@ struct SmartRoutingAgentRow: View {
     let agent: AgentSessionInfo
     let number: Int
     let isSelected: Bool
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         HStack(spacing: 12) {
@@ -195,7 +210,7 @@ struct SmartRoutingAgentRow: View {
                     }
                 }
 
-                Text(stateDescription(agent.state))
+                Text(Self.localizedStateDescription(agent.state, using: localizer))
                     .font(.caption)
                     .foregroundStyle(colorForState(agent.state))
             }
@@ -222,15 +237,16 @@ struct SmartRoutingAgentRow: View {
         }
     }
 
-    private func stateDescription(_ state: AgentDashboardState) -> String {
+    static func localizedStateDescription(_ state: AgentDashboardState, using localizer: AppLocalizer) -> String {
         switch state {
-        case .error:           return "Error"
-        case .blocked:         return "Blocked"
-        case .waitingForInput: return "Waiting for input"
-        case .working:         return "Working"
-        case .launching:       return "Launching"
-        case .idle:            return "Idle"
-        case .finished:        return "Finished"
+        case .error: return localizer.string("smartRouting.state.error", fallback: "Error")
+        case .blocked: return localizer.string("smartRouting.state.blocked", fallback: "Blocked")
+        case .waitingForInput:
+            return localizer.string("smartRouting.state.waitingForInput", fallback: "Waiting for input")
+        case .working: return localizer.string("smartRouting.state.working", fallback: "Working")
+        case .launching: return localizer.string("smartRouting.state.launching", fallback: "Launching")
+        case .idle: return localizer.string("smartRouting.state.idle", fallback: "Idle")
+        case .finished: return localizer.string("smartRouting.state.finished", fallback: "Finished")
         }
     }
 }

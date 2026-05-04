@@ -100,6 +100,10 @@ final class SmartRoutingOverlayViewModel: ObservableObject {
         router.navigateToAgent(session.id)
     }
 
+    func localizedEmptyMessage(using localizer: AppLocalizer) -> String {
+        localizer.string("smartRouting.empty", fallback: emptyMessage)
+    }
+
     // MARK: - Private
 
     private func applyCurrentFilter() {
