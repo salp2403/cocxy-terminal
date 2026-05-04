@@ -45,6 +45,9 @@ final class BrowserContentView: NSView {
     /// Called when the user requests the Browser Pro bookmarks panel.
     private let onToggleBookmarks: (() -> Void)?
 
+    /// Local app-language resolver.
+    private let localizer: AppLocalizer
+
     /// The web view rendering page content.
     private var webView: WKWebView?
 
@@ -101,12 +104,14 @@ final class BrowserContentView: NSView {
         viewModel: BrowserViewModel,
         profileManager: BrowserProfileManager? = nil,
         onToggleHistory: (() -> Void)? = nil,
-        onToggleBookmarks: (() -> Void)? = nil
+        onToggleBookmarks: (() -> Void)? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.viewModel = viewModel
         self.profileManager = profileManager
         self.onToggleHistory = onToggleHistory
         self.onToggleBookmarks = onToggleBookmarks
+        self.localizer = localizer
         super.init(frame: .zero)
         self.viewModel.activeProfileID = profileManager?.activeProfileID ?? viewModel.activeProfileID
         setupUI()
@@ -171,33 +176,33 @@ final class BrowserContentView: NSView {
             symbol: "arrow.clockwise",
             action: #selector(reloadAction)
         )
-        reloadButton.toolTip = "Reload"
+        reloadButton.toolTip = localized("browser.panel.reload", fallback: "Reload page")
 
         let historyButton = createToolbarButton(
             symbol: "clock.arrow.circlepath",
             action: #selector(toggleHistoryAction)
         )
-        historyButton.toolTip = "History"
+        historyButton.toolTip = localized("browser.history.title", fallback: "History")
 
         let bookmarksButton = createToolbarButton(
             symbol: "bookmark",
             action: #selector(toggleBookmarksAction)
         )
-        bookmarksButton.toolTip = "Bookmarks"
+        bookmarksButton.toolTip = localized("browser.bookmarks.title", fallback: "Bookmarks")
 
         // Find button.
         let findButton = createToolbarButton(
             symbol: "magnifyingglass",
             action: #selector(toggleFindBarAction)
         )
-        findButton.toolTip = "Find in page"
+        findButton.toolTip = localized("browser.find.accessibility", fallback: "Find in page")
         toolbar.addSubview(findButton)
 
         let domGrabButton = createToolbarButton(
             symbol: "cursorarrow.click.2",
             action: #selector(toggleDOMGrabAction)
         )
-        domGrabButton.toolTip = "Grab DOM element"
+        domGrabButton.toolTip = localized("browser.panel.domGrab.grab", fallback: "Grab DOM element")
         self.domGrabButton = domGrabButton
 
         // DevTools button.
@@ -205,7 +210,7 @@ final class BrowserContentView: NSView {
             symbol: "wrench.and.screwdriver",
             action: #selector(toggleDevToolsAction)
         )
-        devToolsButton.toolTip = "Developer Tools"
+        devToolsButton.toolTip = localized("browser.devTools.help", fallback: "Developer Tools")
 
         let rightStack = NSStackView()
         rightStack.orientation = .horizontal
@@ -215,16 +220,18 @@ final class BrowserContentView: NSView {
         toolbar.addSubview(rightStack)
 
         if let profileManager {
+            let newProfileNameFormat = localized("browser.profile.newName", fallback: "Profile %d")
             let selector = BrowserProfileSelector(
                 profileManager: profileManager,
                 onCreateProfile: {
                     profileManager.createProfile(
-                        name: "Profile \(profileManager.profiles.count + 1)",
+                        name: String(format: newProfileNameFormat, profileManager.profiles.count + 1),
                         icon: "person.circle",
                         colorHex: "#89B4FA"
                     )
                 },
-                onManageProfiles: nil
+                onManageProfiles: nil,
+                localizer: localizer
             )
             let profileHost = NSHostingView(rootView: selector)
             profileHost.translatesAutoresizingMaskIntoConstraints = false
@@ -248,7 +255,7 @@ final class BrowserContentView: NSView {
         field.isBordered = true
         field.bezelStyle = .roundedBezel
         field.focusRingType = .none
-        field.placeholderString = "Enter URL..."
+        field.placeholderString = localized("browser.content.url.placeholder", fallback: "Enter URL...")
         field.stringValue = viewModel.urlString
         field.target = self
         field.action = #selector(urlFieldAction)
@@ -513,8 +520,8 @@ final class BrowserContentView: NSView {
             ? CocxyColors.blue
             : CocxyColors.subtext0
         domGrabButton?.toolTip = active
-            ? "Stop DOM grab"
-            : "Grab DOM element"
+            ? localized("browser.panel.domGrab.stop", fallback: "Stop DOM grab")
+            : localized("browser.panel.domGrab.grab", fallback: "Grab DOM element")
     }
 
     // MARK: - Feature Toggle Actions
@@ -550,7 +557,8 @@ final class BrowserContentView: NSView {
             onSearch: { [weak self] text in self?.viewModel.findInPage(text) },
             onNextMatch: { [weak self] in self?.viewModel.findNextMatch() },
             onPreviousMatch: { [weak self] in self?.viewModel.findPreviousMatch() },
-            onDismiss: { [weak self] in self?.dismissFindBar() }
+            onDismiss: { [weak self] in self?.dismissFindBar() },
+            localizer: localizer
         )
         let hosting = NSHostingView(rootView: findBarView)
         hosting.translatesAutoresizingMaskIntoConstraints = false
@@ -602,7 +610,8 @@ final class BrowserContentView: NSView {
             onClearConsole: { [weak self] in self?.consoleEntries.removeAll() },
             onClearNetwork: { [weak self] in self?.networkMonitor?.clear() },
             onRefreshDOM: {},
-            onDismiss: { [weak self] in self?.dismissDevTools() }
+            onDismiss: { [weak self] in self?.dismissDevTools() },
+            localizer: localizer
         )
         let hosting = NSHostingView(rootView: devToolsView)
         hosting.translatesAutoresizingMaskIntoConstraints = false
@@ -631,6 +640,10 @@ final class BrowserContentView: NSView {
         webViewBottomConstraint?.isActive = false
         webViewBottomConstraint = webView?.bottomAnchor.constraint(equalTo: bottomAnchor)
         webViewBottomConstraint?.isActive = true
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
@@ -722,6 +735,11 @@ extension BrowserContentView {
     /// styled to match the Catppuccin Mocha terminal theme.
     private func showErrorPage(error: Error, failedURL: URL?) {
         let urlDisplay = failedURL?.absoluteString ?? viewModel.urlString
+        let title = localized("browser.content.error.title", fallback: "Cannot reach this page")
+        let hint = localized(
+            "browser.content.error.hint",
+            fallback: "Type a URL in the address bar above or start a dev server."
+        )
         let errorHTML = """
         <!DOCTYPE html>
         <html>
@@ -767,10 +785,10 @@ extension BrowserContentView {
         <body>
         <div class="container">
             <div class="icon">&#9888;&#65039;</div>
-            <h1>Cannot reach this page</h1>
+            <h1>\(htmlEscape(title))</h1>
             <div class="url">\(htmlEscape(urlDisplay))</div>
             <p class="detail">\(htmlEscape(error.localizedDescription))</p>
-            <p class="hint">Type a URL in the address bar above or start a dev server.</p>
+            <p class="hint">\(htmlEscape(hint))</p>
         </div>
         </body>
         </html>

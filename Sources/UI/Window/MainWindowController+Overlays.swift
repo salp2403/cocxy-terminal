@@ -1997,7 +1997,8 @@ extension MainWindowController {
             profileManager: browserProfileManager,
             onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
             onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
-            onDismiss: { [weak self] in self?.dismissBrowser() }
+            onDismiss: { [weak self] in self?.dismissBrowser() },
+            localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
@@ -2454,7 +2455,8 @@ extension MainWindowController {
             profileManager: browserProfileManager,
             onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
             onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
-            onDismiss: { [weak self] in self?.dismissBrowser() }
+            onDismiss: { [weak self] in self?.dismissBrowser() },
+            localizer: appLocalizer()
         )
         view.vibrancyAppearanceOverride = override
         hostingView.rootView = view

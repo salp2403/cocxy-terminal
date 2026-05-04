@@ -77,6 +77,7 @@ extension MainWindowController {
         updateAIEditHistoryPanelLocalizers(localizer)
         updateDBCloudHelperPanelLocalizers(localizer)
         updateProjectTemplatePanelLocalizers(localizer)
+        updateBrowserPanelLocalizers(localizer)
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
@@ -262,6 +263,44 @@ extension MainWindowController {
             for view in panelViews.values {
                 if let hostingView = view as? NSHostingView<ProjectTemplatePanelView> {
                     hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+                }
+            }
+        }
+    }
+
+    private func updateBrowserPanelLocalizers(_ localizer: AppLocalizer) {
+        if let hostingView = browserHostingView {
+            var root = hostingView.rootView
+            root.localizer = localizer
+            hostingView.rootView = root
+        }
+
+        if let hostingView = browserHistoryHostingView as? NSHostingView<BrowserHistoryView> {
+            var root = hostingView.rootView
+            root.localizer = localizer
+            hostingView.rootView = root
+        }
+
+        if let hostingView = browserBookmarksHostingView as? NSHostingView<BrowserBookmarksView> {
+            var root = hostingView.rootView
+            root.localizer = localizer
+            hostingView.rootView = root
+        }
+
+        for view in panelContentViews.values {
+            if let hostingView = view as? NSHostingView<BrowserPanelView> {
+                var root = hostingView.rootView
+                root.localizer = localizer
+                hostingView.rootView = root
+            }
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                if let hostingView = view as? NSHostingView<BrowserPanelView> {
+                    var root = hostingView.rootView
+                    root.localizer = localizer
+                    hostingView.rootView = root
                 }
             }
         }

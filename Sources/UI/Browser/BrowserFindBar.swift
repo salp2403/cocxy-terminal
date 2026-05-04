@@ -56,6 +56,9 @@ struct BrowserFindBar: View {
     /// Called when the user dismisses the find bar.
     let onDismiss: () -> Void
 
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     /// Whether the text field should receive focus on appear.
     @FocusState private var isSearchFieldFocused: Bool
 
@@ -79,7 +82,7 @@ struct BrowserFindBar: View {
         )
         .onAppear { isSearchFieldFocused = true }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Find in page")
+        .accessibilityLabel(localized("browser.find.accessibility", fallback: "Find in page"))
     }
 
     // MARK: - Search Field
@@ -90,14 +93,14 @@ struct BrowserFindBar: View {
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
 
-            TextField("Find in page...", text: $searchText)
+            TextField(localized("browser.find.placeholder", fallback: "Find in page..."), text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
                 .focused($isSearchFieldFocused)
                 .onSubmit { onNextMatch() }
                 .onChange(of: searchText) { onSearch(searchText) }
-                .accessibilityLabel("Search text")
+                .accessibilityLabel(localized("browser.find.search.accessibility", fallback: "Search text"))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
@@ -129,9 +132,13 @@ struct BrowserFindBar: View {
 
     private var matchCountText: String {
         if totalMatches == 0 {
-            return "0 results"
+            return localized("browser.find.results.zero", fallback: "0 results")
         }
-        return "\(currentMatch) of \(totalMatches)"
+        return String(
+            format: localized("browser.find.results.count", fallback: "%d of %d"),
+            currentMatch,
+            totalMatches
+        )
     }
 
     private var matchCountColor: Color {
@@ -143,9 +150,13 @@ struct BrowserFindBar: View {
 
     private var matchCountAccessibilityLabel: String {
         if totalMatches == 0 {
-            return "No matches found"
+            return localized("browser.find.noMatches", fallback: "No matches found")
         }
-        return "Match \(currentMatch) of \(totalMatches)"
+        return String(
+            format: localized("browser.find.match.accessibility", fallback: "Match %d of %d"),
+            currentMatch,
+            totalMatches
+        )
     }
 
     // MARK: - Navigation Buttons
@@ -160,7 +171,7 @@ struct BrowserFindBar: View {
             .buttonStyle(.plain)
             .frame(width: 22, height: 22)
             .disabled(totalMatches == 0)
-            .accessibilityLabel("Previous match")
+            .accessibilityLabel(localized("browser.find.previous", fallback: "Previous match"))
 
             Button(action: onNextMatch) {
                 Image(systemName: "chevron.down")
@@ -170,7 +181,7 @@ struct BrowserFindBar: View {
             .buttonStyle(.plain)
             .frame(width: 22, height: 22)
             .disabled(totalMatches == 0)
-            .accessibilityLabel("Next match")
+            .accessibilityLabel(localized("browser.find.next", fallback: "Next match"))
         }
     }
 
@@ -190,6 +201,10 @@ struct BrowserFindBar: View {
         }
         .buttonStyle(.plain)
         .frame(width: 20, height: 20)
-        .accessibilityLabel("Close find bar")
+        .accessibilityLabel(localized("browser.find.close", fallback: "Close find bar"))
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

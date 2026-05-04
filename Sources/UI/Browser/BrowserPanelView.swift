@@ -47,6 +47,7 @@ struct BrowserPanelView: View {
     var onToggleHistory: (() -> Void)?
     var onToggleBookmarks: (() -> Void)?
     var onDismiss: () -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -109,7 +110,8 @@ struct BrowserPanelView: View {
                     onDismiss: {
                         showFindBar = false
                         viewModel.clearFind()
-                    }
+                    },
+                    localizer: localizer
                 )
             }
             webContentView
@@ -123,7 +125,8 @@ struct BrowserPanelView: View {
                     onClearNetwork: { networkMonitor.clear() },
                     onRefreshDOM: { refreshDOM() },
                     onDismiss: { showDevTools = false },
-                    vibrancyAppearanceOverride: vibrancyAppearanceOverride
+                    vibrancyAppearanceOverride: vibrancyAppearanceOverride,
+                    localizer: localizer
                 )
                 .frame(height: 200)
             }
@@ -138,7 +141,8 @@ struct BrowserPanelView: View {
                         }
                     },
                     onDismiss: { showDownloads = false },
-                    vibrancyAppearanceOverride: vibrancyAppearanceOverride
+                    vibrancyAppearanceOverride: vibrancyAppearanceOverride,
+                    localizer: localizer
                 )
                 .frame(maxHeight: 200)
             }
@@ -156,7 +160,7 @@ struct BrowserPanelView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Browser Panel")
+        .accessibilityLabel(localized("browser.panel.accessibility", fallback: "Browser Panel"))
         .onAppear {
             viewModel.activeProfileID = profileManager?.activeProfileID
             viewModel.loadDefaultPage()
@@ -170,7 +174,7 @@ struct BrowserPanelView: View {
 
     private var headerView: some View {
         HStack(spacing: 6) {
-            Text("Browser")
+            Text(localized("browser.panel.title", fallback: "Browser"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
 
@@ -179,12 +183,16 @@ struct BrowserPanelView: View {
                     profileManager: profileManager,
                     onCreateProfile: {
                         profileManager.createProfile(
-                            name: "Profile \(profileManager.profiles.count + 1)",
+                            name: String(
+                                format: localized("browser.profile.newName", fallback: "Profile %d"),
+                                profileManager.profiles.count + 1
+                            ),
                             icon: "person.circle",
                             colorHex: "#89B4FA"
                         )
                     },
-                    onManageProfiles: nil
+                    onManageProfiles: nil,
+                    localizer: localizer
                 )
             }
 
@@ -197,7 +205,7 @@ struct BrowserPanelView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Close browser panel")
+            .accessibilityLabel(localized("browser.panel.close", fallback: "Close browser panel"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -220,7 +228,7 @@ struct BrowserPanelView: View {
                         .frame(width: 24, height: 26)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Add browser tab")
+                .accessibilityLabel(localized("browser.panel.addTab", fallback: "Add browser tab"))
 
                 Spacer()
             }
@@ -252,7 +260,7 @@ struct BrowserPanelView: View {
                         .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close browser tab")
+                .accessibilityLabel(localized("browser.panel.closeTab", fallback: "Close browser tab"))
             }
         }
         .padding(.horizontal, 10)
@@ -268,7 +276,12 @@ struct BrowserPanelView: View {
             viewModel.selectBrowserTab(tab.id)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Browser tab: \(tab.title)")
+        .accessibilityLabel(
+            String(
+                format: localized("browser.panel.tab.accessibility", fallback: "Browser tab: %@"),
+                tab.title
+            )
+        )
     }
 
     // MARK: - Toolbar (URL bar + navigation)
@@ -297,8 +310,8 @@ struct BrowserPanelView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 22, height: 22)
-            .accessibilityLabel("Find in page")
-            .help("Find in page")
+            .accessibilityLabel(localized("browser.find.accessibility", fallback: "Find in page"))
+            .help(localized("browser.find.accessibility", fallback: "Find in page"))
 
             Button(action: { viewModel.toggleDOMGrabMode() }) {
                 Image(systemName: "cursorarrow.click.2")
@@ -313,10 +326,10 @@ struct BrowserPanelView: View {
             .frame(width: 22, height: 22)
             .accessibilityLabel(
                 viewModel.isDOMGrabActive
-                    ? "Stop DOM grab"
-                    : "Grab DOM element"
+                    ? localized("browser.panel.domGrab.stop", fallback: "Stop DOM grab")
+                    : localized("browser.panel.domGrab.grab", fallback: "Grab DOM element")
             )
-            .help("Grab DOM element")
+            .help(localized("browser.panel.domGrab.grab", fallback: "Grab DOM element"))
 
             if let onToggleHistory {
                 Button(action: onToggleHistory) {
@@ -326,8 +339,8 @@ struct BrowserPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(width: 22, height: 22)
-                .accessibilityLabel("Open browser history")
-                .help("History")
+                .accessibilityLabel(localized("browser.panel.openHistory", fallback: "Open browser history"))
+                .help(localized("browser.history.title", fallback: "History"))
             }
 
             if let onToggleBookmarks {
@@ -338,8 +351,8 @@ struct BrowserPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(width: 22, height: 22)
-                .accessibilityLabel("Open browser bookmarks")
-                .help("Bookmarks")
+                .accessibilityLabel(localized("browser.panel.openBookmarks", fallback: "Open browser bookmarks"))
+                .help(localized("browser.bookmarks.title", fallback: "Bookmarks"))
             }
 
             Button(action: { showDownloads.toggle() }) {
@@ -353,8 +366,8 @@ struct BrowserPanelView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 22, height: 22)
-            .accessibilityLabel("Downloads")
-            .help("Downloads")
+            .accessibilityLabel(localized("browser.downloads.title", fallback: "Downloads"))
+            .help(localized("browser.downloads.title", fallback: "Downloads"))
 
             Button(action: { showDevTools.toggle() }) {
                 Image(systemName: "wrench.and.screwdriver")
@@ -367,8 +380,8 @@ struct BrowserPanelView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 22, height: 22)
-            .accessibilityLabel("DevTools")
-            .help("Developer Tools")
+            .accessibilityLabel(localized("browser.devTools.accessibility", fallback: "DevTools"))
+            .help(localized("browser.devTools.help", fallback: "Developer Tools"))
         }
     }
 
@@ -386,8 +399,12 @@ struct BrowserPanelView: View {
             .buttonStyle(.plain)
             .frame(width: 28, height: 28)
             .disabled(!viewModel.canGoBack)
-            .accessibilityLabel("Go back")
-            .accessibilityValue(viewModel.canGoBack ? "available" : "unavailable")
+            .accessibilityLabel(localized("browser.panel.goBack", fallback: "Go back"))
+            .accessibilityValue(
+                viewModel.canGoBack
+                    ? localized("browser.panel.available", fallback: "available")
+                    : localized("browser.panel.unavailable", fallback: "unavailable")
+            )
 
             Button(action: { viewModel.goForward() }) {
                 Image(systemName: "chevron.right")
@@ -401,18 +418,23 @@ struct BrowserPanelView: View {
             .buttonStyle(.plain)
             .frame(width: 28, height: 28)
             .disabled(!viewModel.canGoForward)
-            .accessibilityLabel("Go forward")
-            .accessibilityValue(viewModel.canGoForward ? "available" : "unavailable")
+            .accessibilityLabel(localized("browser.panel.goForward", fallback: "Go forward"))
+            .accessibilityValue(
+                viewModel.canGoForward
+                    ? localized("browser.panel.available", fallback: "available")
+                    : localized("browser.panel.unavailable", fallback: "unavailable")
+            )
         }
     }
 
     private var urlField: some View {
         URLBarField(
             text: $viewModel.urlString,
-            onSubmit: { viewModel.navigate(to: viewModel.urlString) }
+            onSubmit: { viewModel.navigate(to: viewModel.urlString) },
+            placeholder: localized("browser.panel.url.placeholder", fallback: "Search or enter URL")
         )
         .frame(height: 26)
-        .accessibilityLabel("URL input field")
+        .accessibilityLabel(localized("browser.panel.url.accessibility", fallback: "URL input field"))
     }
 
     private var reloadButton: some View {
@@ -431,7 +453,11 @@ struct BrowserPanelView: View {
         }
         .buttonStyle(.plain)
         .frame(width: 24, height: 24)
-        .accessibilityLabel(viewModel.isLoading ? "Loading" : "Reload page")
+        .accessibilityLabel(
+            viewModel.isLoading
+                ? localized("browser.panel.loading", fallback: "Loading")
+                : localized("browser.panel.reload", fallback: "Reload page")
+        )
     }
 
     // MARK: - Web Content
@@ -496,10 +522,10 @@ struct BrowserPanelView: View {
             Image(systemName: "globe")
                 .font(.system(size: 32))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No page loaded")
+            Text(localized("browser.panel.empty.title", fallback: "No page loaded"))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Enter a URL above to browse.\nDefault: localhost:3000")
+            Text(localized("browser.panel.empty.detail", fallback: "Enter a URL above to browse.\nDefault: localhost:3000"))
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -508,6 +534,10 @@ struct BrowserPanelView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
@@ -523,6 +553,7 @@ struct URLBarField: NSViewRepresentable {
 
     @Binding var text: String
     var onSubmit: () -> Void
+    var placeholder: String = "Search or enter URL"
 
     func makeNSView(context: Context) -> NSTextField {
         let field = BrowserURLTextField()
@@ -534,7 +565,7 @@ struct URLBarField: NSViewRepresentable {
         field.isBordered = false
         field.isBezeled = false
         field.focusRingType = .default
-        field.placeholderString = "Search or enter URL"
+        field.placeholderString = placeholder
         field.stringValue = text
         field.cell?.truncatesLastVisibleLine = true
         field.cell?.lineBreakMode = .byTruncatingTail
@@ -549,6 +580,7 @@ struct URLBarField: NSViewRepresentable {
         if nsView.currentEditor() == nil, nsView.stringValue != text {
             nsView.stringValue = text
         }
+        nsView.placeholderString = placeholder
     }
 
     func makeCoordinator() -> Coordinator {

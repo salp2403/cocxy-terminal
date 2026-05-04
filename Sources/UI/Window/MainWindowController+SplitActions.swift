@@ -225,6 +225,7 @@ extension MainWindowController {
                 onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
                 onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
                 onDismiss: { [weak self] in self?.closePanel(contentID: contentID) },
+                localizer: appLocalizer(),
                 layout: .splitPane
             )
             browserView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()

@@ -43,6 +43,9 @@ struct BrowserProfileSelector: View {
     /// When nil, the "Manage Profiles" button is hidden.
     let onManageProfiles: (() -> Void)?
 
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     // MARK: - Body
 
     var body: some View {
@@ -55,8 +58,13 @@ struct BrowserProfileSelector: View {
         }
         .menuStyle(.borderlessButton)
         .frame(height: 24)
-        .accessibilityLabel("Profile: \(profileManager.activeProfile.name)")
-        .accessibilityHint("Opens profile switcher")
+        .accessibilityLabel(
+            String(
+                format: localized("browser.profile.accessibility", fallback: "Profile: %@"),
+                profileManager.activeProfile.name
+            )
+        )
+        .accessibilityHint(localized("browser.profile.switcherHint", fallback: "Opens profile switcher"))
     }
 
     // MARK: - Active Profile Label
@@ -102,13 +110,18 @@ struct BrowserProfileSelector: View {
                         .font(.system(size: 12))
 
                     if profile.isDefault {
-                        Text("(Default)")
+                        Text(localized("browser.profile.defaultBadge", fallback: "(Default)"))
                             .font(.system(size: 10))
                             .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                     }
                 }
             }
-            .accessibilityLabel("Switch to \(profile.name) profile")
+            .accessibilityLabel(
+                String(
+                    format: localized("browser.profile.switchTo", fallback: "Switch to %@ profile"),
+                    profile.name
+                )
+            )
         }
     }
 
@@ -120,22 +133,22 @@ struct BrowserProfileSelector: View {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
                         .font(.system(size: 10))
-                    Text("New Profile")
+                    Text(localized("browser.profile.new", fallback: "New Profile"))
                         .font(.system(size: 12))
                 }
             }
-            .accessibilityLabel("Create new profile")
+            .accessibilityLabel(localized("browser.profile.create", fallback: "Create new profile"))
 
             if let onManageProfiles {
                 Button(action: onManageProfiles) {
                     HStack(spacing: 4) {
                         Image(systemName: "gearshape")
                             .font(.system(size: 10))
-                        Text("Manage Profiles")
+                        Text(localized("browser.profile.manage", fallback: "Manage Profiles"))
                             .font(.system(size: 12))
                     }
                 }
-                .accessibilityLabel("Open profile management")
+                .accessibilityLabel(localized("browser.profile.manage.accessibility", fallback: "Open profile management"))
             }
         }
     }
@@ -167,5 +180,9 @@ struct BrowserProfileSelector: View {
         let blue  = CGFloat(hexValue & 0xFF) / 255.0
 
         return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1.0)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

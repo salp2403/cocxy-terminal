@@ -123,6 +123,21 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("onboarding.error.apply", fallback: "Unable to apply onboarding settings.") == "No se pudieron aplicar los ajustes de onboarding.")
     }
 
+    @Test
+    func browserChromeStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("browser.panel.title", fallback: "Browser") == "Navegador")
+        #expect(spanish.string("browser.panel.empty.title", fallback: "No page loaded") == "Sin página cargada")
+        #expect(spanish.string("browser.find.results.count", fallback: "%d of %d") == "%d de %d")
+        #expect(spanish.string("browser.profile.defaultBadge", fallback: "(Default)") == "(Predeterminado)")
+        #expect(spanish.string("browser.downloads.unknownSize", fallback: "Unknown size") == "Tamaño desconocido")
+        #expect(DevToolsTab.console.localizedTitle(using: spanish) == "Consola")
+        #expect(DevToolsTab.network.localizedTitle(using: spanish) == "Red")
+        #expect(DevToolsTab.dom.localizedTitle(using: spanish) == "DOM")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

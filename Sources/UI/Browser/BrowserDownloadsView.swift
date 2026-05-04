@@ -113,6 +113,9 @@ struct BrowserDownloadsView: View {
     /// rest of the chrome when the user forces a transparency theme.
     var vibrancyAppearanceOverride: NSAppearance?
 
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     // MARK: - Body
 
     var body: some View {
@@ -134,14 +137,14 @@ struct BrowserDownloadsView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Downloads")
+        .accessibilityLabel(localized("browser.downloads.title", fallback: "Downloads"))
     }
 
     // MARK: - Header
 
     private var headerView: some View {
         HStack {
-            Text("Downloads")
+            Text(localized("browser.downloads.title", fallback: "Downloads"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
 
@@ -154,7 +157,7 @@ struct BrowserDownloadsView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Close downloads")
+            .accessibilityLabel(localized("browser.downloads.close", fallback: "Close downloads"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -283,7 +286,7 @@ struct BrowserDownloadsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "trash")
                         .font(.system(size: 10))
-                    Text("Clear Completed")
+                    Text(localized("browser.downloads.clearCompleted", fallback: "Clear Completed"))
                         .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundColor(
@@ -294,7 +297,7 @@ struct BrowserDownloadsView: View {
             }
             .buttonStyle(.plain)
             .disabled(completedCount == 0)
-            .accessibilityLabel("Clear completed downloads")
+            .accessibilityLabel(localized("browser.downloads.clearCompleted.accessibility", fallback: "Clear completed downloads"))
 
             Spacer()
         }
@@ -310,10 +313,10 @@ struct BrowserDownloadsView: View {
             Image(systemName: "arrow.down.circle")
                 .font(.system(size: 28))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No downloads")
+            Text(localized("browser.downloads.empty.title", fallback: "No downloads"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Files you download will appear here.")
+            Text(localized("browser.downloads.empty.detail", fallback: "Files you download will appear here."))
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -330,9 +333,12 @@ struct BrowserDownloadsView: View {
             return formatBytes(total)
         }
         if item.receivedBytes > 0 {
-            return "\(formatBytes(item.receivedBytes)) received"
+            return String(
+                format: localized("browser.downloads.received", fallback: "%@ received"),
+                formatBytes(item.receivedBytes)
+            )
         }
-        return "Unknown size"
+        return localized("browser.downloads.unknownSize", fallback: "Unknown size")
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
@@ -350,11 +356,26 @@ struct BrowserDownloadsView: View {
     private func accessibilityLabel(for item: DownloadItem) -> String {
         switch item.state {
         case .downloading(let progress):
-            return "\(item.fileName), downloading, \(Int(progress * 100)) percent"
+            return String(
+                format: localized("browser.downloads.accessibility.downloading", fallback: "%@, downloading, %d percent"),
+                item.fileName,
+                Int(progress * 100)
+            )
         case .completed:
-            return "\(item.fileName), completed, tap to open"
+            return String(
+                format: localized("browser.downloads.accessibility.completed", fallback: "%@, completed, tap to open"),
+                item.fileName
+            )
         case .failed(let reason):
-            return "\(item.fileName), failed: \(reason)"
+            return String(
+                format: localized("browser.downloads.accessibility.failed", fallback: "%@, failed: %@"),
+                item.fileName,
+                reason
+            )
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

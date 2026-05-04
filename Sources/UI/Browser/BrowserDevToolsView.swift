@@ -22,6 +22,17 @@ enum DevToolsTab: String, CaseIterable, Identifiable {
         case .dom:     return "chevron.left.forwardslash.chevron.right"
         }
     }
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .console:
+            return localizer.string("browser.devTools.tab.console", fallback: rawValue)
+        case .network:
+            return localizer.string("browser.devTools.tab.network", fallback: rawValue)
+        case .dom:
+            return localizer.string("browser.devTools.tab.dom", fallback: rawValue)
+        }
+    }
 }
 
 // MARK: - DOM Node
@@ -122,6 +133,9 @@ struct BrowserDevToolsView: View {
     /// rest of the chrome when the user forces a transparency theme.
     var vibrancyAppearanceOverride: NSAppearance?
 
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     /// The currently selected tab.
     @State private var selectedTab: DevToolsTab = .console
 
@@ -153,7 +167,7 @@ struct BrowserDevToolsView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Browser DevTools")
+        .accessibilityLabel(localized("browser.devTools.accessibility", fallback: "Browser DevTools"))
     }
 
     // MARK: - Header
@@ -173,7 +187,7 @@ struct BrowserDevToolsView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Close DevTools")
+            .accessibilityLabel(localized("browser.devTools.close", fallback: "Close DevTools"))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -184,7 +198,7 @@ struct BrowserDevToolsView: View {
             HStack(spacing: 4) {
                 Image(systemName: tab.symbolName)
                     .font(.system(size: 10))
-                Text(tab.rawValue)
+                Text(tab.localizedTitle(using: localizer))
                     .font(.system(size: 11, weight: selectedTab == tab ? .semibold : .regular))
             }
             .foregroundColor(
@@ -202,7 +216,12 @@ struct BrowserDevToolsView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(tab.rawValue) tab")
+        .accessibilityLabel(
+            String(
+                format: localized("browser.devTools.tab.accessibility", fallback: "%@ tab"),
+                tab.localizedTitle(using: localizer)
+            )
+        )
         .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
 
@@ -230,8 +249,8 @@ struct BrowserDevToolsView: View {
             if filteredConsoleEntries.isEmpty {
                 devToolsEmptyState(
                     symbol: "terminal",
-                    title: "No console output",
-                    detail: "Console messages from the page will appear here."
+                    title: localized("browser.devTools.console.empty.title", fallback: "No console output"),
+                    detail: localized("browser.devTools.console.empty.detail", fallback: "Console messages from the page will appear here.")
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
@@ -254,7 +273,7 @@ struct BrowserDevToolsView: View {
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
 
-                TextField("Filter...", text: $consoleFilterText)
+                TextField(localized("browser.devTools.console.filter.placeholder", fallback: "Filter..."), text: $consoleFilterText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
@@ -270,11 +289,11 @@ struct BrowserDevToolsView: View {
 
             Spacer()
 
-            Button("Clear", action: onClearConsole)
+            Button(localized("common.clear", fallback: "Clear"), action: onClearConsole)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear console")
+                .accessibilityLabel(localized("browser.devTools.console.clear", fallback: "Clear console"))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -282,10 +301,10 @@ struct BrowserDevToolsView: View {
 
     private var consoleLevelPicker: some View {
         HStack(spacing: 2) {
-            consoleLevelChip(label: "All", level: nil)
-            consoleLevelChip(label: "Err", level: .error)
-            consoleLevelChip(label: "Warn", level: .warn)
-            consoleLevelChip(label: "Info", level: .info)
+            consoleLevelChip(label: localized("browser.devTools.console.level.all", fallback: "All"), level: nil)
+            consoleLevelChip(label: localized("browser.devTools.console.level.error", fallback: "Err"), level: .error)
+            consoleLevelChip(label: localized("browser.devTools.console.level.warn", fallback: "Warn"), level: .warn)
+            consoleLevelChip(label: localized("browser.devTools.console.level.info", fallback: "Info"), level: .info)
         }
     }
 
@@ -308,7 +327,12 @@ struct BrowserDevToolsView: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(label) filter")
+        .accessibilityLabel(
+            String(
+                format: localized("browser.devTools.console.level.accessibility", fallback: "%@ filter"),
+                label
+            )
+        )
     }
 
     private func consoleEntryRow(_ entry: ConsoleEntry) -> some View {
@@ -360,8 +384,8 @@ struct BrowserDevToolsView: View {
             if filteredNetworkEntries.isEmpty {
                 devToolsEmptyState(
                     symbol: "network",
-                    title: "No network requests",
-                    detail: "Resource requests from the page will appear here."
+                    title: localized("browser.devTools.network.empty.title", fallback: "No network requests"),
+                    detail: localized("browser.devTools.network.empty.detail", fallback: "Resource requests from the page will appear here.")
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
@@ -384,7 +408,7 @@ struct BrowserDevToolsView: View {
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
 
-                TextField("Filter URLs...", text: $networkFilterText)
+                TextField(localized("browser.devTools.network.filter.placeholder", fallback: "Filter URLs..."), text: $networkFilterText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
@@ -398,15 +422,15 @@ struct BrowserDevToolsView: View {
 
             Spacer()
 
-            Text("\(networkMonitor.entries.count) requests")
+            Text(networkRequestCountText)
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
 
-            Button("Clear", action: onClearNetwork)
+            Button(localized("common.clear", fallback: "Clear"), action: onClearNetwork)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear network log")
+                .accessibilityLabel(localized("browser.devTools.network.clear", fallback: "Clear network log"))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -414,13 +438,13 @@ struct BrowserDevToolsView: View {
 
     private var networkColumnHeader: some View {
         HStack(spacing: 0) {
-            Text("Method")
+            Text(localized("browser.devTools.network.column.method", fallback: "Method"))
                 .frame(width: 44, alignment: .leading)
-            Text("URL")
+            Text(localized("browser.devTools.network.column.url", fallback: "URL"))
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Time")
+            Text(localized("browser.devTools.network.column.time", fallback: "Time"))
                 .frame(width: 54, alignment: .trailing)
-            Text("Size")
+            Text(localized("browser.devTools.network.column.size", fallback: "Size"))
                 .frame(width: 54, alignment: .trailing)
         }
         .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -466,6 +490,18 @@ struct BrowserDevToolsView: View {
         return networkMonitor.entries.filter { $0.url.lowercased().contains(lowered) }
     }
 
+    private var networkRequestCountText: String {
+        String(
+            format: localized(
+                networkMonitor.entries.count == 1
+                    ? "browser.devTools.network.requests.one"
+                    : "browser.devTools.network.requests.many",
+                fallback: networkMonitor.entries.count == 1 ? "%d request" : "%d requests"
+            ),
+            networkMonitor.entries.count
+        )
+    }
+
     // MARK: - DOM Tab
 
     private var domTabView: some View {
@@ -476,14 +512,14 @@ struct BrowserDevToolsView: View {
             if domNodes.isEmpty {
                 devToolsEmptyState(
                     symbol: "chevron.left.forwardslash.chevron.right",
-                    title: "No DOM data",
-                    detail: "Tap Refresh to capture the current page structure."
+                    title: localized("browser.devTools.dom.empty.title", fallback: "No DOM data"),
+                    detail: localized("browser.devTools.dom.empty.detail", fallback: "Tap Refresh to capture the current page structure.")
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(domNodes) { node in
-                            DOMNodeRow(node: node, depth: 0)
+                            DOMNodeRow(node: node, depth: 0, localizer: localizer)
                         }
                     }
                     .padding(.vertical, 4)
@@ -500,13 +536,13 @@ struct BrowserDevToolsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 10))
-                    Text("Refresh")
+                    Text(localized("browser.devTools.dom.refresh", fallback: "Refresh"))
                         .font(.system(size: 10, weight: .medium))
                 }
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Refresh DOM tree")
+            .accessibilityLabel(localized("browser.devTools.dom.refresh.accessibility", fallback: "Refresh DOM tree"))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -600,6 +636,10 @@ struct BrowserDevToolsView: View {
         formatter.dateFormat = "HH:mm:ss"
         return formatter
     }()
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 // MARK: - DOM Node Row
@@ -615,6 +655,9 @@ struct DOMNodeRow: View {
 
     /// The indentation depth (0 = root level).
     let depth: Int
+
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Whether this node's children are expanded.
     @State private var isExpanded: Bool = false
@@ -664,12 +707,17 @@ struct DOMNodeRow: View {
 
             if isExpanded {
                 ForEach(node.children) { child in
-                    DOMNodeRow(node: child, depth: depth + 1)
+                    DOMNodeRow(node: child, depth: depth + 1, localizer: localizer)
                 }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("DOM element: \(node.tag)")
+        .accessibilityLabel(
+            String(
+                format: localizer.string("browser.devTools.dom.node.accessibility", fallback: "DOM element: %@"),
+                node.tag
+            )
+        )
     }
 
     /// Wraps the tag name in angle brackets for display.
