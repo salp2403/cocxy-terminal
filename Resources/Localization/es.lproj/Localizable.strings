@@ -1668,6 +1668,8 @@
 "command.worktree.remove.description" = "Eliminar el worktree gestionado por Cocxy adjunto a la pestaña activa (rechaza si hay cambios sin confirmar)";
 "command.editor.openDefault.name" = "Abrir workspace en editor predeterminado";
 "command.editor.openDefault.description" = "Abrir el workspace de la pestaña activa con el editor predeterminado del sistema";
+"command.editor.openNamed.name" = "Abrir workspace en %@";
+"command.editor.openNamed.description" = "Abrir el workspace de la pestaña activa usando %@";
 
 "common.search" = "Buscar";
 

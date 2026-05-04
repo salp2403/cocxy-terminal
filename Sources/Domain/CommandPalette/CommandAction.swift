@@ -65,6 +65,29 @@ struct CommandAction: Identifiable, Sendable {
     let handler: @MainActor @Sendable () -> Void
 
     func localized(using localizer: AppLocalizer) -> CommandAction {
+        if let editorDisplayName = dynamicEditorDisplayName {
+            return CommandAction(
+                id: id,
+                name: String(
+                    format: localizer.string(
+                        "command.editor.openNamed.name",
+                        fallback: "Open Workspace in %@"
+                    ),
+                    editorDisplayName
+                ),
+                description: String(
+                    format: localizer.string(
+                        "command.editor.openNamed.description",
+                        fallback: "Open the active tab's workspace using %@"
+                    ),
+                    editorDisplayName
+                ),
+                shortcut: shortcut,
+                category: category,
+                handler: handler
+            )
+        }
+
         let nameKey = "command.\(id).name"
         return CommandAction(
             id: id,
@@ -84,5 +107,18 @@ struct CommandAction: Identifiable, Sendable {
             return "command.window.pictureInPicture.description.enabled"
         }
         return "command.\(id).description"
+    }
+
+    private var dynamicEditorDisplayName: String? {
+        guard id.hasPrefix("editor.open."), id != "editor.openDefault" else { return nil }
+        let namePrefix = "Open Workspace in "
+        if name.hasPrefix(namePrefix) {
+            return String(name.dropFirst(namePrefix.count))
+        }
+        let descriptionPrefix = "Open the active tab's workspace using "
+        if description.hasPrefix(descriptionPrefix) {
+            return String(description.dropFirst(descriptionPrefix.count))
+        }
+        return nil
     }
 }

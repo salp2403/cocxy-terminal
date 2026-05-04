@@ -486,6 +486,24 @@ struct AppLocalizationSwiftTestingTests {
         #expect(enabled.description == "Mover el terminal activo a un panel flotante Picture-in-Picture")
     }
 
+    @MainActor
+    @Test
+    func commandActionLocalizationHandlesDynamicEditorNames() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let action = CommandAction(
+            id: "editor.open.vscode",
+            name: "Open Workspace in Visual Studio Code",
+            description: "Open the active tab's workspace using Visual Studio Code",
+            shortcut: nil,
+            category: .editor,
+            handler: {}
+        ).localized(using: localizer)
+
+        #expect(action.name == "Abrir workspace en Visual Studio Code")
+        #expect(action.description == "Abrir el workspace de la pestaña activa usando Visual Studio Code")
+    }
+
     @Test
     func buildAndVerifyScriptsIncludeLocalizationResources() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

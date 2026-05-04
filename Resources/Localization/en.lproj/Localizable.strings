@@ -1668,6 +1668,8 @@
 "command.worktree.remove.description" = "Remove the cocxy-managed worktree attached to the active tab (refuses when dirty)";
 "command.editor.openDefault.name" = "Open Workspace in Default Editor";
 "command.editor.openDefault.description" = "Open the active tab's workspace with the system default editor";
+"command.editor.openNamed.name" = "Open Workspace in %@";
+"command.editor.openNamed.description" = "Open the active tab's workspace using %@";
 
 "common.search" = "Search";
 
