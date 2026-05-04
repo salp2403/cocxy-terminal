@@ -151,6 +151,11 @@ extension MainWindowController {
             refreshStatusBar()
         }
 
+        if old?.appearance.appLanguage != config.appearance.appLanguage {
+            syncCodeReviewPanelRootView(panelWidth: codeReviewPanelWidth)
+            syncGitHubPaneRootView(panelWidth: gitHubPanePanelWidth)
+        }
+
         if old?.keybindings != config.keybindings
             || old?.experimental != config.experimental {
             refreshCommandPaletteRuntimeStateIfNeeded(config)

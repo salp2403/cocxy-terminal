@@ -44,6 +44,7 @@ struct GitHubPaneView: View {
     var layout: Layout = .sidePanel
     var onDismiss: (() -> Void)?
     var panelWidth: CGFloat = GitHubPaneView.defaultPanelWidth
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     // MARK: Body
 
@@ -341,7 +342,8 @@ struct GitHubPaneView: View {
 
     private func presentMergeActionSheet(for pullRequest: GitHubPullRequest) {
         guard let decision = MergePullRequestActionSheet.present(
-            pullRequestNumber: pullRequest.number
+            pullRequestNumber: pullRequest.number,
+            localizer: localizer
         ) else { return }
         viewModel.requestMergePullRequest(
             number: pullRequest.number,

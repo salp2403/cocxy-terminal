@@ -219,9 +219,13 @@ extension MainWindowController {
         // worktree directory on disk. Tabs without a worktree id keep
         // the default policy so plain feature branches behave exactly
         // as before.
-        viewModel.postMergeCleanupAlertHandler = { headRefName in
+        viewModel.postMergeCleanupAlertHandler = { [weak self] headRefName in
             await MainActor.run {
-                PostMergeWorktreeCleanupAlert.present(headRefName: headRefName)
+                let localizer = self?.appLocalizer() ?? AppLocalizer(languagePreference: .system)
+                return PostMergeWorktreeCleanupAlert.present(
+                    headRefName: headRefName,
+                    localizer: localizer
+                )
             }
         }
         viewModel.closeWorktreeTabHandler = { [weak self] tabID in
@@ -274,7 +278,8 @@ extension MainWindowController {
             onDismiss: { [weak self] in
                 self?.dismissGitHubPane()
             },
-            panelWidth: panelWidth
+            panelWidth: panelWidth,
+            localizer: appLocalizer()
         )
     }
 

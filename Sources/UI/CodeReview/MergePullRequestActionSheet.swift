@@ -15,6 +15,17 @@ import Foundation
 
 enum MergePullRequestActionSheet {
 
+    struct PresentationCopy: Equatable {
+        let messageText: String
+        let informativeText: String
+        let squashButton: String
+        let mergeCommitButton: String
+        let rebaseButton: String
+        let cancelButton: String
+        let deleteBranchTitle: String
+        let deleteBranchTooltip: String
+    }
+
     /// Outcome of presenting the alert. `nil` means the user
     /// cancelled (Esc, Cancel button, or the window closed before a
     /// choice was made).
@@ -99,23 +110,23 @@ enum MergePullRequestActionSheet {
     static func present(
         pullRequestNumber: Int,
         defaultsDeleteBranch: Bool? = nil,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) -> Decision? {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Merge pull request #\(pullRequestNumber)?"
-        alert.informativeText = """
-        Choose how to merge this pull request. Once started, this action cannot be undone from Cocxy.
-        """
+        let copy = localizedPresentationCopy(localizer: localizer, pullRequestNumber: pullRequestNumber)
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
 
         // Order matters: NSAlert maps the first button to
         // `.alertFirstButtonReturn`, so Squash & Merge stays the
         // default (it is the most common strategy on GitHub today and
         // pressing Return triggers it without scrolling).
-        alert.addButton(withTitle: "Squash & Merge")
-        alert.addButton(withTitle: "Merge Commit")
-        alert.addButton(withTitle: "Rebase & Merge")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.squashButton)
+        alert.addButton(withTitle: copy.mergeCommitButton)
+        alert.addButton(withTitle: copy.rebaseButton)
+        alert.addButton(withTitle: copy.cancelButton)
 
         // Cancel binding so Esc dismisses the sheet without firing a
         // strategy. The fourth button receives `.alertFourthButtonReturn`
@@ -126,12 +137,12 @@ enum MergePullRequestActionSheet {
         let initialDeleteBranch = defaultsDeleteBranch
             ?? storedDeleteBranchPreference(in: defaults)
         let checkbox = NSButton(
-            checkboxWithTitle: "Delete branch after merge",
+            checkboxWithTitle: copy.deleteBranchTitle,
             target: nil,
             action: nil
         )
         checkbox.state = initialDeleteBranch ? .on : .off
-        checkbox.toolTip = "Removes the local and remote branch once the merge succeeds."
+        checkbox.toolTip = copy.deleteBranchTooltip
         checkbox.translatesAutoresizingMaskIntoConstraints = false
         // Wrap the checkbox in a fixed-width container so the alert
         // does not resize unpredictably across locales with longer
@@ -154,5 +165,36 @@ enum MergePullRequestActionSheet {
         // toggle matches the GitHub web behaviour.
         storeDeleteBranchPreference(deleteBranch, in: defaults)
         return decision
+    }
+
+    static func localizedPresentationCopy(
+        localizer: AppLocalizer,
+        pullRequestNumber: Int
+    ) -> PresentationCopy {
+        PresentationCopy(
+            messageText: String(
+                format: localizer.string(
+                    "codeReview.merge.title",
+                    fallback: "Merge pull request #%d?"
+                ),
+                pullRequestNumber
+            ),
+            informativeText: localizer.string(
+                "codeReview.merge.message",
+                fallback: "Choose how to merge this pull request. Once started, this action cannot be undone from Cocxy."
+            ),
+            squashButton: localizer.string("codeReview.merge.squash", fallback: "Squash & Merge"),
+            mergeCommitButton: localizer.string("codeReview.merge.mergeCommit", fallback: "Merge Commit"),
+            rebaseButton: localizer.string("codeReview.merge.rebase", fallback: "Rebase & Merge"),
+            cancelButton: localizer.string("common.cancel", fallback: "Cancel"),
+            deleteBranchTitle: localizer.string(
+                "codeReview.merge.deleteBranch",
+                fallback: "Delete branch after merge"
+            ),
+            deleteBranchTooltip: localizer.string(
+                "codeReview.merge.deleteBranch.tooltip",
+                fallback: "Removes the local and remote branch once the merge succeeds."
+            )
+        )
     }
 }

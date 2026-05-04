@@ -1297,9 +1297,13 @@ extension MainWindowController {
         // worktree directory on disk. Tabs without a worktree id keep
         // the default policy (configured `[worktree].on-close`) so
         // plain feature branches behave exactly as before.
-        viewModel.postMergeCleanupAlertHandler = { headRefName in
+        viewModel.postMergeCleanupAlertHandler = { [weak self] headRefName in
             await MainActor.run {
-                PostMergeWorktreeCleanupAlert.present(headRefName: headRefName)
+                let localizer = self?.appLocalizer() ?? AppLocalizer(languagePreference: .system)
+                return PostMergeWorktreeCleanupAlert.present(
+                    headRefName: headRefName,
+                    localizer: localizer
+                )
             }
         }
         viewModel.closeWorktreeTabHandler = { [weak self] tabID in
@@ -1812,11 +1816,12 @@ extension MainWindowController {
             },
             externalEditorActions: codeReviewExternalEditorActions(
                 workingDirectory: currentCodeReviewWorkingDirectory()
-            )
+            ),
+            localizer: appLocalizer()
         )
     }
 
-    private func syncCodeReviewPanelRootView(panelWidth: CGFloat) {
+    func syncCodeReviewPanelRootView(panelWidth: CGFloat) {
         guard isCodeReviewVisible,
               let hostingView = codeReviewHostingView,
               let viewModel = codeReviewViewModel else {

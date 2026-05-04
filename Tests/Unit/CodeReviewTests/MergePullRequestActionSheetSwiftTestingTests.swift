@@ -146,4 +146,29 @@ struct MergePullRequestActionSheetSwiftTestingTests {
         #expect(a != c)
         #expect(a != d)
     }
+
+    @Test("presentation copy localizes to configured app language")
+    func presentationCopyLocalizes() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        let copy = MergePullRequestActionSheet.localizedPresentationCopy(
+            localizer: localizer,
+            pullRequestNumber: 42
+        )
+
+        #expect(copy.messageText == "¿Fusionar pull request #42?")
+        #expect(copy.informativeText == "Elige cómo fusionar este pull request. Una vez iniciada, esta acción no puede deshacerse desde Cocxy.")
+        #expect(copy.squashButton == "Squash y merge")
+        #expect(copy.mergeCommitButton == "Commit de merge")
+        #expect(copy.rebaseButton == "Rebase y merge")
+        #expect(copy.cancelButton == "Cancelar")
+        #expect(copy.deleteBranchTitle == "Eliminar rama después de fusionar")
+        #expect(copy.deleteBranchTooltip == "Elimina la rama local y remota cuando la fusión termina correctamente.")
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
 }

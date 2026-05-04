@@ -179,4 +179,26 @@ struct PostMergeWorktreeCleanupAlertSwiftTestingTests {
     func closePolicyOverrideForNilTab() {
         #expect(PostMergeWorktreeCleanupAlert.closePolicyOverride(for: nil) == nil)
     }
+
+    @Test("presentation copy localizes to configured app language")
+    func presentationCopyLocalizes() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        let copy = PostMergeWorktreeCleanupAlert.localizedPresentationCopy(
+            localizer: localizer,
+            headRefName: "feat/x"
+        )
+
+        #expect(copy.messageText == "¿Cerrar worktree para `feat/x`?")
+        #expect(copy.informativeText.contains("La rama `feat/x` se eliminó en origin"))
+        #expect(copy.primaryButton == "Cerrar worktree")
+        #expect(copy.secondaryButton == "Mantener worktree")
+        #expect(copy.tertiaryButton == "Cancelar")
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
 }

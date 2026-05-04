@@ -13,6 +13,7 @@ struct CodeReviewPanelView: View {
     var onIncreaseWidth: (() -> Void)? = nil
     var onDismiss: (() -> Void)? = nil
     var externalEditorActions: [CodeReviewExternalEditorAction] = []
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -52,7 +53,7 @@ struct CodeReviewPanelView: View {
 
                 VStack(spacing: 0) {
                     Divider()
-                    ReviewToolbarView(viewModel: viewModel)
+                    ReviewToolbarView(viewModel: viewModel, localizer: localizer)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

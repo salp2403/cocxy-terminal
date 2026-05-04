@@ -462,6 +462,17 @@
 "markdown.explorer.trash.title" = "¿Mover \"%@\" a la papelera?";
 "markdown.explorer.trash.message" = "Puedes deshacerlo desde la papelera.";
 "markdown.explorer.trash.button" = "Mover a la papelera";
+"codeReview.merge.title" = "¿Fusionar pull request #%d?";
+"codeReview.merge.message" = "Elige cómo fusionar este pull request. Una vez iniciada, esta acción no puede deshacerse desde Cocxy.";
+"codeReview.merge.squash" = "Squash y merge";
+"codeReview.merge.mergeCommit" = "Commit de merge";
+"codeReview.merge.rebase" = "Rebase y merge";
+"codeReview.merge.deleteBranch" = "Eliminar rama después de fusionar";
+"codeReview.merge.deleteBranch.tooltip" = "Elimina la rama local y remota cuando la fusión termina correctamente.";
+"codeReview.postMergeCleanup.title" = "¿Cerrar worktree para `%@`?";
+"codeReview.postMergeCleanup.message" = "La rama `%@` se eliminó en origin después de la fusión. Puedes cerrar ahora la pestaña de este worktree o mantenerla abierta para revisar el resultado. Cerrar también elimina el directorio del worktree en disco si no tiene cambios sin commit.";
+"codeReview.postMergeCleanup.closeWorktree" = "Cerrar worktree";
+"codeReview.postMergeCleanup.keepWorktree" = "Mantener worktree";
 
 "welcome.accessibilityLabel" = "Bienvenida a Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";

@@ -6,6 +6,7 @@ import SwiftUI
 
 struct ReviewToolbarView: View {
     @ObservedObject var viewModel: CodeReviewPanelViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(spacing: 8) {
@@ -291,7 +292,8 @@ struct ReviewToolbarView: View {
 
     private func presentMergeActionSheet(prNumber: Int) {
         guard let decision = MergePullRequestActionSheet.present(
-            pullRequestNumber: prNumber
+            pullRequestNumber: prNumber,
+            localizer: localizer
         ) else { return }
         viewModel.requestMergePullRequest(
             method: decision.method,

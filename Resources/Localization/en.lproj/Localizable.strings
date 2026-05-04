@@ -462,6 +462,17 @@
 "markdown.explorer.trash.title" = "Move \"%@\" to Trash?";
 "markdown.explorer.trash.message" = "This can be undone from the Trash.";
 "markdown.explorer.trash.button" = "Move to Trash";
+"codeReview.merge.title" = "Merge pull request #%d?";
+"codeReview.merge.message" = "Choose how to merge this pull request. Once started, this action cannot be undone from Cocxy.";
+"codeReview.merge.squash" = "Squash & Merge";
+"codeReview.merge.mergeCommit" = "Merge Commit";
+"codeReview.merge.rebase" = "Rebase & Merge";
+"codeReview.merge.deleteBranch" = "Delete branch after merge";
+"codeReview.merge.deleteBranch.tooltip" = "Removes the local and remote branch once the merge succeeds.";
+"codeReview.postMergeCleanup.title" = "Close worktree for `%@`?";
+"codeReview.postMergeCleanup.message" = "The branch `%@` was deleted on origin after the merge. You can close this worktree's tab now or keep it open to inspect the result. Closing also removes the worktree directory on disk if it has no uncommitted changes.";
+"codeReview.postMergeCleanup.closeWorktree" = "Close Worktree";
+"codeReview.postMergeCleanup.keepWorktree" = "Keep Worktree";
 
 "welcome.accessibilityLabel" = "Welcome to Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";

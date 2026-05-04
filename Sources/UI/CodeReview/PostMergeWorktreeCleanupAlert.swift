@@ -160,25 +160,53 @@ enum PostMergeWorktreeCleanupAlert {
     /// modal style of `MergePullRequestActionSheet` so the two flows
     /// chained back-to-back share a recognisable visual rhythm.
     @MainActor
-    static func present(headRefName: String) -> Resolution {
+    static func present(
+        headRefName: String,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) -> Resolution {
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "Close worktree for `\(headRefName)`?"
-        alert.informativeText = """
-        The branch `\(headRefName)` was deleted on origin after the merge. \
-        You can close this worktree's tab now or keep it open to inspect the result. \
-        Closing also removes the worktree directory on disk if it has no uncommitted changes.
-        """
+        let copy = localizedPresentationCopy(localizer: localizer, headRefName: headRefName)
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
 
         // Order: Close → Keep → Cancel. Close is the default (first
         // button) because it matches the most common post-merge
         // intent — the user explicitly asked for `--delete-branch`,
         // so closing the now-orphan tab is the natural follow-up.
-        alert.addButton(withTitle: "Close Worktree")
-        alert.addButton(withTitle: "Keep Worktree")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
+        alert.addButton(withTitle: copy.tertiaryButton ?? localizer.string("common.cancel", fallback: "Cancel"))
         alert.buttons.last?.keyEquivalent = "\u{1b}"  // Esc → Cancel.
 
         return decode(response: alert.runModal())
+    }
+
+    static func localizedPresentationCopy(localizer: AppLocalizer, headRefName: String) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: String(
+                format: localizer.string(
+                    "codeReview.postMergeCleanup.title",
+                    fallback: "Close worktree for `%@`?"
+                ),
+                headRefName
+            ),
+            informativeText: String(
+                format: localizer.string(
+                    "codeReview.postMergeCleanup.message",
+                    fallback: "The branch `%@` was deleted on origin after the merge. You can close this worktree's tab now or keep it open to inspect the result. Closing also removes the worktree directory on disk if it has no uncommitted changes."
+                ),
+                headRefName
+            ),
+            primaryButton: localizer.string(
+                "codeReview.postMergeCleanup.closeWorktree",
+                fallback: "Close Worktree"
+            ),
+            secondaryButton: localizer.string(
+                "codeReview.postMergeCleanup.keepWorktree",
+                fallback: "Keep Worktree"
+            ),
+            tertiaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
     }
 }
