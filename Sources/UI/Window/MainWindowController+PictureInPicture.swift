@@ -25,7 +25,7 @@ extension MainWindowController {
 
         let controller = PIPWindowController(
             tabID: tabID,
-            title: "Cocxy PIP - \(tab.displayTitle)",
+            title: Self.localizedPictureInPictureTitle(for: tab.displayTitle, using: appLocalizer()),
             detachedView: surfaceView,
             onRestore: { [weak self] tabID, view in
                 Task { @MainActor in
@@ -81,5 +81,12 @@ extension MainWindowController {
 
     @objc func detachActiveTerminalToPIPAction(_ sender: Any?) {
         _ = detachActiveTerminalToPIP()
+    }
+
+    static func localizedPictureInPictureTitle(for tabTitle: String, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string("pip.window.title", fallback: "Cocxy PIP - %@"),
+            tabTitle
+        )
     }
 }

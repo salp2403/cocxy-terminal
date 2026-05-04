@@ -570,6 +570,7 @@ struct AppLocalizationSwiftTestingTests {
 
         #expect(disabled.description == "Activa [experimental].pip-enabled para usar Picture-in-Picture del terminal")
         #expect(enabled.description == "Mover el terminal activo a un panel flotante Picture-in-Picture")
+        #expect(MainWindowController.localizedPictureInPictureTitle(for: "Proyecto", using: localizer) == "Cocxy PIP - Proyecto")
     }
 
     @MainActor
