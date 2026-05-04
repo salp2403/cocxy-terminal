@@ -13,12 +13,16 @@ struct ActivityDashboardView: View {
     init(
         viewModel: ActivityDashboardViewModel,
         onDismiss: (() -> Void)? = nil,
-        fileActions: ActivityDashboardFileActions? = nil
+        fileActions: ActivityDashboardFileActions? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.viewModel = viewModel
         self.onDismiss = onDismiss
         _fileActions = StateObject(
-            wrappedValue: fileActions ?? ActivityDashboardFileActions(viewModel: viewModel)
+            wrappedValue: fileActions ?? ActivityDashboardFileActions(
+                viewModel: viewModel,
+                presenter: SystemActivityDashboardFilePresenter(localizer: localizer)
+            )
         )
     }
 

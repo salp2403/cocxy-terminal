@@ -441,6 +441,12 @@
 "terminal.clipboardRead.message" = "A terminal program requested access to the system clipboard via OSC 52. Allowing this will send your current clipboard contents to the running shell.";
 "terminal.clipboardRead.allow" = "Allow";
 "terminal.clipboardRead.deny" = "Deny";
+"activity.deleteAll.title" = "Delete all Activity data?";
+"activity.deleteAll.message" = "This removes local Activity and token records from this Mac.";
+"activity.deleteAll.button" = "Delete";
+"sessionReplay.deleteAll.title" = "Delete All Recordings?";
+"sessionReplay.deleteAll.message" = "This removes every local Session Replay recording from this Mac.";
+"sessionReplay.deleteAll.button" = "Delete All";
 
 "welcome.accessibilityLabel" = "Welcome to Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";

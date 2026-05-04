@@ -7,10 +7,16 @@ import UniformTypeIdentifiers
 
 struct SessionReplayPanelView: View {
     @StateObject private var viewModel: SessionReplayPanelViewModel
+    private let localizer: AppLocalizer
     let onClose: (() -> Void)?
 
-    init(viewModel: SessionReplayPanelViewModel, onClose: (() -> Void)? = nil) {
+    init(
+        viewModel: SessionReplayPanelViewModel,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        onClose: (() -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.localizer = localizer
         self.onClose = onClose
     }
 
@@ -85,15 +91,28 @@ struct SessionReplayPanelView: View {
 
     private func confirmDeleteAllRecordings() {
         let alert = NSAlert()
-        alert.messageText = "Delete All Recordings?"
-        alert.informativeText = "This removes every local Session Replay recording from this Mac."
+        let copy = Self.localizedDeleteAllRecordingsCopy(localizer: localizer)
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Delete All")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         viewModel.perform {
             try viewModel.deleteAll()
         }
+    }
+
+    static func localizedDeleteAllRecordingsCopy(localizer: AppLocalizer) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: localizer.string("sessionReplay.deleteAll.title", fallback: "Delete All Recordings?"),
+            informativeText: localizer.string(
+                "sessionReplay.deleteAll.message",
+                fallback: "This removes every local Session Replay recording from this Mac."
+            ),
+            primaryButton: localizer.string("sessionReplay.deleteAll.button", fallback: "Delete All"),
+            secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
     }
 
     private var recordingList: some View {

@@ -213,6 +213,21 @@ struct SessionReplayPanelViewModelSwiftTestingTests {
         #expect(playback.requests.isEmpty)
     }
 
+    @Test("delete-all Session Replay confirmation copy follows configured app language")
+    func deleteAllSessionReplayConfirmationCopyFollowsConfiguredAppLanguage() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+
+        let copy = SessionReplayPanelView.localizedDeleteAllRecordingsCopy(localizer: localizer)
+
+        #expect(copy.messageText == "¿Eliminar todas las grabaciones?")
+        #expect(copy.informativeText == "Esto elimina todas las grabaciones locales de Session Replay de esta Mac.")
+        #expect(copy.primaryButton == "Eliminar todo")
+        #expect(copy.secondaryButton == "Cancelar")
+    }
+
     private func makeRecording(
         store: SessionReplayStore,
         title: String,
@@ -243,6 +258,11 @@ struct SessionReplayPanelViewModelSwiftTestingTests {
             attributes: [.posixPermissions: 0o700]
         )
         return url
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 
     private func sampleCast() -> String {

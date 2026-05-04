@@ -76,9 +76,14 @@ final class ActivityDashboardFileActions: ObservableObject {
 @MainActor
 final class SystemActivityDashboardFilePresenter: ActivityDashboardFilePresenting {
     private let windowProvider: () -> NSWindow?
+    private let localizer: AppLocalizer
 
-    init(windowProvider: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow }) {
+    init(
+        windowProvider: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.windowProvider = windowProvider
+        self.localizer = localizer
     }
 
     func destination(
@@ -103,10 +108,11 @@ final class SystemActivityDashboardFilePresenter: ActivityDashboardFilePresentin
     func confirmDeleteAll(completion: @escaping (Bool) -> Void) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Delete all Activity data?"
-        alert.informativeText = "This removes local Activity and token records from this Mac."
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
+        let copy = Self.localizedDeleteAllCopy(localizer: localizer)
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
 
         let handle: (NSApplication.ModalResponse) -> Void = { response in
             completion(response == .alertFirstButtonReturn)
@@ -117,6 +123,18 @@ final class SystemActivityDashboardFilePresenter: ActivityDashboardFilePresentin
         } else {
             handle(alert.runModal())
         }
+    }
+
+    static func localizedDeleteAllCopy(localizer: AppLocalizer) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: localizer.string("activity.deleteAll.title", fallback: "Delete all Activity data?"),
+            informativeText: localizer.string(
+                "activity.deleteAll.message",
+                fallback: "This removes local Activity and token records from this Mac."
+            ),
+            primaryButton: localizer.string("activity.deleteAll.button", fallback: "Delete"),
+            secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
+        )
     }
 }
 

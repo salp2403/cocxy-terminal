@@ -284,7 +284,7 @@ extension MainWindowController {
                     self?.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
                 }
             )
-            let view = SessionReplayPanelView(viewModel: viewModel) { [weak self] in
+            let view = SessionReplayPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             return NSHostingView(rootView: view)

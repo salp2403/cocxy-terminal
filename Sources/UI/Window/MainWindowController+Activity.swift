@@ -28,7 +28,8 @@ extension MainWindowController {
         activityDashboardHostingView?.removeFromSuperview()
         let swiftUIView = ActivityDashboardView(
             viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissActivityDashboard() }
+            onDismiss: { [weak self] in self?.dismissActivityDashboard() },
+            localizer: appLocalizer()
         )
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
@@ -319,7 +320,8 @@ extension MainWindowController {
         guard let hostingView = activityDashboardHostingView else { return }
         hostingView.rootView = ActivityDashboardView(
             viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissActivityDashboard() }
+            onDismiss: { [weak self] in self?.dismissActivityDashboard() },
+            localizer: appLocalizer()
         )
     }
 }

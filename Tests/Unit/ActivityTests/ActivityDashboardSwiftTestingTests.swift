@@ -224,6 +224,21 @@ struct ActivityDashboardSwiftTestingTests {
         #expect(actions.errorMessage == nil)
     }
 
+    @Test("delete-all Activity confirmation copy follows configured app language")
+    func deleteAllActivityConfirmationCopyFollowsConfiguredAppLanguage() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+
+        let copy = SystemActivityDashboardFilePresenter.localizedDeleteAllCopy(localizer: localizer)
+
+        #expect(copy.messageText == "¿Eliminar todos los datos de Activity?")
+        #expect(copy.informativeText == "Esto elimina los registros locales de Activity y tokens de esta Mac.")
+        #expect(copy.primaryButton == "Eliminar")
+        #expect(copy.secondaryButton == "Cancelar")
+    }
+
     private func date(day: Int = 1, hour: Int, minute: Int = 0) -> Date {
         DateComponents(
             calendar: utcCalendar(),
@@ -240,6 +255,11 @@ struct ActivityDashboardSwiftTestingTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         return calendar
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
 

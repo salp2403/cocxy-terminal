@@ -441,6 +441,12 @@
 "terminal.clipboardRead.message" = "Un programa de terminal solicitó acceso al portapapeles del sistema mediante OSC 52. Permitirlo enviará el contenido actual del portapapeles al shell en ejecución.";
 "terminal.clipboardRead.allow" = "Permitir";
 "terminal.clipboardRead.deny" = "Denegar";
+"activity.deleteAll.title" = "¿Eliminar todos los datos de Activity?";
+"activity.deleteAll.message" = "Esto elimina los registros locales de Activity y tokens de esta Mac.";
+"activity.deleteAll.button" = "Eliminar";
+"sessionReplay.deleteAll.title" = "¿Eliminar todas las grabaciones?";
+"sessionReplay.deleteAll.message" = "Esto elimina todas las grabaciones locales de Session Replay de esta Mac.";
+"sessionReplay.deleteAll.button" = "Eliminar todo";
 
 "welcome.accessibilityLabel" = "Bienvenida a Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";
