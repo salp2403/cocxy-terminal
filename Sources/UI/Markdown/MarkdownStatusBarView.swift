@@ -16,9 +16,9 @@ final class MarkdownStatusBarView: NSView {
 
     // MARK: - Properties
 
-    private let wordsLabel = NSTextField(labelWithString: "Words: 0")
-    private let charsLabel = NSTextField(labelWithString: "Chars: 0")
-    private let linesLabel = NSTextField(labelWithString: "Lines: 0")
+    private let wordsLabel = NSTextField(labelWithString: "")
+    private let charsLabel = NSTextField(labelWithString: "")
+    private let linesLabel = NSTextField(labelWithString: "")
     private var localizer: AppLocalizer
 
     /// Height of the status bar.

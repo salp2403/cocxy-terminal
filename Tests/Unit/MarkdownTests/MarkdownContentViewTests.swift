@@ -219,6 +219,8 @@ struct MarkdownContentViewTests {
                 == "No se pudo cargar el archivo: README.md"
         )
         #expect(MarkdownStatusBarView.localizedWords(3, using: localizer) == "Palabras: 3")
+        #expect(MarkdownStatusBarView.localizedCharacters(10, using: localizer) == "Caracteres: 10")
+        #expect(MarkdownStatusBarView.localizedLines(2, using: localizer) == "Líneas: 2")
         #expect(MarkdownOutlineView.localizedTitle(using: localizer) == "Esquema")
         #expect(MarkdownSearchView.localizedPlaceholder(using: localizer) == "Buscar en archivos...")
         #expect(
@@ -335,6 +337,23 @@ struct MarkdownContentViewTests {
         #expect(statusBar?.wordCount.words == 4)
         // Characters counted on the body after frontmatter extraction
         #expect(statusBar?.wordCount.characters ?? 0 >= 20)
+    }
+
+    @Test("Status bar renders localized counter labels")
+    func statusBarRendersLocalizedCounterLabels() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let statusBar = MarkdownStatusBarView(localizer: localizer)
+
+        statusBar.wordCount = MarkdownWordCount(words: 2, characters: 11, lines: 1)
+
+        let labels = textFieldStrings(in: statusBar)
+        #expect(labels.contains("Palabras: 2"))
+        #expect(labels.contains("Caracteres: 11"))
+        #expect(labels.contains("Líneas: 1"))
+        #expect(!labels.contains("Words: 0"))
+        #expect(!labels.contains("Chars: 0"))
+        #expect(!labels.contains("Lines: 0"))
     }
 
     @Test("Status bar updates when document changes via editing")
@@ -543,6 +562,13 @@ struct MarkdownContentViewTests {
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
+
+    private func textFieldStrings(in view: NSView) -> [String] {
+        view.subviews.flatMap { subview -> [String] in
+            let current = (subview as? NSTextField).map { [$0.stringValue] } ?? []
+            return current + textFieldStrings(in: subview)
+        }
     }
 
     private func makeKeyEvent(
