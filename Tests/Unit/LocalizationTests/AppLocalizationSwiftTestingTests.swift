@@ -273,6 +273,39 @@ struct AppLocalizationSwiftTestingTests {
 
     @MainActor
     @Test
+    func scrollbackSearchStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let viewModel = ScrollbackSearchBarViewModel()
+
+        #expect(spanish.string("scrollbackSearch.placeholder", fallback: "Search scrollback...") == "Buscar en scrollback...")
+        #expect(spanish.string("scrollbackSearch.close", fallback: "Close search") == "Cerrar búsqueda")
+        #expect(viewModel.localizedResultCountDisplay(using: spanish) == "Sin coincidencias")
+
+        viewModel.applySearchResults([
+            SearchResult(
+                id: UUID(),
+                lineNumber: 1,
+                column: 0,
+                matchText: "match",
+                contextBefore: "",
+                contextAfter: ""
+            ),
+            SearchResult(
+                id: UUID(),
+                lineNumber: 2,
+                column: 0,
+                matchText: "match",
+                contextBefore: "",
+                contextAfter: ""
+            ),
+        ])
+        viewModel.navigateNext()
+        #expect(viewModel.localizedResultCountDisplay(using: spanish) == "2 de 2 coincidencias")
+    }
+
+    @MainActor
+    @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {
         let bundle = try #require(localizationBundle())
         let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)

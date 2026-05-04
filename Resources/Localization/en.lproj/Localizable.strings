@@ -180,6 +180,17 @@
 "subagent.panel.close" = "Close panel";
 "subagent.panel.running" = "Running...";
 "subagent.panel.agentStarting" = "Agent starting...";
+"scrollbackSearch.accessibility" = "Scrollback search";
+"scrollbackSearch.placeholder" = "Search scrollback...";
+"scrollbackSearch.query" = "Search query";
+"scrollbackSearch.results" = "%d of %d matches";
+"scrollbackSearch.noMatches" = "No matches";
+"scrollbackSearch.results.accessibility" = "Search results: %@";
+"scrollbackSearch.previousMatch" = "Previous match";
+"scrollbackSearch.nextMatch" = "Next match";
+"scrollbackSearch.caseSensitive" = "Case sensitive";
+"scrollbackSearch.regex" = "Regular expression";
+"scrollbackSearch.close" = "Close search";
 "preferences.mcp.configFile.section" = "Config File";
 "preferences.mcp.path" = "Path";
 "preferences.mcp.reload" = "Reload";

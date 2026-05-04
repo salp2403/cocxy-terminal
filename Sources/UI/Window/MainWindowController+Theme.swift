@@ -81,6 +81,7 @@ extension MainWindowController {
         updateBrowserPanelLocalizers(localizer)
         updateNotebookAndWorkflowPanelLocalizers(localizer)
         updateSubagentPanelLocalizers(localizer)
+        updateSearchBarLocalizer(localizer)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         updateRemoteWorkspacePanelLocalizer(localizer)
         refreshVisibleActivityDashboardLocalizer()
@@ -371,6 +372,13 @@ extension MainWindowController {
                 (view as? SubagentContentView)?.updateLocalizer(localizer)
             }
         }
+    }
+
+    private func updateSearchBarLocalizer(_ localizer: AppLocalizer) {
+        guard let hostingView = searchBarHostingView else { return }
+        var root = hostingView.rootView
+        root.localizer = localizer
+        hostingView.rootView = root
     }
 
     // MARK: - Tab Position

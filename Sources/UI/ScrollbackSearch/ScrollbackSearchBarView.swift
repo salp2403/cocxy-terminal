@@ -42,6 +42,7 @@ struct ScrollbackSearchBarView: View {
 
     /// Callback invoked when the current match changes (for scrolling to match).
     var onNavigateToResult: ((SearchResult) -> Void)?
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Forced `NSAppearance` for the translucent search-bar background.
     ///
@@ -74,13 +75,13 @@ struct ScrollbackSearchBarView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Scrollback search")
+        .accessibilityLabel(localized("scrollbackSearch.accessibility", fallback: "Scrollback search"))
     }
 
     // MARK: - Search Field
 
     private var searchField: some View {
-        TextField("Search scrollback...", text: $viewModel.query)
+        TextField(localized("scrollbackSearch.placeholder", fallback: "Search scrollback..."), text: $viewModel.query)
             .textFieldStyle(.plain)
             .font(.system(size: 13))
             .frame(minWidth: 150, maxWidth: 300)
@@ -90,17 +91,23 @@ struct ScrollbackSearchBarView: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color(.textBackgroundColor))
             )
-            .accessibilityLabel("Search query")
+            .accessibilityLabel(localized("scrollbackSearch.query", fallback: "Search query"))
     }
 
     // MARK: - Result Count
 
     private var resultCountLabel: some View {
-        Text(viewModel.resultCountDisplay)
+        Text(localizedResultCountDisplay)
             .font(.system(size: 11))
             .foregroundColor(.secondary)
             .frame(minWidth: 80)
-            .accessibilityLabel("Search results: \(viewModel.resultCountDisplay)")
+            .accessibilityLabel(String(
+                format: localized(
+                    "scrollbackSearch.results.accessibility",
+                    fallback: "Search results: %@"
+                ),
+                localizedResultCountDisplay
+            ))
     }
 
     // MARK: - Navigation Buttons
@@ -116,7 +123,7 @@ struct ScrollbackSearchBarView: View {
             }
             .buttonStyle(.plain)
             .disabled(viewModel.totalMatches == 0)
-            .accessibilityLabel("Previous match")
+            .accessibilityLabel(localized("scrollbackSearch.previousMatch", fallback: "Previous match"))
 
             Button(action: {
                 viewModel.navigateNext()
@@ -127,7 +134,7 @@ struct ScrollbackSearchBarView: View {
             }
             .buttonStyle(.plain)
             .disabled(viewModel.totalMatches == 0)
-            .accessibilityLabel("Next match")
+            .accessibilityLabel(localized("scrollbackSearch.nextMatch", fallback: "Next match"))
         }
     }
 
@@ -141,7 +148,7 @@ struct ScrollbackSearchBarView: View {
             }
             .toggleStyle(.button)
             .controlSize(.small)
-            .accessibilityLabel("Case sensitive")
+            .accessibilityLabel(localized("scrollbackSearch.caseSensitive", fallback: "Case sensitive"))
 
             Toggle(isOn: $viewModel.useRegex) {
                 Text(".*")
@@ -149,7 +156,7 @@ struct ScrollbackSearchBarView: View {
             }
             .toggleStyle(.button)
             .controlSize(.small)
-            .accessibilityLabel("Regular expression")
+            .accessibilityLabel(localized("scrollbackSearch.regex", fallback: "Regular expression"))
         }
     }
 
@@ -165,10 +172,18 @@ struct ScrollbackSearchBarView: View {
                 .foregroundColor(.secondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Close search")
+        .accessibilityLabel(localized("scrollbackSearch.close", fallback: "Close search"))
     }
 
     // MARK: - Private Helpers
+
+    private var localizedResultCountDisplay: String {
+        viewModel.localizedResultCountDisplay(using: localizer)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 
     private func notifyNavigationChanged() {
         if let result = viewModel.currentResult {

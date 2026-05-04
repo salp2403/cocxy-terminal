@@ -118,6 +118,17 @@ final class ScrollbackSearchBarViewModel: ObservableObject {
         return "\(currentMatchIndex + 1) of \(totalMatches) matches"
     }
 
+    func localizedResultCountDisplay(using localizer: AppLocalizer) -> String {
+        guard totalMatches > 0 else {
+            return localizer.string("scrollbackSearch.noMatches", fallback: "No matches")
+        }
+        return String(
+            format: localizer.string("scrollbackSearch.results", fallback: "%d of %d matches"),
+            currentMatchIndex + 1,
+            totalMatches
+        )
+    }
+
     /// The currently highlighted search result, if any.
     var currentResult: SearchResult? {
         guard totalMatches > 0, currentMatchIndex < results.count else {

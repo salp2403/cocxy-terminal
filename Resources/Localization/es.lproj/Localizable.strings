@@ -180,6 +180,17 @@
 "subagent.panel.close" = "Cerrar panel";
 "subagent.panel.running" = "Ejecutando...";
 "subagent.panel.agentStarting" = "Agente iniciando...";
+"scrollbackSearch.accessibility" = "Búsqueda en scrollback";
+"scrollbackSearch.placeholder" = "Buscar en scrollback...";
+"scrollbackSearch.query" = "Consulta de búsqueda";
+"scrollbackSearch.results" = "%d de %d coincidencias";
+"scrollbackSearch.noMatches" = "Sin coincidencias";
+"scrollbackSearch.results.accessibility" = "Resultados de búsqueda: %@";
+"scrollbackSearch.previousMatch" = "Coincidencia anterior";
+"scrollbackSearch.nextMatch" = "Siguiente coincidencia";
+"scrollbackSearch.caseSensitive" = "Distinguir mayúsculas";
+"scrollbackSearch.regex" = "Expresión regular";
+"scrollbackSearch.close" = "Cerrar búsqueda";
 "preferences.mcp.configFile.section" = "Archivo de configuración";
 "preferences.mcp.path" = "Ruta";
 "preferences.mcp.reload" = "Recargar";

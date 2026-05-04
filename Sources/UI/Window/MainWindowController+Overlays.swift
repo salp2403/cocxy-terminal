@@ -1524,7 +1524,8 @@ extension MainWindowController {
             viewModel: viewModel,
             onClose: { [weak self] in
                 self?.dismissSearchBar()
-            }
+            },
+            localizer: appLocalizer()
         )
         swiftUIView.onNavigateToResult = { [weak self] result in
             guard let self, let surfaceID = self.activeSearchSurfaceID() else { return }
@@ -2530,7 +2531,8 @@ extension MainWindowController {
               let viewModel = searchBarViewModel else { return }
         var view = ScrollbackSearchBarView(
             viewModel: viewModel,
-            onClose: { [weak self] in self?.dismissSearchBar() }
+            onClose: { [weak self] in self?.dismissSearchBar() },
+            localizer: appLocalizer()
         )
         view.onNavigateToResult = { [weak self] result in
             guard let self, let surfaceID = self.activeTerminalSurfaceView?.terminalViewModel?.surfaceID else { return }
