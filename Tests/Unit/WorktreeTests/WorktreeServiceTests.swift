@@ -423,6 +423,153 @@ struct WorktreeServiceTests {
         #expect(snapshot.porcelainLines.first?.hasSuffix("README.md") == true)
     }
 
+    // MARK: - batch cleanup
+
+    @Test("merged cleanup removes clean merged worktrees in one batch")
+    func mergedCleanupRemovesCleanMergedWorktrees() async throws {
+        guard gitAvailable() else { return }
+
+        let tempRoot = try makeTempRoot()
+        defer { removeTempRoot(tempRoot) }
+        let origin = try initOriginRepo(under: tempRoot)
+        let storagePath = tempRoot.appendingPathComponent("worktrees").path
+        let service = WorktreeService()
+        let store = makeStore(originRepoPath: origin, basePath: storagePath)
+        let config = makeConfig(basePath: storagePath)
+
+        let first = try await service.add(
+            originRepoPath: origin,
+            agent: "codex",
+            tabID: nil,
+            config: config,
+            store: store
+        )
+        let second = try await service.add(
+            originRepoPath: origin,
+            agent: "review",
+            tabID: nil,
+            config: config,
+            store: store
+        )
+
+        let result = try await service.cleanupMergedWorktrees(
+            originRepoPath: origin,
+            baseRef: "HEAD",
+            store: store
+        )
+
+        #expect(Set(result.plan.removable.map(\.id)) == Set([first.id, second.id]))
+        #expect(Set(result.removed.map(\.id)) == Set([first.id, second.id]))
+        #expect(try await service.list(store: store).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: first.path.path))
+        #expect(!FileManager.default.fileExists(atPath: second.path.path))
+    }
+
+    @Test("merged cleanup blocks dirty worktrees unless forced")
+    func mergedCleanupBlocksDirtyWorktreesUnlessForced() async throws {
+        guard gitAvailable() else { return }
+
+        let tempRoot = try makeTempRoot()
+        defer { removeTempRoot(tempRoot) }
+        let origin = try initOriginRepo(under: tempRoot)
+        let storagePath = tempRoot.appendingPathComponent("worktrees").path
+        let service = WorktreeService()
+        let store = makeStore(originRepoPath: origin, basePath: storagePath)
+        let config = makeConfig(basePath: storagePath)
+        let entry = try await service.add(
+            originRepoPath: origin,
+            agent: "codex",
+            tabID: nil,
+            config: config,
+            store: store
+        )
+        try "dirty\n".write(
+            to: entry.path.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let blockedPlan = try await service.mergedCleanupPlan(
+            originRepoPath: origin,
+            baseRef: "HEAD",
+            store: store
+        )
+
+        #expect(blockedPlan.removable.isEmpty)
+        #expect(blockedPlan.blocked.map(\.entry.id) == [entry.id])
+        if case .uncommittedChanges(let output)? = blockedPlan.blocked.first?.reason {
+            #expect(output.contains("README.md"))
+        } else {
+            Issue.record("Expected dirty worktree block")
+        }
+
+        let forced = try await service.cleanupMergedWorktrees(
+            originRepoPath: origin,
+            baseRef: "HEAD",
+            force: true,
+            store: store
+        )
+
+        #expect(forced.removed.map(\.id) == [entry.id])
+        #expect(try await service.list(store: store).isEmpty)
+    }
+
+    @Test("merged cleanup blocks a merged parent when an unmerged dependent remains")
+    func mergedCleanupBlocksParentWithUnmergedDependent() async throws {
+        guard gitAvailable() else { return }
+
+        let tempRoot = try makeTempRoot()
+        defer { removeTempRoot(tempRoot) }
+        let origin = try initOriginRepo(under: tempRoot)
+        let storagePath = tempRoot.appendingPathComponent("worktrees").path
+        let service = WorktreeService()
+        let store = makeStore(originRepoPath: origin, basePath: storagePath)
+        let parentConfig = makeConfig(
+            basePath: storagePath,
+            branchTemplate: "feature/payment/{id}"
+        )
+        let parent = try await service.add(
+            originRepoPath: origin,
+            agent: nil,
+            tabID: nil,
+            config: parentConfig,
+            store: store
+        )
+        let childConfig = makeConfig(
+            basePath: storagePath,
+            branchTemplate: "\(parent.branch)-followup/{id}"
+        )
+        let child = try await service.add(
+            originRepoPath: origin,
+            agent: nil,
+            tabID: nil,
+            config: childConfig,
+            store: store
+        )
+        try "child\n".write(
+            to: child.path.appendingPathComponent("child.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGitCommand(at: child.path, arguments: ["add", "child.txt"])
+        try runGitCommand(at: child.path, arguments: ["commit", "-q", "-m", "child change"])
+
+        let plan = try await service.mergedCleanupPlan(
+            originRepoPath: origin,
+            baseRef: "HEAD",
+            store: store
+        )
+
+        #expect(plan.removable.isEmpty)
+        #expect(plan.skipped.map(\.entry.id) == [child.id])
+        #expect(plan.blocked.map(\.entry.id) == [parent.id])
+        if case .dependentWorktrees(let ids)? = plan.blocked.first?.reason {
+            #expect(ids == [child.id])
+        } else {
+            Issue.record("Expected dependency block")
+        }
+    }
+
     // MARK: - Collision handling
 
     @Test("add retries with longer IDs when the first id collides with a branch")

@@ -18,6 +18,36 @@ struct WorktreeStatusSnapshot: Equatable, Sendable {
     let porcelainLines: [String]
 }
 
+struct WorktreeBatchCleanupPlan: Equatable, Sendable {
+    let removable: [WorktreeManifest.WorktreeEntry]
+    let blocked: [WorktreeBatchCleanupBlock]
+    let skipped: [WorktreeBatchCleanupSkip]
+}
+
+struct WorktreeBatchCleanupResult: Equatable, Sendable {
+    let plan: WorktreeBatchCleanupPlan
+    let removed: [WorktreeManifest.WorktreeEntry]
+}
+
+struct WorktreeBatchCleanupBlock: Equatable, Sendable {
+    let entry: WorktreeManifest.WorktreeEntry
+    let reason: WorktreeBatchCleanupBlockReason
+}
+
+enum WorktreeBatchCleanupBlockReason: Equatable, Sendable {
+    case uncommittedChanges(statusOutput: String)
+    case dependentWorktrees(ids: [String])
+}
+
+struct WorktreeBatchCleanupSkip: Equatable, Sendable {
+    let entry: WorktreeManifest.WorktreeEntry
+    let reason: WorktreeBatchCleanupSkipReason
+}
+
+enum WorktreeBatchCleanupSkipReason: Equatable, Sendable {
+    case notMerged
+}
+
 /// Errors surfaced by `WorktreeService`. Typed so CLI and UI layers can
 /// render actionable messages without parsing stderr themselves.
 enum WorktreeServiceError: Error, Equatable, Sendable {
@@ -340,6 +370,98 @@ actor WorktreeService {
         )
     }
 
+    // MARK: - batch cleanup
+
+    func mergedCleanupPlan(
+        originRepoPath: URL,
+        baseRef: String,
+        force: Bool = false,
+        store: WorktreeManifestStore
+    ) async throws -> WorktreeBatchCleanupPlan {
+        let manifest = try await loadManifest(store)
+        let entries = manifest.entries
+        guard !entries.isEmpty else {
+            return WorktreeBatchCleanupPlan(removable: [], blocked: [], skipped: [])
+        }
+
+        let mergedBranches = try mergedBranchNames(at: originRepoPath, baseRef: baseRef)
+        var statusByID: [String: WorktreeStatusSnapshot] = [:]
+        for entry in entries where mergedBranches.contains(entry.branch) {
+            statusByID[entry.id] = try await status(id: entry.id, store: store)
+        }
+
+        let initiallyRemovableIDs = Set(entries.compactMap { entry -> String? in
+            guard mergedBranches.contains(entry.branch) else { return nil }
+            if force { return entry.id }
+            return statusByID[entry.id]?.isClean == true ? entry.id : nil
+        })
+        let dependencies = WorktreeDependencyTracker().graph(for: entries)
+
+        var removable: [WorktreeManifest.WorktreeEntry] = []
+        var blocked: [WorktreeBatchCleanupBlock] = []
+        var skipped: [WorktreeBatchCleanupSkip] = []
+
+        for entry in entries {
+            guard mergedBranches.contains(entry.branch) else {
+                skipped.append(WorktreeBatchCleanupSkip(entry: entry, reason: .notMerged))
+                continue
+            }
+
+            if !force, let status = statusByID[entry.id], !status.isClean {
+                blocked.append(WorktreeBatchCleanupBlock(
+                    entry: entry,
+                    reason: .uncommittedChanges(statusOutput: status.porcelainLines.joined(separator: "\n"))
+                ))
+                continue
+            }
+
+            let blockingDependents = dependencies
+                .dependents(of: entry.id)
+                .filter { !initiallyRemovableIDs.contains($0) }
+            if !blockingDependents.isEmpty {
+                blocked.append(WorktreeBatchCleanupBlock(
+                    entry: entry,
+                    reason: .dependentWorktrees(ids: blockingDependents)
+                ))
+                continue
+            }
+
+            removable.append(entry)
+        }
+
+        return WorktreeBatchCleanupPlan(
+            removable: Self.cleanupRemovalOrder(removable),
+            blocked: blocked.sorted { $0.entry.id < $1.entry.id },
+            skipped: skipped.sorted { $0.entry.id < $1.entry.id }
+        )
+    }
+
+    @discardableResult
+    func cleanupMergedWorktrees(
+        originRepoPath: URL,
+        baseRef: String,
+        force: Bool = false,
+        store: WorktreeManifestStore
+    ) async throws -> WorktreeBatchCleanupResult {
+        let plan = try await mergedCleanupPlan(
+            originRepoPath: originRepoPath,
+            baseRef: baseRef,
+            force: force,
+            store: store
+        )
+        var removed: [WorktreeManifest.WorktreeEntry] = []
+        for entry in plan.removable {
+            let removedEntry = try await remove(
+                id: entry.id,
+                force: force,
+                originRepoPath: originRepoPath,
+                store: store
+            )
+            removed.append(removedEntry)
+        }
+        return WorktreeBatchCleanupResult(plan: plan, removed: removed)
+    }
+
     // MARK: - Private helpers
 
     /// Picks a unique `(id, branch, path)` triple, retrying up to
@@ -430,6 +552,42 @@ actor WorktreeService {
             }
         }
         return paths
+    }
+
+    private func mergedBranchNames(
+        at originRepoPath: URL,
+        baseRef: String
+    ) throws -> Set<String> {
+        let trimmedBaseRef = baseRef.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveBaseRef = trimmedBaseRef.isEmpty ? "HEAD" : trimmedBaseRef
+        let result = try runGit(
+            at: originRepoPath,
+            arguments: ["branch", "--merged", effectiveBaseRef, "--format=%(refname:short)"]
+        )
+        guard result.terminationStatus == 0 else {
+            throw WorktreeServiceError.gitCommandFailed(
+                command: "git branch --merged \(effectiveBaseRef) --format=%(refname:short)",
+                stderr: result.stderr,
+                exitCode: result.terminationStatus
+            )
+        }
+        return Set(result.stdout
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty })
+    }
+
+    private static func cleanupRemovalOrder(
+        _ entries: [WorktreeManifest.WorktreeEntry]
+    ) -> [WorktreeManifest.WorktreeEntry] {
+        entries.sorted { lhs, rhs in
+            let lhsDepth = lhs.branch.split(separator: "/").count
+            let rhsDepth = rhs.branch.split(separator: "/").count
+            if lhsDepth == rhsDepth {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhsDepth > rhsDepth
+        }
     }
 
     private func loadManifest(
