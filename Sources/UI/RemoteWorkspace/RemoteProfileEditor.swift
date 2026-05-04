@@ -304,25 +304,25 @@ struct RemoteProfileEditor: View {
         VStack(alignment: .leading, spacing: 10) {
             editorField(
                 label: localized("remoteWorkspace.profileEditor.field.name", fallback: "Name"),
-                placeholder: "production-web",
+                placeholder: localized("remoteWorkspace.profileEditor.placeholder.name", fallback: "production-web"),
                 text: $viewModel.name
             )
 
             editorField(
                 label: localized("remoteWorkspace.profileEditor.field.host", fallback: "Host"),
-                placeholder: "192.168.1.100 or host.example.com",
+                placeholder: localized("remoteWorkspace.profileEditor.placeholder.host", fallback: "192.168.1.100 or host.example.com"),
                 text: $viewModel.host
             )
 
             editorField(
                 label: localized("remoteWorkspace.profileEditor.field.username", fallback: "Username"),
-                placeholder: "deploy",
+                placeholder: localized("remoteWorkspace.profileEditor.placeholder.username", fallback: "deploy"),
                 text: $viewModel.username
             )
 
             editorField(
                 label: localized("remoteWorkspace.profileEditor.field.port", fallback: "Port"),
-                placeholder: "22",
+                placeholder: localized("remoteWorkspace.profileEditor.placeholder.port", fallback: "22"),
                 text: $viewModel.port
             )
                 .frame(width: 100)
@@ -364,7 +364,7 @@ struct RemoteProfileEditor: View {
         VStack(alignment: .leading, spacing: 4) {
             editorField(
                 label: localized("remoteWorkspace.profileEditor.field.group", fallback: "Group"),
-                placeholder: "production, staging, personal...",
+                placeholder: localized("remoteWorkspace.profileEditor.placeholder.group", fallback: "production, staging, personal..."),
                 text: $viewModel.group
             )
 

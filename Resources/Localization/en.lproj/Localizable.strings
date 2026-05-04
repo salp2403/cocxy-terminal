@@ -2099,6 +2099,11 @@
 "remoteWorkspace.profileEditor.field.port" = "Port";
 "remoteWorkspace.profileEditor.field.identityFile" = "Identity File";
 "remoteWorkspace.profileEditor.field.group" = "Group";
+"remoteWorkspace.profileEditor.placeholder.name" = "production-web";
+"remoteWorkspace.profileEditor.placeholder.host" = "192.168.1.100 or host.example.com";
+"remoteWorkspace.profileEditor.placeholder.username" = "deploy";
+"remoteWorkspace.profileEditor.placeholder.port" = "22";
+"remoteWorkspace.profileEditor.placeholder.group" = "production, staging, personal...";
 "remoteWorkspace.profileEditor.identity.browse.accessibility" = "Browse for identity file";
 "remoteWorkspace.profileEditor.section.jumpHosts" = "Jump Hosts";
 "remoteWorkspace.profileEditor.section.portForwards" = "Port Forwards";
