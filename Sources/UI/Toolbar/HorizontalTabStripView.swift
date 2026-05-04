@@ -1341,7 +1341,8 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
             placeholder: itemKind == .workspaceTab
                 ? HorizontalTabStripView.localizedTabRenamePlaceholder(using: localizer)
                 : HorizontalTabStripView.localizedPanelRenamePlaceholder(using: localizer),
-            icon: itemKind == .workspaceTab ? "terminal.fill" : "rectangle.split.2x1"
+            icon: itemKind == .workspaceTab ? "terminal.fill" : "rectangle.split.2x1",
+            localizer: localizer
         ) { [weak self] newTitle in
             self?.isEditing = false
             if let newTitle {

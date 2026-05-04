@@ -677,6 +677,9 @@
 "common.delete" = "Delete";
 "common.clear" = "Clear";
 "common.discard" = "Discard";
+"renameSheet.title" = "Rename";
+"renameSheet.done" = "Done";
+"renameSheet.placeholder" = "Enter name...";
 "tabbar.accessibility.tabs" = "Terminal tabs";
 "tabbar.workspaces" = "WORKSPACES";
 "tabbar.notifications.title" = "Notifications";

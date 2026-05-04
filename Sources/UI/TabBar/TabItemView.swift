@@ -861,6 +861,7 @@ final class TabItemView: NSView {
             currentName: titleLabel.stringValue,
             placeholder: Self.localizedRenamePlaceholder(using: localizer),
             icon: "terminal.fill",
+            localizer: localizer,
             onComplete: { [weak self] newTitle in
                 self?.isEditing = false
                 if let newTitle {

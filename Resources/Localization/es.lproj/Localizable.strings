@@ -677,6 +677,9 @@
 "common.delete" = "Eliminar";
 "common.clear" = "Limpiar";
 "common.discard" = "Descartar";
+"renameSheet.title" = "Renombrar";
+"renameSheet.done" = "Listo";
+"renameSheet.placeholder" = "Ingresa nombre...";
 "tabbar.accessibility.tabs" = "Pestañas de terminal";
 "tabbar.workspaces" = "ESPACIOS";
 "tabbar.notifications.title" = "Notificaciones";

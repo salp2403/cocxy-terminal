@@ -16,8 +16,9 @@ final class RenameSheetController {
     static func present(
         on window: NSWindow,
         currentName: String,
-        placeholder: String = "Enter name...",
+        placeholder: String? = nil,
         icon: String = "pencil.line",
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
         onComplete: @escaping (String?) -> Void
     ) {
         let panelWidth: CGFloat = 300
@@ -72,7 +73,7 @@ final class RenameSheetController {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         effectView.addSubview(iconView)
 
-        let titleLabel = NSTextField(labelWithString: "Rename")
+        let titleLabel = NSTextField(labelWithString: Self.localizedTitle(using: localizer))
         titleLabel.font = .systemFont(ofSize: 13, weight: .medium)
         titleLabel.textColor = CocxyColors.text
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -91,14 +92,14 @@ final class RenameSheetController {
         textField.layer?.borderWidth = 1
         textField.layer?.borderColor = NSColor.white.withAlphaComponent(0.1).cgColor
         textField.focusRingType = .none
-        textField.placeholderString = placeholder
+        textField.placeholderString = placeholder ?? Self.localizedDefaultPlaceholder(using: localizer)
         textField.stringValue = currentName
         textField.translatesAutoresizingMaskIntoConstraints = false
         effectView.addSubview(textField)
 
         // Rename button.
         let renameBtn = NSButton()
-        renameBtn.title = "Done"
+        renameBtn.title = Self.localizedDone(using: localizer)
         renameBtn.bezelStyle = .accessoryBarAction
         renameBtn.isBordered = false
         renameBtn.wantsLayer = true
@@ -108,11 +109,13 @@ final class RenameSheetController {
         renameBtn.font = .systemFont(ofSize: 11, weight: .semibold)
         renameBtn.translatesAutoresizingMaskIntoConstraints = false
         renameBtn.keyEquivalent = "\r"
+        renameBtn.setAccessibilityLabel(Self.localizedDone(using: localizer))
         effectView.addSubview(renameBtn)
 
         // Cancel button.
         let cancelBtn = NSButton()
-        cancelBtn.title = "Cancel"
+        let cancelTitle = localizer.string("common.cancel", fallback: "Cancel")
+        cancelBtn.title = cancelTitle
         cancelBtn.bezelStyle = .accessoryBarAction
         cancelBtn.isBordered = false
         cancelBtn.wantsLayer = true
@@ -121,6 +124,7 @@ final class RenameSheetController {
         cancelBtn.font = .systemFont(ofSize: 11, weight: .medium)
         cancelBtn.translatesAutoresizingMaskIntoConstraints = false
         cancelBtn.keyEquivalent = "\u{1b}"
+        cancelBtn.setAccessibilityLabel(cancelTitle)
         effectView.addSubview(cancelBtn)
 
         NSLayoutConstraint.activate([
@@ -164,6 +168,18 @@ final class RenameSheetController {
 
         // Make the parent window's content dim slightly.
         window.addChildWindow(panel, ordered: .above)
+    }
+
+    static func localizedTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("renameSheet.title", fallback: "Rename")
+    }
+
+    static func localizedDone(using localizer: AppLocalizer) -> String {
+        localizer.string("renameSheet.done", fallback: "Done")
+    }
+
+    static func localizedDefaultPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("renameSheet.placeholder", fallback: "Enter name...")
     }
 }
 
