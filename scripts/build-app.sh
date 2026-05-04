@@ -149,17 +149,22 @@ if [ -d "${PROJECT_ROOT}/Resources/Sounds" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Sounds" "${RESOURCES}/Sounds"
 fi
 
-# Step 6c: Copy shell integration scripts.
+# Step 6c: Copy localization bundles.
+if [ -d "${PROJECT_ROOT}/Resources/Localization" ]; then
+    find "${PROJECT_ROOT}/Resources/Localization" -maxdepth 1 -type d -name "*.lproj" -exec cp -R {} "${RESOURCES}/" \;
+fi
+
+# Step 6d: Copy shell integration scripts.
 if [ -d "${PROJECT_ROOT}/Resources/shell-integration" ]; then
     cp -R "${PROJECT_ROOT}/Resources/shell-integration" "${RESOURCES}/shell-integration"
 fi
 
-# Step 6d: Copy bundled terminal fonts.
+# Step 6e: Copy bundled terminal fonts.
 if [ -d "${PROJECT_ROOT}/Resources/Fonts" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Fonts" "${RESOURCES}/Fonts"
 fi
 
-# Step 6e: Copy bundled Tree-sitter core and syntax grammar resources. Parser
+# Step 6f: Copy bundled Tree-sitter core and syntax grammar resources. Parser
 # dylibs are added by the grammar build pipeline; manifest and queries are copied
 # independently so the runtime can degrade safely when parsers are not present yet.
 if [ -d "${PROJECT_ROOT}/Resources/TreeSitter" ]; then
@@ -169,12 +174,12 @@ if [ -d "${PROJECT_ROOT}/Resources/Grammars" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Grammars" "${RESOURCES}/Grammars"
 fi
 
-# Step 6f: Copy markdown preview resources (Mermaid, KaTeX).
+# Step 6g: Copy markdown preview resources (Mermaid, KaTeX).
 if [ -d "${PROJECT_ROOT}/Resources/Markdown" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Markdown" "${RESOURCES}/Markdown"
 fi
 
-# Step 6g: Copy in-page JS bundles used by the browser panel features
+# Step 6h: Copy in-page JS bundles used by the browser panel features
 # (dom-grab.js for the click-to-capture flow). Plain vanilla JS, no
 # bundler, no external dependencies — copied as-is so the WKWebView
 # user-script loader can pick it up by name at runtime.
@@ -182,22 +187,22 @@ if [ -d "${PROJECT_ROOT}/Resources/JS" ]; then
     cp -R "${PROJECT_ROOT}/Resources/JS" "${RESOURCES}/JS"
 fi
 
-# Step 6h: Copy bundled local skills.
+# Step 6i: Copy bundled local skills.
 if [ -d "${PROJECT_ROOT}/Resources/Skills" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Skills" "${RESOURCES}/Skills"
 fi
 
-# Step 6i: Copy bundled project templates.
+# Step 6j: Copy bundled project templates.
 if [ -d "${PROJECT_ROOT}/Resources/Templates" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Templates" "${RESOURCES}/Templates"
 fi
 
-# Step 6j: Copy bundled plugin repos for the local marketplace.
+# Step 6k: Copy bundled plugin repos for the local marketplace.
 if [ -d "${PROJECT_ROOT}/Resources/Plugins" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Plugins" "${RESOURCES}/Plugins"
 fi
 
-# Step 6k: Build and embed the QuickLook extension.
+# Step 6l: Build and embed the QuickLook extension.
 echo "==> Building QuickLook extension..."
 QL_APPEX="$("${PROJECT_ROOT}/scripts/build-quicklook-extension.sh" "${BUILD_MODE}")"
 cp -R "${QL_APPEX}" "${PLUGINS}/"

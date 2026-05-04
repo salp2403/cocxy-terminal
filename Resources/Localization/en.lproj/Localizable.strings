@@ -1,0 +1,3 @@
+"preferences.appearance.language.title" = "Language";
+"preferences.appearance.language.picker" = "App language";
+"preferences.appearance.language.help" = "System follows the first supported macOS preferred language. English and Spanish are available now.";

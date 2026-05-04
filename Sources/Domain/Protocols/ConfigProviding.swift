@@ -222,12 +222,15 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             backgroundBlurRadius: overrides.backgroundBlurRadius ?? appearance.backgroundBlurRadius,
             transparencyChromeTheme: appearance.transparencyChromeTheme,
             auroraEnabled: appearance.auroraEnabled,
+            auroraSidebarDisplayMode: appearance.auroraSidebarDisplayMode,
+            auroraSidebarPrimaryInfo: appearance.auroraSidebarPrimaryInfo,
             // Status-bar UI preference: stays global (not overridable per-project)
             // for the same reason as auroraEnabled — it's a user choice, not a
             // project setting. Round-tripped here so the merge does not silently
             // reset the field to its default after `.cocxy.toml` overrides apply.
             rateLimitIndicatorEnabled: appearance.rateLimitIndicatorEnabled,
-            quickSwitchMode: appearance.quickSwitchMode
+            quickSwitchMode: appearance.quickSwitchMode,
+            appLanguage: appearance.appLanguage
         )
 
         let mergedKeybindings: KeybindingsConfig
@@ -359,6 +362,39 @@ struct GeneralConfig: Codable, Sendable, Equatable {
 
 // MARK: - Appearance Config
 
+/// UI language policy for localizable Cocxy strings.
+///
+/// `system` follows the first supported macOS preferred language; explicit
+/// values pin the app to one supported localization without any backend.
+enum AppLanguage: String, Codable, Sendable, Equatable, CaseIterable, Identifiable {
+    case system
+    case english = "en"
+    case spanish = "es"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .english: return "English"
+        case .spanish: return "Español"
+        }
+    }
+
+    static func normalized(_ rawValue: String) -> AppLanguage? {
+        let normalized = rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
+
+        guard !normalized.isEmpty else { return nil }
+        if normalized == "system" { return .system }
+        if normalized == "en" || normalized.hasPrefix("en-") { return .english }
+        if normalized == "es" || normalized.hasPrefix("es-") { return .spanish }
+        return nil
+    }
+}
+
 /// `[appearance]` section of the configuration.
 struct AppearanceConfig: Codable, Sendable, Equatable {
     /// Name of the active (dark) theme.
@@ -448,6 +484,10 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     /// the legacy unread-tab rotation path as a rollback lever.
     let quickSwitchMode: QuickSwitchMode
 
+    /// App UI language. Defaults to `.system` so existing users keep their
+    /// current macOS language preference until they explicitly override it.
+    let appLanguage: AppLanguage
+
     /// Effective horizontal padding (prefers windowPaddingX, falls back to windowPadding).
     var effectivePaddingX: Double { windowPaddingX ?? windowPadding }
     /// Effective vertical padding (prefers windowPaddingY, falls back to windowPadding).
@@ -471,7 +511,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         auroraSidebarDisplayMode: AuroraSidebarDisplayMode = .detailed,
         auroraSidebarPrimaryInfo: AuroraSidebarPrimaryInfo = .state,
         rateLimitIndicatorEnabled: Bool = true,
-        quickSwitchMode: QuickSwitchMode = .unified
+        quickSwitchMode: QuickSwitchMode = .unified,
+        appLanguage: AppLanguage = .system
     ) {
         self.theme = theme
         self.lightTheme = lightTheme
@@ -491,6 +532,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         self.auroraSidebarPrimaryInfo = auroraSidebarPrimaryInfo
         self.rateLimitIndicatorEnabled = rateLimitIndicatorEnabled
         self.quickSwitchMode = quickSwitchMode
+        self.appLanguage = appLanguage
     }
 
     static var defaults: AppearanceConfig {
@@ -512,7 +554,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             auroraSidebarDisplayMode: .detailed,
             auroraSidebarPrimaryInfo: .state,
             rateLimitIndicatorEnabled: true,
-            quickSwitchMode: .unified
+            quickSwitchMode: .unified,
+            appLanguage: .system
         )
     }
 
@@ -521,7 +564,8 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
     /// Backwards-compatible decoding: configs persisted before the
     /// `transparencyChromeTheme`, `auroraEnabled`,
     /// `auroraSidebarDisplayMode`, `auroraSidebarPrimaryInfo`,
-    /// `rateLimitIndicatorEnabled`, or `quickSwitchMode` keys existed
+    /// `rateLimitIndicatorEnabled`, `quickSwitchMode`, or `appLanguage`
+    /// keys existed
     /// decode cleanly with their runtime defaults.
     private enum CodingKeys: String, CodingKey {
         case theme
@@ -542,6 +586,7 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
         case auroraSidebarPrimaryInfo
         case rateLimitIndicatorEnabled
         case quickSwitchMode
+        case appLanguage
     }
 
     init(from decoder: Decoder) throws {
@@ -582,6 +627,10 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
             QuickSwitchMode.self,
             forKey: .quickSwitchMode
         ) ?? AppearanceConfig.defaults.quickSwitchMode
+        self.appLanguage = try container.decodeIfPresent(
+            AppLanguage.self,
+            forKey: .appLanguage
+        ) ?? AppearanceConfig.defaults.appLanguage
     }
 }
 

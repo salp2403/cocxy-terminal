@@ -329,6 +329,22 @@ struct EditableAppearanceSection: View {
                 }
             }
 
+            Section(viewModel.localizedString(.preferencesAppearanceLanguageTitle)) {
+                Picker(
+                    viewModel.localizedString(.preferencesAppearanceLanguagePicker),
+                    selection: $viewModel.appLanguage
+                ) {
+                    ForEach(viewModel.availableAppLanguages) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+
+                Text(viewModel.localizedString(.preferencesAppearanceLanguageHelp))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Font") {
                 FontFamilyComboBox(
                     text: $viewModel.fontFamily,

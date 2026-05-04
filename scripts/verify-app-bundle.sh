@@ -148,7 +148,13 @@ check_exists "$RESOURCES/Fonts" "Fonts directory"
 check_dir_not_empty "$RESOURCES/Fonts" "Font files (.ttf)" "*.ttf"
 check_dir_not_empty "$RESOURCES/Fonts" "Font files (.otf)" "*.otf"
 
-# 4. Shell integration (required for command tracking and CWD detection)
+# 4. Localization bundles
+echo ""
+echo "[Localization]"
+check_exists "$RESOURCES/en.lproj/Localizable.strings" "English localization"
+check_exists "$RESOURCES/es.lproj/Localizable.strings" "Spanish localization"
+
+# 5. Shell integration (required for command tracking and CWD detection)
 echo ""
 echo "[Shell Integration]"
 check_exists "$RESOURCES/shell-integration" "shell-integration directory"
@@ -156,12 +162,12 @@ check_exists "$RESOURCES/shell-integration/zsh" "zsh integration"
 check_exists "$RESOURCES/shell-integration/bash" "bash integration"
 check_exists "$RESOURCES/shell-integration/fish" "fish integration"
 
-# 5. Default configuration
+# 6. Default configuration
 echo ""
 echo "[Defaults]"
 check_exists "$RESOURCES/defaults" "defaults directory"
 
-# 6. CLI companion
+# 7. CLI companion
 echo ""
 echo "[CLI]"
 check_exists "$RESOURCES/cocxy" "CLI companion binary"

@@ -94,6 +94,9 @@ final class PreferencesViewModel: ObservableObject {
     /// QuickSwitch behavior for the go-to-attention shortcut.
     @Published var quickSwitchMode: QuickSwitchMode
 
+    /// App UI language policy for localizable Cocxy strings.
+    @Published var appLanguage: AppLanguage
+
     /// Whether the chrome theme picker should be interactive.
     ///
     /// Mirrors the runtime rule: the override only matters while the
@@ -451,6 +454,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Local Speech locales exposed in Preferences.
     let availableVoiceLocales: [VoiceLocaleOption]
 
+    /// Local app languages exposed in Preferences.
+    let availableAppLanguages: [AppLanguage]
+
     /// Local code languages exposed for inline completion opt-in.
     let availableCompletionLanguageIDs: [String]
 
@@ -486,6 +492,7 @@ final class PreferencesViewModel: ObservableObject {
             || auroraSidebarPrimaryInfo != c.appearance.auroraSidebarPrimaryInfo
             || rateLimitIndicatorEnabled != c.appearance.rateLimitIndicatorEnabled
             || quickSwitchMode != c.appearance.quickSwitchMode
+            || appLanguage != c.appearance.appLanguage
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -524,6 +531,10 @@ final class PreferencesViewModel: ObservableObject {
         mcpConfigText != savedMCPConfigText
     }
 
+    func localizedString(_ key: AppLocalizationKey) -> String {
+        AppLocalizer(languagePreference: appLanguage, bundle: appLocalizationBundle).string(key)
+    }
+
     var mcpConfigPath: String {
         mcpConfigURL.path
     }
@@ -544,8 +555,11 @@ final class PreferencesViewModel: ObservableObject {
         backgroundOpacity = c.appearance.backgroundOpacity
         transparencyChromeTheme = c.appearance.transparencyChromeTheme
         auroraEnabled = c.appearance.auroraEnabled
+        auroraSidebarDisplayMode = c.appearance.auroraSidebarDisplayMode
+        auroraSidebarPrimaryInfo = c.appearance.auroraSidebarPrimaryInfo
         rateLimitIndicatorEnabled = c.appearance.rateLimitIndicatorEnabled
         quickSwitchMode = c.appearance.quickSwitchMode
+        appLanguage = c.appearance.appLanguage
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -669,6 +683,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Parser/writer for `mcp.json`.
     private let mcpConfigLoader: MCPServerConfigLoader
 
+    /// Bundle containing app localization resources.
+    private let appLocalizationBundle: Bundle
+
     /// Last loaded or successfully saved MCP JSON text.
     private var savedMCPConfigText: String = MCPServerConfigLoader.defaultConfigText
 
@@ -700,7 +717,8 @@ final class PreferencesViewModel: ObservableObject {
         iCloudSyncConflictBackupRoot: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/icloud-conflict-backups", isDirectory: true),
         mcpConfigURL: URL = MCPServerConfigLoader().defaultConfigURL(),
-        mcpConfigLoader: MCPServerConfigLoader = MCPServerConfigLoader()
+        mcpConfigLoader: MCPServerConfigLoader = MCPServerConfigLoader(),
+        appLocalizationBundle: Bundle = .main
     ) {
         self.savedConfig = config
         self.fileProvider = fileProvider
@@ -714,6 +732,7 @@ final class PreferencesViewModel: ObservableObject {
         self.iCloudSyncConflictBackupRoot = iCloudSyncConflictBackupRoot.standardizedFileURL
         self.mcpConfigURL = mcpConfigURL
         self.mcpConfigLoader = mcpConfigLoader
+        self.appLocalizationBundle = appLocalizationBundle
 
         // General
         self.shell = config.general.shell
@@ -737,6 +756,7 @@ final class PreferencesViewModel: ObservableObject {
         self.auroraSidebarPrimaryInfo = config.appearance.auroraSidebarPrimaryInfo
         self.rateLimitIndicatorEnabled = config.appearance.rateLimitIndicatorEnabled
         self.quickSwitchMode = config.appearance.quickSwitchMode
+        self.appLanguage = config.appearance.appLanguage
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -854,6 +874,7 @@ final class PreferencesViewModel: ObservableObject {
         self.bundledFontFamilies = FontFallbackResolver.bundledFamilies
         self.availableLSPLanguages = LSPLanguageRegistry.defaults.servers
         self.availableVoiceLocales = voiceLocaleResolver.supportedLocaleOptions()
+        self.availableAppLanguages = AppLanguage.allCases
         self.availableCompletionLanguageIDs = CompletionConfig.defaults.enabledLanguageIDs
         loadInitialMCPConfig()
     }
@@ -1243,7 +1264,8 @@ final class PreferencesViewModel: ObservableObject {
                 auroraSidebarDisplayMode: auroraSidebarDisplayMode,
                 auroraSidebarPrimaryInfo: auroraSidebarPrimaryInfo,
                 rateLimitIndicatorEnabled: rateLimitIndicatorEnabled,
-                quickSwitchMode: quickSwitchMode
+                quickSwitchMode: quickSwitchMode,
+                appLanguage: appLanguage
             ),
             terminal: TerminalConfig(
                 scrollbackLines: savedConfig.terminal.scrollbackLines,
@@ -1717,6 +1739,7 @@ final class PreferencesViewModel: ObservableObject {
         [appearance]
         theme = "\(theme)"
         light-theme = "\(defaults.appearance.lightTheme)"
+        app-language = "\(appLanguage.rawValue)"
         font-family = "\(fontFamily)"
         font-size = \(clampedFontSize)
         tab-position = "\(tabPosition)"

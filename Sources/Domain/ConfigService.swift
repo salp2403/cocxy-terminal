@@ -254,6 +254,9 @@ final class ConfigService: ConfigProviding {
         [appearance]
         theme = "\(defaults.appearance.theme)"
         light-theme = "\(defaults.appearance.lightTheme)"
+        # UI language: system, en, es. system follows the first supported
+        # macOS preferred language and never contacts a backend.
+        app-language = "\(defaults.appearance.appLanguage.rawValue)"
         font-family = "\(defaults.appearance.fontFamily)"
         font-size = \(defaults.appearance.fontSize)
         tab-position = "\(defaults.appearance.tabPosition.rawValue)"
@@ -663,6 +666,7 @@ final class ConfigService: ConfigProviding {
         let rawBlur = doubleValue(table["background-blur-radius"]) ?? defaults.backgroundBlurRadius
         let chromeTheme = parseTransparencyChromeTheme(table["transparency-chrome-theme"])
         let quickSwitchMode = parseQuickSwitchMode(table["quickswitch-mode"])
+        let appLanguage = parseAppLanguage(table["app-language"])
         let auroraSidebarDisplayMode = parseAuroraSidebarDisplayMode(table["aurora-sidebar-display-mode"])
         let auroraSidebarPrimaryInfo = parseAuroraSidebarPrimaryInfo(table["aurora-sidebar-primary-info"])
 
@@ -685,8 +689,23 @@ final class ConfigService: ConfigProviding {
             auroraSidebarPrimaryInfo: auroraSidebarPrimaryInfo,
             rateLimitIndicatorEnabled: boolValue(table["rate-limit-indicator-enabled"])
                 ?? defaults.rateLimitIndicatorEnabled,
-            quickSwitchMode: quickSwitchMode
+            quickSwitchMode: quickSwitchMode,
+            appLanguage: appLanguage
         )
+    }
+
+    private func parseAppLanguage(_ value: TOMLValue?) -> AppLanguage {
+        guard let value else { return AppearanceConfig.defaults.appLanguage }
+        guard let raw = stringValue(value),
+              let language = AppLanguage.normalized(raw) else {
+            if let raw = stringValue(value) {
+                NSLog("[ConfigService] Unknown app-language value %@; falling back to system.", raw)
+            } else {
+                NSLog("[ConfigService] app-language must be a string; falling back to system.")
+            }
+            return AppearanceConfig.defaults.appLanguage
+        }
+        return language
     }
 
     private func parseAuroraSidebarDisplayMode(_ value: TOMLValue?) -> AuroraSidebarDisplayMode {

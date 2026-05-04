@@ -10,7 +10,7 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasNineteenCases() {
+    func test_allSections_hasTwentyCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
@@ -20,12 +20,13 @@ final class PreferencesSectionTests: XCTestCase {
         // settings bring it to 14; MCP server config editing brings it to 15;
         // Activity privacy controls bring it to 16; local plugin management
         // brings it to 17; iCloud Sync opt-in settings bring it to 18;
-        // Session Replay opt-in and consent settings bring it to 19.
+        // Session Replay opt-in and consent settings bring it to 19;
+        // GitHub pane settings bring it to 20.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 19)
+        XCTAssertEqual(PreferencesSection.allCases.count, 20)
     }
 
     func test_worktreesSection_hasTitleAndIcon() {
