@@ -92,6 +92,18 @@ extension MainWindowController {
         localizer.string("window.tabConfig.open.error", fallback: "Unable to open tab config.")
     }
 
+    static func localizedSSHUploadCompleteTitle(localizer: AppLocalizer) -> String {
+        localizer.string("window.sshUpload.complete.title", fallback: "Upload Complete")
+    }
+
+    static func localizedSSHUploadFailedTitle(localizer: AppLocalizer) -> String {
+        localizer.string("window.sshUpload.failed.title", fallback: "Upload Failed")
+    }
+
+    static func localizedSSHUploadUnknownError(localizer: AppLocalizer) -> String {
+        localizer.string("window.sshUpload.unknownError", fallback: "Unknown error")
+    }
+
     private static func localizedPaneName(_ paneType: PanelType, localizer: AppLocalizer) -> String {
         switch paneType {
         case .terminal:

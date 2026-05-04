@@ -895,6 +895,9 @@
 "window.tabConfig.open.message" = "El archivo TOML se recarga desde disco antes de abrir la pestaña.";
 "window.tabConfig.save.error" = "No se pudo guardar la configuración de pestaña.";
 "window.tabConfig.open.error" = "No se pudo abrir la configuración de pestaña.";
+"window.sshUpload.complete.title" = "Subida completada";
+"window.sshUpload.failed.title" = "Falló la subida";
+"window.sshUpload.unknownError" = "Error desconocido";
 "preferences.unsaved.title" = "Cambios sin guardar";
 "preferences.unsaved.message" = "Tienes ajustes sin guardar. ¿Quieres guardarlos antes de cerrar?";
 "terminal.clipboardRead.title" = "¿Permitir lectura del portapapeles?";

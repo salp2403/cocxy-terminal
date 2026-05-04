@@ -453,6 +453,9 @@ struct AppLocalizationSwiftTestingTests {
         #expect(SmartRoutingFilter.errorsOnly.localizedTitle(using: spanish) == "Errores")
         #expect(SmartRoutingFilterView.localizedFilterAccessibility("Errores", using: spanish) == "Filtro: Errores")
         #expect(SmartRoutingAgentRow.localizedStateDescription(.waitingForInput, using: spanish) == "Esperando entrada")
+        #expect(MainWindowController.localizedSSHUploadCompleteTitle(localizer: spanish) == "Subida completada")
+        #expect(MainWindowController.localizedSSHUploadFailedTitle(localizer: spanish) == "Falló la subida")
+        #expect(MainWindowController.localizedSSHUploadUnknownError(localizer: spanish) == "Error desconocido")
     }
 
     @MainActor

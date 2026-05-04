@@ -1004,6 +1004,10 @@ extension MainWindowController {
         let user = session.user
         let port = session.port
         let capturedTabID = tabID
+        let localizer = appLocalizer()
+        let uploadCompleteTitle = Self.localizedSSHUploadCompleteTitle(localizer: localizer)
+        let uploadFailedTitle = Self.localizedSSHUploadFailedTitle(localizer: localizer)
+        let unknownUploadError = Self.localizedSSHUploadUnknownError(localizer: localizer)
 
         return { urls in
             let localPaths = urls.map(\.path)
@@ -1043,7 +1047,7 @@ extension MainWindowController {
                             let notification = CocxyNotification(
                                 type: .custom("ssh-upload"),
                                 tabId: capturedTabID,
-                                title: "Upload Complete",
+                                title: uploadCompleteTitle,
                                 body: "\(fileNames) → \(host)"
                             )
                             notificationManager?.notify(notification)
@@ -1051,11 +1055,11 @@ extension MainWindowController {
                             let stderr = String(
                                 data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
                                 encoding: .utf8
-                            ) ?? "Unknown error"
+                            ) ?? unknownUploadError
                             let notification = CocxyNotification(
                                 type: .custom("ssh-upload-error"),
                                 tabId: capturedTabID,
-                                title: "Upload Failed",
+                                title: uploadFailedTitle,
                                 body: String(stderr.prefix(200))
                             )
                             notificationManager?.notify(notification)
@@ -1066,7 +1070,7 @@ extension MainWindowController {
                         let notification = CocxyNotification(
                             type: .custom("ssh-upload-error"),
                             tabId: capturedTabID,
-                            title: "Upload Failed",
+                            title: uploadFailedTitle,
                             body: error.localizedDescription
                         )
                         notificationManager?.notify(notification)

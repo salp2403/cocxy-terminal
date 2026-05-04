@@ -895,6 +895,9 @@
 "window.tabConfig.open.message" = "The TOML file is reloaded from disk before the tab opens.";
 "window.tabConfig.save.error" = "Unable to save tab config.";
 "window.tabConfig.open.error" = "Unable to open tab config.";
+"window.sshUpload.complete.title" = "Upload Complete";
+"window.sshUpload.failed.title" = "Upload Failed";
+"window.sshUpload.unknownError" = "Unknown error";
 "preferences.unsaved.title" = "Unsaved Changes";
 "preferences.unsaved.message" = "You have unsaved settings. Would you like to save them before closing?";
 "terminal.clipboardRead.title" = "Allow clipboard read?";
