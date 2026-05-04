@@ -1078,6 +1078,14 @@
 "markdown.search.matches.one.manyFiles" = "%d coincidencia en %d archivos";
 "markdown.search.matches.many.oneFile" = "%d coincidencias en %d archivo";
 "markdown.search.matches.many.manyFiles" = "%d coincidencias en %d archivos";
+"markdown.diff.noChanges" = "Sin cambios detectados";
+"markdown.diff.noBlameData" = "Sin datos de blame (el archivo no está trackeado o no está en un repositorio git)";
+"markdown.diff.blame.lines.one" = "%d línea";
+"markdown.diff.blame.lines.many" = "%d líneas";
+"markdown.diff.blame.authors.one" = "%d autor";
+"markdown.diff.blame.authors.many" = "%d autores";
+"markdown.diff.blame.commits.one" = "%d commit";
+"markdown.diff.blame.commits.many" = "%d commits";
 "markdown.explorer.filesColumn" = "Archivos";
 "markdown.explorer.menu.rename" = "Renombrar";
 "markdown.explorer.menu.renameFolder" = "Renombrar carpeta";

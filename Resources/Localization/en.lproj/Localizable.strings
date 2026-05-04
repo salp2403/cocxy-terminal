@@ -1078,6 +1078,14 @@
 "markdown.search.matches.one.manyFiles" = "%d match in %d files";
 "markdown.search.matches.many.oneFile" = "%d matches in %d file";
 "markdown.search.matches.many.manyFiles" = "%d matches in %d files";
+"markdown.diff.noChanges" = "No changes detected";
+"markdown.diff.noBlameData" = "No blame data (file not tracked or not in a git repository)";
+"markdown.diff.blame.lines.one" = "%d line";
+"markdown.diff.blame.lines.many" = "%d lines";
+"markdown.diff.blame.authors.one" = "%d author";
+"markdown.diff.blame.authors.many" = "%d authors";
+"markdown.diff.blame.commits.one" = "%d commit";
+"markdown.diff.blame.commits.many" = "%d commits";
 "markdown.explorer.filesColumn" = "Files";
 "markdown.explorer.menu.rename" = "Rename";
 "markdown.explorer.menu.renameFolder" = "Rename Folder";

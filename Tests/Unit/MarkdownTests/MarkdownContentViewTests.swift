@@ -225,6 +225,11 @@ struct MarkdownContentViewTests {
             MarkdownSearchView.localizedMatches(matches: 2, files: 1, using: localizer)
                 == "2 coincidencias en 1 archivo"
         )
+        #expect(MarkdownDiffView.localizedNoChanges(using: localizer) == "Sin cambios detectados")
+        #expect(
+            MarkdownDiffView.localizedBlameSummary(lines: 2, authors: 1, commits: 2, using: localizer)
+                == "2 líneas · 1 autor · 2 commits"
+        )
     }
 
     // MARK: - Helpers

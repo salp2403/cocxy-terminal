@@ -12,28 +12,42 @@ import CocxyMarkdownLib
 /// default text color. Each hunk is separated by its header.
 @MainActor
 final class MarkdownDiffView: NSView {
+    private enum RenderMode {
+        case diff
+        case blame
+    }
 
     // MARK: - Properties
 
     private let scrollView = NSScrollView()
     private let textView = NSTextView()
-    private let emptyLabel = NSTextField(labelWithString: "No changes detected")
+    private let emptyLabel = NSTextField(labelWithString: "")
+    private var localizer: AppLocalizer
+    private var renderMode: RenderMode = .diff
 
     /// Sets the diff hunks to display.
     var hunks: [GitDiffHunk] = [] {
-        didSet { renderDiff() }
+        didSet {
+            renderMode = .diff
+            renderDiff()
+        }
     }
 
     /// Sets blame lines to display. Clears diff hunks.
     var blameLines: [GitBlameLine] = [] {
-        didSet { renderBlame() }
+        didSet {
+            renderMode = .blame
+            renderBlame()
+        }
     }
 
     // MARK: - Init
 
-    init() {
+    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+        self.localizer = localizer
         super.init(frame: .zero)
         setupUI()
+        renderDiff()
     }
 
     @available(*, unavailable)
@@ -83,12 +97,22 @@ final class MarkdownDiffView: NSView {
         ])
     }
 
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        switch renderMode {
+        case .diff:
+            renderDiff()
+        case .blame:
+            renderBlame()
+        }
+    }
+
     // MARK: - Rendering
 
     private func renderDiff() {
         if hunks.isEmpty {
             textView.string = ""
-            emptyLabel.stringValue = "No changes detected"
+            emptyLabel.stringValue = Self.localizedNoChanges(using: localizer)
             emptyLabel.isHidden = false
             return
         }
@@ -145,7 +169,7 @@ final class MarkdownDiffView: NSView {
     private func renderBlame() {
         if blameLines.isEmpty {
             textView.string = ""
-            emptyLabel.stringValue = "No blame data (file not tracked or not in a git repository)"
+            emptyLabel.stringValue = Self.localizedNoBlameData(using: localizer)
             emptyLabel.isHidden = false
             return
         }
@@ -162,7 +186,12 @@ final class MarkdownDiffView: NSView {
         // Header
         let authorCount = Set(blameLines.map(\.author)).count
         let commitCount = Set(blameLines.map(\.commitHash)).count
-        let summary = "\(blameLines.count) lines · \(authorCount) authors · \(commitCount) commits\n\n"
+        let summary = Self.localizedBlameSummary(
+            lines: blameLines.count,
+            authors: authorCount,
+            commits: commitCount,
+            using: localizer
+        ) + "\n\n"
         result.append(NSAttributedString(string: summary, attributes: [
             .font: metaFont,
             .foregroundColor: CocxyColors.blue
@@ -187,5 +216,63 @@ final class MarkdownDiffView: NSView {
         }
 
         textView.textStorage?.setAttributedString(result)
+    }
+
+    static func localizedNoChanges(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.diff.noChanges", fallback: "No changes detected")
+    }
+
+    static func localizedNoBlameData(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "markdown.diff.noBlameData",
+            fallback: "No blame data (file not tracked or not in a git repository)"
+        )
+    }
+
+    static func localizedBlameSummary(
+        lines: Int,
+        authors: Int,
+        commits: Int,
+        using localizer: AppLocalizer
+    ) -> String {
+        [
+            localizedCount(
+                lines,
+                oneKey: "markdown.diff.blame.lines.one",
+                manyKey: "markdown.diff.blame.lines.many",
+                oneFallback: "%d line",
+                manyFallback: "%d lines",
+                using: localizer
+            ),
+            localizedCount(
+                authors,
+                oneKey: "markdown.diff.blame.authors.one",
+                manyKey: "markdown.diff.blame.authors.many",
+                oneFallback: "%d author",
+                manyFallback: "%d authors",
+                using: localizer
+            ),
+            localizedCount(
+                commits,
+                oneKey: "markdown.diff.blame.commits.one",
+                manyKey: "markdown.diff.blame.commits.many",
+                oneFallback: "%d commit",
+                manyFallback: "%d commits",
+                using: localizer
+            ),
+        ].joined(separator: " · ")
+    }
+
+    private static func localizedCount(
+        _ count: Int,
+        oneKey: String,
+        manyKey: String,
+        oneFallback: String,
+        manyFallback: String,
+        using localizer: AppLocalizer
+    ) -> String {
+        let key = count == 1 ? oneKey : manyKey
+        let fallback = count == 1 ? oneFallback : manyFallback
+        return String(format: localizer.string(key, fallback: fallback), count)
     }
 }

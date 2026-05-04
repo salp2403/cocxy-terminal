@@ -54,7 +54,7 @@ final class MarkdownContentView: NSView {
     private let sidebar: MarkdownSidebarView
     let sourceView: MarkdownSourceView
     let previewView: MarkdownPreviewView
-    let diffView = MarkdownDiffView()
+    let diffView: MarkdownDiffView
     private let splitContainer = NSSplitView()
     let contentContainer = NSView()
     let statusBar: MarkdownStatusBarView
@@ -124,6 +124,7 @@ final class MarkdownContentView: NSView {
         self.sidebar = MarkdownSidebarView(localizer: localizer)
         self.sourceView = MarkdownSourceView()
         self.previewView = MarkdownPreviewView()
+        self.diffView = MarkdownDiffView(localizer: localizer)
         self.statusBar = MarkdownStatusBarView(localizer: localizer)
         super.init(frame: .zero)
         setupUI()
@@ -207,6 +208,7 @@ final class MarkdownContentView: NSView {
         self.localizer = localizer
         toolbar.updateLocalizer(localizer)
         sidebar.updateLocalizer(localizer)
+        diffView.updateLocalizer(localizer)
         statusBar.updateLocalizer(localizer)
         if filePath == nil {
             showEmptyState()
