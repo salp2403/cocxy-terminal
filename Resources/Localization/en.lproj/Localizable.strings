@@ -422,6 +422,10 @@
 "keybindings.saved" = "Keybindings saved.";
 "keybindings.conflictsDetected" = "Conflicts detected";
 "keybindings.resolveConflicts" = "Resolve conflicts before saving.";
+"keybindings.invalidShortcut" = "That is not a valid shortcut.";
+"keybindings.unparseableShortcut" = "That shortcut could not be parsed.";
+"keybindings.invalidShortcutFor" = "Shortcut for %@ is invalid.";
+"keybindings.persistenceUnavailable" = "Preferences window is not available to persist changes.";
 "keybindings.shortcut.accessibility" = "Shortcut: %@";
 "keybindings.edit" = "Edit";
 "keybindings.reset" = "Reset";

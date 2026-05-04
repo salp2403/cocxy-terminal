@@ -44,13 +44,20 @@ final class KeybindingsEditorViewModel: ObservableObject {
     ///
     /// Non-nil when a capture event returned an invalid shortcut or when a
     /// save is blocked by conflicts.
-    @Published var statusMessage: String?
+    @Published private(set) var statusMessage: String?
 
     // MARK: - Dependencies
 
     /// Persistence provider. `nil` disables `save()` (useful for tests and
     /// previews).
     private weak var persistence: PreferencesViewModel?
+
+    /// Localizer used for transient validation and persistence status text.
+    private var localizer: AppLocalizer
+
+    /// Semantic source for `statusMessage`, retained so language changes can
+    /// relocalize the current banner without comparing already-rendered copy.
+    private var statusState: StatusState?
 
     /// Snapshot of the last-saved config, used to rebuild the editable state
     /// when `reload(from:)` is called after a successful save.
@@ -64,11 +71,16 @@ final class KeybindingsEditorViewModel: ObservableObject {
     ///   - config: The current application config. The `keybindings` section
     ///     drives the initial state.
     ///   - persistence: The preferences view model used to persist changes.
-    ///     When `nil`, `save()` is a no-op that still reports success so
-    ///     previews and tests can operate without a file provider.
-    init(config: CocxyConfig, persistence: PreferencesViewModel? = nil) {
+    ///     When `nil`, `save()` throws `SaveError.persistenceUnavailable` so
+    ///     previews and tests cannot accidentally report a persisted change.
+    init(
+        config: CocxyConfig,
+        persistence: PreferencesViewModel? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.snapshot = config.keybindings
         self.persistence = persistence
+        self.localizer = localizer
         self.shortcutsById = Self.buildShortcutMap(from: config.keybindings)
     }
 
@@ -82,7 +94,15 @@ final class KeybindingsEditorViewModel: ObservableObject {
     func reload(from config: CocxyConfig) {
         snapshot = config.keybindings
         shortcutsById = Self.buildShortcutMap(from: config.keybindings)
-        statusMessage = nil
+        clearStatus()
+    }
+
+    /// Updates the localizer and re-renders the active status message.
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        if let statusState {
+            statusMessage = Self.localizedStatus(statusState, using: localizer)
+        }
     }
 
     // MARK: - Lookup Helpers
@@ -169,35 +189,35 @@ final class KeybindingsEditorViewModel: ObservableObject {
     @discardableResult
     func assign(_ shortcut: KeybindingShortcut?, to actionId: String) -> Bool {
         guard let shortcut else {
-            statusMessage = "That is not a valid shortcut."
+            setStatus(.invalidShortcut)
             return false
         }
         guard KeybindingShortcut.parse(shortcut.canonical) != nil else {
-            statusMessage = "That shortcut could not be parsed."
+            setStatus(.unparseableShortcut)
             return false
         }
         shortcutsById[actionId] = shortcut.canonical
-        statusMessage = nil
+        clearStatus()
         return true
     }
 
     /// Clears the shortcut for the given action. Equivalent to "no binding".
     func clear(_ actionId: String) {
         shortcutsById[actionId] = ""
-        statusMessage = nil
+        clearStatus()
     }
 
     /// Restores the catalog default for a single action.
     func reset(_ actionId: String) {
         guard let entry = KeybindingAction.catalogEntry(for: actionId) else { return }
         shortcutsById[actionId] = entry.defaultShortcut.canonical
-        statusMessage = nil
+        clearStatus()
     }
 
     /// Restores catalog defaults for every action in the editor.
     func resetAll() {
         shortcutsById = Self.defaultShortcutMap()
-        statusMessage = nil
+        clearStatus()
     }
 
     // MARK: - Save
@@ -221,6 +241,13 @@ final class KeybindingsEditorViewModel: ObservableObject {
         }
     }
 
+    private enum StatusState: Equatable {
+        case invalidShortcut
+        case unparseableShortcut
+        case saveError(SaveError)
+        case saved
+    }
+
     /// Persists the pending edits via the injected `PreferencesViewModel`.
     ///
     /// The caller is responsible for first clearing conflicts; `save()`
@@ -230,16 +257,17 @@ final class KeybindingsEditorViewModel: ObservableObject {
     ///   by the persistence layer (e.g., file I/O failure).
     func save() throws {
         if hasConflicts {
-            statusMessage = SaveError.conflictsUnresolved.errorDescription
+            setStatus(.saveError(.conflictsUnresolved))
             throw SaveError.conflictsUnresolved
         }
         for (id, shortcut) in shortcutsById where !shortcut.isEmpty {
             if KeybindingShortcut.parse(shortcut) == nil {
-                statusMessage = SaveError.invalidShortcut(actionId: id).errorDescription
+                setStatus(.saveError(.invalidShortcut(actionId: id)))
                 throw SaveError.invalidShortcut(actionId: id)
             }
         }
         guard let persistence else {
+            setStatus(.saveError(.persistenceUnavailable))
             throw SaveError.persistenceUnavailable
         }
 
@@ -248,7 +276,92 @@ final class KeybindingsEditorViewModel: ObservableObject {
         try persistence.save()
 
         snapshot = updatedConfig
-        statusMessage = "Keybindings saved."
+        setStatus(.saved)
+    }
+
+    // MARK: - Localization
+
+    func localizedDescription(for error: SaveError) -> String {
+        Self.localizedDescription(for: error, using: localizer)
+    }
+
+    static func localizedInvalidShortcut(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.invalidShortcut", fallback: "That is not a valid shortcut.")
+    }
+
+    static func localizedUnparseableShortcut(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.unparseableShortcut", fallback: "That shortcut could not be parsed.")
+    }
+
+    static func localizedSaved(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.saved", fallback: "Keybindings saved.")
+    }
+
+    static func localizedDescription(for error: SaveError, using localizer: AppLocalizer) -> String {
+        switch error {
+        case .conflictsUnresolved:
+            return localizer.string(
+                "keybindings.resolveConflicts",
+                fallback: error.errorDescription ?? "Resolve conflicts before saving."
+            )
+        case .invalidShortcut(let actionId):
+            let actionName = KeybindingAction.catalogEntry(for: actionId)?
+                .localizedDisplayName(using: localizer) ?? actionId
+            return String(
+                format: localizer.string(
+                    "keybindings.invalidShortcutFor",
+                    fallback: "Shortcut for %@ is invalid."
+                ),
+                actionName
+            )
+        case .persistenceUnavailable:
+            return localizer.string(
+                "keybindings.persistenceUnavailable",
+                fallback: error.errorDescription ?? "Preferences window is not available to persist changes."
+            )
+        }
+    }
+
+    static func localizedStatusMessage(_ status: String, using localizer: AppLocalizer) -> String {
+        if status == "That is not a valid shortcut." {
+            return localizedInvalidShortcut(using: localizer)
+        }
+        if status == "That shortcut could not be parsed." {
+            return localizedUnparseableShortcut(using: localizer)
+        }
+        if status == "Keybindings saved." {
+            return localizedSaved(using: localizer)
+        }
+        if status == (SaveError.conflictsUnresolved.errorDescription ?? "") {
+            return localizedDescription(for: .conflictsUnresolved, using: localizer)
+        }
+        if status == (SaveError.persistenceUnavailable.errorDescription ?? "") {
+            return localizedDescription(for: .persistenceUnavailable, using: localizer)
+        }
+        return status
+    }
+
+    private static func localizedStatus(_ state: StatusState, using localizer: AppLocalizer) -> String {
+        switch state {
+        case .invalidShortcut:
+            return localizedInvalidShortcut(using: localizer)
+        case .unparseableShortcut:
+            return localizedUnparseableShortcut(using: localizer)
+        case .saveError(let error):
+            return localizedDescription(for: error, using: localizer)
+        case .saved:
+            return localizedSaved(using: localizer)
+        }
+    }
+
+    private func setStatus(_ state: StatusState) {
+        statusState = state
+        statusMessage = Self.localizedStatus(state, using: localizer)
+    }
+
+    private func clearStatus() {
+        statusState = nil
+        statusMessage = nil
     }
 
     // MARK: - Assembly

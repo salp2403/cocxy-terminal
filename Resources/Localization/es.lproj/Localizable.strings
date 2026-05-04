@@ -422,6 +422,10 @@
 "keybindings.saved" = "Atajos guardados.";
 "keybindings.conflictsDetected" = "Conflictos detectados";
 "keybindings.resolveConflicts" = "Resuelve los conflictos antes de guardar.";
+"keybindings.invalidShortcut" = "Ese no es un atajo válido.";
+"keybindings.unparseableShortcut" = "No se pudo interpretar ese atajo.";
+"keybindings.invalidShortcutFor" = "El atajo para %@ no es válido.";
+"keybindings.persistenceUnavailable" = "La ventana de Preferencias no está disponible para guardar cambios.";
 "keybindings.shortcut.accessibility" = "Atajo: %@";
 "keybindings.edit" = "Editar";
 "keybindings.reset" = "Restablecer";

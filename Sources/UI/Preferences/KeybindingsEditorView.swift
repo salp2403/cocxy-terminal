@@ -88,6 +88,12 @@ struct KeybindingsEditorView: View {
                 localizer: localizer
             )
         }
+        .onAppear {
+            viewModel.updateLocalizer(localizer)
+        }
+        .onChange(of: localizer.resolvedLanguage) { _, _ in
+            viewModel.updateLocalizer(localizer)
+        }
     }
 
     // MARK: - Helpers
@@ -125,7 +131,9 @@ struct KeybindingsEditorView: View {
     private func performSave() {
         do {
             try viewModel.save()
-            saveStatus = "Keybindings saved."
+            saveStatus = KeybindingsEditorViewModel.localizedSaved(using: localizer)
+        } catch let error as KeybindingsEditorViewModel.SaveError {
+            saveStatus = viewModel.localizedDescription(for: error)
         } catch {
             saveStatus = error.localizedDescription
         }
@@ -147,13 +155,7 @@ struct KeybindingsEditorView: View {
     }
 
     private func localizedStatus(_ status: String) -> String {
-        if status == "Keybindings saved." {
-            return localizer.string("keybindings.saved", fallback: status)
-        }
-        if status == KeybindingsEditorViewModel.SaveError.conflictsUnresolved.errorDescription {
-            return localizer.string("keybindings.resolveConflicts", fallback: status)
-        }
-        return status
+        KeybindingsEditorViewModel.localizedStatusMessage(status, using: localizer)
     }
 
     private func localized(_ key: String, fallback: String) -> String {

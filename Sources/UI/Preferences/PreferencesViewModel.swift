@@ -702,7 +702,7 @@ final class PreferencesViewModel: ObservableObject {
     /// Constructed lazily on first access so view models used purely for
     /// programmatic saves (e.g., CLI-driven) do not pay the cost.
     lazy var keybindingsEditor: KeybindingsEditorViewModel = {
-        KeybindingsEditorViewModel(config: savedConfig, persistence: self)
+        KeybindingsEditorViewModel(config: savedConfig, persistence: self, localizer: appLocalizer())
     }()
 
     // MARK: - Initialization

@@ -377,6 +377,7 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    @MainActor
     func keybindingsEditorStringsLocalizeSpanish() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
@@ -386,6 +387,19 @@ struct AppLocalizationSwiftTestingTests {
         #expect(KeybindingsEditorView.localizedResetAllButton(using: spanish) == "Restablecer todo")
         #expect(KeybindingsEditorView.localizedConflictsDetected(using: spanish) == "Conflictos detectados")
         #expect(KeybindingCaptureSheet.localizedCaptureHint(using: spanish) == "Presiona el nuevo atajo...")
+        #expect(KeybindingsEditorViewModel.localizedInvalidShortcut(using: spanish) == "Ese no es un atajo válido.")
+        #expect(KeybindingsEditorViewModel.localizedUnparseableShortcut(using: spanish) == "No se pudo interpretar ese atajo.")
+        #expect(KeybindingsEditorViewModel.localizedSaved(using: spanish) == "Atajos guardados.")
+        #expect(
+            KeybindingsEditorViewModel.localizedDescription(
+                for: .invalidShortcut(actionId: KeybindingActionCatalog.tabNew.id),
+                using: spanish
+            ) == "El atajo para Nueva pestaña no es válido."
+        )
+        #expect(
+            KeybindingsEditorViewModel.localizedDescription(for: .persistenceUnavailable, using: spanish)
+                == "La ventana de Preferencias no está disponible para guardar cambios."
+        )
         #expect(KeybindingCategory.tab.localizedTitle(using: spanish) == "Pestañas")
         #expect(KeybindingActionCatalog.tabNew.localizedDisplayName(using: spanish) == "Nueva pestaña")
         #expect(KeybindingActionCatalog.tabNew.localizedSummary(using: spanish) == "Abrir una nueva pestaña de terminal.")

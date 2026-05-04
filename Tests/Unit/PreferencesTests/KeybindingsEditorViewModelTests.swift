@@ -56,6 +56,22 @@ struct KeybindingsEditorViewModelMutationTests {
         #expect(viewModel.statusMessage != nil)
     }
 
+    @Test func assignNilUsesConfiguredLocalizerAndUpdatesWhenLanguageChanges() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let viewModel = KeybindingsEditorViewModel(config: .defaults, localizer: spanish)
+
+        let applied = viewModel.assign(nil, to: KeybindingActionCatalog.tabNew.id)
+
+        #expect(applied == false)
+        #expect(viewModel.statusMessage == "Ese no es un atajo válido.")
+
+        viewModel.updateLocalizer(english)
+
+        #expect(viewModel.statusMessage == "That is not a valid shortcut.")
+    }
+
     @Test func resetRestoresDefault() {
         let viewModel = KeybindingsEditorViewModel(config: .defaults)
         let target = KeybindingActionCatalog.tabNew
@@ -195,6 +211,22 @@ struct KeybindingsEditorViewModelPersistenceTests {
         }
     }
 
+    @Test func saveUnavailableReportsLocalizedStatus() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let editor = KeybindingsEditorViewModel(config: .defaults, localizer: spanish)
+
+        do {
+            try editor.save()
+            Issue.record("save() should throw when persistence is unavailable")
+        } catch let error as KeybindingsEditorViewModel.SaveError {
+            #expect(error == .persistenceUnavailable)
+            #expect(editor.statusMessage == "La ventana de Preferencias no está disponible para guardar cambios.")
+        } catch {
+            Issue.record("Unexpected error \(error)")
+        }
+    }
+
     @Test func savedSnapshotResetsUnsavedChanges() throws {
         let fileProvider = InMemoryFileProvider()
         let preferences = PreferencesViewModel(config: .defaults, fileProvider: fileProvider)
@@ -207,4 +239,9 @@ struct KeybindingsEditorViewModelPersistenceTests {
         try editor.save()
         #expect(editor.hasUnsavedChanges == false)
     }
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
