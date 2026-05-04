@@ -1586,6 +1586,43 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testMacrosPanelActionInstallsRealHostedPanel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithMacrosAction(nil)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after opening macros panel")
+            return
+        }
+
+        let leaves = splitManager.rootNode.allLeafIDs()
+        guard let macrosLeaf = leaves.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .macros
+        }) else {
+            XCTFail("Expected macros panel leaf")
+            return
+        }
+
+        XCTAssertTrue(
+            controller.panelContentViews[macrosLeaf.terminalID] is NSHostingView<MacroSnippetPanelView>,
+            "Macros split must host the real macros, snippets, aliases, and clipboard panel"
+        )
+
+        let panelTabs = (controller.horizontalTabStripView as? HorizontalTabStripView)?.tabs.map(\.title) ?? []
+        XCTAssertTrue(panelTabs.contains("Macros"))
+        XCTAssertEqual(
+            splitManager.focusedLeafID,
+            macrosLeaf.leafID,
+            "Opening Macros should leave the macros panel selected"
+        )
+    }
+
     func testToolbarSplitButtonsMapToVisualOrientation() {
         let sideBySideController = MainWindowController(bridge: MockTerminalEngine())
         sideBySideController.showWindow(nil)

@@ -61,6 +61,9 @@ final class HorizontalTabStripView: NSView {
     /// Callback when "Templates" is selected from the add menu.
     var onAddTemplates: (() -> Void)?
 
+    /// Callback when "Macros" is selected from the add menu.
+    var onAddMacros: (() -> Void)?
+
     /// Callback when the close button is clicked on a tab by index.
     var onCloseTab: ((Int) -> Void)?
 
@@ -99,6 +102,9 @@ final class HorizontalTabStripView: NSView {
 
     /// Callback when the "Open Templates" action icon is clicked.
     var onOpenTemplates: (() -> Void)?
+
+    /// Callback when the "Open Macros" action icon is clicked.
+    var onOpenMacros: (() -> Void)?
 
     /// Callback when the "Reload" action icon is clicked.
     var onReload: (() -> Void)?
@@ -646,6 +652,13 @@ final class HorizontalTabStripView: NSView {
         }
         menu.addItem(templatesItem)
 
+        let macrosItem = NSMenuItem(title: "Macros", action: #selector(addMacros), keyEquivalent: "")
+        macrosItem.target = self
+        if let img = NSImage(systemSymbolName: "keyboard", accessibilityDescription: nil) {
+            macrosItem.image = img
+        }
+        menu.addItem(macrosItem)
+
         let point = NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 4)
         menu.popUp(positioning: nil, at: point, in: button)
     }
@@ -660,6 +673,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func addSessionReplay() { onAddSessionReplay?() }
     @objc private func addAIEditHistory() { onAddAIEditHistory?() }
     @objc private func addTemplates() { onAddTemplates?() }
+    @objc private func addMacros() { onAddMacros?() }
 
     // MARK: - Contextual Action Icons
 
@@ -760,6 +774,14 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleOpenTemplates)
                 )
             )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "keyboard",
+                    tooltip: "Open Macros",
+                    accessibilityID: "action:openMacros",
+                    action: #selector(handleOpenMacros)
+                )
+            )
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
@@ -785,7 +807,7 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .templates, .subagent:
+        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .templates, .macros, .subagent:
             break
         }
 
@@ -839,6 +861,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleOpenSessionReplay() { onOpenSessionReplay?() }
     @objc private func handleOpenAIEditHistory() { onOpenAIEditHistory?() }
     @objc private func handleOpenTemplates() { onOpenTemplates?() }
+    @objc private func handleOpenMacros() { onOpenMacros?() }
     @objc private func handleReload() { onReload?() }
     @objc private func handleGoBack() { onGoBack?() }
     @objc private func handleGoForward() { onGoForward?() }

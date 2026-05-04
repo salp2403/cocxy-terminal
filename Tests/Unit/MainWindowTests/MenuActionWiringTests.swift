@@ -251,6 +251,23 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testOpenMacrosPanelHasAction() {
+        let macros = viewMenu.items.first(where: { $0.title == "Open Macros Panel" })
+        XCTAssertNotNil(
+            macros?.action,
+            "Open Macros Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenMacrosPanelActionPointsToCorrectSelector() {
+        let macros = viewMenu.items.first(where: { $0.title == "Open Macros Panel" })
+        XCTAssertEqual(
+            macros?.action,
+            #selector(MainWindowController.splitWithMacrosAction(_:)),
+            "Open Macros Panel must create the real macro and snippets split panel"
+        )
+    }
+
     // MARK: - New Window
 
     func testNewWindowHasAction() {

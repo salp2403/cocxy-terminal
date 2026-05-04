@@ -66,6 +66,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "workspace.sessionReplay",
             "workspace.aiEditHistory",
             "workspace.templates",
+            "workspace.macros",
             "remote.toggle",
             "browser.history",
             "browser.bookmarks",

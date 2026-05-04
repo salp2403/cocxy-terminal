@@ -72,6 +72,7 @@ extension MainWindowController {
                     case .sessionReplay: icon = "record.circle"
                     case .aiEditHistory: icon = "clock.arrow.circlepath"
                     case .templates: icon = "square.grid.2x2"
+                    case .macros: icon = "keyboard"
                     case .subagent: icon = "person.2"
                     }
                 } else {
@@ -105,6 +106,9 @@ extension MainWindowController {
                     case .templates:
                         title = "Templates"
                         icon = "square.grid.2x2"
+                    case .macros:
+                        title = "Macros"
+                        icon = "keyboard"
                     case .subagent:
                         title = "Agent"
                         icon = "person.2"

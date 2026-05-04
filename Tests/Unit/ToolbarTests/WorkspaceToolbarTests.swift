@@ -81,6 +81,14 @@ final class WorkspaceToolbarTests: XCTestCase {
         XCTAssertEqual(tab.symbolName, "square.grid.2x2")
     }
 
+    func testPanelTabInfoMacrosSymbol() {
+        let tab = PanelTabInfo(
+            leafID: UUID(), contentID: UUID(),
+            panelType: .macros, title: "Macros", isFocused: false
+        )
+        XCTAssertEqual(tab.symbolName, "keyboard")
+    }
+
     // MARK: - Toolbar Visibility
 
     func testToolbarVisibleWithSinglePane() {
@@ -234,6 +242,19 @@ final class WorkspaceToolbarTests: XCTestCase {
         let templateTabs = controller.panelTabs.filter { $0.panelType == .templates }
         XCTAssertEqual(templateTabs.count, 1)
         XCTAssertEqual(templateTabs.first?.title, "Templates")
+    }
+
+    func testMacrosPanelTabTitle() {
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window)
+        let manager = SplitManager()
+        manager.splitFocusedWithPanel(direction: .horizontal, panel: .macros())
+
+        controller.update(splitManager: manager)
+
+        let macroTabs = controller.panelTabs.filter { $0.panelType == .macros }
+        XCTAssertEqual(macroTabs.count, 1)
+        XCTAssertEqual(macroTabs.first?.title, "Macros")
     }
 
     // MARK: - Callbacks

@@ -149,6 +149,17 @@ extension MainWindowController {
         )
     }
 
+    /// Opens the local macros, snippets, aliases, and clipboard manager.
+    @objc func splitWithMacrosAction(_ sender: Any?) {
+        let dir = workspaceDirectoryForCurrentTab()
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .macros(workingDirectory: dir),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
+    }
+
     // MARK: - Split with Panel
 
     /// Creates a visual split with a non-terminal panel.
@@ -295,6 +306,12 @@ extension MainWindowController {
                 destinationRootURL: workspaceDir
             )
             let view = ProjectTemplatePanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            panelView = NSHostingView(rootView: view)
+        case .macros:
+            let viewModel = MacroSnippetPanelViewModel()
+            let view = MacroSnippetPanelView(viewModel: viewModel) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             panelView = NSHostingView(rootView: view)

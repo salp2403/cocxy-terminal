@@ -639,6 +639,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "workspace.macros",
+                name: "Open Macros Panel",
+                description: "Open local macros, snippets, aliases, and clipboard history",
+                shortcut: nil,
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.splitWithMacrosAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "remote.toggle",
                 name: "Toggle Remote Workspaces",
                 description: "Show or hide the remote workspace panel",

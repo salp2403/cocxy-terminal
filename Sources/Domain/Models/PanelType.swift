@@ -41,6 +41,9 @@ enum PanelType: String, Codable, Sendable, Equatable {
     /// A local project scaffold template picker.
     case templates
 
+    /// A local macro, snippet, alias, and clipboard manager.
+    case macros
+
     /// A live subagent activity panel.
     case subagent
 }
@@ -100,6 +103,9 @@ struct PanelInfo: Equatable, Sendable {
     }
     static func templates(workingDirectory: URL? = nil) -> PanelInfo {
         PanelInfo(type: .templates, filePath: workingDirectory)
+    }
+    static func macros(workingDirectory: URL? = nil) -> PanelInfo {
+        PanelInfo(type: .macros, filePath: workingDirectory)
     }
     static func subagent(id: String, sessionId: String) -> PanelInfo {
         PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)
