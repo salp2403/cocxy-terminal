@@ -72,6 +72,7 @@ extension MainWindowController {
         // Apply notification toggle changes to tab bar.
         let localizer = appLocalizer(for: config)
         tabBarView?.updateLocalizer(localizer)
+        (horizontalTabStripView as? HorizontalTabStripView)?.updateLocalizer(localizer)
         auroraChromeController?.updateLocalizer(localizer)
         updateMarkdownPanelLocalizers(localizer)
         updateSessionReplayPanelLocalizers(localizer)

@@ -365,6 +365,11 @@ struct AppLocalizationSwiftTestingTests {
         #expect(Design.AuroraSidebarView.localizedUpdateButton(using: spanish) == "Actualizar")
         #expect(Design.AuroraSidebarView.localizedUpdateTitle(update, using: spanish) == "Actualización crítica")
         #expect(Design.SessionNodeView.localizedCloseTabAccessibility("README.md", using: spanish) == "Cerrar README.md")
+        #expect(HorizontalTabStripView.localizedAddPanel(using: spanish) == "Agregar panel")
+        #expect(HorizontalTabStripView.localizedSwitchToDarkTheme(using: spanish) == "Cambiar a tema oscuro")
+        #expect(HorizontalTabStripView.localizedTerminalSideBySide(using: spanish) == "Terminal (lado a lado)")
+        #expect(HorizontalTabStripView.localizedOpenDBCloudHelpers(using: spanish) == "Abrir ayudas DB/Cloud")
+        #expect(HorizontalTabStripView.localizedPanelRenamePlaceholder(using: spanish) == "Nombre del panel")
     }
 
     @MainActor

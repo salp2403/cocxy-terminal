@@ -136,6 +136,17 @@ final class HorizontalTabStripView: NSView {
     /// Current semantic mode for close labels, context menus and rename UI.
     private var itemKind: ItemKind = .panel
 
+    /// Local app-language resolver for tooltips, menus, and accessibility copy.
+    private var localizer = AppLocalizer(languagePreference: .english)
+
+    /// Last rendered theme-toggle state so language changes can refresh
+    /// the tooltip without flipping the requested action.
+    private var lastThemeModeIsLight = false
+
+    /// Last action-icon state so language changes can rebuild tooltips
+    /// without waiting for the next focus change.
+    private var lastActionIconState: (panelType: PanelType, canClose: Bool)?
+
     /// Leading inset used by the split/panel toolbar variant.
     private static let panelLeadingInset: CGFloat = 8
 
@@ -165,12 +176,11 @@ final class HorizontalTabStripView: NSView {
         let btn = NSButton()
         btn.bezelStyle = .accessoryBarAction
         btn.isBordered = false
-        if let img = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Panel") {
+        if let img = NSImage(systemSymbolName: "plus", accessibilityDescription: nil) {
             btn.image = img.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
         }
         btn.contentTintColor = CocxyColors.overlay1
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.toolTip = "Add Panel"
         return btn
     }()
 
@@ -192,7 +202,6 @@ final class HorizontalTabStripView: NSView {
         btn.wantsLayer = true
         btn.contentTintColor = CocxyColors.overlay1
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.setAccessibilityLabel("Toggle light or dark theme")
         return btn
     }()
 
@@ -229,6 +238,7 @@ final class HorizontalTabStripView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         setupUI()
+        applyLocalizedChrome()
         // Show a default "Terminal" tab.
         updateTabs([(title: "Terminal", icon: "terminal.fill", isActive: true)])
     }
@@ -304,6 +314,26 @@ final class HorizontalTabStripView: NSView {
 
     // MARK: - Public API
 
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        applyLocalizedChrome()
+        updateTabs(tabs)
+        if let lastActionIconState {
+            updateActionIcons(
+                panelType: lastActionIconState.panelType,
+                canClose: lastActionIconState.canClose
+            )
+        }
+    }
+
+    private func applyLocalizedChrome() {
+        let addPanelTitle = Self.localizedAddPanel(using: localizer)
+        addButton.toolTip = addPanelTitle
+        addButton.setAccessibilityLabel(addPanelTitle)
+        themeModeButton.setAccessibilityLabel(Self.localizedThemeToggleAccessibility(using: localizer))
+        setThemeMode(isLight: lastThemeModeIsLight)
+    }
+
     /// Toggles between vibrancy (glass) and solid background modes.
     ///
     /// When transparent, the solid overlay is hidden and the underlying
@@ -332,8 +362,11 @@ final class HorizontalTabStripView: NSView {
     ///   icon points at the next action: moon = switch back to dark,
     ///   sun = switch to light.
     func setThemeMode(isLight: Bool) {
+        lastThemeModeIsLight = isLight
         let symbol = isLight ? "moon.fill" : "sun.max.fill"
-        let tooltip = isLight ? "Switch to dark theme" : "Switch to light theme"
+        let tooltip = isLight
+            ? Self.localizedSwitchToDarkTheme(using: localizer)
+            : Self.localizedSwitchToLightTheme(using: localizer)
         if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: tooltip) {
             themeModeButton.image = img.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
         }
@@ -397,6 +430,7 @@ final class HorizontalTabStripView: NSView {
         container.translatesAutoresizingMaskIntoConstraints = false
         container.tabIndex = index
         container.itemKind = itemKind
+        container.localizer = localizer
         container.onReorder = { [weak self] fromIndex, toIndex in
             self?.onSwapTabs?(fromIndex, toIndex)
         }
@@ -453,7 +487,7 @@ final class HorizontalTabStripView: NSView {
         let menu = NSMenu()
 
         let moveLeftItem = NSMenuItem(
-            title: "Move Left",
+            title: Self.localizedMoveLeft(using: localizer),
             action: #selector(handleMoveTabLeft(_:)),
             keyEquivalent: ""
         )
@@ -466,7 +500,7 @@ final class HorizontalTabStripView: NSView {
         menu.addItem(moveLeftItem)
 
         let moveRightItem = NSMenuItem(
-            title: "Move Right",
+            title: Self.localizedMoveRight(using: localizer),
             action: #selector(handleMoveTabRight(_:)),
             keyEquivalent: ""
         )
@@ -481,7 +515,9 @@ final class HorizontalTabStripView: NSView {
         menu.addItem(NSMenuItem.separator())
 
         let closeItem = NSMenuItem(
-            title: itemKind == .workspaceTab ? "Close Tab" : "Close Panel",
+            title: itemKind == .workspaceTab
+                ? Self.localizedCloseTabTitle(using: localizer)
+                : Self.localizedClosePanelTitle(using: localizer),
             action: #selector(closeTabClicked(_:)),
             keyEquivalent: ""
         )
@@ -544,7 +580,7 @@ final class HorizontalTabStripView: NSView {
         btn.bezelStyle = .accessoryBarAction
         btn.isBordered = false
         btn.wantsLayer = true
-        if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close tab") {
+        if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) {
             btn.image = img.withSymbolConfiguration(.init(pointSize: 8, weight: .medium))
         }
         btn.contentTintColor = CocxyColors.overlay0
@@ -552,10 +588,173 @@ final class HorizontalTabStripView: NSView {
         btn.target = self
         btn.action = #selector(closeTabClicked(_:))
         btn.translatesAutoresizingMaskIntoConstraints = false
-        let label = itemKind == .workspaceTab ? "Close tab" : "Close panel"
+        let label = itemKind == .workspaceTab
+            ? Self.localizedCloseTabControl(using: localizer)
+            : Self.localizedClosePanelControl(using: localizer)
         btn.setAccessibilityLabel(label)
+        btn.setAccessibilityIdentifier("horizontalTab.close")
         btn.toolTip = label
         return btn
+    }
+
+    static func localizedAddPanel(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.addPanel", fallback: "Add Panel")
+    }
+
+    static func localizedThemeToggleAccessibility(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.themeToggle.accessibility", fallback: "Toggle light or dark theme")
+    }
+
+    static func localizedSwitchToDarkTheme(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.themeToggle.dark", fallback: "Switch to dark theme")
+    }
+
+    static func localizedSwitchToLightTheme(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.themeToggle.light", fallback: "Switch to light theme")
+    }
+
+    static func localizedMoveLeft(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.context.moveLeft", fallback: "Move Left")
+    }
+
+    static func localizedMoveRight(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.context.moveRight", fallback: "Move Right")
+    }
+
+    static func localizedCloseTabTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("tabbar.context.close", fallback: "Close Tab")
+    }
+
+    static func localizedClosePanelTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.context.closePanel", fallback: "Close Panel")
+    }
+
+    static func localizedCloseTabControl(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.closeTab.control", fallback: "Close tab")
+    }
+
+    static func localizedClosePanelControl(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.closePanel.control", fallback: "Close panel")
+    }
+
+    static func localizedTerminalSideBySide(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.terminalSideBySide", fallback: "Terminal (Side by Side)")
+    }
+
+    static func localizedTerminalStacked(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.terminalStacked", fallback: "Terminal (Stacked)")
+    }
+
+    static func localizedBrowser(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.browser", fallback: "Browser")
+    }
+
+    static func localizedMarkdown(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.markdown", fallback: "Markdown")
+    }
+
+    static func localizedTextEditor(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.textEditor", fallback: "Text Editor")
+    }
+
+    static func localizedNotebook(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.notebook", fallback: "Notebook")
+    }
+
+    static func localizedWorkflow(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.workflow", fallback: "Workflow")
+    }
+
+    static func localizedSessionReplay(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.sessionReplay", fallback: "Session Replay")
+    }
+
+    static func localizedEditHistory(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.editHistory", fallback: "Edit History")
+    }
+
+    static func localizedTemplates(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.templates", fallback: "Templates")
+    }
+
+    static func localizedMacros(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.macros", fallback: "Macros")
+    }
+
+    static func localizedDBCloudHelpers(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.add.dbCloudHelpers", fallback: "DB/Cloud Helpers")
+    }
+
+    static func localizedSplitSideBySide(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.splitSideBySide", fallback: "Split Side by Side")
+    }
+
+    static func localizedSplitStacked(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.splitStacked", fallback: "Split Stacked")
+    }
+
+    static func localizedOpenBrowserHere(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openBrowserHere", fallback: "Open Browser Here")
+    }
+
+    static func localizedOpenMarkdown(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openMarkdown", fallback: "Open Markdown")
+    }
+
+    static func localizedOpenTextEditor(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openTextEditor", fallback: "Open Text Editor")
+    }
+
+    static func localizedOpenNotebook(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openNotebook", fallback: "Open Notebook")
+    }
+
+    static func localizedOpenWorkflow(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openWorkflow", fallback: "Open Workflow")
+    }
+
+    static func localizedOpenSessionReplay(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openSessionReplay", fallback: "Open Session Replay")
+    }
+
+    static func localizedOpenEditHistory(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openEditHistory", fallback: "Open Edit History")
+    }
+
+    static func localizedOpenTemplates(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openTemplates", fallback: "Open Templates")
+    }
+
+    static func localizedOpenMacros(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openMacros", fallback: "Open Macros")
+    }
+
+    static func localizedOpenDBCloudHelpers(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.openDBCloudHelpers", fallback: "Open DB/Cloud Helpers")
+    }
+
+    static func localizedBack(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.back", fallback: "Back")
+    }
+
+    static func localizedForward(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.forward", fallback: "Forward")
+    }
+
+    static func localizedReload(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.reload", fallback: "Reload")
+    }
+
+    static func localizedCloseFocusedPane(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.action.closeFocusedPane", fallback: "Close Focused Pane")
+    }
+
+    static func localizedTabRenamePlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("tabbar.tab.renamePlaceholder", fallback: "Tab name")
+    }
+
+    static func localizedPanelRenamePlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.rename.panelPlaceholder", fallback: "Panel name")
     }
 
     // MARK: - Actions
@@ -577,7 +776,7 @@ final class HorizontalTabStripView: NSView {
         let menu = NSMenu()
 
         let sideBySideItem = NSMenuItem(
-            title: "Terminal (Side by Side)",
+            title: Self.localizedTerminalSideBySide(using: localizer),
             action: #selector(addTerminal),
             keyEquivalent: "d"
         )
@@ -589,7 +788,7 @@ final class HorizontalTabStripView: NSView {
         menu.addItem(sideBySideItem)
 
         let stackedItem = NSMenuItem(
-            title: "Terminal (Stacked)",
+            title: Self.localizedTerminalStacked(using: localizer),
             action: #selector(addStackedTerminal),
             keyEquivalent: "d"
         )
@@ -602,70 +801,74 @@ final class HorizontalTabStripView: NSView {
 
         menu.addItem(NSMenuItem.separator())
 
-        let browserItem = NSMenuItem(title: "Browser", action: #selector(addBrowser), keyEquivalent: "")
+        let browserItem = NSMenuItem(
+            title: Self.localizedBrowser(using: localizer),
+            action: #selector(addBrowser),
+            keyEquivalent: ""
+        )
         browserItem.target = self
         if let img = NSImage(systemSymbolName: "globe", accessibilityDescription: nil) {
             browserItem.image = img
         }
         menu.addItem(browserItem)
 
-        let markdownItem = NSMenuItem(title: "Markdown", action: #selector(addMarkdown), keyEquivalent: "")
+        let markdownItem = NSMenuItem(title: Self.localizedMarkdown(using: localizer), action: #selector(addMarkdown), keyEquivalent: "")
         markdownItem.target = self
         if let img = NSImage(systemSymbolName: "doc.text", accessibilityDescription: nil) {
             markdownItem.image = img
         }
         menu.addItem(markdownItem)
 
-        let editorItem = NSMenuItem(title: "Text Editor", action: #selector(addEditor), keyEquivalent: "")
+        let editorItem = NSMenuItem(title: Self.localizedTextEditor(using: localizer), action: #selector(addEditor), keyEquivalent: "")
         editorItem.target = self
         if let img = NSImage(systemSymbolName: "doc.plaintext", accessibilityDescription: nil) {
             editorItem.image = img
         }
         menu.addItem(editorItem)
 
-        let notebookItem = NSMenuItem(title: "Notebook", action: #selector(addNotebook), keyEquivalent: "")
+        let notebookItem = NSMenuItem(title: Self.localizedNotebook(using: localizer), action: #selector(addNotebook), keyEquivalent: "")
         notebookItem.target = self
         if let img = NSImage(systemSymbolName: "book", accessibilityDescription: nil) {
             notebookItem.image = img
         }
         menu.addItem(notebookItem)
 
-        let workflowItem = NSMenuItem(title: "Workflow", action: #selector(addWorkflow), keyEquivalent: "")
+        let workflowItem = NSMenuItem(title: Self.localizedWorkflow(using: localizer), action: #selector(addWorkflow), keyEquivalent: "")
         workflowItem.target = self
         if let img = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil) {
             workflowItem.image = img
         }
         menu.addItem(workflowItem)
 
-        let replayItem = NSMenuItem(title: "Session Replay", action: #selector(addSessionReplay), keyEquivalent: "")
+        let replayItem = NSMenuItem(title: Self.localizedSessionReplay(using: localizer), action: #selector(addSessionReplay), keyEquivalent: "")
         replayItem.target = self
         if let img = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil) {
             replayItem.image = img
         }
         menu.addItem(replayItem)
 
-        let historyItem = NSMenuItem(title: "Edit History", action: #selector(addAIEditHistory), keyEquivalent: "")
+        let historyItem = NSMenuItem(title: Self.localizedEditHistory(using: localizer), action: #selector(addAIEditHistory), keyEquivalent: "")
         historyItem.target = self
         if let img = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil) {
             historyItem.image = img
         }
         menu.addItem(historyItem)
 
-        let templatesItem = NSMenuItem(title: "Templates", action: #selector(addTemplates), keyEquivalent: "")
+        let templatesItem = NSMenuItem(title: Self.localizedTemplates(using: localizer), action: #selector(addTemplates), keyEquivalent: "")
         templatesItem.target = self
         if let img = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil) {
             templatesItem.image = img
         }
         menu.addItem(templatesItem)
 
-        let macrosItem = NSMenuItem(title: "Macros", action: #selector(addMacros), keyEquivalent: "")
+        let macrosItem = NSMenuItem(title: Self.localizedMacros(using: localizer), action: #selector(addMacros), keyEquivalent: "")
         macrosItem.target = self
         if let img = NSImage(systemSymbolName: "keyboard", accessibilityDescription: nil) {
             macrosItem.image = img
         }
         menu.addItem(macrosItem)
 
-        let dbCloudItem = NSMenuItem(title: "DB/Cloud Helpers", action: #selector(addDBCloud), keyEquivalent: "")
+        let dbCloudItem = NSMenuItem(title: Self.localizedDBCloudHelpers(using: localizer), action: #selector(addDBCloud), keyEquivalent: "")
         dbCloudItem.target = self
         if let img = NSImage(systemSymbolName: "externaldrive.connected.to.line.below", accessibilityDescription: nil) {
             dbCloudItem.image = img
@@ -702,13 +905,14 @@ final class HorizontalTabStripView: NSView {
     ///   - panelType: The type of the currently focused panel.
     ///   - canClose: Whether the close action should be shown (requires > 1 panel).
     func updateActionIcons(panelType: PanelType, canClose: Bool) {
+        lastActionIconState = (panelType, canClose)
         actionStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
         // Split actions are available for all panel types.
         actionStack.addArrangedSubview(
             createActionButton(
                 icon: "rectangle.split.2x1",
-                tooltip: "Split Side by Side",
+                tooltip: Self.localizedSplitSideBySide(using: localizer),
                 accessibilityID: "action:splitSideBySide",
                 action: #selector(handleSplitSideBySide)
             )
@@ -716,7 +920,7 @@ final class HorizontalTabStripView: NSView {
         actionStack.addArrangedSubview(
             createActionButton(
                 icon: "rectangle.split.1x2",
-                tooltip: "Split Stacked",
+                tooltip: Self.localizedSplitStacked(using: localizer),
                 accessibilityID: "action:splitStacked",
                 action: #selector(handleSplitStacked)
             )
@@ -727,7 +931,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "globe",
-                    tooltip: "Open Browser Here",
+                    tooltip: Self.localizedOpenBrowserHere(using: localizer),
                     accessibilityID: "action:openBrowser",
                     action: #selector(handleOpenBrowser)
                 )
@@ -735,7 +939,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "doc.text",
-                    tooltip: "Open Markdown",
+                    tooltip: Self.localizedOpenMarkdown(using: localizer),
                     accessibilityID: "action:openMarkdown",
                     action: #selector(handleOpenMarkdown)
                 )
@@ -743,7 +947,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "doc.plaintext",
-                    tooltip: "Open Text Editor",
+                    tooltip: Self.localizedOpenTextEditor(using: localizer),
                     accessibilityID: "action:openEditor",
                     action: #selector(handleOpenEditor)
                 )
@@ -751,7 +955,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "book",
-                    tooltip: "Open Notebook",
+                    tooltip: Self.localizedOpenNotebook(using: localizer),
                     accessibilityID: "action:openNotebook",
                     action: #selector(handleOpenNotebook)
                 )
@@ -759,7 +963,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "arrow.triangle.branch",
-                    tooltip: "Open Workflow",
+                    tooltip: Self.localizedOpenWorkflow(using: localizer),
                     accessibilityID: "action:openWorkflow",
                     action: #selector(handleOpenWorkflow)
                 )
@@ -767,7 +971,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "record.circle",
-                    tooltip: "Open Session Replay",
+                    tooltip: Self.localizedOpenSessionReplay(using: localizer),
                     accessibilityID: "action:openSessionReplay",
                     action: #selector(handleOpenSessionReplay)
                 )
@@ -775,7 +979,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "clock.arrow.circlepath",
-                    tooltip: "Open Edit History",
+                    tooltip: Self.localizedOpenEditHistory(using: localizer),
                     accessibilityID: "action:openAIEditHistory",
                     action: #selector(handleOpenAIEditHistory)
                 )
@@ -783,7 +987,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "square.grid.2x2",
-                    tooltip: "Open Templates",
+                    tooltip: Self.localizedOpenTemplates(using: localizer),
                     accessibilityID: "action:openTemplates",
                     action: #selector(handleOpenTemplates)
                 )
@@ -791,7 +995,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "keyboard",
-                    tooltip: "Open Macros",
+                    tooltip: Self.localizedOpenMacros(using: localizer),
                     accessibilityID: "action:openMacros",
                     action: #selector(handleOpenMacros)
                 )
@@ -799,7 +1003,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "externaldrive.connected.to.line.below",
-                    tooltip: "Open DB/Cloud Helpers",
+                    tooltip: Self.localizedOpenDBCloudHelpers(using: localizer),
                     accessibilityID: "action:openDBCloud",
                     action: #selector(handleOpenDBCloud)
                 )
@@ -808,7 +1012,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "chevron.left",
-                    tooltip: "Back",
+                    tooltip: Self.localizedBack(using: localizer),
                     accessibilityID: "action:goBack",
                     action: #selector(handleGoBack)
                 )
@@ -816,7 +1020,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "chevron.right",
-                    tooltip: "Forward",
+                    tooltip: Self.localizedForward(using: localizer),
                     accessibilityID: "action:goForward",
                     action: #selector(handleGoForward)
                 )
@@ -824,7 +1028,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "arrow.clockwise",
-                    tooltip: "Reload",
+                    tooltip: Self.localizedReload(using: localizer),
                     accessibilityID: "action:reload",
                     action: #selector(handleReload)
                 )
@@ -837,7 +1041,7 @@ final class HorizontalTabStripView: NSView {
             actionStack.addArrangedSubview(
                 createActionButton(
                     icon: "rectangle.badge.xmark",
-                    tooltip: "Close Focused Pane",
+                    tooltip: Self.localizedCloseFocusedPane(using: localizer),
                     accessibilityID: "action:closePanel",
                     action: #selector(handleClosePanel)
                 )
@@ -934,6 +1138,9 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
     /// Semantic meaning of the item represented by this container.
     var itemKind: HorizontalTabStripView.ItemKind = .panel
 
+    /// Localizer copied from the owning strip when the container is created.
+    var localizer = AppLocalizer(languagePreference: .english)
+
     /// Callback invoked when a tab is dropped onto this container.
     /// Parameters: (sourceIndex, destinationIndex).
     var onReorder: ((Int, Int) -> Void)?
@@ -980,7 +1187,7 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
         for subview in subviews where subview is NSButton {
             let btnPoint = subview.convert(point, from: superview)
             if subview.bounds.contains(btnPoint),
-               Self.isCloseButtonLabel(subview.accessibilityLabel()) {
+               Self.isCloseButton(subview) {
                 return subview
             }
         }
@@ -1004,6 +1211,11 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
     /// container.
     static func isCloseButtonLabel(_ label: String?) -> Bool {
         label == "Close tab" || label == "Close panel"
+    }
+
+    static func isCloseButton(_ view: NSView) -> Bool {
+        view.accessibilityIdentifier() == "horizontalTab.close"
+            || isCloseButtonLabel(view.accessibilityLabel())
     }
 
     // MARK: - Click vs Drag Detection
@@ -1036,7 +1248,7 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
                 // Short click — find the tab button and trigger its action.
                 for subview in subviews where subview is NSButton {
                     if let btn = subview as? NSButton,
-                       !Self.isCloseButtonLabel(btn.accessibilityLabel()) {
+                       !Self.isCloseButton(btn) {
                         btn.performClick(nil)
                         return
                     }
@@ -1126,7 +1338,9 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
         RenameSheetController.present(
             on: parentWindow,
             currentName: currentTitle,
-            placeholder: itemKind == .workspaceTab ? "Tab name" : "Panel name",
+            placeholder: itemKind == .workspaceTab
+                ? HorizontalTabStripView.localizedTabRenamePlaceholder(using: localizer)
+                : HorizontalTabStripView.localizedPanelRenamePlaceholder(using: localizer),
             icon: itemKind == .workspaceTab ? "terminal.fill" : "rectangle.split.2x1"
         ) { [weak self] newTitle in
             self?.isEditing = false
@@ -1140,7 +1354,7 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
     private func currentTabButtonTitle() -> String {
         for subview in subviews where subview is NSButton {
             if let btn = subview as? NSButton,
-               !Self.isCloseButtonLabel(btn.accessibilityLabel()) {
+               !Self.isCloseButton(btn) {
                 return btn.title.trimmingCharacters(in: .whitespaces)
             }
         }

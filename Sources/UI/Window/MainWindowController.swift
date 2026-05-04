@@ -937,6 +937,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             frame: NSRect(x: 0, y: container.bounds.height - stripH,
                           width: container.bounds.width, height: stripH)
         )
+        strip.updateLocalizer(appLocalizer())
         strip.autoresizingMask = [.width, .minYMargin]
         strip.onAddTab = { [weak self] in self?.performVisualSplit(isVertical: true) }
         strip.onAddStackedTerminal = { [weak self] in self?.performVisualSplit(isVertical: false) }
