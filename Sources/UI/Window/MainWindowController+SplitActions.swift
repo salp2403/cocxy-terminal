@@ -312,9 +312,10 @@ extension MainWindowController {
             let workspaceDir = panel.filePath ?? workspaceDirectory(for: tabID) ?? workspaceDirectoryForCurrentTab()
             let viewModel = ProjectTemplatePanelViewModel(
                 registry: .localDefault(projectRoot: workspaceDir),
-                destinationRootURL: workspaceDir
+                destinationRootURL: workspaceDir,
+                localizer: appLocalizer()
             )
-            let view = ProjectTemplatePanelView(viewModel: viewModel) { [weak self] in
+            let view = ProjectTemplatePanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             return NSHostingView(rootView: view)

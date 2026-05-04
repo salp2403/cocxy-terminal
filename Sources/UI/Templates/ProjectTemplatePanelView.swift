@@ -4,12 +4,26 @@
 import SwiftUI
 
 struct ProjectTemplatePanelView: View {
-    @StateObject private var viewModel: ProjectTemplatePanelViewModel
+    @ObservedObject private var viewModel: ProjectTemplatePanelViewModel
+    var localizer: AppLocalizer
     let onClose: (() -> Void)?
 
-    init(viewModel: ProjectTemplatePanelViewModel, onClose: (() -> Void)? = nil) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    init(
+        viewModel: ProjectTemplatePanelViewModel,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        onClose: (() -> Void)? = nil
+    ) {
+        _viewModel = ObservedObject(wrappedValue: viewModel)
+        self.localizer = localizer
         self.onClose = onClose
+        viewModel.updateLocalizer(localizer)
+    }
+
+    func updatedLocalizer(_ localizer: AppLocalizer) -> ProjectTemplatePanelView {
+        var copy = self
+        copy.localizer = localizer
+        viewModel.updateLocalizer(localizer)
+        return copy
     }
 
     var body: some View {
@@ -36,7 +50,7 @@ struct ProjectTemplatePanelView: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Label("Templates", systemImage: "square.grid.2x2")
+            Label(localized("templates.title", fallback: "Templates"), systemImage: "square.grid.2x2")
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
 
@@ -59,7 +73,7 @@ struct ProjectTemplatePanelView: View {
                     try viewModel.refresh()
                 }
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label(localized("templates.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
             }
             .controlSize(.small)
 
@@ -68,7 +82,7 @@ struct ProjectTemplatePanelView: View {
                     try viewModel.scaffoldSelected()
                 }
             } label: {
-                Label("Scaffold", systemImage: "plus.square.on.square")
+                Label(localized("templates.scaffold", fallback: "Scaffold"), systemImage: "plus.square.on.square")
             }
             .controlSize(.small)
             .disabled(viewModel.selectedTemplate == nil)
@@ -78,7 +92,8 @@ struct ProjectTemplatePanelView: View {
                     Image(systemName: "xmark")
                 }
                 .controlSize(.small)
-                .help("Close")
+                .help(localized("common.close", fallback: "Close"))
+                .accessibilityLabel(localized("templates.close", fallback: "Close templates"))
             }
         }
         .padding(.horizontal, 10)
@@ -92,14 +107,14 @@ struct ProjectTemplatePanelView: View {
                 set: { viewModel.select(templateID: $0) }
             )) {
                 ForEach(viewModel.templates) { template in
-                    ProjectTemplateRow(template: template)
+                    ProjectTemplateRow(template: template, localizer: localizer)
                         .tag(Optional(template.id))
                 }
             }
             .listStyle(.sidebar)
 
             if viewModel.templates.isEmpty {
-                Text("No templates")
+                Text(localized("templates.status.noTemplates", fallback: "No templates"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 12)
@@ -123,10 +138,10 @@ struct ProjectTemplatePanelView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Destination")
+                        Text(localized("templates.destination", fallback: "Destination"))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.secondary)
-                        TextField("Folder name", text: $viewModel.destinationName)
+                        TextField(localized("templates.folderName", fallback: "Folder name"), text: $viewModel.destinationName)
                             .textFieldStyle(.roundedBorder)
                         Text(viewModel.destinationRootURL.path)
                             .font(.system(size: 10, design: .monospaced))
@@ -136,13 +151,14 @@ struct ProjectTemplatePanelView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Variables")
+                        Text(localized("templates.variables", fallback: "Variables"))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.secondary)
 
                         ForEach(viewModel.selectedVariables, id: \.name) { variable in
                             ProjectTemplateVariableField(
                                 variable: variable,
+                                localizer: localizer,
                                 value: Binding(
                                     get: { viewModel.value(for: variable.name) },
                                     set: { viewModel.setValue($0, for: variable.name) }
@@ -154,7 +170,7 @@ struct ProjectTemplatePanelView: View {
                     if !viewModel.createdFiles.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             ProgressView(value: viewModel.progress)
-                            Text("Created Files")
+                            Text(localized("templates.createdFiles", fallback: "Created Files"))
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
                             ForEach(viewModel.createdFiles, id: \.self) { file in
@@ -167,7 +183,7 @@ struct ProjectTemplatePanelView: View {
 
                     if !viewModel.pendingHookCommands.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Pending Hooks")
+                            Text(localized("templates.pendingHooks", fallback: "Pending Hooks"))
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
                             ForEach(viewModel.pendingHookCommands, id: \.self) { command in
@@ -188,7 +204,7 @@ struct ProjectTemplatePanelView: View {
         } else {
             VStack {
                 Spacer()
-                Text("No template selected")
+                Text(localized("templates.empty.noSelection", fallback: "No template selected"))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -196,10 +212,15 @@ struct ProjectTemplatePanelView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 private struct ProjectTemplateRow: View {
     let template: ProjectTemplatePresentation
+    let localizer: AppLocalizer
 
     var body: some View {
         HStack(spacing: 10) {
@@ -210,17 +231,26 @@ private struct ProjectTemplateRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(template.name)
                     .lineLimit(1)
-                Text("\(template.source.rawValue) - \(template.variableCount) vars")
+                Text(rowDetail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }
     }
+
+    private var rowDetail: String {
+        String(
+            format: localizer.string("templates.row.detail", fallback: "%@ - %d vars"),
+            template.source.localizedTitle(using: localizer),
+            template.variableCount
+        )
+    }
 }
 
 private struct ProjectTemplateVariableField: View {
     let variable: ProjectTemplateVariable
+    let localizer: AppLocalizer
     @Binding var value: String
 
     var body: some View {
@@ -229,7 +259,7 @@ private struct ProjectTemplateVariableField: View {
                 Text(variable.prompt)
                     .font(.system(size: 11, weight: .medium))
                 if variable.required {
-                    Text("Required")
+                    Text(localizer.string("templates.variable.required", fallback: "Required"))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }

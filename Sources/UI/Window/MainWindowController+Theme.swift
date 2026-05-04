@@ -76,6 +76,7 @@ extension MainWindowController {
         updateSessionReplayPanelLocalizers(localizer)
         updateAIEditHistoryPanelLocalizers(localizer)
         updateDBCloudHelperPanelLocalizers(localizer)
+        updateProjectTemplatePanelLocalizers(localizer)
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
@@ -244,6 +245,22 @@ extension MainWindowController {
         for panelViews in savedTabPanelContentViews.values {
             for view in panelViews.values {
                 if let hostingView = view as? NSHostingView<DBCloudHelperPanelView> {
+                    hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+                }
+            }
+        }
+    }
+
+    private func updateProjectTemplatePanelLocalizers(_ localizer: AppLocalizer) {
+        for view in panelContentViews.values {
+            if let hostingView = view as? NSHostingView<ProjectTemplatePanelView> {
+                hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+            }
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                if let hostingView = view as? NSHostingView<ProjectTemplatePanelView> {
                     hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
                 }
             }

@@ -7,6 +7,17 @@ enum ProjectTemplateSource: String, Sendable, Codable, Equatable {
     case builtIn = "built-in"
     case user
     case project
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .builtIn:
+            return localizer.string("templates.source.builtIn", fallback: rawValue)
+        case .user:
+            return localizer.string("templates.source.user", fallback: rawValue)
+        case .project:
+            return localizer.string("templates.source.project", fallback: rawValue)
+        }
+    }
 }
 
 struct ProjectTemplateDirectory: Sendable, Equatable {

@@ -76,11 +76,55 @@ struct ProjectTemplatePanelViewModelSwiftTestingTests {
         ) == "# Generated\n")
     }
 
+    @Test("Spanish localizer updates template panel statuses")
+    func spanishLocalizerUpdatesTemplatePanelStatuses() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let templatesRoot = root.appendingPathComponent("templates", isDirectory: true)
+        let outputRoot = root.appendingPathComponent("output", isDirectory: true)
+        try writeTemplate(
+            id: "swift-package",
+            name: "Swift Package",
+            summary: "Create a Swift package",
+            files: ["README.md": "# {{project_name}}\n"],
+            in: templatesRoot
+        )
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let viewModel = ProjectTemplatePanelViewModel(
+            registry: ProjectTemplateRegistry(
+                directories: [ProjectTemplateDirectory(url: templatesRoot, source: .builtIn)]
+            ),
+            destinationRootURL: outputRoot,
+            localizer: spanish
+        )
+
+        try viewModel.refresh()
+
+        #expect(ProjectTemplateSource.builtIn.localizedTitle(using: spanish) == "incluida")
+        #expect(viewModel.statusText == "1 plantilla")
+
+        viewModel.destinationName = "Generado"
+        viewModel.setValue("Generado", for: "project_name")
+        try viewModel.scaffoldSelected()
+
+        #expect(viewModel.statusText == "1 archivo creado")
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.statusText == "Created 1 file")
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-template-panel-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 
     private func writeTemplate(
