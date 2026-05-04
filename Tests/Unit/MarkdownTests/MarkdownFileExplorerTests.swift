@@ -145,6 +145,33 @@ struct MarkdownFileExplorerTests {
         #expect(!FileManager.default.fileExists(atPath: original.path))
     }
 
+    @Test("deferred root scan waits until the explorer is attached to a window")
+    func deferredRootScanWaitsUntilVisible() throws {
+        let dir = createTempDir()
+        defer { cleanup(dir) }
+
+        try "# Hello".write(to: dir.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+
+        let view = MarkdownFileExplorerView()
+        view.setRootDirectory(dir, deferUntilVisible: true)
+
+        #expect(view.rootDirectory == dir)
+        #expect(view.rootNodesForTesting.isEmpty)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let contentView = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = contentView
+        contentView.addSubview(view)
+
+        #expect(view.rootNodesForTesting.count == 1)
+        #expect(view.rootNodesForTesting.first?.name == "README.md")
+    }
+
     @Test("deleteItem moves a file to trash")
     func deleteItemMovesFileToTrash() throws {
         let dir = createTempDir()

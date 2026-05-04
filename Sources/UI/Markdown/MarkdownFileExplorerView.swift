@@ -20,6 +20,7 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
     private var dataSource: FileTreeDataSource?
     private var delegateObject: FileTreeDelegate?
     private var localizer: AppLocalizer
+    private var pendingRootDirectoryForVisibleLoad: URL?
 
     /// Invoked when a file is clicked. The URL points to the selected .md file.
     var onFileSelected: ((URL) -> Void)?
@@ -38,6 +39,10 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
     /// Root directory to browse.
     private(set) var rootDirectory: URL?
 
+    internal var rootNodesForTesting: [FileTreeNode] {
+        dataSource?.rootNodes ?? []
+    }
+
     // MARK: - Init
 
     init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
@@ -53,9 +58,33 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
 
     // MARK: - Public API
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            loadPendingRootDirectoryIfNeeded()
+        }
+    }
+
     /// Sets the root directory and scans for markdown files.
-    func setRootDirectory(_ url: URL) {
+    func setRootDirectory(_ url: URL, deferUntilVisible: Bool = false) {
         rootDirectory = url
+        if deferUntilVisible, window == nil {
+            pendingRootDirectoryForVisibleLoad = url
+            dataSource?.rootNodes = []
+            outlineView.reloadData()
+            return
+        }
+        rebuildTree(from: url)
+    }
+
+    private func loadPendingRootDirectoryIfNeeded() {
+        guard let pending = pendingRootDirectoryForVisibleLoad else { return }
+        pendingRootDirectoryForVisibleLoad = nil
+        rebuildTree(from: pending)
+    }
+
+    private func rebuildTree(from url: URL) {
+        pendingRootDirectoryForVisibleLoad = nil
         let tree = FileTreeNode.buildTree(from: url)
         dataSource?.rootNodes = tree
         outlineView.reloadData()

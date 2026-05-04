@@ -192,7 +192,7 @@ final class MarkdownContentView: NSView {
             effectiveRoot = fileDir
         }
         if sidebar.fileExplorer.rootDirectory != effectiveRoot {
-            sidebar.fileExplorer.setRootDirectory(effectiveRoot)
+            sidebar.fileExplorer.setRootDirectory(effectiveRoot, deferUntilVisible: window == nil)
             sidebar.searchView.rootDirectory = effectiveRoot
         }
         sidebar.fileExplorer.activeFilePath = url
@@ -524,7 +524,7 @@ final class MarkdownContentView: NSView {
 
     private func configureWorkspaceSidebarForEmptyState() {
         guard let workspaceDirectory else { return }
-        sidebar.fileExplorer.setRootDirectory(workspaceDirectory)
+        sidebar.fileExplorer.setRootDirectory(workspaceDirectory, deferUntilVisible: window == nil)
         sidebar.searchView.rootDirectory = workspaceDirectory
         sidebar.fileExplorer.activeFilePath = nil
         sidebar.selectTab(.files)
