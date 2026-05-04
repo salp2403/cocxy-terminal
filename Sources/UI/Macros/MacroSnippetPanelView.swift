@@ -5,6 +5,8 @@ import SwiftUI
 
 struct MacroSnippetPanelView: View {
     @StateObject private var viewModel: MacroSnippetPanelViewModel
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.designThemePalette) private var designPalette
     var localizer: AppLocalizer
     let onClose: (() -> Void)?
 
@@ -335,7 +337,7 @@ struct MacroSnippetPanelView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
-                        .background(Color(nsColor: CocxyColors.surface0))
+                        .background(panelSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
             }
@@ -372,6 +374,13 @@ struct MacroSnippetPanelView: View {
             }
         }
         .padding(14)
+    }
+
+    private var panelSurface: Color {
+        Design
+            .panelPalette(for: colorScheme, current: designPalette)
+            .backgroundSecondary
+            .resolvedColor()
     }
 
     private func eventList(title: String, rows: [String]) -> some View {

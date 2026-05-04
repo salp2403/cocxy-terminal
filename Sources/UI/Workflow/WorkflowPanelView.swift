@@ -107,6 +107,8 @@ struct WorkflowPanelView: View {
 }
 
 private struct WorkflowStepPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.designThemePalette) private var designPalette
     let step: WorkflowStepPresentation
 
     var body: some View {
@@ -127,11 +129,11 @@ private struct WorkflowStepPanel: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
-                .background(Color(nsColor: CocxyColors.surface0))
+                .background(panelSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 
             if !step.stdout.isEmpty {
-                outputText(step.stdout, background: Color(nsColor: CocxyColors.surface1))
+                outputText(step.stdout, background: panelSurfaceElevated)
             }
 
             if !step.stderr.isEmpty {
@@ -162,5 +164,17 @@ private struct WorkflowStepPanel: View {
             .padding(8)
             .background(background)
             .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var panelPalette: Design.ThemePalette {
+        Design.panelPalette(for: colorScheme, current: designPalette)
+    }
+
+    private var panelSurface: Color {
+        panelPalette.backgroundSecondary.resolvedColor()
+    }
+
+    private var panelSurfaceElevated: Color {
+        panelPalette.backgroundTertiary.resolvedColor()
     }
 }

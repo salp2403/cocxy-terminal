@@ -224,6 +224,8 @@ private struct AIEditFileSummaryRow: View {
 }
 
 private struct AIEditDiffView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.designThemePalette) private var designPalette
     let change: AIEditChange
     let localizer: AppLocalizer
 
@@ -259,10 +261,17 @@ private struct AIEditDiffView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
             }
-            .background(Color(nsColor: CocxyColors.surface0))
+            .background(panelSurface)
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .frame(minWidth: 160)
+    }
+
+    private var panelSurface: Color {
+        Design
+            .panelPalette(for: colorScheme, current: designPalette)
+            .backgroundSecondary
+            .resolvedColor()
     }
 }
 

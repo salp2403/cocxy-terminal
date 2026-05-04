@@ -3,14 +3,35 @@
 
 import SwiftUI
 
+extension Design {
+    static func panelPalette(for colorScheme: ColorScheme, current palette: ThemePalette) -> ThemePalette {
+        if colorScheme == .light, palette == .aurora {
+            return .paper
+        }
+        return palette
+    }
+}
+
 extension View {
     /// Applies the Aurora glass primitive as the full bounds background for
     /// split-pane and overlay panels that should not create an additional card.
     func glassPanelBackground() -> some View {
         background {
-            Design.GlassSurface(shape: Rectangle()) {
+            Design.PanelGlassBackground()
+        }
+    }
+}
+
+extension Design {
+    struct PanelGlassBackground: View {
+        @Environment(\.colorScheme) private var colorScheme
+        @Environment(\.designThemePalette) private var palette
+
+        var body: some View {
+            GlassSurface(shape: Rectangle()) {
                 Color.clear
             }
+            .designThemePalette(Design.panelPalette(for: colorScheme, current: palette))
         }
     }
 }

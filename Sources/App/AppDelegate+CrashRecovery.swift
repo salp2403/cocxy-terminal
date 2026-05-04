@@ -58,7 +58,8 @@ extension AppDelegate {
 
     func presentCrashRecoveryOfferIfNeeded() {
         guard let snapshot = pendingCrashRecoverySnapshot else { return }
-        guard let controller = windowController else { return }
+        guard let controller = windowController,
+              let window = controller.window else { return }
         pendingCrashRecoverySnapshot = nil
 
         let alert = NSAlert()
@@ -69,8 +70,15 @@ extension AppDelegate {
         alert.addButton(withTitle: copy.primaryButton)
         alert.addButton(withTitle: copy.secondaryButton)
 
-        if alert.runModal() == .alertFirstButtonReturn {
-            _ = restoreSession(snapshot.session, into: controller)
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        alert.beginSheetModal(for: window) { [weak self, weak controller] response in
+            guard response == .alertFirstButtonReturn,
+                  let self,
+                  let controller else { return }
+            _ = self.restoreSession(snapshot.session, into: controller)
         }
     }
 }

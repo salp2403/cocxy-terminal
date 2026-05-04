@@ -1660,6 +1660,48 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testHostedWorkspacePanelsTrackAuroraThemeAppearance() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithMacrosAction(nil)
+
+        guard let splitManager = controller.activeSplitManager,
+              let macrosLeaf = splitManager.rootNode.allLeafIDs().first(where: {
+                  splitManager.panelType(for: $0.terminalID) == .macros
+              }),
+              let macrosPanel = controller.panelContentViews[macrosLeaf.terminalID] else {
+            XCTFail("Expected macros panel leaf")
+            return
+        }
+
+        XCTAssertEqual(
+            macrosPanel.appearance?.name,
+            NSAppearance.Name.darkAqua,
+            "Hosted workspace panels should start on the dark Aurora appearance."
+        )
+
+        controller.syncAuroraDesignTheme(for: .light)
+
+        XCTAssertEqual(
+            macrosPanel.appearance?.name,
+            NSAppearance.Name.aqua,
+            "Hosted workspace panels must repaint AppKit-backed SwiftUI controls when the user toggles a light theme."
+        )
+
+        controller.syncAuroraDesignTheme(for: .dark)
+
+        XCTAssertEqual(
+            macrosPanel.appearance?.name,
+            NSAppearance.Name.darkAqua,
+            "Hosted workspace panels must return to the dark appearance with dark themes."
+        )
+    }
+
     func testMacroPlaybackPlanSendsEventsToTargetTerminalSurface() throws {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

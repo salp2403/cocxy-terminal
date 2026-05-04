@@ -8,6 +8,7 @@
 // Swift source as the redesign evolves.
 
 import Foundation
+import SwiftUI
 import Testing
 @testable import CocxyTerminal
 
@@ -35,6 +36,13 @@ struct DesignTokensSwiftTestingTests {
         #expect(Design.ThemeIdentity.aurora.prefersDarkAppearance == true)
         #expect(Design.ThemeIdentity.paper.prefersDarkAppearance == false)
         #expect(Design.ThemeIdentity.nocturne.prefersDarkAppearance == true)
+    }
+
+    @Test("Glass panel fallback palette follows the active color scheme")
+    func glassPanelFallbackPaletteFollowsColorScheme() {
+        #expect(Design.panelPalette(for: .light, current: .aurora) == .paper)
+        #expect(Design.panelPalette(for: .dark, current: .aurora) == .aurora)
+        #expect(Design.panelPalette(for: .light, current: .nocturne) == .nocturne)
     }
 
     // MARK: - OKLCH helpers

@@ -107,6 +107,8 @@ struct NotebookPanelView: View {
 }
 
 private struct NotebookCellPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.designThemePalette) private var designPalette
     let cell: NotebookCellPresentation
 
     var body: some View {
@@ -126,7 +128,7 @@ private struct NotebookCellPanel: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
-                .background(Color(nsColor: CocxyColors.surface0))
+                .background(panelSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 
             ForEach(cell.outputs) { output in
@@ -144,9 +146,21 @@ private struct NotebookCellPanel: View {
     private func outputBackground(for kind: NotebookCellOutputKind) -> Color {
         switch kind {
         case .stdout, .displayData:
-            return Color(nsColor: CocxyColors.surface1)
+            return panelSurfaceElevated
         case .stderr, .error:
             return Color(nsColor: CocxyColors.red.withAlphaComponent(0.16))
         }
+    }
+
+    private var panelPalette: Design.ThemePalette {
+        Design.panelPalette(for: colorScheme, current: designPalette)
+    }
+
+    private var panelSurface: Color {
+        panelPalette.backgroundSecondary.resolvedColor()
+    }
+
+    private var panelSurfaceElevated: Color {
+        panelPalette.backgroundTertiary.resolvedColor()
     }
 }

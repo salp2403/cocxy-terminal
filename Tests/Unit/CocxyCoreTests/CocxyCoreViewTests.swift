@@ -174,6 +174,33 @@ struct CocxyCoreViewTests {
         #expect(harness.view.needsRender == false)
     }
 
+    @Test("display link coalesces render requests while a frame is scheduled")
+    func displayLinkCoalescesScheduledRenderRequests() {
+        let view = CocxyCoreView(viewModel: TerminalViewModel())
+
+        #expect(view.claimRenderSlotForDisplayLink() == false)
+
+        view.needsRender = true
+        #expect(view.claimRenderSlotForDisplayLink() == true)
+        #expect(view.renderScheduled == true)
+        #expect(view.claimRenderSlotForDisplayLink() == false)
+
+        view.finishRenderSlotForDisplayLink()
+
+        #expect(view.renderScheduled == false)
+        #expect(view.claimRenderSlotForDisplayLink() == true)
+    }
+
+    @Test("display link stays stopped while the terminal view is detached")
+    func displayLinkStaysStoppedWhileViewIsDetached() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+
+        #expect(harness.view.isDisplayLinkRunningForTests == false)
+        harness.view.requestImmediateRedraw()
+        #expect(harness.view.isDisplayLinkRunningForTests == false)
+    }
+
     @Test("backing CAMetalLayer is opaque so translucent windows do not bleed through the terminal")
     func backingMetalLayerIsOpaque() {
         // Regression for the "transparent shell on agent launch" bug: when
@@ -194,6 +221,36 @@ struct CocxyCoreViewTests {
 
         #expect(metalLayer != nil)
         #expect(metalLayer?.isOpaque == true)
+        #expect(metalLayer?.backgroundColor != nil)
+        #expect(metalLayer?.backgroundColor?.alpha == 1.0)
+    }
+
+    @Test("configure applies the terminal theme background before the first Metal frame")
+    func configureAppliesTerminalThemeBackgroundFallback() throws {
+        let palette = makeTerminalPalette(background: "#112233")
+        let bridge = CocxyCoreBridge()
+        try bridge.initialize(config: makeTerminalConfig(themePalette: palette))
+        let viewModel = TerminalViewModel(engine: bridge)
+        let view = CocxyCoreView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 200, height: 120)
+        _ = view.layer
+
+        let surfaceID = try bridge.createSurface(
+            in: view,
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+            command: "/bin/cat"
+        )
+        defer { bridge.destroySurface(surfaceID) }
+
+        viewModel.markRunning(surfaceID: surfaceID)
+        view.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+
+        let color = try #require(view.layer?.backgroundColor)
+        let nsColor = try #require(NSColor(cgColor: color)?.usingColorSpace(.sRGB))
+        #expect(abs(nsColor.redComponent - (0x11 / 255.0)) < 0.001)
+        #expect(abs(nsColor.greenComponent - (0x22 / 255.0)) < 0.001)
+        #expect(abs(nsColor.blueComponent - (0x33 / 255.0)) < 0.001)
+        #expect(nsColor.alphaComponent == 1.0)
     }
 
     @Test("surface state carries a usable terminal lock for render serialization")
@@ -344,4 +401,41 @@ private func makeKeyEvent(
         isARepeat: false,
         keyCode: 15
     )!
+}
+
+private func makeTerminalConfig(themePalette: ThemePalette? = nil) -> TerminalEngineConfig {
+    TerminalEngineConfig(
+        fontFamily: "Menlo",
+        fontSize: 14,
+        themeName: "Test",
+        shell: "/bin/zsh",
+        workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+        themePalette: themePalette,
+        windowPaddingX: 8,
+        windowPaddingY: 4
+    )
+}
+
+private func makeTerminalPalette(background: String) -> ThemePalette {
+    ThemePalette(
+        background: background,
+        foreground: "#cdd6f4",
+        cursor: "#f5e0dc",
+        selectionBackground: "#585b70",
+        selectionForeground: "#cdd6f4",
+        tabActiveBackground: background,
+        tabActiveForeground: "#cdd6f4",
+        tabInactiveBackground: "#181825",
+        tabInactiveForeground: "#6c7086",
+        badgeAttention: "#f9e2af",
+        badgeCompleted: "#a6e3a1",
+        badgeError: "#f38ba8",
+        badgeWorking: "#89b4fa",
+        ansiColors: [
+            "#45475a", "#f38ba8", "#a6e3a1", "#f9e2af",
+            "#89b4fa", "#f5c2e7", "#94e2d5", "#bac2de",
+            "#585b70", "#f38ba8", "#a6e3a1", "#f9e2af",
+            "#89b4fa", "#f5c2e7", "#94e2d5", "#a6adc8"
+        ]
+    )
 }

@@ -994,6 +994,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             height: outerContainer.bounds.height - stripH
         ))
         terminalArea.autoresizingMask = [.width, .height]
+        terminalArea.wantsLayer = true
+        terminalArea.layer?.backgroundColor = (window?.backgroundColor ?? CocxyColors.base).cgColor
         outerContainer.addSubview(terminalArea)
         self.terminalContainerView = terminalArea
 

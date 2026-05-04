@@ -411,6 +411,7 @@ extension MainWindowController {
             return
         }
 
+        applyCurrentAuroraAppearance(to: panelView)
         panelContentViews[contentID] = panelView
 
         if appendToEnd, let tabID = currentTabID {

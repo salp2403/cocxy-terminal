@@ -1035,6 +1035,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyThemeUI(_ wc: MainWindowController, palette: ThemePalette) {
         let backgroundColor = CodableColor(hex: palette.background).nsColor
         wc.window?.backgroundColor = backgroundColor
+        wc.terminalContainerView?.layer?.backgroundColor = backgroundColor.cgColor
         wc.tabBarViewModel?.syncWithManager()
         wc.refreshStatusBar()
 

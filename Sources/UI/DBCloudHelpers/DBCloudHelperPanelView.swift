@@ -5,6 +5,8 @@ import SwiftUI
 
 struct DBCloudHelperPanelView: View {
     @ObservedObject private var viewModel: DBCloudHelperPanelViewModel
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.designThemePalette) private var designPalette
     var localizer: AppLocalizer
     private let onClose: () -> Void
 
@@ -68,6 +70,26 @@ struct DBCloudHelperPanelView: View {
         .padding(.vertical, 10)
     }
 
+    private var panelPalette: Design.ThemePalette {
+        Design.panelPalette(for: colorScheme, current: designPalette)
+    }
+
+    private var panelSurface: Color {
+        panelPalette.backgroundSecondary.resolvedColor()
+    }
+
+    private var panelSurfaceElevated: Color {
+        panelPalette.backgroundTertiary.resolvedColor()
+    }
+
+    private var panelDivider: Color {
+        panelPalette.divider.resolvedColor()
+    }
+
+    private var panelAccent: Color {
+        panelPalette.accent.resolvedColor()
+    }
+
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker(localized("dbCloud.kindPicker", fallback: "Kind"), selection: $viewModel.selectedKind) {
@@ -113,11 +135,11 @@ struct DBCloudHelperPanelView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: descriptor.id == viewModel.selectedHelperID ? CocxyColors.surface1 : CocxyColors.surface0))
+                .fill(descriptor.id == viewModel.selectedHelperID ? panelSurfaceElevated : panelSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(nsColor: descriptor.id == viewModel.selectedHelperID ? CocxyColors.blue : CocxyColors.surface2), lineWidth: 1)
+                .stroke(descriptor.id == viewModel.selectedHelperID ? panelAccent : panelDivider, lineWidth: 1)
         )
     }
 
@@ -142,7 +164,7 @@ struct DBCloudHelperPanelView: View {
                         .textSelection(.enabled)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(nsColor: CocxyColors.surface0))
+                        .background(panelSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
@@ -180,7 +202,7 @@ struct DBCloudHelperPanelView: View {
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 110)
                 .scrollContentBackground(.hidden)
-                .background(Color(nsColor: CocxyColors.surface0))
+                .background(panelSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case "cocxy-db-sqlite":
             TextField(
@@ -192,7 +214,7 @@ struct DBCloudHelperPanelView: View {
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 110)
                 .scrollContentBackground(.hidden)
-                .background(Color(nsColor: CocxyColors.surface0))
+                .background(panelSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case "cocxy-aws-cli-helper":
             TextField(localized("dbCloud.field.awsProfile", fallback: "AWS profile"), text: $viewModel.awsProfile)
@@ -222,7 +244,7 @@ struct DBCloudHelperPanelView: View {
                     .padding(10)
             }
             .frame(minHeight: 120)
-            .background(Color(nsColor: CocxyColors.surface0))
+            .background(panelSurface)
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }

@@ -5,6 +5,8 @@ import SwiftUI
 
 struct ProjectTemplatePanelView: View {
     @ObservedObject private var viewModel: ProjectTemplatePanelViewModel
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.designThemePalette) private var designPalette
     var localizer: AppLocalizer
     let onClose: (() -> Void)?
 
@@ -122,6 +124,13 @@ struct ProjectTemplatePanelView: View {
         }
     }
 
+    private var panelSurface: Color {
+        Design
+            .panelPalette(for: colorScheme, current: designPalette)
+            .backgroundSecondary
+            .resolvedColor()
+    }
+
     @ViewBuilder
     private var detailPane: some View {
         if let template = viewModel.selectedTemplate {
@@ -192,7 +201,7 @@ struct ProjectTemplatePanelView: View {
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(8)
-                                    .background(Color(nsColor: CocxyColors.surface0))
+                                    .background(panelSurface)
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
                         }

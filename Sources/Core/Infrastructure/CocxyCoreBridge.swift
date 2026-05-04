@@ -467,6 +467,24 @@ final class CocxyCoreBridge: TerminalEngine {
     /// All active surface IDs (for bulk operations like theme change).
     var allSurfaceIDs: [SurfaceID] { Array(surfaces.keys) }
 
+    /// Opaque terminal background resolved from the active engine defaults.
+    ///
+    /// Host views use this as their layer fallback before Metal presents the
+    /// first frame, which keeps heavy session restore from briefly showing a
+    /// transparent terminal surface.
+    var configuredTerminalBackgroundColor: NSColor {
+        guard let background = config?.themePalette?.background else {
+            return CocxyColors.base
+        }
+        let rgb = Self.parseHexColor(background)
+        return NSColor(
+            srgbRed: CGFloat(rgb.r) / 255.0,
+            green: CGFloat(rgb.g) / 255.0,
+            blue: CGFloat(rgb.b) / 255.0,
+            alpha: 1.0
+        )
+    }
+
     /// Current horizontal content padding in points.
     var configuredPaddingX: CGFloat { CGFloat(config?.windowPaddingX ?? 8.0) }
 
@@ -2457,6 +2475,37 @@ final class CocxyCoreBridge: TerminalEngine {
                 columnCount: cols
             )
         }
+    }
+
+    /// Snapshot only the newest non-empty history lines without materializing
+    /// the full scrollback. Use this for periodic UI recovery paths where the
+    /// caller only needs recent launch markers and blank viewport rows at the
+    /// live bottom are noise.
+    func historyTailLines(for surface: SurfaceID, maxCount: Int) -> [String] {
+        guard maxCount > 0,
+              let state = surfaces[surface] else { return [] }
+
+        let rowCount = Int(cocxycore_terminal_history_rows(state.terminal))
+        let cols = cocxycore_terminal_cols(state.terminal)
+        guard rowCount > 0, cols > 0 else { return [] }
+
+        var lines: [String] = []
+        lines.reserveCapacity(min(maxCount, rowCount))
+
+        var rowIndex = rowCount - 1
+        while rowIndex >= 0, lines.count < maxCount {
+            let line = historyLineText(
+                terminal: state.terminal,
+                absoluteRow: UInt32(rowIndex),
+                columnCount: cols
+            )
+            if !line.isEmpty {
+                lines.append(line)
+            }
+            rowIndex -= 1
+        }
+
+        return lines.reversed()
     }
 
     /// Returns the text for a currently visible row in the viewport.

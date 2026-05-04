@@ -38,10 +38,12 @@ extension MainWindowController {
     /// intentionally a slow safety net for launch banners that were already
     /// visible before the callback wiring existed or for panes whose state
     /// was reset by shell-prompt recovery while a full-screen TUI remains on
-    /// screen. Scanning 80 visible rows across a handful of panes once per
-    /// second is cheap and avoids the "only one split agent is counted"
-    /// regression the Aurora dogfood builds exposed.
-    private static var auroraAgentReconciliationInterval: TimeInterval { 1.0 }
+    /// screen. Keep this slower than live semantic callbacks: it is a recovery
+    /// safety net, not the primary source of truth.
+    private static var auroraAgentReconciliationInterval: TimeInterval { 5.0 }
+
+    private static var auroraAgentVisibleRowScanLimit: Int { 80 }
+    private static var auroraAgentHistoryTailScanLimit: Int { 200 }
 
     /// Idempotent entry point invoked by `applyConfig(...)` whenever the
     /// appearance block changes. Instantiates the Aurora controller and
@@ -389,11 +391,14 @@ extension MainWindowController {
         if let strip = horizontalTabStripView as? HorizontalTabStripView {
             strip.setThemeMode(isLight: variant == .light)
         }
-        guard let controller = auroraChromeController else { return }
         let identity = Self.auroraThemeIdentity(for: variant)
+        let appearance = Design.appearance(for: identity)
+        window?.appearance = appearance
+        syncWorkspacePanelAppearances(for: identity)
+
+        guard let controller = auroraChromeController else { return }
         controller.themeIdentity = identity
 
-        let appearance = Design.appearance(for: identity)
         controller.sidebarHost?.appearance = appearance
         controller.statusBarHost?.appearance = appearance
         controller.paletteHost?.appearance = appearance
@@ -444,6 +449,22 @@ extension MainWindowController {
         return .aurora
     }
 
+    func applyCurrentAuroraAppearance(to panelView: NSView) {
+        panelView.appearance = Design.appearance(for: currentAuroraThemeIdentity())
+    }
+
+    func syncWorkspacePanelAppearances(for identity: Design.ThemeIdentity) {
+        let appearance = Design.appearance(for: identity)
+        for view in panelContentViews.values {
+            view.appearance = appearance
+        }
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                view.appearance = appearance
+            }
+        }
+    }
+
     /// Reconciles Aurora's per-surface store from the terminal buffers
     /// that are already on screen.
     ///
@@ -476,9 +497,9 @@ extension MainWindowController {
                 .map { ($0.name, $0.displayName) }
         )
 
-        for surfaceID in surfaceIDsByTabSnapshot().values.flatMap({ $0 }) {
+        for surfaceID in visibleAuroraSurfaceIDsSnapshot() {
             let current = store.state(for: surfaceID)
-            let visibleLines = (0..<80).compactMap { row in
+            let visibleLines = (0..<Self.auroraAgentVisibleRowScanLimit).compactMap { row in
                 cocxyBridge.visibleLineText(
                     for: surfaceID,
                     visibleRow: UInt16(row)
@@ -490,13 +511,24 @@ extension MainWindowController {
             )
             let visibleReturnedShellPrompt = Self.visibleAuroraBufferHasReturnedShellPrompt(visibleLines)
 
-            let historyAgent = Self.auroraHistoryFallbackAgentIdentifier(
-                visibleAgent: visibleAgent,
-                visibleLines: visibleLines,
-                historyLines: Array(cocxyBridge.historyLines(for: surfaceID).suffix(200)),
-                currentCarriesAgent: current.isActive || current.hasAgent,
-                compiledConfigs: compiledDefaults
-            )
+            let currentCarriesAgent = current.isActive || current.hasAgent
+            let historyAgent: String?
+            if visibleAgent == nil,
+               currentCarriesAgent,
+               !visibleReturnedShellPrompt {
+                historyAgent = Self.auroraHistoryFallbackAgentIdentifier(
+                    visibleAgent: visibleAgent,
+                    visibleLines: visibleLines,
+                    historyLines: cocxyBridge.historyTailLines(
+                        for: surfaceID,
+                        maxCount: Self.auroraAgentHistoryTailScanLimit
+                    ),
+                    currentCarriesAgent: currentCarriesAgent,
+                    compiledConfigs: compiledDefaults
+                )
+            } else {
+                historyAgent = nil
+            }
 
             if let identifier = visibleAgent ?? historyAgent {
                 if current.detectedAgent?.name == identifier, current.isActive {
@@ -793,6 +825,30 @@ extension MainWindowController {
             result[tab.id] = surfaceIDs(for: tab.id)
         }
         return result
+    }
+
+    /// Returns only surfaces currently drawn in the window. Aurora's periodic
+    /// recovery path should not walk every restored background tab: semantic
+    /// callbacks keep hidden panes current, and any missed launch banner will be
+    /// recovered when the tab becomes visible.
+    private func visibleAuroraSurfaceIDsSnapshot() -> [SurfaceID] {
+        guard let tabID = displayedTabID ?? tabManager.activeTabID else { return [] }
+
+        var ids: [SurfaceID] = []
+        var seen = Set<SurfaceID>()
+
+        func append(_ surfaceID: SurfaceID?) {
+            guard let surfaceID, seen.insert(surfaceID).inserted else { return }
+            ids.append(surfaceID)
+        }
+
+        append(tabSurfaceMap[tabID])
+        guard displayedTabID == tabID else { return ids }
+
+        for surfaceID in splitSurfaceViews.keys.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+            append(surfaceID)
+        }
+        return ids
     }
 
     // MARK: - Palette routing

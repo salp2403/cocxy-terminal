@@ -110,6 +110,7 @@ final class CocxyCoreView: NSView {
     // MARK: - Display Link
 
     private var displayLink: CVDisplayLink?
+    internal var isDisplayLinkRunningForTests: Bool { displayLink != nil }
 
     /// Whether the render loop must produce a new frame on the next tick.
     ///
@@ -123,6 +124,8 @@ final class CocxyCoreView: NSView {
     /// Exposed as `internal` for `@testable import` so the re-arm contract
     /// can be verified without going through the display link.
     internal var needsRender: Bool = false
+    private let renderScheduleLock = NSLock()
+    internal private(set) var renderScheduled: Bool = false
 
     // MARK: - Input State
 
@@ -168,6 +171,7 @@ final class CocxyCoreView: NSView {
         self.localizer = localizer
         super.init(frame: .zero)
         wantsLayer = true
+        applyTerminalBackingBackground()
         registerForDraggedTypes([.fileURL])
     }
 
@@ -193,6 +197,11 @@ final class CocxyCoreView: NSView {
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+    override var isHidden: Bool {
+        didSet {
+            updateDisplayLinkRunningState()
+        }
+    }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let commandFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -221,6 +230,7 @@ final class CocxyCoreView: NSView {
         // showing the desktop straight through the terminal — instead of
         // keeping the previous valid frame visible.
         metalLayer.isOpaque = true
+        metalLayer.backgroundColor = CocxyColors.base.cgColor
         return metalLayer
     }
 
@@ -231,6 +241,7 @@ final class CocxyCoreView: NSView {
         self.bridge = bridge
         self.surfaceID = surfaceID
         self.viewModel = viewModel
+        applyTerminalBackingBackground()
         refreshIDECursorMetrics()
 
         do {
@@ -243,7 +254,7 @@ final class CocxyCoreView: NSView {
 
         installCommandBlockOverlayIfNeeded()
         refreshBackingConfiguration(forceGridSync: true)
-        startDisplayLink()
+        updateDisplayLinkRunningState()
     }
 
     // MARK: - Render Loop
@@ -264,9 +275,10 @@ final class CocxyCoreView: NSView {
         CVDisplayLinkSetOutputCallback(link, { (_, _, _, _, _, userInfo) -> CVReturn in
             guard let userInfo = userInfo else { return kCVReturnError }
             let view = Unmanaged<CocxyCoreView>.fromOpaque(userInfo).takeUnretainedValue()
-            if view.needsRender {
+            if view.claimRenderSlotForDisplayLink() {
                 DispatchQueue.main.async {
                     view.renderFrame()
+                    view.finishRenderSlotForDisplayLink()
                 }
             }
             return kCVReturnSuccess
@@ -289,6 +301,21 @@ final class CocxyCoreView: NSView {
     /// Called from CocxyCoreBridge after PTY data is processed.
     func setNeedsTerminalDisplay() {
         needsRender = true
+        updateDisplayLinkRunningState()
+    }
+
+    internal func claimRenderSlotForDisplayLink() -> Bool {
+        renderScheduleLock.lock()
+        defer { renderScheduleLock.unlock() }
+        guard needsRender, !renderScheduled else { return false }
+        renderScheduled = true
+        return true
+    }
+
+    internal func finishRenderSlotForDisplayLink() {
+        renderScheduleLock.lock()
+        renderScheduled = false
+        renderScheduleLock.unlock()
     }
 
     /// Runs one render cycle. Called from the CVDisplayLink callback (see
@@ -368,6 +395,7 @@ final class CocxyCoreView: NSView {
         super.viewDidMoveToWindow()
         installWindowObserversIfNeeded()
         refreshBackingConfiguration(forceGridSync: true)
+        updateDisplayLinkRunningState()
     }
 
     /// Forces a size sync after surface creation.
@@ -461,6 +489,20 @@ final class CocxyCoreView: NSView {
         else { return }
         let displayID = CGDirectDisplayID(screenNumber.uint32Value)
         CVDisplayLinkSetCurrentCGDisplay(link, displayID)
+    }
+
+    private func updateDisplayLinkRunningState() {
+        guard surfaceID != nil else {
+            stopDisplayLink()
+            return
+        }
+
+        if window != nil, !isHiddenOrHasHiddenAncestor {
+            startDisplayLink()
+            anchorDisplayLinkToCurrentScreen()
+        } else {
+            stopDisplayLink()
+        }
     }
 
     private func refreshBackingConfiguration(forceGridSync: Bool) {
@@ -1271,7 +1313,21 @@ extension CocxyCoreView: TerminalHostingView {
     }
 
     func requestImmediateRedraw() {
+        applyTerminalBackingBackground()
         setNeedsTerminalDisplay()
+    }
+
+    private func applyTerminalBackingBackground() {
+        guard let layer else { return }
+        let color = bridge?.configuredTerminalBackgroundColor ?? CocxyColors.base
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.backgroundColor = color.cgColor
+        layer.isOpaque = true
+        if let metalLayer = layer as? CAMetalLayer {
+            metalLayer.isOpaque = true
+        }
+        CATransaction.commit()
     }
 
     private func updateNotificationRingFrame() {

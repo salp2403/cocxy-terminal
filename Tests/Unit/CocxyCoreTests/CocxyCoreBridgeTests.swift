@@ -73,6 +73,21 @@ struct CocxyCoreBridgeTests {
         #expect(Array(lines.prefix(3)) == ["alpha", "beta", "gamma"])
     }
 
+    @Test("historyTailLines returns only newest scrollback lines")
+    func historyTailLinesReturnsOnlyNewestLines() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(numberedLines(12), to: state.terminal)
+
+        let tail = bridge.historyTailLines(for: surfaceID, maxCount: 4)
+        #expect(tail == ["line-08", "line-09", "line-10", "line-11"])
+        #expect(bridge.historyTailLines(for: surfaceID, maxCount: 0).isEmpty)
+        #expect(bridge.historyTailLines(for: SurfaceID(), maxCount: 4).isEmpty)
+    }
+
     @Test("searchScrollback uses CocxyCore native search and preserves match coordinates")
     func searchScrollbackUsesNativeSearch() throws {
         let bridge = try makeBridge()
