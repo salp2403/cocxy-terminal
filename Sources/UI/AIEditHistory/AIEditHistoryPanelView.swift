@@ -5,13 +5,27 @@ import AppKit
 import SwiftUI
 
 struct AIEditHistoryPanelView: View {
-    @StateObject private var viewModel: AIEditHistoryPanelViewModel
+    @ObservedObject private var viewModel: AIEditHistoryPanelViewModel
     @State private var showingRevertSheet = false
+    var localizer: AppLocalizer
     let onClose: (() -> Void)?
 
-    init(viewModel: AIEditHistoryPanelViewModel, onClose: (() -> Void)? = nil) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    init(
+        viewModel: AIEditHistoryPanelViewModel,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        onClose: (() -> Void)? = nil
+    ) {
+        _viewModel = ObservedObject(wrappedValue: viewModel)
+        self.localizer = localizer
         self.onClose = onClose
+        viewModel.updateLocalizer(localizer)
+    }
+
+    func updatedLocalizer(_ localizer: AppLocalizer) -> AIEditHistoryPanelView {
+        var copy = self
+        copy.localizer = localizer
+        viewModel.updateLocalizer(localizer)
+        return copy
     }
 
     var body: some View {
@@ -36,6 +50,7 @@ struct AIEditHistoryPanelView: View {
             AIEditRevertSheet(
                 selectedRecord: viewModel.selectedRecord,
                 fileSummaries: viewModel.selectedFileSummaries,
+                localizer: localizer,
                 onCancel: { showingRevertSheet = false },
                 onConfirm: {
                     viewModel.perform {
@@ -49,7 +64,7 @@ struct AIEditHistoryPanelView: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Label("Edit History", systemImage: "clock.arrow.circlepath")
+            Label(localized("aiEditHistory.title", fallback: "Edit History"), systemImage: "clock.arrow.circlepath")
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
 
@@ -72,14 +87,14 @@ struct AIEditHistoryPanelView: View {
                     try viewModel.refresh()
                 }
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label(localized("aiEditHistory.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
             }
             .controlSize(.small)
 
             Button {
                 showingRevertSheet = true
             } label: {
-                Label("Revert", systemImage: "arrow.uturn.backward")
+                Label(localized("aiEditHistory.revert", fallback: "Revert"), systemImage: "arrow.uturn.backward")
             }
             .controlSize(.small)
             .disabled(viewModel.selectedRecord == nil)
@@ -89,7 +104,8 @@ struct AIEditHistoryPanelView: View {
                     Image(systemName: "xmark")
                 }
                 .controlSize(.small)
-                .help("Close")
+                .help(localized("common.close", fallback: "Close"))
+                .accessibilityLabel(localized("aiEditHistory.close", fallback: "Close edit history"))
             }
         }
         .padding(.horizontal, 10)
@@ -110,7 +126,7 @@ struct AIEditHistoryPanelView: View {
             .listStyle(.sidebar)
 
             if viewModel.records.isEmpty {
-                Text("No edits")
+                Text(localized("aiEditHistory.status.noEdits", fallback: "No edits"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 12)
@@ -141,7 +157,7 @@ struct AIEditHistoryPanelView: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(viewModel.selectedChanges, id: \.filePath) { change in
-                            AIEditDiffView(change: change)
+                            AIEditDiffView(change: change, localizer: localizer)
                         }
                     }
                 }
@@ -151,13 +167,17 @@ struct AIEditHistoryPanelView: View {
         } else {
             VStack {
                 Spacer()
-                Text("No edit selected")
+                Text(localized("aiEditHistory.empty.noSelection", fallback: "No edit selected"))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
@@ -205,6 +225,7 @@ private struct AIEditFileSummaryRow: View {
 
 private struct AIEditDiffView: View {
     let change: AIEditChange
+    let localizer: AppLocalizer
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -213,8 +234,14 @@ private struct AIEditDiffView: View {
                 .lineLimit(1)
 
             HSplitView {
-                diffColumn(title: "Before", content: change.beforeContent)
-                diffColumn(title: "After", content: change.afterContent)
+                diffColumn(
+                    title: localizer.string("aiEditHistory.diff.before", fallback: "Before"),
+                    content: change.beforeContent
+                )
+                diffColumn(
+                    title: localizer.string("aiEditHistory.diff.after", fallback: "After"),
+                    content: change.afterContent
+                )
             }
             .frame(minHeight: 120)
         }
@@ -226,7 +253,7 @@ private struct AIEditDiffView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
             ScrollView {
-                Text(content ?? "(missing)")
+                Text(content ?? localizer.string("aiEditHistory.diff.missing", fallback: "(missing)"))
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -242,15 +269,21 @@ private struct AIEditDiffView: View {
 private struct AIEditRevertSheet: View {
     let selectedRecord: AIEditRecordPresentation?
     let fileSummaries: [AIEditFileSummary]
+    let localizer: AppLocalizer
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Revert Edit?")
+            Text(localized("aiEditHistory.revertSheet.title", fallback: "Revert Edit?"))
                 .font(.system(size: 15, weight: .semibold))
 
-            Text("This restores the selected local edit only if the files still match the recorded output.")
+            Text(
+                localized(
+                    "aiEditHistory.revertSheet.message",
+                    fallback: "This restores the selected local edit only if the files still match the recorded output."
+                )
+            )
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -271,11 +304,15 @@ private struct AIEditRevertSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel", action: onCancel)
-                Button("Revert", role: .destructive, action: onConfirm)
+                Button(localized("common.cancel", fallback: "Cancel"), action: onCancel)
+                Button(localized("aiEditHistory.revert", fallback: "Revert"), role: .destructive, action: onConfirm)
             }
         }
         .padding(18)
         .frame(width: 420)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

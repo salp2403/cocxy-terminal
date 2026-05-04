@@ -2,6 +2,7 @@
 // MainWindowController+Theme.swift - Theme cycling and config application.
 
 import AppKit
+import SwiftUI
 
 // MARK: - Transparency Chrome Theme -> NSAppearance
 
@@ -69,8 +70,10 @@ extension MainWindowController {
         }
 
         // Apply notification toggle changes to tab bar.
-        tabBarView?.updateLocalizer(appLocalizer(for: config))
-        updateMarkdownPanelLocalizers(appLocalizer(for: config))
+        let localizer = appLocalizer(for: config)
+        tabBarView?.updateLocalizer(localizer)
+        updateMarkdownPanelLocalizers(localizer)
+        updateAIEditHistoryPanelLocalizers(localizer)
         tabBarView?.flashTabEnabled = config.notifications.flashTab
         tabBarView?.badgeOnTabEnabled = config.notifications.badgeOnTab
 
@@ -156,6 +159,7 @@ extension MainWindowController {
             syncGitHubPaneRootView(panelWidth: gitHubPanePanelWidth)
             syncNotesRootView()
             syncTimelineRootView()
+            syncNotificationPanelRootView()
         }
 
         if old?.keybindings != config.keybindings
@@ -192,6 +196,22 @@ extension MainWindowController {
         for panelViews in savedTabPanelContentViews.values {
             for view in panelViews.values {
                 (view as? MarkdownContentView)?.updateLocalizer(localizer)
+            }
+        }
+    }
+
+    private func updateAIEditHistoryPanelLocalizers(_ localizer: AppLocalizer) {
+        for view in panelContentViews.values {
+            if let hostingView = view as? NSHostingView<AIEditHistoryPanelView> {
+                hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+            }
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                if let hostingView = view as? NSHostingView<AIEditHistoryPanelView> {
+                    hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+                }
             }
         }
     }

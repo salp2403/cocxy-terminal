@@ -565,6 +565,34 @@
 "timeline.empty.all.title" = "No timeline events";
 "timeline.empty.all.detail" = "Agent actions will appear here\nas they happen in real-time.";
 
+"notifications.panel.accessibility" = "Notification Panel";
+"notifications.panel.title" = "Notifications";
+"notifications.panel.markAllRead" = "Mark all read";
+"notifications.panel.markAllRead.accessibility" = "Mark all notifications as read";
+"notifications.panel.close" = "Close notification panel";
+"notifications.panel.empty.title" = "No notifications yet";
+"notifications.panel.empty.detail" = "Alerts from your AI agents\nwill appear here.";
+
+"aiEditHistory.title" = "Edit History";
+"aiEditHistory.refresh" = "Refresh";
+"aiEditHistory.revert" = "Revert";
+"aiEditHistory.close" = "Close edit history";
+"aiEditHistory.status.noEdits" = "No edits";
+"aiEditHistory.status.noSession" = "No edit session";
+"aiEditHistory.status.reverted" = "Reverted %@";
+"aiEditHistory.count.edit.one" = "%d edit";
+"aiEditHistory.count.edit.many" = "%d edits";
+"aiEditHistory.count.file.one" = "%d file";
+"aiEditHistory.count.file.many" = "%d files";
+"aiEditHistory.empty.noSelection" = "No edit selected";
+"aiEditHistory.diff.before" = "Before";
+"aiEditHistory.diff.after" = "After";
+"aiEditHistory.diff.missing" = "(missing)";
+"aiEditHistory.revertSheet.title" = "Revert Edit?";
+"aiEditHistory.revertSheet.message" = "This restores the selected local edit only if the files still match the recorded output.";
+"aiEditHistory.error.noSession" = "No agent edit session is selected.";
+"aiEditHistory.error.noSelection" = "No edit is selected.";
+
 "welcome.accessibilityLabel" = "Welcome to Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";
 "welcome.subtitle" = "Agent-aware terminal for macOS";

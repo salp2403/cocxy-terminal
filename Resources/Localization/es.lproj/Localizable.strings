@@ -565,6 +565,34 @@
 "timeline.empty.all.title" = "Sin eventos de línea de tiempo";
 "timeline.empty.all.detail" = "Las acciones del agente aparecerán aquí\ncuando ocurran en tiempo real.";
 
+"notifications.panel.accessibility" = "Panel de notificaciones";
+"notifications.panel.title" = "Notificaciones";
+"notifications.panel.markAllRead" = "Marcar todo como leído";
+"notifications.panel.markAllRead.accessibility" = "Marcar todas las notificaciones como leídas";
+"notifications.panel.close" = "Cerrar panel de notificaciones";
+"notifications.panel.empty.title" = "Sin notificaciones todavía";
+"notifications.panel.empty.detail" = "Las alertas de tus agentes IA\naparecerán aquí.";
+
+"aiEditHistory.title" = "Historial de ediciones";
+"aiEditHistory.refresh" = "Actualizar";
+"aiEditHistory.revert" = "Revertir";
+"aiEditHistory.close" = "Cerrar historial de ediciones";
+"aiEditHistory.status.noEdits" = "Sin ediciones";
+"aiEditHistory.status.noSession" = "Sin sesión de ediciones";
+"aiEditHistory.status.reverted" = "Revertido %@";
+"aiEditHistory.count.edit.one" = "%d edición";
+"aiEditHistory.count.edit.many" = "%d ediciones";
+"aiEditHistory.count.file.one" = "%d archivo";
+"aiEditHistory.count.file.many" = "%d archivos";
+"aiEditHistory.empty.noSelection" = "No hay edición seleccionada";
+"aiEditHistory.diff.before" = "Antes";
+"aiEditHistory.diff.after" = "Después";
+"aiEditHistory.diff.missing" = "(faltante)";
+"aiEditHistory.revertSheet.title" = "¿Revertir edición?";
+"aiEditHistory.revertSheet.message" = "Esto restaura la edición local seleccionada solo si los archivos todavía coinciden con la salida registrada.";
+"aiEditHistory.error.noSession" = "No hay una sesión de ediciones de agente seleccionada.";
+"aiEditHistory.error.noSelection" = "No hay una edición seleccionada.";
+
 "welcome.accessibilityLabel" = "Bienvenida a Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";
 "welcome.subtitle" = "Terminal para macOS con conciencia de agentes";

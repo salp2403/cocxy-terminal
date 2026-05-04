@@ -300,9 +300,10 @@ extension MainWindowController {
             let viewModel = AIEditHistoryPanelViewModel(
                 repoID: repoID,
                 sessionID: sessionID,
-                workingDirectory: repoRoot
+                workingDirectory: repoRoot,
+                localizer: appLocalizer()
             )
-            let view = AIEditHistoryPanelView(viewModel: viewModel) { [weak self] in
+            let view = AIEditHistoryPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             return NSHostingView(rootView: view)

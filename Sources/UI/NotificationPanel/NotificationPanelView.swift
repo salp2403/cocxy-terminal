@@ -123,6 +123,9 @@ struct NotificationPanelView: View {
     /// the rest of the chrome when the user forces a transparency theme.
     var vibrancyAppearanceOverride: NSAppearance?
 
+    /// Local app-language resolver.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     static let panelWidth: CGFloat = 320
 
     // MARK: - Body
@@ -146,14 +149,14 @@ struct NotificationPanelView: View {
             }
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Notification Panel")
+        .accessibilityLabel(localized("notifications.panel.accessibility", fallback: "Notification Panel"))
     }
 
     // MARK: - Header
 
     private var headerView: some View {
         HStack {
-            Text("Notifications")
+            Text(localized("notifications.panel.title", fallback: "Notifications"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
 
@@ -170,12 +173,17 @@ struct NotificationPanelView: View {
             Spacer()
 
             Button(action: { viewModel.markAllAsRead() }) {
-                Text("Mark all read")
+                Text(localized("notifications.panel.markAllRead", fallback: "Mark all read"))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Mark all notifications as read")
+            .accessibilityLabel(
+                localized(
+                    "notifications.panel.markAllRead.accessibility",
+                    fallback: "Mark all notifications as read"
+                )
+            )
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
@@ -184,7 +192,7 @@ struct NotificationPanelView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
-            .accessibilityLabel("Close notification panel")
+            .accessibilityLabel(localized("notifications.panel.close", fallback: "Close notification panel"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -222,10 +230,15 @@ struct NotificationPanelView: View {
             Image(systemName: "bell.badge")
                 .font(.system(size: 32))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text("No notifications yet")
+            Text(localized("notifications.panel.empty.title", fallback: "No notifications yet"))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
-            Text("Alerts from your AI agents\nwill appear here.")
+            Text(
+                localized(
+                    "notifications.panel.empty.detail",
+                    fallback: "Alerts from your AI agents\nwill appear here."
+                )
+            )
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
@@ -234,6 +247,10 @@ struct NotificationPanelView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 

@@ -79,6 +79,39 @@ struct AIEditHistoryPanelViewModelSwiftTestingTests {
         #expect(viewModel.statusText == "Reverted 1 file")
     }
 
+    @Test("Spanish localizer updates status and record detail copy")
+    func spanishLocalizerUpdatesStatusAndRecordDetails() throws {
+        let storeRoot = try makeTemporaryDirectory(named: "ai-edit-history-panel-spanish-store")
+        let workspace = try makeTemporaryDirectory(named: "ai-edit-history-panel-spanish-workspace")
+        defer {
+            try? FileManager.default.removeItem(at: storeRoot)
+            try? FileManager.default.removeItem(at: workspace)
+        }
+
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let store = AIEditStore(rootDirectory: storeRoot)
+        let record = edit(filePath: "README.md")
+        try store.append(record, repoID: "repo")
+        let viewModel = AIEditHistoryPanelViewModel(
+            repoID: "repo",
+            sessionID: "session",
+            workingDirectory: workspace,
+            store: store,
+            localizer: spanish
+        )
+
+        try viewModel.refresh()
+
+        #expect(viewModel.statusText == "1 edición")
+        #expect(viewModel.records.first?.detail == "1 archivo - local-agent")
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.statusText == "1 edit")
+        #expect(viewModel.records.first?.detail == "1 file - local-agent")
+    }
+
     private func edit(
         id: UUID = UUID(),
         createdAt: Date = Date(timeIntervalSince1970: 1),
@@ -101,5 +134,10 @@ struct AIEditHistoryPanelViewModelSwiftTestingTests {
             .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

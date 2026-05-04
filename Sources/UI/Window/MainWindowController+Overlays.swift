@@ -1912,7 +1912,8 @@ extension MainWindowController {
         notificationPanelHostingView?.removeFromSuperview()
         var swiftUIView = NotificationPanelView(
             viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissNotificationPanel() }
+            onDismiss: { [weak self] in self?.dismissNotificationPanel() },
+            localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
@@ -2427,13 +2428,18 @@ extension MainWindowController {
         hostingView.rootView = view
     }
 
+    func syncNotificationPanelRootView() {
+        syncNotificationPanelVibrancyOverride(resolveVibrancyAppearanceOverride())
+    }
+
     private func syncNotificationPanelVibrancyOverride(_ override: NSAppearance?) {
         guard isNotificationPanelVisible,
               let hostingView = notificationPanelHostingView,
               let viewModel = notificationPanelViewModel else { return }
         var view = NotificationPanelView(
             viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissNotificationPanel() }
+            onDismiss: { [weak self] in self?.dismissNotificationPanel() },
+            localizer: appLocalizer()
         )
         view.vibrancyAppearanceOverride = override
         hostingView.rootView = view

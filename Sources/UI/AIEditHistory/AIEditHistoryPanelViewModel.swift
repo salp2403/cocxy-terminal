@@ -36,11 +36,18 @@ extension AIEditReverter: AIEditReverting {}
 
 @MainActor
 final class AIEditHistoryPanelViewModel: ObservableObject {
+    private enum StatusState: Equatable {
+        case noEdits
+        case noSession
+        case edits(Int)
+        case reverted(Int)
+    }
+
     @Published private(set) var records: [AIEditRecordPresentation] = []
     @Published var selectedRecordID: UUID?
     @Published private(set) var selectedFileSummaries: [AIEditFileSummary] = []
     @Published private(set) var selectedChanges: [AIEditChange] = []
-    @Published private(set) var statusText = "No edits"
+    @Published private(set) var statusText: String
     @Published private(set) var errorText: String?
 
     let repoID: String
@@ -50,6 +57,9 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
     private let store: AIEditStore
     private let differ: AIEditDiffer
     private let reverter: any AIEditReverting
+    private var localizer: AppLocalizer
+    private var statusState: StatusState = .noEdits
+    private var currentError: Error?
     private var loadedRecords: [AIEditRecord] = []
 
     var selectedRecord: AIEditRecordPresentation? {
@@ -63,7 +73,8 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
         workingDirectory: URL,
         store: AIEditStore = AIEditStore(),
         differ: AIEditDiffer = AIEditDiffer(),
-        reverter: any AIEditReverting = AIEditReverter()
+        reverter: any AIEditReverting = AIEditReverter(),
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.repoID = repoID
         self.sessionID = sessionID
@@ -71,6 +82,24 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
         self.store = store
         self.differ = differ
         self.reverter = reverter
+        self.localizer = localizer
+        self.statusText = Self.localizedStatusText(.noEdits, localizer: localizer)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        let selected = selectedRecordID
+        records = loadedRecords.map { Self.presentation(for: $0, localizer: localizer) }
+        if let selected,
+           records.contains(where: { $0.id == selected }) {
+            selectedRecordID = selected
+        } else {
+            selectedRecordID = records.first?.id
+        }
+        statusText = Self.localizedStatusText(statusState, localizer: localizer)
+        if let currentError {
+            errorText = Self.localizedErrorDescription(currentError, localizer: localizer)
+        }
     }
 
     func refresh() throws {
@@ -80,14 +109,15 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
             selectedRecordID = nil
             selectedFileSummaries = []
             selectedChanges = []
-            statusText = "No edit session"
+            setStatus(.noSession)
+            currentError = nil
             errorText = nil
             return
         }
 
         let previousSelection = selectedRecordID
         loadedRecords = Array(try store.timeline(repoID: repoID, sessionID: sessionID).records.reversed())
-        records = loadedRecords.map(Self.presentation(for:))
+        records = loadedRecords.map { Self.presentation(for: $0, localizer: localizer) }
 
         if let previousSelection,
            records.contains(where: { $0.id == previousSelection }) {
@@ -97,7 +127,8 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
         }
 
         updateSelectedDetails()
-        statusText = records.count == 1 ? "1 edit" : "\(records.count) edits"
+        setStatus(.edits(records.count))
+        currentError = nil
         errorText = nil
     }
 
@@ -112,7 +143,8 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
         }
         let result = try reverter.revert(record, in: workingDirectory)
         updateSelectedDetails()
-        statusText = "Reverted \(result.revertedFiles.count) \(result.revertedFiles.count == 1 ? "file" : "files")"
+        setStatus(.reverted(result.revertedFiles.count))
+        currentError = nil
         errorText = nil
     }
 
@@ -120,8 +152,14 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
         do {
             try action()
         } catch {
-            errorText = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            currentError = error
+            errorText = Self.localizedErrorDescription(error, localizer: localizer)
         }
+    }
+
+    private func setStatus(_ status: StatusState) {
+        statusState = status
+        statusText = Self.localizedStatusText(status, localizer: localizer)
     }
 
     private func rawSelectedRecord() -> AIEditRecord? {
@@ -141,7 +179,10 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
         }
     }
 
-    private static func presentation(for record: AIEditRecord) -> AIEditRecordPresentation {
+    private static func presentation(
+        for record: AIEditRecord,
+        localizer: AppLocalizer
+    ) -> AIEditRecordPresentation {
         let fileCount = record.changes.count
         return AIEditRecordPresentation(
             id: record.id,
@@ -149,8 +190,76 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
             agentID: record.agentID,
             createdAt: record.createdAt,
             title: record.summary,
-            detail: "\(fileCount) \(fileCount == 1 ? "file" : "files") - \(record.agentID)",
+            detail: "\(localizedFileCount(fileCount, localizer: localizer)) - \(record.agentID)",
             summary: record.summary
         )
     }
+
+    private static func localizedStatusText(
+        _ status: StatusState,
+        localizer: AppLocalizer
+    ) -> String {
+        switch status {
+        case .noEdits:
+            return localizer.string("aiEditHistory.status.noEdits", fallback: "No edits")
+        case .noSession:
+            return localizer.string("aiEditHistory.status.noSession", fallback: "No edit session")
+        case .edits(let count):
+            return localizedEditCount(count, localizer: localizer)
+        case .reverted(let count):
+            return String(
+                format: localizer.string(
+                    "aiEditHistory.status.reverted",
+                    fallback: "Reverted %@"
+                ),
+                localizedFileCount(count, localizer: localizer)
+            )
+        }
+    }
+
+    private static func localizedEditCount(_ count: Int, localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string(
+                count == 1
+                ? "aiEditHistory.count.edit.one"
+                : "aiEditHistory.count.edit.many",
+                fallback: count == 1 ? "%d edit" : "%d edits"
+            ),
+            count
+        )
+    }
+
+    private static func localizedFileCount(_ count: Int, localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string(
+                count == 1
+                ? "aiEditHistory.count.file.one"
+                : "aiEditHistory.count.file.many",
+                fallback: count == 1 ? "%d file" : "%d files"
+            ),
+            count
+        )
+    }
+
+    private static func localizedErrorDescription(
+        _ error: Error,
+        localizer: AppLocalizer
+    ) -> String {
+        if let panelError = error as? AIEditHistoryPanelError {
+            switch panelError {
+            case .noSession:
+                return localizer.string(
+                    "aiEditHistory.error.noSession",
+                    fallback: "No agent edit session is selected."
+                )
+            case .noSelection:
+                return localizer.string(
+                    "aiEditHistory.error.noSelection",
+                    fallback: "No edit is selected."
+                )
+            }
+        }
+        return (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+    }
+
 }
