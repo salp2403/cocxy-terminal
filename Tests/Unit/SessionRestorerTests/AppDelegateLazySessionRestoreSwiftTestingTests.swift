@@ -125,6 +125,29 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(controller.terminalContainerView?.layer?.backgroundColor?.alpha == 1.0)
     }
 
+    @Test("restore does not force an intermediate window display before surfaces exist")
+    func restoreDoesNotForceIntermediateWindowDisplayBeforeSurfacesExist() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let trackingWindow = TrackingRestoreWindow(
+            contentRect: controller.window?.frame ?? NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: controller.window?.styleMask ?? [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        trackingWindow.contentView = controller.window?.contentView
+        trackingWindow.backgroundColor = CocxyColors.base.withAlphaComponent(0.35)
+        controller.window = trackingWindow
+
+        let session = makeSession(tabIDs: [TabID(), TabID()], activeTabIndex: 0)
+
+        #expect(delegate.restoreSession(session, into: controller))
+        #expect(trackingWindow.setFrameDisplayFlags == [false])
+    }
+
     private func makeSession(
         tabIDs: [TabID],
         activeTabIndex: Int,
@@ -175,5 +198,14 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         await Task.yield()
         try? await Task.sleep(nanoseconds: 50_000_000)
         await Task.yield()
+    }
+}
+
+private final class TrackingRestoreWindow: NSWindow {
+    private(set) var setFrameDisplayFlags: [Bool] = []
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        setFrameDisplayFlags.append(flag)
+        super.setFrame(frameRect, display: flag)
     }
 }

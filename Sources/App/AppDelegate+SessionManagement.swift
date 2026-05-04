@@ -373,7 +373,8 @@ extension AppDelegate {
             width: result.windowFrame.width,
             height: result.windowFrame.height
         )
-        controller.window?.setFrame(frame, display: true)
+        controller.refreshTerminalContainerBackingBackground()
+        controller.window?.setFrame(frame, display: false)
 
         resetControllerForRestore(controller)
         controller.deferredRestoredTabLoader = { [weak self, weak controller] tabID in
@@ -659,6 +660,7 @@ extension AppDelegate {
             controller.tabSplitCoordinator.removeSplitManager(for: tabID)
         }
 
+        controller.refreshTerminalContainerBackingBackground()
         controller.destroyAllSurfaces()
         controller.refreshTerminalContainerBackingBackground()
         controller.deferredRestoredTabs.removeAll()
