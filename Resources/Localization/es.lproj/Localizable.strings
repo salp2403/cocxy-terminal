@@ -367,6 +367,7 @@
 "statusBar.agent.working" = "trabajando";
 "statusBar.agent.waiting" = "esperando";
 "statusBar.agent.error" = "error";
+"statusBar.rateLimit.usage" = "Uso de %@";
 "agentState.accessibility.idle" = "No hay agente activo";
 "agentState.accessibility.launched" = "Agente iniciado";
 "agentState.accessibility.working" = "El agente está trabajando";
@@ -1608,6 +1609,7 @@
 "browser.downloads.empty.detail" = "Los archivos que descargues aparecerán aquí.";
 "browser.downloads.received" = "%@ recibido";
 "browser.downloads.unknownSize" = "Tamaño desconocido";
+"browser.downloads.progress.percent.accessibility" = "%d por ciento";
 "browser.downloads.accessibility.downloading" = "%@, descargando, %d por ciento";
 "browser.downloads.accessibility.completed" = "%@, completado, toca para abrir";
 "browser.downloads.accessibility.failed" = "%@, falló: %@";

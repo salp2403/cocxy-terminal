@@ -273,7 +273,7 @@ struct BrowserDownloadsView: View {
                 .frame(width: 30, alignment: .trailing)
         }
         .padding(.leading, 26)
-        .accessibilityValue("\(Int(progress * 100)) percent")
+        .accessibilityValue(Self.localizedProgressAccessibilityValue(progress, using: localizer))
     }
 
     // MARK: - Footer
@@ -373,6 +373,13 @@ struct BrowserDownloadsView: View {
                 reason
             )
         }
+    }
+
+    static func localizedProgressAccessibilityValue(_ progress: Double, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string("browser.downloads.progress.percent.accessibility", fallback: "%d percent"),
+            Int(progress * 100)
+        )
     }
 
     private func localized(_ key: String, fallback: String) -> String {

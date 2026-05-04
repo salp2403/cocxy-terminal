@@ -230,7 +230,7 @@ struct StatusBarView: View {
             }
 
             if let rateLimitSnapshot {
-                RateLimitIndicatorView(snapshot: rateLimitSnapshot)
+                RateLimitIndicatorView(snapshot: rateLimitSnapshot, localizer: localizer)
                     .padding(.trailing, 8)
             }
 

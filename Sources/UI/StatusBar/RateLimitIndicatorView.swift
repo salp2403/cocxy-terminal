@@ -32,6 +32,7 @@ struct RateLimitIndicatorView: View {
     /// the optional from `RateLimitProbeService.snapshot` and elides
     /// the view entirely when it is `nil`).
     let snapshot: RateLimitSnapshot
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         HStack(spacing: 4) {
@@ -50,7 +51,7 @@ struct RateLimitIndicatorView: View {
         )
         .help(RateLimitIndicatorFormatting.tooltipText(for: snapshot))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(RateLimitIndicatorFormatting.agentDisplayName(snapshot.agent)) usage")
+        .accessibilityLabel(Self.localizedAccessibilityLabel(for: snapshot, using: localizer))
         .accessibilityValue(RateLimitIndicatorFormatting.percentLabel(for: snapshot))
     }
 
@@ -63,5 +64,15 @@ struct RateLimitIndicatorView: View {
         case .yellow: return CocxyColors.swiftUI(CocxyColors.yellow)
         case .red:    return CocxyColors.swiftUI(CocxyColors.red)
         }
+    }
+
+    static func localizedAccessibilityLabel(
+        for snapshot: RateLimitSnapshot,
+        using localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string("statusBar.rateLimit.usage", fallback: "%@ usage"),
+            RateLimitIndicatorFormatting.agentDisplayName(snapshot.agent)
+        )
     }
 }

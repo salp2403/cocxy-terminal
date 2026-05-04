@@ -152,6 +152,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("browser.find.results.count", fallback: "%d of %d") == "%d de %d")
         #expect(spanish.string("browser.profile.defaultBadge", fallback: "(Default)") == "(Predeterminado)")
         #expect(spanish.string("browser.downloads.unknownSize", fallback: "Unknown size") == "Tamaño desconocido")
+        #expect(BrowserDownloadsView.localizedProgressAccessibilityValue(0.42, using: spanish) == "42 por ciento")
         #expect(DevToolsTab.console.localizedTitle(using: spanish) == "Consola")
         #expect(DevToolsTab.network.localizedTitle(using: spanish) == "Red")
         #expect(DevToolsTab.dom.localizedTitle(using: spanish) == "DOM")
@@ -361,6 +362,15 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("statusBar.agentDot.focusedSuffix", fallback: " (focused)") == " (con foco)")
         #expect(AgentAttachmentBar.localizedRemoveImage(using: spanish) == "Eliminar imagen")
         #expect(spanish.string("terminal.blockOverlay.copyOutput", fallback: "Copy block output") == "Copiar salida del bloque")
+        let snapshot = RateLimitSnapshot(
+            agent: .codex,
+            usagePercent: 0.42,
+            usedAmount: 42,
+            limitAmount: 100,
+            unit: .requests,
+            updatedAt: Date(timeIntervalSince1970: 1_750_000_000)
+        )
+        #expect(RateLimitIndicatorView.localizedAccessibilityLabel(for: snapshot, using: spanish) == "Uso de Codex")
     }
 
     @Test
