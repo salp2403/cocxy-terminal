@@ -36,6 +36,7 @@ extension Design {
         let tooltip: AuroraSidebarTooltipSnapshot
         let sidebarFrame: CGRect
         let containerSize: CGSize
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         var body: some View {
             let placement = VerticalTabHoverSidecarPlacement.placement(
@@ -46,7 +47,8 @@ extension Design {
             AuroraSessionTooltipCard(
                 session: tooltip.session,
                 workspaceName: tooltip.workspaceName,
-                workspaceBranch: tooltip.workspaceBranch
+                workspaceBranch: tooltip.workspaceBranch,
+                localizer: localizer
             )
             .frame(width: placement.width)
             .allowsHitTesting(false)

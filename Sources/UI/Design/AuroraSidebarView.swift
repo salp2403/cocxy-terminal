@@ -405,7 +405,8 @@ extension Design {
                     },
                     onOpenNote: { noteID in
                         onOpenNote(workspaceID, noteID)
-                    }
+                    },
+                    localizer: localizer
                 )
                 .padding(.top, 2)
             }
@@ -541,10 +542,10 @@ extension Design {
                     }
                     Spacer()
                     if layout.showsPaneMatrix {
-                        MiniMatrixView(panes: session.matrixPanes)
+                        MiniMatrixView(panes: session.matrixPanes, localizer: localizer)
                     }
                     if !session.movablePanes.isEmpty {
-                        PaneTransferHandleView(panes: session.movablePanes)
+                        PaneTransferHandleView(panes: session.movablePanes, localizer: localizer)
                     }
                     if let onClose, !session.isPinned, layout.showsCloseButton {
                         Button(action: onClose) {
@@ -765,6 +766,7 @@ extension Design {
         let session: AuroraSession
         let workspaceName: String
         let workspaceBranch: String?
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.designThemePalette) private var palette
 
@@ -793,13 +795,13 @@ extension Design {
                     HStack(spacing: 5) {
                         Text(agentLabel(session.agent))
                         Text("·")
-                        Text(session.state.rawValue)
+                        Text(Design.localizedAgentStateLabel(session.state, using: localizer))
                     }
                     .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(session.agent.token.resolvedColor())
                 }
                 Spacer()
-                Text(session.paneCountLabel)
+                Text(Design.localizedPaneCount(session.panes.count, using: localizer))
                     .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                     .foregroundStyle(palette.textMedium.resolvedColor())
                     .padding(.horizontal, 7)
@@ -813,9 +815,9 @@ extension Design {
 
         private var metrics: some View {
             HStack(spacing: 8) {
-                metricChip("live", "\(session.activePaneCount)")
-                metricChip("tools", "\(session.totalToolCount)")
-                metricChip("errors", "\(session.totalErrorCount)", isWarning: session.totalErrorCount > 0)
+                metricChip(Self.localizedLiveMetric(using: localizer), "\(session.activePaneCount)")
+                metricChip(Self.localizedToolsMetric(using: localizer), "\(session.totalToolCount)")
+                metricChip(Self.localizedErrorsMetric(using: localizer), "\(session.totalErrorCount)", isWarning: session.totalErrorCount > 0)
             }
         }
 
@@ -843,15 +845,19 @@ extension Design {
 
         private var contextBlock: some View {
             VStack(alignment: .leading, spacing: 7) {
-                infoLine(icon: "square.stack.3d.up", label: "Workspace", value: workspaceSummary)
+                infoLine(
+                    icon: "square.stack.3d.up",
+                    label: Self.localizedWorkspaceLabel(using: localizer),
+                    value: workspaceSummary
+                )
                 if let process = cleaned(session.foregroundProcessName) {
-                    infoLine(icon: "cpu", label: "Process", value: process)
+                    infoLine(icon: "cpu", label: Self.localizedProcessLabel(using: localizer), value: process)
                 }
                 if let directory = cleaned(session.workingDirectory) {
-                    infoLine(icon: "folder", label: "Directory", value: prettyDirectory(directory))
+                    infoLine(icon: "folder", label: Self.localizedDirectoryLabel(using: localizer), value: prettyDirectory(directory))
                 }
                 if let command = cleaned(session.lastCommandSummary) {
-                    infoLine(icon: "terminal", label: "Command", value: command)
+                    infoLine(icon: "terminal", label: Self.localizedCommandLabel(using: localizer), value: command)
                 }
             }
             .padding(10)
@@ -888,7 +894,7 @@ extension Design {
                 emptyPanes
             } else {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("Live panes")
+                    Text(Self.localizedLivePanesTitle(using: localizer))
                         .font(.system(size: 10.5, weight: .semibold))
                         .tracking(0.8)
                         .foregroundStyle(palette.textLow.resolvedColor())
@@ -896,7 +902,7 @@ extension Design {
                         paneLine(pane)
                     }
                     if session.matrixPanes.count > 5 {
-                        Text("+ \(session.matrixPanes.count - 5) more active panes")
+                        Text(Self.localizedMoreActivePanes(session.matrixPanes.count - 5, using: localizer))
                             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                             .foregroundStyle(palette.textLow.resolvedColor())
                     }
@@ -909,7 +915,7 @@ extension Design {
                 Circle()
                     .fill(AgentStateRole.idle.token.resolvedColor())
                     .frame(width: 7, height: 7)
-                Text("All panes are idle")
+                Text(Self.localizedAllPanesIdle(using: localizer))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(palette.textLow.resolvedColor())
             }
@@ -942,7 +948,7 @@ extension Design {
         }
 
         private var footer: some View {
-            Text("Click the row to focus · use × to close")
+            Text(Self.localizedFooter(using: localizer))
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(palette.textDim.resolvedColor())
         }
@@ -955,13 +961,13 @@ extension Design {
         }
 
         private func paneSubtitle(_ pane: AuroraPane) -> String {
-            var parts = [pane.state.rawValue]
+            var parts = [Design.localizedAgentStateLabel(pane.state, using: localizer)]
             if let activity = cleaned(pane.activity) {
                 parts.append(activity)
             }
             if pane.toolCount > 0 || pane.errorCount > 0 {
-                parts.append("tools \(pane.toolCount)")
-                parts.append("errors \(pane.errorCount)")
+                parts.append(Design.localizedToolCount(pane.toolCount, using: localizer))
+                parts.append(Design.localizedErrorCount(pane.errorCount, using: localizer))
             }
             return parts.joined(separator: " · ")
         }
@@ -992,6 +998,54 @@ extension Design {
             case .shell: return "Shell"
             }
         }
+
+        static func localizedLiveMetric(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.metric.live", fallback: "live")
+        }
+
+        static func localizedToolsMetric(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.metric.tools", fallback: "tools")
+        }
+
+        static func localizedErrorsMetric(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.metric.errors", fallback: "errors")
+        }
+
+        static func localizedWorkspaceLabel(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.context.workspace", fallback: "Workspace")
+        }
+
+        static func localizedProcessLabel(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.context.process", fallback: "Process")
+        }
+
+        static func localizedDirectoryLabel(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.context.directory", fallback: "Directory")
+        }
+
+        static func localizedCommandLabel(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.context.command", fallback: "Command")
+        }
+
+        static func localizedLivePanesTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.panes.live", fallback: "Live panes")
+        }
+
+        static func localizedMoreActivePanes(_ count: Int, using localizer: AppLocalizer) -> String {
+            let key = count == 1
+                ? "auroraSidebar.tooltip.panes.moreActive.one"
+                : "auroraSidebar.tooltip.panes.moreActive.many"
+            let fallback = count == 1 ? "+ %d more active pane" : "+ %d more active panes"
+            return String(format: localizer.string(key, fallback: fallback), count)
+        }
+
+        static func localizedAllPanesIdle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.panes.allIdle", fallback: "All panes are idle")
+        }
+
+        static func localizedFooter(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.tooltip.footer", fallback: "Click the row to focus · use × to close")
+        }
     }
 
     // MARK: - Notes section
@@ -1013,6 +1067,7 @@ extension Design {
         let isExpanded: Bool
         let onToggleExpansion: () -> Void
         let onOpenNote: (String) -> Void
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.designThemePalette) private var palette
 
@@ -1037,7 +1092,7 @@ extension Design {
                     Image(systemName: "note.text")
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(palette.textLow.resolvedColor())
-                    Text("Notes")
+                    Text(Self.localizedTitle(using: localizer))
                         .font(.system(size: 10.5, weight: .semibold))
                         .tracking(0.6)
                         .textCase(.uppercase)
@@ -1054,8 +1109,8 @@ extension Design {
                 .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Notes — \(summary.count) note\(summary.count == 1 ? "" : "s")")
-            .accessibilityHint(isExpanded ? "Collapse notes list" : "Expand notes list")
+            .accessibilityLabel(Self.localizedAccessibilityLabel(summary.count, using: localizer))
+            .accessibilityHint(Self.localizedAccessibilityHint(isExpanded: isExpanded, using: localizer))
         }
 
         private func countBadge(_ count: Int) -> some View {
@@ -1107,7 +1162,38 @@ extension Design {
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .accessibilityLabel("Open note: \(row.title)")
+            .accessibilityLabel(Self.localizedOpenNoteAccessibility(row.title, using: localizer))
+        }
+
+        static func localizedTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.notes.title", fallback: "Notes")
+        }
+
+        static func localizedAccessibilityLabel(_ count: Int, using localizer: AppLocalizer) -> String {
+            let key = count == 1
+                ? "auroraSidebar.notes.accessibility.one"
+                : "auroraSidebar.notes.accessibility.many"
+            let fallback = count == 1 ? "Notes — %d note" : "Notes — %d notes"
+            return String(format: localizer.string(key, fallback: fallback), count)
+        }
+
+        static func localizedAccessibilityHint(
+            isExpanded: Bool,
+            using localizer: AppLocalizer
+        ) -> String {
+            isExpanded
+                ? localizer.string("auroraSidebar.notes.collapse", fallback: "Collapse notes list")
+                : localizer.string("auroraSidebar.notes.expand", fallback: "Expand notes list")
+        }
+
+        static func localizedOpenNoteAccessibility(
+            _ title: String,
+            using localizer: AppLocalizer
+        ) -> String {
+            String(
+                format: localizer.string("auroraSidebar.notes.open.accessibility", fallback: "Open note: %@"),
+                title
+            )
         }
     }
 
@@ -1119,6 +1205,7 @@ extension Design {
     /// stays visible even when several panes are all `working`.
     struct MiniMatrixView: View {
         let panes: [AuroraPane]
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         var body: some View {
             HStack(spacing: 3) {
@@ -1130,7 +1217,7 @@ extension Design {
                                 .strokeBorder(pane.state.token.resolvedColor(), lineWidth: 0.8)
                         )
                         .frame(width: 7, height: 7)
-                        .help(pane.diagnosticLine)
+                        .help(Design.localizedPaneDiagnosticLine(for: pane, using: localizer))
                 }
             }
             .accessibilityHidden(true)
@@ -1142,6 +1229,7 @@ extension Design {
     /// every movable split pane, including idle shells.
     struct PaneTransferHandleView: View {
         let panes: [AuroraPane]
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.designThemePalette) private var palette
 
@@ -1155,8 +1243,8 @@ extension Design {
                                 .strokeBorder(pane.state.token.resolvedColor(), lineWidth: 0.9)
                         )
                         .frame(width: 7, height: 7)
-                        .help("Drag \(pane.name) pane to another tab")
-                        .accessibilityLabel("Move \(pane.name) pane")
+                        .help(Self.localizedDragPaneHelp(pane.name, using: localizer))
+                        .accessibilityLabel(Self.localizedMovePaneAccessibility(pane.name, using: localizer))
                         .onDrag {
                             NSItemProvider(
                                 object: VerticalTabDragPayload.pane(pane.id).encodedValue as NSString
@@ -1164,6 +1252,20 @@ extension Design {
                         }
                 }
             }
+        }
+
+        static func localizedDragPaneHelp(_ name: String, using localizer: AppLocalizer) -> String {
+            String(
+                format: localizer.string("auroraSidebar.paneTransfer.drag.help", fallback: "Drag %@ pane to another tab"),
+                name
+            )
+        }
+
+        static func localizedMovePaneAccessibility(_ name: String, using localizer: AppLocalizer) -> String {
+            String(
+                format: localizer.string("auroraSidebar.paneTransfer.move.accessibility", fallback: "Move %@ pane"),
+                name
+            )
         }
     }
 
@@ -1174,6 +1276,8 @@ extension Design {
     /// Cocxy supports explicit remote sessions, so "100% local" would
     /// overstate the runtime model whenever SSH features are active.
     struct LocalBadgeView: View {
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
         @Environment(\.designThemePalette) private var palette
 
         var body: some View {
@@ -1183,7 +1287,7 @@ extension Design {
                     .fill(finished)
                     .frame(width: 6, height: 6)
                     .shadow(color: finished.opacity(0.7), radius: 3)
-                Text("no telemetry")
+                Text(Self.localizedLabel(using: localizer))
                     .font(.system(size: 10.5, weight: .regular, design: .monospaced))
                     .foregroundStyle(finished)
             }
@@ -1197,8 +1301,26 @@ extension Design {
                             .strokeBorder(finished.opacity(0.35), lineWidth: 1)
                     )
             )
-            .help("Cocxy does not phone home. Remote panes connect only when you explicitly open them.")
-            .accessibilityLabel("No telemetry: Cocxy does not phone home")
+            .help(Self.localizedHelp(using: localizer))
+            .accessibilityLabel(Self.localizedAccessibilityLabel(using: localizer))
+        }
+
+        static func localizedLabel(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraStatus.localBadge.label", fallback: "no telemetry")
+        }
+
+        static func localizedHelp(using localizer: AppLocalizer) -> String {
+            localizer.string(
+                "auroraStatus.localBadge.help",
+                fallback: "Cocxy does not phone home. Remote panes connect only when you explicitly open them."
+            )
+        }
+
+        static func localizedAccessibilityLabel(using localizer: AppLocalizer) -> String {
+            localizer.string(
+                "auroraStatus.localBadge.accessibility",
+                fallback: "No telemetry: Cocxy does not phone home"
+            )
         }
     }
 }

@@ -374,6 +374,58 @@ struct AppLocalizationSwiftTestingTests {
 
     @MainActor
     @Test
+    func auroraStatusAndInspectorStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let panes = [
+            Design.AuroraPane(
+                id: "shell",
+                name: "shell",
+                agent: .codex,
+                state: .working,
+                activity: "swift build",
+                toolCount: 1,
+                errorCount: 0
+            ),
+            Design.AuroraPane(id: "review", name: "review", agent: .shell, state: .waiting),
+            Design.AuroraPane(id: "server", name: "server", agent: .aider, state: .error),
+            Design.AuroraPane(id: "done", name: "done", agent: .gemini, state: .finished),
+        ]
+        let port = Design.AuroraPortBinding(port: 3000, name: "web", health: .ok)
+
+        #expect(Design.LocalBadgeView.localizedLabel(using: spanish) == "sin telemetría")
+        #expect(Design.AgentMatrixView.localizedTitle(using: spanish) == "agentes")
+        #expect(
+            Design.AgentMatrixView.summaryText(for: panes, using: spanish)
+                == "1 trabajando · 1 esperando · 1 error · 1 finalizado"
+        )
+        #expect(
+            Design.localizedPaneDiagnosticLine(for: panes[0], using: spanish)
+                == "• shell — trabajando · swift build · 1 herramienta · 0 errores"
+        )
+        #expect(
+            Design.AgentMatrixView.agentTooltip(for: panes, using: spanish)
+                .hasPrefix("Agentes activos:\n• shell — trabajando")
+        )
+        #expect(Design.PortListView.localizedTitle(using: spanish) == "puertos")
+        #expect(Design.PortListView.localizedNone(using: spanish) == "ninguno")
+        #expect(
+            Design.PortListView.localizedOpenPortHelp(port, using: spanish)
+                == "Abrir http://localhost:3000. Usa el menú emergente de puertos para copiar o abrir."
+        )
+        #expect(Design.PortsPopoverView.localizedCopyButton(using: spanish) == "Copiar")
+        #expect(Design.PortChip.localizedAccessibilityLabel(port, using: spanish) == "Puerto 3000 llamado web, estado correcto")
+        #expect(Design.AuroraSessionTooltipCard.localizedLivePanesTitle(using: spanish) == "Paneles activos")
+        #expect(Design.AuroraSessionTooltipCard.localizedMoreActivePanes(2, using: spanish) == "+ 2 paneles activos más")
+        #expect(Design.NotesSectionView.localizedAccessibilityLabel(2, using: spanish) == "Notas — 2 notas")
+        #expect(
+            Design.PaneTransferHandleView.localizedDragPaneHelp("editor", using: spanish)
+                == "Arrastra el panel editor a otra pestaña"
+        )
+    }
+
+    @MainActor
+    @Test
     func utilityOverlayStringsLocalizeSpanish() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)

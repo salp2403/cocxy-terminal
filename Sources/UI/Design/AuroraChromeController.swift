@@ -762,7 +762,8 @@ struct AuroraStatusBarHost: View {
             onOpenPort: { port in
                 guard let url = URL(string: port.localhostURLString) else { return }
                 NSWorkspace.shared.open(url)
-            }
+            },
+            localizer: controller.localizer
         )
         .designThemePalette(Design.palette(for: controller.themeIdentity))
     }
@@ -817,7 +818,8 @@ struct AuroraSidebarTooltipHost: View {
                 Design.VerticalTabHoverSidecar(
                     tooltip: tooltip,
                     sidebarFrame: controller.sidebarTooltipSidebarFrameInOverlay,
-                    containerSize: proxy.size
+                    containerSize: proxy.size,
+                    localizer: controller.localizer
                 )
             }
         }
