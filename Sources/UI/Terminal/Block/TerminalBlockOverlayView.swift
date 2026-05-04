@@ -70,10 +70,15 @@ final class TerminalBlockOverlayView: NSView {
     private var cellHeight: CGFloat = 0
     private var contentPadding: CGPoint = .zero
     private var selectionMode = BlockSelectionMode()
+    private var localizer: AppLocalizer
 
     override var isFlipped: Bool { true }
 
-    override init(frame frameRect: NSRect) {
+    init(
+        frame frameRect: NSRect,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
+    ) {
+        self.localizer = localizer
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = true
     }
@@ -96,6 +101,11 @@ final class TerminalBlockOverlayView: NSView {
         self.cellHeight = cellHeight
         self.contentPadding = padding
         selectionMode.prune(validIDs: Set(blocks.map(\.id)))
+        rebuildRows()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
         rebuildRows()
     }
 
@@ -138,7 +148,8 @@ final class TerminalBlockOverlayView: NSView {
             let row = TerminalBlockHeaderView(
                 block: entry.block,
                 isSelected: selectionMode.contains(entry.block.id),
-                selectedCount: selectionMode.selectedCount
+                selectedCount: selectionMode.selectedCount,
+                localizer: localizer
             )
             row.frame = entry.frame
             row.autoresizingMask = [.width]
@@ -222,6 +233,7 @@ private final class TerminalBlockHeaderView: NSView {
     private let block: TerminalCommandBlock
     private let isSelected: Bool
     private let selectedCount: Int
+    private let localizer: AppLocalizer
     private let commandLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
     private let selectButton = NSButton()
@@ -232,10 +244,16 @@ private final class TerminalBlockHeaderView: NSView {
 
     override var isFlipped: Bool { true }
 
-    init(block: TerminalCommandBlock, isSelected: Bool, selectedCount: Int) {
+    init(
+        block: TerminalCommandBlock,
+        isSelected: Bool,
+        selectedCount: Int,
+        localizer: AppLocalizer
+    ) {
         self.block = block
         self.isSelected = isSelected
         self.selectedCount = selectedCount
+        self.localizer = localizer
         super.init(frame: .zero)
         wantsLayer = true
         configureLayer()
@@ -293,7 +311,14 @@ private final class TerminalBlockHeaderView: NSView {
     }
 
     private func configureLabels() {
-        let statusText = block.exitCode.map { $0 == 0 ? "ok" : "exit \($0)" } ?? "run"
+        let statusText = block.exitCode.map {
+            $0 == 0
+                ? localizer.string("terminal.blockOverlay.status.ok", fallback: "ok")
+                : String(
+                    format: localizer.string("terminal.blockOverlay.status.exit", fallback: "exit %d"),
+                    $0
+                )
+        } ?? localizer.string("terminal.blockOverlay.status.run", fallback: "run")
         statusLabel.stringValue = statusText
         statusLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         statusLabel.textColor = block.exitCode == 0
@@ -302,7 +327,9 @@ private final class TerminalBlockHeaderView: NSView {
         statusLabel.alignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
 
-        commandLabel.stringValue = block.command.isEmpty ? "(command)" : block.command
+        commandLabel.stringValue = block.command.isEmpty
+            ? localizer.string("terminal.blockOverlay.commandPlaceholder", fallback: "(command)")
+            : block.command
         commandLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         commandLabel.textColor = .labelColor
         commandLabel.lineBreakMode = .byTruncatingMiddle
@@ -315,39 +342,46 @@ private final class TerminalBlockHeaderView: NSView {
         configureIconButton(
             selectButton,
             symbolName: isSelected ? "checkmark.circle.fill" : "circle",
-            accessibilityLabel: isSelected ? "Deselect command block" : "Select command block",
+            accessibilityLabel: isSelected
+                ? localizer.string("terminal.blockOverlay.deselect", fallback: "Deselect command block")
+                : localizer.string("terminal.blockOverlay.select", fallback: "Select command block"),
             identifier: "command-block-select-\(block.id)",
             action: #selector(toggleSelection)
         )
         configureIconButton(
             bookmarkButton,
             symbolName: block.isBookmarked ? "bookmark.fill" : "bookmark",
-            accessibilityLabel: block.isBookmarked ? "Remove block bookmark" : "Bookmark command block",
+            accessibilityLabel: block.isBookmarked
+                ? localizer.string("terminal.blockOverlay.removeBookmark", fallback: "Remove block bookmark")
+                : localizer.string("terminal.blockOverlay.bookmark", fallback: "Bookmark command block"),
             identifier: "command-block-bookmark-\(block.id)",
             action: #selector(toggleBookmark)
         )
         configureIconButton(
             shareButton,
             symbolName: "square.and.arrow.up",
-            accessibilityLabel: "Share command block",
+            accessibilityLabel: localizer.string("terminal.blockOverlay.share", fallback: "Share command block"),
             identifier: "command-block-share-\(block.id)",
             action: #selector(shareBlock)
         )
         configureIconButton(
             copyButton,
             symbolName: "doc.on.doc",
-            accessibilityLabel: "Copy block output",
+            accessibilityLabel: localizer.string("terminal.blockOverlay.copyOutput", fallback: "Copy block output"),
             identifier: "command-block-copy-\(block.id)",
             action: #selector(copyBlockOutput)
         )
         copyButton.toolTip = selectedCount > 1 && isSelected
-            ? "Copy selected block outputs"
-            : "Copy block output"
-        copyButton.setAccessibilityLabel(copyButton.toolTip ?? "Copy block output")
+            ? localizer.string("terminal.blockOverlay.copySelectedOutputs", fallback: "Copy selected block outputs")
+            : localizer.string("terminal.blockOverlay.copyOutput", fallback: "Copy block output")
+        copyButton.setAccessibilityLabel(copyButton.toolTip ?? localizer.string(
+            "terminal.blockOverlay.copyOutput",
+            fallback: "Copy block output"
+        ))
         configureIconButton(
             rerunButton,
             symbolName: "arrow.clockwise",
-            accessibilityLabel: "Rerun command block",
+            accessibilityLabel: localizer.string("terminal.blockOverlay.rerun", fallback: "Rerun command block"),
             identifier: "command-block-rerun-\(block.id)",
             action: #selector(rerunBlock)
         )

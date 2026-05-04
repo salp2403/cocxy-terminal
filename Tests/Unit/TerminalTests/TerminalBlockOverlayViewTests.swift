@@ -171,6 +171,37 @@ final class TerminalBlockOverlayViewTests: XCTestCase {
         XCTAssertNotNil(bookmarkButton?.image)
     }
 
+    func testActionButtonLabelsFollowConfiguredLanguage() throws {
+        let overlay = TerminalBlockOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 480, height: 260),
+            localizer: AppLocalizer(
+                languagePreference: .spanish,
+                bundle: try XCTUnwrap(localizationBundle())
+            )
+        )
+        overlay.update(
+            blocks: [sampleBlock(id: 12, command: "make test", startRow: 3, endRow: 4)],
+            visibleStartRow: 0,
+            visibleRowCount: 24,
+            cellHeight: 11,
+            padding: CGPoint(x: 8, y: 4)
+        )
+        overlay.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(
+            overlay.descendantButton(withIdentifier: "command-block-share-12")?.accessibilityLabel(),
+            "Compartir bloque de comando"
+        )
+        XCTAssertEqual(
+            overlay.descendantButton(withIdentifier: "command-block-copy-12")?.toolTip,
+            "Copiar salida del bloque"
+        )
+        XCTAssertEqual(
+            overlay.descendantButton(withIdentifier: "command-block-rerun-12")?.accessibilityLabel(),
+            "Reejecutar bloque de comando"
+        )
+    }
+
     private func sampleBlock(
         id: UInt64,
         command: String,
@@ -191,6 +222,11 @@ final class TerminalBlockOverlayViewTests: XCTestCase {
             streamID: 1,
             blockType: 3
         )
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
 

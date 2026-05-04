@@ -178,6 +178,7 @@ final class CocxyCoreView: NSView {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        commandBlockOverlayView?.updateLocalizer(localizer)
     }
 
     deinit {
@@ -1068,7 +1069,7 @@ final class CocxyCoreView: NSView {
     private func installCommandBlockOverlayIfNeeded() {
         guard commandBlockOverlayView == nil else { return }
 
-        let overlay = TerminalBlockOverlayView(frame: bounds)
+        let overlay = TerminalBlockOverlayView(frame: bounds, localizer: localizer)
         overlay.autoresizingMask = [.width, .height]
         overlay.onCopyBlockOutput = { [weak self] block in
             self?.copyBlockOutputFromOverlay(block)

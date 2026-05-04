@@ -345,6 +345,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(AgentState.error.accessibilityDescription(using: spanish) == "El agente encontró un error")
         #expect(spanish.string("statusBar.agentDot.focusedSuffix", fallback: " (focused)") == " (con foco)")
         #expect(AgentAttachmentBar.localizedRemoveImage(using: spanish) == "Eliminar imagen")
+        #expect(spanish.string("terminal.blockOverlay.copyOutput", fallback: "Copy block output") == "Copiar salida del bloque")
     }
 
     @Test
