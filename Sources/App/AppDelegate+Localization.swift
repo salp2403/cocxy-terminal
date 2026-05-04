@@ -56,4 +56,11 @@ extension AppDelegate {
             secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
         )
     }
+
+    static func localizedTerminalEngineInitializationFailure(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "app.terminalEngine.initializationFailure",
+            fallback: "Terminal engine failed to initialize"
+        )
+    }
 }

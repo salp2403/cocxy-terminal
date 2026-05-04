@@ -1469,7 +1469,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         errorView.layer?.backgroundColor = CocxyColors.base.cgColor
 
         // Add error label.
-        let label = NSTextField(labelWithString: "Terminal engine failed to initialize")
+        let label = NSTextField(
+            labelWithString: Self.localizedTerminalEngineInitializationFailure(using: appLocalizer())
+        )
         label.textColor = CocxyColors.text
         label.font = NSFont.systemFont(ofSize: 16, weight: .medium)
         label.alignment = .center

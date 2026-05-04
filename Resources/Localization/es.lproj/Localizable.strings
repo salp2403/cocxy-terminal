@@ -663,6 +663,7 @@
 "app.quit.title" = "¿Cerrar Cocxy Terminal?";
 "app.quit.message" = "Todas las sesiones de terminal se cerrarán.";
 "app.quit.button" = "Cerrar";
+"app.terminalEngine.initializationFailure" = "No se pudo inicializar el motor de terminal";
 "common.ok" = "OK";
 "common.cancel" = "Cancelar";
 "common.close" = "Cerrar";

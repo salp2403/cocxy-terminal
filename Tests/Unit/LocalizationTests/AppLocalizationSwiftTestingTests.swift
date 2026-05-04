@@ -75,6 +75,18 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("common.cancel", fallback: "Cancel") == "Cancelar")
     }
 
+    @MainActor
+    @Test
+    func appDelegateFallbackStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(
+            AppDelegate.localizedTerminalEngineInitializationFailure(using: spanish)
+                == "No se pudo inicializar el motor de terminal"
+        )
+    }
+
     @Test
     func localizerLoadsCommandPaletteResources() throws {
         let bundle = try #require(localizationBundle())
