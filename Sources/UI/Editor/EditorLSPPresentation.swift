@@ -10,6 +10,14 @@ struct EditorLSPPresentation: Equatable {
     var referenceLocations: [LSPLocation] = []
 
     var accessoryText: String? {
+        accessoryText(using: AppLocalizer(languagePreference: .english))
+    }
+
+    var resultItemTitles: [String] {
+        resultItemTitles(using: AppLocalizer(languagePreference: .english))
+    }
+
+    func accessoryText(using localizer: AppLocalizer) -> String? {
         if let completion = completionItems.first {
             return completionTitle(completion)
         }
@@ -20,12 +28,12 @@ struct EditorLSPPresentation: Equatable {
             return locationSummary(definition)
         }
         if !referenceLocations.isEmpty {
-            return "\(referenceLocations.count) references"
+            return Self.localizedReferences(referenceLocations.count, using: localizer)
         }
         return nil
     }
 
-    var resultItemTitles: [String] {
+    func resultItemTitles(using _: AppLocalizer) -> [String] {
         if !completionItems.isEmpty {
             return completionItems.map(completionTitle)
         }
@@ -36,6 +44,12 @@ struct EditorLSPPresentation: Equatable {
             return referenceLocations.map(locationSummary)
         }
         return []
+    }
+
+    static func localizedReferences(_ count: Int, using localizer: AppLocalizer) -> String {
+        let key = count == 1 ? "editor.lsp.references.one" : "editor.lsp.references.many"
+        let fallback = count == 1 ? "%d reference" : "%d references"
+        return String(format: localizer.string(key, fallback: fallback), count)
     }
 
     mutating func apply(_ event: LSPClientEvent) {

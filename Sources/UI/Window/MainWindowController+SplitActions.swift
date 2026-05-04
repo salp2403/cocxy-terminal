@@ -240,7 +240,7 @@ extension MainWindowController {
                 localizer: appLocalizer()
             )
         case .editor:
-            let editorView = EditorView(fileURL: panel.filePath)
+            let editorView = EditorView(fileURL: panel.filePath, localizer: appLocalizer())
             wireEditorVimMode(editorView: editorView, tabID: tabID)
             wireEditorSyntaxIfAvailable(editorView: editorView)
             wireEditorCompletionIfNeeded(editorView: editorView, fileURL: panel.filePath, tabID: tabID)

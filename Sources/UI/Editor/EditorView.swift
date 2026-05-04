@@ -9,6 +9,33 @@ final class EditorView: NSView, NSTextViewDelegate {
         case missingFileURL
     }
 
+    private enum StatusOverride: Equatable {
+        case loadFailed
+        case markFileMissing
+        case written
+        case writeFailed
+        case noWriteSinceLastChange
+        case softWrap(Bool)
+
+        @MainActor
+        func localized(using localizer: AppLocalizer) -> String {
+            switch self {
+            case .loadFailed:
+                return EditorView.localizedLoadFailed(using: localizer)
+            case .markFileMissing:
+                return EditorView.localizedMarkFileMissing(using: localizer)
+            case .written:
+                return EditorView.localizedWritten(using: localizer)
+            case .writeFailed:
+                return EditorView.localizedWriteFailed(using: localizer)
+            case .noWriteSinceLastChange:
+                return EditorView.localizedNoWriteSinceLastChange(using: localizer)
+            case .softWrap(let enabled):
+                return EditorView.localizedSoftWrap(enabled, using: localizer)
+            }
+        }
+    }
+
     private struct EditorUndoSnapshot: Equatable {
         var text: String
         var selection: EditorSelection
@@ -23,8 +50,8 @@ final class EditorView: NSView, NSTextViewDelegate {
     private(set) var session: EditorSession
 
     private let toolbar = NSStackView()
-    private let fileNameLabel = NSTextField(labelWithString: "Untitled")
-    private let statusLabel = NSTextField(labelWithString: "Saved")
+    private let fileNameLabel = NSTextField(labelWithString: "")
+    private let statusLabel = NSTextField(labelWithString: "")
     private let lspAccessoryLabel = NSTextField(labelWithString: "")
     private let lspHoverButton = NSButton()
     private let lspCompletionButton = NSButton()
@@ -38,7 +65,8 @@ final class EditorView: NSView, NSTextViewDelegate {
     private let clipboardService: ClipboardServiceProtocol
     private let lspResultsMenu = NSMenu()
     private var isApplyingProgrammaticUpdate = false
-    private var statusOverride: String?
+    private var statusOverride: StatusOverride?
+    private var localizer: AppLocalizer
     private var lspPresentation = EditorLSPPresentation()
     private var vimController = VimController()
     private var vimUndoStack: [EditorUndoEntry] = []
@@ -67,7 +95,7 @@ final class EditorView: NSView, NSTextViewDelegate {
     var lspDefinitionLocations: [LSPLocation] { lspPresentation.definitionLocations }
     var lspReferenceLocations: [LSPLocation] { lspPresentation.referenceLocations }
     var lspAccessoryText: String? { lspAccessoryLabel.isHidden ? nil : lspAccessoryLabel.stringValue }
-    var lspResultItemTitles: [String] { lspPresentation.resultItemTitles }
+    var lspResultItemTitles: [String] { lspPresentation.resultItemTitles(using: localizer) }
     var onFileLoaded: ((URL) -> Void)?
     var onQuitRequested: (() -> Void)?
     var onLSPHoverRequested: ((LSPPosition) -> Void)?
@@ -88,12 +116,14 @@ final class EditorView: NSView, NSTextViewDelegate {
     init(
         fileURL: URL? = nil,
         text: String = "",
-        clipboardService: ClipboardServiceProtocol = SystemClipboardService()
+        clipboardService: ClipboardServiceProtocol = SystemClipboardService(),
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.fileURL = fileURL
         self.session = EditorSession(document: EditorDocument(fileURL: fileURL, text: text))
         self.scrollView = EditorScrollView(textView: textView)
         self.clipboardService = clipboardService
+        self.localizer = localizer
         super.init(frame: .zero)
 
         setupUI()
@@ -149,7 +179,7 @@ final class EditorView: NSView, NSTextViewDelegate {
             onFileLoaded?(url)
         } catch {
             session = EditorSession(document: EditorDocument(fileURL: url, text: ""))
-            statusOverride = "Load failed"
+            statusOverride = .loadFailed
             resetVimUndoState()
             clearLSPPresentation()
             dismissInlineCompletion()
@@ -477,7 +507,7 @@ final class EditorView: NSView, NSTextViewDelegate {
         switch command {
         case let .openFileAtMark(url, offset, lineWise):
             guard FileManager.default.fileExists(atPath: url.path) else {
-                statusOverride = "Mark file missing"
+                statusOverride = .markFileMissing
                 updateHeader()
                 return false
             }
@@ -625,6 +655,13 @@ final class EditorView: NSView, NSTextViewDelegate {
         updateHeader()
     }
 
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        applyLocalizedChrome()
+        renderLSPPresentation()
+        updateHeader()
+    }
+
     func textDidChange(_ notification: Notification) {
         guard !isApplyingProgrammaticUpdate else { return }
         dismissInlineCompletion()
@@ -649,12 +686,12 @@ final class EditorView: NSView, NSTextViewDelegate {
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         addSubview(toolbar)
 
-        configureIconButton(openButton, symbolName: "folder", tooltip: "Open File", action: #selector(openButtonPressed))
-        configureIconButton(saveButton, symbolName: "square.and.arrow.down", tooltip: "Save", action: #selector(saveButtonPressed))
-        configureIconButton(lspHoverButton, symbolName: "info.circle", tooltip: "Show Hover", action: #selector(lspHoverButtonPressed))
-        configureIconButton(lspCompletionButton, symbolName: "wand.and.stars", tooltip: "Show Completions", action: #selector(lspCompletionButtonPressed))
-        configureIconButton(lspDefinitionButton, symbolName: "arrowshape.turn.up.right", tooltip: "Go to Definition", action: #selector(lspDefinitionButtonPressed))
-        configureIconButton(lspReferencesButton, symbolName: "number", tooltip: "Find References", action: #selector(lspReferencesButtonPressed))
+        configureIconButton(openButton, symbolName: "folder", tooltip: Self.localizedOpenFile(using: localizer), action: #selector(openButtonPressed))
+        configureIconButton(saveButton, symbolName: "square.and.arrow.down", tooltip: Self.localizedSave(using: localizer), action: #selector(saveButtonPressed))
+        configureIconButton(lspHoverButton, symbolName: "info.circle", tooltip: Self.localizedShowHover(using: localizer), action: #selector(lspHoverButtonPressed))
+        configureIconButton(lspCompletionButton, symbolName: "wand.and.stars", tooltip: Self.localizedShowCompletions(using: localizer), action: #selector(lspCompletionButtonPressed))
+        configureIconButton(lspDefinitionButton, symbolName: "arrowshape.turn.up.right", tooltip: Self.localizedGoToDefinition(using: localizer), action: #selector(lspDefinitionButtonPressed))
+        configureIconButton(lspReferencesButton, symbolName: "number", tooltip: Self.localizedFindReferences(using: localizer), action: #selector(lspReferencesButtonPressed))
 
         fileNameLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         fileNameLabel.textColor = CocxyColors.text
@@ -673,7 +710,7 @@ final class EditorView: NSView, NSTextViewDelegate {
         configureIconButton(
             lspPrimaryActionButton,
             symbolName: "arrow.right.circle",
-            tooltip: "Apply Suggestion",
+            tooltip: Self.localizedApplySuggestion(using: localizer),
             action: #selector(lspPrimaryActionPressed)
         )
         lspPrimaryActionButton.isHidden = true
@@ -710,6 +747,16 @@ final class EditorView: NSView, NSTextViewDelegate {
         ])
         renderLSPControls()
         applySoftWrapConfiguration()
+    }
+
+    private func applyLocalizedChrome() {
+        applyButtonCopy(openButton, Self.localizedOpenFile(using: localizer))
+        applyButtonCopy(saveButton, Self.localizedSave(using: localizer))
+        applyButtonCopy(lspHoverButton, Self.localizedShowHover(using: localizer))
+        applyButtonCopy(lspCompletionButton, Self.localizedShowCompletions(using: localizer))
+        applyButtonCopy(lspDefinitionButton, Self.localizedGoToDefinition(using: localizer))
+        applyButtonCopy(lspReferencesButton, Self.localizedFindReferences(using: localizer))
+        applyButtonCopy(lspPrimaryActionButton, Self.localizedApplySuggestion(using: localizer))
     }
 
     private func wireCallbacks() {
@@ -755,6 +802,12 @@ final class EditorView: NSView, NSTextViewDelegate {
         ])
     }
 
+    private func applyButtonCopy(_ button: NSButton, _ copy: String) {
+        button.toolTip = copy
+        button.setAccessibilityLabel(copy)
+        button.image?.accessibilityDescription = copy
+    }
+
     private func applyText(_ text: String, preserveSelection: Bool) {
         let selectedRange = textView.selectedRange()
         isApplyingProgrammaticUpdate = true
@@ -794,7 +847,7 @@ final class EditorView: NSView, NSTextViewDelegate {
     }
 
     private func renderLSPPresentation() {
-        let text = lspPresentation.accessoryText
+        let text = lspPresentation.accessoryText(using: localizer)
         lspAccessoryLabel.stringValue = text ?? ""
         lspAccessoryLabel.isHidden = text == nil
         lspPrimaryActionButton.isHidden = !hasLSPPrimaryAction
@@ -810,7 +863,7 @@ final class EditorView: NSView, NSTextViewDelegate {
 
     private func rebuildLSPResultsMenu() {
         lspResultsMenu.removeAllItems()
-        for (index, title) in lspPresentation.resultItemTitles.enumerated() {
+        for (index, title) in lspPresentation.resultItemTitles(using: localizer).enumerated() {
             let item = NSMenuItem(
                 title: title,
                 action: #selector(lspResultMenuItemSelected(_:)),
@@ -1050,11 +1103,12 @@ final class EditorView: NSView, NSTextViewDelegate {
     }
 
     private func updateHeader() {
-        fileNameLabel.stringValue = fileURL?.lastPathComponent ?? "Untitled"
+        fileNameLabel.stringValue = fileURL?.lastPathComponent ?? Self.localizedUntitled(using: localizer)
         if let vimPromptText {
             statusLabel.stringValue = vimPromptText
         } else {
-            statusLabel.stringValue = statusOverride ?? (isDirty ? "Edited" : "Saved")
+            statusLabel.stringValue = statusOverride?.localized(using: localizer)
+                ?? (isDirty ? Self.localizedEdited(using: localizer) : Self.localizedSaved(using: localizer))
         }
         saveButton.isEnabled = fileURL != nil && isDirty
     }
@@ -1064,14 +1118,14 @@ final class EditorView: NSView, NSTextViewDelegate {
         case .write:
             do {
                 try saveNow()
-                statusOverride = "Written"
+                statusOverride = .written
             } catch {
-                statusOverride = "Write failed"
+                statusOverride = .writeFailed
             }
             updateHeader()
         case .quit:
             if isDirty {
-                statusOverride = "No write since last change"
+                statusOverride = .noWriteSinceLastChange
                 updateHeader()
             } else {
                 onQuitRequested?()
@@ -1079,11 +1133,11 @@ final class EditorView: NSView, NSTextViewDelegate {
         case .writeQuit:
             do {
                 try saveNow()
-                statusOverride = "Written"
+                statusOverride = .written
                 updateHeader()
                 onQuitRequested?()
             } catch {
-                statusOverride = "Write failed"
+                statusOverride = .writeFailed
                 updateHeader()
             }
         case .clearSearchHighlights:
@@ -1093,9 +1147,74 @@ final class EditorView: NSView, NSTextViewDelegate {
         case .toggleSoftWrap:
             setSoftWrapEnabled(!isSoftWrapEnabled)
         case .reportSoftWrap:
-            statusOverride = isSoftWrapEnabled ? "wrap" : "nowrap"
+            statusOverride = .softWrap(isSoftWrapEnabled)
             updateHeader()
         }
+    }
+
+    static func localizedUntitled(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.chrome.untitled", fallback: "Untitled")
+    }
+
+    static func localizedSaved(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.status.saved", fallback: "Saved")
+    }
+
+    static func localizedEdited(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.status.edited", fallback: "Edited")
+    }
+
+    static func localizedLoadFailed(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.status.loadFailed", fallback: "Load failed")
+    }
+
+    static func localizedMarkFileMissing(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.status.markFileMissing", fallback: "Mark file missing")
+    }
+
+    static func localizedWritten(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.status.written", fallback: "Written")
+    }
+
+    static func localizedWriteFailed(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.status.writeFailed", fallback: "Write failed")
+    }
+
+    static func localizedNoWriteSinceLastChange(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.status.noWriteSinceLastChange", fallback: "No write since last change")
+    }
+
+    static func localizedSoftWrap(_ enabled: Bool, using localizer: AppLocalizer) -> String {
+        let key = enabled ? "editor.status.wrap" : "editor.status.nowrap"
+        return localizer.string(key, fallback: enabled ? "wrap" : "nowrap")
+    }
+
+    static func localizedOpenFile(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.toolbar.openFile", fallback: "Open File")
+    }
+
+    static func localizedSave(using localizer: AppLocalizer) -> String {
+        localizer.string("common.save", fallback: "Save")
+    }
+
+    static func localizedShowHover(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.toolbar.showHover", fallback: "Show Hover")
+    }
+
+    static func localizedShowCompletions(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.toolbar.showCompletions", fallback: "Show Completions")
+    }
+
+    static func localizedGoToDefinition(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.toolbar.goToDefinition", fallback: "Go to Definition")
+    }
+
+    static func localizedFindReferences(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.toolbar.findReferences", fallback: "Find References")
+    }
+
+    static func localizedApplySuggestion(using localizer: AppLocalizer) -> String {
+        localizer.string("editor.toolbar.applySuggestion", fallback: "Apply Suggestion")
     }
 
     private func replaceSearchDecorations(for query: String) {

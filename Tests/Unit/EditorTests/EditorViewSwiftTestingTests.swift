@@ -32,6 +32,23 @@ struct EditorViewSwiftTestingTests {
         #expect(view.statusText == "Load failed")
     }
 
+    @Test("editor chrome strings localize to Spanish")
+    func editorChromeStringsLocalize() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let view = EditorView(text: "alpha", localizer: localizer)
+
+        #expect(view.statusText == "Guardado")
+        view.replaceText("beta")
+        #expect(view.statusText == "Editado")
+        view.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+        #expect(view.statusText == "Edited")
+        #expect(EditorView.localizedUntitled(using: localizer) == "Sin título")
+        #expect(EditorView.localizedOpenFile(using: localizer) == "Abrir archivo")
+        #expect(EditorView.localizedFindReferences(using: localizer) == "Buscar referencias")
+        #expect(EditorLSPPresentation.localizedReferences(2, using: localizer) == "2 referencias")
+    }
+
     @Test("programmatic text replacement marks document dirty and save writes to disk")
     func replacementAndSaveRoundTrip() throws {
         let fileURL = try makeTemporaryFile(contents: "old\n")
@@ -991,6 +1008,10 @@ struct EditorViewSwiftTestingTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func localizationBundle() -> Bundle? {
+        Bundle(url: repositoryRoot().appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 
     private func findSubview<T: NSView>(in root: NSView) -> T? {

@@ -75,6 +75,7 @@ extension MainWindowController {
         (horizontalTabStripView as? HorizontalTabStripView)?.updateLocalizer(localizer)
         auroraChromeController?.updateLocalizer(localizer)
         updateMarkdownPanelLocalizers(localizer)
+        updateEditorPanelLocalizers(localizer)
         updateSessionReplayPanelLocalizers(localizer)
         updateAIEditHistoryPanelLocalizers(localizer)
         updateDBCloudHelperPanelLocalizers(localizer)
@@ -213,6 +214,18 @@ extension MainWindowController {
         for panelViews in savedTabPanelContentViews.values {
             for view in panelViews.values {
                 (view as? MarkdownContentView)?.updateLocalizer(localizer)
+            }
+        }
+    }
+
+    private func updateEditorPanelLocalizers(_ localizer: AppLocalizer) {
+        for view in panelContentViews.values {
+            (view as? EditorView)?.updateLocalizer(localizer)
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                (view as? EditorView)?.updateLocalizer(localizer)
             }
         }
     }
