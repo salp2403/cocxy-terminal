@@ -1,0 +1,8 @@
+name = "Kubernetes Helper"
+description = "Adds local kubectl checks and command helpers."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-kubernetes"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "process-spawn"]

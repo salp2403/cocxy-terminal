@@ -1,0 +1,8 @@
+name = "Redis Helper"
+description = "Adds local Redis CLI checks and command helpers."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-db-redis"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "process-spawn"]

@@ -1,0 +1,8 @@
+name = "GCP CLI Helper"
+description = "Adds local Google Cloud CLI checks and command helpers."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-gcp-cli"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "process-spawn"]

@@ -1,0 +1,8 @@
+name = "Azure CLI Helper"
+description = "Adds local Azure CLI checks and command helpers."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-azure-cli"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "process-spawn"]

@@ -218,6 +218,34 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(manifests[0].capabilities == [.environmentRead])
     }
 
+    @Test("bundled plugin catalog includes DB and cloud helper set")
+    func bundledPluginCatalogIncludesDBAndCloudHelperSet() throws {
+        let pluginsRoot = repositoryRoot()
+            .appendingPathComponent("Resources/Plugins", isDirectory: true)
+        let manifests = try BundledPluginCatalog(pluginsDirectory: pluginsRoot).loadManifests()
+        let manifestsByID = Dictionary(uniqueKeysWithValues: manifests.map { ($0.id, $0) })
+        let expectedIDs: Set<String> = [
+            "cocxy-aws-cli-helper",
+            "cocxy-azure-cli",
+            "cocxy-cloudflare",
+            "cocxy-db-mysql",
+            "cocxy-db-postgres",
+            "cocxy-db-redis",
+            "cocxy-db-sqlite",
+            "cocxy-docker-helper",
+            "cocxy-gcp-cli",
+            "cocxy-kubernetes",
+        ]
+
+        #expect(Set(manifestsByID.keys).isSuperset(of: expectedIDs))
+        for id in expectedIDs {
+            let manifest = try #require(manifestsByID[id])
+            #expect(manifest.repositoryURL?.hasPrefix("bundled://") == true)
+            #expect(manifest.capabilities.contains(.processSpawn))
+        }
+        #expect(manifestsByID["cocxy-db-sqlite"]?.capabilities.contains(.filesystemRead) == true)
+    }
+
     @Test("plugin updater reports newer semver tags")
     func pluginUpdaterReportsNewerSemverTags() {
         let manifest = PluginManifest(
@@ -279,5 +307,13 @@ struct PluginMarketplaceSwiftTestingTests {
                 capabilities: []
             )
         }
+    }
+
+    private func repositoryRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 }

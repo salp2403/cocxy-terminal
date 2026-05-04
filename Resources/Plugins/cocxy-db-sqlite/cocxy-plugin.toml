@@ -1,0 +1,8 @@
+name = "SQLite Helper"
+description = "Adds local SQLite CLI checks and command helpers."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-db-sqlite"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["filesystem-read", "process-spawn"]

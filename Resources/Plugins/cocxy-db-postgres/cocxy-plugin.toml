@@ -1,0 +1,8 @@
+name = "PostgreSQL Helper"
+description = "Adds local PostgreSQL CLI checks and command helpers."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-db-postgres"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "process-spawn"]

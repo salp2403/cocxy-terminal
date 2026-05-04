@@ -1,0 +1,8 @@
+name = "MySQL Helper"
+description = "Adds local MySQL CLI checks and command helpers."
+version = "1.0.0"
+author = "Cocxy"
+repository = "bundled://cocxy-db-mysql"
+license = "MIT"
+events = ["session-start"]
+capabilities = ["environment-read", "process-spawn"]

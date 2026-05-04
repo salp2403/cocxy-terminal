@@ -299,6 +299,14 @@ check_exists "$RESOURCES/Plugins/cocxy-linear/cocxy-plugin.toml" "Linear bundled
 check_exists "$RESOURCES/Plugins/cocxy-jira/cocxy-plugin.toml" "Jira bundled plugin"
 check_exists "$RESOURCES/Plugins/cocxy-aws-cli-helper/cocxy-plugin.toml" "AWS CLI bundled plugin"
 check_exists "$RESOURCES/Plugins/cocxy-docker-helper/cocxy-plugin.toml" "Docker bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-db-postgres/cocxy-plugin.toml" "PostgreSQL bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-db-mysql/cocxy-plugin.toml" "MySQL bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-db-sqlite/cocxy-plugin.toml" "SQLite bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-db-redis/cocxy-plugin.toml" "Redis bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-gcp-cli/cocxy-plugin.toml" "GCP CLI bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-azure-cli/cocxy-plugin.toml" "Azure CLI bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-kubernetes/cocxy-plugin.toml" "Kubernetes bundled plugin"
+check_exists "$RESOURCES/Plugins/cocxy-cloudflare/cocxy-plugin.toml" "Cloudflare bundled plugin"
 
 # 10. QuickLook extension
 echo ""
