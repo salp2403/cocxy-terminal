@@ -39,11 +39,14 @@ struct CodeReviewPanelView: View {
             }
             Divider()
             if !viewModel.reviewAgentSessions.isEmpty {
-                CodeReviewAgentActivityView(sessions: viewModel.reviewAgentSessions)
+                CodeReviewAgentActivityView(
+                    sessions: viewModel.reviewAgentSessions,
+                    localizer: localizer
+                )
                 Divider()
             }
             if viewModel.isGitWorkflowVisible {
-                CodeReviewGitWorkflowPanel(viewModel: viewModel)
+                CodeReviewGitWorkflowPanel(viewModel: viewModel, localizer: localizer)
                 Divider()
             }
 
@@ -205,7 +208,8 @@ struct CodeReviewPanelView: View {
                             },
                             onRemove: { id in
                                 viewModel.removeComment(id: id)
-                            }
+                            },
+                            localizer: localizer
                         )
                         .padding(12)
                     }

@@ -6,28 +6,48 @@ import SwiftUI
 
 struct CodeReviewAgentActivityView: View {
     let sessions: [AgentSessionInfo]
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 8) {
-                Label("Live Agent Workstream", systemImage: "waveform.path.ecg")
+                Label(
+                    localized("codeReview.activity.title", fallback: "Live Agent Workstream"),
+                    systemImage: "waveform.path.ecg"
+                )
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
 
                 Spacer(minLength: 8)
 
-                metric("\(sessions.count)", "agents", color: CocxyColors.blue)
-                metric("\(subagentCount)", "subs", color: CocxyColors.mauve)
-                metric("\(touchedFileCount)", "files", color: CocxyColors.green)
+                metric(
+                    "\(sessions.count)",
+                    localized("codeReview.activity.metric.agents", fallback: "agents"),
+                    color: CocxyColors.blue
+                )
+                metric(
+                    "\(subagentCount)",
+                    localized("codeReview.activity.metric.subagentsShort", fallback: "subs"),
+                    color: CocxyColors.mauve
+                )
+                metric(
+                    "\(touchedFileCount)",
+                    localized("codeReview.activity.metric.files", fallback: "files"),
+                    color: CocxyColors.green
+                )
                 if conflictCount > 0 {
-                    metric("\(conflictCount)", "conflicts", color: CocxyColors.red)
+                    metric(
+                        "\(conflictCount)",
+                        localized("codeReview.activity.metric.conflicts", fallback: "conflicts"),
+                        color: CocxyColors.red
+                    )
                 }
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 10) {
                     ForEach(sessions) { session in
-                        CodeReviewAgentSessionCard(session: session)
+                        CodeReviewAgentSessionCard(session: session, localizer: localizer)
                     }
                 }
                 .padding(.bottom, 2)
@@ -46,7 +66,9 @@ struct CodeReviewAgentActivityView: View {
             )
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Live agent workstream")
+        .accessibilityLabel(
+            localized("codeReview.activity.accessibility", fallback: "Live agent workstream")
+        )
     }
 
     private var subagentCount: Int {
@@ -75,12 +97,17 @@ struct CodeReviewAgentActivityView: View {
         .background(
             Capsule()
                 .fill(Color(nsColor: color).opacity(0.12))
-        )
+            )
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }
 
 private struct CodeReviewAgentSessionCard: View {
     let session: AgentSessionInfo
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -109,13 +136,29 @@ private struct CodeReviewAgentSessionCard: View {
             }
 
             HStack(spacing: 6) {
-                chip("\(session.totalToolCalls)", "tools", color: CocxyColors.sky)
-                chip("\(session.filesTouched.count)", "files", color: CocxyColors.green)
+                chip(
+                    "\(session.totalToolCalls)",
+                    localized("codeReview.activity.metric.tools", fallback: "tools"),
+                    color: CocxyColors.sky
+                )
+                chip(
+                    "\(session.filesTouched.count)",
+                    localized("codeReview.activity.metric.files", fallback: "files"),
+                    color: CocxyColors.green
+                )
                 if session.totalErrors > 0 {
-                    chip("\(session.totalErrors)", "errors", color: CocxyColors.red)
+                    chip(
+                        "\(session.totalErrors)",
+                        localized("codeReview.activity.metric.errors", fallback: "errors"),
+                        color: CocxyColors.red
+                    )
                 }
                 if !session.fileConflicts.isEmpty {
-                    chip("\(session.fileConflicts.count)", "conflicts", color: CocxyColors.red)
+                    chip(
+                        "\(session.fileConflicts.count)",
+                        localized("codeReview.activity.metric.conflicts", fallback: "conflicts"),
+                        color: CocxyColors.red
+                    )
                 }
             }
 
@@ -144,7 +187,9 @@ private struct CodeReviewAgentSessionCard: View {
 
     private var agentName: String {
         let trimmedName = session.agentName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmedName.isEmpty ? "Agent" : trimmedName
+        return trimmedName.isEmpty
+            ? localized("codeReview.activity.agentFallback", fallback: "Agent")
+            : trimmedName
     }
 
     private var agentBadge: some View {
@@ -176,13 +221,20 @@ private struct CodeReviewAgentSessionCard: View {
 
     private var stateLabel: String {
         switch session.state {
-        case .working: return "working"
-        case .waitingForInput: return "waiting"
-        case .blocked: return "blocked"
-        case .idle: return "idle"
-        case .finished: return "finished"
-        case .error: return "error"
-        case .launching: return "launching"
+        case .working:
+            return localized("codeReview.activity.state.working", fallback: "working")
+        case .waitingForInput:
+            return localized("codeReview.activity.state.waiting", fallback: "waiting")
+        case .blocked:
+            return localized("codeReview.activity.state.blocked", fallback: "blocked")
+        case .idle:
+            return localized("codeReview.activity.state.idle", fallback: "idle")
+        case .finished:
+            return localized("codeReview.activity.state.finished", fallback: "finished")
+        case .error:
+            return localized("codeReview.activity.state.error", fallback: "error")
+        case .launching:
+            return localized("codeReview.activity.state.launching", fallback: "launching")
         }
     }
 
@@ -190,7 +242,7 @@ private struct CodeReviewAgentSessionCard: View {
     private var subagentSection: some View {
         if !session.subagents.isEmpty {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Subagents")
+                Text(localized("codeReview.activity.subagents", fallback: "Subagents"))
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
 
@@ -224,7 +276,15 @@ private struct CodeReviewAgentSessionCard: View {
                 }
 
                 if session.subagents.count > 3 {
-                    Text("+\(session.subagents.count - 3) more subagents")
+                    Text(
+                        String(
+                            format: localized(
+                                "codeReview.activity.moreSubagents",
+                                fallback: "+%d more subagents"
+                            ),
+                            session.subagents.count - 3
+                        )
+                    )
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 }
@@ -236,7 +296,7 @@ private struct CodeReviewAgentSessionCard: View {
     private var fileImpactSection: some View {
         if !session.filesTouched.isEmpty {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Touched files")
+                Text(localized("codeReview.activity.touchedFiles", fallback: "Touched files"))
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
 
@@ -295,5 +355,9 @@ private struct CodeReviewAgentSessionCard: View {
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes)m" }
         return "\(minutes / 60)h"
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

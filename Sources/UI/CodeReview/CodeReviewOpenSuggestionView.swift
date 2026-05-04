@@ -7,6 +7,7 @@ import SwiftUI
 struct CodeReviewOpenSuggestionView: View {
     let fileCount: Int
     let agentCount: Int
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     let onOpen: () -> Void
     let onDismiss: () -> Void
 
@@ -22,7 +23,12 @@ struct CodeReviewOpenSuggestionView: View {
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Agent changes are ready to review")
+                Text(
+                    localized(
+                        "codeReview.openSuggestion.title",
+                        fallback: "Agent changes are ready to review"
+                    )
+                )
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
 
@@ -34,7 +40,7 @@ struct CodeReviewOpenSuggestionView: View {
 
             Spacer(minLength: 8)
 
-            Button("Open Review") {
+            Button(localized("codeReview.openSuggestion.open", fallback: "Open Review")) {
                 onOpen()
             }
             .buttonStyle(.borderedProminent)
@@ -46,7 +52,7 @@ struct CodeReviewOpenSuggestionView: View {
                     .font(.system(size: 10, weight: .semibold))
             }
             .buttonStyle(.plain)
-            .help("Not now")
+            .help(localized("codeReview.openSuggestion.dismiss", fallback: "Not now"))
         }
         .padding(12)
         .frame(width: 390)
@@ -60,12 +66,59 @@ struct CodeReviewOpenSuggestionView: View {
         )
         .shadow(color: .black.opacity(0.24), radius: 18, x: 0, y: 10)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Agent changes are ready to review")
+        .accessibilityLabel(
+            localized(
+                "codeReview.openSuggestion.title",
+                fallback: "Agent changes are ready to review"
+            )
+        )
     }
 
     private var detailText: String {
-        let files = fileCount > 0 ? "\(fileCount) changed file\(fileCount == 1 ? "" : "s")" : "new file activity"
-        let agents = agentCount > 0 ? " from \(agentCount) active agent\(agentCount == 1 ? "" : "s")" : ""
-        return "\(files)\(agents). Open Code Review when you are ready."
+        let files: String
+        if fileCount > 0 {
+            files = String(
+                format: localized(
+                    fileCount == 1
+                        ? "codeReview.openSuggestion.files.one"
+                        : "codeReview.openSuggestion.files.many",
+                    fallback: fileCount == 1 ? "%d changed file" : "%d changed files"
+                ),
+                fileCount
+            )
+        } else {
+            files = localized(
+                "codeReview.openSuggestion.files.none",
+                fallback: "new file activity"
+            )
+        }
+
+        let agents: String
+        if agentCount > 0 {
+            agents = String(
+                format: localized(
+                    agentCount == 1
+                        ? "codeReview.openSuggestion.agents.one"
+                        : "codeReview.openSuggestion.agents.many",
+                    fallback: agentCount == 1 ? " from %d active agent" : " from %d active agents"
+                ),
+                agentCount
+            )
+        } else {
+            agents = ""
+        }
+
+        return String(
+            format: localized(
+                "codeReview.openSuggestion.detail",
+                fallback: "%@%@. Open Code Review when you are ready."
+            ),
+            files,
+            agents
+        )
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

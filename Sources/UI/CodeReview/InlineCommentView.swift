@@ -10,6 +10,7 @@ struct InlineCommentView: View {
     let onSubmit: (String) -> Void
     let onCancel: () -> Void
     let onRemove: (UUID) -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var draftText = ""
 
@@ -17,17 +18,31 @@ struct InlineCommentView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Inline Comment")
+                    Text(localized("codeReview.inlineComment.title", fallback: "Inline Comment"))
                         .font(.system(size: 12, weight: .semibold))
-                    Text("\(URL(fileURLWithPath: filePath).lastPathComponent) · line \(line)")
+                    Text(
+                        String(
+                            format: localized(
+                                "codeReview.inlineComment.location",
+                                fallback: "%@ · line %d"
+                            ),
+                            URL(fileURLWithPath: filePath).lastPathComponent,
+                            line
+                        )
+                    )
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 }
                 Spacer()
-                Button("Cancel", action: onCancel)
+                Button(localized("codeReview.inlineComment.cancel", fallback: "Cancel"), action: onCancel)
                     .buttonStyle(.plain)
                     .foregroundColor(.secondary)
-                    .accessibilityHint("Close the inline comment composer")
+                    .accessibilityHint(
+                        localized(
+                            "codeReview.inlineComment.cancelHint",
+                            fallback: "Close the inline comment composer"
+                        )
+                    )
             }
 
             if !existingComments.isEmpty {
@@ -52,8 +67,10 @@ struct InlineCommentView: View {
                             }
                             .buttonStyle(.plain)
                             .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                            .help("Remove comment")
-                            .accessibilityLabel("Remove comment")
+                            .help(localized("codeReview.inlineComment.remove", fallback: "Remove comment"))
+                            .accessibilityLabel(
+                                localized("codeReview.inlineComment.remove", fallback: "Remove comment")
+                            )
                         }
                         .padding(8)
                         .background(
@@ -64,7 +81,14 @@ struct InlineCommentView: View {
                 }
             }
 
-            TextField("Describe the change you want from the agent", text: $draftText, axis: .vertical)
+            TextField(
+                localized(
+                    "codeReview.inlineComment.placeholder",
+                    fallback: "Describe the change you want from the agent"
+                ),
+                text: $draftText,
+                axis: .vertical
+            )
                 .textFieldStyle(.plain)
                 .font(.system(size: 11))
                 .padding(10)
@@ -77,20 +101,40 @@ struct InlineCommentView: View {
                         .stroke(Color(nsColor: CocxyColors.surface1), lineWidth: 1)
                 )
                 .onSubmit(submit)
-                .accessibilityLabel("Comment draft")
-                .accessibilityHint("Describe the change you want the agent to make")
+                .accessibilityLabel(
+                    localized(
+                        "codeReview.inlineComment.draftAccessibility",
+                        fallback: "Comment draft"
+                    )
+                )
+                .accessibilityHint(
+                    localized(
+                        "codeReview.inlineComment.draftHint",
+                        fallback: "Describe the change you want the agent to make"
+                    )
+                )
 
             HStack {
-                Text("Enter to add, Cmd+Enter to submit all")
+                Text(
+                    localized(
+                        "codeReview.inlineComment.keyboardHint",
+                        fallback: "Enter to add, Cmd+Enter to submit all"
+                    )
+                )
                     .font(.system(size: 10))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
 
                 Spacer()
 
-                Button("Add Comment", action: submit)
+                Button(localized("codeReview.inlineComment.add", fallback: "Add Comment"), action: submit)
                     .buttonStyle(.borderedProminent)
                     .disabled(draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityHint("Add this inline comment to the pending review feedback")
+                    .accessibilityHint(
+                        localized(
+                            "codeReview.inlineComment.addHint",
+                            fallback: "Add this inline comment to the pending review feedback"
+                        )
+                    )
             }
         }
         .padding(12)
@@ -109,5 +153,9 @@ struct InlineCommentView: View {
         guard !trimmed.isEmpty else { return }
         onSubmit(trimmed)
         draftText = ""
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 }

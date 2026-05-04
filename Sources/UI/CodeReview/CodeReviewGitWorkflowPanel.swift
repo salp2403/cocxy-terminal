@@ -5,6 +5,7 @@ import SwiftUI
 
 struct CodeReviewGitWorkflowPanel: View {
     @ObservedObject var viewModel: CodeReviewPanelViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -50,12 +51,17 @@ struct CodeReviewGitWorkflowPanel: View {
                 .frame(height: 1)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Git workflow")
+        .accessibilityLabel(
+            localized("codeReview.gitWorkflow.accessibility", fallback: "Git workflow")
+        )
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            Label("Git Workflow", systemImage: "arrow.triangle.branch")
+            Label(
+                localized("codeReview.gitWorkflow.title", fallback: "Git Workflow"),
+                systemImage: "arrow.triangle.branch"
+            )
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
 
@@ -70,7 +76,10 @@ struct CodeReviewGitWorkflowPanel: View {
             Button {
                 viewModel.refreshGitStatus()
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label(
+                    localized("codeReview.gitWorkflow.refresh", fallback: "Refresh"),
+                    systemImage: "arrow.clockwise"
+                )
             }
             .buttonStyle(.bordered)
             .disabled(viewModel.isGitActionRunning)
@@ -82,12 +91,15 @@ struct CodeReviewGitWorkflowPanel: View {
                     .font(.system(size: 10, weight: .semibold))
             }
             .buttonStyle(.plain)
-            .help("Hide Git workflow")
+            .help(localized("codeReview.gitWorkflow.hide", fallback: "Hide Git workflow"))
         }
     }
 
     private var statusCard: some View {
-        GitWorkflowCard(title: "Repository", systemImage: "externaldrive.connected.to.line.below") {
+        GitWorkflowCard(
+            title: localized("codeReview.gitWorkflow.repository", fallback: "Repository"),
+            systemImage: "externaldrive.connected.to.line.below"
+        ) {
             if let status = viewModel.gitStatus {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
@@ -100,21 +112,57 @@ struct CodeReviewGitWorkflowPanel: View {
                         Spacer(minLength: 6)
 
                         if status.ahead > 0 {
-                            miniStat("ahead \(status.ahead)", color: CocxyColors.green)
+                            miniStat(
+                                localizedCount("codeReview.gitWorkflow.stat.ahead", fallback: "ahead %d", status.ahead),
+                                color: CocxyColors.green
+                            )
                         }
                         if status.behind > 0 {
-                            miniStat("behind \(status.behind)", color: CocxyColors.yellow)
+                            miniStat(
+                                localizedCount(
+                                    "codeReview.gitWorkflow.stat.behind",
+                                    fallback: "behind %d",
+                                    status.behind
+                                ),
+                                color: CocxyColors.yellow
+                            )
                         }
                     }
 
                     HStack(spacing: 7) {
-                        miniStat("\(status.changedCount) changed", color: CocxyColors.sky)
-                        miniStat("\(status.stagedCount) staged", color: CocxyColors.green)
-                        miniStat("\(status.untrackedCount) new", color: CocxyColors.mauve)
+                        miniStat(
+                            localizedCount(
+                                "codeReview.gitWorkflow.stat.changed",
+                                fallback: "%d changed",
+                                status.changedCount
+                            ),
+                            color: CocxyColors.sky
+                        )
+                        miniStat(
+                            localizedCount(
+                                "codeReview.gitWorkflow.stat.staged",
+                                fallback: "%d staged",
+                                status.stagedCount
+                            ),
+                            color: CocxyColors.green
+                        )
+                        miniStat(
+                            localizedCount(
+                                "codeReview.gitWorkflow.stat.new",
+                                fallback: "%d new",
+                                status.untrackedCount
+                            ),
+                            color: CocxyColors.mauve
+                        )
                     }
                 }
             } else {
-                Text("No Git repository was detected for this review context.")
+                Text(
+                    localized(
+                        "codeReview.gitWorkflow.noRepository",
+                        fallback: "No Git repository was detected for this review context."
+                    )
+                )
                     .font(.system(size: 11))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     .fixedSize(horizontal: false, vertical: true)
@@ -123,15 +171,24 @@ struct CodeReviewGitWorkflowPanel: View {
     }
 
     private var branchCard: some View {
-        GitWorkflowCard(title: "Branch", systemImage: "point.3.connected.trianglepath.dotted") {
+        GitWorkflowCard(
+            title: localized("codeReview.gitWorkflow.branch", fallback: "Branch"),
+            systemImage: "point.3.connected.trianglepath.dotted"
+        ) {
             VStack(alignment: .leading, spacing: 8) {
-                TextField("feature/review-fix", text: $viewModel.branchNameDraft)
+                TextField(
+                    localized("codeReview.gitWorkflow.placeholder.branch", fallback: "feature/review-fix"),
+                    text: $viewModel.branchNameDraft
+                )
                     .textFieldStyle(.roundedBorder)
 
                 Button {
                     viewModel.createBranchFromDraft()
                 } label: {
-                    Label("Create Branch", systemImage: "plus")
+                    Label(
+                        localized("codeReview.gitWorkflow.createBranch", fallback: "Create Branch"),
+                        systemImage: "plus"
+                    )
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -140,7 +197,12 @@ struct CodeReviewGitWorkflowPanel: View {
                     || viewModel.isGitActionRunning
                 )
 
-                Text("Creates and switches to the branch before committing.")
+                Text(
+                    localized(
+                        "codeReview.gitWorkflow.createBranch.help",
+                        fallback: "Creates and switches to the branch before committing."
+                    )
+                )
                     .font(.system(size: 9))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
             }
@@ -148,10 +210,13 @@ struct CodeReviewGitWorkflowPanel: View {
     }
 
     private var commitCard: some View {
-        GitWorkflowCard(title: "Commit & Push", systemImage: "paperplane") {
+        GitWorkflowCard(
+            title: localized("codeReview.gitWorkflow.commitPush", fallback: "Commit & Push"),
+            systemImage: "paperplane"
+        ) {
             VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Commit message")
+                    Text(localized("codeReview.gitWorkflow.commitMessage", fallback: "Commit message"))
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                         .textCase(.uppercase)
@@ -165,7 +230,12 @@ struct CodeReviewGitWorkflowPanel: View {
                             )
 
                         if viewModel.commitMessageDraft.isEmpty {
-                            Text("fix(review): explain what changed and why")
+                            Text(
+                                localized(
+                                    "codeReview.gitWorkflow.commitPlaceholder",
+                                    fallback: "fix(review): explain what changed and why"
+                                )
+                            )
                                 .font(.system(size: 11, design: .monospaced))
                                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                                 .padding(.horizontal, 9)
@@ -181,11 +251,22 @@ struct CodeReviewGitWorkflowPanel: View {
                     .frame(minHeight: 78, maxHeight: 104)
 
                     HStack(spacing: 6) {
-                        Text("Tip: first line = summary, blank line = details.")
+                        Text(
+                            localized(
+                                "codeReview.gitWorkflow.commitTip",
+                                fallback: "Tip: first line = summary, blank line = details."
+                            )
+                        )
                             .font(.system(size: 9))
                             .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                         Spacer()
-                        Text("\(viewModel.commitMessageDraft.count) chars")
+                        Text(
+                            localizedCount(
+                                "codeReview.gitWorkflow.chars",
+                                fallback: "%d chars",
+                                viewModel.commitMessageDraft.count
+                            )
+                        )
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     }
@@ -195,7 +276,10 @@ struct CodeReviewGitWorkflowPanel: View {
                     Button {
                         viewModel.commitAllChangesFromDraft()
                     } label: {
-                        Label("Commit All", systemImage: "checkmark.circle")
+                        Label(
+                            localized("codeReview.gitWorkflow.commitAll", fallback: "Commit All"),
+                            systemImage: "checkmark.circle"
+                        )
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -207,7 +291,10 @@ struct CodeReviewGitWorkflowPanel: View {
                     Button {
                         viewModel.pushCurrentBranch()
                     } label: {
-                        Label("Push", systemImage: "arrow.up.circle")
+                        Label(
+                            localized("codeReview.gitWorkflow.push", fallback: "Push"),
+                            systemImage: "arrow.up.circle"
+                        )
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -217,18 +304,32 @@ struct CodeReviewGitWorkflowPanel: View {
                 Button {
                     viewModel.requestCreatePullRequest()
                 } label: {
-                    Label("Create Pull Request", systemImage: "arrow.triangle.pull")
+                    Label(
+                        localized("codeReview.gitWorkflow.createPR", fallback: "Create Pull Request"),
+                        systemImage: "arrow.triangle.pull"
+                    )
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!isCreatePRAvailable)
                 .help(
                     viewModel.createPullRequestHandler == nil
-                        ? "Open the GitHub pane (Cmd+Option+G) once to enable this action."
-                        : "Creates a PR on GitHub via gh using the commit message as title and body."
+                        ? localized(
+                            "codeReview.gitWorkflow.createPR.enableHelp",
+                            fallback: "Open the GitHub pane (Cmd+Option+G) once to enable this action."
+                        )
+                        : localized(
+                            "codeReview.gitWorkflow.createPR.help",
+                            fallback: "Creates a PR on GitHub via gh using the commit message as title and body."
+                        )
                 )
 
-                Text("Commit All stages current review changes, Push sends the branch to origin, Create Pull Request opens a PR on GitHub via gh.")
+                Text(
+                    localized(
+                        "codeReview.gitWorkflow.footer",
+                        fallback: "Commit All stages current review changes, Push sends the branch to origin, Create Pull Request opens a PR on GitHub via gh."
+                    )
+                )
                     .font(.system(size: 9))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
             }
@@ -260,6 +361,14 @@ struct CodeReviewGitWorkflowPanel: View {
                     .fill(Color(nsColor: color).opacity(0.12))
             )
             .lineLimit(1)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    private func localizedCount(_ key: String, fallback: String, _ count: Int) -> String {
+        String(format: localized(key, fallback: fallback), count)
     }
 }
 

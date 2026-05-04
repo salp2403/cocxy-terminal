@@ -1096,6 +1096,7 @@ extension MainWindowController {
         let swiftUIView = CodeReviewOpenSuggestionView(
             fileCount: viewModel.currentDiffs.count,
             agentCount: max(viewModel.reviewAgentSessions.count, 1),
+            localizer: appLocalizer(),
             onOpen: { [weak self] in
                 self?.dismissCodeReviewSuggestion()
                 self?.showCodeReviewPanel()
