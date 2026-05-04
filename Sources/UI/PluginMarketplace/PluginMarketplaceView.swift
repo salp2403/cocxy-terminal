@@ -262,6 +262,7 @@ struct PluginMarketplaceView: View {
             }
         }
         .padding(20)
+        .glassPanelBackground()
         .confirmationDialog(
             "Uninstall Plugin",
             isPresented: Binding(

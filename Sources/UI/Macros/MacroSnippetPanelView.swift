@@ -28,7 +28,7 @@ struct MacroSnippetPanelView: View {
             Divider()
             content
         }
-        .background(Color(nsColor: CocxyColors.base))
+        .glassPanelBackground()
         .onAppear {
             viewModel.perform {
                 try viewModel.refresh()

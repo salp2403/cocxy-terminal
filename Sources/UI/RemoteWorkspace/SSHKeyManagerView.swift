@@ -274,7 +274,7 @@ struct SSHKeyManagerView: View {
         }
         .padding(20)
         .frame(width: 320)
-        .background(Color(nsColor: CocxyColors.mantle))
+        .glassPanelBackground()
     }
 
     // MARK: - Form Field Helper

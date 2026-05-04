@@ -33,7 +33,7 @@ struct NotebookPanelView: View {
                 .frame(minWidth: 260)
             }
         }
-        .background(Color(nsColor: CocxyColors.base))
+        .glassPanelBackground()
     }
 
     private var toolbar: some View {

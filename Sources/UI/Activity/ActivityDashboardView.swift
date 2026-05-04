@@ -30,12 +30,7 @@ struct ActivityDashboardView: View {
         }
         .frame(width: Self.panelWidth)
         .frame(maxHeight: .infinity)
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
-            }
-        )
+        .glassPanelBackground()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Activity Dashboard")
     }

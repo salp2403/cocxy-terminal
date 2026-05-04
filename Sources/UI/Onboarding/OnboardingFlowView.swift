@@ -36,7 +36,11 @@ struct OnboardingFlowView: View {
             }
             .frame(width: 560)
             .padding(24)
-            .background(.ultraThinMaterial)
+            .background {
+                Design.GlassSurface(cornerRadius: .large) {
+                    Color.clear
+                }
+            }
             .cornerRadius(14)
             .shadow(color: .black.opacity(0.35), radius: 22, y: 12)
             .scaleEffect(isVisible ? 1.0 : 0.96)

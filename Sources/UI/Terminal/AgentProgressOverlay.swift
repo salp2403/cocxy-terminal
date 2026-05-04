@@ -66,7 +66,11 @@ struct AgentProgressOverlay: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(.ultraThinMaterial)
+        .background {
+            Design.GlassSurface(cornerRadius: .medium) {
+                Color.clear
+            }
+        }
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
         .onAppear { isVisible = true }

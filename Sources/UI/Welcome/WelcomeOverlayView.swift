@@ -72,7 +72,11 @@ struct WelcomeOverlayView: View {
 
             overlayContent
                 .frame(width: Self.overlayWidth, height: Self.overlayHeight)
-                .background(.ultraThinMaterial)
+                .background {
+                    Design.GlassSurface(cornerRadius: .large) {
+                        Color.clear
+                    }
+                }
                 .cornerRadius(16)
                 .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
                 .scaleEffect(isVisible ? 1.0 : 0.95)

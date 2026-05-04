@@ -33,7 +33,7 @@ struct WorkflowPanelView: View {
                 .frame(minWidth: 280)
             }
         }
-        .background(Color(nsColor: CocxyColors.base))
+        .glassPanelBackground()
     }
 
     private var toolbar: some View {

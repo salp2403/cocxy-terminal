@@ -328,7 +328,7 @@ private struct ReviewKeyboardHintsButton: View {
             }
             .padding(16)
             .frame(width: 250)
-            .background(Color(nsColor: CocxyColors.base))
+            .glassPanelBackground()
         }
     }
 }

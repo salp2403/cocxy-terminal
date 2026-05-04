@@ -274,7 +274,7 @@ struct RemoteProfileEditor: View {
             footerButtons
         }
         .frame(width: 420, height: 500)
-        .background(Color(nsColor: CocxyColors.mantle))
+        .glassPanelBackground()
     }
 
     // MARK: - Header

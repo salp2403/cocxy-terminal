@@ -322,16 +322,7 @@ struct RemoteConnectionView: View {
         }
         .frame(width: Self.panelWidth)
         .frame(maxHeight: .infinity)
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground()
         .onAppear { viewModel.loadProfiles() }
         .onChange(of: viewModel.selectedProfileID) { _, _ in
             sftpBrowserVM = nil

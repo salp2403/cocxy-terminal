@@ -60,7 +60,7 @@ struct GitHubPaneView: View {
         }
         .frame(width: layout == .sidePanel ? panelWidth : nil)
         .frame(maxHeight: .infinity)
-        .background(.thickMaterial)
+        .glassPanelBackground()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("GitHub pane")
     }

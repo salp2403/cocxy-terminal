@@ -28,7 +28,7 @@ struct DBCloudHelperPanelView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 460)
-        .background(Color(nsColor: CocxyColors.base))
+        .glassPanelBackground()
     }
 
     private var header: some View {

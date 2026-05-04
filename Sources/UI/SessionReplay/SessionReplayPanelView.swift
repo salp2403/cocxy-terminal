@@ -26,7 +26,7 @@ struct SessionReplayPanelView: View {
                     .frame(minWidth: 360)
             }
         }
-        .background(Color(nsColor: CocxyColors.base))
+        .glassPanelBackground()
         .onAppear {
             viewModel.perform {
                 try viewModel.refresh()

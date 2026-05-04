@@ -24,7 +24,7 @@ struct ProjectTemplatePanelView: View {
                     .frame(minWidth: 380)
             }
         }
-        .background(Color(nsColor: CocxyColors.base))
+        .glassPanelBackground()
         .onAppear {
             if viewModel.templates.isEmpty {
                 viewModel.perform {

@@ -240,7 +240,7 @@ struct CodeReviewPanelView: View {
             .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: CocxyColors.base))
+        .glassPanelBackground()
     }
 
     private var headerView: some View {
@@ -524,7 +524,7 @@ struct CodeReviewPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color(nsColor: CocxyColors.mantle))
+        .glassPanelBackground()
     }
 
     private enum BannerKind {
@@ -889,7 +889,7 @@ private struct CodeReviewFileEditorView: View {
                 .layoutPriority(viewModel.isEditorExpanded ? 3 : 1)
                 .accessibilityLabel("Code review inline editor")
         }
-        .background(Color(nsColor: CocxyColors.base))
+        .glassPanelBackground()
         .layoutPriority(viewModel.isEditorExpanded ? 3 : 1)
     }
 

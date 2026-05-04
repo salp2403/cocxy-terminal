@@ -46,7 +46,7 @@ struct FileListView: View {
             }
             .padding(10)
         }
-        .background(Color(nsColor: CocxyColors.mantle))
+        .glassPanelBackground()
     }
 }
 
