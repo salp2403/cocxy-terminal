@@ -20,6 +20,27 @@ struct MarkdownSourceViewTests {
         #expect(editor.isIncrementalSearchingEnabled == true)
     }
 
+    @Test("source editor repairs unreadable foregrounds before drawing")
+    func sourceEditorRepairsUnreadableForegroundsBeforeDrawing() {
+        let view = MarkdownSourceView()
+        view.document = MarkdownDocument.parse("alpha beta")
+        let editor = view.editorTextView
+        let theme = MarkdownRenderTheme.cocxyDefaultTheme()
+        let fullRange = NSRange(location: 0, length: editor.textStorage?.length ?? 0)
+
+        editor.textColor = .black
+        editor.insertionPointColor = .black
+        editor.typingAttributes[.foregroundColor] = NSColor.black
+        editor.textStorage?.addAttribute(.foregroundColor, value: NSColor.black, range: fullRange)
+
+        editor.viewWillDraw()
+
+        #expect(editor.textColor == theme.textColor)
+        #expect(editor.insertionPointColor == theme.textColor)
+        #expect(editor.typingAttributes[.foregroundColor] as? NSColor == theme.textColor)
+        #expect(editor.textStorage?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == theme.textColor)
+    }
+
     @Test("applyBold wraps selected text")
     func applyBoldWrapsSelection() {
         let view = MarkdownSourceView()

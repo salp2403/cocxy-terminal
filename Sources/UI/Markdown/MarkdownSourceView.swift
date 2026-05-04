@@ -15,6 +15,7 @@ enum MarkdownSourceShortcutCommand: Equatable {
 private final class MarkdownEditorTextView: NSTextView {
     var shortcutHandler: ((NSEvent) -> Bool)?
     var imagePasteHandler: ((Data) -> Bool)?
+    private var readableTheme: MarkdownRenderTheme?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if shortcutHandler?(event) == true {
@@ -35,6 +36,119 @@ private final class MarkdownEditorTextView: NSTextView {
             return
         }
         super.paste(sender)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        repairReadableSourceThemeIfNeeded()
+    }
+
+    override func viewWillDraw() {
+        super.viewWillDraw()
+        repairReadableSourceThemeIfNeeded()
+    }
+
+    func applyReadableSourceTheme(
+        _ theme: MarkdownRenderTheme,
+        repairStorageForeground: Bool = false
+    ) {
+        readableTheme = theme
+        backgroundColor = CocxyColors.base
+        font = theme.codeFont
+        textColor = theme.textColor
+        insertionPointColor = theme.textColor
+        typingAttributes[.font] = theme.codeFont
+        typingAttributes[.foregroundColor] = theme.textColor
+        selectedTextAttributes = [
+            .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.28),
+            .foregroundColor: theme.textColor,
+        ]
+
+        if repairStorageForeground {
+            repairUnreadableStorageForegrounds(theme: theme)
+        }
+    }
+
+    private func repairReadableSourceThemeIfNeeded() {
+        guard let readableTheme else { return }
+        guard needsReadableSourceThemeRepair() else { return }
+        applyReadableSourceTheme(readableTheme, repairStorageForeground: true)
+    }
+
+    private func needsReadableSourceThemeRepair() -> Bool {
+        if !isReadableOnSourceBackground(textColor) {
+            return true
+        }
+        if !isReadableOnSourceBackground(insertionPointColor) {
+            return true
+        }
+        if let typingForeground = typingAttributes[.foregroundColor] as? NSColor,
+           !isReadableOnSourceBackground(typingForeground) {
+            return true
+        }
+
+        guard let textStorage, textStorage.length > 0 else { return false }
+        for location in sampledAttributeLocations(textLength: textStorage.length) {
+            let foreground = textStorage.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor
+            if foreground == nil || !isReadableOnSourceBackground(foreground) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func repairUnreadableStorageForegrounds(theme: MarkdownRenderTheme) {
+        guard let textStorage, textStorage.length > 0 else { return }
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        var rangesToRepair: [NSRange] = []
+
+        textStorage.enumerateAttribute(.foregroundColor, in: fullRange) { value, range, _ in
+            let foreground = value as? NSColor
+            if foreground == nil || !self.isReadableOnSourceBackground(foreground) {
+                rangesToRepair.append(range)
+            }
+        }
+
+        guard !rangesToRepair.isEmpty else { return }
+        textStorage.beginEditing()
+        for range in rangesToRepair {
+            textStorage.addAttribute(.foregroundColor, value: theme.textColor, range: range)
+        }
+        textStorage.endEditing()
+    }
+
+    private func sampledAttributeLocations(textLength: Int) -> [Int] {
+        let last = max(0, textLength - 1)
+        return Array(Set([0, last / 2, last])).sorted()
+    }
+
+    private func isReadableOnSourceBackground(_ color: NSColor?) -> Bool {
+        guard let color else { return false }
+        guard let foreground = relativeLuminance(color),
+              let background = relativeLuminance(CocxyColors.base)
+        else {
+            return true
+        }
+
+        let lighter = max(foreground, background)
+        let darker = min(foreground, background)
+        let contrastRatio = (lighter + 0.05) / (darker + 0.05)
+        return contrastRatio >= 3.0
+    }
+
+    private func relativeLuminance(_ color: NSColor) -> CGFloat? {
+        guard let rgb = color.usingColorSpace(NSColorSpace.sRGB) else { return nil }
+
+        func adjusted(_ component: CGFloat) -> CGFloat {
+            if component <= 0.03928 {
+                return component / 12.92
+            }
+            return pow((component + 0.055) / 1.055, 2.4)
+        }
+
+        return 0.2126 * adjusted(rgb.redComponent)
+            + 0.7152 * adjusted(rgb.greenComponent)
+            + 0.0722 * adjusted(rgb.blueComponent)
     }
 
     private static func pngData(fromTIFF tiffData: Data) -> Data? {
@@ -290,10 +404,7 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
         textView.isHorizontallyResizable = false
         textView.textContainer?.widthTracksTextView = true
         textView.font = highlighter.theme.codeFont
-        textView.typingAttributes = [
-            .font: highlighter.theme.codeFont,
-            .foregroundColor: highlighter.theme.textColor
-        ]
+        textView.applyReadableSourceTheme(highlighter.theme)
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -376,10 +487,7 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
         isApplyingProgrammaticUpdate = true
         undoManager?.disableUndoRegistration()
         textStorage.setAttributedString(attributed)
-        textView.typingAttributes = [
-            .font: highlighter.theme.codeFont,
-            .foregroundColor: highlighter.theme.textColor
-        ]
+        textView.applyReadableSourceTheme(highlighter.theme)
         undoManager?.enableUndoRegistration()
         isApplyingProgrammaticUpdate = false
 
