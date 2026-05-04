@@ -490,6 +490,7 @@
 "preferences.mcp.reload" = "Reload";
 "preferences.mcp.openFolder" = "Open Folder";
 "preferences.mcp.configuredServers.section" = "Configured Servers";
+"preferences.mcp.json.section" = "JSON";
 "preferences.mcp.noServers" = "No MCP servers configured.";
 "preferences.mcp.validate" = "Validate";
 "preferences.mcp.save" = "Save MCP Config";

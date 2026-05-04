@@ -61,6 +61,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.agentMode.enable", fallback: "Enable Agent Mode") == "Activar modo agente")
         #expect(spanish.string("preferences.agentMode.apiKey.saved", fallback: "A key is saved in the macOS Keychain for this provider.") == "Hay una llave guardada en Keychain de macOS para este provider.")
         #expect(spanish.string("preferences.mcp.configFile.section", fallback: "Config File") == "Archivo de configuración")
+        #expect(spanish.string("preferences.mcp.json.section", fallback: "__missing_key__") != "__missing_key__")
         #expect(spanish.string("preferences.mcp.noServers", fallback: "No MCP servers configured.") == "No hay servidores MCP configurados.")
         #expect(spanish.string("preferences.iCloud.enable", fallback: "Enable iCloud Drive sync") == "Activar sincronización con iCloud Drive")
         #expect(spanish.string("preferences.iCloud.artifact.settings", fallback: "Settings") == "Ajustes")

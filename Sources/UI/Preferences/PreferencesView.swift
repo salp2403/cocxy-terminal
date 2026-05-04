@@ -1413,7 +1413,7 @@ struct MCPServersPreferencesSection: View {
                 }
             }
 
-            Section("JSON") {
+            Section(viewModel.localizedString("preferences.mcp.json.section", fallback: "JSON")) {
                 TextEditor(text: $viewModel.mcpConfigText)
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 240)
