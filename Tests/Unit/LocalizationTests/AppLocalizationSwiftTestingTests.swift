@@ -338,6 +338,14 @@ struct AppLocalizationSwiftTestingTests {
         #expect(KeybindingCaptureSheet.localizedCaptureHint(using: spanish) == "Presiona el nuevo atajo...")
     }
 
+    @Test
+    func dbCloudPanelPickerLocalizesSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("dbCloud.kindPicker", fallback: "Kind") == "Tipo")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

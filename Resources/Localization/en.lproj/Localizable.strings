@@ -711,6 +711,7 @@
 "dbCloud.title" = "DB/Cloud";
 "dbCloud.refresh" = "Refresh";
 "dbCloud.close" = "Close DB/Cloud helpers";
+"dbCloud.kindPicker" = "Kind";
 "dbCloud.kind.database" = "Database";
 "dbCloud.kind.cloud" = "Cloud";
 "dbCloud.kind.container" = "Container";

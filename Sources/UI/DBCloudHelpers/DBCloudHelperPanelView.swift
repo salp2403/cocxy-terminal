@@ -70,7 +70,7 @@ struct DBCloudHelperPanelView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("Kind", selection: $viewModel.selectedKind) {
+            Picker(localized("dbCloud.kindPicker", fallback: "Kind"), selection: $viewModel.selectedKind) {
                 ForEach(DBCloudHelperKind.allCases) { kind in
                     Label(kind.localizedTitle(using: localizer), systemImage: kind.systemImage).tag(kind)
                 }
