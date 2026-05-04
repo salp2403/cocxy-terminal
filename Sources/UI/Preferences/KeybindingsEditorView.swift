@@ -39,7 +39,7 @@ struct KeybindingsEditorView: View {
             conflictsBanner
 
             ForEach(KeybindingActionCatalog.grouped, id: \.category.id) { section in
-                Section(section.category.title) {
+                Section(section.category.localizedTitle(using: localizer)) {
                     ForEach(section.actions) { action in
                         KeybindingRow(
                             action: action,
@@ -116,7 +116,9 @@ struct KeybindingsEditorView: View {
     }
 
     private func groupDescription(for ids: [String]) -> String {
-        let names = ids.compactMap { KeybindingAction.catalogEntry(for: $0)?.displayName }
+        let names = ids.compactMap {
+            KeybindingAction.catalogEntry(for: $0)?.localizedDisplayName(using: localizer)
+        }
         return names.joined(separator: ", ")
     }
 
@@ -182,9 +184,9 @@ private struct KeybindingRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(action.displayName)
+                Text(action.localizedDisplayName(using: localizer))
                     .font(.body)
-                Text(action.summary)
+                Text(action.localizedSummary(using: localizer))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -243,9 +245,9 @@ struct KeybindingCaptureSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(action.displayName)
+                Text(action.localizedDisplayName(using: localizer))
                     .font(.headline)
-                Text(action.summary)
+                Text(action.localizedSummary(using: localizer))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -317,7 +319,9 @@ struct KeybindingCaptureSheet: View {
     }
 
     private func conflictMessage(for ids: [String]) -> String {
-        let names = ids.compactMap { KeybindingAction.catalogEntry(for: $0)?.displayName }
+        let names = ids.compactMap {
+            KeybindingAction.catalogEntry(for: $0)?.localizedDisplayName(using: localizer)
+        }
         let list = names.joined(separator: ", ")
         return String(
             format: localizer.string(

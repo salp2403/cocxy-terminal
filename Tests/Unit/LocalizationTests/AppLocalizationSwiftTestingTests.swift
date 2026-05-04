@@ -355,11 +355,37 @@ struct AppLocalizationSwiftTestingTests {
     func keybindingsEditorStringsLocalizeSpanish() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let missing = "__missing_key__"
 
         #expect(KeybindingsEditorView.localizedSaveButton(using: spanish) == "Guardar")
         #expect(KeybindingsEditorView.localizedResetAllButton(using: spanish) == "Restablecer todo")
         #expect(KeybindingsEditorView.localizedConflictsDetected(using: spanish) == "Conflictos detectados")
         #expect(KeybindingCaptureSheet.localizedCaptureHint(using: spanish) == "Presiona el nuevo atajo...")
+        #expect(KeybindingCategory.tab.localizedTitle(using: spanish) == "Pestañas")
+        #expect(KeybindingActionCatalog.tabNew.localizedDisplayName(using: spanish) == "Nueva pestaña")
+        #expect(KeybindingActionCatalog.tabNew.localizedSummary(using: spanish) == "Abrir una nueva pestaña de terminal.")
+
+        for category in KeybindingCategory.allCases {
+            #expect(
+                spanish.string("keybindings.category.\(category.id)", fallback: missing) != missing,
+                "Missing localized keybinding category: \(category.id)"
+            )
+        }
+
+        for action in KeybindingActionCatalog.all {
+            #expect(
+                spanish.string("keybindings.action.\(action.id).name", fallback: missing) != missing,
+                "Missing localized keybinding action name: \(action.id)"
+            )
+            #expect(
+                spanish.string("keybindings.action.\(action.id).summary", fallback: missing) != missing,
+                "Missing localized keybinding action summary: \(action.id)"
+            )
+        }
+
+        #expect(spanish.string("keybindings.category.tab", fallback: "Tabs") == "Pestañas")
+        #expect(spanish.string("keybindings.action.tab.new.name", fallback: "New Tab") == "Nueva pestaña")
+        #expect(spanish.string("keybindings.action.tab.new.summary", fallback: "Open a new terminal tab.") == "Abrir una nueva pestaña de terminal.")
     }
 
     @Test

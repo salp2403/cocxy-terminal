@@ -37,6 +37,10 @@ enum KeybindingCategory: String, CaseIterable, Identifiable, Sendable {
         case .misc: return "Other"
         }
     }
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.category.\(id)", fallback: title)
+    }
 }
 
 // MARK: - Keybinding Action
@@ -75,6 +79,14 @@ struct KeybindingAction: Identifiable, Sendable, Equatable {
     /// Returns the catalog entry for the given id, or `nil` when unknown.
     static func catalogEntry(for id: String) -> KeybindingAction? {
         KeybindingActionCatalog.all.first { $0.id == id }
+    }
+
+    func localizedDisplayName(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.action.\(id).name", fallback: displayName)
+    }
+
+    func localizedSummary(using localizer: AppLocalizer) -> String {
+        localizer.string("keybindings.action.\(id).summary", fallback: summary)
     }
 }
 
