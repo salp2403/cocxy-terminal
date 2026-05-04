@@ -49,11 +49,12 @@ extension MainWindowController {
 
     func codeReviewExternalEditorActions(workingDirectory: URL?) -> [CodeReviewExternalEditorAction] {
         guard let workingDirectory else { return [] }
+        let localizer = appLocalizer()
 
         var actions: [CodeReviewExternalEditorAction] = [
             CodeReviewExternalEditorAction(
                 id: "system",
-                title: "Open in Default Editor",
+                title: Self.localizedOpenInDefaultEditorTitle(localizer: localizer),
                 systemImage: "arrow.up.right.square"
             ) { [weak self] relativePath in
                 self?.openReviewFileInEditor(relativePath, workingDirectory: workingDirectory, editorID: nil)
@@ -64,7 +65,7 @@ extension MainWindowController {
             actions.append(
                 CodeReviewExternalEditorAction(
                     id: launcher.id,
-                    title: "Open in \(launcher.displayName)",
+                    title: Self.localizedOpenInEditorTitle(launcher.displayName, localizer: localizer),
                     systemImage: "square.and.pencil"
                 ) { [weak self, editorID = launcher.id] relativePath in
                     self?.openReviewFileInEditor(relativePath, workingDirectory: workingDirectory, editorID: editorID)

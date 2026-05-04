@@ -104,6 +104,17 @@ extension MainWindowController {
         localizer.string("window.sshUpload.unknownError", fallback: "Unknown error")
     }
 
+    static func localizedOpenInDefaultEditorTitle(localizer: AppLocalizer) -> String {
+        localizer.string("codeReview.externalEditor.openDefault", fallback: "Open in Default Editor")
+    }
+
+    static func localizedOpenInEditorTitle(_ editorName: String, localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string("codeReview.externalEditor.openNamed", fallback: "Open in %@"),
+            editorName
+        )
+    }
+
     private static func localizedPaneName(_ paneType: PanelType, localizer: AppLocalizer) -> String {
         switch paneType {
         case .terminal:

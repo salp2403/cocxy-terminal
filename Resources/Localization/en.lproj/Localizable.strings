@@ -1139,6 +1139,8 @@
 "codeReview.panel.save" = "Save";
 "codeReview.panel.discard" = "Discard";
 "codeReview.panel.cancel" = "Cancel";
+"codeReview.externalEditor.openDefault" = "Open in Default Editor";
+"codeReview.externalEditor.openNamed" = "Open in %@";
 "codeReview.panel.editorFocus.title" = "Editor focus mode";
 "codeReview.panel.editorFocus.message" = "The diff is temporarily hidden so the inline editor can use the full review panel.";
 "codeReview.panel.editorFocus.showDiff" = "Show Diff";
