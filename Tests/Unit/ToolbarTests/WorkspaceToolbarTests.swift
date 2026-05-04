@@ -65,6 +65,14 @@ final class WorkspaceToolbarTests: XCTestCase {
         XCTAssertEqual(tab.symbolName, "record.circle")
     }
 
+    func testPanelTabInfoAIEditHistorySymbol() {
+        let tab = PanelTabInfo(
+            leafID: UUID(), contentID: UUID(),
+            panelType: .aiEditHistory, title: "Edit History", isFocused: false
+        )
+        XCTAssertEqual(tab.symbolName, "clock.arrow.circlepath")
+    }
+
     // MARK: - Toolbar Visibility
 
     func testToolbarVisibleWithSinglePane() {
@@ -192,6 +200,19 @@ final class WorkspaceToolbarTests: XCTestCase {
         let replayTabs = controller.panelTabs.filter { $0.panelType == .sessionReplay }
         XCTAssertEqual(replayTabs.count, 1)
         XCTAssertEqual(replayTabs.first?.title, "Replay")
+    }
+
+    func testAIEditHistoryPanelTabTitle() {
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window)
+        let manager = SplitManager()
+        manager.splitFocusedWithPanel(direction: .horizontal, panel: .aiEditHistory())
+
+        controller.update(splitManager: manager)
+
+        let historyTabs = controller.panelTabs.filter { $0.panelType == .aiEditHistory }
+        XCTAssertEqual(historyTabs.count, 1)
+        XCTAssertEqual(historyTabs.first?.title, "Edit History")
     }
 
     // MARK: - Callbacks

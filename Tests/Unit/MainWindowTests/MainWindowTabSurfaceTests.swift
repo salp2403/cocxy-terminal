@@ -1512,6 +1512,43 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testAIEditHistoryPanelActionInstallsRealHostedPanel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithAIEditHistoryAction(nil)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after opening edit history panel")
+            return
+        }
+
+        let leaves = splitManager.rootNode.allLeafIDs()
+        guard let historyLeaf = leaves.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .aiEditHistory
+        }) else {
+            XCTFail("Expected edit history panel leaf")
+            return
+        }
+
+        XCTAssertTrue(
+            controller.panelContentViews[historyLeaf.terminalID] is NSHostingView<AIEditHistoryPanelView>,
+            "Edit History split must host the real timeline, diff, and revert controls"
+        )
+
+        let panelTabs = (controller.horizontalTabStripView as? HorizontalTabStripView)?.tabs.map(\.title) ?? []
+        XCTAssertTrue(panelTabs.contains("Edit History"))
+        XCTAssertEqual(
+            splitManager.focusedLeafID,
+            historyLeaf.leafID,
+            "Opening Edit History should leave the history panel selected"
+        )
+    }
+
     func testToolbarSplitButtonsMapToVisualOrientation() {
         let sideBySideController = MainWindowController(bridge: MockTerminalEngine())
         sideBySideController.showWindow(nil)

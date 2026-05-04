@@ -35,6 +35,9 @@ enum PanelType: String, Codable, Sendable, Equatable {
     /// A local terminal session recording library and replay panel.
     case sessionReplay = "session-replay"
 
+    /// A local timeline of recorded agent file edits.
+    case aiEditHistory = "ai-edit-history"
+
     /// A live subagent activity panel.
     case subagent
 }
@@ -88,6 +91,9 @@ struct PanelInfo: Equatable, Sendable {
     }
     static func sessionReplay() -> PanelInfo {
         PanelInfo(type: .sessionReplay)
+    }
+    static func aiEditHistory(sessionID: String? = nil, workingDirectory: URL? = nil) -> PanelInfo {
+        PanelInfo(type: .aiEditHistory, filePath: workingDirectory, sessionId: sessionID)
     }
     static func subagent(id: String, sessionId: String) -> PanelInfo {
         PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)

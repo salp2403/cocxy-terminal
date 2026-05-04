@@ -126,6 +126,18 @@ extension MainWindowController {
         )
     }
 
+    /// Opens the local edit history timeline for the latest agent session in the workspace.
+    @objc func splitWithAIEditHistoryAction(_ sender: Any?) {
+        let dir = workspaceDirectoryForCurrentTab()
+        let sessionID = injectedSessionDiffTracker?.latestSessionId(for: dir)
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .aiEditHistory(sessionID: sessionID, workingDirectory: dir),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
+    }
+
     // MARK: - Split with Panel
 
     /// Creates a visual split with a non-terminal panel.
@@ -248,6 +260,20 @@ extension MainWindowController {
                 }
             )
             let view = SessionReplayPanelView(viewModel: viewModel) { [weak self] in
+                self?.closePanel(contentID: contentID)
+            }
+            panelView = NSHostingView(rootView: view)
+        case .aiEditHistory:
+            let workspaceDir = panel.filePath ?? workspaceDirectoryForCurrentTab()
+            let repoRoot = (try? AIEditRepositoryIdentifier.repositoryRoot(for: workspaceDir)) ?? workspaceDir
+            let repoID = (try? AIEditRepositoryIdentifier.id(for: repoRoot)) ?? "local"
+            let sessionID = panel.sessionId ?? injectedSessionDiffTracker?.latestSessionId(for: workspaceDir)
+            let viewModel = AIEditHistoryPanelViewModel(
+                repoID: repoID,
+                sessionID: sessionID,
+                workingDirectory: repoRoot
+            )
+            let view = AIEditHistoryPanelView(viewModel: viewModel) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             panelView = NSHostingView(rootView: view)

@@ -217,6 +217,23 @@ final class MenuActionWiringTests: XCTestCase {
         )
     }
 
+    func testOpenEditHistoryPanelHasAction() {
+        let history = viewMenu.items.first(where: { $0.title == "Open Edit History Panel" })
+        XCTAssertNotNil(
+            history?.action,
+            "Open Edit History Panel must be discoverable from the View menu"
+        )
+    }
+
+    func testOpenEditHistoryPanelActionPointsToCorrectSelector() {
+        let history = viewMenu.items.first(where: { $0.title == "Open Edit History Panel" })
+        XCTAssertEqual(
+            history?.action,
+            #selector(MainWindowController.splitWithAIEditHistoryAction(_:)),
+            "Open Edit History Panel must create the real timeline and revert split panel"
+        )
+    }
+
     // MARK: - New Window
 
     func testNewWindowHasAction() {

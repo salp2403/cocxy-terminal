@@ -49,6 +49,11 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertNil(strip.onAddSessionReplay)
     }
 
+    func testOnAddAIEditHistoryCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onAddAIEditHistory)
+    }
+
     func testOnOpenEditorCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onOpenEditor)
@@ -67,6 +72,11 @@ final class HorizontalTabStripActionTests: XCTestCase {
     func testOnOpenSessionReplayCallbackDefaultIsNil() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         XCTAssertNil(strip.onOpenSessionReplay)
+    }
+
+    func testOnOpenAIEditHistoryCallbackDefaultIsNil() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        XCTAssertNil(strip.onOpenAIEditHistory)
     }
 
     func testOnReloadCallbackDefaultIsNil() {
@@ -160,6 +170,14 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertTrue(called)
     }
 
+    func testOnAddAIEditHistoryCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onAddAIEditHistory = { called = true }
+        strip.onAddAIEditHistory?()
+        XCTAssertTrue(called)
+    }
+
     func testOnOpenEditorCallbackFires() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         var called = false
@@ -189,6 +207,14 @@ final class HorizontalTabStripActionTests: XCTestCase {
         var called = false
         strip.onOpenSessionReplay = { called = true }
         strip.onOpenSessionReplay?()
+        XCTAssertTrue(called)
+    }
+
+    func testOnOpenAIEditHistoryCallbackFires() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        var called = false
+        strip.onOpenAIEditHistory = { called = true }
+        strip.onOpenAIEditHistory?()
         XCTAssertTrue(called)
     }
 
@@ -245,22 +271,20 @@ final class HorizontalTabStripActionTests: XCTestCase {
 
     // MARK: - Action Icons Update
 
-    func testUpdateActionIconsForTerminalPanelShowsEightActions() {
+    func testUpdateActionIconsForTerminalPanelShowsNineActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
         let actionButtons = findActionButtons(in: strip)
-        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Notebook, Workflow, Replay
-        XCTAssertEqual(actionButtons.count, 8)
+        XCTAssertEqual(actionButtons.count, 9)
     }
 
-    func testUpdateActionIconsForTerminalWithCloseShowsNineActions() {
+    func testUpdateActionIconsForTerminalWithCloseShowsTenActions() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: true)
 
         let actionButtons = findActionButtons(in: strip)
-        // Terminal: Split Side by Side, Split Stacked, Browser, Markdown, Editor, Notebook, Workflow, Replay, Close
-        XCTAssertEqual(actionButtons.count, 9)
+        XCTAssertEqual(actionButtons.count, 10)
     }
 
     func testUpdateActionIconsForBrowserPanelShowsFiveActions() {
@@ -341,12 +365,23 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertEqual(replayButton?.toolTip, "Open Session Replay")
     }
 
+    func testTerminalActionIconsIncludeAIEditHistoryButton() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(panelType: .terminal, canClose: false)
+
+        let historyButton = findActionButtons(in: strip).first {
+            $0.accessibilityLabel() == "action:openAIEditHistory"
+        }
+
+        XCTAssertEqual(historyButton?.toolTip, "Open Edit History")
+    }
+
     func testUpdateActionIconsReplacesOldButtons() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
 
         strip.updateActionIcons(panelType: .terminal, canClose: true)
         let terminalButtons = findActionButtons(in: strip)
-        XCTAssertEqual(terminalButtons.count, 9)
+        XCTAssertEqual(terminalButtons.count, 10)
 
         strip.updateActionIcons(panelType: .browser, canClose: false)
         let browserButtons = findActionButtons(in: strip)

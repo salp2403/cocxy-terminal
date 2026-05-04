@@ -55,6 +55,9 @@ final class HorizontalTabStripView: NSView {
     /// Callback when "Session Replay" is selected from the add menu.
     var onAddSessionReplay: (() -> Void)?
 
+    /// Callback when "Edit History" is selected from the add menu.
+    var onAddAIEditHistory: (() -> Void)?
+
     /// Callback when the close button is clicked on a tab by index.
     var onCloseTab: ((Int) -> Void)?
 
@@ -87,6 +90,9 @@ final class HorizontalTabStripView: NSView {
 
     /// Callback when the "Open Session Replay" action icon is clicked.
     var onOpenSessionReplay: (() -> Void)?
+
+    /// Callback when the "Open Edit History" action icon is clicked.
+    var onOpenAIEditHistory: (() -> Void)?
 
     /// Callback when the "Reload" action icon is clicked.
     var onReload: (() -> Void)?
@@ -620,6 +626,13 @@ final class HorizontalTabStripView: NSView {
         }
         menu.addItem(replayItem)
 
+        let historyItem = NSMenuItem(title: "Edit History", action: #selector(addAIEditHistory), keyEquivalent: "")
+        historyItem.target = self
+        if let img = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil) {
+            historyItem.image = img
+        }
+        menu.addItem(historyItem)
+
         let point = NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 4)
         menu.popUp(positioning: nil, at: point, in: button)
     }
@@ -632,6 +645,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func addNotebook() { onAddNotebook?() }
     @objc private func addWorkflow() { onAddWorkflow?() }
     @objc private func addSessionReplay() { onAddSessionReplay?() }
+    @objc private func addAIEditHistory() { onAddAIEditHistory?() }
 
     // MARK: - Contextual Action Icons
 
@@ -716,6 +730,14 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleOpenSessionReplay)
                 )
             )
+            actionStack.addArrangedSubview(
+                createActionButton(
+                    icon: "clock.arrow.circlepath",
+                    tooltip: "Open Edit History",
+                    accessibilityID: "action:openAIEditHistory",
+                    action: #selector(handleOpenAIEditHistory)
+                )
+            )
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
@@ -741,7 +763,7 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .subagent:
+        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .subagent:
             break
         }
 
@@ -793,6 +815,7 @@ final class HorizontalTabStripView: NSView {
     @objc private func handleOpenNotebook() { onOpenNotebook?() }
     @objc private func handleOpenWorkflow() { onOpenWorkflow?() }
     @objc private func handleOpenSessionReplay() { onOpenSessionReplay?() }
+    @objc private func handleOpenAIEditHistory() { onOpenAIEditHistory?() }
     @objc private func handleReload() { onReload?() }
     @objc private func handleGoBack() { onGoBack?() }
     @objc private func handleGoForward() { onGoForward?() }

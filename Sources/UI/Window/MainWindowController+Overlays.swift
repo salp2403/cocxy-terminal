@@ -617,6 +617,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "workspace.aiEditHistory",
+                name: "Open Edit History Panel",
+                description: "Open local agent edit history and revert controls",
+                shortcut: nil,
+                category: .splits,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.splitWithAIEditHistoryAction(nil) }
+                }
+            ),
+            CommandAction(
                 id: "remote.toggle",
                 name: "Toggle Remote Workspaces",
                 description: "Show or hide the remote workspace panel",

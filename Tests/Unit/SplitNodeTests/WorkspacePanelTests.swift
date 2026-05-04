@@ -19,6 +19,7 @@ final class PanelTypeTests: XCTestCase {
         XCTAssertEqual(PanelType.notebook.rawValue, "notebook")
         XCTAssertEqual(PanelType.workflow.rawValue, "workflow")
         XCTAssertEqual(PanelType.sessionReplay.rawValue, "session-replay")
+        XCTAssertEqual(PanelType.aiEditHistory.rawValue, "ai-edit-history")
     }
 
     func testPanelTypeCodable() throws {
@@ -86,6 +87,14 @@ final class PanelTypeTests: XCTestCase {
         let info = PanelInfo.sessionReplay()
         XCTAssertEqual(info.type, .sessionReplay)
         XCTAssertNil(info.filePath)
+    }
+
+    func testPanelInfoAIEditHistoryLinksSessionAndWorkingDirectory() {
+        let path = URL(fileURLWithPath: "/tmp/project")
+        let info = PanelInfo.aiEditHistory(sessionID: "session-1", workingDirectory: path)
+        XCTAssertEqual(info.type, .aiEditHistory)
+        XCTAssertEqual(info.sessionId, "session-1")
+        XCTAssertEqual(info.filePath, path)
     }
 }
 
@@ -191,6 +200,21 @@ final class SplitManagerPanelTests: XCTestCase {
 
         XCTAssertNotNil(newID)
         XCTAssertEqual(manager.panelType(for: newID!), .sessionReplay)
+    }
+
+    func testSplitFocusedWithAIEditHistoryTracksSessionAndWorkingDirectory() {
+        let manager = SplitManager()
+        let path = URL(fileURLWithPath: "/tmp/project")
+        let newID = manager.splitFocusedWithPanel(
+            direction: .vertical,
+            panel: .aiEditHistory(sessionID: "session-1", workingDirectory: path)
+        )
+
+        XCTAssertNotNil(newID)
+        XCTAssertEqual(manager.panelType(for: newID!), .aiEditHistory)
+        let info = manager.panelInfo(for: newID!)
+        XCTAssertEqual(info.sessionId, "session-1")
+        XCTAssertEqual(info.filePath, path)
     }
 
     func testCloseFocusedCleansPanelType() {

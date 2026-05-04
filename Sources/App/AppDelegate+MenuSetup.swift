@@ -322,6 +322,10 @@ extension AppDelegate {
                          action: #selector(MainWindowController.splitWithSessionReplayAction(_:)),
                          keyEquivalent: "")
 
+        viewMenu.addItem(withTitle: "Open Edit History Panel",
+                         action: #selector(MainWindowController.splitWithAIEditHistoryAction(_:)),
+                         keyEquivalent: "")
+
         viewMenu.addItem(NSMenuItem.separator())
 
         // Toggle Tab Bar: not rebindable (no catalog entry, no default shortcut).

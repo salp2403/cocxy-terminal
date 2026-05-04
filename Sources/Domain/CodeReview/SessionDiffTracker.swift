@@ -36,8 +36,10 @@ private struct SessionSnapshot: Sendable {
     var snapshotNotice: String?
     var trackedFiles: Set<String> = []
     var fileAgentNames: [String: String] = [:]
+    var agentName: String?
     var reviewRounds: [ReviewRound] = []
     var pendingSnapshotDirectory: URL?
+    var editHistoryRecorded = false
     var updatedAt: Date = Date()
 }
 
@@ -48,12 +50,17 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
     private var snapshots: [String: SessionSnapshot] = [:]
     private let queue = DispatchQueue(label: "dev.cocxy.codereview.difftracker", qos: .userInitiated)
     private let gitRunner: @Sendable (URL, [String]) throws -> String
+    private let editHistoryRecorder: (any AIEditHistoryRecording)?
 
-    init(gitRunner: (@Sendable (URL, [String]) throws -> String)? = nil) {
+    init(
+        gitRunner: (@Sendable (URL, [String]) throws -> String)? = nil,
+        editHistoryRecorder: (any AIEditHistoryRecording)? = nil
+    ) {
         let defaultRunner: @Sendable (URL, [String]) throws -> String = { workingDirectory, arguments in
             try Self.runGit(workingDirectory, arguments)
         }
         self.gitRunner = gitRunner ?? defaultRunner
+        self.editHistoryRecorder = editHistoryRecorder
     }
 
     func recordSnapshot(sessionId: String, ref: String, workingDirectory: URL) {
@@ -148,6 +155,7 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
                 let dedupePendingLookup = snapshot.pendingSnapshotDirectory?.standardizedFileURL == workingDirectory.standardizedFileURL
                 snapshot.workingDirectory = workingDirectory
                 snapshot.pendingSnapshotDirectory = workingDirectory
+                snapshot.agentName = Self.agentName(from: event.data) ?? snapshot.agentName
                 snapshot.updatedAt = Date()
                 snapshots[event.sessionId] = snapshot
                 evictSnapshotsIfNeededLocked()
@@ -165,9 +173,11 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
                 trackFile(sessionId: event.sessionId, filePath: candidate, agentName: Self.agentName(from: event.data))
             }
 
-        case .taskCompleted, .sessionEnd, .stop, .notification, .teammateIdle,
-             .subagentStart, .subagentStop, .userPromptSubmit,
-             .cwdChanged, .fileChanged:
+        case .taskCompleted, .sessionEnd, .stop:
+            recordEditHistoryIfNeeded(sessionId: event.sessionId)
+
+        case .notification, .teammateIdle, .subagentStart, .subagentStop,
+             .userPromptSubmit, .cwdChanged, .fileChanged:
             // FileChanged and CwdChanged are handled by higher-level consumers
             // (CodeReviewPanelViewModel refreshes diffs, AppDelegate syncs tab
             // CWD). The snapshot tracker reacts only to tool use events.
@@ -345,6 +355,41 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
             return info.agentType
         default:
             return nil
+        }
+    }
+
+    private func recordEditHistoryIfNeeded(sessionId: String) {
+        guard let editHistoryRecorder else { return }
+        let payload = lock.withLock { () -> (sessionID: String, agentID: String, workingDirectory: URL, baseRef: String?, trackedFiles: Set<String>)? in
+            guard var snapshot = snapshots[sessionId],
+                  !snapshot.trackedFiles.isEmpty,
+                  !snapshot.editHistoryRecorded else {
+                return nil
+            }
+            snapshot.editHistoryRecorded = true
+            snapshot.updatedAt = Date()
+            snapshots[sessionId] = snapshot
+            let agentID = snapshot.fileAgentNames.values.sorted().first
+                ?? snapshot.agentName
+                ?? "local-agent"
+            return (
+                sessionID: sessionId,
+                agentID: agentID,
+                workingDirectory: snapshot.repoRoot ?? snapshot.workingDirectory,
+                baseRef: snapshot.ref,
+                trackedFiles: snapshot.trackedFiles
+            )
+        }
+        guard let payload else { return }
+
+        queue.async {
+            _ = try? editHistoryRecorder.recordSession(
+                sessionID: payload.sessionID,
+                agentID: payload.agentID,
+                workingDirectory: payload.workingDirectory,
+                baseRef: payload.baseRef,
+                trackedFiles: payload.trackedFiles
+            )
         }
     }
 

@@ -66,7 +66,7 @@ extension AppDelegate {
         }
 
         hookEventReceiver = HookEventReceiverImpl()
-        let sessionDiffTracker = SessionDiffTrackerImpl()
+        let sessionDiffTracker = SessionDiffTrackerImpl(editHistoryRecorder: AIEditHistoryGitRecorder())
         self.sessionDiffTracker = sessionDiffTracker
 
         hookEventReceiver?.eventPublisher

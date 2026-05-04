@@ -21,6 +21,44 @@ private final class CounterBox: @unchecked Sendable {
     }
 }
 
+private struct CapturedEditHistorySession: Sendable, Equatable {
+    let sessionID: String
+    let agentID: String
+    let workingDirectory: URL
+    let baseRef: String?
+    let trackedFiles: Set<String>
+}
+
+private final class CapturingEditHistoryRecorder: AIEditHistoryRecording, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [CapturedEditHistorySession] = []
+
+    var calls: [CapturedEditHistorySession] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func recordSession(
+        sessionID: String,
+        agentID: String,
+        workingDirectory: URL,
+        baseRef: String?,
+        trackedFiles: Set<String>
+    ) throws -> AIEditRecord? {
+        lock.lock()
+        storage.append(CapturedEditHistorySession(
+            sessionID: sessionID,
+            agentID: agentID,
+            workingDirectory: workingDirectory,
+            baseRef: baseRef,
+            trackedFiles: trackedFiles
+        ))
+        lock.unlock()
+        return nil
+    }
+}
+
 @Suite("SessionDiffTracker", .serialized)
 struct SessionDiffTrackerSwiftTestingTests {
     @Test("snapshotRef stores git HEAD for session")
@@ -196,6 +234,29 @@ struct SessionDiffTrackerSwiftTestingTests {
         #expect(diffs[0].status == .untracked)
         #expect(diffs[0].agentName == "Codex CLI")
         #expect(diffs[0].additions == 1)
+    }
+
+    @Test("session end records tracked files into local edit history once")
+    func sessionEndRecordsTrackedFilesIntoEditHistoryOnce() async throws {
+        let recorder = CapturingEditHistoryRecorder()
+        let tracker = SessionDiffTrackerImpl(editHistoryRecorder: recorder)
+        let root = URL(fileURLWithPath: "/tmp/ai-edit-history-session", isDirectory: true)
+        tracker.recordSnapshot(sessionId: "session-history", ref: "base-ref", workingDirectory: root)
+        tracker.trackFile(sessionId: "session-history", filePath: "Sources/App.swift", agentName: "local-agent")
+
+        tracker.handleHookEvent(HookEvent(type: .sessionEnd, sessionId: "session-history", cwd: root.path))
+        tracker.handleHookEvent(HookEvent(type: .stop, sessionId: "session-history", cwd: root.path))
+
+        try await waitForTrackerCondition {
+            recorder.calls.count == 1
+        }
+
+        let call = try #require(recorder.calls.first)
+        #expect(call.sessionID == "session-history")
+        #expect(call.agentID == "local-agent")
+        #expect(call.workingDirectory == root)
+        #expect(call.baseRef == "base-ref")
+        #expect(call.trackedFiles == Set(["Sources/App.swift"]))
     }
 
     @Test("review rounds append per session")
