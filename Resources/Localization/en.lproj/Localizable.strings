@@ -1130,6 +1130,7 @@
 "markdown.empty.noFile" = "No file";
 "markdown.empty.placeholder" = "Drop a .md file here or choose one from the Files sidebar.";
 "markdown.loadFailed" = "Failed to load file: %@";
+"markdown.toolbar.untitledFile" = "Untitled.md";
 "markdown.toolbar.mode.tooltip" = "Switch between Source, Preview, and Split view";
 "markdown.toolbar.gitBlame" = "Show Git Blame";
 "markdown.toolbar.gitDiff" = "Show Git Diff";

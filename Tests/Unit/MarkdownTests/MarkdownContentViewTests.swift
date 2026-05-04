@@ -209,8 +209,11 @@ struct MarkdownContentViewTests {
     func markdownChromeStringsLocalize() throws {
         let bundle = try #require(localizationBundle())
         let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let toolbar = MarkdownToolbarView(localizer: localizer)
 
         #expect(MarkdownViewMode.source.localizedLabel(using: localizer) == "Fuente")
+        #expect(MarkdownToolbarView.localizedUntitledFileName(using: localizer) == "Sin título.md")
+        #expect(toolbar.fileName == "Sin título.md")
         #expect(MarkdownToolbarView.localizedCopyAsMarkdown(using: localizer) == "Copiar como Markdown")
         #expect(MarkdownToolbarView.localizedReloadFile(using: localizer) == "Recargar archivo (Cmd+R)")
         #expect(MarkdownContentView.localizedNoFile(using: localizer) == "Sin archivo")

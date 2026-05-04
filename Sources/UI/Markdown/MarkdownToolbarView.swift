@@ -18,7 +18,7 @@ final class MarkdownToolbarView: NSView {
     // MARK: - Properties
 
     private let iconView = NSImageView()
-    private let fileNameLabel = NSTextField(labelWithString: "Untitled.md")
+    private let fileNameLabel = NSTextField(labelWithString: "")
     private let modeSegmented = NSSegmentedControl()
     private let blameButton = NSButton()
     private let diffButton = NSButton()
@@ -34,7 +34,7 @@ final class MarkdownToolbarView: NSView {
     static let height: CGFloat = 34
 
     /// Current file name displayed.
-    var fileName: String = "Untitled.md" {
+    var fileName: String = "" {
         didSet {
             fileNameLabel.stringValue = fileName
             fileNameLabel.toolTip = fileName
@@ -98,6 +98,7 @@ final class MarkdownToolbarView: NSView {
         self.localizer = localizer
         super.init(frame: .zero)
         setupUI()
+        fileName = Self.localizedUntitledFileName(using: localizer)
     }
 
     @available(*, unavailable)
@@ -273,7 +274,11 @@ final class MarkdownToolbarView: NSView {
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
+        let previousUntitledName = Self.localizedUntitledFileName(using: self.localizer)
         self.localizer = localizer
+        if fileName.isEmpty || fileName == previousUntitledName {
+            fileName = Self.localizedUntitledFileName(using: localizer)
+        }
         for (index, mode) in MarkdownViewMode.allCases.enumerated() {
             modeSegmented.setLabel(mode.localizedLabel(using: localizer), forSegment: index)
         }
@@ -400,6 +405,10 @@ final class MarkdownToolbarView: NSView {
 
     static func localizedModeTooltip(using localizer: AppLocalizer) -> String {
         localizer.string("markdown.toolbar.mode.tooltip", fallback: "Switch between Source, Preview, and Split view")
+    }
+
+    static func localizedUntitledFileName(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.untitledFile", fallback: "Untitled.md")
     }
 
     static func localizedShowGitBlame(using localizer: AppLocalizer) -> String {
