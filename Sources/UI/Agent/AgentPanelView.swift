@@ -193,10 +193,10 @@ struct AgentPanelView: View {
                 .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(status.title)
+                Text(status.localizedTitle(using: localizer))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.primary)
-                Text(status.detail)
+                Text(status.localizedDetail(using: localizer))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -215,7 +215,7 @@ struct AgentPanelView: View {
                 .stroke(Color(nsColor: CocxyColors.overlay0).opacity(0.45), lineWidth: 1)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(status.accessibilityLabel)
+        .accessibilityLabel(status.localizedAccessibilityLabel(using: localizer))
     }
 
     private func approvalCard(_ request: AgentToolApprovalRequest) -> some View {

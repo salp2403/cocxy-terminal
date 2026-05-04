@@ -234,6 +234,17 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(status.systemImage == "keyboard")
         #expect(status.accessibilityLabel == "Computer action pending: type text, 12 characters")
         #expect(!status.accessibilityLabel.contains("secret-token"))
+
+        let spanish = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        #expect(status.localizedTitle(using: spanish) == "Escritura pendiente")
+        #expect(status.localizedDetail(using: spanish) == "12 caracteres")
+        #expect(
+            status.localizedAccessibilityLabel(using: spanish)
+                == "Acción de computadora pendiente: escribir texto, 12 caracteres"
+        )
     }
 
     @Test("computer use status names running screenshot and mouse actions")
@@ -252,6 +263,20 @@ struct AgentPanelViewModelSwiftTestingTests {
             reason: .computerUseApprovalRequired(toolID: "computer_move_mouse"),
             preview: AgentToolApprovalPreview(kind: .computerUse, title: "Approve computer action", body: "move")
         )
+        let clickRequest = AgentToolApprovalRequest(
+            call: AgentToolCall(
+                id: "click",
+                toolID: "computer_click",
+                arguments: [
+                    "button": .string("right"),
+                    "clickCount": .number(2),
+                    "x": .number(10),
+                    "y": .number(20.5),
+                ]
+            ),
+            reason: .computerUseApprovalRequired(toolID: "computer_click"),
+            preview: AgentToolApprovalPreview(kind: .computerUse, title: "Approve computer action", body: "click")
+        )
 
         let screenshot = try #require(AgentComputerUseStatus(request: screenshotRequest, phase: .running))
         #expect(screenshot.title == "Capturing screen")
@@ -262,6 +287,34 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(mouse.title == "Moving mouse")
         #expect(mouse.detail == "x 10, y 20.5")
         #expect(mouse.accessibilityLabel == "Computer action running: move mouse, x 10, y 20.5")
+
+        let click = try #require(AgentComputerUseStatus(request: clickRequest, phase: .awaitingApproval))
+        #expect(click.title == "Mouse click pending")
+        #expect(click.detail == "2 right clicks at x 10, y 20.5")
+        #expect(click.accessibilityLabel == "Computer action pending: 2 right clicks at x 10, y 20.5")
+
+        let spanish = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        #expect(screenshot.localizedTitle(using: spanish) == "Capturando pantalla")
+        #expect(screenshot.localizedDetail(using: spanish) == "Pantalla principal")
+        #expect(
+            screenshot.localizedAccessibilityLabel(using: spanish)
+                == "Acción de computadora en ejecución: capturar pantalla, pantalla principal"
+        )
+        #expect(mouse.localizedTitle(using: spanish) == "Moviendo mouse")
+        #expect(mouse.localizedDetail(using: spanish) == "x 10, y 20.5")
+        #expect(
+            mouse.localizedAccessibilityLabel(using: spanish)
+                == "Acción de computadora en ejecución: mover mouse, x 10, y 20.5"
+        )
+        #expect(click.localizedTitle(using: spanish) == "Clic de mouse pendiente")
+        #expect(click.localizedDetail(using: spanish) == "2 clics derecho en x 10, y 20.5")
+        #expect(
+            click.localizedAccessibilityLabel(using: spanish)
+                == "Acción de computadora pendiente: 2 clics derecho, x 10, y 20.5"
+        )
     }
 
     @Test("approving pending tool resumes runner and clears approval state")
@@ -510,6 +563,11 @@ private func makeTemporaryDirectory() throws -> URL {
         .appendingPathComponent("cocxy-agent-panel-tests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
 
 private func writeSkill(

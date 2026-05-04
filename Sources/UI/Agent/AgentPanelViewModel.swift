@@ -44,7 +44,16 @@ struct AgentComputerUseStatus: Sendable, Equatable {
         case running
     }
 
+    enum Kind: Sendable, Equatable {
+        case moveMouse(coordinates: String)
+        case click(button: String, count: Int, coordinates: String)
+        case typeText(characterCount: Int)
+        case screenshot
+        case custom(toolID: String)
+    }
+
     let phase: Phase
+    let kind: Kind
     let title: String
     let detail: String
     let systemImage: String
@@ -57,6 +66,7 @@ struct AgentComputerUseStatus: Sendable, Equatable {
         switch request.call.toolID {
         case "computer_move_mouse":
             let coordinateText = Self.coordinateText(from: request.call)
+            self.kind = .moveMouse(coordinates: coordinateText)
             self.systemImage = "cursorarrow.motionlines"
             self.title = phase == .running ? "Moving mouse" : "Mouse move pending"
             self.detail = coordinateText
@@ -69,6 +79,7 @@ struct AgentComputerUseStatus: Sendable, Equatable {
             let clickCount = Int(Self.numberValue(request.call.arguments["clickCount"]) ?? 1)
             let normalizedClickCount = max(1, clickCount)
             let clickText = "\(normalizedClickCount) \(button) click\(normalizedClickCount == 1 ? "" : "s")"
+            self.kind = .click(button: button, count: normalizedClickCount, coordinates: coordinateText)
             self.systemImage = "cursorarrow.click"
             self.title = phase == .running ? "Clicking mouse" : "Mouse click pending"
             self.detail = "\(clickText) at \(coordinateText)"
@@ -76,20 +87,162 @@ struct AgentComputerUseStatus: Sendable, Equatable {
         case "computer_type_text":
             let characterCount = request.call.arguments["text"]?.stringValue?.count ?? 0
             let detail = "\(characterCount) character\(characterCount == 1 ? "" : "s")"
+            self.kind = .typeText(characterCount: characterCount)
             self.systemImage = "keyboard"
             self.title = phase == .running ? "Typing text" : "Typing pending"
             self.detail = detail
             self.accessibilityLabel = "Computer action \(phase.accessibilityVerb): type text, \(detail)"
         case "computer_screenshot":
+            self.kind = .screenshot
             self.systemImage = "camera.viewfinder"
             self.title = phase == .running ? "Capturing screen" : "Screenshot pending"
             self.detail = "Main display"
             self.accessibilityLabel = "Computer action \(phase.accessibilityVerb): capture screenshot, main display"
         default:
+            self.kind = .custom(toolID: request.call.toolID)
             self.systemImage = "cursorarrow.click"
             self.title = phase == .running ? "Running computer action" : "Computer action pending"
             self.detail = request.call.toolID
             self.accessibilityLabel = "Computer action \(phase.accessibilityVerb): \(request.call.toolID)"
+        }
+    }
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch (kind, phase) {
+        case (.moveMouse, .running):
+            return localizer.string("agent.panel.computerUse.title.move.running", fallback: "Moving mouse")
+        case (.moveMouse, .awaitingApproval):
+            return localizer.string("agent.panel.computerUse.title.move.pending", fallback: "Mouse move pending")
+        case (.click, .running):
+            return localizer.string("agent.panel.computerUse.title.click.running", fallback: "Clicking mouse")
+        case (.click, .awaitingApproval):
+            return localizer.string("agent.panel.computerUse.title.click.pending", fallback: "Mouse click pending")
+        case (.typeText, .running):
+            return localizer.string("agent.panel.computerUse.title.type.running", fallback: "Typing text")
+        case (.typeText, .awaitingApproval):
+            return localizer.string("agent.panel.computerUse.title.type.pending", fallback: "Typing pending")
+        case (.screenshot, .running):
+            return localizer.string("agent.panel.computerUse.title.screenshot.running", fallback: "Capturing screen")
+        case (.screenshot, .awaitingApproval):
+            return localizer.string("agent.panel.computerUse.title.screenshot.pending", fallback: "Screenshot pending")
+        case (.custom, .running):
+            return localizer.string("agent.panel.computerUse.title.custom.running", fallback: "Running computer action")
+        case (.custom, .awaitingApproval):
+            return localizer.string("agent.panel.computerUse.title.custom.pending", fallback: "Computer action pending")
+        }
+    }
+
+    func localizedDetail(using localizer: AppLocalizer) -> String {
+        switch kind {
+        case .moveMouse(let coordinates):
+            return coordinates
+        case .click(let button, let count, let coordinates):
+            let key = count == 1
+                ? "agent.panel.computerUse.detail.click.one"
+                : "agent.panel.computerUse.detail.click.many"
+            let fallback = count == 1
+                ? "%d %@ click at %@"
+                : "%d %@ clicks at %@"
+            return String(
+                format: localizer.string(key, fallback: fallback),
+                count,
+                localizedMouseButton(button, using: localizer),
+                coordinates
+            )
+        case .typeText(let characterCount):
+            let key = characterCount == 1
+                ? "agent.panel.computerUse.detail.characters.one"
+                : "agent.panel.computerUse.detail.characters.many"
+            let fallback = characterCount == 1 ? "%d character" : "%d characters"
+            return String(format: localizer.string(key, fallback: fallback), characterCount)
+        case .screenshot:
+            return localizer.string(
+                "agent.panel.computerUse.detail.mainDisplay",
+                fallback: "Main display"
+            )
+        case .custom(let toolID):
+            return toolID
+        }
+    }
+
+    func localizedAccessibilityLabel(using localizer: AppLocalizer) -> String {
+        let phase = phase.localizedAccessibilityVerb(using: localizer)
+        switch kind {
+        case .moveMouse(let coordinates):
+            return String(
+                format: localizer.string(
+                    "agent.panel.computerUse.accessibility.move",
+                    fallback: "Computer action %@: move mouse, %@"
+                ),
+                phase,
+                coordinates
+            )
+        case .click(let button, let count, let coordinates):
+            return String(
+                format: localizer.string(
+                    "agent.panel.computerUse.accessibility.click",
+                    fallback: "Computer action %@: %@, %@"
+                ),
+                phase,
+                localizedClickText(button: button, count: count, using: localizer),
+                coordinates
+            )
+        case .typeText:
+            return String(
+                format: localizer.string(
+                    "agent.panel.computerUse.accessibility.type",
+                    fallback: "Computer action %@: type text, %@"
+                ),
+                phase,
+                localizedDetail(using: localizer)
+            )
+        case .screenshot:
+            return String(
+                format: localizer.string(
+                    "agent.panel.computerUse.accessibility.screenshot",
+                    fallback: "Computer action %@: capture screenshot, %@"
+                ),
+                phase,
+                localizedDetail(using: localizer).lowercased()
+            )
+        case .custom(let toolID):
+            return String(
+                format: localizer.string(
+                    "agent.panel.computerUse.accessibility.custom",
+                    fallback: "Computer action %@: %@"
+                ),
+                phase,
+                toolID
+            )
+        }
+    }
+
+    private func localizedClickText(
+        button: String,
+        count: Int,
+        using localizer: AppLocalizer
+    ) -> String {
+        let key = count == 1
+            ? "agent.panel.computerUse.clickText.one"
+            : "agent.panel.computerUse.clickText.many"
+        let fallback = count == 1 ? "%d %@ click" : "%d %@ clicks"
+        return String(
+            format: localizer.string(key, fallback: fallback),
+            count,
+            localizedMouseButton(button, using: localizer)
+        )
+    }
+
+    private func localizedMouseButton(_ button: String, using localizer: AppLocalizer) -> String {
+        switch button.lowercased() {
+        case "left":
+            return localizer.string("agent.panel.computerUse.button.left", fallback: button)
+        case "right":
+            return localizer.string("agent.panel.computerUse.button.right", fallback: button)
+        case "middle":
+            return localizer.string("agent.panel.computerUse.button.middle", fallback: button)
+        default:
+            return button
         }
     }
 
@@ -120,6 +273,15 @@ private extension AgentComputerUseStatus.Phase {
             return "pending"
         case .running:
             return "running"
+        }
+    }
+
+    func localizedAccessibilityVerb(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .awaitingApproval:
+            return localizer.string("agent.panel.computerUse.phase.pending", fallback: "pending")
+        case .running:
+            return localizer.string("agent.panel.computerUse.phase.running", fallback: "running")
         }
     }
 }
