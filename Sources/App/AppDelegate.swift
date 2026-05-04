@@ -1501,6 +1501,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    /// Installs a terminal engine for unit tests that exercise AppDelegate
+    /// flows without running the full NSApplication launch path.
+    func installTerminalEngineForTesting(_ bridge: any TerminalEngine) {
+        self.bridge = bridge
+    }
+
     // MARK: - Notification Stack Initialization
 
     /// Initializes the notification subsystem: adapter, manager, dock badge, quick switch.

@@ -192,6 +192,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Internal access for session restoration in AppDelegate.
     var tabSurfaceMap: [TabID: SurfaceID] = [:]
 
+    /// Restored tabs whose metadata has been installed but whose terminal
+    /// surfaces have not been created yet. Hidden restore tabs stay here until
+    /// the user activates them, avoiding startup-time PTY creation.
+    var deferredRestoredTabs: [TabID: RestoredTab] = [:]
+    var deferredRestoredTabLoader: ((TabID) -> Void)?
+
     /// Maps tabs and surfaces that use an engine different from `bridge`.
     /// The default bridge is intentionally not stored here so theme switching
     /// can replace `bridge` without stale references in background tabs.
@@ -1978,8 +1984,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         return true
     }
 
+    @discardableResult
+    func materializeDeferredRestoredTabIfNeeded(_ tabID: TabID) -> Bool {
+        guard deferredRestoredTabs[tabID] != nil else { return false }
+        deferredRestoredTabLoader?(tabID)
+        return deferredRestoredTabs[tabID] == nil
+    }
+
     func handleTabSwitch(to tabID: TabID) {
         guard let container = terminalContainerView else { return }
+        materializeDeferredRestoredTabIfNeeded(tabID)
 
         let primarySurfaceView = tabSurfaceViews[tabID]
         let storedPrimarySplitSurface = savedTabSplitSurfaceViews[tabID]?

@@ -266,22 +266,26 @@ final class TabManager: ObservableObject, TabActivating {
     ///
     /// Unlike `addTab()`, this does NOT create a new tab from scratch.
     /// The caller provides a fully formed `Tab` that was previously owned
-    /// by another `TabManager`. The tab is appended and activated.
+    /// by another `TabManager`. The tab is appended and activates by default.
     ///
     /// Used exclusively by cross-window tab drag-and-drop. The surface,
     /// view model, and split state are transferred separately by the
     /// `MainWindowController`.
     ///
     /// - Parameter tab: The tab to insert. Its `id` must not already exist.
-    func insertExternalTab(_ tab: Tab) {
+    func insertExternalTab(_ tab: Tab, activate: Bool = true) {
         // Reject if a tab with this ID already exists (defensive guard).
         guard !tabs.contains(where: { $0.id == tab.id }) else { return }
 
-        deactivateCurrentTab()
+        if activate {
+            deactivateCurrentTab()
+        }
         var inserted = tab
-        inserted.isActive = true
+        inserted.isActive = activate
         tabs.append(inserted)
-        activeTabID = inserted.id
+        if activate {
+            activeTabID = inserted.id
+        }
     }
 
     /// Detaches a tab for transfer to another window.

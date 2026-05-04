@@ -376,9 +376,19 @@ extension AppDelegate {
         controller.window?.setFrame(frame, display: true)
 
         resetControllerForRestore(controller)
+        controller.deferredRestoredTabLoader = { [weak self, weak controller] tabID in
+            guard let self,
+                  let controller,
+                  let restoredTab = controller.deferredRestoredTabs.removeValue(forKey: tabID) else {
+                return
+            }
+            self.restoreSurfaces(for: restoredTab, in: controller)
+        }
 
         let gitProvider = GitInfoProviderImpl()
         let projectConfigService = ProjectConfigService()
+        let safeActiveIndex = min(max(result.activeTabIndex, 0), result.restoredTabs.count - 1)
+        let activeTabID = result.restoredTabs[safeActiveIndex].tabID
 
         for restoredTab in result.restoredTabs {
             let restoredModel = Tab(
@@ -396,7 +406,7 @@ extension AppDelegate {
                 worktreeBranch: restoredTab.worktreeBranch,
                 terminalEnginePreference: restoredTab.terminalEnginePreference
             )
-            controller.tabManager.insertExternalTab(restoredModel)
+            controller.tabManager.insertExternalTab(restoredModel, activate: false)
             registerSession(
                 for: restoredModel,
                 in: controller,
@@ -419,14 +429,20 @@ extension AppDelegate {
                 }
             }
 
-            restoreSurfaces(
-                for: restoredTab,
-                in: controller
-            )
+            if restoredTab.tabID == activeTabID {
+                restoreSurfaces(
+                    for: restoredTab,
+                    in: controller
+                )
+            } else {
+                restoreSplitMetadataOnly(
+                    for: restoredTab,
+                    in: controller
+                )
+                controller.deferredRestoredTabs[restoredTab.tabID] = restoredTab
+            }
         }
 
-        let safeActiveIndex = min(max(result.activeTabIndex, 0), result.restoredTabs.count - 1)
-        let activeTabID = result.restoredTabs[safeActiveIndex].tabID
         controller.tabManager.setActive(id: activeTabID)
         controller.handleTabSwitch(to: activeTabID)
         controller.refreshVisibleTerminalInteractionState()
@@ -440,6 +456,38 @@ extension AppDelegate {
 
         controller.tabBarViewModel?.syncWithManager()
         controller.focusActiveTerminalSurface()
+    }
+
+    private func restoreSplitMetadataOnly(
+        for restoredTab: RestoredTab,
+        in controller: MainWindowController
+    ) {
+        let leafInfos = restoredTab.splitNode.allLeafIDs()
+        guard !leafInfos.isEmpty else { return }
+
+        var restoredPanelTypes: [UUID: PanelInfo] = [:]
+        var restoredPanelTitles: [UUID: String] = [:]
+
+        for (index, leafInfo) in leafInfos.enumerated() {
+            let paneState = index < restoredTab.paneStates.count
+                ? restoredTab.paneStates[index]
+                : SplitPaneState()
+            let panelInfo = paneState.panelInfo
+
+            if panelInfo.type != .terminal {
+                restoredPanelTypes[leafInfo.terminalID] = panelInfo
+            }
+            if let title = paneState.title, !title.isEmpty {
+                restoredPanelTitles[leafInfo.terminalID] = title
+            }
+        }
+
+        controller.tabSplitCoordinator.splitManager(for: restoredTab.tabID).restoreLayout(
+            rootNode: restoredTab.splitNode,
+            focusedLeafID: leafInfos.first?.leafID,
+            panelTypes: restoredPanelTypes,
+            panelTitles: restoredPanelTitles
+        )
     }
 
     private func restoreSurfaces(
@@ -612,6 +660,8 @@ extension AppDelegate {
         }
 
         controller.destroyAllSurfaces()
+        controller.deferredRestoredTabs.removeAll()
+        controller.deferredRestoredTabLoader = nil
         controller.terminalContainerView?.subviews.forEach { $0.removeFromSuperview() }
         controller.tabSessionMap.removeAll()
         controller.tabSurfaceMap.removeAll()

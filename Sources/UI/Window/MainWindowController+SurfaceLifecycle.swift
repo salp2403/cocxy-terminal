@@ -408,6 +408,8 @@ extension MainWindowController {
         tabViewModels.removeAll()
         tabOutputBuffers.removeAll()
         tabCommandTrackers.removeAll()
+        deferredRestoredTabs.removeAll()
+        deferredRestoredTabLoader = nil
         surfaceImageDetectors.removeAll()
         surfaceOutputDispatchers.removeAll()
         panelContentViews.removeAll()

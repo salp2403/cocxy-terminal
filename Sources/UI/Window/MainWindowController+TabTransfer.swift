@@ -53,6 +53,8 @@ extension MainWindowController {
     ///   cannot be detached (not found, pinned, or is the last tab with
     ///   no additional windows).
     func detachTabForTransfer(_ tabID: TabID) -> TransferredTabState? {
+        materializeDeferredRestoredTabIfNeeded(tabID)
+
         // FIX #1: Validate detachability BEFORE touching any state.
         // detachTab checks for pinned tabs and returns nil if blocked.
         // We must call it first to avoid irreversibly gutting state on failure.

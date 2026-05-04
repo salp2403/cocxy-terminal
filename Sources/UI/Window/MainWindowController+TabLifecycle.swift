@@ -183,6 +183,7 @@ extension MainWindowController {
     ) {
         let isClosingActiveTab = (tabID == tabManager.activeTabID)
         let closingTab = tabManager.tab(for: tabID)
+        deferredRestoredTabs.removeValue(forKey: tabID)
 
         // Remove this session from the multi-window registry before
         // destroying surfaces, so other windows receive the removal
