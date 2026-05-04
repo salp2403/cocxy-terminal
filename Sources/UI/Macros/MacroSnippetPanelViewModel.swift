@@ -11,6 +11,19 @@ enum MacroSnippetPanelSection: String, CaseIterable, Identifiable {
     case clipboard = "Clipboard"
 
     var id: String { rawValue }
+
+    func localizedTitle(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .macros:
+            return localizer.string("macros.section.macros", fallback: "Macros")
+        case .snippets:
+            return localizer.string("macros.section.snippets", fallback: "Snippets")
+        case .aliases:
+            return localizer.string("macros.section.aliases", fallback: "Aliases")
+        case .clipboard:
+            return localizer.string("macros.section.clipboard", fallback: "Clipboard")
+        }
+    }
 }
 
 struct MacroPresentation: Identifiable, Equatable {
@@ -22,6 +35,29 @@ struct MacroPresentation: Identifiable, Equatable {
 
 @MainActor
 final class MacroSnippetPanelViewModel: ObservableObject {
+    private enum StatusState: Equatable {
+        case ready
+        case snippets(Int)
+        case refreshFailed
+        case recording
+        case recordedText
+        case recordedKey
+        case recorded(Int)
+        case recordingCanceled
+        case selectMacro
+        case replayed(Int)
+        case prepared(Int)
+        case savedSnippet
+        case expanded(Int)
+        case inserted(Int)
+        case aliases(Int)
+        case renderedAliases(String)
+        case noAliasesToApply
+        case appliedAliases
+        case clipboardItems(Int)
+        case clipboardCleared
+    }
+
     @Published var selectedSection: MacroSnippetPanelSection = .macros
 
     @Published private(set) var macros: [MacroPresentation] = []
@@ -52,7 +88,7 @@ final class MacroSnippetPanelViewModel: ObservableObject {
     @Published var clipboardDraft = ""
     @Published var clipboardQuery = ""
 
-    @Published private(set) var statusText = "Ready"
+    @Published private(set) var statusText: String
     @Published private(set) var errorText: String?
 
     private let snippetManager: SnippetManager
@@ -63,12 +99,15 @@ final class MacroSnippetPanelViewModel: ObservableObject {
     private var recorder = MacroRecorder()
     private var macroLibrary: [TerminalMacro] = []
     private var clipboardHistory: ClipboardHistoryStore
+    private var localizer: AppLocalizer
+    private var statusState: StatusState = .ready
 
     init(
         snippetManager: SnippetManager = SnippetManager(),
         aliasManager: AliasManager = AliasManager(),
         player: MacroPlayer = MacroPlayer(),
         clipboardHistory: ClipboardHistoryStore = ClipboardHistoryStore(),
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
         macroPlaybackHandler: ((MacroPlaybackPlan) throws -> Int)? = nil,
         terminalTextHandler: ((String) throws -> Void)? = nil
     ) {
@@ -78,7 +117,15 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         self.macroPlaybackHandler = macroPlaybackHandler
         self.terminalTextHandler = terminalTextHandler
         self.clipboardHistory = clipboardHistory
+        self.localizer = localizer
         self.clipboardItems = clipboardHistory.items
+        self.statusText = Self.localizedStatusText(.ready, localizer: localizer)
+        self.macroName = localizer.string("macros.default.macroName", fallback: "New Macro")
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        statusText = Self.localizedStatusText(statusState, localizer: localizer)
     }
 
     var selectedMacro: MacroPresentation? {
@@ -98,13 +145,13 @@ final class MacroSnippetPanelViewModel: ObservableObject {
             }
             populateSnippetDraft()
             errorText = nil
-            statusText = snippets.count == 1 ? "1 snippet" : "\(snippets.count) snippets"
+            setStatus(.snippets(snippets.count))
         } catch {
             snippets = []
             selectedSnippetID = nil
             clearSnippetDraft()
             errorText = error.localizedDescription
-            statusText = "Refresh failed"
+            setStatus(.refreshFailed)
             throw error
         }
     }
@@ -123,14 +170,17 @@ final class MacroSnippetPanelViewModel: ObservableObject {
     }
 
     func startRecordingMacro(named name: String? = nil) throws {
-        let resolvedName = cleanName(name ?? macroName, fallback: "New Macro")
+        let resolvedName = cleanName(
+            name ?? macroName,
+            fallback: localizer.string("macros.default.macroName", fallback: "New Macro")
+        )
         try recorder.start(name: resolvedName)
         macroName = resolvedName
         macroTextDraft = ""
         playbackEvents = []
         errorText = nil
         isRecording = true
-        statusText = "Recording macro"
+        setStatus(.recording)
     }
 
     func recordTextEvent(_ text: String? = nil) throws {
@@ -138,14 +188,14 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         guard !value.isEmpty else { return }
         try recorder.record(.text(value))
         macroTextDraft = ""
-        statusText = "Recorded text event"
+        setStatus(.recordedText)
     }
 
     func recordKeyEvent(_ key: String) throws {
         let value = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         try recorder.record(.key(value))
-        statusText = "Recorded key event"
+        setStatus(.recordedKey)
     }
 
     func stopRecordingMacro() throws {
@@ -155,27 +205,27 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         refreshMacroPresentations(selecting: macro.id)
         isRecording = false
         errorText = nil
-        statusText = "Recorded \(macro.events.count) \(macro.events.count == 1 ? "event" : "events")"
+        setStatus(.recorded(macro.events.count))
     }
 
     func cancelRecordingMacro() {
         recorder.cancel()
         isRecording = false
-        statusText = "Recording canceled"
+        setStatus(.recordingCanceled)
     }
 
     func playSelectedMacro() throws {
         guard let macro = selectedMacroID.flatMap({ id in macroLibrary.first { $0.id == id } }) else {
-            statusText = "Select a macro"
+            setStatus(.selectMacro)
             return
         }
         let plan = try player.playback(macro, repeatCount: repeatCount)
         playbackEvents = plan.events.map(formatMacroEvent)
         if let macroPlaybackHandler {
             let replayedCount = try macroPlaybackHandler(plan)
-            statusText = "Replayed \(replayedCount) \(replayedCount == 1 ? "event" : "events")"
+            setStatus(.replayed(replayedCount))
         } else {
-            statusText = "Prepared \(playbackEvents.count) playback events"
+            setStatus(.prepared(playbackEvents.count))
         }
         errorText = nil
     }
@@ -184,7 +234,7 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         let id = selectedSnippetID ?? safeIdentifier(from: snippetTrigger.isEmpty ? snippetName : snippetTrigger)
         let snippet = Snippet(
             id: id,
-            name: cleanName(snippetName, fallback: "Snippet"),
+            name: cleanName(snippetName, fallback: localizer.string("macros.default.snippetName", fallback: "Snippet")),
             trigger: snippetTrigger.trimmingCharacters(in: .whitespacesAndNewlines),
             body: snippetBody,
             scope: normalizedOptional(snippetScope)
@@ -193,7 +243,7 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         selectedSnippetID = snippet.id
         try refresh()
         errorText = nil
-        statusText = "Saved snippet"
+        setStatus(.savedSnippet)
     }
 
     func expandSelectedSnippet() throws {
@@ -204,7 +254,7 @@ final class MacroSnippetPanelViewModel: ObservableObject {
             stop.placeholder.isEmpty ? "\(stop.index)" : "\(stop.index): \(stop.placeholder)"
         }
         errorText = nil
-        statusText = "Expanded \(snippetTabStopLabels.count) tab stops"
+        setStatus(.expanded(snippetTabStopLabels.count))
     }
 
     func insertSelectedSnippetIntoTerminal() throws {
@@ -212,12 +262,12 @@ final class MacroSnippetPanelViewModel: ObservableObject {
             try expandSelectedSnippet()
         }
         guard let terminalTextHandler else {
-            statusText = "Expanded \(snippetTabStopLabels.count) tab stops"
+            setStatus(.expanded(snippetTabStopLabels.count))
             return
         }
         try terminalTextHandler(snippetExpansionText)
         errorText = nil
-        statusText = "Inserted snippet with \(snippetTabStopLabels.count) tab stops"
+        setStatus(.inserted(snippetTabStopLabels.count))
     }
 
     func saveAliasDraft() throws {
@@ -231,13 +281,13 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         aliases.append(alias)
         aliases.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         errorText = nil
-        statusText = aliases.count == 1 ? "1 alias" : "\(aliases.count) aliases"
+        setStatus(.aliases(aliases.count))
     }
 
     func renderAliases() throws {
         renderedAliasBlock = try aliasManager.renderBlock(aliases: aliases, shell: selectedShell)
         errorText = nil
-        statusText = "Rendered aliases for \(selectedShell.rawValue)"
+        setStatus(.renderedAliases(selectedShell.rawValue))
     }
 
     func applyAliasesToTerminal() throws {
@@ -245,18 +295,18 @@ final class MacroSnippetPanelViewModel: ObservableObject {
             try renderAliases()
         }
         guard let terminalTextHandler else {
-            statusText = "Rendered aliases for \(selectedShell.rawValue)"
+            setStatus(.renderedAliases(selectedShell.rawValue))
             return
         }
         let terminalInput = terminalAliasInput(from: renderedAliasBlock)
         guard !terminalInput.isEmpty else {
             errorText = nil
-            statusText = "No aliases to apply"
+            setStatus(.noAliasesToApply)
             return
         }
         try terminalTextHandler(terminalInput)
         errorText = nil
-        statusText = "Applied aliases to terminal"
+        setStatus(.appliedAliases)
     }
 
     func recordClipboardDraft() {
@@ -264,13 +314,13 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         clipboardItems = clipboardHistory.items
         clipboardDraft = ""
         errorText = nil
-        statusText = clipboardItems.count == 1 ? "1 clipboard item" : "\(clipboardItems.count) clipboard items"
+        setStatus(.clipboardItems(clipboardItems.count))
     }
 
     func clearClipboard() {
         clipboardHistory.clear()
         clipboardItems = []
-        statusText = "Clipboard cleared"
+        setStatus(.clipboardCleared)
     }
 
     private func refreshMacroPresentations(selecting id: String?) {
@@ -324,13 +374,13 @@ final class MacroSnippetPanelViewModel: ObservableObject {
     private func formatMacroEvent(_ event: MacroEvent) -> String {
         switch event {
         case .text(let value):
-            return "text: \(value)"
+            return "\(localizer.string("macros.event.text", fallback: "text")): \(value)"
         case .key(let value):
-            return "key: \(value)"
+            return "\(localizer.string("macros.event.key", fallback: "key")): \(value)"
         case .command(let value):
-            return "command: \(value)"
+            return "\(localizer.string("macros.event.command", fallback: "command")): \(value)"
         case .delay(let milliseconds):
-            return "delay: \(milliseconds)ms"
+            return "\(localizer.string("macros.event.delay", fallback: "delay")): \(milliseconds)ms"
         }
     }
 
@@ -343,5 +393,103 @@ final class MacroSnippetPanelViewModel: ObservableObject {
                 return !trimmed.isEmpty && !trimmed.hasPrefix("#")
             }
         return executableLines.isEmpty ? "" : executableLines.joined(separator: "\n") + "\n"
+    }
+
+    private func setStatus(_ status: StatusState) {
+        statusState = status
+        statusText = Self.localizedStatusText(status, localizer: localizer)
+    }
+
+    private static func localizedStatusText(_ status: StatusState, localizer: AppLocalizer) -> String {
+        switch status {
+        case .ready:
+            return localizer.string("macros.status.ready", fallback: "Ready")
+        case .snippets(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "macros.status.snippets.one" : "macros.status.snippets.many",
+                    fallback: count == 1 ? "%d snippet" : "%d snippets"
+                ),
+                count
+            )
+        case .refreshFailed:
+            return localizer.string("macros.status.refreshFailed", fallback: "Refresh failed")
+        case .recording:
+            return localizer.string("macros.status.recording", fallback: "Recording macro")
+        case .recordedText:
+            return localizer.string("macros.status.recordedText", fallback: "Recorded text event")
+        case .recordedKey:
+            return localizer.string("macros.status.recordedKey", fallback: "Recorded key event")
+        case .recorded(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "macros.status.recorded.one" : "macros.status.recorded.many",
+                    fallback: count == 1 ? "Recorded %d event" : "Recorded %d events"
+                ),
+                count
+            )
+        case .recordingCanceled:
+            return localizer.string("macros.status.recordingCanceled", fallback: "Recording canceled")
+        case .selectMacro:
+            return localizer.string("macros.status.selectMacro", fallback: "Select a macro")
+        case .replayed(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "macros.status.replayed.one" : "macros.status.replayed.many",
+                    fallback: count == 1 ? "Replayed %d event" : "Replayed %d events"
+                ),
+                count
+            )
+        case .prepared(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "macros.status.prepared.one" : "macros.status.prepared.many",
+                    fallback: count == 1 ? "Prepared %d playback event" : "Prepared %d playback events"
+                ),
+                count
+            )
+        case .savedSnippet:
+            return localizer.string("macros.status.savedSnippet", fallback: "Saved snippet")
+        case .expanded(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "macros.status.expanded.one" : "macros.status.expanded.many",
+                    fallback: count == 1 ? "Expanded %d tab stop" : "Expanded %d tab stops"
+                ),
+                count
+            )
+        case .inserted(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "macros.status.inserted.one" : "macros.status.inserted.many",
+                    fallback: count == 1 ? "Inserted snippet with %d tab stop" : "Inserted snippet with %d tab stops"
+                ),
+                count
+            )
+        case .aliases(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "macros.status.aliases.one" : "macros.status.aliases.many",
+                    fallback: count == 1 ? "%d alias" : "%d aliases"
+                ),
+                count
+            )
+        case .renderedAliases(let shell):
+            return String(format: localizer.string("macros.status.renderedAliases", fallback: "Rendered aliases for %@"), shell)
+        case .noAliasesToApply:
+            return localizer.string("macros.status.noAliasesToApply", fallback: "No aliases to apply")
+        case .appliedAliases:
+            return localizer.string("macros.status.appliedAliases", fallback: "Applied aliases to terminal")
+        case .clipboardItems(let count):
+            return String(
+                format: localizer.string(
+                    count == 1 ? "macros.status.clipboard.one" : "macros.status.clipboard.many",
+                    fallback: count == 1 ? "%d clipboard item" : "%d clipboard items"
+                ),
+                count
+            )
+        case .clipboardCleared:
+            return localizer.string("macros.status.clipboardCleared", fallback: "Clipboard cleared")
+        }
     }
 }

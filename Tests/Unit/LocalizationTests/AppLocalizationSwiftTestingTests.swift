@@ -160,6 +160,17 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("workflow.step.status.completed", fallback: "Completed") == "Completado")
     }
 
+    @Test
+    func macroPanelStringsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(spanish.string("macros.section.clipboard", fallback: "Clipboard") == "Portapapeles")
+        #expect(spanish.string("macros.record", fallback: "Record") == "Grabar")
+        #expect(spanish.string("macros.status.recorded.one", fallback: "Recorded %d event") == "Grabada %d acción")
+        #expect(spanish.string("macros.status.clipboard.many", fallback: "%d clipboard items") == "%d elementos del portapapeles")
+    }
+
     @MainActor
     @Test
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {

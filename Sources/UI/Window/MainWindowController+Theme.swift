@@ -77,6 +77,7 @@ extension MainWindowController {
         updateAIEditHistoryPanelLocalizers(localizer)
         updateDBCloudHelperPanelLocalizers(localizer)
         updateProjectTemplatePanelLocalizers(localizer)
+        updateMacroSnippetPanelLocalizers(localizer)
         updateBrowserPanelLocalizers(localizer)
         updateNotebookAndWorkflowPanelLocalizers(localizer)
         tabBarView?.flashTabEnabled = config.notifications.flashTab
@@ -263,6 +264,22 @@ extension MainWindowController {
         for panelViews in savedTabPanelContentViews.values {
             for view in panelViews.values {
                 if let hostingView = view as? NSHostingView<ProjectTemplatePanelView> {
+                    hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+                }
+            }
+        }
+    }
+
+    private func updateMacroSnippetPanelLocalizers(_ localizer: AppLocalizer) {
+        for view in panelContentViews.values {
+            if let hostingView = view as? NSHostingView<MacroSnippetPanelView> {
+                hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+            }
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                if let hostingView = view as? NSHostingView<MacroSnippetPanelView> {
                     hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
                 }
             }

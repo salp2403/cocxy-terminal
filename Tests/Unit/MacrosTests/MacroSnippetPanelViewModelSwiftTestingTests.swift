@@ -107,10 +107,38 @@ struct MacroSnippetPanelViewModelSwiftTestingTests {
         #expect(viewModel.statusText == "2 clipboard items")
     }
 
+    @Test("spanish localizer updates macro panel status text")
+    func spanishLocalizerUpdatesMacroPanelStatusText() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = SnippetManager(store: SnippetStore(fileURL: root.appendingPathComponent("snippets.json")))
+        let bundle = try #require(localizationBundle())
+        let viewModel = MacroSnippetPanelViewModel(
+            snippetManager: manager,
+            localizer: AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        )
+
+        try viewModel.refresh()
+        #expect(viewModel.statusText == "0 snippets")
+
+        try viewModel.startRecordingMacro(named: "Build")
+        try viewModel.recordTextEvent("swift build")
+        try viewModel.stopRecordingMacro()
+        #expect(viewModel.statusText == "Grabada 1 acción")
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+        #expect(viewModel.statusText == "Recorded 1 event")
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-macro-panel-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }

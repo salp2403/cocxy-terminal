@@ -5,11 +5,25 @@ import SwiftUI
 
 struct MacroSnippetPanelView: View {
     @StateObject private var viewModel: MacroSnippetPanelViewModel
+    var localizer: AppLocalizer
     let onClose: (() -> Void)?
 
-    init(viewModel: MacroSnippetPanelViewModel, onClose: (() -> Void)? = nil) {
+    init(
+        viewModel: MacroSnippetPanelViewModel,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        onClose: (() -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.localizer = localizer
         self.onClose = onClose
+        viewModel.updateLocalizer(localizer)
+    }
+
+    func updatedLocalizer(_ localizer: AppLocalizer) -> MacroSnippetPanelView {
+        var copy = self
+        copy.localizer = localizer
+        viewModel.updateLocalizer(localizer)
+        return copy
     }
 
     var body: some View {
@@ -18,7 +32,7 @@ struct MacroSnippetPanelView: View {
             Divider()
             Picker("", selection: $viewModel.selectedSection) {
                 ForEach(MacroSnippetPanelSection.allCases) { section in
-                    Text(section.rawValue).tag(section)
+                    Text(section.localizedTitle(using: localizer)).tag(section)
                 }
             }
             .pickerStyle(.segmented)
@@ -30,15 +44,19 @@ struct MacroSnippetPanelView: View {
         }
         .glassPanelBackground()
         .onAppear {
+            viewModel.updateLocalizer(localizer)
             viewModel.perform {
                 try viewModel.refresh()
             }
+        }
+        .onChange(of: localizer.resolvedLanguage) {
+            viewModel.updateLocalizer(localizer)
         }
     }
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Label("Macros", systemImage: "keyboard")
+            Label(localized("macros.title", fallback: "Macros"), systemImage: "keyboard")
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
 
@@ -61,7 +79,7 @@ struct MacroSnippetPanelView: View {
                     try viewModel.refresh()
                 }
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label(localized("macros.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
             }
             .controlSize(.small)
 
@@ -70,7 +88,7 @@ struct MacroSnippetPanelView: View {
                     try viewModel.playSelectedMacro()
                 }
             } label: {
-                Label("Replay", systemImage: "play.fill")
+                Label(localized("macros.replay", fallback: "Replay"), systemImage: "play.fill")
             }
             .controlSize(.small)
             .disabled(viewModel.selectedMacro == nil)
@@ -80,7 +98,8 @@ struct MacroSnippetPanelView: View {
                     Image(systemName: "xmark")
                 }
                 .controlSize(.small)
-                .help("Close")
+                .help(localized("common.close", fallback: "Close"))
+                .accessibilityLabel(localized("macros.close", fallback: "Close macros"))
             }
         }
         .padding(.horizontal, 10)
@@ -105,7 +124,7 @@ struct MacroSnippetPanelView: View {
         HSplitView {
             List(selection: $viewModel.selectedMacroID) {
                 ForEach(viewModel.macros) { macro in
-                    MacroRow(macro: macro)
+                    MacroRow(macro: macro, localizer: localizer)
                         .tag(Optional(macro.id))
                 }
             }
@@ -114,10 +133,10 @@ struct MacroSnippetPanelView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    TextField("Macro name", text: $viewModel.macroName)
+                    TextField(localized("macros.macroName", fallback: "Macro name"), text: $viewModel.macroName)
                         .textFieldStyle(.roundedBorder)
 
-                    TextField("Text event", text: $viewModel.macroTextDraft)
+                    TextField(localized("macros.textEvent", fallback: "Text event"), text: $viewModel.macroTextDraft)
                         .textFieldStyle(.roundedBorder)
 
                     HStack(spacing: 8) {
@@ -126,7 +145,7 @@ struct MacroSnippetPanelView: View {
                                 try viewModel.startRecordingMacro()
                             }
                         } label: {
-                            Label("Record", systemImage: "record.circle")
+                            Label(localized("macros.record", fallback: "Record"), systemImage: "record.circle")
                         }
                         .disabled(viewModel.isRecording)
 
@@ -135,7 +154,7 @@ struct MacroSnippetPanelView: View {
                                 try viewModel.recordTextEvent()
                             }
                         } label: {
-                            Label("Add Text", systemImage: "text.cursor")
+                            Label(localized("macros.addText", fallback: "Add Text"), systemImage: "text.cursor")
                         }
                         .disabled(!viewModel.isRecording)
 
@@ -144,7 +163,7 @@ struct MacroSnippetPanelView: View {
                                 try viewModel.recordKeyEvent("return")
                             }
                         } label: {
-                            Label("Return", systemImage: "return")
+                            Label(localized("macros.returnKey", fallback: "Return"), systemImage: "return")
                         }
                         .disabled(!viewModel.isRecording)
 
@@ -153,22 +172,29 @@ struct MacroSnippetPanelView: View {
                                 try viewModel.stopRecordingMacro()
                             }
                         } label: {
-                            Label("Stop", systemImage: "stop.fill")
+                            Label(localized("macros.stop", fallback: "Stop"), systemImage: "stop.fill")
                         }
                         .disabled(!viewModel.isRecording)
 
                         Button {
                             viewModel.cancelRecordingMacro()
                         } label: {
-                            Label("Cancel", systemImage: "xmark.circle")
+                            Label(localized("common.cancel", fallback: "Cancel"), systemImage: "xmark.circle")
                         }
                         .disabled(!viewModel.isRecording)
                     }
                     .controlSize(.small)
 
-                    Stepper("Repeat \(viewModel.repeatCount)x", value: $viewModel.repeatCount, in: 1...20)
+                    Stepper(
+                        String(
+                            format: localized("macros.repeat", fallback: "Repeat %dx"),
+                            viewModel.repeatCount
+                        ),
+                        value: $viewModel.repeatCount,
+                        in: 1...20
+                    )
 
-                    eventList(title: "Playback", rows: viewModel.playbackEvents)
+                    eventList(title: localized("macros.playback", fallback: "Playback"), rows: viewModel.playbackEvents)
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -193,12 +219,12 @@ struct MacroSnippetPanelView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    TextField("Name", text: $viewModel.snippetName)
+                    TextField(localized("macros.snippet.name", fallback: "Name"), text: $viewModel.snippetName)
                         .textFieldStyle(.roundedBorder)
                     HStack(spacing: 8) {
-                        TextField("Trigger", text: $viewModel.snippetTrigger)
+                        TextField(localized("macros.snippet.trigger", fallback: "Trigger"), text: $viewModel.snippetTrigger)
                             .textFieldStyle(.roundedBorder)
-                        TextField("Scope", text: $viewModel.snippetScope)
+                        TextField(localized("macros.snippet.scope", fallback: "Scope"), text: $viewModel.snippetScope)
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -213,7 +239,7 @@ struct MacroSnippetPanelView: View {
                                 try viewModel.saveSnippetDraft()
                             }
                         } label: {
-                            Label("Save Snippet", systemImage: "square.and.arrow.down")
+                            Label(localized("macros.saveSnippet", fallback: "Save Snippet"), systemImage: "square.and.arrow.down")
                         }
 
                         Button {
@@ -221,7 +247,7 @@ struct MacroSnippetPanelView: View {
                                 try viewModel.expandSelectedSnippet()
                             }
                         } label: {
-                            Label("Expand", systemImage: "text.append")
+                            Label(localized("macros.expand", fallback: "Expand"), systemImage: "text.append")
                         }
 
                         Button {
@@ -229,20 +255,20 @@ struct MacroSnippetPanelView: View {
                                 try viewModel.insertSelectedSnippetIntoTerminal()
                             }
                         } label: {
-                            Label("Insert", systemImage: "terminal")
+                            Label(localized("macros.insert", fallback: "Insert"), systemImage: "terminal")
                         }
                     }
                     .controlSize(.small)
 
                     if !viewModel.snippetExpansionText.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Expansion")
+                            Text(localized("macros.expansion", fallback: "Expansion"))
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
                             Text(viewModel.snippetExpansionText)
                                 .font(.system(size: 12, design: .monospaced))
                                 .textSelection(.enabled)
-                            eventList(title: "Tab Stops", rows: viewModel.snippetTabStopLabels)
+                            eventList(title: localized("macros.tabStops", fallback: "Tab Stops"), rows: viewModel.snippetTabStopLabels)
                         }
                     }
                 }
@@ -256,14 +282,14 @@ struct MacroSnippetPanelView: View {
     private var aliasesPane: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                TextField("Alias name", text: $viewModel.aliasName)
+                TextField(localized("macros.alias.name", fallback: "Alias name"), text: $viewModel.aliasName)
                     .textFieldStyle(.roundedBorder)
-                TextField("Command", text: $viewModel.aliasValue)
+                TextField(localized("macros.alias.command", fallback: "Command"), text: $viewModel.aliasValue)
                     .textFieldStyle(.roundedBorder)
-                TextField("Detail", text: $viewModel.aliasDetail)
+                TextField(localized("macros.alias.detail", fallback: "Detail"), text: $viewModel.aliasDetail)
                     .textFieldStyle(.roundedBorder)
 
-                Picker("Shell", selection: $viewModel.selectedShell) {
+                Picker(localized("macros.alias.shell", fallback: "Shell"), selection: $viewModel.selectedShell) {
                     ForEach(ShellKind.allCases, id: \.self) { shell in
                         Text(shell.rawValue).tag(shell)
                     }
@@ -277,7 +303,7 @@ struct MacroSnippetPanelView: View {
                             try viewModel.saveAliasDraft()
                         }
                     } label: {
-                        Label("Save Alias", systemImage: "plus")
+                        Label(localized("macros.saveAlias", fallback: "Save Alias"), systemImage: "plus")
                     }
 
                     Button {
@@ -285,7 +311,7 @@ struct MacroSnippetPanelView: View {
                             try viewModel.renderAliases()
                         }
                     } label: {
-                        Label("Render", systemImage: "doc.text")
+                        Label(localized("macros.render", fallback: "Render"), systemImage: "doc.text")
                     }
 
                     Button {
@@ -293,12 +319,15 @@ struct MacroSnippetPanelView: View {
                             try viewModel.applyAliasesToTerminal()
                         }
                     } label: {
-                        Label("Apply", systemImage: "terminal")
+                        Label(localized("macros.apply", fallback: "Apply"), systemImage: "terminal")
                     }
                 }
                 .controlSize(.small)
 
-                eventList(title: "Aliases", rows: viewModel.aliases.map { "\($0.name) -> \($0.value)" })
+                eventList(
+                    title: localized("macros.aliases", fallback: "Aliases"),
+                    rows: viewModel.aliases.map { "\($0.name) -> \($0.value)" }
+                )
 
                 if !viewModel.renderedAliasBlock.isEmpty {
                     Text(viewModel.renderedAliasBlock)
@@ -318,22 +347,22 @@ struct MacroSnippetPanelView: View {
     private var clipboardPane: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                TextField("Clipboard text", text: $viewModel.clipboardDraft)
+                TextField(localized("macros.clipboard.text", fallback: "Clipboard text"), text: $viewModel.clipboardDraft)
                     .textFieldStyle(.roundedBorder)
                 Button {
                     viewModel.recordClipboardDraft()
                 } label: {
-                    Label("Record", systemImage: "doc.on.clipboard")
+                    Label(localized("macros.record", fallback: "Record"), systemImage: "doc.on.clipboard")
                 }
                 Button(role: .destructive) {
                     viewModel.clearClipboard()
                 } label: {
-                    Label("Clear", systemImage: "trash")
+                    Label(localized("macros.clear", fallback: "Clear"), systemImage: "trash")
                 }
             }
             .controlSize(.small)
 
-            TextField("Search", text: $viewModel.clipboardQuery)
+            TextField(localized("common.search", fallback: "Search"), text: $viewModel.clipboardQuery)
                 .textFieldStyle(.roundedBorder)
 
             List(viewModel.filteredClipboardItems) { item in
@@ -358,10 +387,15 @@ struct MacroSnippetPanelView: View {
             }
         }
     }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 private struct MacroRow: View {
     let macro: MacroPresentation
+    let localizer: AppLocalizer
 
     var body: some View {
         HStack(spacing: 10) {
@@ -371,11 +405,21 @@ private struct MacroRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(macro.name)
                     .lineLimit(1)
-                Text("\(macro.eventCount) events")
+                Text(rowDetail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var rowDetail: String {
+        String(
+            format: localizer.string(
+                macro.eventCount == 1 ? "macros.row.events.one" : "macros.row.events.many",
+                fallback: macro.eventCount == 1 ? "%d event" : "%d events"
+            ),
+            macro.eventCount
+        )
     }
 }
 

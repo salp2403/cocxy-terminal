@@ -325,6 +325,7 @@ extension MainWindowController {
         case .macros:
             let targetSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
             let viewModel = MacroSnippetPanelViewModel(
+                localizer: appLocalizer(),
                 macroPlaybackHandler: { [weak self] plan in
                     guard let self else {
                         throw MacroTerminalInputReplayError.noTargetSurface
@@ -338,7 +339,7 @@ extension MainWindowController {
                     try self.sendMacroTextToTerminal(text, preferredSurfaceID: targetSurfaceID)
                 }
             )
-            let view = MacroSnippetPanelView(viewModel: viewModel) { [weak self] in
+            let view = MacroSnippetPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
             return NSHostingView(rootView: view)
