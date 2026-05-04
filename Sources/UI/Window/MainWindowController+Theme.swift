@@ -80,6 +80,7 @@ extension MainWindowController {
         updateMacroSnippetPanelLocalizers(localizer)
         updateBrowserPanelLocalizers(localizer)
         updateNotebookAndWorkflowPanelLocalizers(localizer)
+        updateSubagentPanelLocalizers(localizer)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         updateRemoteWorkspacePanelLocalizer(localizer)
         refreshVisibleActivityDashboardLocalizer()
@@ -357,6 +358,18 @@ extension MainWindowController {
             var root = hostingView.rootView
             root.localizer = localizer
             hostingView.rootView = root
+        }
+    }
+
+    private func updateSubagentPanelLocalizers(_ localizer: AppLocalizer) {
+        for view in panelContentViews.values {
+            (view as? SubagentContentView)?.updateLocalizer(localizer)
+        }
+
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                (view as? SubagentContentView)?.updateLocalizer(localizer)
+            }
         }
     }
 

@@ -357,6 +357,7 @@ extension MainWindowController {
                 viewModel: dashboardVM,
                 subagentId: subagentId,
                 sessionId: sessionId,
+                localizer: appLocalizer(),
                 vibrancyAppearanceOverride: resolveVibrancyAppearanceOverride()
             )
             let capturedContentID = contentID

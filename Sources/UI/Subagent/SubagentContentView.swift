@@ -21,6 +21,7 @@ final class SubagentContentView: NSView {
 
     private var hostingView: NSHostingView<SubagentPanelView>?
     private weak var viewModel: AgentDashboardViewModel?
+    private var localizer: AppLocalizer
 
     /// Forced `NSAppearance` applied to the hosted `SubagentPanelView`.
     ///
@@ -37,11 +38,13 @@ final class SubagentContentView: NSView {
         viewModel: AgentDashboardViewModel,
         subagentId: String,
         sessionId: String,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
         vibrancyAppearanceOverride: NSAppearance? = nil
     ) {
         self.subagentId = subagentId
         self.sessionId = sessionId
         self.viewModel = viewModel
+        self.localizer = localizer
         self.vibrancyAppearanceOverride = vibrancyAppearanceOverride
         super.init(frame: .zero)
 
@@ -73,6 +76,15 @@ final class SubagentContentView: NSView {
     /// (for example during teardown).
     func setVibrancyAppearanceOverride(_ override: NSAppearance?) {
         vibrancyAppearanceOverride = override
+        rebuildRootView()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        rebuildRootView()
+    }
+
+    private func rebuildRootView() {
         guard let hostingView, let viewModel else { return }
         hostingView.rootView = makePanelView(viewModel: viewModel)
     }
@@ -82,7 +94,8 @@ final class SubagentContentView: NSView {
             viewModel: viewModel,
             subagentId: subagentId,
             sessionId: sessionId,
-            onClose: { [weak self] in self?.onClose?() }
+            onClose: { [weak self] in self?.onClose?() },
+            localizer: localizer
         )
         view.vibrancyAppearanceOverride = vibrancyAppearanceOverride
         return view

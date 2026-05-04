@@ -20,6 +20,7 @@ struct SubagentPanelView: View {
     let subagentId: String
     let sessionId: String
     var onClose: (() -> Void)?
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -69,10 +70,10 @@ struct SubagentPanelView: View {
         HStack(spacing: 8) {
             stateCircle
             VStack(alignment: .leading, spacing: 1) {
-                Text(subagent?.type ?? "Subagent")
+                Text(subagent?.type ?? Self.localizedFallbackTitle(using: localizer))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.text))
-                Text(verbatim: subagent.map(Self.formatDuration) ?? "Starting...")
+                Text(subagent.map(Self.formatDuration) ?? Self.localizedStartingText(using: localizer))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
             }
@@ -87,7 +88,7 @@ struct SubagentPanelView: View {
                         .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
                 }
                 .buttonStyle(.plain)
-                .help("Close panel")
+                .help(localized("subagent.panel.close", fallback: "Close panel"))
             }
         }
         .padding(.horizontal, 10)
@@ -147,7 +148,7 @@ struct SubagentPanelView: View {
                     activityRow(activity)
                 }
                 if sub.activities.isEmpty {
-                    Text(sub.lastActivity ?? "Running...")
+                    Text(sub.lastActivity ?? Self.localizedRunningText(using: localizer))
                         .font(.system(size: 11))
                         .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
                         .padding(.horizontal, 10)
@@ -189,7 +190,7 @@ struct SubagentPanelView: View {
             Spacer()
             ProgressView()
                 .scaleEffect(0.7)
-            Text("Agent starting...")
+            Text(Self.localizedAgentStartingText(using: localizer))
                 .font(.system(size: 11))
                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
             Spacer()
@@ -210,6 +211,26 @@ struct SubagentPanelView: View {
         let minutes = seconds / 60
         let secs = seconds % 60
         return "\(minutes)m \(secs)s"
+    }
+
+    static func localizedFallbackTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("subagent.panel.fallbackTitle", fallback: "Subagent")
+    }
+
+    static func localizedStartingText(using localizer: AppLocalizer) -> String {
+        localizer.string("subagent.panel.starting", fallback: "Starting...")
+    }
+
+    static func localizedRunningText(using localizer: AppLocalizer) -> String {
+        localizer.string("subagent.panel.running", fallback: "Running...")
+    }
+
+    static func localizedAgentStartingText(using localizer: AppLocalizer) -> String {
+        localizer.string("subagent.panel.agentStarting", fallback: "Agent starting...")
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
     }
 
     static func iconForTool(_ toolName: String) -> String {

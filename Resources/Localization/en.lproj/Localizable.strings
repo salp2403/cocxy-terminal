@@ -175,6 +175,11 @@
 "agent.panel.status.images.one" = "%d image attached.";
 "agent.panel.status.images.many" = "%d images attached.";
 "agent.panel.status.loadSkillsFailed" = "Failed to load skills: %@";
+"subagent.panel.fallbackTitle" = "Subagent";
+"subagent.panel.starting" = "Starting...";
+"subagent.panel.close" = "Close panel";
+"subagent.panel.running" = "Running...";
+"subagent.panel.agentStarting" = "Agent starting...";
 "preferences.mcp.configFile.section" = "Config File";
 "preferences.mcp.path" = "Path";
 "preferences.mcp.reload" = "Reload";
