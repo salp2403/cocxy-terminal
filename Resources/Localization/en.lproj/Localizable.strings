@@ -250,6 +250,15 @@
 "menu.view.githubPane" = "GitHub Pane";
 "menu.view.notes" = "Notes";
 "menu.view.quickSwitch" = "Quick Switch";
+"quickSwitch.item.tab.title" = "Tab: %@";
+"quickSwitch.item.browser.title" = "Browser: %@";
+"quickSwitch.item.worktree.title" = "Worktree: %@";
+"quickSwitch.item.note.title" = "Note: %@";
+"quickSwitch.item.notes.subtitle" = "Workspace notes";
+"quickSwitch.kind.tab" = "Terminal tab";
+"quickSwitch.kind.browserTab" = "Browser tab";
+"quickSwitch.kind.worktree" = "Worktree";
+"quickSwitch.kind.note" = "Note";
 "menu.view.smartRouting" = "Smart Routing";
 "menu.view.remoteWorkspaces" = "Remote Workspaces...";
 "menu.view.agentTimeline" = "Agent Timeline";

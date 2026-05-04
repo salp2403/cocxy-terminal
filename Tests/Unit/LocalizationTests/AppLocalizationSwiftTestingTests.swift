@@ -100,6 +100,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("commandPalette.empty", fallback: "No commands found") == "No se encontraron comandos")
         #expect(spanish.string("commandPalette.footer.navigate", fallback: "Navigate") == "Navegar")
         #expect(spanish.string("commandPalette.footer.action.plural", fallback: "actions") == "acciones")
+        #expect(spanish.string("quickSwitch.item.browser.title", fallback: "Browser: %@") == "Navegador: %@")
+        #expect(spanish.string("quickSwitch.kind.browserTab", fallback: "Browser tab") == "Pestaña de navegador")
     }
 
     @Test

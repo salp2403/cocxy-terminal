@@ -72,6 +72,7 @@ extension MainWindowController {
     // MARK: - Items
 
     func unifiedQuickSwitchActions(now: Date = Date()) -> [CommandAction] {
+        let localizer = appLocalizer()
         let ranked = UnifiedQuickSwitchRanker.rank(
             query: "",
             items: unifiedQuickSwitchItems(now: now),
@@ -83,7 +84,7 @@ extension MainWindowController {
             return CommandAction(
                 id: "unified.quickswitch.\(item.kind.rawValue).\(item.id)",
                 name: item.title,
-                description: item.subtitle ?? item.kind.displayName,
+                description: item.subtitle ?? item.kind.localizedDisplayName(using: localizer),
                 shortcut: nil,
                 category: .navigation,
                 handler: { [weak self, item] in
@@ -95,20 +96,21 @@ extension MainWindowController {
     }
 
     func unifiedQuickSwitchItems(now: Date = Date()) -> [UnifiedQuickSwitchItem] {
+        let localizer = appLocalizer()
         var items: [UnifiedQuickSwitchItem] = []
-        items.append(contentsOf: unifiedQuickSwitchTabItems())
-        items.append(contentsOf: unifiedQuickSwitchBrowserItems(now: now))
-        items.append(contentsOf: unifiedQuickSwitchWorktreeItems())
-        items.append(contentsOf: unifiedQuickSwitchNoteItems())
+        items.append(contentsOf: unifiedQuickSwitchTabItems(localizer: localizer))
+        items.append(contentsOf: unifiedQuickSwitchBrowserItems(now: now, localizer: localizer))
+        items.append(contentsOf: unifiedQuickSwitchWorktreeItems(localizer: localizer))
+        items.append(contentsOf: unifiedQuickSwitchNoteItems(localizer: localizer))
         return items
     }
 
-    private func unifiedQuickSwitchTabItems() -> [UnifiedQuickSwitchItem] {
+    private func unifiedQuickSwitchTabItems(localizer: AppLocalizer) -> [UnifiedQuickSwitchItem] {
         tabManager.tabs.map { tab in
             UnifiedQuickSwitchItem(
                 id: tab.id.rawValue.uuidString,
                 kind: .tab,
-                title: "Tab: \(tab.displayTitle)",
+                title: Self.localizedUnifiedQuickSwitchTabTitle(tab.displayTitle, using: localizer),
                 subtitle: tab.workingDirectory.path,
                 keywords: [
                     tab.displayTitle,
@@ -122,14 +124,14 @@ extension MainWindowController {
         }
     }
 
-    private func unifiedQuickSwitchBrowserItems(now: Date) -> [UnifiedQuickSwitchItem] {
+    private func unifiedQuickSwitchBrowserItems(now: Date, localizer: AppLocalizer) -> [UnifiedQuickSwitchItem] {
         guard let viewModel = browserViewModel else { return [] }
         return viewModel.browserTabs.map { tab in
             let title = tab.title == "New Tab" ? tab.url.absoluteString : tab.title
             return UnifiedQuickSwitchItem(
                 id: tab.id.uuidString,
                 kind: .browserTab,
-                title: "Browser: \(title)",
+                title: Self.localizedUnifiedQuickSwitchBrowserTitle(title, using: localizer),
                 subtitle: tab.url.absoluteString,
                 keywords: [title, tab.url.host ?? "", tab.url.absoluteString],
                 lastUsedAt: tab.id == viewModel.activeTabID ? now : nil,
@@ -138,14 +140,14 @@ extension MainWindowController {
         }
     }
 
-    private func unifiedQuickSwitchWorktreeItems() -> [UnifiedQuickSwitchItem] {
+    private func unifiedQuickSwitchWorktreeItems(localizer: AppLocalizer) -> [UnifiedQuickSwitchItem] {
         tabManager.tabs.compactMap { tab in
             guard let worktreeID = tab.worktreeID else { return nil }
             let branch = tab.worktreeBranch ?? tab.gitBranch ?? worktreeID
             return UnifiedQuickSwitchItem(
                 id: worktreeID,
                 kind: .worktree,
-                title: "Worktree: \(branch)",
+                title: Self.localizedUnifiedQuickSwitchWorktreeTitle(branch, using: localizer),
                 subtitle: tab.worktreeRoot?.path ?? tab.workingDirectory.path,
                 keywords: [
                     worktreeID,
@@ -159,15 +161,15 @@ extension MainWindowController {
         }
     }
 
-    private func unifiedQuickSwitchNoteItems() -> [UnifiedQuickSwitchItem] {
+    private func unifiedQuickSwitchNoteItems(localizer: AppLocalizer) -> [UnifiedQuickSwitchItem] {
         let summaries = auroraChromeController?.notesByWorkspace ?? [:]
         return summaries.flatMap { workspaceID, summary in
             summary.recentNotes.map { note in
                 UnifiedQuickSwitchItem(
                     id: "\(workspaceID)|\(note.id)",
                     kind: .note,
-                    title: "Note: \(note.title)",
-                    subtitle: "Workspace notes",
+                    title: Self.localizedUnifiedQuickSwitchNoteTitle(note.title, using: localizer),
+                    subtitle: Self.localizedUnifiedQuickSwitchNotesSubtitle(using: localizer),
                     keywords: [note.title, workspaceID],
                     lastUsedAt: note.updatedAt,
                     priority: 0
@@ -199,15 +201,39 @@ extension MainWindowController {
             openNote(workspaceIDRaw: pieces[0], noteIDRaw: pieces[1])
         }
     }
+
+    static func localizedUnifiedQuickSwitchTabTitle(_ title: String, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("quickSwitch.item.tab.title", fallback: "Tab: %@"), title)
+    }
+
+    static func localizedUnifiedQuickSwitchBrowserTitle(_ title: String, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("quickSwitch.item.browser.title", fallback: "Browser: %@"), title)
+    }
+
+    static func localizedUnifiedQuickSwitchWorktreeTitle(_ branch: String, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("quickSwitch.item.worktree.title", fallback: "Worktree: %@"), branch)
+    }
+
+    static func localizedUnifiedQuickSwitchNoteTitle(_ title: String, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("quickSwitch.item.note.title", fallback: "Note: %@"), title)
+    }
+
+    static func localizedUnifiedQuickSwitchNotesSubtitle(using localizer: AppLocalizer) -> String {
+        localizer.string("quickSwitch.item.notes.subtitle", fallback: "Workspace notes")
+    }
 }
 
 private extension UnifiedQuickSwitchItemKind {
-    var displayName: String {
+    func localizedDisplayName(using localizer: AppLocalizer) -> String {
         switch self {
-        case .tab: return "Terminal tab"
-        case .browserTab: return "Browser tab"
-        case .worktree: return "Worktree"
-        case .note: return "Note"
+        case .tab:
+            return localizer.string("quickSwitch.kind.tab", fallback: "Terminal tab")
+        case .browserTab:
+            return localizer.string("quickSwitch.kind.browserTab", fallback: "Browser tab")
+        case .worktree:
+            return localizer.string("quickSwitch.kind.worktree", fallback: "Worktree")
+        case .note:
+            return localizer.string("quickSwitch.kind.note", fallback: "Note")
         }
     }
 }

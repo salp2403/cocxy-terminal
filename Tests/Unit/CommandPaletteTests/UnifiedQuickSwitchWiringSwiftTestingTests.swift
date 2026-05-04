@@ -74,6 +74,20 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
         #expect(items.contains(where: { $0.kind == .worktree && $0.id == "wt_123" }))
     }
 
+    @Test("item labels follow configured app language")
+    func itemLabelsFollowConfiguredAppLanguage() throws {
+        let spanish = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+
+        #expect(MainWindowController.localizedUnifiedQuickSwitchTabTitle("main", using: spanish) == "Pestaña: main")
+        #expect(MainWindowController.localizedUnifiedQuickSwitchBrowserTitle("Docs", using: spanish) == "Navegador: Docs")
+        #expect(MainWindowController.localizedUnifiedQuickSwitchWorktreeTitle("feat/a", using: spanish) == "Worktree: feat/a")
+        #expect(MainWindowController.localizedUnifiedQuickSwitchNoteTitle("Ideas", using: spanish) == "Nota: Ideas")
+        #expect(MainWindowController.localizedUnifiedQuickSwitchNotesSubtitle(using: spanish) == "Notas del workspace")
+    }
+
     @Test("activating a terminal tab focuses it through the normal tab lifecycle")
     func activatesTerminalTab() {
         let controller = MainWindowController(bridge: MockTerminalEngine())
@@ -172,5 +186,10 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
         #expect(controller.tabManager.activeTabID == target.id)
         #expect(controller.isCommandPaletteVisible == false)
         #expect(controller.commandPaletteViewModel == nil)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
