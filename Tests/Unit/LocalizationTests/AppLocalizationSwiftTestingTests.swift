@@ -53,6 +53,11 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.codeReview.autoShow", fallback: "Auto-show review panel when an agent session ends") == "Mostrar panel de revisión automáticamente cuando termina una sesión de agente")
         #expect(spanish.string("preferences.notifications.dockBadge", fallback: "Dock badge") == "Badge en el Dock")
         #expect(spanish.string("preferences.terminal.imageMemoryBudget", fallback: "Image memory budget: %d MiB") == "Memoria para imágenes: %d MiB")
+        #expect(spanish.string("preferences.lsp.enable", fallback: "Enable language servers") == "Activar servidores de lenguaje")
+        #expect(spanish.string("preferences.editor.enableVimMode", fallback: "Enable Vim mode") == "Activar modo Vim")
+        #expect(spanish.string("preferences.editor.contextWindow", fallback: "Context window: %d UTF-16") == "Ventana de contexto: %d UTF-16")
+        #expect(spanish.string("preferences.worktrees.enable", fallback: "Enable worktrees") == "Activar worktrees")
+        #expect(spanish.string("preferences.worktrees.onClose.remove", fallback: "Remove if clean") == "Eliminar si está limpio")
     }
 
     @Test

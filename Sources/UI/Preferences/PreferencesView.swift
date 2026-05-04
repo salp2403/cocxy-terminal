@@ -2108,18 +2108,29 @@ struct LanguageServersPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Feature") {
-                Toggle("Enable language servers", isOn: $viewModel.lspEnabled)
-                    .help("Starts only the local language servers selected below.")
+            Section(viewModel.localizedString("preferences.lsp.feature.section", fallback: "Feature")) {
+                Toggle(
+                    viewModel.localizedString("preferences.lsp.enable", fallback: "Enable language servers"),
+                    isOn: $viewModel.lspEnabled
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.lsp.enable.help",
+                        fallback: "Starts only the local language servers selected below."
+                    )
+                )
                 Text(
-                    "Cocxy never auto-installs language servers. Enabled servers run locally and receive opened document text plus workspace URIs."
+                    viewModel.localizedString(
+                        "preferences.lsp.feature.caption",
+                        fallback: "Cocxy never auto-installs language servers. Enabled servers run locally and receive opened document text plus workspace URIs."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Languages") {
+            Section(viewModel.localizedString("preferences.lsp.languages.section", fallback: "Languages")) {
                 ForEach(viewModel.availableLSPLanguages, id: \.languageID) { server in
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle(
@@ -2156,7 +2167,7 @@ struct LanguageServersPreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Language Servers")
+        .navigationTitle(viewModel.localizedString("preferences.section.languageServers", fallback: "Language Servers"))
     }
 
     private func languageDetail(for server: LSPServerConfiguration) -> String {
@@ -2181,28 +2192,52 @@ struct EditorPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Input") {
-                Toggle("Enable Vim mode", isOn: $viewModel.vimEnabled)
-                    .help("Routes editor text input through the Vim state machine.")
-                Text("Applies only to editor tabs. Terminal panes keep standard shell input.")
+            Section(viewModel.localizedString("preferences.editor.input.section", fallback: "Input")) {
+                Toggle(
+                    viewModel.localizedString("preferences.editor.enableVimMode", fallback: "Enable Vim mode"),
+                    isOn: $viewModel.vimEnabled
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.editor.enableVimMode.help",
+                        fallback: "Routes editor text input through the Vim state machine."
+                    )
+                )
+                Text(
+                    viewModel.localizedString(
+                        "preferences.editor.input.caption",
+                        fallback: "Applies only to editor tabs. Terminal panes keep standard shell input."
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Inline Completions") {
-                Toggle("Enable inline AI completions", isOn: $viewModel.completionInlineAIEnabled)
-                    .help("Uses the local Foundation Models provider when available.")
+            Section(viewModel.localizedString("preferences.editor.inlineCompletions.section", fallback: "Inline Completions")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.editor.enableInlineAICompletions",
+                        fallback: "Enable inline AI completions"
+                    ),
+                    isOn: $viewModel.completionInlineAIEnabled
+                )
+                .help(
+                    viewModel.localizedString(
+                        "preferences.editor.enableInlineAICompletions.help",
+                        fallback: "Uses the local Foundation Models provider when available."
+                    )
+                )
 
                 HStack {
-                    Text("Provider")
+                    Text(viewModel.localizedString("preferences.editor.provider", fallback: "Provider"))
                     Spacer()
-                    Text("Foundation Models")
+                    Text(viewModel.localizedString("preferences.editor.foundationModels", fallback: "Foundation Models"))
                         .foregroundStyle(.secondary)
                 }
 
                 HStack {
-                    Text("Idle delay")
+                    Text(viewModel.localizedString("preferences.editor.idleDelay", fallback: "Idle delay"))
                     Slider(
                         value: $viewModel.completionIdleDelaySeconds,
                         in: CompletionConfig.minIdleDelaySeconds...CompletionConfig.maxIdleDelaySeconds,
@@ -2219,11 +2254,19 @@ struct EditorPreferencesSection: View {
                     in: CompletionConfig.minContextUTF16Length...CompletionConfig.maxContextUTF16Length,
                     step: 256
                 ) {
-                    Text("Context window: \(viewModel.completionMaxContextUTF16Length) UTF-16")
+                    Text(
+                        String(
+                            format: viewModel.localizedString(
+                                "preferences.editor.contextWindow",
+                                fallback: "Context window: %d UTF-16"
+                            ),
+                            viewModel.completionMaxContextUTF16Length
+                        )
+                    )
                 }
             }
 
-            Section("Completion Languages") {
+            Section(viewModel.localizedString("preferences.editor.completionLanguages.section", fallback: "Completion Languages")) {
                 ForEach(viewModel.availableCompletionLanguageIDs, id: \.self) { languageID in
                     Toggle(
                         languageID,
@@ -2242,7 +2285,7 @@ struct EditorPreferencesSection: View {
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Editor")
+        .navigationTitle(viewModel.localizedString("preferences.section.editor", fallback: "Editor"))
     }
 }
 
@@ -2259,18 +2302,24 @@ struct WorktreesPreferencesSection: View {
 
     var body: some View {
         Form {
-            Section("Feature") {
-                Toggle("Enable worktrees", isOn: $viewModel.worktreeEnabled)
+            Section(viewModel.localizedString("preferences.worktrees.feature.section", fallback: "Feature")) {
+                Toggle(
+                    viewModel.localizedString("preferences.worktrees.enable", fallback: "Enable worktrees"),
+                    isOn: $viewModel.worktreeEnabled
+                )
                 Text(
-                    "When off, every `cocxy worktree-*` CLI verb and palette action refuses with a hint pointing here. Off by default."
+                    viewModel.localizedString(
+                        "preferences.worktrees.feature.caption",
+                        fallback: "When off, every `cocxy worktree-*` CLI verb and palette action refuses with a hint pointing here. Off by default."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Storage") {
-                LabeledContent("Base path") {
+            Section(viewModel.localizedString("preferences.worktrees.storage.section", fallback: "Storage")) {
+                LabeledContent(viewModel.localizedString("preferences.worktrees.basePath", fallback: "Base path")) {
                     TextField(
                         "~/.cocxy/worktrees",
                         text: $viewModel.worktreeBasePath
@@ -2278,22 +2327,25 @@ struct WorktreesPreferencesSection: View {
                     .textFieldStyle(.roundedBorder)
                 }
                 Text(
-                    "Final worktree path: <base-path>/<repo-hash>/<id>/. ~ is expanded at use time."
+                    viewModel.localizedString(
+                        "preferences.worktrees.finalPath.caption",
+                        fallback: "Final worktree path: <base-path>/<repo-hash>/<id>/. ~ is expanded at use time."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Branch") {
-                LabeledContent("Template") {
+            Section(viewModel.localizedString("preferences.worktrees.branch.section", fallback: "Branch")) {
+                LabeledContent(viewModel.localizedString("preferences.worktrees.template", fallback: "Template")) {
                     TextField(
                         "cocxy/{agent}/{id}",
                         text: $viewModel.worktreeBranchTemplate
                     )
                     .textFieldStyle(.roundedBorder)
                 }
-                LabeledContent("Base ref") {
+                LabeledContent(viewModel.localizedString("preferences.worktrees.baseRef", fallback: "Base ref")) {
                     TextField(
                         "HEAD",
                         text: $viewModel.worktreeBaseRef
@@ -2301,46 +2353,76 @@ struct WorktreesPreferencesSection: View {
                     .textFieldStyle(.roundedBorder)
                 }
                 Text(
-                    "Template placeholders: {agent}, {id}, {date}. Base ref accepts HEAD, main, or any git ref."
+                    viewModel.localizedString(
+                        "preferences.worktrees.branch.caption",
+                        fallback: "Template placeholders: {agent}, {id}, {date}. Base ref accepts HEAD, main, or any git ref."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 Stepper(
-                    "Random id length: \(viewModel.worktreeIDLength)",
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.worktrees.randomIDLength",
+                            fallback: "Random id length: %d"
+                        ),
+                        viewModel.worktreeIDLength
+                    ),
                     value: $viewModel.worktreeIDLength,
                     in: WorktreeConfig.minIDLength...WorktreeConfig.maxIDLength
                 )
             }
 
-            Section("Lifecycle") {
-                Picker("On tab close", selection: $viewModel.worktreeOnClose) {
-                    Text("Keep").tag(WorktreeOnClose.keep.rawValue)
-                    Text("Prompt").tag(WorktreeOnClose.prompt.rawValue)
-                    Text("Remove if clean").tag(WorktreeOnClose.remove.rawValue)
+            Section(viewModel.localizedString("preferences.worktrees.lifecycle.section", fallback: "Lifecycle")) {
+                Picker(
+                    viewModel.localizedString("preferences.worktrees.onClose", fallback: "On tab close"),
+                    selection: $viewModel.worktreeOnClose
+                ) {
+                    Text(viewModel.localizedString("preferences.worktrees.onClose.keep", fallback: "Keep"))
+                        .tag(WorktreeOnClose.keep.rawValue)
+                    Text(viewModel.localizedString("preferences.worktrees.onClose.prompt", fallback: "Prompt"))
+                        .tag(WorktreeOnClose.prompt.rawValue)
+                    Text(viewModel.localizedString("preferences.worktrees.onClose.remove", fallback: "Remove if clean"))
+                        .tag(WorktreeOnClose.remove.rawValue)
                 }
-                Toggle("Open new tab for each worktree", isOn: $viewModel.worktreeOpenInNewTab)
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.worktrees.openNewTab",
+                        fallback: "Open new tab for each worktree"
+                    ),
+                    isOn: $viewModel.worktreeOpenInNewTab
+                )
             }
 
-            Section("Integration") {
+            Section(viewModel.localizedString("preferences.worktrees.integration.section", fallback: "Integration")) {
                 Toggle(
-                    "Inherit project config from origin repo",
+                    viewModel.localizedString(
+                        "preferences.worktrees.inheritProjectConfig",
+                        fallback: "Inherit project config from origin repo"
+                    ),
                     isOn: $viewModel.worktreeInheritProjectConfig
                 )
                 Text(
-                    "When on, .cocxy.toml from the origin repo applies inside the worktree when the worktree tree has none."
+                    viewModel.localizedString(
+                        "preferences.worktrees.inheritProjectConfig.caption",
+                        fallback: "When on, .cocxy.toml from the origin repo applies inside the worktree when the worktree tree has none."
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-                Toggle("Show worktree badge on tabs", isOn: $viewModel.worktreeShowBadge)
+                Toggle(
+                    viewModel.localizedString("preferences.worktrees.showBadge", fallback: "Show worktree badge on tabs"),
+                    isOn: $viewModel.worktreeShowBadge
+                )
             }
 
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
-        .navigationTitle("Worktrees")
+        .navigationTitle(viewModel.localizedString("preferences.section.worktrees", fallback: "Worktrees"))
     }
 }
 
