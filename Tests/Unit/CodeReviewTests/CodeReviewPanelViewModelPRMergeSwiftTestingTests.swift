@@ -283,6 +283,59 @@ struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
 
     // MARK: - userFacingMergeErrorMessage
 
+    @Test("merge request guard banners localize to configured app language")
+    func mergeRequestGuardBannersLocalizeSpanish() throws {
+        let viewModel = makeViewModel(localizer: try spanishLocalizer())
+
+        viewModel.requestMergePullRequest(method: .squash, deleteBranch: true)
+        #expect(viewModel.pullRequestMergeErrorMessage == "No hay un pull request adjunto a esta revisión.")
+
+        viewModel.activePullRequestNumber = 42
+        viewModel.requestMergePullRequest(method: .squash, deleteBranch: true)
+        #expect(viewModel.pullRequestMergeErrorMessage == "La integración de GitHub aún no está lista. Abre el panel de GitHub una vez para inicializarla.")
+    }
+
+    @Test("merge success banner localizes to configured app language")
+    func mergeSuccessBannerLocalizesSpanish() async throws {
+        let viewModel = makeViewModel(localizer: try spanishLocalizer())
+        viewModel.activePullRequestNumber = 42
+        viewModel.mergePullRequestHandler = { request in
+            GitHubPullRequest(
+                number: request.pullRequestNumber,
+                title: "Ready",
+                state: .merged,
+                author: GitHubUser(login: "said"),
+                headRefName: "feature",
+                baseRefName: "main",
+                url: URL(string: "https://github.com/owner/repo/pull/42")!,
+                updatedAt: Date(timeIntervalSince1970: 1_750_000_000)
+            )
+        }
+
+        viewModel.requestMergePullRequest(method: .squash, deleteBranch: true)
+
+        try await waitForReviewCondition {
+            viewModel.pullRequestMergeInfoMessage != nil
+        }
+        #expect(viewModel.pullRequestMergeInfoMessage == "PR #42 fusionado con Squash & Merge.")
+    }
+
+    @Test("typed merge errors localize to configured app language")
+    func typedMergeErrorsLocalizeSpanish() async throws {
+        let viewModel = makeViewModel(localizer: try spanishLocalizer())
+        viewModel.activePullRequestNumber = 42
+        viewModel.mergePullRequestHandler = { _ in
+            throw GitHubMergeError.mergeConflict
+        }
+
+        viewModel.requestMergePullRequest(method: .squash, deleteBranch: true)
+
+        try await waitForReviewCondition {
+            viewModel.pullRequestMergeErrorMessage != nil
+        }
+        #expect(viewModel.pullRequestMergeErrorMessage == "El pull request tiene conflictos de merge. Resuélvelos en un navegador antes de reintentar.")
+    }
+
     // MARK: - Regression: Create PR captures number
 
     @Test("requestCreatePullRequest captures the PR number on success")
@@ -362,11 +415,24 @@ struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
 
     // MARK: - Helpers
 
-    private func makeViewModel() -> CodeReviewPanelViewModel {
+    private func makeViewModel(
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) -> CodeReviewPanelViewModel {
         CodeReviewPanelViewModel(
             tracker: SessionDiffTrackerImpl(),
-            hookEventReceiver: nil
+            hookEventReceiver: nil,
+            localizer: localizer
         )
+    }
+
+    private func spanishLocalizer() throws -> AppLocalizer {
+        let bundle = try #require(localizationBundle())
+        return AppLocalizer(languagePreference: .spanish, bundle: bundle)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
 

@@ -141,10 +141,38 @@ enum PostMergeWorktreeCleanupAlert {
         "Worktree on `\(headRefName)` retained."
     }
 
+    static func localizedKeepBannerFragment(
+        headRefName: String,
+        localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(
+                "codeReview.postMergeCleanup.banner.keep",
+                fallback: "Worktree on `%@` retained."
+            ),
+            locale: localizer.locale,
+            arguments: [headRefName]
+        )
+    }
+
     /// Confirmation fragment appended to the merge banner when the
     /// user picked "Close Worktree" and the close succeeded.
     static func closedBannerFragment(headRefName: String) -> String {
         "Worktree on `\(headRefName)` closed."
+    }
+
+    static func localizedClosedBannerFragment(
+        headRefName: String,
+        localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(
+                "codeReview.postMergeCleanup.banner.closed",
+                fallback: "Worktree on `%@` closed."
+            ),
+            locale: localizer.locale,
+            arguments: [headRefName]
+        )
     }
 
     /// Fallback fragment if the close handler returned `false` (last
@@ -152,6 +180,20 @@ enum PostMergeWorktreeCleanupAlert {
     /// user the close did not happen so they can fix it manually.
     static func closeFailedBannerFragment(headRefName: String) -> String {
         "Could not close the worktree tab automatically — close it manually with Cmd+W."
+    }
+
+    static func localizedCloseFailedBannerFragment(
+        headRefName: String,
+        localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(
+                "codeReview.postMergeCleanup.banner.closeFailed",
+                fallback: "Could not close the worktree tab automatically — close it manually with Cmd+W."
+            ),
+            locale: localizer.locale,
+            arguments: [headRefName]
+        )
     }
 
     // MARK: - Presentation

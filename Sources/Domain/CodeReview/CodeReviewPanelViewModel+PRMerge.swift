@@ -156,7 +156,7 @@ extension CodeReviewPanelViewModel {
                     error=\(String(describing: error), privacy: .private)
                     """
                 )
-                self.pullRequestMergeErrorMessage = Self.userFacingMergeErrorMessage(for: error)
+                self.pullRequestMergeErrorMessage = self.localizedMergeErrorMessage(for: error)
             }
         }
     }
@@ -184,11 +184,17 @@ extension CodeReviewPanelViewModel {
         body: String? = nil
     ) {
         guard let number = activePullRequestNumber else {
-            pullRequestMergeErrorMessage = "No pull request is attached to this review."
+            pullRequestMergeErrorMessage = localizedString(
+                "codeReview.prMerge.noPullRequest",
+                fallback: "No pull request is attached to this review."
+            )
             return
         }
         guard let handler = mergePullRequestHandler else {
-            pullRequestMergeErrorMessage = "GitHub integration is not ready yet. Open the GitHub pane once to initialise it."
+            pullRequestMergeErrorMessage = localizedString(
+                "codeReview.github.notReady",
+                fallback: "GitHub integration is not ready yet. Open the GitHub pane once to initialise it."
+            )
             return
         }
         guard !isMergingPullRequest else { return }
@@ -212,7 +218,12 @@ extension CodeReviewPanelViewModel {
                     guard let self else { return }
                     guard self.activePullRequestNumber == number else { return }
                     self.isMergingPullRequest = false
-                    self.pullRequestMergeInfoMessage = "Merged PR #\(merged.number) via \(method.displayName)."
+                    self.pullRequestMergeInfoMessage = self.localizedFormat(
+                        "codeReview.prMerge.merged",
+                        fallback: "Merged PR #%d via %@.",
+                        merged.number,
+                        method.displayName
+                    )
                     // Refresh mergeability so the chip flips to .merged
                     // and the merge button hides immediately.
                     Task { await self.refreshMergeabilityForActivePR() }
@@ -242,7 +253,7 @@ extension CodeReviewPanelViewModel {
                         """
                     )
                     self.isMergingPullRequest = false
-                    self.pullRequestMergeErrorMessage = Self.userFacingMergeErrorMessage(for: error)
+                    self.pullRequestMergeErrorMessage = self.localizedMergeErrorMessage(for: error)
                     // Mergeability may have shifted (auto-merge, conflict)
                     // — refresh so the chip and reason update.
                     Task { await self.refreshMergeabilityForActivePR() }
@@ -283,6 +294,19 @@ extension CodeReviewPanelViewModel {
         return description.isEmpty ? "Pull request action failed." : description
     }
 
+    func localizedMergeErrorMessage(for error: Error) -> String {
+        if let mergeError = error as? GitHubMergeError {
+            return mergeError.localizedDescription(using: localizer)
+        }
+        let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty
+            ? localizedString(
+                "codeReview.prMerge.error.actionFailed",
+                fallback: "Pull request action failed."
+            )
+            : description
+    }
+
     // MARK: - Post-merge aftermath (v0.1.87)
 
     /// Builds the merge confirmation banner string from the merged PR
@@ -298,6 +322,21 @@ extension CodeReviewPanelViewModel {
         let head = "Merged PR #\(mergedNumber) via \(method.displayName)."
         guard let outcome else { return head }
         return head + " " + outcome.displayMessage
+    }
+
+    func localizedMergeBannerMessage(
+        mergedNumber: Int,
+        method: GitHubMergeMethod,
+        outcome: GitMergeAftermathOutcome?
+    ) -> String {
+        let head = localizedFormat(
+            "codeReview.prMerge.merged",
+            fallback: "Merged PR #%d via %@.",
+            mergedNumber,
+            method.displayName
+        )
+        guard let outcome else { return head }
+        return head + " " + outcome.localizedDisplayMessage(using: localizer)
     }
 
     /// Drives the aftermath sync if a handler is wired and the panel
@@ -326,11 +365,17 @@ extension CodeReviewPanelViewModel {
         Task { [weak self] in
             do {
                 let outcome = try await aftermathHandler(workingDirectory, trimmedBase)
-                let baseBanner = Self.mergeBannerMessage(
-                    mergedNumber: mergedNumber,
-                    method: method,
-                    outcome: outcome
-                )
+                let baseBanner = await MainActor.run { [weak self] in
+                    self?.localizedMergeBannerMessage(
+                        mergedNumber: mergedNumber,
+                        method: method,
+                        outcome: outcome
+                    ) ?? Self.mergeBannerMessage(
+                        mergedNumber: mergedNumber,
+                        method: method,
+                        outcome: outcome
+                    )
+                }
                 await MainActor.run {
                     guard let self else { return }
                     self.pullRequestMergeInfoMessage = baseBanner
@@ -355,7 +400,7 @@ extension CodeReviewPanelViewModel {
                         error=\(String(describing: error), privacy: .private)
                         """
                     )
-                    self.pullRequestMergeErrorMessage = Self.userFacingAftermathErrorMessage(for: error)
+                    self.pullRequestMergeErrorMessage = self.localizedAftermathErrorMessage(for: error)
                 }
             }
         }
@@ -389,15 +434,36 @@ extension CodeReviewPanelViewModel {
             } else {
                 closed = false
             }
-            let fragment = closed
-                ? PostMergeWorktreeCleanupAlert.closedBannerFragment(headRefName: headRefName)
-                : PostMergeWorktreeCleanupAlert.closeFailedBannerFragment(headRefName: headRefName)
+            let fragment = await MainActor.run { [weak self] in
+                guard let self else {
+                    return closed
+                        ? PostMergeWorktreeCleanupAlert.closedBannerFragment(headRefName: headRefName)
+                        : PostMergeWorktreeCleanupAlert.closeFailedBannerFragment(headRefName: headRefName)
+                }
+                return closed
+                    ? PostMergeWorktreeCleanupAlert.localizedClosedBannerFragment(
+                        headRefName: headRefName,
+                        localizer: self.localizer
+                    )
+                    : PostMergeWorktreeCleanupAlert.localizedCloseFailedBannerFragment(
+                        headRefName: headRefName,
+                        localizer: self.localizer
+                    )
+            }
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.pullRequestMergeInfoMessage = baseBanner + " " + fragment
             }
         case .keep:
-            let fragment = PostMergeWorktreeCleanupAlert.keepBannerFragment(headRefName: headRefName)
+            let fragment = await MainActor.run { [weak self] in
+                guard let self else {
+                    return PostMergeWorktreeCleanupAlert.keepBannerFragment(headRefName: headRefName)
+                }
+                return PostMergeWorktreeCleanupAlert.localizedKeepBannerFragment(
+                    headRefName: headRefName,
+                    localizer: self.localizer
+                )
+            }
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.pullRequestMergeInfoMessage = baseBanner + " " + fragment
@@ -417,5 +483,22 @@ extension CodeReviewPanelViewModel {
         }
         let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         return description.isEmpty ? "Post-merge auto-pull failed." : description
+    }
+
+    func localizedAftermathErrorMessage(for error: Error) -> String {
+        if let typed = error as? GitMergeAftermathError {
+            return typed.errorDescription
+                ?? localizedString(
+                    "codeReview.prMerge.aftermath.failed",
+                    fallback: "Post-merge auto-pull failed."
+                )
+        }
+        let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty
+            ? localizedString(
+                "codeReview.prMerge.aftermath.failed",
+                fallback: "Post-merge auto-pull failed."
+            )
+            : description
     }
 }

@@ -160,6 +160,37 @@ struct CodeReviewIntegrationSwiftTestingTests {
         #expect(tracker.reviewRounds(for: "s1").isEmpty)
     }
 
+    @Test("submit route failure localizes the banner in the configured app language")
+    func submitRouteFailureLocalizesSpanish() async throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let tracker = SessionDiffTrackerImpl()
+        let cwd = URL(fileURLWithPath: "/tmp/review-submit-localized", isDirectory: true)
+        tracker.recordSnapshot(sessionId: "s1", ref: "abc123", workingDirectory: cwd)
+
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: tracker,
+            hookEventReceiver: nil,
+            directDiffLoader: { _, _, _ in
+                [FileDiff(filePath: "foo.swift", status: .modified, hunks: [])]
+            },
+            localizer: spanish
+        )
+        viewModel.activeSessionIdProvider = { "s1" }
+        viewModel.activeTabCwdProvider = { cwd }
+        viewModel.refreshDiffs()
+        try await waitForReviewCondition {
+            viewModel.activeSessionId == "s1"
+        }
+
+        viewModel.ptyWriteHandler = { _, _, _, _ in false }
+        viewModel.addComment(filePath: "foo.swift", line: 3, body: "Still pending")
+        viewModel.submitComments()
+
+        #expect(viewModel.lastErrorMessage == "No se pudo enviar el feedback porque la terminal original del agente ya no está disponible.")
+        #expect(viewModel.pendingComments.count == 1)
+    }
+
     @Test("session end auto-triggers review when tracked files exist")
     func sessionEndAutoShowsReview() async throws {
         let tracker = SessionDiffTrackerImpl()
@@ -399,4 +430,9 @@ private func waitForReviewCondition(
         }
         try await Task.sleep(nanoseconds: pollNanoseconds)
     }
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }

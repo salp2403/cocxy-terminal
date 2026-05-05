@@ -212,6 +212,7 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     private let directDiffLoader: (@Sendable (URL, DiffMode, String?) async throws -> [FileDiff])?
     private let commentStore: CommentStore
     private let gitWorkflow: CodeReviewGitWorkflowing
+    var localizer: AppLocalizer
     private var refreshGeneration: UInt64 = 0
     private var refreshTask: Task<Void, Never>?
     private var gitActionTask: Task<Void, Never>?
@@ -239,13 +240,15 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         hookEventReceiver: HookEventReceiving? = nil,
         commentStore: CommentStore = CommentStore(),
         gitWorkflow: CodeReviewGitWorkflowing = CodeReviewGitWorkflowService(),
-        directDiffLoader: (@Sendable (URL, DiffMode, String?) async throws -> [FileDiff])? = nil
+        directDiffLoader: (@Sendable (URL, DiffMode, String?) async throws -> [FileDiff])? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
     ) {
         self.tracker = tracker
         self.hookEventReceiver = hookEventReceiver
         self.commentStore = commentStore
         self.gitWorkflow = gitWorkflow
         self.directDiffLoader = directDiffLoader
+        self.localizer = localizer
 
         commentStore.objectWillChange
             .receive(on: DispatchQueue.main)
@@ -255,6 +258,22 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
             .store(in: &cancellables)
 
         bindHookEvents()
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+    }
+
+    func localizedString(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+
+    func localizedFormat(_ key: String, fallback: String, _ arguments: CVarArg...) -> String {
+        String(
+            format: localizedString(key, fallback: fallback),
+            locale: localizer.locale,
+            arguments: arguments
+        )
     }
 
     var pendingComments: [ReviewComment] {
@@ -428,7 +447,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         let targetWorkingDirectory = activeWorkingDirectory ?? resolvedWorkingDirectory
         let didSend = ptyWriteHandler?(formatted + "\n", targetSessionId, targetWorkingDirectory, activeTabID) ?? false
         guard didSend else {
-            lastErrorMessage = "Review feedback could not be sent because the original agent terminal is no longer available."
+            lastErrorMessage = localizedString(
+                "codeReview.banner.submitRouteMissing",
+                fallback: "Review feedback could not be sent because the original agent terminal is no longer available."
+            )
             lastInfoMessage = nil
             return
         }
@@ -485,7 +507,12 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
 
     func createBranchFromDraft() {
         let branchName = branchNameDraft
-        performGitAction(successMessage: "Branch created.") { workflow, workingDirectory in
+        performGitAction(
+            successMessage: localizedString(
+                "codeReview.gitWorkflow.branchCreated",
+                fallback: "Branch created."
+            )
+        ) { workflow, workingDirectory in
             try workflow.createBranch(named: branchName, workingDirectory: workingDirectory)
             return nil
         }
@@ -493,13 +520,23 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
 
     func commitAllChangesFromDraft() {
         let message = commitMessageDraft
-        performGitAction(successMessage: "Commit created.") { workflow, workingDirectory in
+        performGitAction(
+            successMessage: localizedString(
+                "codeReview.gitWorkflow.commitCreated",
+                fallback: "Commit created."
+            )
+        ) { workflow, workingDirectory in
             try workflow.commitAll(message: message, workingDirectory: workingDirectory)
         }
     }
 
     func pushCurrentBranch() {
-        performGitAction(successMessage: "Branch pushed.") { workflow, workingDirectory in
+        performGitAction(
+            successMessage: localizedString(
+                "codeReview.gitWorkflow.branchPushed",
+                fallback: "Branch pushed."
+            )
+        ) { workflow, workingDirectory in
             try workflow.pushCurrentBranch(workingDirectory: workingDirectory)
         }
     }
@@ -520,7 +557,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         draft: Bool = false
     ) {
         guard let handler = createPullRequestHandler else {
-            lastErrorMessage = "GitHub integration is not ready yet. Open the GitHub pane once to initialise it."
+            lastErrorMessage = localizedString(
+                "codeReview.github.notReady",
+                fallback: "GitHub integration is not ready yet. Open the GitHub pane once to initialise it."
+            )
             return
         }
 
@@ -531,7 +571,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         let effectiveTitle = (resolvedTitle?.isEmpty == false ? resolvedTitle : nil) ?? firstLine
 
         guard !effectiveTitle.isEmpty else {
-            lastErrorMessage = "Add a commit message (or pass a title) before creating a pull request."
+            lastErrorMessage = localizedString(
+                "codeReview.github.createPR.missingTitle",
+                fallback: "Add a commit message (or pass a title) before creating a pull request."
+            )
             return
         }
 
@@ -564,7 +607,11 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                 self.isGitActionRunning = false
                 switch result {
                 case .success(let url):
-                    self.lastInfoMessage = "Pull request created: \(url.absoluteString)"
+                    self.lastInfoMessage = self.localizedFormat(
+                        "codeReview.github.createPR.created",
+                        fallback: "Pull request created: %@",
+                        url.absoluteString
+                    )
                     self.refreshGitStatus()
                     // Capture the PR number from the URL so the merge
                     // integration (v0.1.86) can immediately surface the
@@ -593,7 +640,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
 
     func openFileInEditor(_ filePath: String) {
         guard let fileURL = resolvedFileURL(for: filePath) else {
-            editorErrorMessage = "The selected file is outside the review working directory."
+            editorErrorMessage = localizedString(
+                "codeReview.editor.error.outsideWorkingDirectory",
+                fallback: "The selected file is outside the review working directory."
+            )
             return
         }
 
@@ -618,7 +668,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     private func writeEditorContent(refreshAfterSave: Bool) -> Bool {
         guard let editorFilePath,
               let fileURL = resolvedFileURL(for: editorFilePath) else {
-            editorErrorMessage = "The selected file is outside the review working directory."
+            editorErrorMessage = localizedString(
+                "codeReview.editor.error.outsideWorkingDirectory",
+                fallback: "The selected file is outside the review working directory."
+            )
             return false
         }
 
@@ -954,7 +1007,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         operation: @escaping @Sendable (CodeReviewGitWorkflowing, URL) throws -> String?
     ) {
         guard let workingDirectory = activeWorkingDirectory ?? resolvedWorkingDirectory else {
-            lastErrorMessage = HunkActionError.invalidWorkingDirectory.localizedDescription
+            lastErrorMessage = localizedString(
+                "codeReview.error.invalidWorkingDirectory",
+                fallback: HunkActionError.invalidWorkingDirectory.localizedDescription
+            )
             lastInfoMessage = nil
             return
         }

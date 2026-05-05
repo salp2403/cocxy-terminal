@@ -131,6 +131,106 @@ enum GitHubMergeError: Error, Equatable, Sendable, LocalizedError {
         }
     }
 
+    func localizedDescription(using localizer: AppLocalizer) -> String {
+        func localized(_ key: String, fallback: String, _ arguments: CVarArg...) -> String {
+            String(
+                format: localizer.string(key, fallback: fallback),
+                locale: localizer.locale,
+                arguments: arguments
+            )
+        }
+
+        switch self {
+        case .mergeConflict:
+            return localizer.string(
+                "github.merge.error.conflict",
+                fallback: "The pull request has merge conflicts. Resolve them in a browser before retrying."
+            )
+        case .checksFailing(let stderr):
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return localizer.string(
+                    "github.merge.error.checksFailing",
+                    fallback: "Required status checks are failing for this pull request."
+                )
+            }
+            return localized(
+                "github.merge.error.checksFailing.withDetail",
+                fallback: "Required status checks are failing: %@",
+                trimmed
+            )
+        case .reviewRequired:
+            return localizer.string(
+                "github.merge.error.reviewRequired",
+                fallback: "This pull request requires a reviewer approval before it can be merged."
+            )
+        case .changesRequested:
+            return localizer.string(
+                "github.merge.error.changesRequested",
+                fallback: "A reviewer requested changes. Address them and request another review."
+            )
+        case .behindBaseBranch:
+            return localizer.string(
+                "github.merge.error.behindBaseBranch",
+                fallback: "The pull request branch is behind the base branch. Update the branch and retry."
+            )
+        case .insufficientPermissions:
+            return localizer.string(
+                "github.merge.error.insufficientPermissions",
+                fallback: "You don't have permission to merge this pull request."
+            )
+        case .branchProtected(let reason):
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return localizer.string(
+                    "github.merge.error.branchProtected",
+                    fallback: "Branch protection rules block this merge."
+                )
+            }
+            return localized(
+                "github.merge.error.branchProtected.withReason",
+                fallback: "Branch protection blocks the merge: %@",
+                trimmed
+            )
+        case .alreadyMerged:
+            return localizer.string(
+                "github.merge.error.alreadyMerged",
+                fallback: "This pull request is already merged."
+            )
+        case .prClosed:
+            return localizer.string(
+                "github.merge.error.prClosed",
+                fallback: "This pull request is closed and cannot be merged."
+            )
+        case .pullRequestNotFound(let number):
+            return localized(
+                "github.merge.error.pullRequestNotFound",
+                fallback: "Pull request #%d was not found.",
+                number
+            )
+        case .autoMergeEnabled:
+            return localizer.string(
+                "github.merge.error.autoMergeEnabled",
+                fallback: "Auto-merge is enabled. The pull request will merge once requirements are met."
+            )
+        case .notMergeable(let reason):
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return localizer.string(
+                    "github.merge.error.notMergeable",
+                    fallback: "The pull request cannot be merged at this time."
+                )
+            }
+            return localized(
+                "github.merge.error.notMergeable.withReason",
+                fallback: "The pull request cannot be merged: %@",
+                trimmed
+            )
+        case .underlyingCLIError(let error):
+            return error.localizedMergeDescription(using: localizer)
+        }
+    }
+
     // MARK: - Classification
 
     /// Maps a failed `gh pr merge` invocation into a typed merge error.
@@ -224,5 +324,70 @@ enum GitHubMergeError: Error, Equatable, Sendable, LocalizedError {
         // actionable text. Fold whitespace so the banner stays tidy.
         let cleaned = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         return .notMergeable(reason: cleaned.isEmpty ? "exit code \(exitCode)" : cleaned)
+    }
+}
+
+private extension GitHubCLIError {
+    func localizedMergeDescription(using localizer: AppLocalizer) -> String {
+        func localized(_ key: String, fallback: String, _ arguments: CVarArg...) -> String {
+            String(
+                format: localizer.string(key, fallback: fallback),
+                locale: localizer.locale,
+                arguments: arguments
+            )
+        }
+
+        switch self {
+        case .notInstalled:
+            return localizer.string(
+                "github.merge.error.cli.notInstalled",
+                fallback: "Install the GitHub CLI: brew install gh"
+            )
+        case .notAuthenticated:
+            return localizer.string(
+                "github.merge.error.cli.notAuthenticated",
+                fallback: "Sign in with `gh auth login` before merging."
+            )
+        case .noRemote:
+            return localizer.string(
+                "github.merge.error.cli.noRemote",
+                fallback: "No GitHub remote detected for this repository."
+            )
+        case .notAGitRepository:
+            return localizer.string(
+                "github.merge.error.cli.notGitRepository",
+                fallback: "Open a git repository to merge pull requests."
+            )
+        case .rateLimited:
+            return localizer.string(
+                "github.merge.error.cli.rateLimited",
+                fallback: "GitHub rate limit reached. Try again later."
+            )
+        case .timeout(let seconds):
+            return localized(
+                "github.merge.error.cli.timeout",
+                fallback: "GitHub CLI timed out after %ds. Check your network.",
+                Int(seconds)
+            )
+        case .invalidJSON(let reason):
+            return localized(
+                "github.merge.error.cli.invalidJSON",
+                fallback: "Unexpected gh output: %@",
+                reason
+            )
+        case .unsupportedVersion:
+            return localizer.string(
+                "github.merge.error.cli.unsupportedVersion",
+                fallback: "Update the GitHub CLI (`gh`). Homebrew users can run: brew upgrade gh"
+            )
+        case .commandFailed(_, let stderr, _):
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty
+                ? localizer.string(
+                    "github.merge.error.cli.commandFailed",
+                    fallback: "The gh command failed."
+                )
+                : trimmed
+        }
     }
 }

@@ -114,6 +114,121 @@ enum GitMergeAftermathOutcome: Equatable, Sendable {
             return "Branch not synced: working directory no longer exists."
         }
     }
+
+    func localizedDisplayMessage(using localizer: AppLocalizer) -> String {
+        func localized(_ key: String, fallback: String, _ arguments: CVarArg...) -> String {
+            String(
+                format: localizer.string(key, fallback: fallback),
+                locale: localizer.locale,
+                arguments: arguments
+            )
+        }
+
+        switch self {
+        case .synced(let branch, let ahead, let behind):
+            if behind == 0 && ahead == 0 {
+                return localized(
+                    "codeReview.prMerge.aftermath.synced.already",
+                    fallback: "`%@` already in sync with origin.",
+                    branch
+                )
+            }
+            if behind > 0 && ahead == 0 {
+                return localized(
+                    behind == 1
+                        ? "codeReview.prMerge.aftermath.synced.pulled.one"
+                        : "codeReview.prMerge.aftermath.synced.pulled.many",
+                    fallback: behind == 1
+                        ? "`%@` synced with origin (%d commit pulled)."
+                        : "`%@` synced with origin (%d commits pulled).",
+                    branch,
+                    behind
+                )
+            }
+            if ahead > 0 && behind == 0 {
+                return localized(
+                    "codeReview.prMerge.aftermath.synced.ahead",
+                    fallback: "`%@` is %d ahead of origin (no pull needed).",
+                    branch,
+                    ahead
+                )
+            }
+            return localized(
+                "codeReview.prMerge.aftermath.synced.diverged",
+                fallback: "`%@` synced with origin (was %d ahead, %d behind).",
+                branch,
+                ahead,
+                behind
+            )
+        case .fetchedOnly(let currentBranch, let baseBranch):
+            return localized(
+                "codeReview.prMerge.aftermath.fetchedOnly",
+                fallback: "Fetched `%@` from origin (still on `%@`, no pull needed).",
+                baseBranch,
+                currentBranch
+            )
+        case .skippedDirtyTree(let branch, let modifiedCount, let untrackedCount):
+            let scope = branch.map { "`\($0)`" }
+                ?? localizer.string(
+                    "codeReview.prMerge.aftermath.currentBranch",
+                    fallback: "current branch"
+                )
+            var parts: [String] = []
+            if modifiedCount > 0 {
+                parts.append(
+                    localized(
+                        "codeReview.prMerge.aftermath.modifiedCount",
+                        fallback: "%d modified",
+                        modifiedCount
+                    )
+                )
+            }
+            if untrackedCount > 0 {
+                parts.append(
+                    localized(
+                        "codeReview.prMerge.aftermath.untrackedCount",
+                        fallback: "%d untracked",
+                        untrackedCount
+                    )
+                )
+            }
+            let summary = parts.isEmpty
+                ? localizer.string(
+                    "codeReview.prMerge.aftermath.uncommittedChanges",
+                    fallback: "uncommitted changes"
+                )
+                : parts.joined(separator: ", ")
+            return localized(
+                "codeReview.prMerge.aftermath.skippedDirtyTree",
+                fallback: "%@ not synced: %@. Commit or stash to enable auto-pull.",
+                scope,
+                summary
+            )
+        case .skippedDetachedHead:
+            return localizer.string(
+                "codeReview.prMerge.aftermath.skippedDetachedHead",
+                fallback: "Branch not synced: HEAD is detached."
+            )
+        case .skippedNotInRepo:
+            return localizer.string(
+                "codeReview.prMerge.aftermath.skippedNotInRepo",
+                fallback: "Branch not synced: working directory is not a git repository."
+            )
+        case .skippedNonFastForward(let branch, let ahead, let behind):
+            return localized(
+                "codeReview.prMerge.aftermath.skippedNonFastForward",
+                fallback: "`%@` not synced: would not fast-forward (local is %d ahead, %d behind). Sync manually.",
+                branch,
+                ahead,
+                behind
+            )
+        case .workspaceVanished:
+            return localizer.string(
+                "codeReview.prMerge.aftermath.workspaceVanished",
+                fallback: "Branch not synced: working directory no longer exists."
+            )
+        }
+    }
 }
 
 // MARK: - GitMergeAftermathError

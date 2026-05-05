@@ -1195,6 +1195,7 @@ extension MainWindowController {
     }
 
     private func configureCodeReviewViewModel(_ viewModel: CodeReviewPanelViewModel) {
+        viewModel.updateLocalizer(appLocalizer())
         viewModel.activeTabCwdProvider = { [weak self] in
             self?.currentCodeReviewWorkingDirectory()
         }
@@ -1815,6 +1816,8 @@ extension MainWindowController {
     ) -> CodeReviewPanelView {
         let minimumWidth = minimumCodeReviewPanelWidth()
         let maximumWidth = maximumCodeReviewPanelWidth()
+        let localizer = appLocalizer()
+        viewModel.updateLocalizer(localizer)
 
         return CodeReviewPanelView(
             viewModel: viewModel,
@@ -1833,7 +1836,7 @@ extension MainWindowController {
             externalEditorActions: codeReviewExternalEditorActions(
                 workingDirectory: currentCodeReviewWorkingDirectory()
             ),
-            localizer: appLocalizer()
+            localizer: localizer
         )
     }
 
