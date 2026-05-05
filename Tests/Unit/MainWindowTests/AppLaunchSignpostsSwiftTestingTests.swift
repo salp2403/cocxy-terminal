@@ -104,6 +104,7 @@ struct AppLaunchSignpostsSwiftTestingTests {
         let windowWarmup = try #require(steps.firstIndex(of: .windowWarmup))
         let crashRecovery = try #require(steps.firstIndex(of: .crashRecovery))
         let sessionRestore = try #require(steps.firstIndex(of: .sessionRestore))
+        let bundledFonts = try #require(steps.firstIndex(of: .bundledFonts))
         let menuSetup = try #require(steps.firstIndex(of: .menuSetup))
         let keybindings = try #require(steps.firstIndex(of: .keybindings))
         let plugins = try #require(steps.firstIndex(of: .plugins))
@@ -111,6 +112,7 @@ struct AppLaunchSignpostsSwiftTestingTests {
 
         #expect(windowWarmup < sessionRestore)
         #expect(crashRecovery < sessionRestore)
+        #expect(sessionRestore < bundledFonts)
         #expect(sessionRestore < menuSetup)
         #expect(sessionRestore < keybindings)
         #expect(sessionRestore < plugins)

@@ -96,9 +96,9 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
     /// need to block socket readiness or the first visible window.
     static let deferredWarmupSteps: [AppLaunchStep] = [
         .windowWarmup,
-        .bundledFonts,
         .crashRecovery,
         .sessionRestore,
+        .bundledFonts,
         .menuSetup,
         .keybindings,
         .autoSave,

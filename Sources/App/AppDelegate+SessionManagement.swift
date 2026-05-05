@@ -363,6 +363,7 @@ extension AppDelegate {
     ) {
         guard !result.restoredTabs.isEmpty else { return }
         guard bridge != nil else { return }
+        controller.window?.disableScreenUpdatesUntilFlush()
         controller.isPerformingProgrammaticTabRestore = true
         defer { controller.isPerformingProgrammaticTabRestore = false }
 

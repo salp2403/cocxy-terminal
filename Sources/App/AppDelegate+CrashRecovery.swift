@@ -83,7 +83,6 @@ extension AppDelegate {
     }
 
     func restoreCrashRecoverySession(_ session: Session, into controller: MainWindowController) -> Bool {
-        controller.window?.disableScreenUpdatesUntilFlush()
         let restored = restoreSession(session, into: controller)
         controller.window?.contentView?.layoutSubtreeIfNeeded()
         return restored

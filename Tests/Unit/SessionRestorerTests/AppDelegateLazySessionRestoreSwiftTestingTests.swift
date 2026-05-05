@@ -170,6 +170,31 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(trackingWindow.displayIfNeededCount == 0)
     }
 
+    @Test("manual restore batches visible rebuild until the next window flush")
+    func manualRestoreBatchesVisibleRebuildUntilNextWindowFlush() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let trackingWindow = TrackingRestoreWindow(
+            contentRect: controller.window?.frame ?? NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: controller.window?.styleMask ?? [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        trackingWindow.contentView = controller.window?.contentView
+        trackingWindow.backgroundColor = CocxyColors.base.withAlphaComponent(0.35)
+        controller.window = trackingWindow
+
+        let session = makeSession(tabIDs: [TabID(), TabID()], activeTabIndex: 0)
+
+        #expect(delegate.restoreSession(session, into: controller))
+        #expect(trackingWindow.disableScreenUpdatesCount == 1)
+        #expect(trackingWindow.displayIfNeededCount == 0)
+        #expect(trackingWindow.setFrameDisplayFlags == [false])
+    }
+
     @Test("crash recovery restore batches visible rebuild until the next window flush")
     func crashRecoveryRestoreBatchesVisibleRebuildUntilNextWindowFlush() throws {
         let bridge = MockTerminalEngine()
