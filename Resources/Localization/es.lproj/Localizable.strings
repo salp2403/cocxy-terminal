@@ -1526,6 +1526,7 @@
 "codeReview.toolbar.merge.status.accessibility" = "Estado de merge: %@";
 "codeReview.toolbar.merge.tooltip.inProgress" = "Fusión en progreso...";
 "codeReview.toolbar.merge.tooltip.ready" = "Fusionar este pull request con gh.";
+"codeReview.toolbar.merge.tooltip.autoMerge" = "Activar auto-merge cuando pasen los requisitos.";
 "codeReview.toolbar.merge.tooltip.pending" = "Se está calculando si se puede fusionar.";
 "codeReview.toolbar.shortcuts.help" = "Atajos de revisión";
 "codeReview.toolbar.shortcuts.title" = "Atajos de revisión";

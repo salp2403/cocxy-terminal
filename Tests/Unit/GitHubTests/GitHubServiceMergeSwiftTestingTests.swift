@@ -120,6 +120,32 @@ struct GitHubServiceMergeSwiftTestingTests {
     }
     """
 
+    private static let pendingMergeabilityJSON = """
+    {
+      "number": 42,
+      "state": "OPEN",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "UNSTABLE",
+      "reviewDecision": "APPROVED",
+      "statusCheckRollup": [
+        {"state": "PENDING", "conclusion": null}
+      ]
+    }
+    """
+
+    private static let blockedMergeabilityJSON = """
+    {
+      "number": 42,
+      "state": "OPEN",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "BLOCKED",
+      "reviewDecision": "REVIEW_REQUIRED",
+      "statusCheckRollup": [
+        {"state": "SUCCESS", "conclusion": "SUCCESS"}
+      ]
+    }
+    """
+
     // MARK: - mergePullRequest argument shape
 
     @Test("squash method invokes gh pr merge with --squash flag")
@@ -481,6 +507,70 @@ struct GitHubServiceMergeSwiftTestingTests {
         }
     }
 
+    // MARK: - safeMergePullRequest
+
+    @Test("safeMergePullRequest merges immediately when mergeability is clean")
+    func safeMergePullRequestMergesImmediatelyWhenClean() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMergeabilityView,
+                 result: GitHubCLIResult(stdout: Self.cleanMergeabilityJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesPullRequestView,
+                 result: GitHubCLIResult(stdout: Self.mergedPRJSON, stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        let pr = try await service.safeMergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: false),
+            at: Self.workingDirectory
+        )
+
+        let mergeArgs = try #require(Self.firstMergeInvocation(spy: spy))
+        #expect(!mergeArgs.contains("--auto"))
+        #expect(pr.state == .merged)
+    }
+
+    @Test("safeMergePullRequest enables auto-merge when checks are pending")
+    func safeMergePullRequestEnablesAutoMergeWhenChecksArePending() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMergeabilityView,
+                 result: GitHubCLIResult(stdout: Self.pendingMergeabilityJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: "✓ Auto-merge enabled", stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesPullRequestView,
+                 result: GitHubCLIResult(stdout: Self.openPRJSON, stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        let pr = try await service.safeMergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        let mergeArgs = try #require(Self.firstMergeInvocation(spy: spy))
+        #expect(mergeArgs.contains("--auto"))
+        #expect(mergeArgs.contains("--delete-branch"))
+        #expect(pr.state == .open)
+    }
+
+    @Test("safeMergePullRequest blocks before merge when mergeability is unsafe")
+    func safeMergePullRequestBlocksBeforeMergeWhenUnsafe() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMergeabilityView,
+                 result: GitHubCLIResult(stdout: Self.blockedMergeabilityJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: "", stderr: "merge should not run", terminationStatus: 1))
+
+        let service = GitHubService(runner: spy.runner)
+        await #expect(throws: GitHubMergeError.notMergeable(reason: "Blocked by: blocked by branch protection, review required.")) {
+            _ = try await service.safeMergePullRequest(
+                request: GitHubMergeRequest(pullRequestNumber: 42, method: .merge),
+                at: Self.workingDirectory
+            )
+        }
+
+        #expect(Self.firstMergeInvocation(spy: spy) == nil)
+    }
+
     // MARK: - pullRequestMergeability
 
     @Test("pullRequestMergeability decodes a clean PR successfully")
@@ -619,6 +709,18 @@ struct GitHubServiceMergeSwiftTestingTests {
     /// Predicate matching the `gh pr view <n> ...` follow-up call.
     private static let matchesView: @Sendable ([String]) -> Bool = { args in
         args.first == "pr" && args.dropFirst().first == "view"
+    }
+
+    private static let matchesMergeabilityView: @Sendable ([String]) -> Bool = { args in
+        args.first == "pr"
+            && args.dropFirst().first == "view"
+            && args.contains(where: { $0.contains("mergeStateStatus") })
+    }
+
+    private static let matchesPullRequestView: @Sendable ([String]) -> Bool = { args in
+        args.first == "pr"
+            && args.dropFirst().first == "view"
+            && args.contains(where: { $0.contains("headRefName") })
     }
 
     private static let matchesRepoIdentity: @Sendable ([String]) -> Bool = { args in

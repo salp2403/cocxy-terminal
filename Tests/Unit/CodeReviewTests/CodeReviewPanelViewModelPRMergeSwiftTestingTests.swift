@@ -26,6 +26,27 @@ struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
         )
     }
 
+    private static func pendingAutoMergeability(number: Int = 42) -> GitHubMergeability {
+        GitHubMergeability(
+            pullRequestNumber: number,
+            conflictStatus: .mergeable,
+            stateStatus: .unstable,
+            reviewDecision: .approved,
+            checksPassed: true,
+            checksPending: true
+        )
+    }
+
+    private static func blockedMergeability(number: Int = 42) -> GitHubMergeability {
+        GitHubMergeability(
+            pullRequestNumber: number,
+            conflictStatus: .mergeable,
+            stateStatus: .blocked,
+            reviewDecision: .reviewRequired,
+            checksPassed: true
+        )
+    }
+
     /// Builds a hydrated PR fixture used as the post-merge return value.
     private static func mergedPullRequest(number: Int = 42) -> GitHubPullRequest {
         GitHubPullRequest(
@@ -129,6 +150,26 @@ struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
         let message = viewModel.pullRequestMergeErrorMessage ?? ""
         #expect(message.contains("GitHub pane") || message.contains("not ready"))
         #expect(viewModel.isMergingPullRequest == false)
+    }
+
+    @Test("pending approved checks can start the merge action for auto-merge")
+    func pendingApprovedChecksCanStartMergeActionForAutoMerge() {
+        let viewModel = makeViewModel()
+        viewModel.activePullRequestNumber = 42
+        viewModel.activePullRequestMergeability = Self.pendingAutoMergeability()
+
+        #expect(viewModel.canStartPullRequestMergeAction)
+        #expect(viewModel.activePullRequestCanEnableAutoMerge)
+    }
+
+    @Test("blocked mergeability cannot start the merge action")
+    func blockedMergeabilityCannotStartMergeAction() {
+        let viewModel = makeViewModel()
+        viewModel.activePullRequestNumber = 42
+        viewModel.activePullRequestMergeability = Self.blockedMergeability()
+
+        #expect(!viewModel.canStartPullRequestMergeAction)
+        #expect(!viewModel.activePullRequestCanEnableAutoMerge)
     }
 
     // MARK: - requestMergePullRequest success and error

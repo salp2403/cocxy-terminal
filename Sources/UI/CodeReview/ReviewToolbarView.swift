@@ -369,10 +369,13 @@ struct ReviewToolbarView: View {
     private func mergeButton(prNumber: Int) -> some View {
         let mergeability = viewModel.activePullRequestMergeability
         let canMerge = mergeability?.canMerge ?? false
+        let canStartMergeAction = viewModel.canStartPullRequestMergeAction
+        let canEnableAutoMerge = viewModel.activePullRequestCanEnableAutoMerge
         let isMerging = viewModel.isMergingPullRequest
         let chipKind = mergeability?.chipKind ?? .pending
         let tooltip = mergeButtonTooltip(
             canMerge: canMerge,
+            canEnableAutoMerge: canEnableAutoMerge,
             mergeability: mergeability,
             isMerging: isMerging
         )
@@ -400,7 +403,7 @@ struct ReviewToolbarView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(Color(nsColor: CocxyColors.green))
-            .disabled(!canMerge || isMerging)
+            .disabled(!canStartMergeAction || isMerging)
             .help(tooltip)
             .accessibilityHint(tooltip)
         }
@@ -463,6 +466,7 @@ struct ReviewToolbarView: View {
 
     private func mergeButtonTooltip(
         canMerge: Bool,
+        canEnableAutoMerge: Bool,
         mergeability: GitHubMergeability?,
         isMerging: Bool
     ) -> String {
@@ -476,6 +480,12 @@ struct ReviewToolbarView: View {
             return localized(
                 "codeReview.toolbar.merge.tooltip.ready",
                 fallback: "Merge this pull request via gh."
+            )
+        }
+        if canEnableAutoMerge {
+            return localized(
+                "codeReview.toolbar.merge.tooltip.autoMerge",
+                fallback: "Enable auto-merge once requirements pass."
             )
         }
         if let mergeability,

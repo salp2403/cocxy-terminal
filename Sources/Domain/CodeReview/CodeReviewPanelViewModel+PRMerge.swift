@@ -163,6 +163,39 @@ extension CodeReviewPanelViewModel {
 
     // MARK: - Merge
 
+    /// Decision used by the toolbar before the user chooses the exact
+    /// merge strategy. The policy only needs the PR number and current
+    /// mergeability snapshot, so `.squash` is a neutral placeholder
+    /// here; the final request still uses the user's sheet selection.
+    var activePullRequestMergeActionDecision: PRAutoMergeDecision? {
+        guard let number = activePullRequestNumber,
+              let mergeability = activePullRequestMergeability else {
+            return nil
+        }
+        let request = GitHubMergeRequest(pullRequestNumber: number, method: .squash)
+        return PRAutoMergeOrchestrator.decision(for: mergeability, request: request)
+    }
+
+    /// `true` when the toolbar should allow the user to continue into
+    /// the merge sheet. This includes the normal clean-merge path and
+    /// the safe auto-merge path for approved PRs with checks still in
+    /// progress.
+    var canStartPullRequestMergeAction: Bool {
+        switch activePullRequestMergeActionDecision {
+        case .mergeNow, .enableAutoMerge:
+            return true
+        case .blocked, .none:
+            return false
+        }
+    }
+
+    var activePullRequestCanEnableAutoMerge: Bool {
+        if case .enableAutoMerge = activePullRequestMergeActionDecision {
+            return true
+        }
+        return false
+    }
+
     /// Drives a merge of the active PR through the injected handler.
     /// No-op when no PR is attached, no handler is wired, the cached
     /// mergeability blocks the merge, or another merge is already in

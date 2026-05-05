@@ -434,7 +434,7 @@ extension MainWindowController {
         guard let workingDirectory = explicitWorkingDirectory ?? currentGitHubPaneWorkingDirectory() else {
             throw GitHubCLIError.notAGitRepository(path: "")
         }
-        return try await sharedGitHubService().mergePullRequest(
+        return try await sharedGitHubService().safeMergePullRequest(
             request: request,
             at: workingDirectory
         )

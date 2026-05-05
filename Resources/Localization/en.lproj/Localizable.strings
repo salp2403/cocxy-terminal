@@ -1526,6 +1526,7 @@
 "codeReview.toolbar.merge.status.accessibility" = "Merge status: %@";
 "codeReview.toolbar.merge.tooltip.inProgress" = "Merging in progress...";
 "codeReview.toolbar.merge.tooltip.ready" = "Merge this pull request via gh.";
+"codeReview.toolbar.merge.tooltip.autoMerge" = "Enable auto-merge once requirements pass.";
 "codeReview.toolbar.merge.tooltip.pending" = "Mergeability is being computed.";
 "codeReview.toolbar.shortcuts.help" = "Review shortcuts";
 "codeReview.toolbar.shortcuts.title" = "Review Shortcuts";

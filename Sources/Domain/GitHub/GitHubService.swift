@@ -638,6 +638,36 @@ actor GitHubService {
         )
     }
 
+    @discardableResult
+    func safeMergePullRequest(
+        request: GitHubMergeRequest,
+        at directory: URL,
+        timeoutSeconds: TimeInterval = 60.0
+    ) async throws -> GitHubPullRequest {
+        let mergeability = try await pullRequestMergeability(
+            number: request.pullRequestNumber,
+            at: directory,
+            timeoutSeconds: timeoutSeconds
+        )
+
+        switch PRAutoMergeOrchestrator.decision(for: mergeability, request: request) {
+        case .mergeNow(let request):
+            return try await mergePullRequest(
+                request: request,
+                at: directory,
+                timeoutSeconds: timeoutSeconds
+            )
+        case .enableAutoMerge(let request):
+            return try await enableAutoMerge(
+                request: request,
+                at: directory,
+                timeoutSeconds: timeoutSeconds
+            )
+        case .blocked(let reason):
+            throw GitHubMergeError.notMergeable(reason: reason)
+        }
+    }
+
     // MARK: - Helpers
 
     private static func mergeArguments(
