@@ -30,6 +30,57 @@ struct OnboardingSelection: Equatable, Sendable {
     }
 }
 
+enum GuidedOnboardingStep: String, CaseIterable, Identifiable, Sendable {
+    case theme
+    case agentAutonomy
+    case languageServers
+    case starterTabConfig
+    case primerSkill
+    case firstWorkflow
+
+    var id: String { rawValue }
+
+    var localizationKey: String {
+        switch self {
+        case .theme: return "onboarding.step.theme"
+        case .agentAutonomy: return "onboarding.step.agentAutonomy"
+        case .languageServers: return "onboarding.step.languageServers"
+        case .starterTabConfig: return "onboarding.step.starterTabConfig"
+        case .primerSkill: return "onboarding.step.primerSkill"
+        case .firstWorkflow: return "onboarding.step.firstWorkflow"
+        }
+    }
+
+    var fallbackTitle: String {
+        switch self {
+        case .theme: return "Choose theme"
+        case .agentAutonomy: return "Agent autonomy"
+        case .languageServers: return "Language servers"
+        case .starterTabConfig: return "Starter tab config"
+        case .primerSkill: return "Primer skill"
+        case .firstWorkflow: return "First workflow"
+        }
+    }
+
+    var progressText: String {
+        guard let index = Self.allCases.firstIndex(of: self) else { return "" }
+        return "\(index + 1) / \(Self.allCases.count)"
+    }
+
+    static func next(after step: GuidedOnboardingStep) -> GuidedOnboardingStep? {
+        guard let index = allCases.firstIndex(of: step) else { return nil }
+        let nextIndex = allCases.index(after: index)
+        return nextIndex < allCases.endIndex ? allCases[nextIndex] : nil
+    }
+
+    static func previous(before step: GuidedOnboardingStep) -> GuidedOnboardingStep? {
+        guard let index = allCases.firstIndex(of: step), index > allCases.startIndex else {
+            return nil
+        }
+        return allCases[allCases.index(before: index)]
+    }
+}
+
 struct OnboardingResult: Equatable, Sendable {
     let createdTabConfigName: String?
     let createdSkillID: String?

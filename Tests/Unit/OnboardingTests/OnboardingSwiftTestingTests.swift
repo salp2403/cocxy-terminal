@@ -7,6 +7,24 @@ import Testing
 @Suite("Guided onboarding")
 struct OnboardingSwiftTestingTests {
 
+    @Test("guided onboarding exposes the six v1 setup steps in order")
+    func guidedStepsExposeV1SetupOrder() {
+        #expect(GuidedOnboardingStep.allCases == [
+            .theme,
+            .agentAutonomy,
+            .languageServers,
+            .starterTabConfig,
+            .primerSkill,
+            .firstWorkflow,
+        ])
+        #expect(GuidedOnboardingStep.theme.progressText == "1 / 6")
+        #expect(GuidedOnboardingStep.firstWorkflow.progressText == "6 / 6")
+        #expect(GuidedOnboardingStep.next(after: .theme) == .agentAutonomy)
+        #expect(GuidedOnboardingStep.previous(before: .firstWorkflow) == .primerSkill)
+        #expect(GuidedOnboardingStep.next(after: .firstWorkflow) == nil)
+        #expect(GuidedOnboardingStep.previous(before: .theme) == nil)
+    }
+
     @Test("completion persists selected settings and creates starter artifacts")
     func completionPersistsSettingsAndStarterArtifacts() throws {
         let root = try temporaryDirectory()

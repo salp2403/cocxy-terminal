@@ -1935,8 +1935,16 @@
 "onboarding.createPrimerSkill" = "Create primer skill";
 "onboarding.createFirstWorkflow" = "Create first workflow";
 "onboarding.skip" = "Skip";
+"onboarding.back" = "Back";
+"onboarding.next" = "Next";
 "onboarding.apply" = "Apply";
 "onboarding.error.apply" = "Unable to apply onboarding settings.";
+"onboarding.step.theme" = "Choose theme";
+"onboarding.step.agentAutonomy" = "Agent autonomy";
+"onboarding.step.languageServers" = "Language servers";
+"onboarding.step.starterTabConfig" = "Starter tab config";
+"onboarding.step.primerSkill" = "Primer skill";
+"onboarding.step.firstWorkflow" = "First workflow";
 
 "command.category.tabs" = "Tabs";
 "command.category.splits" = "Splits";

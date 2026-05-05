@@ -14,6 +14,7 @@ struct OnboardingFlowView: View {
     @State private var createTabConfig = true
     @State private var createPrimerSkill = true
     @State private var createFirstWorkflow = true
+    @State private var currentStep: GuidedOnboardingStep = .theme
     @State private var isVisible = false
 
     private let themes = [
@@ -85,6 +86,26 @@ struct OnboardingFlowView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(localized(currentStep.localizationKey, fallback: currentStep.fallbackTitle))
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Text(currentStep.progressText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
+            }
+
+            currentStepControl
+        }
+        .toggleStyle(.checkbox)
+        .font(.system(size: 13))
+        .foregroundColor(CocxyColors.swiftUI(CocxyColors.text))
+    }
+
+    @ViewBuilder
+    private var currentStepControl: some View {
+        switch currentStep {
+        case .theme:
             Picker(localized("onboarding.theme", fallback: "Theme"), selection: $theme) {
                 ForEach(themes, id: \.self) { name in
                     Text(name).tag(name)
@@ -92,15 +113,21 @@ struct OnboardingFlowView: View {
             }
             .pickerStyle(.menu)
 
-            Toggle(localized("onboarding.enableLanguageServers", fallback: "Enable language servers"), isOn: $lspEnabled)
+        case .agentAutonomy:
             Toggle(localized("onboarding.agentAutoMode", fallback: "Agent auto mode"), isOn: $agentAutoMode)
+
+        case .languageServers:
+            Toggle(localized("onboarding.enableLanguageServers", fallback: "Enable language servers"), isOn: $lspEnabled)
+
+        case .starterTabConfig:
             Toggle(localized("onboarding.createStarterTabConfig", fallback: "Create starter tab config"), isOn: $createTabConfig)
+
+        case .primerSkill:
             Toggle(localized("onboarding.createPrimerSkill", fallback: "Create primer skill"), isOn: $createPrimerSkill)
+
+        case .firstWorkflow:
             Toggle(localized("onboarding.createFirstWorkflow", fallback: "Create first workflow"), isOn: $createFirstWorkflow)
         }
-        .toggleStyle(.checkbox)
-        .font(.system(size: 13))
-        .foregroundColor(CocxyColors.swiftUI(CocxyColors.text))
     }
 
     private var footer: some View {
@@ -113,8 +140,20 @@ struct OnboardingFlowView: View {
 
             Spacer()
 
-            Button(localized("onboarding.apply", fallback: "Apply")) {
-                onComplete(selection)
+            if let previous = GuidedOnboardingStep.previous(before: currentStep) {
+                Button(localized("onboarding.back", fallback: "Back")) {
+                    currentStep = previous
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
+            }
+
+            Button(primaryButtonTitle) {
+                if let next = GuidedOnboardingStep.next(after: currentStep) {
+                    currentStep = next
+                } else {
+                    onComplete(selection)
+                }
             }
             .buttonStyle(.plain)
             .font(.system(size: 14, weight: .semibold))
@@ -124,6 +163,12 @@ struct OnboardingFlowView: View {
             .background(CocxyColors.swiftUI(CocxyColors.blue))
             .cornerRadius(8)
         }
+    }
+
+    private var primaryButtonTitle: String {
+        GuidedOnboardingStep.next(after: currentStep) == nil
+            ? localized("onboarding.apply", fallback: "Apply")
+            : localized("onboarding.next", fallback: "Next")
     }
 
     private var selection: OnboardingSelection {

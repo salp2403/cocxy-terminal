@@ -1935,8 +1935,16 @@
 "onboarding.createPrimerSkill" = "Crear skill inicial";
 "onboarding.createFirstWorkflow" = "Crear primer workflow";
 "onboarding.skip" = "Omitir";
+"onboarding.back" = "Atrás";
+"onboarding.next" = "Siguiente";
 "onboarding.apply" = "Aplicar";
 "onboarding.error.apply" = "No se pudieron aplicar los ajustes de onboarding.";
+"onboarding.step.theme" = "Elegir tema";
+"onboarding.step.agentAutonomy" = "Autonomía del agente";
+"onboarding.step.languageServers" = "Servidores de lenguaje";
+"onboarding.step.starterTabConfig" = "Configuración inicial de pestaña";
+"onboarding.step.primerSkill" = "Skill inicial";
+"onboarding.step.firstWorkflow" = "Primer workflow";
 
 "command.category.tabs" = "Pestañas";
 "command.category.splits" = "Paneles";
