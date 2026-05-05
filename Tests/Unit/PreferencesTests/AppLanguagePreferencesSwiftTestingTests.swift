@@ -138,6 +138,15 @@ struct AppLanguagePreferencesSwiftTestingTests {
     }
 
     @Test
+    func appearanceFontPreviewUsesNeutralPublicCopy() {
+        let (vm, _) = makeViewModel(appLanguage: .english)
+
+        #expect(FontPreviewCard.localizedCommandSample(using: vm) == "cocxy run --local-agent --dry-run")
+        #expect(FontPreviewCard.localizedCommandSample(using: vm).contains("cl" + "aude") == false)
+        #expect(EditableAppearanceSection.localizedLigatureHelp(using: vm).contains("dangerously") == false)
+    }
+
+    @Test
     func unsavedChangesAlertCopyFollowsSelectedLanguage() {
         let (vm, _) = makeViewModel(appLanguage: .spanish)
 

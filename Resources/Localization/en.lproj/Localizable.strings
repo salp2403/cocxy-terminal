@@ -41,12 +41,13 @@
 "preferences.appearance.recommended" = "Recommended";
 "preferences.appearance.bundled" = "Bundled";
 "preferences.appearance.preview" = "Preview";
+"preferences.appearance.fontPreview.command" = "cocxy run --local-agent --dry-run";
 "preferences.appearance.fontResolution.included" = "Included with Cocxy: %@";
 "preferences.appearance.fontResolution.installed" = "Using installed font: %@";
 "preferences.appearance.fontResolution.fallbackBundled" = "\"%@\" is not installed. Cocxy will fall back to bundled %@.";
 "preferences.appearance.fontResolution.fallback" = "\"%@\" is not installed. Cocxy will fall back to %@.";
 "preferences.appearance.enableLigatures" = "Enable ligatures";
-"preferences.appearance.enableLigatures.help" = "Some fonts combine symbol pairs like --, ==, -> into a single wider glyph. Disable this option if command text such as --dangerously-skip-permissions looks misaligned or crowded in your prompt.";
+"preferences.appearance.enableLigatures.help" = "Some fonts combine symbol pairs like --, ==, -> into a single wider glyph. Disable this option if command text such as --local-agent --dry-run looks misaligned or crowded in your prompt.";
 "preferences.appearance.enableLigatures.caption" = "Some fonts combine symbol pairs like --, ==, -> into a single glyph. Disable if command text appears misaligned in the prompt.";
 "preferences.appearance.thickenFontStrokes" = "Thicken font strokes";
 "preferences.appearance.thickenFontStrokes.help" = "Enables CoreText font smoothing during glyph rasterization, which boosts perceived stroke weight. Off by default for a cleaner, thinner look. Turn on if the rendered text looks too thin on your display.";

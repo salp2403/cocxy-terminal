@@ -41,12 +41,13 @@
 "preferences.appearance.recommended" = "Recomendadas";
 "preferences.appearance.bundled" = "Incluida";
 "preferences.appearance.preview" = "Vista previa";
+"preferences.appearance.fontPreview.command" = "cocxy run --local-agent --dry-run";
 "preferences.appearance.fontResolution.included" = "Incluida con Cocxy: %@";
 "preferences.appearance.fontResolution.installed" = "Usando fuente instalada: %@";
 "preferences.appearance.fontResolution.fallbackBundled" = "\"%@\" no está instalada. Cocxy usará como fallback la fuente incluida %@.";
 "preferences.appearance.fontResolution.fallback" = "\"%@\" no está instalada. Cocxy usará como fallback %@.";
 "preferences.appearance.enableLigatures" = "Activar ligaduras";
-"preferences.appearance.enableLigatures.help" = "Algunas fuentes combinan pares de símbolos como --, ==, -> en un solo glifo más ancho. Desactiva esta opción si texto de comandos como --dangerously-skip-permissions se ve desalineado o apretado en el prompt.";
+"preferences.appearance.enableLigatures.help" = "Algunas fuentes combinan pares de símbolos como --, ==, -> en un solo glifo más ancho. Desactiva esta opción si texto de comandos como --local-agent --dry-run se ve desalineado o apretado en el prompt.";
 "preferences.appearance.enableLigatures.caption" = "Algunas fuentes combinan pares de símbolos como --, ==, -> en un solo glifo. Desactívalo si el texto de comandos se ve desalineado en el prompt.";
 "preferences.appearance.thickenFontStrokes" = "Engrosar trazos de la fuente";
 "preferences.appearance.thickenFontStrokes.help" = "Activa suavizado de fuente de CoreText durante la rasterización de glifos para aumentar el peso percibido. Está apagado por defecto para un aspecto más limpio y fino. Actívalo si el texto renderizado se ve demasiado delgado en tu pantalla.";

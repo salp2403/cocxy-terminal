@@ -460,10 +460,7 @@ struct EditableAppearanceSection: View {
                         isOn: $viewModel.ligatures
                     )
                         .help(
-                            viewModel.localizedString(
-                                "preferences.appearance.enableLigatures.help",
-                                fallback: "Some fonts combine symbol pairs like --, ==, -> into a single wider glyph. Disable this option if command text such as --dangerously-skip-permissions looks misaligned or crowded in your prompt."
-                            )
+                            Self.localizedLigatureHelp(using: viewModel)
                         )
                     Text(
                         viewModel.localizedString(
@@ -851,6 +848,13 @@ struct EditableAppearanceSection: View {
         .formStyle(.grouped)
         .navigationTitle(viewModel.localizedString("preferences.section.appearance", fallback: "Appearance"))
     }
+
+    static func localizedLigatureHelp(using viewModel: PreferencesViewModel) -> String {
+        viewModel.localizedString(
+            "preferences.appearance.enableLigatures.help",
+            fallback: "Some fonts combine symbol pairs like --, ==, -> into a single wider glyph. Disable this option if command text such as --local-agent --dry-run looks misaligned or crowded in your prompt."
+        )
+    }
 }
 
 // MARK: - Font Picker Helpers
@@ -938,7 +942,7 @@ struct FontPreviewCard: View {
             Text("0Oo Il1 | [] {} () => -> == != --")
                 .font(previewFont)
 
-            Text("claude --dangerously-skip-permissions")
+            Text(Self.localizedCommandSample(using: viewModel))
                 .font(previewFont)
                 .textSelection(.enabled)
 
@@ -949,6 +953,13 @@ struct FontPreviewCard: View {
         }
         .padding(12)
         .background(.quaternary.opacity(0.18), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    static func localizedCommandSample(using viewModel: PreferencesViewModel) -> String {
+        viewModel.localizedString(
+            "preferences.appearance.fontPreview.command",
+            fallback: "cocxy run --local-agent --dry-run"
+        )
     }
 }
 
