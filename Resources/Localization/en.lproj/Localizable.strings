@@ -299,6 +299,8 @@
 "quickSwitch.kind.browserTab" = "Browser tab";
 "quickSwitch.kind.worktree" = "Worktree";
 "quickSwitch.kind.note" = "Note";
+"quickSwitch.result.switchedToTitle" = "Switched to: %@";
+"quickSwitch.result.switchedToUnreadTab" = "Switched to unread tab";
 "menu.view.smartRouting" = "Smart Routing";
 "menu.view.remoteWorkspaces" = "Remote Workspaces...";
 "menu.view.agentTimeline" = "Agent Timeline";

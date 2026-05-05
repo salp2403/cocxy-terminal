@@ -1628,6 +1628,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             tabActivator: tabRouter,
             tabNameProvider: { [weak self] tabID in
                 self?.controllerContainingTab(tabID)?.tabManager.tab(for: tabID)?.displayTitle
+            },
+            localizerProvider: { [weak self] in
+                self?.appLocalizer() ?? AppLocalizer(languagePreference: .system)
             }
         )
         for controller in allWindowControllers {

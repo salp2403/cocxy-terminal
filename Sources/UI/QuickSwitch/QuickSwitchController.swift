@@ -71,6 +71,9 @@ final class QuickSwitchController {
     /// Optional provider for a user-visible tab title used in HUD messages.
     private let tabNameProvider: ((TabID) -> String?)?
 
+    /// Resolves the current app language for user-facing result copy.
+    private let localizerProvider: () -> AppLocalizer
+
     // MARK: - Initialization
 
     /// Creates a QuickSwitchController.
@@ -81,11 +84,14 @@ final class QuickSwitchController {
     init(
         notificationManager: NotificationManaging,
         tabActivator: TabActivating,
-        tabNameProvider: ((TabID) -> String?)? = nil
+        tabNameProvider: ((TabID) -> String?)? = nil,
+        localizerProvider: (() -> AppLocalizer)? = nil
     ) {
         self.notificationManager = notificationManager
         self.tabActivator = tabActivator
         self.tabNameProvider = tabNameProvider
+        let defaultLocalizer = AppLocalizer(languagePreference: .system)
+        self.localizerProvider = localizerProvider ?? { defaultLocalizer }
     }
 
     // MARK: - Quick Switch
@@ -104,11 +110,21 @@ final class QuickSwitchController {
 
         tabActivator.setActive(id: tabId)
 
+        let localizer = localizerProvider()
         let description: String
         if let title = tabNameProvider?(tabId), !title.isEmpty {
-            description = "Switched to: \(title)"
+            description = String(
+                format: localizer.string(
+                    "quickSwitch.result.switchedToTitle",
+                    fallback: "Switched to: %@"
+                ),
+                title
+            )
         } else {
-            description = "Switched to unread tab"
+            description = localizer.string(
+                "quickSwitch.result.switchedToUnreadTab",
+                fallback: "Switched to unread tab"
+            )
         }
 
         return QuickSwitchResult(

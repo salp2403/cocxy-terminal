@@ -182,6 +182,43 @@ final class QuickSwitchControllerTests: XCTestCase {
         XCTAssertEqual(result?.description, "Switched to: Backend Logs")
     }
 
+    func testQuickSwitchResultLocalizesDescriptionWhenTitleAvailable() throws {
+        mockNotificationManager.nextUnreadTabIds = [tabB]
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try XCTUnwrap(localizationBundle())
+        )
+        sut = QuickSwitchController(
+            notificationManager: mockNotificationManager,
+            tabActivator: mockTabActivator,
+            tabNameProvider: { id in
+                id == self.tabB ? "Backend Logs" : nil
+            },
+            localizerProvider: { localizer }
+        )
+
+        let result = sut.performQuickSwitch()
+
+        XCTAssertEqual(result?.description, "Cambiado a: Backend Logs")
+    }
+
+    func testQuickSwitchResultLocalizesUnreadFallbackDescription() throws {
+        mockNotificationManager.nextUnreadTabIds = [tabA]
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try XCTUnwrap(localizationBundle())
+        )
+        sut = QuickSwitchController(
+            notificationManager: mockNotificationManager,
+            tabActivator: mockTabActivator,
+            localizerProvider: { localizer }
+        )
+
+        let result = sut.performQuickSwitch()
+
+        XCTAssertEqual(result?.description, "Cambiado a pestaña sin leer")
+    }
+
     // MARK: - 7. Quick switch does not activate when manager returns nil
 
     func testQuickSwitchDoesNotActivateWhenManagerReturnsNil() {
@@ -213,5 +250,10 @@ final class QuickSwitchControllerTests: XCTestCase {
 
         XCTAssertEqual(result?.tabId, tabB)
         XCTAssertEqual(mockTabActivator.activatedTabIds.first, tabB)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

@@ -299,6 +299,8 @@
 "quickSwitch.kind.browserTab" = "Pestaña de navegador";
 "quickSwitch.kind.worktree" = "Worktree";
 "quickSwitch.kind.note" = "Nota";
+"quickSwitch.result.switchedToTitle" = "Cambiado a: %@";
+"quickSwitch.result.switchedToUnreadTab" = "Cambiado a pestaña sin leer";
 "menu.view.smartRouting" = "Ruteo inteligente";
 "menu.view.remoteWorkspaces" = "Workspaces remotos...";
 "menu.view.agentTimeline" = "Timeline de agente";
