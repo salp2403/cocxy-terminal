@@ -1,0 +1,176 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// PRReviewerSuggester.swift - Local reviewer suggestions from git blame.
+
+import Foundation
+
+struct PRReviewerCandidate: Identifiable, Equatable, Sendable {
+    let id: String
+    let displayName: String
+    let email: String?
+    let lineCount: Int
+    let fileCount: Int
+}
+
+struct PRReviewerSuggester: Sendable {
+    typealias BlameProvider = @Sendable (_ root: URL, _ filePath: String) throws -> String
+
+    private let blameProvider: BlameProvider
+
+    init(
+        blameProvider: @escaping BlameProvider = { root, filePath in
+            try PRReviewerSuggester.gitBlame(root: root, filePath: filePath)
+        }
+    ) {
+        self.blameProvider = blameProvider
+    }
+
+    func suggestions(
+        root: URL,
+        changedFilePaths: [String],
+        excludingEmails: Set<String> = [],
+        limit: Int = 5
+    ) -> [PRReviewerCandidate] {
+        guard limit > 0 else { return [] }
+
+        let excluded = Set(excludingEmails.compactMap(Self.normalizedEmail))
+        var accumulators: [String: CandidateAccumulator] = [:]
+
+        for filePath in safeRelativePaths(from: changedFilePaths, root: root) {
+            guard let blame = try? blameProvider(root, filePath), !blame.isEmpty else {
+                continue
+            }
+            for author in Self.parseBlameAuthors(blame) {
+                if let email = author.email, excluded.contains(email) {
+                    continue
+                }
+                let key = author.email ?? "name:\(author.displayName.lowercased())"
+                var accumulator = accumulators[key] ?? CandidateAccumulator(
+                    displayName: author.displayName,
+                    email: author.email
+                )
+                accumulator.lineCount += 1
+                accumulator.filePaths.insert(filePath)
+                accumulators[key] = accumulator
+            }
+        }
+
+        return accumulators.values
+            .map(\.candidate)
+            .sorted(by: Self.candidateSort)
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    private func safeRelativePaths(from paths: [String], root: URL) -> [String] {
+        var seen = Set<String>()
+        return paths.compactMap { rawPath in
+            guard let path = Self.safeRelativePath(rawPath, root: root),
+                  seen.insert(path).inserted else {
+                return nil
+            }
+            return path
+        }
+    }
+
+    private static func safeRelativePath(_ rawPath: String, root: URL) -> String? {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let rootURL = root.standardizedFileURL
+        let candidate: URL
+        if trimmed.hasPrefix("/") {
+            candidate = URL(fileURLWithPath: trimmed).standardizedFileURL
+        } else {
+            candidate = rootURL.appendingPathComponent(trimmed, isDirectory: false).standardizedFileURL
+        }
+
+        let rootPath = rootURL.path
+        guard candidate.path.hasPrefix(rootPath + "/") else {
+            return nil
+        }
+
+        let relative = String(candidate.path.dropFirst(rootPath.count + 1))
+        guard !relative.isEmpty, !relative.split(separator: "/").contains("..") else {
+            return nil
+        }
+        return relative
+    }
+
+    private static func parseBlameAuthors(_ output: String) -> [BlameAuthor] {
+        var authors: [BlameAuthor] = []
+        var currentName: String?
+        var currentEmail: String?
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if line.hasPrefix("author ") {
+                let name = String(line.dropFirst("author ".count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                currentName = name.isEmpty ? nil : name
+            } else if line.hasPrefix("author-mail ") {
+                let email = String(line.dropFirst("author-mail ".count))
+                currentEmail = normalizedEmail(email)
+            } else if line.hasPrefix("\t"), let name = currentName {
+                authors.append(BlameAuthor(displayName: name, email: currentEmail))
+                currentName = nil
+                currentEmail = nil
+            }
+        }
+
+        return authors
+    }
+
+    private static func normalizedEmail(_ raw: String) -> String? {
+        let trimmed = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "<>"))
+            .lowercased()
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func candidateSort(_ lhs: PRReviewerCandidate, _ rhs: PRReviewerCandidate) -> Bool {
+        if lhs.lineCount != rhs.lineCount {
+            return lhs.lineCount > rhs.lineCount
+        }
+        if lhs.fileCount != rhs.fileCount {
+            return lhs.fileCount > rhs.fileCount
+        }
+        if lhs.displayName != rhs.displayName {
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+        return (lhs.email ?? "") < (rhs.email ?? "")
+    }
+
+    private static func gitBlame(root: URL, filePath: String) throws -> String {
+        let result = try CodeReviewGit.run(
+            workingDirectory: root,
+            arguments: ["blame", "--line-porcelain", "--", filePath]
+        )
+        guard result.terminationStatus == 0 else {
+            return ""
+        }
+        return result.stdout
+    }
+
+    private struct BlameAuthor {
+        let displayName: String
+        let email: String?
+    }
+
+    private struct CandidateAccumulator {
+        let displayName: String
+        let email: String?
+        var lineCount = 0
+        var filePaths = Set<String>()
+
+        var candidate: PRReviewerCandidate {
+            let id = email ?? "name:\(displayName.lowercased())"
+            return PRReviewerCandidate(
+                id: id,
+                displayName: displayName,
+                email: email,
+                lineCount: lineCount,
+                fileCount: filePaths.count
+            )
+        }
+    }
+}
