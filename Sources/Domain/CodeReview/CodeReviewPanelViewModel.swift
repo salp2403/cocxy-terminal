@@ -280,6 +280,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         commentStore.allComments
     }
 
+    var pendingCommentThreads: [PRThreadedComment] {
+        PRThreadedCommentBuilder.makeThreads(from: pendingComments)
+    }
+
     var pendingCommentCount: Int {
         pendingComments.count
     }
