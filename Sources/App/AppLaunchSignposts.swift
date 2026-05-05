@@ -95,8 +95,8 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
     /// Launch phases that are required for full functionality but do not
     /// need to block socket readiness or the first visible window.
     static let deferredWarmupSteps: [AppLaunchStep] = [
-        .bundledFonts,
         .windowWarmup,
+        .bundledFonts,
         .crashRecovery,
         .sessionRestore,
         .menuSetup,

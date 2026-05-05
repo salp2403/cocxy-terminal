@@ -68,7 +68,7 @@ struct AppLaunchSignpostsSwiftTestingTests {
         #expect(!AppLaunchStep.criticalPathSteps.contains(.windowWarmup))
         #expect(!AppLaunchStep.criticalPathSteps.contains(.bundledFonts))
         #expect(!AppLaunchStep.criticalPathSteps.contains(.remoteWorkspace))
-        #expect(AppLaunchStep.deferredWarmupSteps.first == .bundledFonts)
+        #expect(AppLaunchStep.deferredWarmupSteps.first == .windowWarmup)
         #expect(AppLaunchStep.deferredWarmupSteps.contains(.windowWarmup))
         #expect(AppLaunchStep.deferredWarmupSteps.contains(.sessionRestore))
         #expect(AppLaunchStep.deferredWarmupSteps.contains(.bundledFonts))
@@ -82,9 +82,19 @@ struct AppLaunchSignpostsSwiftTestingTests {
 
         #expect(flattened == AppLaunchStep.deferredWarmupSteps)
         #expect(batches.allSatisfy { $0.count == 1 })
-        #expect(flattened.first == .bundledFonts)
+        #expect(flattened.first == .windowWarmup)
         #expect(flattened.contains(.sessionRestore))
         #expect(flattened.last == .menuBar)
+    }
+
+    @Test("window setup runs before bundled fonts so the first shell paints promptly")
+    func windowWarmupRunsBeforeBundledFonts() throws {
+        let steps = AppLaunchStep.deferredWarmupSteps
+
+        let windowWarmup = try #require(steps.firstIndex(of: .windowWarmup))
+        let bundledFonts = try #require(steps.firstIndex(of: .bundledFonts))
+
+        #expect(windowWarmup < bundledFonts)
     }
 
     @Test("session restore precedes secondary services that do not paint the first shell")
