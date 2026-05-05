@@ -49,6 +49,61 @@ struct URLSessionAgentHTTPTransport: AgentHTTPTransport {
     }
 }
 
+struct RetryingAgentHTTPTransport: AgentHTTPTransport {
+    let base: any AgentHTTPTransport
+    let maxAttempts: Int
+    let sleep: @Sendable (Int) async -> Void
+
+    init(
+        base: any AgentHTTPTransport,
+        maxAttempts: Int = 3,
+        sleep: @escaping @Sendable (Int) async -> Void = Self.defaultSleep
+    ) {
+        self.base = base
+        self.maxAttempts = max(1, maxAttempts)
+        self.sleep = sleep
+    }
+
+    func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
+        var lastError: Error?
+
+        for attempt in 1...maxAttempts {
+            do {
+                let response = try await base.send(request)
+                guard shouldRetry(statusCode: response.statusCode), attempt < maxAttempts else {
+                    return response
+                }
+            } catch {
+                lastError = error
+                guard attempt < maxAttempts else {
+                    throw error
+                }
+            }
+
+            await sleep(attempt)
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        return try await base.send(request)
+    }
+
+    private func shouldRetry(statusCode: Int) -> Bool {
+        statusCode == 408
+            || statusCode == 409
+            || statusCode == 425
+            || statusCode == 429
+            || (500...599).contains(statusCode)
+    }
+
+    private static let defaultSleep: @Sendable (Int) async -> Void = { attempt in
+        let clampedAttempt = min(max(1, attempt), 4)
+        let nanoseconds = UInt64(100_000_000) << UInt64(clampedAttempt - 1)
+        try? await Task.sleep(nanoseconds: nanoseconds)
+    }
+}
+
 enum AgentProviderClientError: Error, Sendable, Equatable {
     case invalidRequestBody
     case invalidResponseBody
@@ -150,6 +205,7 @@ struct AgentProviderClientFactory: Sendable {
         provider: AgentProviderKind,
         toolRegistry: AgentToolRegistry
     ) throws -> any AgentLLMClient {
+        let remoteTransport = RetryingAgentHTTPTransport(base: transport)
         switch provider {
         case .foundationModelsOnDevice:
             return FoundationModelsAgentLLMClient(toolRegistry: toolRegistry)
@@ -157,21 +213,21 @@ struct AgentProviderClientFactory: Sendable {
             return OpenAIAgentLLMClient(
                 apiKey: try requiredAPIKey(for: provider),
                 model: modelCatalog.openAI,
-                transport: transport,
+                transport: remoteTransport,
                 toolRegistry: toolRegistry
             )
         case .anthropic:
             return AnthropicAgentLLMClient(
                 apiKey: try requiredAPIKey(for: provider),
                 model: modelCatalog.anthropic,
-                transport: transport,
+                transport: remoteTransport,
                 toolRegistry: toolRegistry
             )
         case .google:
             return GoogleAgentLLMClient(
                 apiKey: try requiredAPIKey(for: provider),
                 model: modelCatalog.google,
-                transport: transport,
+                transport: remoteTransport,
                 toolRegistry: toolRegistry
             )
         }

@@ -525,6 +525,85 @@ struct AgentProviderClientSwiftTestingTests {
         }
     }
 
+    @Test("retrying transport retries transient provider failures")
+    func retryingTransportRetriesTransientProviderFailures() async throws {
+        let base = SequencedAgentHTTPTransport(results: [
+            .success(AgentHTTPResponse(statusCode: 500, data: Data("temporary".utf8))),
+            .success(AgentHTTPResponse(statusCode: 200, data: Data("ok".utf8))),
+        ])
+        let transport = RetryingAgentHTTPTransport(
+            base: base,
+            maxAttempts: 3,
+            sleep: { _ in }
+        )
+        let request = AgentHTTPRequest(
+            url: try #require(URL(string: "https://example.com/agent")),
+            headers: [:],
+            body: Data()
+        )
+
+        let response = try await transport.send(request)
+        let requests = await base.requests
+
+        #expect(response.statusCode == 200)
+        #expect(requests.count == 2)
+    }
+
+    @Test("retrying transport does not retry auth failures")
+    func retryingTransportDoesNotRetryAuthFailures() async throws {
+        let base = SequencedAgentHTTPTransport(results: [
+            .success(AgentHTTPResponse(statusCode: 401, data: Data("invalid key".utf8))),
+            .success(AgentHTTPResponse(statusCode: 200, data: Data("ok".utf8))),
+        ])
+        let transport = RetryingAgentHTTPTransport(
+            base: base,
+            maxAttempts: 3,
+            sleep: { _ in }
+        )
+        let request = AgentHTTPRequest(
+            url: try #require(URL(string: "https://example.com/agent")),
+            headers: [:],
+            body: Data()
+        )
+
+        let response = try await transport.send(request)
+        let requests = await base.requests
+
+        #expect(response.statusCode == 401)
+        #expect(requests.count == 1)
+    }
+
+    @Test("factory wraps remote provider transport with retry")
+    func factoryWrapsRemoteProviderTransportWithRetry() async throws {
+        let secretStore = InMemoryAgentSecretStore()
+        let secrets = AgentSecrets(store: secretStore)
+        try secrets.saveAPIKey("user-openai-key", for: .openai)
+        let transport = SequencedAgentHTTPTransport(results: [
+            .success(AgentHTTPResponse(statusCode: 429, data: Data("rate limited".utf8))),
+            .success(AgentHTTPResponse(
+                statusCode: 200,
+                data: Data(#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#.utf8)
+            )),
+        ])
+        let factory = AgentProviderClientFactory(
+            secrets: secrets,
+            foundationModelsAvailable: false,
+            transport: transport
+        )
+
+        let client = try factory.makeClient(configuration: AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai
+        ))
+        let response = try await client.nextResponse(for: [
+            AgentMessage(id: "m1", role: .user, content: "hello"),
+        ])
+        let requests = await transport.requests
+
+        #expect(response.content == "ok")
+        #expect(requests.count == 2)
+    }
+
     #if canImport(FoundationModels)
     @Test("Foundation Models instructions state on-device tool gating")
     func foundationModelsInstructionsStateOnDeviceToolGating() {
@@ -760,5 +839,22 @@ private actor RecordingAgentHTTPTransport: AgentHTTPTransport {
     func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
         requests.append(request)
         return response
+    }
+}
+
+private actor SequencedAgentHTTPTransport: AgentHTTPTransport {
+    private(set) var requests: [AgentHTTPRequest] = []
+    private var results: [Result<AgentHTTPResponse, Error>]
+
+    init(results: [Result<AgentHTTPResponse, Error>]) {
+        self.results = results
+    }
+
+    func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
+        requests.append(request)
+        guard !results.isEmpty else {
+            return AgentHTTPResponse(statusCode: 599, data: Data("exhausted".utf8))
+        }
+        return try results.removeFirst().get()
     }
 }
