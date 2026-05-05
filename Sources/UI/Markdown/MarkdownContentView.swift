@@ -88,12 +88,11 @@ final class MarkdownContentView: NSView {
         }
     }
 
-    /// Whether the outline sidebar is currently visible.
+    /// Whether the user wants the outline sidebar visible.
     private(set) var isOutlineVisible: Bool = true {
         didSet {
             if oldValue != isOutlineVisible {
                 applyOutlineVisibility()
-                toolbar.isOutlineVisible = isOutlineVisible
             }
         }
     }
@@ -104,10 +103,13 @@ final class MarkdownContentView: NSView {
     }
 
     /// Sidebar column width constraint (toggled between fixed value and 0).
-    private var sidebarWidthConstraint: NSLayoutConstraint!
+    private var sidebarWidthConstraint: NSLayoutConstraint?
 
     /// Fixed width applied when the sidebar is visible.
     private static let sidebarWidth: CGFloat = 210
+
+    /// Below this width, the source editor needs the sidebar's space back.
+    private static let minimumWidthForVisibleSidebar: CGFloat = 1_000
 
     // MARK: - Init
 
@@ -158,6 +160,16 @@ final class MarkdownContentView: NSView {
 
     deinit {}
 
+    override func layout() {
+        super.layout()
+        applyOutlineVisibility()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        applyOutlineVisibility()
+    }
+
     private func tearDownTransientState() {
         pendingSaveWorkItem?.cancel()
         pendingSaveWorkItem = nil
@@ -205,6 +217,7 @@ final class MarkdownContentView: NSView {
 
     internal var sourceViewForTesting: MarkdownSourceView { sourceView }
     internal var sidebarViewForTesting: MarkdownSidebarView { sidebar }
+    internal var effectiveOutlineVisibleForTesting: Bool { effectiveOutlineVisible }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
@@ -290,7 +303,8 @@ final class MarkdownContentView: NSView {
         statusBar.translatesAutoresizingMaskIntoConstraints = false
         addSubview(statusBar)
 
-        sidebarWidthConstraint = sidebar.widthAnchor.constraint(equalToConstant: Self.sidebarWidth)
+        let sidebarWidthConstraint = sidebar.widthAnchor.constraint(equalToConstant: Self.sidebarWidth)
+        self.sidebarWidthConstraint = sidebarWidthConstraint
 
         NSLayoutConstraint.activate([
             toolbar.topAnchor.constraint(equalTo: topAnchor),
@@ -356,7 +370,7 @@ final class MarkdownContentView: NSView {
         toolbar.onCopyPlainText = { [weak self] in
             self?.copyAsPlainText()
         }
-        toolbar.isOutlineVisible = isOutlineVisible
+        toolbar.isOutlineVisible = effectiveOutlineVisible
         toolbar.mode = mode
     }
 
@@ -476,9 +490,23 @@ final class MarkdownContentView: NSView {
     }
 
     private func applyOutlineVisibility() {
-        sidebarWidthConstraint.constant = isOutlineVisible ? Self.sidebarWidth : 0
-        sidebar.isHidden = !isOutlineVisible
-        needsLayout = true
+        guard let sidebarWidthConstraint else { return }
+        let shouldShowSidebar = effectiveOutlineVisible
+        let targetWidth = shouldShowSidebar ? Self.sidebarWidth : 0
+        if sidebarWidthConstraint.constant != targetWidth {
+            sidebarWidthConstraint.constant = targetWidth
+            needsLayout = true
+        }
+        sidebar.isHidden = !shouldShowSidebar
+        toolbar.isOutlineVisible = shouldShowSidebar
+    }
+
+    private var effectiveOutlineVisible: Bool {
+        isOutlineVisible && allowsOutlineSidebarForCurrentWidth
+    }
+
+    private var allowsOutlineSidebarForCurrentWidth: Bool {
+        bounds.width == 0 || bounds.width >= Self.minimumWidthForVisibleSidebar
     }
 
     // MARK: - Document Propagation

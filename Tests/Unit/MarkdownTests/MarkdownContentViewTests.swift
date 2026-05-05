@@ -152,6 +152,32 @@ struct MarkdownContentViewTests {
         #expect(view.isOutlineVisible == true)
     }
 
+    @Test("narrow panes auto-collapse the outline without changing the user's outline preference")
+    func narrowPanesAutoCollapseOutline() {
+        let view = MarkdownContentView()
+        view.frame = NSRect(x: 0, y: 0, width: 760, height: 480)
+
+        view.layout()
+
+        #expect(view.isOutlineVisible == true)
+        #expect(view.effectiveOutlineVisibleForTesting == false)
+        #expect(view.sidebarViewForTesting.isHidden == true)
+    }
+
+    @Test("wide panes restore the outline when the user still wants it visible")
+    func widePanesRestoreOutline() {
+        let view = MarkdownContentView()
+        view.frame = NSRect(x: 0, y: 0, width: 760, height: 480)
+        view.layout()
+
+        view.frame = NSRect(x: 0, y: 0, width: 1_100, height: 480)
+        view.layout()
+
+        #expect(view.isOutlineVisible == true)
+        #expect(view.effectiveOutlineVisibleForTesting == true)
+        #expect(view.sidebarViewForTesting.isHidden == false)
+    }
+
     @Test("editing source updates the live document outline")
     func editingSourceUpdatesDocumentOutline() {
         let url = createTempMarkdownFile(content: "# First")
