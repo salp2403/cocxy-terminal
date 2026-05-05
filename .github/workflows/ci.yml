@@ -26,13 +26,7 @@ jobs:
         run: swift build -c debug
 
       - name: Test
-        run: |
-          set -euo pipefail
-          echo "Running XCTest suite..."
-          swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks 2>&1 | tee xctest-output.log
-          echo "Running Swift Testing suite..."
-          ./scripts/run-swift-testing-serial.sh 2>&1 | tee swift-testing-output.log
-          echo "All XCTest and Swift Testing tests passed."
+        run: ./scripts/run-tests.sh
 
       - name: Build Release
         run: swift build -c release

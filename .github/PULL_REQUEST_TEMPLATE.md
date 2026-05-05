@@ -23,7 +23,7 @@
 
 ## Testing
 
-- [ ] `swift test` passes locally
+- [ ] `./scripts/run-tests.sh` passes locally
 - [ ] New tests added (Swift Testing preferred for new suites)
 - [ ] Manual smoke test completed on macOS 14+ (describe below)
 - [ ] UI changes verified in a release build, not only in debug
