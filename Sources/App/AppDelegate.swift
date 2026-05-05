@@ -488,8 +488,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hasVisibleWindows flag: Bool
     ) -> Bool {
         if !flag {
-            if let wc = windowController, wc.window?.isVisible == true {
+            if let wc = windowController, wc.hasCompletedWindowSetup {
                 wc.showWindow(nil)
+                wc.window?.makeKeyAndOrderFront(nil)
+                wc.focusActiveTerminalSurface()
+                wc.recoverTerminalRenderingAfterWake()
             } else {
                 if sessionRegistry == nil {
                     initializeSessionRegistry()

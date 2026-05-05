@@ -32,6 +32,32 @@ final class AppDelegateLifecycleTests: XCTestCase {
         )
     }
 
+    func testApplicationShouldHandleReopenReusesHiddenCompletedWindow() {
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(MockTerminalEngine())
+        delegate.createMainWindowForTesting(deferSurfaceBootstrap: false)
+        guard let originalController = delegate.windowController else {
+            XCTFail("Expected a main window controller")
+            return
+        }
+
+        originalController.window?.orderOut(nil)
+        XCTAssertFalse(originalController.window?.isVisible ?? true)
+
+        let result = delegate.applicationShouldHandleReopen(
+            NSApplication.shared,
+            hasVisibleWindows: false
+        )
+
+        XCTAssertTrue(result)
+        XCTAssertTrue(
+            delegate.windowController === originalController,
+            "Reopening a hidden completed window should reuse the existing controller instead of rebuilding the whole terminal shell"
+        )
+        XCTAssertTrue(originalController.window?.isVisible == true)
+        originalController.window?.orderOut(nil)
+    }
+
     func testDeferredLaunchDoesNotShowWindowBeforeContentSetup() {
         let delegate = AppDelegate()
         delegate.installTerminalEngineForTesting(MockTerminalEngine())
