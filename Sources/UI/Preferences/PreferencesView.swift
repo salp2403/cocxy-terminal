@@ -6,6 +6,18 @@ import AppKit
 
 // MARK: - Preferences View
 
+enum PreferencesLayout {
+    static let sidebarMinimumWidth: CGFloat = 232
+    static let sidebarIdealWidth: CGFloat = 240
+    static let sidebarMaximumWidth: CGFloat = 300
+    static let windowMinimumWidth: CGFloat = 820
+    static let windowMinimumHeight: CGFloat = 500
+
+    static var windowMinimumContentSize: NSSize {
+        NSSize(width: windowMinimumWidth, height: windowMinimumHeight)
+    }
+}
+
 /// SwiftUI preferences window with fully editable settings.
 ///
 /// Organized in sections with a sidebar navigation pattern:
@@ -90,7 +102,10 @@ struct PreferencesView: View {
         } detail: {
             detailContent
         }
-        .frame(minWidth: 600, minHeight: 400)
+        .frame(
+            minWidth: PreferencesLayout.windowMinimumWidth,
+            minHeight: PreferencesLayout.windowMinimumHeight
+        )
         .glassPanelBackground()
     }
 
@@ -98,11 +113,23 @@ struct PreferencesView: View {
 
     private var sidebarContent: some View {
         List(PreferencesSection.allCases, selection: $selectedSection) { section in
-            Label(section.localizedTitle(viewModel), systemImage: section.iconName)
+            Label {
+                Text(section.localizedTitle(viewModel))
+                    .lineLimit(1)
+            } icon: {
+                Image(systemName: section.iconName)
+            }
                 .tag(section)
+                .help(section.localizedTitle(viewModel))
+                .accessibilityLabel(section.localizedTitle(viewModel))
         }
         .listStyle(.sidebar)
-        .frame(minWidth: 160)
+        .frame(minWidth: PreferencesLayout.sidebarMinimumWidth)
+        .navigationSplitViewColumnWidth(
+            min: PreferencesLayout.sidebarMinimumWidth,
+            ideal: PreferencesLayout.sidebarIdealWidth,
+            max: PreferencesLayout.sidebarMaximumWidth
+        )
     }
 
     // MARK: - Detail

@@ -2142,7 +2142,8 @@ extension MainWindowController {
             fallback: "Cocxy Terminal Settings"
         )
         prefsWindow.styleMask = [.titled, .closable, .resizable]
-        prefsWindow.setContentSize(NSSize(width: 600, height: 400))
+        prefsWindow.contentMinSize = PreferencesLayout.windowMinimumContentSize
+        prefsWindow.setContentSize(PreferencesLayout.windowMinimumContentSize)
         prefsWindow.center()
 
         // Install the delegate that prompts on close with unsaved changes.

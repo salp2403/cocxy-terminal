@@ -2,6 +2,7 @@
 // PreferencesViewTests.swift - Tests for PreferencesView and its sections.
 
 import XCTest
+import AppKit
 @testable import CocxyTerminal
 
 // MARK: - Preferences Section Tests
@@ -27,6 +28,24 @@ final class PreferencesSectionTests: XCTestCase {
         // the author to review every sidebar list that relies on
         // `allCases`.
         XCTAssertEqual(PreferencesSection.allCases.count, 20)
+    }
+
+    @MainActor
+    func test_preferencesLayout_fitsLocalizedSidebarTitles() throws {
+        let bundle = try XCTUnwrap(localizationBundle())
+        let viewModel = PreferencesViewModel(config: .defaults, appLocalizationBundle: bundle)
+        viewModel.appLanguage = .spanish
+        let labelFont = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        let sidebarIconAndInsetBudget: CGFloat = 56
+        let widestTitle = PreferencesSection.allCases
+            .map { $0.localizedTitle(viewModel) }
+            .map { title in
+                title.size(withAttributes: [.font: labelFont]).width + sidebarIconAndInsetBudget
+            }
+            .max() ?? 0
+
+        XCTAssertLessThanOrEqual(ceil(widestTitle), PreferencesLayout.sidebarMinimumWidth)
+        XCTAssertGreaterThanOrEqual(PreferencesLayout.windowMinimumWidth - PreferencesLayout.sidebarIdealWidth, 560)
     }
 
     func test_worktreesSection_hasTitleAndIcon() {
@@ -255,6 +274,11 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertLessThan(agentModeIndex, codeReviewIndex)
         XCTAssertLessThan(codeReviewIndex, notificationsIndex)
     }
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
 
 // MARK: - Tab Position Tests
