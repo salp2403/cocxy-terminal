@@ -1023,6 +1023,12 @@
 "update.critical.title" = "Critical update";
 "quickTerminal.accessibility" = "Quick Terminal";
 "voice.indicator.accessibility" = "Voice input";
+"voice.indicator.requestingAccess" = "Requesting access";
+"voice.indicator.listening" = "Listening";
+"voice.failure.disabled" = "Voice input is disabled.";
+"voice.failure.localeUnavailable" = "No local speech recognition locale is available.";
+"voice.failure.permissionDenied" = "Voice input needs Speech Recognition and Microphone permission.";
+"voice.failure.transcriberUnavailable" = "Local speech recognition is unavailable on this Mac.";
 "smartRouting.title" = "Smart Routing";
 "smartRouting.accessibility.hint" = "Navigate between AI agents. Use arrow keys to select, Enter to activate.";
 "smartRouting.empty" = "No agents need attention";

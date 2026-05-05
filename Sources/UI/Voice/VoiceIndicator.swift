@@ -14,7 +14,7 @@ struct VoiceIndicator: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(iconColor)
 
-                Text(handler.displayText)
+                Text(displayText)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -34,7 +34,7 @@ struct VoiceIndicator: View {
             .shadow(color: .black.opacity(0.24), radius: 16, y: 8)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(Self.localizedAccessibilityLabel(using: localizer))
-            .accessibilityValue(handler.displayText)
+            .accessibilityValue(displayText)
         }
     }
 
@@ -51,5 +51,9 @@ struct VoiceIndicator: View {
         default:
             return Color(nsColor: CocxyColors.blue)
         }
+    }
+
+    private var displayText: String {
+        handler.displayText(using: localizer)
     }
 }

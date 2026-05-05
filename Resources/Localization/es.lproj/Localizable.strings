@@ -1023,6 +1023,12 @@
 "update.critical.title" = "Actualización crítica";
 "quickTerminal.accessibility" = "Terminal rápido";
 "voice.indicator.accessibility" = "Entrada por voz";
+"voice.indicator.requestingAccess" = "Solicitando acceso";
+"voice.indicator.listening" = "Escuchando";
+"voice.failure.disabled" = "La entrada por voz está desactivada.";
+"voice.failure.localeUnavailable" = "No hay un idioma local de reconocimiento de voz disponible.";
+"voice.failure.permissionDenied" = "La entrada por voz necesita permisos de Reconocimiento de voz y Micrófono.";
+"voice.failure.transcriberUnavailable" = "El reconocimiento local de voz no está disponible en esta Mac.";
 "smartRouting.title" = "Ruteo inteligente";
 "smartRouting.accessibility.hint" = "Navega entre agentes IA. Usa las flechas para seleccionar y Enter para activar.";
 "smartRouting.empty" = "Ningún agente requiere atención";

@@ -76,6 +76,47 @@ struct VoiceTriggerHandlerSwiftTestingTests {
         #expect(handler.displayText == "Voice input is disabled.")
         #expect(delivered == nil)
     }
+
+    @Test("localized display text follows the configured app language")
+    @MainActor
+    func localizedDisplayTextFollowsConfiguredAppLanguage() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(
+            VoiceTriggerHandler.localizedDisplayText(
+                for: .requestingPermission,
+                partialText: "",
+                using: spanish
+            ) == "Solicitando acceso"
+        )
+        #expect(
+            VoiceTriggerHandler.localizedDisplayText(
+                for: .recording(localeIdentifier: "es-ES"),
+                partialText: "",
+                using: spanish
+            ) == "Escuchando"
+        )
+        #expect(
+            VoiceTriggerHandler.localizedDisplayText(
+                for: .recording(localeIdentifier: "es-ES"),
+                partialText: "abrir notas",
+                using: spanish
+            ) == "abrir notas"
+        )
+        #expect(
+            VoiceTriggerHandler.localizedDisplayText(
+                for: .failed(.disabled),
+                partialText: "",
+                using: spanish
+            ) == "La entrada por voz está desactivada."
+        )
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
 }
 
 private final class RecordingVoicePermissionManager: VoicePermissionManaging, @unchecked Sendable {
