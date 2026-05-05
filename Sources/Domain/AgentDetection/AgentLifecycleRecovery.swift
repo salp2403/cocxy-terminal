@@ -16,11 +16,11 @@ import Foundation
 /// 4. Explicit teardown via `destroyTerminalSurface` or `destroyAllSurfaces`.
 ///
 /// None of those catch the most common real-world scenario: the user launches
-/// `claude` (or any other agent), the agent terminates on its own without
-/// completing the hook handshake (e.g., aborted by `--dangerously-skip-permissions`,
-/// `Ctrl+C`, or a crash before bootstrap), the shell prompt returns, and the
-/// backing shell process stays alive. In that scenario the per-surface store
-/// retains the last observed agent state (`.launched`, `.finished`,
+/// a local agent, the agent terminates on its own without completing the hook
+/// handshake (for example, aborted by startup flags, `Ctrl+C`, or a crash
+/// before bootstrap), the shell prompt returns, and the backing shell process
+/// stays alive. In that scenario the per-surface store retains the last
+/// observed agent state (`.launched`, `.finished`,
 /// `.waitingInput`, …) and the sidebar, status bar, and progress overlay keep
 /// reporting activity for an agent that no longer exists.
 ///

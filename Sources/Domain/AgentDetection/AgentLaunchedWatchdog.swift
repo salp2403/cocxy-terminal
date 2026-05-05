@@ -8,8 +8,8 @@ import Foundation
 /// without any further activity.
 ///
 /// The detection pipeline marks a surface as `.launched` as soon as the
-/// pattern detector recognises the agent command being typed into the shell
-/// (for example `claude --dangerously-skip-permissions`). From there, the
+/// pattern detector recognises the local agent command being typed into the
+/// shell. From there, the
 /// pipeline expects one of three outcomes: the agent emits output and the
 /// state transitions to `.working`, the agent fails and the state transitions
 /// to `.error`, or the agent process terminates and `notifyProcessExited`
