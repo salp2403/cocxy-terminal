@@ -1552,6 +1552,8 @@
 "browser.history.scope.lastHour" = "la última hora del historial de navegación";
 "browser.history.scope.today" = "el historial de navegación de hoy";
 "browser.history.scope.all" = "todo el historial de navegación";
+"browser.history.group.today" = "Hoy";
+"browser.history.group.yesterday" = "Ayer";
 "browser.bookmarks.accessibility" = "Marcadores";
 "browser.bookmarks.title" = "Marcadores";
 "browser.bookmarks.add" = "Agregar marcador";

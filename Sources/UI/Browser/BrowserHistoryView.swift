@@ -245,7 +245,13 @@ struct BrowserHistoryView: View {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(dateGroups) { group in
-                            dateGroupHeader(group.label)
+                            dateGroupHeader(
+                                Self.localizedDateGroupLabel(
+                                    for: group.date,
+                                    fallback: group.label,
+                                    using: localizer
+                                )
+                            )
 
                             ForEach(group.entries, id: \.id) { entry in
                                 historyEntryRow(entry)
@@ -425,6 +431,30 @@ struct BrowserHistoryView: View {
             primaryButton: localizer.string("browser.history.clear.button", fallback: "Clear"),
             secondaryButton: localizer.string("common.cancel", fallback: "Cancel")
         )
+    }
+
+    static func localizedDateGroupLabel(
+        for date: Date,
+        fallback: String,
+        using localizer: AppLocalizer,
+        calendar: Calendar = .current,
+        referenceDate: Date = Date()
+    ) -> String {
+        if calendar.isDate(date, inSameDayAs: referenceDate) {
+            return localizer.string("browser.history.group.today", fallback: "Today")
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: referenceDate),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return localizer.string("browser.history.group.yesterday", fallback: "Yesterday")
+        }
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = localizer.locale
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "d MMMM"
+        let localized = formatter.string(from: date)
+        return localized.isEmpty ? fallback : localized
     }
 
     private static let timeFormatter: DateFormatter = {

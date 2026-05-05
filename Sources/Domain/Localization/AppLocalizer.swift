@@ -54,6 +54,15 @@ struct AppLocalizer {
         language
     }
 
+    var locale: Locale {
+        switch language {
+        case .system, .english:
+            return Locale(identifier: "en")
+        case .spanish:
+            return Locale(identifier: "es")
+        }
+    }
+
     func string(_ key: AppLocalizationKey) -> String {
         let fallback = fallbackStrings[key] ?? key.rawValue
         return string(key.rawValue, fallback: fallback)

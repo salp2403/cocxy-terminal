@@ -25,6 +25,45 @@ struct BrowserPanelLocalizationSwiftTestingTests {
         #expect(copy.secondaryButton == "Cancelar")
     }
 
+    @Test("history date group labels localize today yesterday and calendar dates")
+    func historyDateGroupLabelsLocalize() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let reference = try #require(calendar.date(from: DateComponents(year: 2026, month: 5, day: 4)))
+        let yesterday = try #require(calendar.date(byAdding: .day, value: -1, to: reference))
+        let older = try #require(calendar.date(from: DateComponents(year: 2024, month: 3, day: 25)))
+
+        #expect(
+            BrowserHistoryView.localizedDateGroupLabel(
+                for: reference,
+                fallback: "Today",
+                using: localizer,
+                calendar: calendar,
+                referenceDate: reference
+            ) == "Hoy"
+        )
+        #expect(
+            BrowserHistoryView.localizedDateGroupLabel(
+                for: yesterday,
+                fallback: "Yesterday",
+                using: localizer,
+                calendar: calendar,
+                referenceDate: reference
+            ) == "Ayer"
+        )
+        #expect(
+            BrowserHistoryView.localizedDateGroupLabel(
+                for: older,
+                fallback: "25 March",
+                using: localizer,
+                calendar: calendar,
+                referenceDate: reference
+            ) == "25 marzo"
+        )
+    }
+
     @Test("bookmark delete confirmation distinguishes folders from bookmarks")
     func bookmarkDeleteConfirmationLocalizes() throws {
         let bundle = try #require(localizationBundle())

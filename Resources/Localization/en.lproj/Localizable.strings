@@ -1552,6 +1552,8 @@
 "browser.history.scope.lastHour" = "the last hour of browsing history";
 "browser.history.scope.today" = "today's browsing history";
 "browser.history.scope.all" = "all browsing history";
+"browser.history.group.today" = "Today";
+"browser.history.group.yesterday" = "Yesterday";
 "browser.bookmarks.accessibility" = "Bookmarks";
 "browser.bookmarks.title" = "Bookmarks";
 "browser.bookmarks.add" = "Add bookmark";
