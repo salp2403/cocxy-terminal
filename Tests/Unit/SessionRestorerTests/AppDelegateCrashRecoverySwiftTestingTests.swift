@@ -142,6 +142,44 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(offer.window?.isOpaque == true)
     }
 
+    @Test("restore action keeps the recovery offer visible while completion runs")
+    func restoreActionKeepsRecoveryOfferVisibleWhileCompletionRuns() throws {
+        let parent = NSWindow(
+            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        defer { parent.close() }
+        let copy = AppAlertCopy(
+            messageText: "Restore Previous Session?",
+            informativeText: "A local crash-recovery snapshot is available.",
+            primaryButton: "Restore",
+            secondaryButton: "Keep Current"
+        )
+
+        var offerReference: CrashRecoveryOfferWindowController?
+        var completionObservedVisibleOffer = false
+        var completionObservedChildOffer = false
+        let offer = CrashRecoveryOfferWindowController(copy: copy) { response in
+            #expect(response == .alertFirstButtonReturn)
+            let window = offerReference?.window
+            completionObservedVisibleOffer = window?.isVisible == true
+            completionObservedChildOffer = parent.childWindows?.contains { $0 === window } == true
+        }
+        offerReference = offer
+        defer { offer.close() }
+
+        offer.show(over: parent)
+        let restoreButton = try #require(button(titled: "Restore", in: offer.window?.contentView))
+
+        restoreButton.performClick(nil)
+
+        #expect(completionObservedVisibleOffer == true)
+        #expect(completionObservedChildOffer == true)
+        #expect(parent.childWindows?.contains { $0 === offer.window } != true)
+    }
+
     @Test("crash recovery alert copy follows configured app language")
     func crashRecoveryAlertCopyFollowsConfiguredAppLanguage() throws {
         let localizer = AppLocalizer(
@@ -173,6 +211,19 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
+
+    private func button(titled title: String, in view: NSView?) -> NSButton? {
+        guard let view else { return nil }
+        if let button = view as? NSButton, button.title == title {
+            return button
+        }
+        for subview in view.subviews {
+            if let found = button(titled: title, in: subview) {
+                return found
+            }
+        }
+        return nil
     }
 }
 

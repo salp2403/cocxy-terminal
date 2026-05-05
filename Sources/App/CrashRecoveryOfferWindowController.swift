@@ -109,11 +109,12 @@ final class CrashRecoveryOfferWindowController: NSWindowController, NSWindowDele
             NSApp.stopModal(withCode: response)
         }
 
+        callback?(response)
+
         if let window {
             parentWindow?.removeChildWindow(window)
             window.orderOut(nil)
         }
-        callback?(response)
     }
 
     private func makeContentView(copy: AppAlertCopy) -> NSView {
