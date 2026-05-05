@@ -119,6 +119,12 @@ private struct MCPJSONRPCMessageProbe: Decodable {
 }
 
 struct MCPStdioProcessLauncher: MCPStdioProcessLaunching {
+    private let sandboxPolicy: MCPStdioSandboxPolicy
+
+    init(sandboxPolicy: MCPStdioSandboxPolicy = MCPStdioSandboxPolicy()) {
+        self.sandboxPolicy = sandboxPolicy
+    }
+
     func launch(server: MCPServer) throws -> any MCPStdioProcess {
         guard case .stdio(let command, let arguments, let environment, let workingDirectory) = server.transport else {
             throw MCPStdioTransportError.unsupportedServer(serverID: server.id)
@@ -135,7 +141,7 @@ struct MCPStdioProcessLauncher: MCPStdioProcessLaunching {
         process.standardInput = input
         process.standardOutput = output
         process.standardError = error
-        process.environment = resolvedEnvironment(overrides: environment)
+        process.environment = try sandboxPolicy.resolvedEnvironment(overrides: environment)
         if let workingDirectory {
             process.currentDirectoryURL = directoryURL(for: workingDirectory)
         }
@@ -170,30 +176,108 @@ struct MCPStdioProcessLauncher: MCPStdioProcessLaunching {
             .appendingPathComponent(expanded, isDirectory: true)
     }
 
-    private func resolvedEnvironment(overrides: [String: String]) -> [String: String] {
-        let base = ProcessInfo.processInfo.environment
-        return overrides.reduce(into: base) { result, entry in
-            result[entry.key] = expandEnvironmentReferences(entry.value, environment: base)
+}
+
+enum MCPStdioSandboxError: Error, Sendable, Equatable {
+    case invalidEnvironmentKey(String)
+}
+
+extension MCPStdioSandboxError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .invalidEnvironmentKey(let key):
+            return "Invalid MCP stdio environment key: \(key)"
         }
     }
+}
 
-    private func expandEnvironmentReferences(
-        _ value: String,
-        environment: [String: String]
-    ) -> String {
-        var output = ""
-        var remaining = value[...]
+struct MCPStdioSandboxPolicy: Sendable {
+    private static let defaultPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-        while let start = remaining.range(of: "${"),
-              let end = remaining[start.upperBound...].firstIndex(of: "}") {
-            output += String(remaining[..<start.lowerBound])
-            let name = String(remaining[start.upperBound..<end])
-            output += environment[name] ?? ""
-            remaining = remaining[remaining.index(after: end)...]
+    private static let allowedInheritedKeys: Set<String> = [
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "DEVELOPER_DIR",
+        "SDKROOT",
+        "TOOLCHAINS",
+        "SHELL",
+        "USER",
+        "LOGNAME",
+        "LANG",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
+        "JAVA_HOME",
+        "GOPATH",
+        "GOROOT",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+        "NODE_PATH",
+        "NPM_CONFIG_PREFIX",
+        "PYENV_ROOT",
+        "RBENV_ROOT",
+        "GEM_HOME",
+        "GEM_PATH",
+        "COMPOSER_HOME",
+    ]
+
+    private static let blockedInheritedKeyFragments = [
+        "secret",
+        "token",
+        "password",
+        "credential",
+        "private_key",
+        "apikey",
+        "api_key",
+        "authorization",
+    ]
+
+    private let inheritedEnvironment: [String: String]
+
+    init(inheritedEnvironment: [String: String] = ProcessInfo.processInfo.environment) {
+        self.inheritedEnvironment = inheritedEnvironment
+    }
+
+    func resolvedEnvironment(overrides: [String: String]) throws -> [String: String] {
+        var environment = inheritedEnvironment.reduce(into: [String: String]()) { result, pair in
+            guard Self.shouldInherit(pair.key) else { return }
+            result[pair.key] = pair.value
         }
 
-        output += String(remaining)
-        return output
+        environment["PATH"] = Self.sandboxedSearchPath(environment["PATH"])
+
+        for key in overrides.keys.sorted() {
+            guard MCPEnvironment.isValidKey(key) else {
+                throw MCPStdioSandboxError.invalidEnvironmentKey(key)
+            }
+            guard let value = overrides[key] else { continue }
+            environment[key] = MCPEnvironment.expandReferences(in: value, environment: inheritedEnvironment)
+        }
+
+        return environment
+    }
+
+    private static func shouldInherit(_ key: String) -> Bool {
+        let lowercased = key.lowercased()
+        guard allowedInheritedKeys.contains(key) || key.hasPrefix("LC_") else {
+            return false
+        }
+        return !blockedInheritedKeyFragments.contains { lowercased.contains($0) }
+    }
+
+    private static func sandboxedSearchPath(_ inheritedPath: String?) -> String {
+        let inheritedComponents = inheritedPath?
+            .split(separator: ":")
+            .map(String.init)
+            .filter { !$0.isEmpty } ?? []
+        var components = inheritedComponents
+
+        for fallback in defaultPath.split(separator: ":").map(String.init) where !components.contains(fallback) {
+            components.append(fallback)
+        }
+
+        return components.joined(separator: ":")
     }
 }
 

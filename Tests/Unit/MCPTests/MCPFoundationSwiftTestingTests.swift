@@ -79,6 +79,54 @@ struct MCPFoundationSwiftTestingTests {
         }
     }
 
+    @Test("config loader rejects invalid explicit stdio environment keys")
+    func configLoaderRejectsInvalidExplicitStdioEnvironmentKeys() throws {
+        let root = temporaryDirectory(named: "mcp-invalid-env-config")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let configURL = root.appendingPathComponent("mcp.json")
+        try """
+        {
+          "mcpServers": {
+            "local": {
+              "command": "mcp-server",
+              "env": {
+                "BAD-KEY": "1"
+              }
+            }
+          }
+        }
+        """.write(to: configURL, atomically: true, encoding: .utf8)
+
+        #expect(throws: MCPServerConfigError.invalidEnvironmentKey("local", "BAD-KEY")) {
+            _ = try MCPServerConfigLoader().loadServers(from: configURL)
+        }
+    }
+
+    @Test("config loader reads HTTP bearer authorization from environment reference")
+    func configLoaderReadsHTTPBearerAuthorizationFromEnvironmentReference() throws {
+        let root = temporaryDirectory(named: "mcp-auth-config")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let configURL = root.appendingPathComponent("mcp.json")
+        try """
+        {
+          "mcpServers": {
+            "docs": {
+              "url": "http://127.0.0.1:8765/mcp",
+              "authorization": {
+                "type": "bearer",
+                "tokenEnv": "MCP_DOCS_TOKEN"
+              }
+            }
+          }
+        }
+        """.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let servers = try MCPServerConfigLoader().loadServers(from: configURL)
+        let docs = try #require(servers.first)
+
+        #expect(docs.authorization == .bearerToken(environmentKey: "MCP_DOCS_TOKEN"))
+    }
+
     @Test("client sends JSON-RPC requests for initialize, tools and resources")
     func clientSendsJSONRPCRequestsForToolsAndResources() async throws {
         let transport = RecordingMCPTransport { request in
@@ -433,6 +481,128 @@ struct MCPFoundationSwiftTestingTests {
         )
 
         #expect(response.result == .object(["ok": .bool(true)]))
+    }
+
+    @Test("HTTP transport resolves configured bearer authorization without storing token in config")
+    func httpTransportResolvesConfiguredBearerAuthorization() async throws {
+        let httpTransport = RecordingMCPHTTPTransport { request in
+            #expect(request.headers["Authorization"] == "Bearer local-oauth-token")
+            return AgentHTTPResponse(
+                statusCode: 200,
+                data: try AgentToolProtocolCodec.encode(MCPJSONRPCResponse(
+                    id: "1",
+                    result: .object(["ok": .bool(true)])
+                ))
+            )
+        }
+        let transport = MCPHTTPTransport(
+            httpTransport: httpTransport,
+            authorizationResolver: MCPAuthorizationResolver(environment: [
+                "MCP_DOCS_TOKEN": "local-oauth-token",
+            ])
+        )
+        let server = MCPServer(
+            id: "docs",
+            authorization: .bearerToken(environmentKey: "MCP_DOCS_TOKEN"),
+            transport: .http(
+                url: URL(string: "http://127.0.0.1:8765/mcp")!,
+                headers: ["Authorization": "Bearer stale-config-token"]
+            )
+        )
+
+        let response = try await transport.send(
+            MCPJSONRPCRequest(id: "1", method: "ping"),
+            to: server
+        )
+
+        #expect(response.result == .object(["ok": .bool(true)]))
+    }
+
+    @Test("HTTP transport fails closed when configured bearer token is missing")
+    func httpTransportFailsClosedWhenConfiguredBearerTokenIsMissing() async throws {
+        let transport = MCPHTTPTransport(
+            httpTransport: RecordingMCPHTTPTransport { _ in
+                Issue.record("HTTP request should not be sent without the configured token")
+                return AgentHTTPResponse(statusCode: 200, data: Data())
+            },
+            authorizationResolver: MCPAuthorizationResolver(environment: [:])
+        )
+        let server = MCPServer(
+            id: "docs",
+            authorization: .bearerToken(environmentKey: "MCP_DOCS_TOKEN"),
+            transport: .http(url: URL(string: "http://127.0.0.1:8765/mcp")!)
+        )
+
+        await #expect(throws: MCPAuthorizationError.missingEnvironmentVariable("MCP_DOCS_TOKEN")) {
+            _ = try await transport.send(
+                MCPJSONRPCRequest(id: "1", method: "ping"),
+                to: server
+            )
+        }
+    }
+
+    @Test("HTTP transport redacts configured authorization from error bodies")
+    func httpTransportRedactsConfiguredAuthorizationFromErrorBodies() async throws {
+        let transport = MCPHTTPTransport(
+            httpTransport: RecordingMCPHTTPTransport { _ in
+                AgentHTTPResponse(
+                    statusCode: 500,
+                    data: Data("authorization=Bearer local-oauth-token token=local-oauth-token".utf8)
+                )
+            },
+            authorizationResolver: MCPAuthorizationResolver(environment: [
+                "MCP_DOCS_TOKEN": "local-oauth-token",
+            ])
+        )
+        let server = MCPServer(
+            id: "docs",
+            authorization: .bearerToken(environmentKey: "MCP_DOCS_TOKEN"),
+            transport: .http(url: URL(string: "http://127.0.0.1:8765/mcp")!)
+        )
+
+        do {
+            _ = try await transport.send(
+                MCPJSONRPCRequest(id: "1", method: "ping"),
+                to: server
+            )
+            Issue.record("Expected MCP HTTP error")
+        } catch {
+            #expect(error.localizedDescription.contains("local-oauth-token") == false)
+            #expect(error.localizedDescription.contains("[redacted]"))
+        }
+    }
+
+    @Test("stdio sandbox keeps a minimal inherited environment and explicit secret opt-ins only")
+    func stdioSandboxKeepsMinimalInheritedEnvironmentAndExplicitSecretOptInsOnly() throws {
+        let policy = MCPStdioSandboxPolicy(inheritedEnvironment: [
+            "PATH": "/usr/bin:/bin",
+            "HOME": "/Users/dev",
+            "TMPDIR": "/var/folders/tmp",
+            "LANG": "en_US.UTF-8",
+            "LC_ALL": "en_US.UTF-8",
+            "GITHUB_TOKEN": "ghp_local_secret",
+            "AWS_SECRET_ACCESS_KEY": "aws-secret",
+            "PROJECT_API_PASSWORD": "password",
+        ])
+
+        let environment = try policy.resolvedEnvironment(overrides: [
+            "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+            "SAFE_MODE": "1",
+        ])
+        let pathComponents = environment["PATH"]?.split(separator: ":").map(String.init) ?? []
+
+        #expect(pathComponents.contains("/opt/homebrew/bin"))
+        #expect(pathComponents.contains("/usr/local/bin"))
+        #expect(pathComponents.contains("/usr/bin"))
+        #expect(pathComponents.contains("/bin"))
+        #expect(environment["HOME"] == "/Users/dev")
+        #expect(environment["TMPDIR"] == "/var/folders/tmp")
+        #expect(environment["LANG"] == "en_US.UTF-8")
+        #expect(environment["LC_ALL"] == "en_US.UTF-8")
+        #expect(environment["GITHUB_TOKEN"] == "ghp_local_secret")
+        #expect(environment["SAFE_MODE"] == "1")
+        #expect(environment["AWS_SECRET_ACCESS_KEY"] == nil)
+        #expect(environment["PROJECT_API_PASSWORD"] == nil)
     }
 
     @Test("stdio transport sends newline JSON and reconnects after process exit")
