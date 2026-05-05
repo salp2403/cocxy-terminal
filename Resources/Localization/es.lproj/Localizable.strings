@@ -1541,6 +1541,17 @@
 "codeReview.suggestions.conflicts" = "No se pudieron aplicar las sugerencias: %d conflictos.";
 "codeReview.suggestions.applied.one" = "1 sugerencia aplicada.";
 "codeReview.suggestions.applied.many" = "%d sugerencias aplicadas.";
+"codeReview.suggestions.conflict.none" = "No hay conflictos de sugerencias.";
+"codeReview.suggestions.conflict.line" = "línea %d";
+"codeReview.suggestions.conflict.lines" = "líneas %d-%d";
+"codeReview.suggestions.conflict.summary.one" = "No se pudieron aplicar las sugerencias: %@ %@ tiene %@. %@";
+"codeReview.suggestions.conflict.summary.many" = "No se pudieron aplicar las sugerencias: %d conflictos. Primero: %@ %@ tiene %@. %@";
+"codeReview.suggestions.conflict.reason.outOfBounds" = "un rango fuera del archivo";
+"codeReview.suggestions.conflict.reason.overlappingRanges" = "rangos superpuestos";
+"codeReview.suggestions.conflict.reason.staleOriginal" = "texto original cambiado";
+"codeReview.suggestions.conflict.action.outOfBounds" = "Vuelve a anclar el comentario a una línea existente antes de aplicar.";
+"codeReview.suggestions.conflict.action.overlappingRanges" = "Conserva una sugerencia superpuesta y elimina el otro borrador.";
+"codeReview.suggestions.conflict.action.staleOriginal" = "Refresca el diff o actualiza la sugerencia para que coincida con el archivo actual.";
 "codeReview.gitWorkflow.accessibility" = "Workflow Git";
 "codeReview.gitWorkflow.title" = "Workflow Git";
 "codeReview.gitWorkflow.refresh" = "Refrescar";

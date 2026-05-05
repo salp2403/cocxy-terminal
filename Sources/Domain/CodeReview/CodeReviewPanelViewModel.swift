@@ -498,10 +498,9 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
             }
             let conflicts = plans.flatMap(\.report.conflicts)
             guard conflicts.isEmpty else {
-                lastErrorMessage = localizedFormat(
-                    "codeReview.suggestions.conflicts",
-                    fallback: "Suggestions could not be applied: %d conflicts.",
-                    conflicts.count
+                lastErrorMessage = PRSuggestionConflictResolver.localizedSummary(
+                    for: conflicts,
+                    using: localizer
                 )
                 lastInfoMessage = nil
                 return

@@ -1541,6 +1541,17 @@
 "codeReview.suggestions.conflicts" = "Suggestions could not be applied: %d conflicts.";
 "codeReview.suggestions.applied.one" = "Applied 1 suggestion.";
 "codeReview.suggestions.applied.many" = "Applied %d suggestions.";
+"codeReview.suggestions.conflict.none" = "No suggestion conflicts.";
+"codeReview.suggestions.conflict.line" = "line %d";
+"codeReview.suggestions.conflict.lines" = "lines %d-%d";
+"codeReview.suggestions.conflict.summary.one" = "Suggestions could not be applied: %@ %@ has %@. %@";
+"codeReview.suggestions.conflict.summary.many" = "Suggestions could not be applied: %d conflicts. First: %@ %@ has %@. %@";
+"codeReview.suggestions.conflict.reason.outOfBounds" = "an out-of-bounds range";
+"codeReview.suggestions.conflict.reason.overlappingRanges" = "overlapping ranges";
+"codeReview.suggestions.conflict.reason.staleOriginal" = "changed original text";
+"codeReview.suggestions.conflict.action.outOfBounds" = "Re-anchor the comment to an existing line before applying.";
+"codeReview.suggestions.conflict.action.overlappingRanges" = "Keep one overlapping suggestion and remove the other draft.";
+"codeReview.suggestions.conflict.action.staleOriginal" = "Refresh the diff or update the suggestion to match the current file.";
 "codeReview.gitWorkflow.accessibility" = "Git workflow";
 "codeReview.gitWorkflow.title" = "Git Workflow";
 "codeReview.gitWorkflow.refresh" = "Refresh";

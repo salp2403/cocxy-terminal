@@ -107,6 +107,68 @@ struct PRReviewSuggestionSwiftTestingTests {
         #expect(report.appliedSuggestions.isEmpty)
         #expect(report.conflicts.map(\.reason) == [.overlappingRanges])
     }
+
+    @Test("conflict resolver summarizes stale originals with actionable guidance")
+    func conflictResolverSummarizesStaleOriginals() {
+        let suggestion = PRSuggestion(
+            filePath: "Sources/App.swift",
+            lineRange: 4...4,
+            replacementText: "let enabled = true",
+            expectedOriginalText: "let enabled = false"
+        )
+        let conflict = PRSuggestionConflict(
+            suggestion: suggestion,
+            reason: .staleOriginal,
+            actualText: "let enabled = alreadyEnabled"
+        )
+
+        let summary = PRSuggestionConflictResolver.localizedSummary(
+            for: [conflict],
+            using: AppLocalizer(languagePreference: .english)
+        )
+        let resolutions = PRSuggestionConflictResolver.resolutions(
+            for: [conflict],
+            using: AppLocalizer(languagePreference: .english)
+        )
+
+        #expect(summary.contains("Suggestions could not be applied"))
+        #expect(summary.contains("Sources/App.swift"))
+        #expect(summary.contains("line 4"))
+        #expect(summary.contains("changed original text"))
+        #expect(resolutions.count == 1)
+        #expect(resolutions[0].action.contains("Refresh the diff"))
+        #expect(resolutions[0].actualTextSnippet == "let enabled = alreadyEnabled")
+    }
+
+    @Test("conflict resolver localizes overlapping ranges to Spanish")
+    func conflictResolverLocalizesOverlapsToSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let suggestion = PRSuggestion(
+            filePath: "Sources/App.swift",
+            lineRange: 1...2,
+            replacementText: "x"
+        )
+        let conflict = PRSuggestionConflict(
+            suggestion: suggestion,
+            reason: .overlappingRanges,
+            actualText: nil
+        )
+
+        let summary = PRSuggestionConflictResolver.localizedSummary(
+            for: [conflict, conflict],
+            using: AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        )
+
+        #expect(summary.contains("No se pudieron aplicar las sugerencias"))
+        #expect(summary.contains("2 conflictos"))
+        #expect(summary.contains("líneas 1-2"))
+        #expect(summary.contains("rangos superpuestos"))
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
 }
 
 private extension Array {
