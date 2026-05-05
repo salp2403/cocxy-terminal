@@ -10,6 +10,7 @@ struct InlineCommentView: View {
     let onSubmit: (String) -> Void
     let onCancel: () -> Void
     let onRemove: (UUID) -> Void
+    var responseTemplates: [PRReviewResponseTemplate] = PRReviewResponseTemplateCatalog.defaultTemplates
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var draftText = ""
@@ -125,6 +126,27 @@ struct InlineCommentView: View {
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
 
                 Spacer()
+
+                Menu {
+                    ForEach(responseTemplates) { template in
+                        Button(template.title(using: localizer)) {
+                            draftText = PRReviewResponseTemplateCatalog.inserting(
+                                templateBody: template.body(using: localizer),
+                                into: draftText
+                            )
+                        }
+                    }
+                } label: {
+                    Image(systemName: "text.badge.plus")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(responseTemplates.isEmpty)
+                .help(localized("codeReview.inlineComment.templates.help", fallback: "Insert response template"))
+                .accessibilityLabel(
+                    localized("codeReview.inlineComment.templates.accessibility", fallback: "Insert response template")
+                )
 
                 Button(localized("codeReview.inlineComment.add", fallback: "Add Comment"), action: submit)
                     .buttonStyle(.borderedProminent)
