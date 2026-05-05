@@ -57,6 +57,91 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(bridge.createSurfaceRequests.count == afterRestoreSurfaceCount + 1)
     }
 
+    @Test("restore defers inactive tab project config until activation")
+    func restoreDefersInactiveTabProjectConfigUntilActivation() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let root = try makeTemporaryDirectory(named: "cocxy-deferred-project-config")
+        let activeDirectory = root.appendingPathComponent("active", isDirectory: true)
+        let deferredDirectory = root.appendingPathComponent("deferred", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: activeDirectory,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: deferredDirectory,
+            withIntermediateDirectories: true
+        )
+        try "font-size = 19\n".write(
+            to: deferredDirectory.appendingPathComponent(".cocxy.toml"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let activeTabID = TabID()
+        let deferredTabID = TabID()
+        let session = makeSession(
+            tabIDs: [activeTabID, deferredTabID],
+            activeTabIndex: 0,
+            workingDirectories: [activeDirectory, deferredDirectory]
+        )
+
+        #expect(delegate.restoreSession(session, into: controller))
+        #expect(controller.tabManager.tab(for: deferredTabID)?.projectConfig == nil)
+
+        controller.tabManager.setActive(id: deferredTabID)
+        controller.handleTabSwitch(to: deferredTabID)
+
+        #expect(controller.tabManager.tab(for: deferredTabID)?.projectConfig?.fontSize == 19)
+    }
+
+    @Test("background metadata hydration does not materialize deferred tab shells")
+    func backgroundMetadataHydrationDoesNotMaterializeDeferredTabShells() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let root = try makeTemporaryDirectory(named: "cocxy-background-project-config")
+        let activeDirectory = root.appendingPathComponent("active", isDirectory: true)
+        let deferredDirectory = root.appendingPathComponent("deferred", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: activeDirectory,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: deferredDirectory,
+            withIntermediateDirectories: true
+        )
+        try "font-size = 21\n".write(
+            to: deferredDirectory.appendingPathComponent(".cocxy.toml"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let activeTabID = TabID()
+        let deferredTabID = TabID()
+        let session = makeSession(
+            tabIDs: [activeTabID, deferredTabID],
+            activeTabIndex: 0,
+            workingDirectories: [activeDirectory, deferredDirectory]
+        )
+
+        #expect(delegate.restoreSession(session, into: controller))
+        let surfaceCountAfterRestore = bridge.createSurfaceRequests.count
+        #expect(controller.tabSurfaceMap[deferredTabID] == nil)
+
+        controller.scheduleDeferredRestoredTabMetadataHydration(after: 0)
+        await settleMainQueue()
+
+        #expect(controller.tabManager.tab(for: deferredTabID)?.projectConfig?.fontSize == 21)
+        #expect(controller.tabSurfaceMap[deferredTabID] == nil)
+        #expect(bridge.createSurfaceRequests.count == surfaceCountAfterRestore)
+    }
+
     @Test("closing a deferred restored tab does not create a shell")
     func closingDeferredRestoredTabDoesNotCreateShell() throws {
         let bridge = MockTerminalEngine()
@@ -248,15 +333,21 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
     private func makeSession(
         tabIDs: [TabID],
         activeTabIndex: Int,
-        splitTabID: TabID? = nil
+        splitTabID: TabID? = nil,
+        workingDirectories: [URL] = []
     ) -> Session {
         let root = FileManager.default.temporaryDirectory
         let tabs = tabIDs.enumerated().map { index, tabID in
-            let workingDirectory = root.appendingPathComponent("cocxy-lazy-restore-\(index)", isDirectory: true)
-            try? FileManager.default.createDirectory(
-                at: workingDirectory,
-                withIntermediateDirectories: true
-            )
+            let workingDirectory: URL
+            if index < workingDirectories.count {
+                workingDirectory = workingDirectories[index]
+            } else {
+                workingDirectory = root.appendingPathComponent("cocxy-lazy-restore-\(index)", isDirectory: true)
+                try? FileManager.default.createDirectory(
+                    at: workingDirectory,
+                    withIntermediateDirectories: true
+                )
+            }
             let splitTree: SplitNodeState
             if tabID == splitTabID {
                 splitTree = .split(
@@ -295,6 +386,16 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         await Task.yield()
         try? await Task.sleep(nanoseconds: 50_000_000)
         await Task.yield()
+    }
+
+    private func makeTemporaryDirectory(named name: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        return directory
     }
 }
 

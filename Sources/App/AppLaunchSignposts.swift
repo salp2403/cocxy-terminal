@@ -81,7 +81,6 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
     static let criticalPathSteps: [AppLaunchStep] = [
         .themeEngine,
         .configService,
-        .configWatcher,
         .sessionManager,
         .bridge,
         .agentDetectionEngine,
@@ -98,6 +97,7 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
         .windowWarmup,
         .crashRecovery,
         .sessionRestore,
+        .configWatcher,
         .bundledFonts,
         .menuSetup,
         .keybindings,

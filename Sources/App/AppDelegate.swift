@@ -271,7 +271,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             themeEngine = ThemeEngineImpl()
         }
         AppLaunchSignposts.measure(.configService) { initializeConfigService() }
-        AppLaunchSignposts.measure(.configWatcher) { startConfigWatcher() }
         AppLaunchSignposts.measure(.sessionManager) { initializeSessionManager() }
         AppLaunchSignposts.measure(.bridge) { initializeBridge() }
         AppLaunchSignposts.measure(.agentDetectionEngine) { initializeAgentDetectionEngine() }
@@ -336,6 +335,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppLaunchSignposts.measure(.sessionRestore) { restoreSessionOnLaunch() }
             presentCrashRecoveryOfferIfNeeded()
             startCrashRecoverySnapshotsIfNeeded()
+        case .configWatcher:
+            AppLaunchSignposts.measure(.configWatcher) { startConfigWatcher() }
         case .autoSave:
             AppLaunchSignposts.measure(.autoSave) {
                 startSessionAutoSaveIfNeeded()
@@ -367,7 +368,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppLaunchSignposts.measure(.menuBar) { initializeMenuBarItem() }
         case .themeEngine,
              .configService,
-             .configWatcher,
              .sessionManager,
              .bridge,
              .agentDetectionEngine,

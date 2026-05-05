@@ -395,11 +395,15 @@ extension AppDelegate {
         let activeTabID = result.restoredTabs[safeActiveIndex].tabID
 
         for restoredTab in result.restoredTabs {
+            let isActiveRestoredTab = restoredTab.tabID == activeTabID
+            let gitBranch = isActiveRestoredTab
+                ? gitProvider.currentBranch(at: restoredTab.workingDirectory)
+                : nil
             let restoredModel = Tab(
                 id: restoredTab.tabID,
                 title: restoredTab.title,
                 workingDirectory: restoredTab.workingDirectory,
-                gitBranch: gitProvider.currentBranch(at: restoredTab.workingDirectory),
+                gitBranch: gitBranch,
                 // Carry worktree metadata forward from the saved session
                 // so the tab keeps pointing at the same worktree on disk
                 // after restore. The `worktreeRoot` anchor survives even
@@ -424,13 +428,17 @@ extension AppDelegate {
             // legacy single-walk behaviour.
             let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
             let originRepo = inheritProjectConfig ? restoredTab.worktreeOriginRepo : nil
-            if let projectConfig = projectConfigService.loadConfig(
-                for: restoredTab.workingDirectory,
-                originRepo: originRepo
-            ) {
-                controller.tabManager.updateTab(id: restoredTab.tabID) { tab in
-                    tab.projectConfig = projectConfig
+            if isActiveRestoredTab {
+                if let projectConfig = projectConfigService.loadConfig(
+                    for: restoredTab.workingDirectory,
+                    originRepo: originRepo
+                ) {
+                    controller.tabManager.updateTab(id: restoredTab.tabID) { tab in
+                        tab.projectConfig = projectConfig
+                    }
                 }
+            } else {
+                controller.deferredRestoredTabMetadataIDs.insert(restoredTab.tabID)
             }
 
             if restoredTab.tabID == activeTabID {
@@ -461,6 +469,7 @@ extension AppDelegate {
         controller.focusActiveTerminalSurface()
         controller.activeTerminalSurfaceView?.requestImmediateRedraw()
         controller.scheduleSessionRestoreShieldRemoval()
+        controller.scheduleDeferredRestoredTabMetadataHydration()
     }
 
     private func restoreSplitMetadataOnly(
@@ -681,6 +690,7 @@ extension AppDelegate {
         controller.tabOutputBuffers.removeAll()
         controller.tabCommandTrackers.removeAll()
         controller.surfaceWorkingDirectories.removeAll()
+        controller.deferredRestoredTabMetadataIDs.removeAll()
         controller.savedTabSplitViews.removeAll()
         controller.savedTabSplitSurfaceViews.removeAll()
         controller.savedTabSplitViewModels.removeAll()

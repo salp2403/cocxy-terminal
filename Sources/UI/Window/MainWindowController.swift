@@ -198,6 +198,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var deferredRestoredTabs: [TabID: RestoredTab] = [:]
     var deferredRestoredTabLoader: ((TabID) -> Void)?
 
+    /// Restored background tabs whose filesystem-derived metadata still needs
+    /// to be resolved. Git branch and `.cocxy.toml` lookup can touch disk, so
+    /// launch restore only performs that work for the visible tab.
+    var deferredRestoredTabMetadataIDs = Set<TabID>()
+
     /// Maps tabs and surfaces that use an engine different from `bridge`.
     /// The default bridge is intentionally not stored here so theme switching
     /// can replace `bridge` without stale references in background tabs.
@@ -2084,6 +2089,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     func handleTabSwitch(to tabID: TabID) {
         guard let container = terminalContainerView else { return }
         materializeDeferredRestoredTabIfNeeded(tabID)
+        resolveDeferredRestoredTabMetadataIfNeeded(tabID)
 
         let primarySurfaceView = tabSurfaceViews[tabID]
         let storedPrimarySplitSurface = savedTabSplitSurfaceViews[tabID]?
@@ -2196,6 +2202,89 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         return targetSurfaceView.superview === container
+    }
+
+    func resolveDeferredRestoredTabMetadataIfNeeded(_ tabID: TabID) {
+        guard deferredRestoredTabMetadataIDs.remove(tabID) != nil,
+              let tab = tabManager.tab(for: tabID) else {
+            return
+        }
+
+        let gitProvider = GitInfoProviderImpl()
+        let branch = gitProvider.currentBranch(at: tab.workingDirectory)
+        let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
+        let originRepo = inheritProjectConfig ? tab.worktreeOriginRepo : nil
+        let projectConfig = ProjectConfigService().loadConfig(
+            for: tab.workingDirectory,
+            originRepo: originRepo
+        )
+
+        tabManager.updateTab(id: tabID) { tab in
+            tab.gitBranch = branch
+            tab.projectConfig = projectConfig
+        }
+        tabBarViewModel?.syncWithManager()
+        refreshStatusBar()
+        refreshTabStrip()
+    }
+
+    func scheduleDeferredRestoredTabMetadataHydration(after delay: TimeInterval = 0.2) {
+        guard !deferredRestoredTabMetadataIDs.isEmpty else { return }
+
+        let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
+        let snapshots: [(tabID: TabID, workingDirectory: URL, originRepo: URL?)] =
+            deferredRestoredTabMetadataIDs.compactMap { tabID in
+                guard let tab = tabManager.tab(for: tabID) else { return nil }
+                return (
+                    tabID,
+                    tab.workingDirectory,
+                    inheritProjectConfig ? tab.worktreeOriginRepo : nil
+                )
+            }
+        guard !snapshots.isEmpty else { return }
+
+        Task.detached(priority: .utility) { [snapshots, delay] in
+            if delay > 0 {
+                let nanoseconds = UInt64(delay * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            }
+
+            let gitProvider = GitInfoProviderImpl()
+            let projectConfigService = ProjectConfigService()
+            let results = snapshots.map { snapshot in
+                (
+                    tabID: snapshot.tabID,
+                    branch: gitProvider.currentBranch(at: snapshot.workingDirectory),
+                    projectConfig: projectConfigService.loadConfig(
+                        for: snapshot.workingDirectory,
+                        originRepo: snapshot.originRepo
+                    )
+                )
+            }
+
+            await Task { @MainActor [weak self, results] in
+                guard let self else { return }
+                var didUpdate = false
+
+                for result in results {
+                    guard self.deferredRestoredTabMetadataIDs.remove(result.tabID) != nil,
+                          self.tabManager.tab(for: result.tabID) != nil else {
+                        continue
+                    }
+
+                    self.tabManager.updateTab(id: result.tabID) { tab in
+                        tab.gitBranch = result.branch
+                        tab.projectConfig = result.projectConfig
+                    }
+                    didUpdate = true
+                }
+
+                guard didUpdate else { return }
+                self.tabBarViewModel?.syncWithManager()
+                self.refreshStatusBar()
+                self.refreshTabStrip()
+            }.value
+        }
     }
 
     /// Re-syncs the currently visible terminal host views with the live window
