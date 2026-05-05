@@ -81,7 +81,7 @@
 "preferences.appearance.showRateLimitIndicator.help" = "Muestra una píldora en la barra de estado con uso estimado localmente para el agente activo. Solo aparece cuando el agente activo tiene un provider local registrado con datos disponibles; desactivarlo lo oculta para todos los agentes.";
 "preferences.appearance.showRateLimitIndicator.caption" = "Lee solo archivos locales que la CLI del agente ya guarda en disco. Nada sale de tu máquina.";
 "preferences.appearance.notes.section" = "Notas";
-"preferences.appearance.enableWorkspaceNotes" = "Activar notas de workspace";
+"preferences.appearance.enableWorkspaceNotes" = "Activar notas de espacio";
 "preferences.appearance.enableWorkspaceNotes.help" = "Muestra el panel de Notas y activa el atajo de notas configurado.";
 "preferences.appearance.notesFormat" = "Formato";
 "preferences.appearance.notesSearch" = "Búsqueda";
@@ -89,7 +89,7 @@
 "preferences.appearance.notesShortcut" = "Atajo";
 "preferences.appearance.autoSaveNotes" = "Auto-guardar notas";
 "preferences.appearance.autoSaveInterval" = "Intervalo de auto-guardado";
-"preferences.appearance.notes.caption" = "Las notas se guardan por workspace en la carpeta local configurada.";
+"preferences.appearance.notes.caption" = "Las notas se guardan por espacio en la carpeta local configurada.";
 "preferences.appearance.transparency.section" = "Transparencia";
 "preferences.appearance.backgroundOpacity" = "Opacidad de fondo";
 "preferences.appearance.backgroundOpacity.caption" = "Valores menores activan un efecto glass en la barra lateral, tira de pestañas y barra de estado.";
@@ -306,7 +306,7 @@
 "quickSwitch.item.browser.title" = "Navegador: %@";
 "quickSwitch.item.worktree.title" = "Worktree: %@";
 "quickSwitch.item.note.title" = "Nota: %@";
-"quickSwitch.item.notes.subtitle" = "Notas del workspace";
+"quickSwitch.item.notes.subtitle" = "Notas del espacio";
 "quickSwitch.kind.tab" = "Pestaña de terminal";
 "quickSwitch.kind.browserTab" = "Pestaña de navegador";
 "quickSwitch.kind.worktree" = "Worktree";
@@ -968,7 +968,7 @@
 "verticalTab.primary.process.menu" = "Proceso en primer plano";
 "verticalTab.primary.command.menu" = "Último comando";
 "auroraSidebar.commandPalette.help" = "Paleta de comandos (%@)";
-"auroraSidebar.notes.help" = "Alternar notas de este workspace";
+"auroraSidebar.notes.help" = "Alternar notas de este espacio";
 "auroraSidebar.newTab.help" = "Nueva pestaña (%@)";
 "auroraSidebar.session.worktree.help" = "Vinculada a un worktree administrado por Cocxy";
 "auroraSidebar.session.close.help" = "Cerrar pestaña";
@@ -1845,7 +1845,7 @@
 "notes.panel.accessibility" = "Panel de notas";
 "notes.title" = "Notas";
 "notes.untitled" = "Sin título";
-"notes.noWorkspace" = "Sin workspace";
+"notes.noWorkspace" = "Sin espacio";
 "notes.newNote" = "Nueva nota";
 "notes.newNote.help" = "Nueva nota";
 "notes.close" = "Cerrar notas";
@@ -1856,7 +1856,7 @@
 "notes.empty.noMatches.title" = "Sin coincidencias";
 "notes.empty.noMatches.message" = "Prueba una búsqueda diferente.";
 "notes.empty.noNotes.title" = "Sin notas";
-"notes.empty.noNotes.message" = "Crea una nota para este workspace.";
+"notes.empty.noNotes.message" = "Crea una nota para este espacio.";
 "notes.edited" = "Editada %@";
 "notes.save" = "Guardar nota";
 "notes.delete" = "Eliminar";
@@ -1865,11 +1865,11 @@
 "notes.empty.select.title" = "Selecciona una nota";
 "notes.empty.select.message" = "Elige una de la lista o crea una nota nueva.";
 "notes.results" = "Resultados";
-"notes.workspaceNotes" = "Notas del workspace";
+"notes.workspaceNotes" = "Notas del espacio";
 "notes.count.one" = "%d nota";
 "notes.count.many" = "%d notas";
 "notes.delete.confirm.title" = "¿Eliminar nota?";
-"notes.delete.confirm.message" = "Esto elimina la nota de este workspace.";
+"notes.delete.confirm.message" = "Esto elimina la nota de este espacio.";
 "notes.delete.confirm.button" = "Eliminar nota";
 
 "timeline.accessibility" = "Línea de tiempo de agentes";
@@ -2083,7 +2083,7 @@
 "command.github.toggle.name" = "Alternar panel de GitHub";
 "command.github.toggle.description" = "Mostrar pull requests, issues y checks desde gh";
 "command.notes.toggle.name" = "Alternar notas";
-"command.notes.toggle.description" = "Mostrar u ocultar notas por workspace";
+"command.notes.toggle.description" = "Mostrar u ocultar notas por espacio";
 "command.timeline.toggle.name" = "Alternar línea de tiempo";
 "command.timeline.toggle.description" = "Mostrar u ocultar el panel de línea de tiempo del agente";
 "command.search.toggle.name" = "Buscar en terminal";

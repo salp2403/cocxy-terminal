@@ -102,9 +102,34 @@ struct NotesOverlayViewSwiftTestingTests {
         let copy = NotesOverlayView.localizedDeleteNoteCopy(localizer: localizer)
 
         #expect(copy.messageText == "¿Eliminar nota?")
-        #expect(copy.informativeText == "Esto elimina la nota de este workspace.")
+        #expect(copy.informativeText == "Esto elimina la nota de este espacio.")
         #expect(copy.primaryButton == "Eliminar nota")
         #expect(copy.secondaryButton == "Cancelar")
+    }
+
+    @Test("Spanish notes panel copy uses space wording across surfaces")
+    func notesPanelCopyUsesSpanishSpaceTerminology() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(
+            localizer.string(
+                "notes.workspaceNotes",
+                fallback: "Workspace Notes"
+            ) == "Notas del espacio"
+        )
+        #expect(
+            localizer.string(
+                "notes.empty.noNotes.message",
+                fallback: "Create a note for this workspace."
+            ) == "Crea una nota para este espacio."
+        )
+        #expect(
+            localizer.string(
+                "command.notes.toggle.description",
+                fallback: "Show or hide workspace notes"
+            ) == "Mostrar u ocultar notas por espacio"
+        )
     }
 
     // MARK: - Test helpers
