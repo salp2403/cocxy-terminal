@@ -19,6 +19,16 @@ struct PluginExecutionPlan: Equatable, Sendable {
     let currentDirectoryURL: URL
 }
 
+protocol PluginSandboxing: Sendable {
+    func execute(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>
+    )
+}
+
 // MARK: - Plugin Sandbox
 
 /// Executes plugin scripts in a controlled environment.
@@ -36,7 +46,7 @@ struct PluginExecutionPlan: Equatable, Sendable {
 /// Scripts are dispatched to a serial background queue to prevent
 /// blocking the main thread. Multiple events are serialized to avoid
 /// race conditions between plugin scripts.
-final class PluginSandbox: @unchecked Sendable {
+final class PluginSandbox: PluginSandboxing, @unchecked Sendable {
 
     // MARK: - Configuration
 

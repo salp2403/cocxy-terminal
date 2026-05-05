@@ -103,14 +103,14 @@ final class PluginManager: ObservableObject {
     private let fileSystem: any PluginFileSystem
     private let pluginsDirectory: String
     private let stateFilePath: String
-    private let sandbox: PluginSandbox
+    private let sandbox: any PluginSandboxing
 
     // MARK: - Initialization
 
     init(
         fileSystem: any PluginFileSystem = DiskPluginFileSystem(),
         pluginsDirectory: String = PluginManager.defaultPluginsDirectory(),
-        sandbox: PluginSandbox = PluginSandbox()
+        sandbox: any PluginSandboxing = PluginSandbox()
     ) {
         self.fileSystem = fileSystem
         self.pluginsDirectory = pluginsDirectory

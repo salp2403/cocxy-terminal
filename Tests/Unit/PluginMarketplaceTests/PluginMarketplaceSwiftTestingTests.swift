@@ -151,6 +151,58 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(manager.plugins[0].manifest.capabilities == [.environmentRead])
     }
 
+    @Test("installed plugin can be enabled dispatched and uninstalled")
+    @MainActor
+    func installedPluginCanBeEnabledDispatchedAndUninstalled() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("run-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try """
+        name = "Run Plugin"
+        version = "1.0.0"
+        author = "Dev"
+        events = ["session-start"]
+        capabilities = ["environment-read"]
+        """.write(
+            to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo run\n".write(
+            to: repo.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let installer = PluginInstaller(pluginsDirectory: pluginsDirectory)
+        let receipt = try installer.install(from: repo)
+
+        let sandbox = RecordingPluginSandbox()
+        let manager = PluginManager(
+            pluginsDirectory: pluginsDirectory.path,
+            sandbox: sandbox
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: receipt.pluginID)
+
+        manager.dispatchEvent(.sessionStart, environment: ["COCXY_SESSION_ID": "session-1"])
+
+        #expect(sandbox.executions.count == 1)
+        #expect(sandbox.executions[0].pluginID == "run-plugin")
+        #expect(sandbox.executions[0].scriptPath.hasSuffix("/run-plugin/on-session-start.sh"))
+        #expect(sandbox.executions[0].environment["COCXY_SESSION_ID"] == "session-1")
+        #expect(sandbox.executions[0].capabilities == [.environmentRead])
+        #expect(manager.plugin(id: "run-plugin")?.lastTriggeredAt != nil)
+
+        try installer.uninstall(id: "run-plugin")
+        manager.scanPlugins()
+
+        #expect(manager.plugin(id: "run-plugin") == nil)
+    }
+
     @Test("uninstall removes persisted enabled state")
     func uninstallRemovesPersistedEnabledState() throws {
         let root = try temporaryDirectory()
@@ -315,5 +367,33 @@ struct PluginMarketplaceSwiftTestingTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+}
+
+private final class RecordingPluginSandbox: PluginSandboxing, @unchecked Sendable {
+    struct Execution: Equatable {
+        let scriptPath: String
+        let environment: [String: String]
+        let pluginID: String
+        let pluginDirectory: String
+        let capabilities: Set<PluginCapability>
+    }
+
+    private(set) var executions: [Execution] = []
+
+    func execute(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>
+    ) {
+        executions.append(Execution(
+            scriptPath: scriptPath,
+            environment: environment,
+            pluginID: pluginID,
+            pluginDirectory: pluginDirectory,
+            capabilities: capabilities
+        ))
     }
 }
