@@ -1759,6 +1759,13 @@
 "notifications.panel.close" = "Cerrar panel de notificaciones";
 "notifications.panel.empty.title" = "Sin notificaciones todavía";
 "notifications.panel.empty.detail" = "Las alertas de tus agentes IA\naparecerán aquí.";
+"notifications.state.agentFallback" = "Agente";
+"notifications.state.waitingInput.title" = "%@ necesita tu entrada";
+"notifications.state.waitingInput.body" = "La pestaña \"%@\" espera entrada.";
+"notifications.state.finished.title" = "%@ completó la tarea";
+"notifications.state.finished.body" = "La pestaña \"%@\" finalizó.";
+"notifications.state.error.title" = "%@ encontró un error";
+"notifications.state.error.body" = "La pestaña \"%@\" tiene un error.";
 
 "aiEditHistory.title" = "Historial de ediciones";
 "aiEditHistory.refresh" = "Actualizar";

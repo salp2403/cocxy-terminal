@@ -1759,6 +1759,13 @@
 "notifications.panel.close" = "Close notification panel";
 "notifications.panel.empty.title" = "No notifications yet";
 "notifications.panel.empty.detail" = "Alerts from your AI agents\nwill appear here.";
+"notifications.state.agentFallback" = "Agent";
+"notifications.state.waitingInput.title" = "%@ needs your input";
+"notifications.state.waitingInput.body" = "Tab \"%@\" is waiting for input.";
+"notifications.state.finished.title" = "%@ completed task";
+"notifications.state.finished.body" = "Tab \"%@\" has finished.";
+"notifications.state.error.title" = "%@ encountered an error";
+"notifications.state.error.body" = "Tab \"%@\" has an error.";
 
 "aiEditHistory.title" = "Edit History";
 "aiEditHistory.refresh" = "Refresh";
