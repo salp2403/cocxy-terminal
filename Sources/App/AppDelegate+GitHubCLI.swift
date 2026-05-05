@@ -9,6 +9,7 @@ import Foundation
 import os.log
 
 extension AppDelegate {
+    nonisolated private static let githubStatusRepoTimeoutSeconds: TimeInterval = 2.0
 
     // MARK: - Service singleton
 
@@ -119,7 +120,10 @@ extension AppDelegate {
             }
 
             if let directory = await MainActor.run(body: { self.currentGitHubCLIWorkingDirectory() }) {
-                if let repo = try? await service.currentRepo(at: directory) {
+                if let repo = try? await service.currentRepo(
+                    at: directory,
+                    timeoutSeconds: Self.githubStatusRepoTimeoutSeconds
+                ) {
                     result["repo"] = repo.fullName
                     result["default_branch"] = repo.defaultBranch
                     result["url"] = repo.url.absoluteString

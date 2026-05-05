@@ -83,7 +83,7 @@ extension AppDelegate {
 
         let offerController = CrashRecoveryOfferWindowController(copy: copy, completion: completion)
         crashRecoveryOfferWindowController = offerController
-        offerController.show(over: window, runModally: true)
+        offerController.show(over: window)
     }
 
     func restoreCrashRecoverySession(_ session: Session, into controller: MainWindowController) -> Bool {

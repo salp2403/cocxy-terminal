@@ -95,6 +95,27 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(delegate.pendingCrashRecoverySnapshot == nil)
     }
 
+    @Test("default restore offer presentation returns without a nested modal loop")
+    func defaultRestoreOfferPresentationReturnsWithoutNestedModalLoop() throws {
+        let fixture = try AppCrashRecoveryFixture()
+        defer { fixture.cleanup() }
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        delegate.pendingCrashRecoverySnapshot = CrashRecoverySnapshot(
+            savedAt: fixture.date("2026-05-03T12:00:00Z"),
+            session: fixture.session(title: "Pending")
+        )
+
+        delegate.presentCrashRecoveryOfferIfNeeded()
+        let offer = try #require(delegate.crashRecoveryOfferWindowController)
+        defer { offer.close() }
+
+        #expect(delegate.pendingCrashRecoverySnapshot == nil)
+        #expect(controller.window?.attachedSheet == nil)
+        #expect(controller.window?.childWindows?.contains { $0 === offer.window } == true)
+    }
+
     @Test("crash recovery offer controller floats above parent instead of becoming a sheet")
     func crashRecoveryOfferControllerFloatsAboveParentInsteadOfSheet() throws {
         let parent = NSWindow(

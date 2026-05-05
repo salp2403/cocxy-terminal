@@ -13,6 +13,8 @@ import CocxyShared
 /// - Socket communication to `SocketClient`.
 /// - Output formatting to `OutputFormatter`.
 public struct CommandRunner {
+    static let extendedGitHubReadSocketTimeoutSeconds: TimeInterval = 25
+    static let extendedGitHubMutationSocketTimeoutSeconds: TimeInterval = 65
 
     /// The socket client to use for communication.
     public let socketClient: SocketClient
@@ -86,7 +88,7 @@ public struct CommandRunner {
         // Send to server.
         let response: CLISocketResponse
         do {
-            response = try socketClient.send(request)
+            response = try socketClient(for: parsedCommand).send(request)
         } catch let error as CLIError {
             return CLIResult(
                 exitCode: 1,
@@ -976,6 +978,35 @@ public struct CommandRunner {
                 command: "github-pr-merge",
                 params: params
             )
+        }
+    }
+
+    func socketClient(for command: ParsedCommand) -> SocketClient {
+        let timeoutSeconds = max(
+            socketClient.timeoutSeconds,
+            Self.socketTimeoutSeconds(for: command)
+        )
+        guard timeoutSeconds != socketClient.timeoutSeconds else {
+            return socketClient
+        }
+        return SocketClient(
+            socketPath: socketClient.socketPath,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    static func socketTimeoutSeconds(for command: ParsedCommand) -> TimeInterval {
+        switch command {
+        case .githubStatus,
+             .githubPRs,
+             .githubIssues,
+             .reviewApprove,
+             .reviewRequestChanges:
+            return extendedGitHubReadSocketTimeoutSeconds
+        case .githubPRMerge:
+            return extendedGitHubMutationSocketTimeoutSeconds
+        default:
+            return SocketClient.defaultTimeoutSeconds
         }
     }
 }

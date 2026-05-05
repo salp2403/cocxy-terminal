@@ -22,6 +22,8 @@ public struct SocketClient {
     /// Connection timeout in seconds.
     public let timeoutSeconds: TimeInterval
 
+    public static let defaultTimeoutSeconds: TimeInterval = 5
+
     /// Default socket path: ~/.config/cocxy/cocxy.sock
     public static let defaultSocketPath: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -33,7 +35,10 @@ public struct SocketClient {
     /// - Parameters:
     ///   - socketPath: Path to the socket file. Defaults to `~/.config/cocxy/cocxy.sock`.
     ///   - timeoutSeconds: Connection timeout. Defaults to 5 seconds.
-    public init(socketPath: String = SocketClient.defaultSocketPath, timeoutSeconds: TimeInterval = 5) {
+    public init(
+        socketPath: String = SocketClient.defaultSocketPath,
+        timeoutSeconds: TimeInterval = SocketClient.defaultTimeoutSeconds
+    ) {
         self.socketPath = socketPath
         self.timeoutSeconds = timeoutSeconds
     }

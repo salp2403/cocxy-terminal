@@ -17,6 +17,77 @@ struct GitHubCLIArgumentParserSwiftTestingTests {
         }
     }
 
+    @Test("GitHub read commands use extended socket timeout budget")
+    func githubReadCommandsUseExtendedSocketTimeoutBudget() {
+        let runner = CommandRunner(
+            socketClient: SocketClient(
+                socketPath: "/tmp/cocxy-github-timeout.sock",
+                timeoutSeconds: SocketClient.defaultTimeoutSeconds
+            )
+        )
+        let commands: [ParsedCommand] = [
+            .githubStatus,
+            .githubPRs(state: nil, limit: nil),
+            .githubIssues(state: nil, limit: nil),
+            .reviewApprove(prNumber: nil, body: nil, readBodyFromStdin: false),
+            .reviewRequestChanges(prNumber: nil, body: nil, readBodyFromStdin: false),
+        ]
+
+        for command in commands {
+            let client = runner.socketClient(for: command)
+
+            #expect(client.socketPath == "/tmp/cocxy-github-timeout.sock")
+            #expect(client.timeoutSeconds == CommandRunner.extendedGitHubReadSocketTimeoutSeconds)
+        }
+    }
+
+    @Test("GitHub merge command uses mutation socket timeout budget")
+    func githubMergeCommandUsesMutationSocketTimeoutBudget() {
+        let runner = CommandRunner(
+            socketClient: SocketClient(
+                socketPath: "/tmp/cocxy-github-merge-timeout.sock",
+                timeoutSeconds: SocketClient.defaultTimeoutSeconds
+            )
+        )
+        let client = runner.socketClient(
+            for: .githubPRMerge(
+                method: .squash,
+                prNumber: nil,
+                deleteBranch: true,
+                subject: nil,
+                body: nil
+            )
+        )
+
+        #expect(client.socketPath == "/tmp/cocxy-github-merge-timeout.sock")
+        #expect(client.timeoutSeconds == CommandRunner.extendedGitHubMutationSocketTimeoutSeconds)
+    }
+
+    @Test("non GitHub commands keep the default socket timeout budget")
+    func nonGitHubCommandsKeepDefaultSocketTimeoutBudget() {
+        let runner = CommandRunner(
+            socketClient: SocketClient(socketPath: "/tmp/cocxy-fast-command.sock")
+        )
+        let client = runner.socketClient(for: .status)
+
+        #expect(client.socketPath == "/tmp/cocxy-fast-command.sock")
+        #expect(client.timeoutSeconds == SocketClient.defaultTimeoutSeconds)
+    }
+
+    @Test("custom larger socket timeout is preserved for GitHub commands")
+    func customLargerSocketTimeoutIsPreservedForGitHubCommands() {
+        let runner = CommandRunner(
+            socketClient: SocketClient(
+                socketPath: "/tmp/cocxy-custom-github-timeout.sock",
+                timeoutSeconds: 60
+            )
+        )
+        let client = runner.socketClient(for: .githubStatus)
+
+        #expect(client.socketPath == "/tmp/cocxy-custom-github-timeout.sock")
+        #expect(client.timeoutSeconds == 60)
+    }
+
     @Test("`cocxy github prs` accepts optional --state and --limit")
     func githubPRs_parsesStateAndLimit() throws {
         let command = try CLIArgumentParser.parse([
