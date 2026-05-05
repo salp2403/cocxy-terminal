@@ -473,6 +473,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// The container view that wraps the terminal area and overlays.
     var terminalContainerView: NSView?
 
+    /// Short-lived opaque cover used while session/crash restore rebuilds
+    /// terminal surfaces inside an already visible window.
+    var sessionRestoreShieldView: NSView?
+
     /// The container view for full-window overlays.
     private(set) var overlayContainerView: NSView?
 
@@ -1057,6 +1061,40 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         layer.backgroundColor = opaqueColor.cgColor
         layer.isOpaque = true
         CATransaction.commit()
+    }
+
+    func installSessionRestoreShield() {
+        guard let terminalContainerView else { return }
+        refreshTerminalContainerBackingBackground()
+
+        let shield = sessionRestoreShieldView ?? NSView(frame: terminalContainerView.bounds)
+        shield.frame = terminalContainerView.bounds
+        shield.autoresizingMask = [.width, .height]
+        shield.wantsLayer = true
+
+        if let layer = shield.layer {
+            let sourceColor = window?.backgroundColor ?? CocxyColors.base
+            let resolvedColor = sourceColor.usingColorSpace(.deviceRGB) ?? sourceColor
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.backgroundColor = resolvedColor.withAlphaComponent(1.0).cgColor
+            layer.isOpaque = true
+            CATransaction.commit()
+        }
+
+        if shield.superview !== terminalContainerView {
+            terminalContainerView.addSubview(shield, positioned: .above, relativeTo: nil)
+        }
+        sessionRestoreShieldView = shield
+    }
+
+    func scheduleSessionRestoreShieldRemoval(after delay: TimeInterval = 0.05) {
+        guard let shield = sessionRestoreShieldView else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak shield] in
+            guard let self, let shield, self.sessionRestoreShieldView === shield else { return }
+            shield.removeFromSuperview()
+            self.sessionRestoreShieldView = nil
+        }
     }
 
     private func buildRootView(contentFrame: NSRect, splitView: NSSplitView) -> NSView {

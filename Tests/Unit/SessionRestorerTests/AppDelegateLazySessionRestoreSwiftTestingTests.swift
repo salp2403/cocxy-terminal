@@ -125,6 +125,32 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(controller.terminalContainerView?.layer?.backgroundColor?.alpha == 1.0)
     }
 
+    @Test("restore covers visible terminal area until first repaint")
+    func restoreCoversVisibleTerminalAreaUntilFirstRepaint() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let transparentBackground = CocxyColors.base.withAlphaComponent(0.35)
+        controller.window?.backgroundColor = transparentBackground
+        controller.terminalContainerView?.layer?.backgroundColor = transparentBackground.cgColor
+
+        let session = makeSession(tabIDs: [TabID(), TabID()], activeTabIndex: 0)
+
+        #expect(delegate.restoreSession(session, into: controller))
+        let shield = try #require(controller.sessionRestoreShieldView)
+        #expect(shield.superview === controller.terminalContainerView)
+        #expect(shield.layer?.isOpaque == true)
+        #expect(shield.layer?.backgroundColor?.alpha == 1.0)
+
+        try? await Task.sleep(nanoseconds: 120_000_000)
+        await Task.yield()
+
+        #expect(controller.sessionRestoreShieldView == nil)
+        #expect(shield.superview == nil)
+    }
+
     @Test("restore does not force an intermediate window display before surfaces exist")
     func restoreDoesNotForceIntermediateWindowDisplayBeforeSurfacesExist() throws {
         let bridge = MockTerminalEngine()

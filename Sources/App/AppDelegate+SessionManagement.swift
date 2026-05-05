@@ -365,6 +365,7 @@ extension AppDelegate {
         guard !result.restoredTabs.isEmpty else { return }
         guard bridge != nil else { return }
         controller.window?.disableScreenUpdatesUntilFlush()
+        controller.installSessionRestoreShield()
         controller.isPerformingProgrammaticTabRestore = true
         defer { controller.isPerformingProgrammaticTabRestore = false }
 
@@ -458,6 +459,8 @@ extension AppDelegate {
 
         controller.tabBarViewModel?.syncWithManager()
         controller.focusActiveTerminalSurface()
+        controller.activeTerminalSurfaceView?.requestImmediateRedraw()
+        controller.scheduleSessionRestoreShieldRemoval()
     }
 
     private func restoreSplitMetadataOnly(
@@ -666,7 +669,11 @@ extension AppDelegate {
         controller.refreshTerminalContainerBackingBackground()
         controller.deferredRestoredTabs.removeAll()
         controller.deferredRestoredTabLoader = nil
-        controller.terminalContainerView?.subviews.forEach { $0.removeFromSuperview() }
+        controller.terminalContainerView?.subviews.forEach { subview in
+            if subview !== controller.sessionRestoreShieldView {
+                subview.removeFromSuperview()
+            }
+        }
         controller.tabSessionMap.removeAll()
         controller.tabSurfaceMap.removeAll()
         controller.tabSurfaceViews.removeAll()
