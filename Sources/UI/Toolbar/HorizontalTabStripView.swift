@@ -145,7 +145,15 @@ final class HorizontalTabStripView: NSView {
 
     /// Last action-icon state so language changes can rebuild tooltips
     /// without waiting for the next focus change.
-    private var lastActionIconState: (panelType: PanelType, canClose: Bool)?
+    private var lastActionIconState: (panelType: PanelType, canClose: Bool, canAddPane: Bool, maxPaneCount: Int?)?
+
+    /// Whether the focused workspace can accept another split/panel leaf.
+    /// The window controller owns the real limit; the strip only reflects it
+    /// so users do not get a silent no-op when the maximum pane count is hit.
+    private var canAddPane = true
+
+    /// Maximum pane count used for the disabled Add Panel tooltip, if known.
+    private var maxPaneCountForAddPaneLimit: Int?
 
     /// Leading inset used by the split/panel toolbar variant.
     private static let panelLeadingInset: CGFloat = 8
@@ -320,15 +328,23 @@ final class HorizontalTabStripView: NSView {
         if let lastActionIconState {
             updateActionIcons(
                 panelType: lastActionIconState.panelType,
-                canClose: lastActionIconState.canClose
+                canClose: lastActionIconState.canClose,
+                canAddPane: lastActionIconState.canAddPane,
+                maxPaneCount: lastActionIconState.maxPaneCount
             )
         }
     }
 
     private func applyLocalizedChrome() {
         let addPanelTitle = Self.localizedAddPanel(using: localizer)
-        addButton.toolTip = addPanelTitle
-        addButton.setAccessibilityLabel(addPanelTitle)
+        let addPanelLimitTitle = Self.localizedAddPanelLimit(
+            maxPaneCount: maxPaneCountForAddPaneLimit,
+            using: localizer
+        )
+        addButton.isEnabled = canAddPane
+        addButton.alphaValue = canAddPane ? 1.0 : 0.45
+        addButton.toolTip = canAddPane ? addPanelTitle : addPanelLimitTitle
+        addButton.setAccessibilityLabel(canAddPane ? addPanelTitle : addPanelLimitTitle)
         themeModeButton.setAccessibilityLabel(Self.localizedThemeToggleAccessibility(using: localizer))
         setThemeMode(isLight: lastThemeModeIsLight)
     }
@@ -598,6 +614,14 @@ final class HorizontalTabStripView: NSView {
 
     static func localizedAddPanel(using localizer: AppLocalizer) -> String {
         localizer.string("horizontalTab.addPanel", fallback: "Add Panel")
+    }
+
+    static func localizedAddPanelLimit(maxPaneCount: Int?, using localizer: AppLocalizer) -> String {
+        let format = localizer.string(
+            "horizontalTab.addPanel.maxReached",
+            fallback: "Maximum of %d panes reached"
+        )
+        return String(format: format, maxPaneCount ?? 4)
     }
 
     static func localizedThemeToggleAccessibility(using localizer: AppLocalizer) -> String {
@@ -907,17 +931,32 @@ final class HorizontalTabStripView: NSView {
     /// - Parameters:
     ///   - panelType: The type of the currently focused panel.
     ///   - canClose: Whether the close action should be shown (requires > 1 panel).
-    func updateActionIcons(panelType: PanelType, canClose: Bool) {
-        lastActionIconState = (panelType, canClose)
+    ///   - canAddPane: Whether split/open/add actions can create another pane.
+    ///   - maxPaneCount: Maximum pane count for disabled-state copy, if known.
+    func updateActionIcons(
+        panelType: PanelType,
+        canClose: Bool,
+        canAddPane: Bool = true,
+        maxPaneCount: Int? = nil
+    ) {
+        self.canAddPane = canAddPane
+        maxPaneCountForAddPaneLimit = maxPaneCount
+        applyLocalizedChrome()
+        lastActionIconState = (panelType, canClose, canAddPane, maxPaneCount)
         actionStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
         // Split actions are available for all panel types.
+        let createPaneTooltip = canAddPane
+            ? nil
+            : Self.localizedAddPanelLimit(maxPaneCount: maxPaneCount, using: localizer)
         actionStack.addArrangedSubview(
             createActionButton(
                 icon: "rectangle.split.2x1",
                 tooltip: Self.localizedSplitSideBySide(using: localizer),
                 accessibilityID: "action:splitSideBySide",
-                action: #selector(handleSplitSideBySide)
+                action: #selector(handleSplitSideBySide),
+                isEnabled: canAddPane,
+                disabledTooltip: createPaneTooltip
             )
         )
         actionStack.addArrangedSubview(
@@ -925,7 +964,9 @@ final class HorizontalTabStripView: NSView {
                 icon: "rectangle.split.1x2",
                 tooltip: Self.localizedSplitStacked(using: localizer),
                 accessibilityID: "action:splitStacked",
-                action: #selector(handleSplitStacked)
+                action: #selector(handleSplitStacked),
+                isEnabled: canAddPane,
+                disabledTooltip: createPaneTooltip
             )
         )
 
@@ -936,7 +977,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "globe",
                     tooltip: Self.localizedOpenBrowserHere(using: localizer),
                     accessibilityID: "action:openBrowser",
-                    action: #selector(handleOpenBrowser)
+                    action: #selector(handleOpenBrowser),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -944,7 +987,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "doc.text",
                     tooltip: Self.localizedOpenMarkdown(using: localizer),
                     accessibilityID: "action:openMarkdown",
-                    action: #selector(handleOpenMarkdown)
+                    action: #selector(handleOpenMarkdown),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -952,7 +997,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "doc.plaintext",
                     tooltip: Self.localizedOpenTextEditor(using: localizer),
                     accessibilityID: "action:openEditor",
-                    action: #selector(handleOpenEditor)
+                    action: #selector(handleOpenEditor),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -960,7 +1007,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "book",
                     tooltip: Self.localizedOpenNotebook(using: localizer),
                     accessibilityID: "action:openNotebook",
-                    action: #selector(handleOpenNotebook)
+                    action: #selector(handleOpenNotebook),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -968,7 +1017,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "arrow.triangle.branch",
                     tooltip: Self.localizedOpenWorkflow(using: localizer),
                     accessibilityID: "action:openWorkflow",
-                    action: #selector(handleOpenWorkflow)
+                    action: #selector(handleOpenWorkflow),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -976,7 +1027,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "record.circle",
                     tooltip: Self.localizedOpenSessionReplay(using: localizer),
                     accessibilityID: "action:openSessionReplay",
-                    action: #selector(handleOpenSessionReplay)
+                    action: #selector(handleOpenSessionReplay),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -984,7 +1037,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "clock.arrow.circlepath",
                     tooltip: Self.localizedOpenEditHistory(using: localizer),
                     accessibilityID: "action:openAIEditHistory",
-                    action: #selector(handleOpenAIEditHistory)
+                    action: #selector(handleOpenAIEditHistory),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -992,7 +1047,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "square.grid.2x2",
                     tooltip: Self.localizedOpenTemplates(using: localizer),
                     accessibilityID: "action:openTemplates",
-                    action: #selector(handleOpenTemplates)
+                    action: #selector(handleOpenTemplates),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -1000,7 +1057,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "keyboard",
                     tooltip: Self.localizedOpenMacros(using: localizer),
                     accessibilityID: "action:openMacros",
-                    action: #selector(handleOpenMacros)
+                    action: #selector(handleOpenMacros),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
             actionStack.addArrangedSubview(
@@ -1008,7 +1067,9 @@ final class HorizontalTabStripView: NSView {
                     icon: "externaldrive.connected.to.line.below",
                     tooltip: Self.localizedOpenDBCloudHelpers(using: localizer),
                     accessibilityID: "action:openDBCloud",
-                    action: #selector(handleOpenDBCloud)
+                    action: #selector(handleOpenDBCloud),
+                    isEnabled: canAddPane,
+                    disabledTooltip: createPaneTooltip
                 )
             )
         case .browser:
@@ -1056,7 +1117,9 @@ final class HorizontalTabStripView: NSView {
         icon: String,
         tooltip: String,
         accessibilityID: String,
-        action: Selector
+        action: Selector,
+        isEnabled: Bool = true,
+        disabledTooltip: String? = nil
     ) -> NSButton {
         let btn = NSButton()
         btn.bezelStyle = .accessoryBarAction
@@ -1067,7 +1130,9 @@ final class HorizontalTabStripView: NSView {
         }
         btn.contentTintColor = CocxyColors.overlay1
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.toolTip = tooltip
+        btn.isEnabled = isEnabled
+        btn.alphaValue = isEnabled ? 1.0 : 0.35
+        btn.toolTip = isEnabled ? tooltip : (disabledTooltip ?? tooltip)
         btn.setAccessibilityLabel(accessibilityID)
         btn.target = self
         btn.action = action

@@ -531,6 +531,30 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertEqual(closeButton?.toolTip, "Close Focused Pane")
     }
 
+    func testPaneCreationControlsDisableAtMaxPaneCount() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(
+            panelType: .terminal,
+            canClose: true,
+            canAddPane: false,
+            maxPaneCount: 4
+        )
+
+        let buttons = findActionButtons(in: strip)
+        let splitButton = buttons.first { $0.accessibilityLabel() == "action:splitSideBySide" }
+        let notebookButton = buttons.first { $0.accessibilityLabel() == "action:openNotebook" }
+        let closeButton = buttons.first { $0.accessibilityLabel() == "action:closePanel" }
+        let addButton = findAddPanelButton(in: strip)
+
+        XCTAssertFalse(splitButton?.isEnabled ?? true)
+        XCTAssertEqual(splitButton?.toolTip, "Maximum of 4 panes reached")
+        XCTAssertFalse(notebookButton?.isEnabled ?? true)
+        XCTAssertEqual(notebookButton?.toolTip, "Maximum of 4 panes reached")
+        XCTAssertTrue(closeButton?.isEnabled ?? false)
+        XCTAssertFalse(addButton?.isEnabled ?? true)
+        XCTAssertEqual(addButton?.toolTip, "Maximum of 4 panes reached")
+    }
+
     func testActionButtonsHaveAccessibilityLabels() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
@@ -558,6 +582,20 @@ final class HorizontalTabStripActionTests: XCTestCase {
         }
         for child in view.subviews {
             if let match = findThemeModeButton(in: child) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    private func findAddPanelButton(in view: NSView) -> NSButton? {
+        if let button = view as? NSButton,
+           button.accessibilityLabel() == "Add Panel"
+            || button.accessibilityLabel() == "Maximum of 4 panes reached" {
+            return button
+        }
+        for child in view.subviews {
+            if let match = findAddPanelButton(in: child) {
                 return match
             }
         }

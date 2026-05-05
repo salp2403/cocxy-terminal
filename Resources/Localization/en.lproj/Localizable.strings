@@ -1062,6 +1062,7 @@
 "smartRouting.state.idle" = "Idle";
 "smartRouting.state.finished" = "Finished";
 "horizontalTab.addPanel" = "Add Panel";
+"horizontalTab.addPanel.maxReached" = "Maximum of %d panes reached";
 "horizontalTab.themeToggle.accessibility" = "Toggle light or dark theme";
 "horizontalTab.themeToggle.dark" = "Switch to dark theme";
 "horizontalTab.themeToggle.light" = "Switch to light theme";

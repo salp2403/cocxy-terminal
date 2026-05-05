@@ -177,6 +177,7 @@ extension MainWindowController {
             let sm = tabSplitCoordinator.splitManager(for: targetTabID)
             let leaves = sm.rootNode.allLeafIDs()
             let canClose = leaves.count > 1
+            let canAddPane = leaves.count < Self.maxPaneCount
 
             let focusedType: PanelType
             if let focusedID = sm.focusedLeafID,
@@ -186,7 +187,12 @@ extension MainWindowController {
                 focusedType = .terminal
             }
 
-            strip.updateActionIcons(panelType: focusedType, canClose: canClose)
+            strip.updateActionIcons(
+                panelType: focusedType,
+                canClose: canClose,
+                canAddPane: canAddPane,
+                maxPaneCount: Self.maxPaneCount
+            )
         }
     }
 

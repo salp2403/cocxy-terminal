@@ -1062,6 +1062,7 @@
 "smartRouting.state.idle" = "Inactivo";
 "smartRouting.state.finished" = "Finalizado";
 "horizontalTab.addPanel" = "Agregar panel";
+"horizontalTab.addPanel.maxReached" = "Máximo de %d paneles alcanzado";
 "horizontalTab.themeToggle.accessibility" = "Alternar tema claro u oscuro";
 "horizontalTab.themeToggle.dark" = "Cambiar a tema oscuro";
 "horizontalTab.themeToggle.light" = "Cambiar a tema claro";

@@ -474,6 +474,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(RenameSheetController.localizedDone(using: spanish) == "Listo")
         #expect(RenameSheetController.localizedDefaultPlaceholder(using: spanish) == "Ingresa nombre...")
         #expect(HorizontalTabStripView.localizedAddPanel(using: spanish) == "Agregar panel")
+        #expect(HorizontalTabStripView.localizedAddPanelLimit(maxPaneCount: 4, using: spanish) == "Máximo de 4 paneles alcanzado")
         #expect(HorizontalTabStripView.localizedSwitchToDarkTheme(using: spanish) == "Cambiar a tema oscuro")
         #expect(HorizontalTabStripView.localizedTerminalSideBySide(using: spanish) == "Terminal (lado a lado)")
         #expect(HorizontalTabStripView.localizedTerminalTitle(using: spanish) == "Terminal")
