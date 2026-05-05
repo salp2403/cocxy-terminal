@@ -153,4 +153,34 @@ struct GitHubPaneUISwiftTestingTests {
         _ = GitHubCheckRow(check: passed).body
         _ = GitHubCheckRow(check: pending).body
     }
+
+    @Test("GitHubReviewThreadRow renders resolved and unresolved states")
+    func reviewThreadRow_rendersResolvedAndUnresolvedStates() {
+        let unresolved = GitHubPullRequestReviewThread(
+            id: "PRRT_1",
+            path: "Sources/App.swift",
+            line: 12,
+            isResolved: false,
+            comments: [
+                GitHubPullRequestReviewThreadComment(
+                    id: "PRRC_1",
+                    body: "Can this return early?",
+                    authorLogin: "reviewer"
+                ),
+            ]
+        )
+        let resolved = GitHubPullRequestReviewThread(
+            id: "PRRT_2",
+            path: "Sources/App.swift",
+            line: 20,
+            isResolved: true,
+            isOutdated: true
+        )
+
+        let localizer = AppLocalizer(languagePreference: .english)
+        #expect(GitHubReviewThreadRow.statusTitle(for: unresolved, using: localizer) == "Unresolved")
+        #expect(GitHubReviewThreadRow.statusTitle(for: resolved, using: localizer) == "Resolved")
+        _ = GitHubReviewThreadRow(thread: unresolved, localizer: localizer).body
+        _ = GitHubReviewThreadRow(thread: resolved, localizer: localizer).body
+    }
 }

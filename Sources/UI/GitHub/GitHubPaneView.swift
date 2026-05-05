@@ -194,6 +194,8 @@ struct GitHubPaneView: View {
             issuesList
         case .checks:
             checksList
+        case .reviewThreads:
+            reviewThreadsList
         }
     }
 
@@ -259,6 +261,18 @@ struct GitHubPaneView: View {
                                         }
                                     }
                                     .disabled(viewModel.isMerging(pr.number))
+                                }
+                                Divider()
+                                Button {
+                                    viewModel.selectPullRequestForReviewThreads(pr)
+                                } label: {
+                                    Label(
+                                        localized(
+                                            "github.pane.context.reviewThreads",
+                                            fallback: "Show Review Threads"
+                                        ),
+                                        systemImage: "bubble.left.and.bubble.right"
+                                    )
                                 }
                             }
                         }
@@ -349,6 +363,59 @@ struct GitHubPaneView: View {
         .frame(maxHeight: .infinity)
     }
 
+    private var reviewThreadsList: some View {
+        Group {
+            if viewModel.selectedPullRequestNumber == nil {
+                emptyState(
+                    title: localized(
+                        "github.pane.empty.selectPullRequestReviews",
+                        fallback: "Select a pull request to see review threads"
+                    ),
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+            } else if viewModel.reviewThreads.isEmpty {
+                emptyState(
+                    title: localized(
+                        "github.pane.empty.noReviewThreads",
+                        fallback: "No review threads"
+                    ),
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(viewModel.reviewThreads) { thread in
+                            Button(action: {
+                                if let url = thread.comments.first?.url {
+                                    viewModel.open(url)
+                                }
+                            }) {
+                                GitHubReviewThreadRow(thread: thread, localizer: localizer)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(thread.comments.first?.url == nil)
+                            .contextMenu {
+                                if let url = thread.comments.first?.url {
+                                    Button(
+                                        localized(
+                                            "github.pane.context.openInBrowser",
+                                            fallback: "Open in Browser"
+                                        )
+                                    ) {
+                                        viewModel.open(url)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
+
     private func emptyState(title: String, systemImage: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: systemImage)
@@ -405,7 +472,11 @@ struct GitHubPaneView: View {
     // MARK: Actions
 
     private func didActivate(_ pullRequest: GitHubPullRequest) {
-        viewModel.selectPullRequestForChecks(pullRequest)
+        if viewModel.selectedTab == .reviewThreads {
+            viewModel.selectPullRequestForReviewThreads(pullRequest)
+        } else {
+            viewModel.selectPullRequestForChecks(pullRequest)
+        }
     }
 
     private func presentMergeActionSheet(for pullRequest: GitHubPullRequest) {

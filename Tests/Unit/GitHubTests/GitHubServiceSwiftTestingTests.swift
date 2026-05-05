@@ -258,6 +258,94 @@ struct GitHubServiceSwiftTestingTests {
         #expect(args[limitIndex + 1] == "200")
     }
 
+    @Test("pullRequestReviewThreads decodes unresolved and resolved GraphQL threads")
+    func pullRequestReviewThreads_decodesGraphQLThreads() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+            stdout: #"""
+            {
+              "defaultBranchRef": {"name": "main"},
+              "description": "",
+              "hasIssuesEnabled": true,
+              "isEmpty": false,
+              "isPrivate": false,
+              "name": "r",
+              "owner": {"login": "u"},
+              "url": "https://github.com/u/r"
+            }
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: { $0.contains("api") && $0.contains("graphql") }, result: GitHubCLIResult(
+            stdout: #"""
+            {
+              "data": {
+                "repository": {
+                  "pullRequest": {
+                    "reviewThreads": {
+                      "nodes": [
+                        {
+                          "id": "PRRT_1",
+                          "isResolved": false,
+                          "isOutdated": false,
+                          "viewerCanResolve": true,
+                          "viewerCanUnresolve": false,
+                          "path": "Sources/App.swift",
+                          "line": 12,
+                          "startLine": 10,
+                          "comments": {
+                            "nodes": [
+                              {
+                                "id": "PRRC_1",
+                                "body": "Please tighten this guard.",
+                                "author": {"login": "reviewer"},
+                                "createdAt": "2026-05-05T10:00:00Z",
+                                "url": "https://github.com/u/r/pull/42#discussion_r1"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "id": "PRRT_2",
+                          "isResolved": true,
+                          "isOutdated": true,
+                          "viewerCanResolve": false,
+                          "viewerCanUnresolve": true,
+                          "path": "Sources/Done.swift",
+                          "line": 4,
+                          "startLine": null,
+                          "comments": {"nodes": []}
+                        }
+                      ],
+                      "pageInfo": {"hasNextPage": false, "endCursor": null}
+                    }
+                  }
+                }
+              }
+            }
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        let threads = try await service.pullRequestReviewThreads(
+            number: 42,
+            at: URL(fileURLWithPath: "/tmp")
+        )
+
+        #expect(threads.map(\.id) == ["PRRT_1", "PRRT_2"])
+        #expect(threads[0].state == .unresolved)
+        #expect(threads[0].lineRange == 10...12)
+        #expect(threads[0].comments.count == 1)
+        #expect(threads[0].comments.first?.authorLogin == "reviewer")
+        #expect(threads[1].state == .resolved)
+        #expect(threads[1].lineRange == 4...4)
+        #expect(threads[1].isOutdated)
+        #expect(threads[1].viewerCanUnresolve)
+    }
+
     @Test("listPullRequests normalises unknown state to the fallback")
     func listPullRequests_normalisesUnknownState() async throws {
         let spy = RunnerSpy()

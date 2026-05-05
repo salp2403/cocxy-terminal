@@ -76,9 +76,10 @@ struct GitHubPaneViewModelSwiftTestingTests {
 
     @Test("Tab cases expose stable id + icon for the segmented picker")
     func tab_casesExposeStableIdAndIcon() {
-        #expect(GitHubPaneViewModel.Tab.allCases.count == 3)
+        #expect(GitHubPaneViewModel.Tab.allCases.count == 4)
         #expect(GitHubPaneViewModel.Tab.pullRequests.id == "pullRequests")
         #expect(GitHubPaneViewModel.Tab.issues.systemImage == "exclamationmark.circle")
+        #expect(GitHubPaneViewModel.Tab.reviewThreads.systemImage == "bubble.left.and.bubble.right")
     }
 
     // MARK: - clampedState
@@ -591,6 +592,116 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.selectedPullRequestNumber == 2)
         #expect(viewModel.checks.first?.name == "second-check")
         #expect(viewModel.checks.first?.status == .pending)
+    }
+
+    @Test("selectPullRequestForReviewThreads targets remote unresolved and resolved conversations")
+    func selectPullRequestForReviewThreads_refreshesSelectedPRThreads() async throws {
+        let service = makeService { spy in
+            spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+                stdout: "",
+                stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "defaultBranchRef": {"name": "main"},
+                  "description": "",
+                  "hasIssuesEnabled": true,
+                  "isEmpty": false,
+                  "isPrivate": false,
+                  "name": "r",
+                  "owner": {"login": "u"},
+                  "url": "https://github.com/u/r"
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: #"""
+                [
+                  {"number": 1, "title": "first", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/1", "updatedAt": "2026-04-23T15:47:21Z"},
+                  {"number": 2, "title": "second", "state": "OPEN", "author": {"login": "u"}, "headRefName": "b", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/2", "updatedAt": "2026-04-23T15:47:21Z"}
+                ]
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("issue") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("checks") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("api") && $0.contains("graphql") && $0.contains("number=1") }, result: GitHubCLIResult(
+                stdout: #"{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}"#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("api") && $0.contains("graphql") && $0.contains("number=2") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "data": {
+                    "repository": {
+                      "pullRequest": {
+                        "reviewThreads": {
+                          "nodes": [
+                            {
+                              "id": "PRRT_2",
+                              "isResolved": false,
+                              "isOutdated": false,
+                              "viewerCanResolve": true,
+                              "viewerCanUnresolve": false,
+                              "path": "Sources/App.swift",
+                              "line": 7,
+                              "startLine": null,
+                              "comments": {
+                                "nodes": [
+                                  {
+                                    "id": "PRRC_2",
+                                    "body": "Can this branch return early?",
+                                    "author": {"login": "reviewer"},
+                                    "createdAt": "2026-05-05T10:00:00Z",
+                                    "url": "https://github.com/u/r/pull/2#discussion_r2"
+                                  }
+                                ]
+                              }
+                            }
+                          ],
+                          "pageInfo": {"hasNextPage": false, "endCursor": null}
+                        }
+                      }
+                    }
+                  }
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp") }
+        viewModel.refresh()
+        await flush()
+        #expect(viewModel.selectedPullRequestNumber == 1)
+        #expect(viewModel.reviewThreads.isEmpty)
+
+        let second = try #require(viewModel.pullRequests.first(where: { $0.number == 2 }))
+        viewModel.selectPullRequestForReviewThreads(second)
+        await flush()
+
+        #expect(viewModel.selectedTab == .reviewThreads)
+        #expect(viewModel.selectedPullRequestNumber == 2)
+        #expect(viewModel.reviewThreads.map(\.id) == ["PRRT_2"])
+        #expect(viewModel.reviewThreads[0].state == .unresolved)
+        #expect(viewModel.reviewThreads[0].comments.count == 1)
+        #expect(viewModel.reviewThreads[0].comments.first?.body == "Can this branch return early?")
     }
 
     @Test("isVisible toggle starts and stops auto-refresh without crashing")

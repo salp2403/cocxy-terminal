@@ -363,6 +363,58 @@ actor GitHubService {
         }
     }
 
+    // MARK: - PR review threads
+
+    func pullRequestReviewThreads(
+        number: Int,
+        at directory: URL,
+        repository: GitHubRepo? = nil,
+        timeoutSeconds: TimeInterval = 20.0
+    ) async throws -> [GitHubPullRequestReviewThread] {
+        let repo: GitHubRepo
+        if let repository {
+            repo = repository
+        } else {
+            repo = try await currentRepo(at: directory, timeoutSeconds: timeoutSeconds)
+        }
+        var threads: [GitHubPullRequestReviewThread] = []
+        var afterCursor: String?
+
+        repeat {
+            var args = [
+                "api", "graphql",
+                "-f", "query=\(Self.pullRequestReviewThreadsQuery)",
+                "-F", "owner=\(repo.owner.login)",
+                "-F", "name=\(repo.name)",
+                "-F", "number=\(number)",
+            ]
+            if let afterCursor {
+                args.append(contentsOf: ["-F", "after=\(afterCursor)"])
+            }
+
+            let result = try runner(directory, args, timeoutSeconds)
+            if result.terminationStatus != 0 {
+                throw GitHubCLI.classifyError(
+                    command: "gh api graphql",
+                    stderr: result.stderr,
+                    exitCode: result.terminationStatus
+                )
+            }
+
+            let page = try GitHubJSONDecoder.decode(
+                GitHubPullRequestReviewThreadsGraphQLResponse.self,
+                from: result.stdout
+            )
+            guard let connection = page.data.repository.pullRequest?.reviewThreads else {
+                return threads
+            }
+            threads.append(contentsOf: connection.nodes)
+            afterCursor = connection.pageInfo.hasNextPage ? connection.pageInfo.endCursor : nil
+        } while afterCursor != nil
+
+        return threads
+    }
+
     // MARK: - Mergeability
 
     /// Fetches a typed snapshot describing whether a pull request can
@@ -586,4 +638,66 @@ actor GitHubService {
         let lower = state.lowercased()
         return allowed.contains(lower) ? lower : fallback
     }
+}
+
+private struct GitHubPullRequestReviewThreadsGraphQLResponse: Decodable {
+    struct Payload: Decodable {
+        struct Repository: Decodable {
+            struct PullRequest: Decodable {
+                let reviewThreads: ReviewThreadConnection
+            }
+            let pullRequest: PullRequest?
+        }
+        let repository: Repository
+    }
+
+    struct ReviewThreadConnection: Decodable {
+        struct PageInfo: Decodable {
+            let hasNextPage: Bool
+            let endCursor: String?
+        }
+
+        let nodes: [GitHubPullRequestReviewThread]
+        let pageInfo: PageInfo
+    }
+
+    let data: Payload
+}
+
+private extension GitHubService {
+    static let pullRequestReviewThreadsQuery = """
+    query CocxyPullRequestReviewThreads($owner: String!, $name: String!, $number: Int!, $after: String) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100, after: $after) {
+            nodes {
+              id
+              isResolved
+              isOutdated
+              viewerCanResolve
+              viewerCanUnresolve
+              path
+              line
+              startLine
+              comments(first: 100) {
+                nodes {
+                  id
+                  body
+                  author {
+                    login
+                  }
+                  createdAt
+                  url
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    }
+    """
 }

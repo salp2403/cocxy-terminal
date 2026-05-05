@@ -317,6 +317,137 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+// MARK: - Pull request review threads
+
+enum GitHubReviewThreadState: String, Equatable, Sendable {
+    case unresolved
+    case resolved
+
+    var displayName: String {
+        switch self {
+        case .unresolved: return "Unresolved"
+        case .resolved: return "Resolved"
+        }
+    }
+}
+
+struct GitHubPullRequestReviewThreadComment: Decodable, Equatable, Sendable, Identifiable {
+    private struct Author: Decodable, Equatable, Sendable {
+        let login: String?
+    }
+
+    let id: String
+    let body: String
+    let authorLogin: String
+    let createdAt: Date?
+    let url: URL?
+
+    init(
+        id: String,
+        body: String,
+        authorLogin: String = "—",
+        createdAt: Date? = nil,
+        url: URL? = nil
+    ) {
+        self.id = id
+        self.body = body
+        self.authorLogin = authorLogin
+        self.createdAt = createdAt
+        self.url = url
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, body, author, createdAt, url
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.body = try container.decodeIfPresent(String.self, forKey: .body) ?? ""
+        let author = try container.decodeIfPresent(Author.self, forKey: .author)
+        let trimmedLogin = author?.login?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.authorLogin = trimmedLogin.isEmpty ? "—" : trimmedLogin
+        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        self.url = try container.decodeIfPresent(URL.self, forKey: .url)
+    }
+}
+
+struct GitHubPullRequestReviewThread: Decodable, Equatable, Sendable, Identifiable {
+    private struct CommentsConnection: Decodable, Equatable, Sendable {
+        let nodes: [GitHubPullRequestReviewThreadComment]
+    }
+
+    let id: String
+    let path: String
+    let line: Int?
+    let startLine: Int?
+    let isResolved: Bool
+    let isOutdated: Bool
+    let viewerCanResolve: Bool
+    let viewerCanUnresolve: Bool
+    let comments: [GitHubPullRequestReviewThreadComment]
+
+    var state: GitHubReviewThreadState {
+        isResolved ? .resolved : .unresolved
+    }
+
+    var lineRange: ClosedRange<Int>? {
+        guard let line else { return nil }
+        let start = startLine ?? line
+        return min(start, line)...max(start, line)
+    }
+
+    var displayLocation: String {
+        guard let lineRange else { return path }
+        if lineRange.lowerBound == lineRange.upperBound {
+            return "\(path):\(lineRange.lowerBound)"
+        }
+        return "\(path):\(lineRange.lowerBound)-\(lineRange.upperBound)"
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, path, line, startLine, isResolved, isOutdated
+        case viewerCanResolve, viewerCanUnresolve, comments
+    }
+
+    init(
+        id: String,
+        path: String,
+        line: Int? = nil,
+        startLine: Int? = nil,
+        isResolved: Bool,
+        isOutdated: Bool = false,
+        viewerCanResolve: Bool = false,
+        viewerCanUnresolve: Bool = false,
+        comments: [GitHubPullRequestReviewThreadComment] = []
+    ) {
+        self.id = id
+        self.path = path
+        self.line = line
+        self.startLine = startLine
+        self.isResolved = isResolved
+        self.isOutdated = isOutdated
+        self.viewerCanResolve = viewerCanResolve
+        self.viewerCanUnresolve = viewerCanUnresolve
+        self.comments = comments
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.path = try container.decodeIfPresent(String.self, forKey: .path) ?? ""
+        self.line = try container.decodeIfPresent(Int.self, forKey: .line)
+        self.startLine = try container.decodeIfPresent(Int.self, forKey: .startLine)
+        self.isResolved = try container.decodeIfPresent(Bool.self, forKey: .isResolved) ?? false
+        self.isOutdated = try container.decodeIfPresent(Bool.self, forKey: .isOutdated) ?? false
+        self.viewerCanResolve = try container.decodeIfPresent(Bool.self, forKey: .viewerCanResolve) ?? false
+        self.viewerCanUnresolve = try container.decodeIfPresent(Bool.self, forKey: .viewerCanUnresolve) ?? false
+        self.comments = try container
+            .decodeIfPresent(CommentsConnection.self, forKey: .comments)?
+            .nodes ?? []
+    }
+}
+
 // MARK: - Issue
 
 /// Open / closed state for a GitHub issue.

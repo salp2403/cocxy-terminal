@@ -263,6 +263,134 @@ struct GitHubCheckRow: View {
     }
 }
 
+// MARK: - Review thread row
+
+struct GitHubReviewThreadRow: View {
+    let thread: GitHubPullRequestReviewThread
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: statusSystemImage)
+                .foregroundColor(statusTint)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 18, height: 18)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(thread.displayLocation)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Text(Self.statusTitle(for: thread, using: localizer))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(statusTint)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(statusTint.opacity(0.14))
+                        )
+                }
+
+                if let firstComment = thread.comments.first {
+                    Text(firstComment.body)
+                        .font(.system(size: 12))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        String(
+                            format: localizer.string(
+                                "github.pane.reviewThreads.author",
+                                fallback: "by %@"
+                            ),
+                            firstComment.authorLogin
+                        )
+                    )
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                }
+
+                HStack(spacing: 6) {
+                    Label(
+                        String(
+                            format: localizer.string(
+                                "github.pane.reviewThreads.comments",
+                                fallback: "%d comments"
+                            ),
+                            thread.comments.count
+                        ),
+                        systemImage: "bubble.right"
+                    )
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+
+                    if thread.isOutdated {
+                        Label(
+                            localizer.string(
+                                "github.pane.reviewThreads.outdated",
+                                fallback: "Outdated"
+                            ),
+                            systemImage: "clock.arrow.circlepath"
+                        )
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Self.accessibilityLabel(for: thread, using: localizer))
+    }
+
+    static func statusTitle(
+        for thread: GitHubPullRequestReviewThread,
+        using localizer: AppLocalizer
+    ) -> String {
+        switch thread.state {
+        case .unresolved:
+            return localizer.string("github.pane.reviewThreads.unresolved", fallback: "Unresolved")
+        case .resolved:
+            return localizer.string("github.pane.reviewThreads.resolved", fallback: "Resolved")
+        }
+    }
+
+    static func accessibilityLabel(
+        for thread: GitHubPullRequestReviewThread,
+        using localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(
+                "github.pane.row.reviewThread.accessibility",
+                fallback: "%@ review thread at %@ with %d comments"
+            ),
+            statusTitle(for: thread, using: localizer),
+            thread.displayLocation,
+            thread.comments.count
+        )
+    }
+
+    private var statusSystemImage: String {
+        switch thread.state {
+        case .unresolved: return "exclamationmark.bubble"
+        case .resolved: return "checkmark.circle"
+        }
+    }
+
+    private var statusTint: Color {
+        switch thread.state {
+        case .unresolved: return .orange
+        case .resolved: return .green
+        }
+    }
+}
+
 extension GitHubCheckStatus {
     func localizedDisplayName(using localizer: AppLocalizer) -> String {
         switch self {

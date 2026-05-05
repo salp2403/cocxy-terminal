@@ -62,6 +62,7 @@ final class GitHubPaneViewModel: ObservableObject {
         case pullRequests
         case issues
         case checks
+        case reviewThreads
 
         var id: String { rawValue }
         var displayName: String {
@@ -69,6 +70,7 @@ final class GitHubPaneViewModel: ObservableObject {
             case .pullRequests: return "Pull Requests"
             case .issues: return "Issues"
             case .checks: return "Checks"
+            case .reviewThreads: return "Review Threads"
             }
         }
         func localizedTitle(using localizer: AppLocalizer) -> String {
@@ -88,6 +90,11 @@ final class GitHubPaneViewModel: ObservableObject {
                     "github.pane.tab.checks",
                     fallback: displayName
                 )
+            case .reviewThreads:
+                return localizer.string(
+                    "github.pane.tab.reviewThreads",
+                    fallback: displayName
+                )
             }
         }
         var systemImage: String {
@@ -95,6 +102,7 @@ final class GitHubPaneViewModel: ObservableObject {
             case .pullRequests: return "arrow.triangle.pull"
             case .issues: return "exclamationmark.circle"
             case .checks: return "checkmark.circle"
+            case .reviewThreads: return "bubble.left.and.bubble.right"
             }
         }
     }
@@ -114,6 +122,7 @@ final class GitHubPaneViewModel: ObservableObject {
     @Published private(set) var pullRequests: [GitHubPullRequest] = []
     @Published private(set) var issues: [GitHubIssue] = []
     @Published private(set) var checks: [GitHubCheck] = []
+    @Published private(set) var reviewThreads: [GitHubPullRequestReviewThread] = []
 
     /// PR number whose checks the view currently highlights. Set by
     /// the UI row selection and read by `refresh()` to decide which
@@ -335,6 +344,13 @@ final class GitHubPaneViewModel: ObservableObject {
         selectedPullRequestNumber = pullRequest.number
         selectedTab = .checks
         checks = []
+        refresh()
+    }
+
+    func selectPullRequestForReviewThreads(_ pullRequest: GitHubPullRequest) {
+        selectedPullRequestNumber = pullRequest.number
+        selectedTab = .reviewThreads
+        reviewThreads = []
         refresh()
     }
 
@@ -725,6 +741,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 pullRequests = []
                 issues = []
                 checks = []
+                reviewThreads = []
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
                 pullRequestsTabID = nil
@@ -745,6 +762,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 pullRequests = []
                 issues = []
                 checks = []
+                reviewThreads = []
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
                 pullRequestsTabID = nil
@@ -778,6 +796,7 @@ final class GitHubPaneViewModel: ObservableObject {
                     pullRequests = []
                     issues = []
                     checks = []
+                    reviewThreads = []
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
                     pullRequestsTabID = nil
@@ -789,6 +808,7 @@ final class GitHubPaneViewModel: ObservableObject {
                     pullRequests = []
                     issues = []
                     checks = []
+                    reviewThreads = []
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
                     pullRequestsTabID = nil
@@ -824,6 +844,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 pullRequests = []
                 issues = []
                 checks = []
+                reviewThreads = []
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
                 pullRequestsTabID = nil
@@ -846,6 +867,7 @@ final class GitHubPaneViewModel: ObservableObject {
                     pullRequests = []
                     issues = []
                     checks = []
+                    reviewThreads = []
                     selectedPullRequestNumber = nil
                     pullRequestsWorkingDirectory = nil
                     pullRequestsTabID = nil
@@ -908,10 +930,16 @@ final class GitHubPaneViewModel: ObservableObject {
                 targetNumber = fetchedPRs.first?.number
             }
             var fetchedChecks: [GitHubCheck] = []
+            var fetchedReviewThreads: [GitHubPullRequestReviewThread] = []
             if let number = targetNumber {
                 fetchedChecks = (try? await service.checksForPullRequest(
                     number: number,
                     at: workingDirectory
+                )) ?? []
+                fetchedReviewThreads = (try? await service.pullRequestReviewThreads(
+                    number: number,
+                    at: workingDirectory,
+                    repository: resolvedRepo
                 )) ?? []
             }
             guard generation == refreshGeneration else { return }
@@ -920,6 +948,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 pullRequests = fetchedPRs
                 issues = fetchedIssues
                 checks = fetchedChecks
+                reviewThreads = fetchedReviewThreads
                 selectedPullRequestNumber = targetNumber
                 pullRequestsWorkingDirectory = workingDirectory
                 pullRequestsTabID = tabIDProvider?()
@@ -967,6 +996,7 @@ final class GitHubPaneViewModel: ObservableObject {
         pullRequests = []
         issues = []
         checks = []
+        reviewThreads = []
         selectedPullRequestNumber = nil
         pullRequestsWorkingDirectory = nil
         pullRequestsTabID = nil
