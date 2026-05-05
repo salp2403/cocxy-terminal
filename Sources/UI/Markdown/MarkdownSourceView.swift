@@ -53,6 +53,7 @@ private final class MarkdownEditorTextView: NSTextView {
         repairStorageForeground: Bool = false
     ) {
         readableTheme = theme
+        drawsBackground = true
         backgroundColor = CocxyColors.base
         font = theme.codeFont
         textColor = theme.textColor

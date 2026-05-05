@@ -20,6 +20,20 @@ struct MarkdownSourceViewTests {
         #expect(editor.isIncrementalSearchingEnabled == true)
     }
 
+    @Test("source editor owns an opaque readable dark background")
+    func sourceEditorOwnsOpaqueReadableDarkBackground() {
+        let view = MarkdownSourceView()
+        view.document = MarkdownDocument.parse("alpha beta")
+        let editor = view.editorTextView
+        let theme = MarkdownRenderTheme.cocxyDefaultTheme()
+
+        #expect(editor.drawsBackground == true)
+        #expect(editor.backgroundColor == CocxyColors.base)
+        #expect(editor.textColor == theme.textColor)
+        #expect(editor.insertionPointColor == theme.textColor)
+        #expect(editor.typingAttributes[.foregroundColor] as? NSColor == theme.textColor)
+    }
+
     @Test("source editor repairs unreadable foregrounds before drawing")
     func sourceEditorRepairsUnreadableForegroundsBeforeDrawing() {
         let view = MarkdownSourceView()
