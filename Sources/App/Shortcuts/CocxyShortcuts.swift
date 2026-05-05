@@ -61,6 +61,29 @@ enum CocxyShortcutsCatalog {
     static func descriptor(id: String) -> CocxyShortcutDescriptor? {
         descriptors.first { $0.id == id }
     }
+
+    static func descriptors(localizer: AppLocalizer) -> [CocxyShortcutDescriptor] {
+        descriptors.map { descriptor in
+            descriptor.localized(using: localizer)
+        }
+    }
+}
+
+extension CocxyShortcutDescriptor {
+    func localized(using localizer: AppLocalizer) -> CocxyShortcutDescriptor {
+        CocxyShortcutDescriptor(
+            id: id,
+            title: localizer.string("shortcuts.\(id).title", fallback: title),
+            summary: localizer.string("shortcuts.\(id).summary", fallback: summary),
+            systemImageName: systemImageName,
+            networkPolicy: networkPolicy,
+            requiresUserInitiation: requiresUserInitiation,
+            privacySummary: localizer.string(
+                "shortcuts.\(id).privacy",
+                fallback: privacySummary
+            )
+        )
+    }
 }
 
 enum CocxyShortcutError: Error, LocalizedError {
@@ -69,13 +92,26 @@ enum CocxyShortcutError: Error, LocalizedError {
     case noWindow
 
     var errorDescription: String? {
+        localizedDescription(using: AppLocalizer(languagePreference: .system))
+    }
+
+    func localizedDescription(using localizer: AppLocalizer) -> String {
         switch self {
         case .appDelegateUnavailable:
-            return "Cocxy is not ready yet."
+            return localizer.string(
+                "shortcuts.error.appDelegateUnavailable",
+                fallback: "Cocxy is not ready yet."
+            )
         case .noActiveTerminal:
-            return "No active terminal surface is available."
+            return localizer.string(
+                "shortcuts.error.noActiveTerminal",
+                fallback: "No active terminal surface is available."
+            )
         case .noWindow:
-            return "No Cocxy window is available."
+            return localizer.string(
+                "shortcuts.error.noWindow",
+                fallback: "No Cocxy window is available."
+            )
         }
     }
 }

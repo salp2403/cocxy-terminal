@@ -23,6 +23,20 @@ struct CocxyShortcutsCatalogSwiftTestingTests {
         #expect(descriptors.allSatisfy { !$0.privacySummary.isEmpty })
     }
 
+    @Test("catalog localizes shortcut copy and local error messages")
+    func catalogLocalizesShortcutCopyAndErrors() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let descriptors = CocxyShortcutsCatalog.descriptors(localizer: spanish)
+
+        #expect(descriptors[0].title == "Abrir Cocxy")
+        #expect(descriptors[0].summary == "Traer al frente la ventana local de terminal.")
+        #expect(descriptors[0].privacySummary == "Solo activa la app local; ningún contenido de terminal sale de la Mac.")
+        #expect(descriptors[1].title == "Ejecutar comando en Cocxy")
+        #expect(descriptors[1].summary == "Enviar texto a la terminal local enfocada y opcionalmente presionar Return.")
+        #expect(CocxyShortcutError.noActiveTerminal.localizedDescription(using: spanish) == "No hay una superficie de terminal activa disponible.")
+    }
+
     @Test("app bundle scripts emit and verify Shortcuts metadata")
     func appBundleScriptsEmitAndVerifyShortcutsMetadata() throws {
         let root = repositoryRoot()
@@ -52,5 +66,9 @@ struct CocxyShortcutsCatalogSwiftTestingTests {
             url.deleteLastPathComponent()
         }
         return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        Bundle(url: repositoryRoot().appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

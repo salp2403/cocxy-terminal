@@ -2381,3 +2381,19 @@
 "remoteWorkspace.sftp.entry.folder" = "Folder";
 "remoteWorkspace.sftp.entry.file" = "File";
 "remoteWorkspace.sftp.entry.accessibility" = "%@: %@, %@";
+
+"shortcuts.open-app.title" = "Open Cocxy";
+"shortcuts.open-app.summary" = "Bring the local terminal window forward.";
+"shortcuts.open-app.privacy" = "Activates the local app only; no terminal content leaves the Mac.";
+"shortcuts.run-command.title" = "Run Command in Cocxy";
+"shortcuts.run-command.summary" = "Send text to the focused local terminal and optionally press Return.";
+"shortcuts.run-command.privacy" = "Writes only to the focused local terminal surface selected by the user.";
+"shortcuts.open-notebook.title" = "Open Cocxy Notebook";
+"shortcuts.open-notebook.summary" = "Open a local executable notebook panel in the current workspace.";
+"shortcuts.open-notebook.privacy" = "Opens local UI state only; notebook execution remains user-triggered.";
+"shortcuts.list-skills.title" = "List Cocxy Skills";
+"shortcuts.list-skills.summary" = "Return local built-in and user skill identifiers.";
+"shortcuts.list-skills.privacy" = "Reads local skill manifests only; nothing is uploaded or synced.";
+"shortcuts.error.appDelegateUnavailable" = "Cocxy is not ready yet.";
+"shortcuts.error.noActiveTerminal" = "No active terminal surface is available.";
+"shortcuts.error.noWindow" = "No Cocxy window is available.";
