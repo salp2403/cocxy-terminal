@@ -346,6 +346,111 @@ struct GitHubServiceSwiftTestingTests {
         #expect(threads[1].viewerCanUnresolve)
     }
 
+    @Test("resolveReviewThread sends a GraphQL mutation and decodes the updated thread")
+    func resolveReviewThread_sendsMutationAndDecodesThread() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: { $0.contains("api") && $0.contains("graphql") }, result: GitHubCLIResult(
+            stdout: #"""
+            {
+              "data": {
+                "resolveReviewThread": {
+                  "thread": {
+                    "id": "PRRT_1",
+                    "isResolved": true,
+                    "isOutdated": false,
+                    "viewerCanResolve": false,
+                    "viewerCanUnresolve": true,
+                    "path": "Sources/App.swift",
+                    "line": 12,
+                    "startLine": null,
+                    "comments": {"nodes": []}
+                  }
+                }
+              }
+            }
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        let thread = try await service.resolveReviewThread(
+            threadID: "PRRT_1",
+            at: URL(fileURLWithPath: "/tmp")
+        )
+
+        #expect(thread.id == "PRRT_1")
+        #expect(thread.state == .resolved)
+        #expect(thread.viewerCanUnresolve)
+
+        let args = try #require(spy.allInvocations.first?.args)
+        #expect(args.contains("api"))
+        #expect(args.contains("graphql"))
+        #expect(args.contains("-F"))
+        #expect(args.contains("threadId=PRRT_1"))
+        #expect(args.contains { $0.contains("resolveReviewThread") })
+    }
+
+    @Test("unresolveReviewThread maps non-zero gh exit to a typed error")
+    func unresolveReviewThread_mapsNonZeroExitToTypedError() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: { $0.contains("api") && $0.contains("graphql") }, result: GitHubCLIResult(
+            stdout: "",
+            stderr: "GraphQL: Could not resolve to a node with the global id",
+            terminationStatus: 1
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        await #expect(throws: GitHubCLIError.self) {
+            _ = try await service.unresolveReviewThread(
+                threadID: "PRRT_missing",
+                at: URL(fileURLWithPath: "/tmp")
+            )
+        }
+    }
+
+    @Test("unresolveReviewThread sends a GraphQL mutation and decodes the updated thread")
+    func unresolveReviewThread_sendsMutationAndDecodesThread() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: { $0.contains("api") && $0.contains("graphql") }, result: GitHubCLIResult(
+            stdout: #"""
+            {
+              "data": {
+                "unresolveReviewThread": {
+                  "thread": {
+                    "id": "PRRT_1",
+                    "isResolved": false,
+                    "isOutdated": false,
+                    "viewerCanResolve": true,
+                    "viewerCanUnresolve": false,
+                    "path": "Sources/App.swift",
+                    "line": 12,
+                    "startLine": null,
+                    "comments": {"nodes": []}
+                  }
+                }
+              }
+            }
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        let thread = try await service.unresolveReviewThread(
+            threadID: "PRRT_1",
+            at: URL(fileURLWithPath: "/tmp")
+        )
+
+        #expect(thread.id == "PRRT_1")
+        #expect(thread.state == .unresolved)
+        #expect(thread.viewerCanResolve)
+
+        let args = try #require(spy.allInvocations.first?.args)
+        #expect(args.contains("threadId=PRRT_1"))
+        #expect(args.contains { $0.contains("unresolveReviewThread") })
+    }
+
     @Test("listPullRequests normalises unknown state to the fallback")
     func listPullRequests_normalisesUnknownState() async throws {
         let spy = RunnerSpy()

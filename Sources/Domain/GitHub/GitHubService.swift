@@ -415,6 +415,77 @@ actor GitHubService {
         return threads
     }
 
+    func resolveReviewThread(
+        threadID: String,
+        at directory: URL,
+        timeoutSeconds: TimeInterval = 20.0
+    ) async throws -> GitHubPullRequestReviewThread {
+        try mutateReviewThreadResolution(
+            threadID: threadID,
+            mutation: Self.resolveReviewThreadMutation,
+            responseKeyPath: \.resolveReviewThread,
+            commandName: "resolveReviewThread",
+            at: directory,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    func unresolveReviewThread(
+        threadID: String,
+        at directory: URL,
+        timeoutSeconds: TimeInterval = 20.0
+    ) async throws -> GitHubPullRequestReviewThread {
+        try mutateReviewThreadResolution(
+            threadID: threadID,
+            mutation: Self.unresolveReviewThreadMutation,
+            responseKeyPath: \.unresolveReviewThread,
+            commandName: "unresolveReviewThread",
+            at: directory,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    private func mutateReviewThreadResolution(
+        threadID: String,
+        mutation: String,
+        responseKeyPath: KeyPath<GitHubPullRequestReviewThreadMutationGraphQLResponse.Payload, GitHubPullRequestReviewThreadMutationGraphQLResponse.MutationPayload?>,
+        commandName: String,
+        at directory: URL,
+        timeoutSeconds: TimeInterval
+    ) throws -> GitHubPullRequestReviewThread {
+        let trimmedID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty else {
+            throw GitHubCLIError.commandFailed(
+                command: "gh api graphql",
+                stderr: "Review thread id is required.",
+                exitCode: 1
+            )
+        }
+
+        let args = [
+            "api", "graphql",
+            "-f", "query=\(mutation)",
+            "-F", "threadId=\(trimmedID)",
+        ]
+        let result = try runner(directory, args, timeoutSeconds)
+        if result.terminationStatus != 0 {
+            throw GitHubCLI.classifyError(
+                command: "gh api graphql \(commandName)",
+                stderr: result.stderr,
+                exitCode: result.terminationStatus
+            )
+        }
+
+        let response = try GitHubJSONDecoder.decode(
+            GitHubPullRequestReviewThreadMutationGraphQLResponse.self,
+            from: result.stdout
+        )
+        guard let thread = response.data[keyPath: responseKeyPath]?.thread else {
+            throw GitHubCLIError.invalidJSON(reason: "Missing review thread mutation payload")
+        }
+        return thread
+    }
+
     // MARK: - Mergeability
 
     /// Fetches a typed snapshot describing whether a pull request can
@@ -664,13 +735,21 @@ private struct GitHubPullRequestReviewThreadsGraphQLResponse: Decodable {
     let data: Payload
 }
 
+private struct GitHubPullRequestReviewThreadMutationGraphQLResponse: Decodable {
+    struct Payload: Decodable {
+        let resolveReviewThread: MutationPayload?
+        let unresolveReviewThread: MutationPayload?
+    }
+
+    struct MutationPayload: Decodable {
+        let thread: GitHubPullRequestReviewThread
+    }
+
+    let data: Payload
+}
+
 private extension GitHubService {
-    static let pullRequestReviewThreadsQuery = """
-    query CocxyPullRequestReviewThreads($owner: String!, $name: String!, $number: Int!, $after: String) {
-      repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-          reviewThreads(first: 100, after: $after) {
-            nodes {
+    static let reviewThreadFields = """
               id
               isResolved
               isOutdated
@@ -690,12 +769,41 @@ private extension GitHubService {
                   url
                 }
               }
+    """
+
+    static let pullRequestReviewThreadsQuery = """
+    query CocxyPullRequestReviewThreads($owner: String!, $name: String!, $number: Int!, $after: String) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100, after: $after) {
+            nodes {
+    """ + reviewThreadFields + """
             }
             pageInfo {
               hasNextPage
               endCursor
             }
           }
+        }
+      }
+    }
+    """
+
+    static let resolveReviewThreadMutation = """
+    mutation CocxyResolveReviewThread($threadId: ID!) {
+      resolveReviewThread(input: { threadId: $threadId }) {
+        thread {
+    """ + reviewThreadFields + """
+        }
+      }
+    }
+    """
+
+    static let unresolveReviewThreadMutation = """
+    mutation CocxyUnresolveReviewThread($threadId: ID!) {
+      unresolveReviewThread(input: { threadId: $threadId }) {
+        thread {
+    """ + reviewThreadFields + """
         }
       }
     }

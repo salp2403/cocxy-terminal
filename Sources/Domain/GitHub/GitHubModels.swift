@@ -405,6 +405,22 @@ struct GitHubPullRequestReviewThread: Decodable, Equatable, Sendable, Identifiab
         return "\(path):\(lineRange.lowerBound)-\(lineRange.upperBound)"
     }
 
+    func applyingResolutionUpdate(
+        _ updated: GitHubPullRequestReviewThread
+    ) -> GitHubPullRequestReviewThread {
+        GitHubPullRequestReviewThread(
+            id: id,
+            path: updated.path.isEmpty ? path : updated.path,
+            line: updated.line ?? line,
+            startLine: updated.startLine ?? startLine,
+            isResolved: updated.isResolved,
+            isOutdated: updated.isOutdated,
+            viewerCanResolve: updated.viewerCanResolve,
+            viewerCanUnresolve: updated.viewerCanUnresolve,
+            comments: updated.comments.isEmpty ? comments : updated.comments
+        )
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, path, line, startLine, isResolved, isOutdated
         case viewerCanResolve, viewerCanUnresolve, comments

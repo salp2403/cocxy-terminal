@@ -123,6 +123,7 @@ final class GitHubPaneViewModel: ObservableObject {
     @Published private(set) var issues: [GitHubIssue] = []
     @Published private(set) var checks: [GitHubCheck] = []
     @Published private(set) var reviewThreads: [GitHubPullRequestReviewThread] = []
+    @Published private(set) var reviewThreadsBeingUpdated: Set<String> = []
 
     /// PR number whose checks the view currently highlights. Set by
     /// the UI row selection and read by `refresh()` to decide which
@@ -352,6 +353,103 @@ final class GitHubPaneViewModel: ObservableObject {
         selectedTab = .reviewThreads
         reviewThreads = []
         refresh()
+    }
+
+    func canOfferResolveReviewThread(_ thread: GitHubPullRequestReviewThread) -> Bool {
+        guard !thread.isResolved else { return false }
+        guard thread.viewerCanResolve else { return false }
+        guard pullRequestsWorkingDirectory != nil else { return false }
+        return !reviewThreadsBeingUpdated.contains(thread.id)
+    }
+
+    func canOfferUnresolveReviewThread(_ thread: GitHubPullRequestReviewThread) -> Bool {
+        guard thread.isResolved else { return false }
+        guard thread.viewerCanUnresolve else { return false }
+        guard pullRequestsWorkingDirectory != nil else { return false }
+        return !reviewThreadsBeingUpdated.contains(thread.id)
+    }
+
+    func isUpdatingReviewThread(_ threadID: String) -> Bool {
+        reviewThreadsBeingUpdated.contains(threadID)
+    }
+
+    func resolveReviewThread(_ thread: GitHubPullRequestReviewThread) {
+        setReviewThreadResolution(thread, resolved: true)
+    }
+
+    func unresolveReviewThread(_ thread: GitHubPullRequestReviewThread) {
+        setReviewThreadResolution(thread, resolved: false)
+    }
+
+    private func setReviewThreadResolution(
+        _ thread: GitHubPullRequestReviewThread,
+        resolved: Bool
+    ) {
+        guard let workingDirectory = pullRequestsWorkingDirectory else {
+            lastErrorMessage = localized(
+                "github.pane.reviewThreads.reloadRequired",
+                fallback: "Reload the GitHub pane before updating this review thread."
+            )
+            return
+        }
+        let canMutate = resolved
+            ? canOfferResolveReviewThread(thread)
+            : canOfferUnresolveReviewThread(thread)
+        guard canMutate else {
+            lastErrorMessage = localized(
+                "github.pane.reviewThreads.permissionDenied",
+                fallback: "This review thread cannot be changed by the current account."
+            )
+            return
+        }
+
+        reviewThreadsBeingUpdated.insert(thread.id)
+        lastErrorMessage = nil
+        lastInfoMessage = nil
+
+        Task { [weak self] in
+            do {
+                let updated = if resolved {
+                    try await self?.service.resolveReviewThread(
+                        threadID: thread.id,
+                        at: workingDirectory
+                    )
+                } else {
+                    try await self?.service.unresolveReviewThread(
+                        threadID: thread.id,
+                        at: workingDirectory
+                    )
+                }
+                await MainActor.run {
+                    guard let self else { return }
+                    self.reviewThreadsBeingUpdated.remove(thread.id)
+                    if let updated {
+                        self.applyReviewThreadResolutionUpdate(updated, fallback: thread)
+                    }
+                    self.lastInfoMessage = self.localizedReviewThreadResolutionMessage(
+                        resolved: resolved,
+                        location: thread.displayLocation
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    guard let self else { return }
+                    self.reviewThreadsBeingUpdated.remove(thread.id)
+                    if let cliError = error as? GitHubCLIError {
+                        self.lastErrorMessage = Self.banner(for: cliError, using: self.localizer)
+                    } else {
+                        let description = error.localizedDescription
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        self.lastErrorMessage = description.isEmpty
+                            ? self.localized(
+                                "github.pane.reviewThreads.updateFailed",
+                                fallback: "Review thread update failed."
+                            )
+                            : description
+                    }
+                }
+            }
+        }
     }
 
     /// Forwards a "Create PR" request to the code-review integration.
@@ -977,6 +1075,38 @@ final class GitHubPaneViewModel: ObservableObject {
     /// without touching every call site.
     private func applyState(_ mutate: () -> Void) {
         mutate()
+    }
+
+    private func applyReviewThreadResolutionUpdate(
+        _ updated: GitHubPullRequestReviewThread,
+        fallback: GitHubPullRequestReviewThread
+    ) {
+        guard let index = reviewThreads.firstIndex(where: { $0.id == fallback.id }) else {
+            return
+        }
+        reviewThreads[index] = reviewThreads[index].applyingResolutionUpdate(updated)
+    }
+
+    private func localizedReviewThreadResolutionMessage(
+        resolved: Bool,
+        location: String
+    ) -> String {
+        if resolved {
+            return String(
+                format: localized(
+                    "github.pane.reviewThreads.resolve.success",
+                    fallback: "Resolved review thread at %@."
+                ),
+                location
+            )
+        }
+        return String(
+            format: localized(
+                "github.pane.reviewThreads.unresolve.success",
+                fallback: "Reopened review thread at %@."
+            ),
+            location
+        )
     }
 
     private func refreshAfterMergeCleanup(mergedWorkingDirectory: URL) {

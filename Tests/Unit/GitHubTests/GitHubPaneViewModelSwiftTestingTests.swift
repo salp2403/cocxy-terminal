@@ -16,6 +16,7 @@ struct GitHubPaneViewModelSwiftTestingTests {
     /// Declared per-suite so the two test files stay independent.
     final class RunnerSpy: @unchecked Sendable {
         private let lock = NSLock()
+        private var invocations: [(directory: URL, args: [String], timeout: TimeInterval)] = []
         private var stubs: [(predicate: @Sendable ([String]) -> Bool, result: GitHubCLIResult)] = []
 
         func stub(
@@ -28,8 +29,9 @@ struct GitHubPaneViewModelSwiftTestingTests {
         }
 
         var runner: GitHubService.Runner {
-            return { [self] _, args, _ in
+            return { [self] directory, args, timeout in
                 self.lock.lock()
+                self.invocations.append((directory: directory, args: args, timeout: timeout))
                 let stubs = self.stubs
                 self.lock.unlock()
                 for stub in stubs where stub.predicate(args) {
@@ -41,6 +43,12 @@ struct GitHubPaneViewModelSwiftTestingTests {
                     terminationStatus: 1
                 )
             }
+        }
+
+        var allInvocations: [(directory: URL, args: [String], timeout: TimeInterval)] {
+            lock.lock()
+            defer { lock.unlock() }
+            return invocations
         }
     }
 
@@ -702,6 +710,187 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.reviewThreads[0].state == .unresolved)
         #expect(viewModel.reviewThreads[0].comments.count == 1)
         #expect(viewModel.reviewThreads[0].comments.first?.body == "Can this branch return early?")
+    }
+
+    @Test("review thread resolution actions mutate GitHub and update the local row")
+    func reviewThreadResolutionActions_updateLocalThreadState() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+            stdout: "",
+            stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+            stdout: #"""
+            {
+              "defaultBranchRef": {"name": "main"},
+              "description": "",
+              "hasIssuesEnabled": true,
+              "isEmpty": false,
+              "isPrivate": false,
+              "name": "r",
+              "owner": {"login": "u"},
+              "url": "https://github.com/u/r"
+            }
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+            stdout: #"""
+            [
+              {"number": 1, "title": "first", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/1", "updatedAt": "2026-04-23T15:47:21Z"}
+            ]
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: { $0.contains("issue") && $0.contains("list") }, result: GitHubCLIResult(
+            stdout: "[]",
+            stderr: "",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: { $0.contains("pr") && $0.contains("checks") }, result: GitHubCLIResult(
+            stdout: "[]",
+            stderr: "",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: { $0.contains("api") && $0.contains("graphql") && $0.contains("number=1") }, result: GitHubCLIResult(
+            stdout: #"""
+            {
+              "data": {
+                "repository": {
+                  "pullRequest": {
+                    "reviewThreads": {
+                      "nodes": [
+                        {
+                          "id": "PRRT_1",
+                          "isResolved": false,
+                          "isOutdated": false,
+                          "viewerCanResolve": true,
+                          "viewerCanUnresolve": false,
+                          "path": "Sources/App.swift",
+                          "line": 7,
+                          "startLine": null,
+                          "comments": {
+                            "nodes": [
+                              {
+                                "id": "PRRC_1",
+                                "body": "Can this branch return early?",
+                                "author": {"login": "reviewer"},
+                                "createdAt": "2026-05-05T10:00:00Z",
+                                "url": "https://github.com/u/r/pull/1#discussion_r1"
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      "pageInfo": {"hasNextPage": false, "endCursor": null}
+                    }
+                  }
+                }
+              }
+            }
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: {
+            $0.contains("api")
+                && $0.contains("graphql")
+                && $0.contains("threadId=PRRT_1")
+                && $0.contains { $0.contains("CocxyResolveReviewThread") }
+        }, result: GitHubCLIResult(
+            stdout: #"""
+            {
+              "data": {
+                "resolveReviewThread": {
+                  "thread": {
+                    "id": "PRRT_1",
+                    "isResolved": true,
+                    "isOutdated": false,
+                    "viewerCanResolve": false,
+                    "viewerCanUnresolve": true,
+                    "path": "Sources/App.swift",
+                    "line": 7,
+                    "startLine": null,
+                    "comments": {"nodes": []}
+                  }
+                }
+              }
+            }
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: {
+            $0.contains("api")
+                && $0.contains("graphql")
+                && $0.contains("threadId=PRRT_1")
+                && $0.contains { $0.contains("CocxyUnresolveReviewThread") }
+        }, result: GitHubCLIResult(
+            stdout: #"""
+            {
+              "data": {
+                "unresolveReviewThread": {
+                  "thread": {
+                    "id": "PRRT_1",
+                    "isResolved": false,
+                    "isOutdated": false,
+                    "viewerCanResolve": true,
+                    "viewerCanUnresolve": false,
+                    "path": "Sources/App.swift",
+                    "line": 7,
+                    "startLine": null,
+                    "comments": {"nodes": []}
+                  }
+                }
+              }
+            }
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+
+        let service = GitHubService(runner: spy.runner)
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp") }
+        viewModel.refresh()
+        await flush()
+
+        let unresolved = try #require(viewModel.reviewThreads.first)
+        #expect(viewModel.canOfferResolveReviewThread(unresolved))
+        #expect(unresolved.comments.first?.body == "Can this branch return early?")
+
+        viewModel.resolveReviewThread(unresolved)
+        await flush()
+
+        let updated = try #require(viewModel.reviewThreads.first)
+        #expect(updated.state == .resolved)
+        #expect(updated.viewerCanResolve == false)
+        #expect(updated.viewerCanUnresolve)
+        #expect(updated.comments.first?.body == "Can this branch return early?")
+        #expect(viewModel.lastInfoMessage?.contains("Resolved review thread") == true)
+        #expect(viewModel.reviewThreadsBeingUpdated.isEmpty)
+        #expect(viewModel.canOfferUnresolveReviewThread(updated))
+
+        let mutationArgs = try #require(
+            spy.allInvocations.first(where: {
+                $0.args.contains("threadId=PRRT_1")
+                    && $0.args.contains { $0.contains("CocxyResolveReviewThread") }
+            })?.args
+        )
+        #expect(mutationArgs.contains { $0.contains("resolveReviewThread") })
+
+        viewModel.unresolveReviewThread(updated)
+        await flush()
+
+        let reopened = try #require(viewModel.reviewThreads.first)
+        #expect(reopened.state == .unresolved)
+        #expect(reopened.viewerCanResolve)
+        #expect(reopened.viewerCanUnresolve == false)
+        #expect(reopened.comments.first?.body == "Can this branch return early?")
+        #expect(viewModel.lastInfoMessage?.contains("Reopened review thread") == true)
     }
 
     @Test("isVisible toggle starts and stops auto-refresh without crashing")

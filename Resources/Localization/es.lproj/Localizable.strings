@@ -788,6 +788,8 @@
 "github.pane.context.openInBrowser" = "Abrir en navegador";
 "github.pane.context.copyURL" = "Copiar URL";
 "github.pane.context.reviewThreads" = "Mostrar threads de revisión";
+"github.pane.context.resolveReviewThread" = "Resolver thread";
+"github.pane.context.reopenReviewThread" = "Reabrir thread";
 "github.pane.merge.action" = "Fusionar pull request...";
 "github.pane.merge.inProgress" = "Fusionando...";
 "github.pane.merge.disabled" = "La fusión de pull requests está desactivada en [github].merge-enabled.";
@@ -825,6 +827,11 @@
 "github.pane.reviewThreads.author" = "por %@";
 "github.pane.reviewThreads.comments" = "%d comentarios";
 "github.pane.reviewThreads.outdated" = "Desactualizado";
+"github.pane.reviewThreads.reloadRequired" = "Recarga el panel de GitHub antes de actualizar este thread de revisión.";
+"github.pane.reviewThreads.permissionDenied" = "La cuenta actual no puede cambiar este thread de revisión.";
+"github.pane.reviewThreads.updateFailed" = "No se pudo actualizar el thread de revisión.";
+"github.pane.reviewThreads.resolve.success" = "Thread de revisión resuelto en %@.";
+"github.pane.reviewThreads.unresolve.success" = "Thread de revisión reabierto en %@.";
 "github.pane.check.status.queued" = "En cola";
 "github.pane.check.status.inProgress" = "En progreso";
 "github.pane.check.status.completed" = "Completado";

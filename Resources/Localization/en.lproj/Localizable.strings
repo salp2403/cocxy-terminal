@@ -788,6 +788,8 @@
 "github.pane.context.openInBrowser" = "Open in Browser";
 "github.pane.context.copyURL" = "Copy URL";
 "github.pane.context.reviewThreads" = "Show Review Threads";
+"github.pane.context.resolveReviewThread" = "Resolve Thread";
+"github.pane.context.reopenReviewThread" = "Reopen Thread";
 "github.pane.merge.action" = "Merge Pull Request...";
 "github.pane.merge.inProgress" = "Merging...";
 "github.pane.merge.disabled" = "Pull request merge is disabled in [github].merge-enabled.";
@@ -825,6 +827,11 @@
 "github.pane.reviewThreads.author" = "by %@";
 "github.pane.reviewThreads.comments" = "%d comments";
 "github.pane.reviewThreads.outdated" = "Outdated";
+"github.pane.reviewThreads.reloadRequired" = "Reload the GitHub pane before updating this review thread.";
+"github.pane.reviewThreads.permissionDenied" = "This review thread cannot be changed by the current account.";
+"github.pane.reviewThreads.updateFailed" = "Review thread update failed.";
+"github.pane.reviewThreads.resolve.success" = "Resolved review thread at %@.";
+"github.pane.reviewThreads.unresolve.success" = "Reopened review thread at %@.";
 "github.pane.check.status.queued" = "Queued";
 "github.pane.check.status.inProgress" = "In progress";
 "github.pane.check.status.completed" = "Completed";

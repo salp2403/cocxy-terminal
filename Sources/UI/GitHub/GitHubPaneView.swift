@@ -405,6 +405,36 @@ struct GitHubPaneView: View {
                                         viewModel.open(url)
                                     }
                                 }
+                                if viewModel.canOfferResolveReviewThread(thread) {
+                                    Divider()
+                                    Button {
+                                        viewModel.resolveReviewThread(thread)
+                                    } label: {
+                                        Label(
+                                            localized(
+                                                "github.pane.context.resolveReviewThread",
+                                                fallback: "Resolve Thread"
+                                            ),
+                                            systemImage: "checkmark.circle"
+                                        )
+                                    }
+                                    .disabled(viewModel.isUpdatingReviewThread(thread.id))
+                                }
+                                if viewModel.canOfferUnresolveReviewThread(thread) {
+                                    Divider()
+                                    Button {
+                                        viewModel.unresolveReviewThread(thread)
+                                    } label: {
+                                        Label(
+                                            localized(
+                                                "github.pane.context.reopenReviewThread",
+                                                fallback: "Reopen Thread"
+                                            ),
+                                            systemImage: "arrow.uturn.backward.circle"
+                                        )
+                                    }
+                                    .disabled(viewModel.isUpdatingReviewThread(thread.id))
+                                }
                             }
                         }
                     }
