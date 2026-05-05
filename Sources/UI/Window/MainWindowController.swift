@@ -262,6 +262,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var voiceIndicatorHostingView: NSHostingView<VoiceIndicator>?
     var voiceInputTask: Task<Void, Never>?
     var injectedVoiceSessionFactory: VoiceTriggerHandler.SessionFactory?
+    var touchBarController: CocxyTouchBarController?
 
     var searchBarViewModel: ScrollbackSearchBarViewModel?
     var searchBarHostingView: NSHostingView<ScrollbackSearchBarView>?
@@ -821,11 +822,34 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .darkAqua)
+        window.collectionBehavior.insert(.primary)
+        window.collectionBehavior.insert(.managed)
+        window.collectionBehavior.insert(.participatesInCycle)
         window.collectionBehavior.insert(.fullScreenPrimary)
+        window.collectionBehavior.insert(.fullScreenAllowsTiling)
+        window.tabbingMode = .preferred
         window.isMovableByWindowBackground = true
         window.setFrameAutosaveName("CocxyMainWindow")
         window.delegate = self
         window.backgroundColor = CocxyColors.base
+    }
+
+    override func makeTouchBar() -> NSTouchBar? {
+        let localizer = appLocalizer()
+        let controller = CocxyTouchBarController(
+            labels: CocxyTouchBarController.Labels(
+                newTab: localizer.string("menu.file.newTab", fallback: "New Tab"),
+                commandPalette: localizer.string("menu.view.commandPalette", fallback: "Command Palette"),
+                agentPanel: localizer.string("menu.view.agentMode", fallback: "Agent Mode"),
+                search: localizer.string("menu.edit.find", fallback: "Find...")
+            ),
+            newTab: { [weak self] in self?.newTabAction(nil) },
+            commandPalette: { [weak self] in self?.toggleCommandPalette() },
+            agentPanel: { [weak self] in self?.toggleAgentMode() },
+            search: { [weak self] in self?.showSearchBarOverlay() }
+        )
+        touchBarController = controller
+        return controller.makeTouchBar()
     }
 
     private func buildSidebar() -> TabBarView {
