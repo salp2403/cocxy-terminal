@@ -287,6 +287,61 @@ struct SSHKeyManagerTests {
         #expect(call.arguments.contains("/test/.ssh/id_ed25519"))
     }
 
+    @Test func importIntoKeychainUsesModernAppleKeychainFlag() throws {
+        let executor = MockSSHKeyExecutor()
+        let manager = SSHKeyManager(
+            fileSystem: MockSSHKeyFileSystem(),
+            executor: executor,
+            sshDirectoryPath: "/test/.ssh"
+        )
+
+        try manager.importIntoKeychain(keyPath: "/test/.ssh/id_ed25519")
+
+        #expect(executor.executedCommands.count == 1)
+        let call = executor.executedCommands[0]
+        #expect(call.command == "/usr/bin/ssh-add")
+        #expect(call.arguments == ["--apple-use-keychain", "/test/.ssh/id_ed25519"])
+    }
+
+    @Test func importIntoKeychainFallsBackToLegacyFlagWhenModernFlagIsUnsupported() throws {
+        let executor = MockSSHKeyExecutor()
+        executor.stubbedResults["/usr/bin/ssh-add --apple-use-keychain /test/.ssh/id_ed25519"] =
+            ProcessResult(exitCode: 1, stdout: "", stderr: "illegal option -- -")
+        executor.stubbedResults["/usr/bin/ssh-add -K /test/.ssh/id_ed25519"] =
+            ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        let manager = SSHKeyManager(
+            fileSystem: MockSSHKeyFileSystem(),
+            executor: executor,
+            sshDirectoryPath: "/test/.ssh"
+        )
+
+        try manager.importIntoKeychain(keyPath: "/test/.ssh/id_ed25519")
+
+        #expect(executor.executedCommands.map(\.arguments) == [
+            ["--apple-use-keychain", "/test/.ssh/id_ed25519"],
+            ["-K", "/test/.ssh/id_ed25519"],
+        ])
+    }
+
+    @Test func importIntoKeychainDoesNotHideNormalSSHAddFailures() {
+        let executor = MockSSHKeyExecutor()
+        executor.defaultResult = ProcessResult(
+            exitCode: 1,
+            stdout: "",
+            stderr: "Error loading key: invalid format"
+        )
+        let manager = SSHKeyManager(
+            fileSystem: MockSSHKeyFileSystem(),
+            executor: executor,
+            sshDirectoryPath: "/test/.ssh"
+        )
+
+        #expect(throws: SSHKeyManagerError.self) {
+            try manager.importIntoKeychain(keyPath: "/test/.ssh/bad_key")
+        }
+        #expect(executor.executedCommands.count == 1)
+    }
+
     @Test func tildePathExpandsToHomeDirectory() {
         let executor = MockSSHKeyExecutor()
         let fileSystem = MockSSHKeyFileSystem()

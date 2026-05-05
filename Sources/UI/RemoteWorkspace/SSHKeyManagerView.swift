@@ -84,6 +84,15 @@ final class SSHKeyManagerViewModel: ObservableObject {
         }
     }
 
+    func importIntoKeychain(keyPath: String) {
+        do {
+            try keyManager.importIntoKeychain(keyPath: keyPath)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func dismissError() {
         errorMessage = nil
     }
@@ -181,6 +190,8 @@ struct SSHKeyManagerView: View {
                         ForEach(viewModel.keys) { key in
                             SSHKeyRow(key: key, onAddToAgent: {
                                 viewModel.addToAgent(keyPath: key.id)
+                            }, onImportIntoKeychain: {
+                                viewModel.importIntoKeychain(keyPath: key.id)
                             }, localizer: localizer)
                             Divider()
                                 .padding(.leading, 40)
@@ -334,6 +345,7 @@ struct SSHKeyRow: View {
 
     let key: SSHKeyInfo
     let onAddToAgent: () -> Void
+    let onImportIntoKeychain: () -> Void
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
@@ -361,6 +373,23 @@ struct SSHKeyRow: View {
             }
 
             Spacer()
+
+            Button(action: onImportIntoKeychain) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+            }
+            .buttonStyle(.plain)
+            .help(localized("remoteWorkspace.keys.importKeychain.help", fallback: "Import to macOS Keychain"))
+            .accessibilityLabel(
+                String(
+                    format: localized(
+                        "remoteWorkspace.keys.importKeychain.accessibility",
+                        fallback: "Import %@ to macOS Keychain"
+                    ),
+                    key.name
+                )
+            )
 
             Button(action: onAddToAgent) {
                 Image(systemName: "person.badge.key")

@@ -59,6 +59,24 @@ enum SSHKeyManagerError: Error, Equatable {
     case fingerprintFailed(String)
     case generationFailed(String)
     case agentError(String)
+    case keychainImportFailed(String)
+}
+
+extension SSHKeyManagerError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .keyNotFound(let path):
+            return "SSH key not found: \(path)"
+        case .fingerprintFailed(let message):
+            return "Could not read SSH key fingerprint: \(message)"
+        case .generationFailed(let message):
+            return "Could not generate SSH key: \(message)"
+        case .agentError(let message):
+            return "Could not add SSH key to agent: \(message)"
+        case .keychainImportFailed(let message):
+            return "Could not import SSH key into macOS Keychain: \(message)"
+        }
+    }
 }
 
 // MARK: - Key Executor Protocol
@@ -270,6 +288,32 @@ final class SSHKeyManager: Sendable {
         }
     }
 
+    /// Imports a private key into the macOS OpenSSH Keychain integration.
+    ///
+    /// Modern macOS OpenSSH uses `--apple-use-keychain`; older builds used
+    /// `-K`. The legacy flag is attempted only when the modern flag is not
+    /// recognized so normal SSH errors are not hidden by a fallback path.
+    func importIntoKeychain(keyPath: String) throws {
+        let result = try executor.execute(
+            command: "/usr/bin/ssh-add",
+            arguments: ["--apple-use-keychain", keyPath]
+        )
+
+        guard result.exitCode != 0 else { return }
+
+        guard Self.shouldRetryLegacyKeychainFlag(for: result) else {
+            throw SSHKeyManagerError.keychainImportFailed(result.stderr)
+        }
+
+        let legacyResult = try executor.execute(
+            command: "/usr/bin/ssh-add",
+            arguments: ["-K", keyPath]
+        )
+        guard legacyResult.exitCode == 0 else {
+            throw SSHKeyManagerError.keychainImportFailed(legacyResult.stderr)
+        }
+    }
+
     // MARK: - Parsing
 
     /// Extracts the SHA256 hash from ssh-keygen output.
@@ -288,5 +332,12 @@ final class SSHKeyManager: Sendable {
         }
 
         return trimmed
+    }
+
+    private static func shouldRetryLegacyKeychainFlag(for result: ProcessResult) -> Bool {
+        let message = "\(result.stdout)\n\(result.stderr)".lowercased()
+        return message.contains("illegal option")
+            || message.contains("unknown option")
+            || message.contains("unrecognized option")
     }
 }

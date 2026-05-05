@@ -2327,6 +2327,8 @@
 "remoteWorkspace.keys.passphrase.placeholder" = "Opcional";
 "remoteWorkspace.keys.addToAgent.help" = "Agregar al agente SSH";
 "remoteWorkspace.keys.addToAgent.accessibility" = "Agregar %@ al agente SSH";
+"remoteWorkspace.keys.importKeychain.help" = "Importar a Keychain de macOS";
+"remoteWorkspace.keys.importKeychain.accessibility" = "Importar %@ a Keychain de macOS";
 "remoteWorkspace.keys.error.nameRequired" = "El nombre de la llave es obligatorio.";
 
 "remoteWorkspace.daemon.connectFirst" = "Conecta primero al perfil para gestionar el daemon";
