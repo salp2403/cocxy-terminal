@@ -651,6 +651,43 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func sourceLiteralFallbackLocalizationKeysExistInEnglishAndSpanishResources() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let english = try localizationKeys(
+            at: root.appendingPathComponent("Resources/Localization/en.lproj/Localizable.strings")
+        )
+        let spanish = try localizationKeys(
+            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
+        )
+        let sourceKeys = try sourceLiteralFallbackLocalizationKeys(
+            at: root.appendingPathComponent("Sources", isDirectory: true),
+            relativeTo: root
+        )
+
+        #expect(!sourceKeys.isEmpty)
+        #expect(
+            sourceKeys.keys.filter { !english.contains($0) }.isEmpty,
+            Comment(
+                rawValue: missingLocalizationMessage(
+                    sourceKeys: sourceKeys,
+                    availableKeys: english,
+                    localeName: "English"
+                )
+            )
+        )
+        #expect(
+            sourceKeys.keys.filter { !spanish.contains($0) }.isEmpty,
+            Comment(
+                rawValue: missingLocalizationMessage(
+                    sourceKeys: sourceKeys,
+                    availableKeys: spanish,
+                    localeName: "Spanish"
+                )
+            )
+        )
+    }
+
+    @Test
     func markdownPreviewTemplateUsesLocalizedTOCTitle() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
@@ -679,6 +716,65 @@ struct AppLocalizationSwiftTestingTests {
         )
         let strings = try #require(propertyList as? [String: String])
         return Set(strings.keys)
+    }
+
+    private func sourceLiteralFallbackLocalizationKeys(
+        at sourcesURL: URL,
+        relativeTo root: URL
+    ) throws -> [String: [String]] {
+        let expression = try NSRegularExpression(
+            pattern: #"(?:\.string|localizedString)\(\s*"([A-Za-z0-9_.-]+)"\s*,\s*fallback:"#,
+            options: []
+        )
+        guard let enumerator = FileManager.default.enumerator(
+            at: sourcesURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return [:]
+        }
+
+        var keysBySource: [String: [String]] = [:]
+        for case let fileURL as URL in enumerator {
+            guard fileURL.pathExtension == "swift" else { continue }
+            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true else { continue }
+
+            let source = try String(contentsOf: fileURL, encoding: .utf8)
+            let range = NSRange(source.startIndex..<source.endIndex, in: source)
+            for match in expression.matches(in: source, options: [], range: range) {
+                guard let keyRange = Range(match.range(at: 1), in: source) else { continue }
+                let key = String(source[keyRange])
+                keysBySource[key, default: []].append(relativePath(for: fileURL, from: root))
+            }
+        }
+        return keysBySource
+    }
+
+    private func missingLocalizationMessage(
+        sourceKeys: [String: [String]],
+        availableKeys: Set<String>,
+        localeName: String
+    ) -> String {
+        let missing = sourceKeys.keys
+            .filter { !availableKeys.contains($0) }
+            .sorted()
+            .prefix(20)
+            .map { key in
+                let locations = sourceKeys[key, default: []].prefix(3).joined(separator: ", ")
+                return "\(key) [\(locations)]"
+            }
+            .joined(separator: "; ")
+        return "Missing \(localeName) localization keys: \(missing)"
+    }
+
+    private func relativePath(for fileURL: URL, from root: URL) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let filePath = fileURL.standardizedFileURL.path
+        guard filePath.hasPrefix(rootPath + "/") else {
+            return filePath
+        }
+        return String(filePath.dropFirst(rootPath.count + 1))
     }
 }
 
