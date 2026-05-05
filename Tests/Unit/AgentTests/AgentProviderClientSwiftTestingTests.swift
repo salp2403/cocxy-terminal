@@ -525,6 +525,34 @@ struct AgentProviderClientSwiftTestingTests {
         }
     }
 
+    @Test("provider failure messages redact echoed secrets and stay bounded")
+    func providerFailureMessagesRedactEchoedSecretsAndStayBounded() async throws {
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 401,
+            data: Data("""
+            {"error":{"message":"invalid token sk-test-redacted-openai-key for token=abc12345678901234567890 with \(String(repeating: "context ", count: 80))"}}
+            """.utf8)
+        ))
+        let client = OpenAIAgentLLMClient(
+            apiKey: "secret-openai-key",
+            model: "test-openai-model",
+            transport: transport
+        )
+
+        do {
+            _ = try await client.nextResponse(for: [
+                AgentMessage(id: "m1", role: .user, content: "hello"),
+            ])
+            Issue.record("Expected provider failure")
+        } catch let error as AgentProviderClientError {
+            let description = error.localizedDescription
+            #expect(description.contains("[redacted]"))
+            #expect(!description.contains("sk-test-redacted-openai-key"))
+            #expect(!description.contains("abc12345678901234567890"))
+            #expect(description.count <= 360)
+        }
+    }
+
     @Test("retrying transport retries transient provider failures")
     func retryingTransportRetriesTransientProviderFailures() async throws {
         let base = SequencedAgentHTTPTransport(results: [

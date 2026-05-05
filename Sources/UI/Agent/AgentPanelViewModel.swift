@@ -419,7 +419,7 @@ final class AgentPanelViewModel: ObservableObject {
     }
 
     func handleAttachmentError(_ error: Error) {
-        let description = error.localizedDescription
+        let description = AgentErrorPresentation.message(for: error)
         state = .failed(description)
         statusText = description
     }
@@ -456,7 +456,7 @@ final class AgentPanelViewModel: ObservableObject {
         do {
             effectiveHistory = try historyWithSelectedSkills()
         } catch {
-            let description = error.localizedDescription
+            let description = AgentErrorPresentation.message(for: error)
             state = .failed(description)
             statusText = description
             return
@@ -489,7 +489,7 @@ final class AgentPanelViewModel: ObservableObject {
             messages = result.messages
             applyStopReason(result.stopReason)
         } catch {
-            let description = error.localizedDescription
+            let description = AgentErrorPresentation.message(for: error)
             state = .failed(description)
             statusText = description
         }
@@ -530,7 +530,7 @@ final class AgentPanelViewModel: ObservableObject {
             messages = result.messages
             applyStopReason(result.stopReason)
         } catch {
-            let description = error.localizedDescription
+            let description = AgentErrorPresentation.message(for: error)
             state = .failed(description)
             statusText = description
         }
@@ -561,7 +561,7 @@ final class AgentPanelViewModel: ObservableObject {
             availableSkills = []
             selectedSkillIDs = []
             if configuration.enabled {
-                statusText = "Failed to load skills: \(error.localizedDescription)"
+                statusText = "Failed to load skills: \(AgentErrorPresentation.message(for: error))"
             }
         }
     }

@@ -469,6 +469,25 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(viewModel.statusText == "Provider unavailable.")
     }
 
+    @Test("runner errors are redacted before reaching panel state")
+    func runnerErrorsAreRedactedBeforeReachingPanelState() async throws {
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true),
+            runner: SensitiveThrowingAgentPromptRunner()
+        )
+
+        viewModel.promptDraft = "Explain this"
+        await viewModel.submitPrompt()
+
+        guard case .failed(let message) = viewModel.state else {
+            Issue.record("Expected failed state")
+            return
+        }
+        #expect(message.contains("[redacted]"))
+        #expect(!message.contains("sk-test-panel-key"))
+        #expect(viewModel.statusText == message)
+    }
+
     private static let pngData = Data(base64Encoded:
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
     )!
@@ -555,6 +574,24 @@ private struct ThrowingAgentPromptRunner: AgentPromptRunning {
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
         throw AgentPanelViewModelError.providerUnavailable
+    }
+}
+
+private struct SensitiveThrowingAgentPromptRunner: AgentPromptRunning {
+    func run(
+        prompt: String,
+        history: [AgentMessage],
+        configuration: AgentModeConfig
+    ) async throws -> AgentLoopResult {
+        throw SensitiveAgentPanelTestError.providerReturnedSecret
+    }
+}
+
+private enum SensitiveAgentPanelTestError: LocalizedError {
+    case providerReturnedSecret
+
+    var errorDescription: String? {
+        "Provider failed with token sk-test-panel-key."
     }
 }
 

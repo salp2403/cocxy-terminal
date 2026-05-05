@@ -936,14 +936,16 @@ private func validate(_ response: AgentHTTPResponse) throws {
 
 private func providerErrorMessage(from data: Data) -> String {
     guard let object = try? jsonDictionary(from: data) else {
-        return String(data: data, encoding: .utf8) ?? "HTTP request failed"
+        return AgentErrorPresentation.redacted(
+            String(data: data, encoding: .utf8) ?? "HTTP request failed"
+        )
     }
     if let error = object["error"] as? [String: Any],
        let message = error["message"] as? String {
-        return message
+        return AgentErrorPresentation.redacted(message)
     }
     if let message = object["message"] as? String {
-        return message
+        return AgentErrorPresentation.redacted(message)
     }
     return "HTTP request failed"
 }
