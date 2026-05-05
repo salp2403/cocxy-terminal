@@ -487,11 +487,7 @@ extension CodeReviewPanelViewModel {
 
     func localizedAftermathErrorMessage(for error: Error) -> String {
         if let typed = error as? GitMergeAftermathError {
-            return typed.errorDescription
-                ?? localizedString(
-                    "codeReview.prMerge.aftermath.failed",
-                    fallback: "Post-merge auto-pull failed."
-                )
+            return typed.localizedDescription(using: localizer)
         }
         let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         return description.isEmpty

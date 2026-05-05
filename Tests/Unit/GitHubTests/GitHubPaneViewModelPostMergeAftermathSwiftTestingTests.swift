@@ -191,6 +191,28 @@ struct GitHubPaneViewModelPostMergeAftermathSwiftTestingTests {
         #expect(viewModel.lastErrorMessage == nil)
     }
 
+    @Test("aftermath success localizes merged head and outcome")
+    func aftermathSuccessLocalizesSpanish() async throws {
+        let viewModel = try makeViewModel(localizer: spanishLocalizer())
+        viewModel.postMergeAftermathHandler = { _, baseBranch in
+            .synced(branch: baseBranch, ahead: 0, behind: 2)
+        }
+
+        viewModel.runPostMergeAftermathIfWired(
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            baseBranch: "main",
+            headRefName: "feat/test",
+            deleteBranchUsed: false,
+            mergedNumber: 42,
+            method: .squash
+        )
+
+        try await waitForCondition {
+            viewModel.lastMergeInfoMessage?.contains("fusionado") == true
+        }
+        #expect(viewModel.lastMergeInfoMessage == "PR #42 fusionado con Squash & Merge. `main` sincronizada con origin (2 commits descargados).")
+    }
+
     @Test("aftermath baseBranch trimmed before invoking handler")
     func aftermathTrimsBaseBranch() async throws {
         let viewModel = makeViewModel()
@@ -248,6 +270,26 @@ struct GitHubPaneViewModelPostMergeAftermathSwiftTestingTests {
         try await waitForCondition { viewModel.lastErrorMessage != nil }
         #expect(viewModel.lastErrorMessage?.contains("network") == true ||
                 viewModel.lastErrorMessage?.lowercased().contains("fetch") == true)
+    }
+
+    @Test("aftermath thrown typed errors localize")
+    func aftermathThrownTypedErrorsLocalizeSpanish() async throws {
+        let viewModel = try makeViewModel(localizer: spanishLocalizer())
+        viewModel.postMergeAftermathHandler = { _, _ in
+            throw GitMergeAftermathError.fetchFailed(stderr: "", exitCode: 128)
+        }
+
+        viewModel.runPostMergeAftermathIfWired(
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            baseBranch: "main",
+            headRefName: "feat/test",
+            deleteBranchUsed: false,
+            mergedNumber: 42,
+            method: .squash
+        )
+
+        try await waitForCondition { viewModel.lastErrorMessage != nil }
+        #expect(viewModel.lastErrorMessage == "Falló el auto-pull: `git fetch` salió con código 128.")
     }
 
     // MARK: - End-to-end: requestMergePullRequest invokes aftermath
@@ -335,6 +377,34 @@ struct GitHubPaneViewModelPostMergeAftermathSwiftTestingTests {
         #expect(closedTabID.value != otherTabID)
     }
 
+    @Test("cleanup close appends localized fragment")
+    func cleanupCloseAppendsLocalizedFragmentSpanish() async throws {
+        let loadedTabID = TabID()
+        let viewModel = try await makeLoadedViewModel(
+            tabIDProvider: { loadedTabID },
+            localizer: spanishLocalizer()
+        )
+        viewModel.mergePullRequestHandler = { _, _ in Self.mergedPullRequest() }
+        viewModel.postMergeAftermathHandler = { _, _ in
+            .fetchedOnly(currentBranch: "feature/test", baseBranch: "main")
+        }
+        viewModel.postMergeCleanupAlertHandler = { _ in .closeWorktree }
+        viewModel.closeWorktreeTabHandler = { _ in true }
+
+        viewModel.requestMergePullRequest(
+            number: 42,
+            method: .squash,
+            deleteBranch: true
+        )
+
+        try await waitForCondition {
+            viewModel.lastMergeInfoMessage?.contains("cerrado") == true
+        }
+        let message = viewModel.lastMergeInfoMessage ?? ""
+        #expect(message.contains("PR #42 fusionado con Squash & Merge."))
+        #expect(message.contains("Worktree en `feature/test` cerrado."))
+    }
+
     @Test("cleanup close skips stale refresh when merged worktree directory disappeared")
     func cleanupCloseSkipsStaleRefreshWhenMergedWorktreeDirectoryDisappeared() async throws {
         let workingDirectory = URL(
@@ -383,20 +453,23 @@ struct GitHubPaneViewModelPostMergeAftermathSwiftTestingTests {
 
     // MARK: - Helpers
 
-    private func makeViewModel() -> GitHubPaneViewModel {
+    private func makeViewModel(
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
+    ) -> GitHubPaneViewModel {
         let service = GitHubService(runner: { _, _, _ in
             GitHubCLIResult(stdout: "", stderr: "", terminationStatus: 0)
         })
-        return GitHubPaneViewModel(service: service)
+        return GitHubPaneViewModel(service: service, localizer: localizer)
     }
 
     private func makeLoadedViewModel(
         workingDirectory: URL = URL(fileURLWithPath: "/tmp/github-pane-aftermath", isDirectory: true),
         pullRequestNumber: Int = 42,
-        tabIDProvider: (() -> TabID?)? = nil
+        tabIDProvider: (() -> TabID?)? = nil,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
     ) async throws -> GitHubPaneViewModel {
         let service = GitHubService(runner: Self.loadedRunner(pullRequestNumber: pullRequestNumber))
-        let viewModel = GitHubPaneViewModel(service: service)
+        let viewModel = GitHubPaneViewModel(service: service, localizer: localizer)
         viewModel.workingDirectoryProvider = { workingDirectory }
         viewModel.tabIDProvider = tabIDProvider
         viewModel.refresh()
@@ -405,6 +478,16 @@ struct GitHubPaneViewModelPostMergeAftermathSwiftTestingTests {
                 && viewModel.isLoading == false
         }
         return viewModel
+    }
+
+    private func spanishLocalizer() throws -> AppLocalizer {
+        let bundle = try #require(localizationBundle())
+        return AppLocalizer(languagePreference: .spanish, bundle: bundle)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
 

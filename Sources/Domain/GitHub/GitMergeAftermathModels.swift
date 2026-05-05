@@ -293,4 +293,64 @@ enum GitMergeAftermathError: Error, Equatable, Sendable, LocalizedError {
             return "Auto-pull aborted: unexpected `git status` output (\(preview))."
         }
     }
+
+    func localizedDescription(using localizer: AppLocalizer) -> String {
+        func localized(_ key: String, fallback: String, _ arguments: CVarArg...) -> String {
+            String(
+                format: localizer.string(key, fallback: fallback),
+                locale: localizer.locale,
+                arguments: arguments
+            )
+        }
+
+        switch self {
+        case .gitUnavailable:
+            return localizer.string(
+                "codeReview.prMerge.aftermath.error.gitUnavailable",
+                fallback: "Could not auto-pull: git binary not found on PATH."
+            )
+        case .fetchFailed(let stderr, let exitCode):
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return localized(
+                    "codeReview.prMerge.aftermath.error.fetchFailed.empty",
+                    fallback: "Auto-pull failed: `git fetch` exited %d.",
+                    exitCode
+                )
+            }
+            return localized(
+                "codeReview.prMerge.aftermath.error.fetchFailed.detail",
+                fallback: "Auto-pull failed during fetch: %@",
+                trimmed
+            )
+        case .pullFailed(let stderr, let exitCode):
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return localized(
+                    "codeReview.prMerge.aftermath.error.pullFailed.empty",
+                    fallback: "Auto-pull failed: `git pull --ff-only` exited %d.",
+                    exitCode
+                )
+            }
+            return localized(
+                "codeReview.prMerge.aftermath.error.pullFailed.detail",
+                fallback: "Auto-pull failed during pull: %@",
+                trimmed
+            )
+        case .timedOut(let operation, let after):
+            return localized(
+                "codeReview.prMerge.aftermath.error.timedOut",
+                fallback: "Auto-pull timed out: `git %@` exceeded %ds.",
+                operation,
+                Int(after)
+            )
+        case .invalidPorcelainOutput(let raw):
+            let preview = String(raw.prefix(80))
+            return localized(
+                "codeReview.prMerge.aftermath.error.invalidPorcelainOutput",
+                fallback: "Auto-pull aborted: unexpected `git status` output (%@).",
+                preview
+            )
+        }
+    }
 }

@@ -263,6 +263,28 @@ struct CodeReviewPanelViewModelPostMergeAftermathSwiftTestingTests {
         #expect(errorMessage.contains("network") || errorMessage.lowercased().contains("fetch"))
     }
 
+    @Test("aftermath typed errors localize to configured app language")
+    func aftermathTypedErrorsLocalizeSpanish() async throws {
+        let viewModel = try makeViewModel(localizer: spanishLocalizer())
+        viewModel.activeTabCwdProvider = { Self.workingDirectory }
+        viewModel.postMergeAftermathHandler = { _, _ in
+            throw GitMergeAftermathError.fetchFailed(stderr: "", exitCode: 128)
+        }
+
+        viewModel.runPostMergeAftermathIfWired(
+            baseBranch: "main",
+            headRefName: "feat/test",
+            deleteBranchUsed: false,
+            mergedNumber: 42,
+            method: .squash
+        )
+
+        try await waitForCondition {
+            viewModel.pullRequestMergeErrorMessage != nil
+        }
+        #expect(viewModel.pullRequestMergeErrorMessage == "Falló el auto-pull: `git fetch` salió con código 128.")
+    }
+
     // MARK: - End-to-end requestMergePullRequest with aftermath
 
     @Test("requestMergePullRequest success path invokes aftermath with merged baseRefName")
@@ -387,11 +409,24 @@ struct CodeReviewPanelViewModelPostMergeAftermathSwiftTestingTests {
 
     // MARK: - Helpers
 
-    private func makeViewModel() -> CodeReviewPanelViewModel {
+    private func makeViewModel(
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
+    ) -> CodeReviewPanelViewModel {
         CodeReviewPanelViewModel(
             tracker: SessionDiffTrackerImpl(),
-            hookEventReceiver: nil
+            hookEventReceiver: nil,
+            localizer: localizer
         )
+    }
+
+    private func spanishLocalizer() throws -> AppLocalizer {
+        let bundle = try #require(localizationBundle())
+        return AppLocalizer(languagePreference: .spanish, bundle: bundle)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
 

@@ -261,6 +261,21 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
         #expect(viewModel.pullRequestsBeingMerged.contains(42) == false)
     }
 
+    @Test("requestMergePullRequest localizes typed merge errors")
+    func requestMergePullRequestLocalizesTypedMergeErrorsSpanish() async throws {
+        let viewModel = try await makeLoadedViewModel(localizer: try spanishLocalizer())
+        viewModel.mergePullRequestHandler = { _, _ in
+            throw GitHubMergeError.mergeConflict
+        }
+
+        viewModel.requestMergePullRequest(number: 42, method: .squash, deleteBranch: true)
+
+        try await waitForGitHubPaneCondition {
+            viewModel.lastErrorMessage != nil
+        }
+        #expect(viewModel.lastErrorMessage == "El pull request tiene conflictos de merge. Resuélvelos en un navegador antes de reintentar.")
+    }
+
     @Test("requestMergePullRequest with merge feature disabled sets error banner immediately")
     func requestMergePullRequestRespectsFeatureFlag() {
         let viewModel = makeViewModel()
@@ -328,10 +343,11 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
 
     private func makeLoadedViewModel(
         workingDirectory: URL = URL(fileURLWithPath: "/tmp/github-pane-merge", isDirectory: true),
-        pullRequestNumber: Int = 42
+        pullRequestNumber: Int = 42,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
     ) async throws -> GitHubPaneViewModel {
         let service = GitHubService(runner: Self.loadedRunner(pullRequestNumber: pullRequestNumber))
-        let viewModel = GitHubPaneViewModel(service: service)
+        let viewModel = GitHubPaneViewModel(service: service, localizer: localizer)
         viewModel.workingDirectoryProvider = { workingDirectory }
         viewModel.refresh()
         try await waitForGitHubPaneCondition {
@@ -339,6 +355,16 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
                 && viewModel.isLoading == false
         }
         return viewModel
+    }
+
+    private func spanishLocalizer() throws -> AppLocalizer {
+        let bundle = try #require(localizationBundle())
+        return AppLocalizer(languagePreference: .spanish, bundle: bundle)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
 

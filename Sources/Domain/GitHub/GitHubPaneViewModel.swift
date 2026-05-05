@@ -433,7 +433,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 await MainActor.run {
                     guard let self else { return }
                     self.pullRequestsBeingMerged.remove(number)
-                    self.lastErrorMessage = Self.userFacingMergeErrorMessage(for: error)
+                    self.lastErrorMessage = self.localizedMergeErrorMessage(for: error)
                 }
             }
         }
@@ -470,6 +470,22 @@ final class GitHubPaneViewModel: ObservableObject {
         return description.isEmpty ? "Pull request action failed." : description
     }
 
+    private func localizedMergeErrorMessage(for error: Error) -> String {
+        if let mergeError = error as? GitHubMergeError {
+            return mergeError.localizedDescription(using: localizer)
+        }
+        if let cliError = error as? GitHubCLIError {
+            return Self.banner(for: cliError, using: localizer)
+        }
+        let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty
+            ? localized(
+                "github.merge.error.actionFailed",
+                fallback: "Pull request action failed."
+            )
+            : description
+    }
+
     // MARK: - Post-merge aftermath (v0.1.87)
 
     /// Builds the merge confirmation banner combining the merge head
@@ -486,6 +502,16 @@ final class GitHubPaneViewModel: ObservableObject {
         return head + " " + outcome.displayMessage
     }
 
+    private func localizedMergeBannerMessage(
+        mergedNumber: Int,
+        method: GitHubMergeMethod,
+        outcome: GitMergeAftermathOutcome?
+    ) -> String {
+        let head = localizedMergeBannerHead(number: mergedNumber, method: method)
+        guard let outcome else { return head }
+        return head + " " + outcome.localizedDisplayMessage(using: localizer)
+    }
+
     /// Maps an aftermath error to user-facing copy. `GitMergeAftermathError`
     /// already carries actionable phrasing; anything else falls back
     /// to `localizedDescription`.
@@ -495,6 +521,19 @@ final class GitHubPaneViewModel: ObservableObject {
         }
         let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         return description.isEmpty ? "Post-merge auto-pull failed." : description
+    }
+
+    private func localizedAftermathErrorMessage(for error: Error) -> String {
+        if let typed = error as? GitMergeAftermathError {
+            return typed.localizedDescription(using: localizer)
+        }
+        let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty
+            ? localized(
+                "codeReview.prMerge.aftermath.failed",
+                fallback: "Post-merge auto-pull failed."
+            )
+            : description
     }
 
     /// Drives the aftermath sync if a handler is wired. Always runs in
@@ -518,11 +557,17 @@ final class GitHubPaneViewModel: ObservableObject {
         Task { [weak self] in
             do {
                 let outcome = try await aftermathHandler(workingDirectory, trimmedBase)
-                let baseBanner = Self.mergeBannerMessage(
-                    mergedNumber: mergedNumber,
-                    method: method,
-                    outcome: outcome
-                )
+                let baseBanner = await MainActor.run { [weak self] in
+                    self?.localizedMergeBannerMessage(
+                        mergedNumber: mergedNumber,
+                        method: method,
+                        outcome: outcome
+                    ) ?? Self.mergeBannerMessage(
+                        mergedNumber: mergedNumber,
+                        method: method,
+                        outcome: outcome
+                    )
+                }
                 await MainActor.run {
                     guard let self else { return }
                     self.lastMergeInfoMessage = baseBanner
@@ -545,7 +590,7 @@ final class GitHubPaneViewModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     guard let self else { return }
-                    self.lastErrorMessage = Self.userFacingAftermathErrorMessage(for: error)
+                    self.lastErrorMessage = self.localizedAftermathErrorMessage(for: error)
                 }
             }
         }
@@ -577,15 +622,36 @@ final class GitHubPaneViewModel: ObservableObject {
             } else {
                 closed = false
             }
-            let fragment = closed
-                ? PostMergeWorktreeCleanupAlert.closedBannerFragment(headRefName: headRefName)
-                : PostMergeWorktreeCleanupAlert.closeFailedBannerFragment(headRefName: headRefName)
+            let fragment = await MainActor.run { [weak self] in
+                guard let self else {
+                    return closed
+                        ? PostMergeWorktreeCleanupAlert.closedBannerFragment(headRefName: headRefName)
+                        : PostMergeWorktreeCleanupAlert.closeFailedBannerFragment(headRefName: headRefName)
+                }
+                return closed
+                    ? PostMergeWorktreeCleanupAlert.localizedClosedBannerFragment(
+                        headRefName: headRefName,
+                        localizer: self.localizer
+                    )
+                    : PostMergeWorktreeCleanupAlert.localizedCloseFailedBannerFragment(
+                        headRefName: headRefName,
+                        localizer: self.localizer
+                    )
+            }
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.lastMergeInfoMessage = baseBanner + " " + fragment
             }
         case .keep:
-            let fragment = PostMergeWorktreeCleanupAlert.keepBannerFragment(headRefName: headRefName)
+            let fragment = await MainActor.run { [weak self] in
+                guard let self else {
+                    return PostMergeWorktreeCleanupAlert.keepBannerFragment(headRefName: headRefName)
+                }
+                return PostMergeWorktreeCleanupAlert.localizedKeepBannerFragment(
+                    headRefName: headRefName,
+                    localizer: self.localizer
+                )
+            }
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.lastMergeInfoMessage = baseBanner + " " + fragment

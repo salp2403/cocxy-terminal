@@ -1534,6 +1534,13 @@
 "codeReview.prMerge.error.default" = "Pull request could not be merged.";
 "codeReview.prMerge.error.actionFailed" = "Pull request action failed.";
 "codeReview.prMerge.aftermath.failed" = "Post-merge auto-pull failed.";
+"codeReview.prMerge.aftermath.error.gitUnavailable" = "Could not auto-pull: git binary not found on PATH.";
+"codeReview.prMerge.aftermath.error.fetchFailed.empty" = "Auto-pull failed: `git fetch` exited %d.";
+"codeReview.prMerge.aftermath.error.fetchFailed.detail" = "Auto-pull failed during fetch: %@";
+"codeReview.prMerge.aftermath.error.pullFailed.empty" = "Auto-pull failed: `git pull --ff-only` exited %d.";
+"codeReview.prMerge.aftermath.error.pullFailed.detail" = "Auto-pull failed during pull: %@";
+"codeReview.prMerge.aftermath.error.timedOut" = "Auto-pull timed out: `git %@` exceeded %ds.";
+"codeReview.prMerge.aftermath.error.invalidPorcelainOutput" = "Auto-pull aborted: unexpected `git status` output (%@).";
 "codeReview.prMerge.aftermath.synced.already" = "`%@` already in sync with origin.";
 "codeReview.prMerge.aftermath.synced.pulled.one" = "`%@` synced with origin (%d commit pulled).";
 "codeReview.prMerge.aftermath.synced.pulled.many" = "`%@` synced with origin (%d commits pulled).";
@@ -1564,6 +1571,7 @@
 "github.merge.error.autoMergeEnabled" = "Auto-merge is enabled. The pull request will merge once requirements are met.";
 "github.merge.error.notMergeable" = "The pull request cannot be merged at this time.";
 "github.merge.error.notMergeable.withReason" = "The pull request cannot be merged: %@";
+"github.merge.error.actionFailed" = "Pull request action failed.";
 "github.merge.error.cli.notInstalled" = "Install the GitHub CLI: brew install gh";
 "github.merge.error.cli.notAuthenticated" = "Sign in with `gh auth login` before merging.";
 "github.merge.error.cli.noRemote" = "No GitHub remote detected for this repository.";

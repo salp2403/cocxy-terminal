@@ -160,6 +160,13 @@ struct GitMergeAftermathErrorSwiftTestingTests {
         #expect(lower.contains("fetch"))
     }
 
+    @Test("fetchFailed error localizes empty stderr fallback")
+    func fetchFailedEmptyStderrLocalizesSpanish() throws {
+        let localizer = try spanishLocalizer()
+        let error = GitMergeAftermathError.fetchFailed(stderr: "", exitCode: 128)
+        #expect(error.localizedDescription(using: localizer) == "Falló el auto-pull: `git fetch` salió con código 128.")
+    }
+
     @Test("pullFailed error includes stderr")
     func pullFailedMessage() {
         let error = GitMergeAftermathError.pullFailed(
@@ -193,5 +200,15 @@ struct GitMergeAftermathErrorSwiftTestingTests {
         let c = GitMergeAftermathError.fetchFailed(stderr: "x", exitCode: 2)
         #expect(a == b)
         #expect(a != c)
+    }
+
+    private func spanishLocalizer() throws -> AppLocalizer {
+        let bundle = try #require(localizationBundle())
+        return AppLocalizer(languagePreference: .spanish, bundle: bundle)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
