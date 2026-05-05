@@ -405,6 +405,99 @@ struct CodebaseIndexSwiftTestingTests {
         #expect(storageURL.path.contains("dev.cocxy.codebase-index"))
     }
 
+    @Test("query suggestions expose local symbols and respect ignore policy")
+    func querySuggestionsExposeLocalSymbolsAndRespectIgnorePolicy() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "Generated/\n".write(to: root.appendingPathComponent(".cocxyindexignore"), atomically: true, encoding: .utf8)
+        try """
+        final class AuthSessionManager {
+            func issueSessionToken() {}
+        }
+        """.write(to: root.appendingPathComponent("Sources/AuthSessionManager.swift"), atomically: true, encoding: .utf8)
+        try "struct AuthIgnoredHelper {}\n".write(
+            to: root.appendingPathComponent("Generated/AuthIgnoredHelper.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let index = CodebaseIndex(workspace: AgentWorkspace(rootURL: root))
+        let suggestions = try index.suggestions(CodebaseQuerySuggestionRequest(query: "auth", limit: 5))
+
+        #expect(suggestions.first?.text == "auth session manager")
+        #expect(suggestions.first?.sourcePath == "Sources/AuthSessionManager.swift")
+        #expect(!suggestions.map(\.text).contains("auth ignored helper"))
+    }
+
+    @Test("query suggestions scope to validated workspace subdirectories")
+    func querySuggestionsScopeToValidatedWorkspaceSubdirectories() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "struct SourceAuthHelper {}\n".write(
+            to: root.appendingPathComponent("Sources/SourceAuthHelper.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "struct TestAuthFixture {}\n".write(
+            to: root.appendingPathComponent("Tests/TestAuthFixture.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let index = CodebaseIndex(workspace: AgentWorkspace(rootURL: root))
+        let suggestions = try index.suggestions(CodebaseQuerySuggestionRequest(
+            query: "auth",
+            scopePath: "Tests",
+            limit: 5
+        ))
+
+        #expect(suggestions.map(\.sourcePath).allSatisfy { $0?.hasPrefix("Tests/") == true })
+        #expect(suggestions.map(\.text).contains("test auth fixture"))
+        #expect(throws: AgentWorkspaceError.outsideRoot("../outside")) {
+            _ = try index.suggestions(CodebaseQuerySuggestionRequest(query: "auth", scopePath: "../outside"))
+        }
+    }
+
+    @Test("cross repository index merges and ranks workspace results")
+    func crossRepositoryIndexMergesAndRanksWorkspaceResults() throws {
+        let authRoot = try makeWorkspace()
+        let docsRoot = try makeWorkspace()
+        defer {
+            try? FileManager.default.removeItem(at: authRoot)
+            try? FileManager.default.removeItem(at: docsRoot)
+        }
+        try "session token authentication\n".write(
+            to: authRoot.appendingPathComponent("Sources/Auth.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "session notes\n".write(
+            to: docsRoot.appendingPathComponent("Sources/Notes.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let authWorkspace = AgentWorkspace(rootURL: authRoot)
+        let docsWorkspace = AgentWorkspace(rootURL: docsRoot)
+        let crossIndex = CodebaseCrossRepositoryIndex(workspaces: [
+            CodebaseIndexedWorkspace(
+                id: "docs",
+                displayName: "Docs",
+                index: CodebaseIndex(workspace: docsWorkspace)
+            ),
+            CodebaseIndexedWorkspace(
+                id: "auth",
+                displayName: "Auth",
+                index: CodebaseIndex(workspace: authWorkspace)
+            ),
+        ])
+
+        let results = try crossIndex.search(CodebaseSearchRequest(query: "session token", limit: 10))
+
+        #expect(results.map(\.workspaceID) == ["auth", "docs"])
+        #expect(results.first?.result.path == "Sources/Auth.swift")
+        #expect(results.first?.workspaceDisplayName == "Auth")
+    }
+
     @Test("semantic index rebuilds ten thousand files in persistent batches")
     func semanticIndexRebuildsTenThousandFilesInPersistentBatches() throws {
         let root = try makeWorkspace()
