@@ -78,7 +78,14 @@ extension AppDelegate {
             guard response == .alertFirstButtonReturn,
                   let self,
                   let controller else { return }
-            _ = self.restoreSession(snapshot.session, into: controller)
+            _ = self.restoreCrashRecoverySession(snapshot.session, into: controller)
         }
+    }
+
+    func restoreCrashRecoverySession(_ session: Session, into controller: MainWindowController) -> Bool {
+        controller.window?.disableScreenUpdatesUntilFlush()
+        let restored = restoreSession(session, into: controller)
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        return restored
     }
 }

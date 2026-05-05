@@ -170,6 +170,30 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(trackingWindow.displayIfNeededCount == 0)
     }
 
+    @Test("crash recovery restore batches visible rebuild until the next window flush")
+    func crashRecoveryRestoreBatchesVisibleRebuildUntilNextWindowFlush() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let trackingWindow = TrackingRestoreWindow(
+            contentRect: controller.window?.frame ?? NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: controller.window?.styleMask ?? [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        trackingWindow.contentView = controller.window?.contentView
+        trackingWindow.backgroundColor = CocxyColors.base.withAlphaComponent(0.35)
+        controller.window = trackingWindow
+
+        let session = makeSession(tabIDs: [TabID(), TabID()], activeTabIndex: 0)
+
+        #expect(delegate.restoreCrashRecoverySession(session, into: controller))
+        #expect(trackingWindow.disableScreenUpdatesCount == 1)
+        #expect(trackingWindow.displayIfNeededCount == 0)
+    }
+
     private func makeSession(
         tabIDs: [TabID],
         activeTabIndex: Int,
@@ -226,10 +250,16 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
 private final class TrackingRestoreWindow: NSWindow {
     private(set) var setFrameDisplayFlags: [Bool] = []
     private(set) var displayIfNeededCount = 0
+    private(set) var disableScreenUpdatesCount = 0
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
         setFrameDisplayFlags.append(flag)
         super.setFrame(frameRect, display: flag)
+    }
+
+    override func disableScreenUpdatesUntilFlush() {
+        disableScreenUpdatesCount += 1
+        super.disableScreenUpdatesUntilFlush()
     }
 
     override func displayIfNeeded() {
