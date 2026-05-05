@@ -334,6 +334,126 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(diagnosticsToolMessage.content.contains("Cannot find value."))
     }
 
+    @Test("runner combines codebase search skills and approved MCP tools in one session")
+    func runnerCombinesCodebaseSearchSkillsAndApprovedMCPTools() async throws {
+        let workspace = temporaryDirectory(named: "local-context-workspace")
+        let conversationRoot = temporaryDirectory(named: "local-context-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(
+            at: workspace.appendingPathComponent("Sources", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try "func restoreTerminalPalette() {}\n".write(
+            to: workspace.appendingPathComponent("Sources/RestoreCoordinator.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try writeProjectSkill(
+            id: "local-context",
+            name: "Local Context",
+            summary: "Use local project context.",
+            body: "Prefer local files, local skills, and local tool outputs.",
+            in: workspace
+        )
+
+        let mcpCall = AgentToolCall(
+            id: "mcp-lookup",
+            toolID: "mcp__local__lookup",
+            arguments: ["query": .string("restore")]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(
+                content: "Gathering local context.",
+                toolCalls: [
+                    AgentToolCall(id: "skills-list", toolID: "list_skills"),
+                    AgentToolCall(
+                        id: "skill-use",
+                        toolID: "use_skill",
+                        arguments: ["id": .string("local-context")]
+                    ),
+                    AgentToolCall(
+                        id: "codebase-search",
+                        toolID: "search_codebase",
+                        arguments: [
+                            "query": .string("restore palette"),
+                            "limit": .number(5),
+                        ]
+                    ),
+                ]
+            ),
+            AgentLLMResponse(
+                content: "Calling approved local MCP tool.",
+                toolCalls: [mcpCall]
+            ),
+            AgentLLMResponse(content: "Combined local context and MCP result.", toolCalls: []),
+        ])
+        let factory = RecordingSessionRunnerClientFactory(client: provider)
+        let mcpManager = RecordingSessionMCPManager(result: .object([
+            "content": .array([.string("MCP local restore result")]),
+        ]))
+        let runner = AgentSessionRunner(
+            clientFactory: factory,
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-local-context-integration",
+            mcpManager: mcpManager
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            maxIterations: 5,
+            conversationStorageDir: conversationRoot.path
+        )
+
+        let pending = try await runner.run(
+            prompt: "Use local context and then call the local MCP lookup.",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let approval) = pending.stopReason else {
+            Issue.record("Expected MCP approval after local context tools ran")
+            return
+        }
+        let secondSnapshot = try #require(await provider.snapshots.dropFirst().first)
+        #expect(approval.reason == .externalToolApprovalRequired(toolID: "mcp__local__lookup"))
+        #expect(factory.registries.first?.descriptor(for: "search_codebase")?.capability == .read)
+        #expect(factory.registries.first?.descriptor(for: "use_skill")?.capability == .read)
+        #expect(factory.registries.first?.descriptor(for: "mcp__local__lookup")?.capability == .external)
+        #expect(secondSnapshot.contains { message in
+            message.role == .tool
+                && message.toolName == "list_skills"
+                && message.content.contains("local-context")
+        })
+        #expect(secondSnapshot.contains { message in
+            message.role == .tool
+                && message.toolName == "use_skill"
+                && message.content.contains("Prefer local files")
+        })
+        #expect(secondSnapshot.contains { message in
+            message.role == .tool
+                && message.toolName == "search_codebase"
+                && message.content.contains("RestoreCoordinator.swift")
+        })
+
+        let completed = try await runner.approve(
+            request: approval,
+            history: pending.messages,
+            configuration: configuration
+        )
+
+        #expect(completed.stopReason == .completed)
+        #expect(completed.messages.contains { message in
+            message.role == .tool
+                && message.toolName == "mcp__local__lookup"
+                && message.content.contains("MCP local restore result")
+        })
+        #expect(await mcpManager.calls == [
+            AgentSessionMCPCall(toolID: "mcp__local__lookup", arguments: ["query": .string("restore")]),
+        ])
+    }
+
     @Test("runner prompts for computer use by default before executing")
     func runnerPromptsForComputerUseByDefault() async throws {
         let workspace = temporaryDirectory(named: "computer-use-prompt-workspace")
@@ -612,6 +732,29 @@ struct AgentSessionRunnerSwiftTestingTests {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
+
+    private func writeProjectSkill(
+        id: String,
+        name: String,
+        summary: String,
+        body: String,
+        in root: URL
+    ) throws {
+        let directory = root
+            .appendingPathComponent(".cocxy/skills", isDirectory: true)
+            .appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try """
+        ---
+        id: \(id)
+        name: \(name)
+        description: \(summary)
+        ---
+        # \(name)
+
+        \(body)
+        """.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
 }
 
 private actor ScriptedSessionRunnerClient: AgentLLMClient {
@@ -632,11 +775,18 @@ private final class RecordingSessionRunnerClientFactory: AgentLLMClientMaking, @
     private let client: any AgentLLMClient
     private let lock = NSLock()
     private var configurationStorage: [AgentModeConfig] = []
+    private var registryStorage: [AgentToolRegistry] = []
 
     var configurations: [AgentModeConfig] {
         lock.lock()
         defer { lock.unlock() }
         return configurationStorage
+    }
+
+    var registries: [AgentToolRegistry] {
+        lock.lock()
+        defer { lock.unlock() }
+        return registryStorage
     }
 
     init(client: any AgentLLMClient) {
@@ -649,6 +799,17 @@ private final class RecordingSessionRunnerClientFactory: AgentLLMClientMaking, @
         lock.unlock()
         return client
     }
+
+    func makeClient(
+        configuration: AgentModeConfig,
+        toolRegistry: AgentToolRegistry
+    ) throws -> any AgentLLMClient {
+        lock.lock()
+        configurationStorage.append(configuration)
+        registryStorage.append(toolRegistry)
+        lock.unlock()
+        return client
+    }
 }
 
 private struct StaticAgentCommandAllowlist: AgentCommandAllowlistLoading {
@@ -656,6 +817,36 @@ private struct StaticAgentCommandAllowlist: AgentCommandAllowlistLoading {
 
     func loadRules() throws -> [AgentCommandAllowRule] {
         rules
+    }
+}
+
+private struct AgentSessionMCPCall: Sendable, Equatable {
+    let toolID: String
+    let arguments: [String: AgentJSONValue]
+}
+
+private actor RecordingSessionMCPManager: MCPManaging {
+    private let result: AgentJSONValue
+    private(set) var calls: [AgentSessionMCPCall] = []
+
+    init(result: AgentJSONValue) {
+        self.result = result
+    }
+
+    func listToolDescriptors() async throws -> [AgentToolDescriptor] {
+        [
+            AgentToolDescriptor(
+                id: "mcp__local__lookup",
+                displayName: "Local: lookup",
+                description: "Look up local MCP context.",
+                capability: .external
+            ),
+        ]
+    }
+
+    func executeTool(agentToolID: String, arguments: [String: AgentJSONValue]) async throws -> AgentJSONValue {
+        calls.append(AgentSessionMCPCall(toolID: agentToolID, arguments: arguments))
+        return result
     }
 }
 
