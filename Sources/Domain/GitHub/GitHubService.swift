@@ -554,21 +554,7 @@ actor GitHubService {
         at directory: URL,
         timeoutSeconds: TimeInterval = 60.0
     ) async throws -> GitHubPullRequest {
-        var args: [String] = [
-            "pr", "merge", "\(request.pullRequestNumber)",
-            request.method.ghFlag,
-        ]
-        if request.deleteBranch {
-            args.append("--delete-branch")
-        }
-        if let subject = request.subject?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !subject.isEmpty {
-            args.append(contentsOf: ["--subject", subject])
-        }
-        if let body = request.body, !body.isEmpty {
-            args.append(contentsOf: ["--body", body])
-        }
-
+        let args = Self.mergeArguments(for: request)
         let result = try runner(directory, args, timeoutSeconds)
 
         // `gh pr merge` sometimes exits 0 while printing "will be
@@ -624,7 +610,59 @@ actor GitHubService {
         return merged
     }
 
+    @discardableResult
+    func enableAutoMerge(
+        request: GitHubMergeRequest,
+        at directory: URL,
+        timeoutSeconds: TimeInterval = 60.0
+    ) async throws -> GitHubPullRequest {
+        let result = try runner(
+            directory,
+            Self.mergeArguments(for: request, auto: true),
+            timeoutSeconds
+        )
+
+        if result.terminationStatus != 0 {
+            let combined = result.stderr + "\n" + result.stdout
+            throw GitHubMergeError.classify(
+                stderr: combined,
+                exitCode: result.terminationStatus,
+                pullRequestNumber: request.pullRequestNumber
+            )
+        }
+
+        return try await viewPullRequest(
+            number: request.pullRequestNumber,
+            at: directory,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
     // MARK: - Helpers
+
+    private static func mergeArguments(
+        for request: GitHubMergeRequest,
+        auto: Bool = false
+    ) -> [String] {
+        var args: [String] = [
+            "pr", "merge", "\(request.pullRequestNumber)",
+            request.method.ghFlag,
+        ]
+        if auto {
+            args.append("--auto")
+        }
+        if request.deleteBranch {
+            args.append("--delete-branch")
+        }
+        if let subject = request.subject?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !subject.isEmpty {
+            args.append(contentsOf: ["--subject", subject])
+        }
+        if let body = request.body, !body.isEmpty {
+            args.append(contentsOf: ["--body", body])
+        }
+        return args
+    }
 
     /// Pulls the numeric PR id out of the URL `gh pr create` prints.
     ///

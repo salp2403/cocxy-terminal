@@ -48,7 +48,7 @@ struct PRReviewerSuggesterSwiftTestingTests {
     @Test("suggestions skip excluded authors and unsafe paths")
     func suggestionsSkipExcludedAuthorsAndUnsafePaths() {
         let root = URL(fileURLWithPath: "/tmp/repo", isDirectory: true)
-        var requestedPaths: [String] = []
+        let requestedPaths = LockedStringArray()
         let suggester = PRReviewerSuggester(blameProvider: { _, filePath in
             requestedPaths.append(filePath)
             return """
@@ -73,7 +73,7 @@ struct PRReviewerSuggesterSwiftTestingTests {
             excludingEmails: ["current@example.com"]
         )
 
-        #expect(requestedPaths == ["Sources/App.swift"])
+        #expect(requestedPaths.values == ["Sources/App.swift"])
         #expect(suggestions.map(\.email) == ["alice@example.com"])
     }
 
@@ -104,3 +104,20 @@ struct PRReviewerSuggesterSwiftTestingTests {
 }
 
 private struct TestBlameError: Error {}
+
+private final class LockedStringArray: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    func append(_ value: String) {
+        lock.lock()
+        storage.append(value)
+        lock.unlock()
+    }
+
+    var values: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}

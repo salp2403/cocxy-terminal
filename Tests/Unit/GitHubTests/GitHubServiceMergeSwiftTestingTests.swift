@@ -84,6 +84,22 @@ struct GitHubServiceMergeSwiftTestingTests {
     }
     """
 
+    private static let openPRJSON = """
+    {
+      "number": 42,
+      "title": "Test PR",
+      "state": "OPEN",
+      "author": {"login": "octocat"},
+      "headRefName": "feature/test",
+      "baseRefName": "main",
+      "labels": [],
+      "isDraft": false,
+      "reviewDecision": "APPROVED",
+      "url": "https://github.com/owner/repo/pull/42",
+      "updatedAt": "2026-04-25T12:00:00Z"
+    }
+    """
+
     private static let repoIdentityJSON = """
     {
       "owner": {"login": "owner"},
@@ -420,6 +436,49 @@ struct GitHubServiceMergeSwiftTestingTests {
         )
         let mergeInvocation = try #require(spy.allInvocations.first)
         #expect(mergeInvocation.timeout == 60.0)
+    }
+
+    // MARK: - enableAutoMerge
+
+    @Test("enableAutoMerge invokes gh pr merge with --auto and hydrates the PR")
+    func enableAutoMergeInvokesGhWithAutoFlag() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: "✓ Auto-merge enabled", stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: Self.openPRJSON, stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        let pr = try await service.enableAutoMerge(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        let mergeArgs = try #require(Self.firstMergeInvocation(spy: spy))
+        #expect(mergeArgs.contains("--auto"))
+        #expect(mergeArgs.contains("--squash"))
+        #expect(mergeArgs.contains("--delete-branch"))
+        #expect(pr.number == 42)
+        #expect(pr.state == .open)
+    }
+
+    @Test("enableAutoMerge classifies gh failures")
+    func enableAutoMergeClassifiesGhFailures() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(
+                    stdout: "",
+                    stderr: "Pull request is not mergeable: dirty",
+                    terminationStatus: 1
+                 ))
+
+        let service = GitHubService(runner: spy.runner)
+        await #expect(throws: GitHubMergeError.mergeConflict) {
+            _ = try await service.enableAutoMerge(
+                request: GitHubMergeRequest(pullRequestNumber: 42, method: .merge),
+                at: Self.workingDirectory
+            )
+        }
     }
 
     // MARK: - pullRequestMergeability
