@@ -103,6 +103,26 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         XCTAssertEqual(events.last?.metadata["exit_code"], "127")
     }
 
+    func testCommandBlockFallbackSummariesLocalizeToConfiguredAppLanguage() throws {
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store, appLanguage: .spanish)
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        try store.deleteAll()
+
+        controller.recordCommandBlockActivity(
+            makeCommandBlock(command: "   ", pwd: "/tmp/cocxy-test", exitCode: 127),
+            tabID: tabID,
+            surfaceID: nil
+        )
+
+        let events = try store.events()
+        XCTAssertEqual(events.map(\.kind), [.commandExecuted, .blockFinished, .errorEncountered])
+        XCTAssertEqual(events[0].summary, "Comando finalizado")
+        XCTAssertEqual(events[1].summary, "Bloque finalizado: Comando finalizado")
+        XCTAssertEqual(events[2].summary, "Comando fallido: Comando finalizado")
+    }
+
     func testEnabledConfigRecordsAgentInvokedLocally() throws {
         let store = try SQLiteActivityStore(databasePath: ":memory:")
         let controller = try makeActivityEnabledController(store: store)
@@ -247,9 +267,13 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         store: ActivityStoring,
         costTracking: Bool = false,
         inputCostMicrosPerMillionTokens: Int = 0,
-        outputCostMicrosPerMillionTokens: Int = 0
+        outputCostMicrosPerMillionTokens: Int = 0,
+        appLanguage: AppLanguage = .system
     ) throws -> MainWindowController {
         let provider = ActivityRecordingConfigProvider(content: """
+        [appearance]
+        app-language = "\(appLanguage.rawValue)"
+
         [activity]
         enabled = true
         cost-tracking = \(costTracking ? "true" : "false")
@@ -263,8 +287,16 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
             bridge: MockTerminalEngine(),
             configService: service
         )
+        if let bundle = localizationBundle() {
+            controller.appLocalizationBundle = bundle
+        }
         controller.injectedActivityStore = store
         return controller
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 
     private static func activityConfigContent(storageDirectory: String) -> String {

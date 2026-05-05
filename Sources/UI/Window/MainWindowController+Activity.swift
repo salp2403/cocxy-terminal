@@ -189,7 +189,7 @@ extension MainWindowController {
         )
         recordLocalActivity(
             kind: .blockFinished,
-            summary: "Block finished: \(summary)",
+            summary: blockFinishedActivitySummary(summary),
             workingDirectory: workingDirectory,
             sessionID: sessionID,
             metadata: metadata
@@ -197,7 +197,7 @@ extension MainWindowController {
         if let exitCode = block.exitCode, exitCode != 0 {
             recordLocalActivity(
                 kind: .errorEncountered,
-                summary: "Command failed: \(summary)",
+                summary: commandFailedActivitySummary(summary),
                 workingDirectory: workingDirectory,
                 sessionID: sessionID,
                 metadata: metadata
@@ -227,7 +227,7 @@ extension MainWindowController {
             ?? tabManager.tab(for: tabID)?.workingDirectory
         let summary = trimmedNonEmpty(displayName)
             ?? trimmedNonEmpty(agentName)
-            ?? "Agent invoked"
+            ?? appLocalizer().string("window.activity.agentInvoked", fallback: "Agent invoked")
         recordLocalActivity(
             kind: .agentInvoked,
             summary: summary,
@@ -305,9 +305,34 @@ extension MainWindowController {
 
     private func commandActivitySummary(_ command: String) -> String {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "Command finished" }
+        guard !trimmed.isEmpty else {
+            return appLocalizer().string(
+                "window.activity.commandFinished",
+                fallback: "Command finished"
+            )
+        }
         if trimmed.count <= 240 { return trimmed }
         return String(trimmed.prefix(237)) + "..."
+    }
+
+    private func blockFinishedActivitySummary(_ summary: String) -> String {
+        String(
+            format: appLocalizer().string(
+                "window.activity.blockFinished",
+                fallback: "Block finished: %@"
+            ),
+            summary
+        )
+    }
+
+    private func commandFailedActivitySummary(_ summary: String) -> String {
+        String(
+            format: appLocalizer().string(
+                "window.activity.commandFailed",
+                fallback: "Command failed: %@"
+            ),
+            summary
+        )
     }
 
     private func trimmedNonEmpty(_ value: String?) -> String? {

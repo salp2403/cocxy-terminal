@@ -268,6 +268,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var isSearchBarVisible: Bool = false
     var searchQueryCancellable: AnyCancellable?
 
+    /// Bundle used by runtime localization lookups. Production uses
+    /// `Bundle.main`; tests may inject the repo-local localization bundle.
+    var appLocalizationBundle: Bundle = .main
+
     var smartRoutingViewModel: SmartRoutingOverlayViewModel?
     var smartRoutingHostingView: NSHostingView<AnyView>?
     var isSmartRoutingVisible: Bool = false

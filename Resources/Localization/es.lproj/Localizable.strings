@@ -1074,6 +1074,10 @@
 "window.activity.tabOpened" = "Nueva pestaña";
 "window.activity.splitSideBySide" = "Split lado a lado";
 "window.activity.splitStacked" = "Split apilado";
+"window.activity.commandFinished" = "Comando finalizado";
+"window.activity.blockFinished" = "Bloque finalizado: %@";
+"window.activity.commandFailed" = "Comando fallido: %@";
+"window.activity.agentInvoked" = "Agente invocado";
 "window.pane.terminalSplit" = "split de terminal";
 "window.pane.browserPanel" = "panel de navegador";
 "window.pane.markdownPanel" = "panel de markdown";

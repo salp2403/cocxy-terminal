@@ -16,7 +16,10 @@ extension MainWindowController {
 
     func appLocalizer(for config: CocxyConfig? = nil) -> AppLocalizer {
         let resolvedConfig = config ?? configService?.current ?? .defaults
-        return AppLocalizer(languagePreference: resolvedConfig.appearance.appLanguage)
+        return AppLocalizer(
+            languagePreference: resolvedConfig.appearance.appLanguage,
+            bundle: appLocalizationBundle
+        )
     }
 
     // MARK: - Command Palette (Cmd+Shift+P)

@@ -1074,6 +1074,10 @@
 "window.activity.tabOpened" = "New tab";
 "window.activity.splitSideBySide" = "Split side by side";
 "window.activity.splitStacked" = "Split stacked";
+"window.activity.commandFinished" = "Command finished";
+"window.activity.blockFinished" = "Block finished: %@";
+"window.activity.commandFailed" = "Command failed: %@";
+"window.activity.agentInvoked" = "Agent invoked";
 "window.pane.terminalSplit" = "terminal split";
 "window.pane.browserPanel" = "browser panel";
 "window.pane.markdownPanel" = "markdown panel";
