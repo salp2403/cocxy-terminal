@@ -44,6 +44,27 @@ struct PluginMarketplaceCLIArgumentParserSwiftTestingTests {
         ))
     }
 
+    @Test("flat plugin commands advertised in help parse")
+    func flatPluginCommandsAdvertisedInHelpParse() throws {
+        #expect(try CLIArgumentParser.parse(["plugin-list"]) == .pluginList)
+        #expect(try CLIArgumentParser.parse(["plugin-enable", "sample"]) == .pluginEnable(id: "sample"))
+        #expect(try CLIArgumentParser.parse(["plugin-disable", "sample"]) == .pluginDisable(id: "sample"))
+        #expect(try CLIArgumentParser.parse(["plugin-source-list"]) == .pluginSourceList)
+        #expect(try CLIArgumentParser.parse([
+            "plugin-source-add",
+            "https://github.com/example/cocxy-plugin.git",
+        ]) == .pluginSourceAdd(
+            url: "https://github.com/example/cocxy-plugin.git",
+            displayName: nil
+        ))
+        #expect(try CLIArgumentParser.parse([
+            "plugin-install",
+            "/tmp/cocxy-plugin",
+            "--replace",
+        ]) == .pluginInstall(url: "/tmp/cocxy-plugin", replaceExisting: true))
+        #expect(try CLIArgumentParser.parse(["plugin-uninstall", "sample"]) == .pluginUninstall(id: "sample"))
+    }
+
     @Test("plugin marketplace commands build socket requests")
     func commandRunnerBuildsPluginMarketplaceRequests() {
         let sourceRequest = CommandRunner().buildRequest(from: .pluginSourceAdd(

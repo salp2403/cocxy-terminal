@@ -91,7 +91,7 @@ fi
 plutil -extract constValueProtocols json -o "${APPINTENTS_PROTOCOL_LIST}" "${APPINTENTS_PROTOCOLS_JSON}"
 printf '%s\n' "${PROJECT_ROOT}/Sources/App/Shortcuts/CocxyShortcuts.swift" > "${APPINTENTS_SOURCE_LIST}"
 
-swift build ${SWIFT_FLAGS} \
+swift build --product "${APP_NAME}" ${SWIFT_FLAGS} \
     -Xswiftc -emit-const-values-path \
     -Xswiftc "${APPINTENTS_CONST_VALUES}" \
     -Xswiftc -Xfrontend \

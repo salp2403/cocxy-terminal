@@ -684,6 +684,20 @@ public enum CLIArgumentParser {
 
         case "plugin":
             return try parsePlugin(arguments: Array(arguments.dropFirst()))
+        case "plugin-list":
+            return try parsePlugin(arguments: ["list"] + Array(arguments.dropFirst()))
+        case "plugin-enable":
+            return try parsePlugin(arguments: ["enable"] + Array(arguments.dropFirst()))
+        case "plugin-disable":
+            return try parsePlugin(arguments: ["disable"] + Array(arguments.dropFirst()))
+        case "plugin-source-list":
+            return try parsePlugin(arguments: ["source", "list"] + Array(arguments.dropFirst()))
+        case "plugin-source-add":
+            return try parsePlugin(arguments: ["source", "add"] + Array(arguments.dropFirst()))
+        case "plugin-install":
+            return try parsePlugin(arguments: ["install"] + Array(arguments.dropFirst()))
+        case "plugin-uninstall":
+            return try parsePlugin(arguments: ["uninstall"] + Array(arguments.dropFirst()))
 
         case "browser":
             return try parseBrowser(arguments: Array(arguments.dropFirst()))

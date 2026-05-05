@@ -78,6 +78,8 @@ extension MainWindowController {
             workingDirectory: dir,
             sessionID: sessionID.rawValue.uuidString
         )
+        dispatchPluginEvent(.tabCreated, tabID: newTab.id, sessionID: sessionID)
+        dispatchPluginEvent(.sessionStart, tabID: newTab.id, sessionID: sessionID)
 
         handleTabSwitch(to: newTab.id)
         return newTab.id
@@ -183,12 +185,15 @@ extension MainWindowController {
     ) {
         let isClosingActiveTab = (tabID == tabManager.activeTabID)
         let closingTab = tabManager.tab(for: tabID)
+        let closingSessionID = sessionIDForTab(tabID)
         deferredRestoredTabs.removeValue(forKey: tabID)
+        dispatchPluginEvent(.sessionEnd, tabID: tabID, sessionID: closingSessionID)
+        dispatchPluginEvent(.tabClosed, tabID: tabID, sessionID: closingSessionID)
 
         // Remove this session from the multi-window registry before
         // destroying surfaces, so other windows receive the removal
         // event while the session ID is still valid.
-        sessionRegistry?.removeSession(sessionIDForTab(tabID))
+        sessionRegistry?.removeSession(closingSessionID)
 
         // Destroy the primary terminal surface.
         if let surfaceID = tabSurfaceMap[tabID] {

@@ -51,6 +51,7 @@ struct CocxyShortcutsCatalogSwiftTestingTests {
 
         #expect(buildScript.contains("appintentsmetadataprocessor"))
         #expect(buildScript.contains("SwiftConstantValues/AppIntents.json"))
+        #expect(buildScript.contains("--product \"${APP_NAME}\""))
         #expect(buildScript.contains("Metadata.appintents"))
         #expect(verifyScript.contains("[Shortcuts]"))
         #expect(verifyScript.contains("Metadata.appintents"))
