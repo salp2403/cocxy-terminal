@@ -1179,6 +1179,11 @@
 "sessionReplay.deleteAll.title" = "¿Eliminar todas las grabaciones?";
 "sessionReplay.deleteAll.message" = "Esto elimina todas las grabaciones locales de Session Replay de esta Mac.";
 "sessionReplay.deleteAll.button" = "Eliminar todo";
+"scripting.error.applicationNotReady" = "La aplicación no está lista";
+"scripting.error.noCommandTextProvided" = "No se proporcionó texto de comando";
+"scripting.error.noActiveTerminal" = "No hay terminal activa";
+"scripting.error.tabIndexRequired" = "Se requiere índice de pestaña";
+"scripting.error.tabIndexOutOfRange" = "Índice de pestaña fuera de rango";
 "sessionReplay.title" = "Reproducción de sesiones";
 "sessionReplay.refresh" = "Actualizar";
 "sessionReplay.close" = "Cerrar reproducción de sesiones";

@@ -1179,6 +1179,11 @@
 "sessionReplay.deleteAll.title" = "Delete All Recordings?";
 "sessionReplay.deleteAll.message" = "This removes every local Session Replay recording from this Mac.";
 "sessionReplay.deleteAll.button" = "Delete All";
+"scripting.error.applicationNotReady" = "Application not ready";
+"scripting.error.noCommandTextProvided" = "No command text provided";
+"scripting.error.noActiveTerminal" = "No active terminal";
+"scripting.error.tabIndexRequired" = "Tab index required";
+"scripting.error.tabIndexOutOfRange" = "Tab index out of range";
 "sessionReplay.title" = "Session Replay";
 "sessionReplay.refresh" = "Refresh";
 "sessionReplay.close" = "Close Session Replay";

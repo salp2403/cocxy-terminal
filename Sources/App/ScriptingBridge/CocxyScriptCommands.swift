@@ -8,6 +8,51 @@ private func setScriptError(on command: NSScriptCommand, message: String) {
     command.scriptErrorString = message
 }
 
+enum CocxyScriptCommandErrorCopy {
+    static func applicationNotReady(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "scripting.error.applicationNotReady",
+            fallback: "Application not ready"
+        )
+    }
+
+    static func noCommandTextProvided(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "scripting.error.noCommandTextProvided",
+            fallback: "No command text provided"
+        )
+    }
+
+    static func noActiveTerminal(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "scripting.error.noActiveTerminal",
+            fallback: "No active terminal"
+        )
+    }
+
+    static func tabIndexRequired(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "scripting.error.tabIndexRequired",
+            fallback: "Tab index required"
+        )
+    }
+
+    static func tabIndexOutOfRange(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "scripting.error.tabIndexOutOfRange",
+            fallback: "Tab index out of range"
+        )
+    }
+}
+
+@MainActor
+private func scriptCommandLocalizer() -> AppLocalizer {
+    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+        return appDelegate.appLocalizer()
+    }
+    return AppLocalizer(languagePreference: .system)
+}
+
 // MARK: - Make Tab Command
 
 /// Handles: `make new tab with command "ls" at "/path"`
@@ -24,9 +69,10 @@ final class CocxyMakeTabCommand: NSScriptCommand, @unchecked Sendable {
         let dirPath = arguments["workingDirectory"] as? String
 
         let outcome: (result: ScriptableTab?, errorMessage: String?) = MainActor.assumeIsolated {
+            let localizer = scriptCommandLocalizer()
             guard let appDelegate = NSApp.delegate as? AppDelegate,
                   let windowController = appDelegate.focusedWindowController() ?? appDelegate.windowController else {
-                return (nil, "Application not ready")
+                return (nil, CocxyScriptCommandErrorCopy.applicationNotReady(using: localizer))
             }
 
             let workingDir: URL
@@ -69,15 +115,16 @@ final class CocxyRunCommandCommand: NSScriptCommand, @unchecked Sendable {
     override func performDefaultImplementation() -> Any? {
         let directText = directParameter as? String
         let errorMessage: String? = MainActor.assumeIsolated {
+            let localizer = scriptCommandLocalizer()
             guard let text = directText, !text.isEmpty else {
-                return "No command text provided"
+                return CocxyScriptCommandErrorCopy.noCommandTextProvided(using: localizer)
             }
 
             guard let appDelegate = NSApp.delegate as? AppDelegate,
                   let windowController = appDelegate.focusedWindowController() ?? appDelegate.windowController,
                   let activeID = windowController.tabManager.activeTabID,
                   let surfaceID = windowController.tabSurfaceMap[activeID] else {
-                return "No active terminal"
+                return CocxyScriptCommandErrorCopy.noActiveTerminal(using: localizer)
             }
 
             windowController.terminalEngine(for: surfaceID).sendText(text + "\r", to: surfaceID)
@@ -102,9 +149,10 @@ final class CocxySplitCommand: NSScriptCommand, @unchecked Sendable {
         let direction = (arguments["direction"] as? String)?.lowercased() ?? "vertical"
 
         let errorMessage: String? = MainActor.assumeIsolated {
+            let localizer = scriptCommandLocalizer()
             guard let appDelegate = NSApp.delegate as? AppDelegate,
                   let windowController = appDelegate.focusedWindowController() ?? appDelegate.windowController else {
-                return "Application not ready"
+                return CocxyScriptCommandErrorCopy.applicationNotReady(using: localizer)
             }
 
             if direction == "horizontal" {
@@ -131,12 +179,13 @@ final class CocxyFocusTabCommand: NSScriptCommand, @unchecked Sendable {
     override func performDefaultImplementation() -> Any? {
         let directIndex = directParameter as? Int
         let errorMessage: String? = MainActor.assumeIsolated {
+            let localizer = scriptCommandLocalizer()
             guard let index = directIndex else {
-                return "Tab index required"
+                return CocxyScriptCommandErrorCopy.tabIndexRequired(using: localizer)
             }
 
             guard let appDelegate = NSApp.delegate as? AppDelegate else {
-                return "Application not ready"
+                return CocxyScriptCommandErrorCopy.applicationNotReady(using: localizer)
             }
 
             let zeroBasedIndex = index - 1
@@ -144,7 +193,7 @@ final class CocxyFocusTabCommand: NSScriptCommand, @unchecked Sendable {
                 controller.tabManager.tabs.map(\.id)
             }
             guard zeroBasedIndex >= 0, zeroBasedIndex < allTabIDs.count else {
-                return "Tab index out of range"
+                return CocxyScriptCommandErrorCopy.tabIndexOutOfRange(using: localizer)
             }
 
             let targetID = allTabIDs[zeroBasedIndex]

@@ -84,6 +84,18 @@ struct AppleScriptTests {
         #expect(scriptable.processName == "")
     }
 
+    @Test("scripting command error copy localizes to configured app language")
+    func scriptCommandErrorsLocalizeSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(CocxyScriptCommandErrorCopy.applicationNotReady(using: localizer) == "La aplicación no está lista")
+        #expect(CocxyScriptCommandErrorCopy.noCommandTextProvided(using: localizer) == "No se proporcionó texto de comando")
+        #expect(CocxyScriptCommandErrorCopy.noActiveTerminal(using: localizer) == "No hay terminal activa")
+        #expect(CocxyScriptCommandErrorCopy.tabIndexRequired(using: localizer) == "Se requiere índice de pestaña")
+        #expect(CocxyScriptCommandErrorCopy.tabIndexOutOfRange(using: localizer) == "Índice de pestaña fuera de rango")
+    }
+
     @Test("NSApplication scriptableTabs returns empty without AppDelegate")
     @MainActor
     func appScriptableTabsEmpty() {
@@ -97,5 +109,10 @@ struct AppleScriptTests {
         let tabs = app.scriptableTabs
         // Without an AppDelegate or window controller, expect empty.
         #expect(tabs.isEmpty)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
