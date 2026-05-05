@@ -117,11 +117,14 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
     ]
 
     /// Warm-up work is intentionally sliced across main-run-loop turns.
-    /// A single deferred block keeps socket readiness fast but can still
-    /// make the first restored window feel frozen while restore, plugins,
-    /// update checks and menu work run back-to-back.
-    static let deferredWarmupRunLoopBatches: [[AppLaunchStep]] =
-        deferredWarmupSteps.map { [$0] }
+    ///
+    /// Keep the first visual restore path together so a reopened window
+    /// reaches its restored shell without artificial gaps between the
+    /// scaffold, crash snapshot load, and session surface materialization.
+    /// Secondary services stay one-per-turn after that first paint path.
+    static let deferredWarmupRunLoopBatches: [[AppLaunchStep]] = [
+        [.windowWarmup, .crashRecovery, .sessionRestore],
+    ] + deferredWarmupSteps.dropFirst(3).map { [$0] }
 
     var signpostName: StaticString {
         switch self {
