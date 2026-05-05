@@ -202,6 +202,13 @@ check_exists "$RESOURCES/AppIcon.png" "App icon"
 check_exists "$RESOURCES/CocxyTerminal.sdef" "AppleScript definition"
 check_codesign_entitlement_true "$APP_BUNDLE" "com.apple.security.device.audio-input" "App audio input entitlement"
 
+# 7b. Shortcuts/App Intents metadata
+echo ""
+echo "[Shortcuts]"
+check_exists "$RESOURCES/Metadata.appintents" "Shortcuts metadata bundle"
+check_exists "$RESOURCES/Metadata.appintents/version.json" "Shortcuts metadata version"
+check_exists "$RESOURCES/Metadata.appintents/extract.actionsdata" "Shortcuts actions metadata"
+
 # 8. Markdown preview resources (Mermaid, KaTeX)
 echo ""
 echo "[Syntax Grammars]"

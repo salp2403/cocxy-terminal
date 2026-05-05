@@ -62,6 +62,11 @@ else
     SWIFT_FLAGS=""
     BUILD_DIR="${PROJECT_ROOT}/.build/arm64-apple-macosx/debug"
 fi
+APPINTENTS_WORK_DIR="${BUILD_DIR}/AppIntents"
+APPINTENTS_CONST_VALUES="${APPINTENTS_WORK_DIR}/${APP_NAME}.swiftconstvalues"
+APPINTENTS_PROTOCOL_LIST="${APPINTENTS_WORK_DIR}/protocols.json"
+APPINTENTS_SOURCE_LIST="${APPINTENTS_WORK_DIR}/sources.list"
+APPINTENTS_DEPLOYMENT_TARGET="14.0"
 
 OUTPUT_DIR="${PROJECT_ROOT}/build"
 APP_BUNDLE="${OUTPUT_DIR}/${APP_NAME}.app"
@@ -75,11 +80,33 @@ echo "==> Building ${BUNDLE_NAME} (${BUILD_MODE})..."
 
 # Step 1: Build the Swift package.
 cd "${PROJECT_ROOT}"
-swift build ${SWIFT_FLAGS} 2>&1 | tail -3
+mkdir -p "${APPINTENTS_WORK_DIR}"
+TOOLCHAIN_USR="$(cd "$(dirname "$(xcrun -find swiftc)")/.." && pwd)"
+TOOLCHAIN_DIR="$(cd "${TOOLCHAIN_USR}/.." && pwd)"
+APPINTENTS_PROTOCOLS_JSON="${TOOLCHAIN_USR}/share/swift/SwiftConstantValues/AppIntents.json"
+if [ ! -f "${APPINTENTS_PROTOCOLS_JSON}" ]; then
+    echo "ERROR: App Intents protocol list not found at ${APPINTENTS_PROTOCOLS_JSON}"
+    exit 1
+fi
+plutil -extract constValueProtocols json -o "${APPINTENTS_PROTOCOL_LIST}" "${APPINTENTS_PROTOCOLS_JSON}"
+printf '%s\n' "${PROJECT_ROOT}/Sources/App/Shortcuts/CocxyShortcuts.swift" > "${APPINTENTS_SOURCE_LIST}"
+
+swift build ${SWIFT_FLAGS} \
+    -Xswiftc -emit-const-values-path \
+    -Xswiftc "${APPINTENTS_CONST_VALUES}" \
+    -Xswiftc -Xfrontend \
+    -Xswiftc -const-gather-protocols-file \
+    -Xswiftc -Xfrontend \
+    -Xswiftc "${APPINTENTS_PROTOCOL_LIST}" \
+    2>&1 | tail -3
 
 # Verify binary exists.
 if [ ! -f "${BUILD_DIR}/${APP_NAME}" ]; then
     echo "ERROR: Binary not found at ${BUILD_DIR}/${APP_NAME}"
+    exit 1
+fi
+if [ ! -s "${APPINTENTS_CONST_VALUES}" ]; then
+    echo "ERROR: App Intents const values not generated at ${APPINTENTS_CONST_VALUES}"
     exit 1
 fi
 
@@ -133,6 +160,33 @@ done
 if [ -f "${PROJECT_ROOT}/Resources/CocxyTerminal.sdef" ]; then
     cp "${PROJECT_ROOT}/Resources/CocxyTerminal.sdef" "${RESOURCES}/CocxyTerminal.sdef"
 fi
+
+# Step 4d: Generate Shortcuts/App Intents metadata. SwiftPM compiles the
+# intents, while LaunchServices needs this metadata bundle to discover actions.
+echo "==> Generating Shortcuts metadata..."
+SDK_ROOT="$(xcrun --sdk macosx --show-sdk-path)"
+XCODE_BUILD_VERSION="$(xcodebuild -version | awk '/Build version/ { print $3; exit }')"
+TARGET_TRIPLE="$(uname -m)-apple-macosx${APPINTENTS_DEPLOYMENT_TARGET}"
+printf '%s\n' "${APPINTENTS_CONST_VALUES}" > "${APPINTENTS_WORK_DIR}/constvalues.list"
+xcrun appintentsmetadataprocessor \
+    --output "${RESOURCES}" \
+    --toolchain-dir "${TOOLCHAIN_DIR}" \
+    --module-name "${APP_NAME}" \
+    --sdk-root "${SDK_ROOT}" \
+    --xcode-version "${XCODE_BUILD_VERSION}" \
+    --platform-family macOS \
+    --deployment-target "${APPINTENTS_DEPLOYMENT_TARGET}" \
+    --target-triple "${TARGET_TRIPLE}" \
+    --source-file-list "${APPINTENTS_SOURCE_LIST}" \
+    --swift-const-vals-list "${APPINTENTS_WORK_DIR}/constvalues.list" \
+    --force-metadata-output \
+    --no-app-shortcuts-localization \
+    2>&1 | tail -3
+if [ ! -s "${RESOURCES}/Metadata.appintents/extract.actionsdata" ]; then
+    echo "ERROR: Shortcuts metadata was not generated in ${RESOURCES}/Metadata.appintents"
+    exit 1
+fi
+echo "    Shortcuts metadata: ${RESOURCES}/Metadata.appintents"
 
 # Step 5: Copy default config files.
 if [ -d "${PROJECT_ROOT}/Resources/defaults" ]; then
