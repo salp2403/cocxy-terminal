@@ -118,6 +118,64 @@ struct EditorViewSwiftTestingTests {
         #expect(requestedTexts.last == "func greet() {}\n")
     }
 
+    @Test("editor syntax LSP and Vim wiring coexist on one surface")
+    func editorSyntaxLSPAndVimWiringCoexist() throws {
+        let fileURL = try makeTemporaryFile(contents: "let value = 1\nprint(value)\n")
+        let view = EditorView(fileURL: fileURL)
+        let textView: EditorTextView = try #require(findSubview(in: view))
+        var requestedPositions: [LSPPosition] = []
+
+        view.syntaxDecorationProvider = { document in
+            [
+                EditorDecoration(
+                    id: "syntax.keyword",
+                    range: EditorTextRange(location: 0, length: 3),
+                    kind: .syntaxToken,
+                    message: "syntax:\(document.buffer.lineCount)"
+                ),
+            ]
+        }
+        view.applyLSPClientEvent(.diagnostics(uri: fileURL.absoluteString, diagnostics: [
+            LSPDiagnostic(
+                range: LSPRange(
+                    start: LSPPosition(line: 1, character: 6),
+                    end: LSPPosition(line: 1, character: 11)
+                ),
+                severity: .warning,
+                message: "unused value",
+                source: "local-lsp"
+            ),
+        ]))
+        view.onLSPHoverRequested = { requestedPositions.append($0) }
+        view.setLSPControlsEnabled(true)
+
+        view.setSelection(.caret(at: 0))
+        view.setVimModeEnabled(true)
+        textView.keyDown(with: try makeKeyDownEvent("l"))
+        textView.keyDown(with: try makeKeyDownEvent("l"))
+        textView.keyDown(with: try makeKeyDownEvent("l"))
+        textView.keyDown(with: try makeKeyDownEvent("l"))
+
+        #expect(view.requestLSPHoverAtSelection())
+        #expect(requestedPositions == [LSPPosition(line: 0, character: 4)])
+        #expect(view.session.selection == .caret(at: 4))
+
+        let syntaxDecorations = view.session.decorations.intersecting(
+            EditorTextRange(location: 0, length: view.session.document.buffer.utf16Length),
+            kinds: [.syntaxToken]
+        )
+        let diagnosticDecorations = view.session.decorations.intersecting(
+            EditorTextRange(location: 0, length: view.session.document.buffer.utf16Length),
+            kinds: [.diagnostic]
+        )
+
+        #expect(syntaxDecorations.map(\.id) == ["syntax.keyword"])
+        #expect(diagnosticDecorations.count == 1)
+        #expect(diagnosticDecorations.first?.message == "local-lsp: unused value")
+        #expect(diagnosticDecorations.first?.severity == .warning)
+        #expect(view.currentText == "let value = 1\nprint(value)\n")
+    }
+
     @Test("plain text keeps readable editor foreground when syntax has no tokens")
     func plainTextKeepsReadableForegroundWithoutSyntaxTokens() throws {
         let view = EditorView(text: "alpha beta\n")
