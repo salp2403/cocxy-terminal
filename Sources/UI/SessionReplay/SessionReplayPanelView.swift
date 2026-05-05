@@ -264,6 +264,10 @@ struct SessionReplayPanelView: View {
 
     private func exportRecording(_ recording: SessionReplayRecordingPresentation) {
         let panel = NSSavePanel()
+        let copy = Self.localizedExportPanelCopy(localizer: localizer)
+        panel.title = copy.title
+        panel.message = copy.message
+        panel.prompt = copy.prompt
         panel.allowedContentTypes = [UTType(filenameExtension: "cast") ?? .data]
         panel.nameFieldStringValue = Self.safeExportFilename(for: recording.title)
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -281,6 +285,17 @@ struct SessionReplayPanelView: View {
             .joined(separator: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return "\(safeStem.isEmpty ? "session-replay" : safeStem).cast"
+    }
+
+    static func localizedExportPanelCopy(localizer: AppLocalizer) -> AppFilePanelCopy {
+        AppFilePanelCopy(
+            title: localizer.string("sessionReplay.exportPanel.title", fallback: "Export Session Replay"),
+            message: localizer.string(
+                "sessionReplay.exportPanel.message",
+                fallback: "Choose where to save this recording."
+            ),
+            prompt: localizer.string("common.export", fallback: "Export")
+        )
     }
 
     private var searchPane: some View {

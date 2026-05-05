@@ -1255,6 +1255,10 @@ final class EditorView: NSView, NSTextViewDelegate {
 
     @objc private func openButtonPressed() {
         let panel = NSOpenPanel()
+        let copy = Self.localizedOpenPanelCopy(using: localizer)
+        panel.title = copy.title
+        panel.message = copy.message
+        panel.prompt = copy.prompt
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -1270,5 +1274,16 @@ final class EditorView: NSView, NSTextViewDelegate {
         } else {
             completion(panel.runModal())
         }
+    }
+
+    static func localizedOpenPanelCopy(using localizer: AppLocalizer) -> AppFilePanelCopy {
+        AppFilePanelCopy(
+            title: localizer.string("editor.openPanel.title", fallback: "Open File"),
+            message: localizer.string(
+                "editor.openPanel.message",
+                fallback: "Choose a local text file to edit."
+            ),
+            prompt: localizer.string("common.open", fallback: "Open")
+        )
     }
 }

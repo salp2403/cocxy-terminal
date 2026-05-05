@@ -1655,16 +1655,24 @@ extension MainWindowController {
         let store = injectedTimelineStore ?? AgentTimelineStoreImpl()
         let vm = TimelineViewModel(
             store: store,
-            onExportJSON: { [weak store] in
+            onExportJSON: { [weak self, weak store] in
                 guard let store = store else { return }
                 let data = TimelineExporter.exportJSON(events: store.allEvents)
-                MainWindowController.saveExportedData(data, suggestedName: "timeline.json")
+                MainWindowController.saveExportedData(
+                    data,
+                    suggestedName: "timeline.json",
+                    localizer: self?.appLocalizer() ?? AppLocalizer(languagePreference: .system)
+                )
             },
-            onExportMarkdown: { [weak store] in
+            onExportMarkdown: { [weak self, weak store] in
                 guard let store = store else { return }
                 let markdown = TimelineExporter.exportMarkdown(events: store.allEvents)
                 if let data = markdown.data(using: .utf8) {
-                    MainWindowController.saveExportedData(data, suggestedName: "timeline.md")
+                    MainWindowController.saveExportedData(
+                        data,
+                        suggestedName: "timeline.md",
+                        localizer: self?.appLocalizer() ?? AppLocalizer(languagePreference: .system)
+                    )
                 }
             }
         )
@@ -1873,8 +1881,16 @@ extension MainWindowController {
         return min(max(requestedWidth, minimumWidth), maximumWidth)
     }
 
-    static func saveExportedData(_ data: Data, suggestedName: String) {
+    static func saveExportedData(
+        _ data: Data,
+        suggestedName: String,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         let panel = NSSavePanel()
+        let copy = localizedExportedDataPanelCopy(localizer: localizer)
+        panel.title = copy.title
+        panel.message = copy.message
+        panel.prompt = copy.prompt
         panel.nameFieldStringValue = suggestedName
         panel.canCreateDirectories = true
         panel.begin { response in
@@ -1885,6 +1901,17 @@ extension MainWindowController {
                 NSLog("[Cocxy] Failed to export file: %@", String(describing: error))
             }
         }
+    }
+
+    static func localizedExportedDataPanelCopy(localizer: AppLocalizer) -> AppFilePanelCopy {
+        AppFilePanelCopy(
+            title: localizer.string("window.exportPanel.title", fallback: "Export Data"),
+            message: localizer.string(
+                "window.exportPanel.message",
+                fallback: "Choose where to save the exported file."
+            ),
+            prompt: localizer.string("common.export", fallback: "Export")
+        )
     }
 
     // MARK: - Notification Panel (Cmd+Shift+I)

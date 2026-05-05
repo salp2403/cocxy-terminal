@@ -716,6 +716,8 @@
 "editor.status.wrap" = "ajuste de línea";
 "editor.status.nowrap" = "sin ajuste de línea";
 "editor.toolbar.openFile" = "Abrir archivo";
+"editor.openPanel.title" = "Abrir archivo";
+"editor.openPanel.message" = "Elige un archivo de texto local para editar.";
 "editor.toolbar.showHover" = "Mostrar hover";
 "editor.toolbar.showCompletions" = "Mostrar completados";
 "editor.toolbar.goToDefinition" = "Ir a definición";
@@ -858,6 +860,7 @@
 "common.close" = "Cerrar";
 "common.save" = "Guardar";
 "common.open" = "Abrir";
+"common.export" = "Exportar";
 "common.copy" = "Copiar";
 "common.paste" = "Pegar";
 "common.cut" = "Cortar";
@@ -1082,6 +1085,8 @@
 "window.closePane.message.one" = "Esto cerrará el %@ enfocado. La pestaña de workspace queda abierta con %d panel restante.";
 "window.closePane.message.many" = "Esto cerrará el %@ enfocado. La pestaña de workspace queda abierta con %d paneles restantes.";
 "window.closePane.button" = "Cerrar panel";
+"window.exportPanel.title" = "Exportar datos";
+"window.exportPanel.message" = "Elige dónde guardar el archivo exportado.";
 "window.activity.tabOpened" = "Nueva pestaña";
 "window.activity.splitSideBySide" = "Split lado a lado";
 "window.activity.splitStacked" = "Split apilado";
@@ -1125,6 +1130,8 @@
 "activity.title" = "Actividad";
 "activity.accessibility" = "Dashboard de actividad";
 "activity.export" = "Exportar actividad";
+"activity.exportPanel.title" = "Exportar actividad";
+"activity.exportPanel.message" = "Elige dónde guardar %@.";
 "activity.deleteData" = "Eliminar datos de Activity";
 "activity.refresh" = "Refrescar actividad";
 "activity.close" = "Cerrar actividad";
@@ -1184,6 +1191,8 @@
 "sessionReplay.bookmark.placeholder" = "Etiqueta del marcador";
 "sessionReplay.bookmark" = "Marcador";
 "sessionReplay.export" = "Exportar";
+"sessionReplay.exportPanel.title" = "Exportar Session Replay";
+"sessionReplay.exportPanel.message" = "Elige dónde guardar esta grabación.";
 "sessionReplay.search.placeholder" = "Buscar en grabación";
 "sessionReplay.search" = "Buscar";
 "sessionReplay.bookmarks" = "Marcadores";
@@ -1300,6 +1309,12 @@
 "markdown.toolbar.exportPDF" = "Exportar PDF (Cmd+Shift+E)";
 "markdown.toolbar.exportHTML" = "Exportar HTML (Cmd+Shift+H)";
 "markdown.toolbar.exportSlides" = "Exportar slides (Cmd+Shift+S)";
+"markdown.exportPanel.pdf.title" = "Exportar Markdown como PDF";
+"markdown.exportPanel.pdf.message" = "Elige dónde guardar la exportación PDF.";
+"markdown.exportPanel.html.title" = "Exportar Markdown como HTML";
+"markdown.exportPanel.html.message" = "Elige dónde guardar la exportación HTML.";
+"markdown.exportPanel.slides.title" = "Exportar slides de Markdown";
+"markdown.exportPanel.slides.message" = "Elige dónde guardar la exportación de slides.";
 "markdown.toolbar.toggleSidebar" = "Alternar barra lateral (Cmd+Shift+O)";
 "markdown.toolbar.reloadFile" = "Recargar archivo (Cmd+R)";
 "markdown.toolbar.copyAs.markdown" = "Copiar como Markdown";

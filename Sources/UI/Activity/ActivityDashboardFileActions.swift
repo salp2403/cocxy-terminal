@@ -92,6 +92,10 @@ final class SystemActivityDashboardFilePresenter: ActivityDashboardFilePresentin
         completion: @escaping (URL?) -> Void
     ) {
         let panel = NSSavePanel()
+        let copy = Self.localizedDestinationPanelCopy(for: format, localizer: localizer)
+        panel.title = copy.title
+        panel.message = copy.message
+        panel.prompt = copy.prompt
         panel.allowedContentTypes = [format.contentType]
         panel.nameFieldStringValue = defaultFilename
 
@@ -103,6 +107,23 @@ final class SystemActivityDashboardFilePresenter: ActivityDashboardFilePresentin
             let response = panel.runModal()
             completion(response == .OK ? panel.url : nil)
         }
+    }
+
+    static func localizedDestinationPanelCopy(
+        for format: ActivityDashboardExportFormat,
+        localizer: AppLocalizer
+    ) -> AppFilePanelCopy {
+        AppFilePanelCopy(
+            title: localizer.string("activity.exportPanel.title", fallback: "Export Activity"),
+            message: String(
+                format: localizer.string(
+                    "activity.exportPanel.message",
+                    fallback: "Choose where to save %@."
+                ),
+                format.localizedMenuTitle(using: localizer)
+            ),
+            prompt: localizer.string("common.export", fallback: "Export")
+        )
     }
 
     func confirmDeleteAll(completion: @escaping (Bool) -> Void) {

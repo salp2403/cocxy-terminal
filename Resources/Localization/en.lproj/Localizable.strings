@@ -716,6 +716,8 @@
 "editor.status.wrap" = "wrap";
 "editor.status.nowrap" = "nowrap";
 "editor.toolbar.openFile" = "Open File";
+"editor.openPanel.title" = "Open File";
+"editor.openPanel.message" = "Choose a local text file to edit.";
 "editor.toolbar.showHover" = "Show Hover";
 "editor.toolbar.showCompletions" = "Show Completions";
 "editor.toolbar.goToDefinition" = "Go to Definition";
@@ -858,6 +860,7 @@
 "common.close" = "Close";
 "common.save" = "Save";
 "common.open" = "Open";
+"common.export" = "Export";
 "common.copy" = "Copy";
 "common.paste" = "Paste";
 "common.cut" = "Cut";
@@ -1082,6 +1085,8 @@
 "window.closePane.message.one" = "This will close the focused %@. The workspace tab stays open with %d pane remaining.";
 "window.closePane.message.many" = "This will close the focused %@. The workspace tab stays open with %d panes remaining.";
 "window.closePane.button" = "Close Pane";
+"window.exportPanel.title" = "Export Data";
+"window.exportPanel.message" = "Choose where to save the exported file.";
 "window.activity.tabOpened" = "New tab";
 "window.activity.splitSideBySide" = "Split side by side";
 "window.activity.splitStacked" = "Split stacked";
@@ -1125,6 +1130,8 @@
 "activity.title" = "Activity";
 "activity.accessibility" = "Activity Dashboard";
 "activity.export" = "Export Activity";
+"activity.exportPanel.title" = "Export Activity";
+"activity.exportPanel.message" = "Choose where to save %@.";
 "activity.deleteData" = "Delete Activity Data";
 "activity.refresh" = "Refresh Activity";
 "activity.close" = "Close Activity";
@@ -1184,6 +1191,8 @@
 "sessionReplay.bookmark.placeholder" = "Bookmark label";
 "sessionReplay.bookmark" = "Bookmark";
 "sessionReplay.export" = "Export";
+"sessionReplay.exportPanel.title" = "Export Session Replay";
+"sessionReplay.exportPanel.message" = "Choose where to save this recording.";
 "sessionReplay.search.placeholder" = "Search recording";
 "sessionReplay.search" = "Search";
 "sessionReplay.bookmarks" = "Bookmarks";
@@ -1300,6 +1309,12 @@
 "markdown.toolbar.exportPDF" = "Export PDF (Cmd+Shift+E)";
 "markdown.toolbar.exportHTML" = "Export HTML (Cmd+Shift+H)";
 "markdown.toolbar.exportSlides" = "Export Slides (Cmd+Shift+S)";
+"markdown.exportPanel.pdf.title" = "Export Markdown as PDF";
+"markdown.exportPanel.pdf.message" = "Choose where to save the PDF export.";
+"markdown.exportPanel.html.title" = "Export Markdown as HTML";
+"markdown.exportPanel.html.message" = "Choose where to save the HTML export.";
+"markdown.exportPanel.slides.title" = "Export Markdown Slides";
+"markdown.exportPanel.slides.message" = "Choose where to save the slides export.";
 "markdown.toolbar.toggleSidebar" = "Toggle Sidebar (Cmd+Shift+O)";
 "markdown.toolbar.reloadFile" = "Reload File (Cmd+R)";
 "markdown.toolbar.copyAs.markdown" = "Copy as Markdown";

@@ -237,6 +237,14 @@ struct ActivityDashboardSwiftTestingTests {
         #expect(copy.informativeText == "Esto elimina los registros locales de Activity y tokens de esta Mac.")
         #expect(copy.primaryButton == "Eliminar")
         #expect(copy.secondaryButton == "Cancelar")
+
+        let exportCopy = SystemActivityDashboardFilePresenter.localizedDestinationPanelCopy(
+            for: .eventsCSV,
+            localizer: localizer
+        )
+        #expect(exportCopy.title == "Exportar actividad")
+        #expect(exportCopy.message == "Elige dónde guardar Eventos CSV.")
+        #expect(exportCopy.prompt == "Exportar")
     }
 
     private func date(day: Int = 1, hour: Int, minute: Int = 0) -> Date {

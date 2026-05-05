@@ -47,6 +47,11 @@ struct EditorViewSwiftTestingTests {
         #expect(EditorView.localizedOpenFile(using: localizer) == "Abrir archivo")
         #expect(EditorView.localizedFindReferences(using: localizer) == "Buscar referencias")
         #expect(EditorLSPPresentation.localizedReferences(2, using: localizer) == "2 referencias")
+
+        let openPanel = EditorView.localizedOpenPanelCopy(using: localizer)
+        #expect(openPanel.title == "Abrir archivo")
+        #expect(openPanel.message == "Elige un archivo de texto local para editar.")
+        #expect(openPanel.prompt == "Abrir")
     }
 
     @Test("programmatic text replacement marks document dirty and save writes to disk")

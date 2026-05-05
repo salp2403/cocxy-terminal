@@ -55,6 +55,11 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
             MainWindowController.localizedSplitCreatedActivitySummary(isVertical: false, localizer: localizer) ==
                 "Split apilado"
         )
+
+        let exportCopy = MainWindowController.localizedExportedDataPanelCopy(localizer: localizer)
+        #expect(exportCopy.title == "Exportar datos")
+        #expect(exportCopy.message == "Elige dónde guardar el archivo exportado.")
+        #expect(exportCopy.prompt == "Exportar")
     }
 
     @Test("worktree and tab config alert copy follows configured app language")

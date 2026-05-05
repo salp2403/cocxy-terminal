@@ -25,6 +25,12 @@ struct AppAlertCopy: Equatable {
     }
 }
 
+struct AppFilePanelCopy: Equatable {
+    let title: String
+    let message: String
+    let prompt: String
+}
+
 extension AppDelegate {
     func appLocalizer() -> AppLocalizer {
         AppLocalizer(languagePreference: configService?.current.appearance.appLanguage ?? .system)

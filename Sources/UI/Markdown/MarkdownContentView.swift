@@ -60,6 +60,8 @@ final class MarkdownContentView: NSView {
     let statusBar: MarkdownStatusBarView
     private var localizer: AppLocalizer
 
+    var actionLocalizer: AppLocalizer { localizer }
+
     /// Whether the diff view is currently shown instead of the normal content.
     var isDiffVisible = false
 

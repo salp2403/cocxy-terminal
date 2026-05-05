@@ -227,6 +227,18 @@ struct MarkdownContentViewTests {
         #expect(MarkdownOutlineView.localizedTitle(using: localizer) == "Esquema")
         #expect(MarkdownSearchView.localizedPlaceholder(using: localizer) == "Buscar en archivos...")
         #expect(
+            MarkdownContentView.localizedExportPanelCopy(kind: .pdf, using: localizer).title
+                == "Exportar Markdown como PDF"
+        )
+        #expect(
+            MarkdownContentView.localizedExportPanelCopy(kind: .html, using: localizer).message
+                == "Elige dónde guardar la exportación HTML."
+        )
+        #expect(
+            MarkdownContentView.localizedExportPanelCopy(kind: .slides, using: localizer).prompt
+                == "Exportar"
+        )
+        #expect(
             MarkdownSearchView.localizedMatches(matches: 2, files: 1, using: localizer)
                 == "2 coincidencias en 1 archivo"
         )

@@ -139,6 +139,10 @@ extension MarkdownContentView {
         guard let printOp = previewView.createPrintOperation() else { return }
 
         let panel = NSSavePanel()
+        let copy = Self.localizedExportPanelCopy(kind: .pdf, using: actionLocalizer)
+        panel.title = copy.title
+        panel.message = copy.message
+        panel.prompt = copy.prompt
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = defaultExportName(extension: "pdf")
         panel.beginSheetModal(for: window ?? NSApp.mainWindow ?? NSWindow()) { response in
@@ -165,6 +169,10 @@ extension MarkdownContentView {
             }
 
             let panel = NSSavePanel()
+            let copy = Self.localizedExportPanelCopy(kind: .html, using: self.actionLocalizer)
+            panel.title = copy.title
+            panel.message = copy.message
+            panel.prompt = copy.prompt
             panel.allowedContentTypes = [.html]
             panel.nameFieldStringValue = self.defaultExportName(extension: "html")
             panel.beginSheetModal(for: self.window ?? NSApp.mainWindow ?? NSWindow()) { response in
@@ -195,6 +203,10 @@ extension MarkdownContentView {
         }
 
         let panel = NSSavePanel()
+        let copy = Self.localizedExportPanelCopy(kind: .slides, using: actionLocalizer)
+        panel.title = copy.title
+        panel.message = copy.message
+        panel.prompt = copy.prompt
         panel.allowedContentTypes = [.html]
         panel.nameFieldStringValue = defaultExportName(extension: "slides.html")
         panel.beginSheetModal(for: window ?? NSApp.mainWindow ?? NSWindow()) { response in
@@ -210,6 +222,46 @@ extension MarkdownContentView {
     func defaultExportName(extension ext: String) -> String {
         let baseName = filePath?.deletingPathExtension().lastPathComponent ?? "document"
         return "\(baseName).\(ext)"
+    }
+
+    enum MarkdownExportPanelKind {
+        case pdf
+        case html
+        case slides
+    }
+
+    static func localizedExportPanelCopy(
+        kind: MarkdownExportPanelKind,
+        using localizer: AppLocalizer
+    ) -> AppFilePanelCopy {
+        let titleKey: String
+        let titleFallback: String
+        let messageKey: String
+        let messageFallback: String
+
+        switch kind {
+        case .pdf:
+            titleKey = "markdown.exportPanel.pdf.title"
+            titleFallback = "Export Markdown as PDF"
+            messageKey = "markdown.exportPanel.pdf.message"
+            messageFallback = "Choose where to save the PDF export."
+        case .html:
+            titleKey = "markdown.exportPanel.html.title"
+            titleFallback = "Export Markdown as HTML"
+            messageKey = "markdown.exportPanel.html.message"
+            messageFallback = "Choose where to save the HTML export."
+        case .slides:
+            titleKey = "markdown.exportPanel.slides.title"
+            titleFallback = "Export Markdown Slides"
+            messageKey = "markdown.exportPanel.slides.message"
+            messageFallback = "Choose where to save the slides export."
+        }
+
+        return AppFilePanelCopy(
+            title: localizer.string(titleKey, fallback: titleFallback),
+            message: localizer.string(messageKey, fallback: messageFallback),
+            prompt: localizer.string("common.export", fallback: "Export")
+        )
     }
 
     func handlePastedImageData(_ imageData: Data) {
