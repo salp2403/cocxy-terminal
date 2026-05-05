@@ -18,33 +18,33 @@ struct WorktreeStatusSnapshot: Equatable, Sendable {
     let porcelainLines: [String]
 }
 
-struct WorktreeBatchCleanupPlan: Equatable, Sendable {
+struct WorktreeBatchCleanupPlan: Codable, Equatable, Sendable {
     let removable: [WorktreeManifest.WorktreeEntry]
     let blocked: [WorktreeBatchCleanupBlock]
     let skipped: [WorktreeBatchCleanupSkip]
 }
 
-struct WorktreeBatchCleanupResult: Equatable, Sendable {
+struct WorktreeBatchCleanupResult: Codable, Equatable, Sendable {
     let plan: WorktreeBatchCleanupPlan
     let removed: [WorktreeManifest.WorktreeEntry]
 }
 
-struct WorktreeBatchCleanupBlock: Equatable, Sendable {
+struct WorktreeBatchCleanupBlock: Codable, Equatable, Sendable {
     let entry: WorktreeManifest.WorktreeEntry
     let reason: WorktreeBatchCleanupBlockReason
 }
 
-enum WorktreeBatchCleanupBlockReason: Equatable, Sendable {
+enum WorktreeBatchCleanupBlockReason: Codable, Equatable, Sendable {
     case uncommittedChanges(statusOutput: String)
     case dependentWorktrees(ids: [String])
 }
 
-struct WorktreeBatchCleanupSkip: Equatable, Sendable {
+struct WorktreeBatchCleanupSkip: Codable, Equatable, Sendable {
     let entry: WorktreeManifest.WorktreeEntry
     let reason: WorktreeBatchCleanupSkipReason
 }
 
-enum WorktreeBatchCleanupSkipReason: Equatable, Sendable {
+enum WorktreeBatchCleanupSkipReason: Codable, Equatable, Sendable {
     case notMerged
 }
 

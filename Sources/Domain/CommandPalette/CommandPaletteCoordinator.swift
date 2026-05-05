@@ -70,6 +70,11 @@ protocol CommandPaletteCoordinating: AnyObject {
     /// `--force`, so this method is always non-destructive from the
     /// palette.
     func removeCurrentWorktree()
+
+    /// Opens the merged-worktree cleanup preflight sheet. The actual
+    /// deletion path still goes through WorktreeService's clean/dirty
+    /// and dependency checks.
+    func cleanupMergedWorktrees()
 }
 
 // MARK: - Command Palette Coordinator Implementation
@@ -114,6 +119,10 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
     /// worktree attached to the active tab. Respects the CLI's dirty
     /// preflight (never destructive).
     var onRemoveWorktree: (() -> Void)?
+
+    /// Worktree hook wired by `MainWindowController` for the batch
+    /// cleanup sheet.
+    var onCleanupMergedWorktrees: (() -> Void)?
 
     // MARK: - Initialization
 
@@ -202,5 +211,9 @@ final class CommandPaletteCoordinatorImpl: CommandPaletteCoordinating {
 
     func removeCurrentWorktree() {
         onRemoveWorktree?()
+    }
+
+    func cleanupMergedWorktrees() {
+        onCleanupMergedWorktrees?()
     }
 }

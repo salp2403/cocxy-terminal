@@ -165,6 +165,41 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["status"], "focused")
     }
 
+    func test_worktreeCleanupMerged_routesToWorktreeProvider() {
+        let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            worktreeCLIProvider: { kind, params in
+                captured.withValue { value in
+                    value = (kind, params)
+                }
+                return (
+                    success: true,
+                    data: [
+                        "status": "dry-run",
+                        "removed-count": "2",
+                        "blocked-count": "0",
+                        "skipped-count": "1"
+                    ]
+                )
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "wt-cleanup-1",
+            command: "worktree-cleanup-merged",
+            params: ["base-ref": "main", "dry-run": "true"]
+        ))
+
+        XCTAssertTrue(response.success)
+        let snapshot = captured.withValue { $0 }
+        XCTAssertEqual(snapshot.kind, "cleanup-merged")
+        XCTAssertEqual(snapshot.params?["base-ref"], "main")
+        XCTAssertEqual(snapshot.params?["dry-run"], "true")
+        XCTAssertEqual(response.data?["removed-count"], "2")
+    }
+
     @MainActor
     func test_pluginMarketplaceCommands_useInjectedLocalStores() throws {
         let root = try temporaryDirectory()

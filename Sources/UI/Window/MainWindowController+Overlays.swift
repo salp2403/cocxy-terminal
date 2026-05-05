@@ -922,11 +922,7 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in
-                        guard let delegate = NSApp.delegate as? AppDelegate else { return }
-                        _ = await delegate.performWorktreeCLIRequest(
-                            kind: "add",
-                            params: [:]
-                        )
+                        self?.showWorktreeAdvancedModal()
                     }
                 }
             ),
@@ -947,6 +943,19 @@ extension MainWindowController {
                             kind: "remove",
                             params: ["id": worktreeID]
                         )
+                    }
+                }
+            ),
+            CommandAction(
+                id: "worktree.cleanupMerged",
+                name: "Clean Up Merged Worktrees",
+                description: "Review and remove clean merged cocxy-managed worktrees",
+                shortcut: paletteShortcutLabel("worktree.cleanupMerged", fallback: nil),
+                category: .worktree,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        self?.showWorktreeBatchCleanupSheet()
                     }
                 }
             ),

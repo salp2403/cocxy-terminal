@@ -285,6 +285,14 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
                 category: .worktree,
                 handler: { coordinatorBox.coordinator?.removeCurrentWorktree() }
             ),
+            CommandAction(
+                id: "worktree.cleanupMerged",
+                name: "Clean Up Merged Worktrees",
+                description: "Review and remove clean merged cocxy-managed worktrees",
+                shortcut: nil,
+                category: .worktree,
+                handler: { coordinatorBox.coordinator?.cleanupMergedWorktrees() }
+            ),
         ]
 
         for action in builtIns {

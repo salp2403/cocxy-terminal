@@ -195,6 +195,7 @@ public enum CLICommand: String, CaseIterable {
     case worktreeFocus = "worktree-focus"
     case worktreeRemove = "worktree-remove"
     case worktreePrune = "worktree-prune"
+    case worktreeCleanupMerged = "worktree-cleanup-merged"
 
     // MARK: - GitHub pane (v0.1.84)
 
@@ -376,6 +377,7 @@ public enum CLICommand: String, CaseIterable {
         case .worktreeFocus: return "Focus an existing cocxy-managed git worktree, reopening it in a tab when needed"
         case .worktreeRemove: return "Remove a cocxy-managed git worktree (refuses when dirty unless --force)"
         case .worktreePrune: return "Drop manifest entries whose worktree git no longer tracks"
+        case .worktreeCleanupMerged: return "Clean up merged cocxy-managed git worktrees after a dry-run preflight"
 
         // GitHub pane v0.1.84
         case .githubStatus: return "Return gh auth + repository summary for the active tab as JSON"
@@ -549,6 +551,7 @@ public enum CLICommand: String, CaseIterable {
         case .worktreeFocus: return "cocxy worktree focus <id>"
         case .worktreeRemove: return "cocxy worktree remove <id> [--force]"
         case .worktreePrune: return "cocxy worktree prune"
+        case .worktreeCleanupMerged: return "cocxy worktree cleanup-merged [--base-ref <ref>] [--force] [--dry-run]"
 
         // GitHub pane v0.1.84
         case .githubStatus: return "cocxy github status"

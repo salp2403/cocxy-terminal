@@ -325,6 +325,14 @@ public enum OutputFormatter {
         case .worktreePrune:
             let count = response.data?["count"] ?? "0"
             return "Pruned \(count) orphan worktree\(count == "1" ? "" : "s")."
+        case .worktreeCleanupMerged:
+            let removed = response.data?["removed-count"] ?? "0"
+            let blocked = response.data?["blocked-count"] ?? "0"
+            let skipped = response.data?["skipped-count"] ?? "0"
+            if response.data?["status"] == "dry-run" {
+                return "Merged cleanup dry run: \(removed) removable, \(blocked) blocked, \(skipped) skipped."
+            }
+            return "Cleaned up \(removed) merged worktree\(removed == "1" ? "" : "s"); \(blocked) blocked, \(skipped) skipped."
         case .githubStatus, .githubPRs, .githubIssues:
             return formatDataOrJSON(response: response)
         case .githubOpen:

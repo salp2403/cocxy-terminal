@@ -904,6 +904,18 @@ public struct CommandRunner {
         case .worktreePrune:
             return CLISocketRequest(id: requestID, command: "worktree-prune", params: nil)
 
+        case .worktreeCleanupMerged(let baseRef, let force, let dryRun):
+            var params = [
+                "force": force ? "true" : "false",
+                "dry-run": dryRun ? "true" : "false"
+            ]
+            if let baseRef { params["base-ref"] = baseRef }
+            return CLISocketRequest(
+                id: requestID,
+                command: "worktree-cleanup-merged",
+                params: params
+            )
+
         case .githubStatus:
             return CLISocketRequest(id: requestID, command: "github-status", params: nil)
 

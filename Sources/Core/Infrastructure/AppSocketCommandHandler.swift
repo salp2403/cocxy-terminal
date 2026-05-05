@@ -1087,6 +1087,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleWorktreeRemove(request)
         case .worktreePrune:
             return handleWorktreePrune(request)
+        case .worktreeCleanupMerged:
+            return handleWorktreeCleanupMerged(request)
 
         // GitHub pane (v0.1.84)
         case .githubStatus:
@@ -3531,6 +3533,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// the list of removed ids under `data["pruned"]`.
     private func handleWorktreePrune(_ request: SocketRequest) -> SocketResponse {
         runWorktreeProvider(kind: "prune", request: request)
+    }
+
+    /// Routes merged-worktree cleanup through the same provider used by
+    /// the interactive Worktree UI. `dry-run=true` returns counts without
+    /// deleting anything; the default path performs the preflight then
+    /// removes only clean merged worktrees.
+    private func handleWorktreeCleanupMerged(_ request: SocketRequest) -> SocketResponse {
+        runWorktreeProvider(kind: "cleanup-merged", request: request)
     }
 
     /// Shared dispatch used by every worktree verb. Keeping the four

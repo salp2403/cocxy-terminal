@@ -265,7 +265,7 @@ echo "    QuickLook: ${PLUGINS}/$(basename "${QL_APPEX}")"
 
 # Step 7: Also build the CLI companion and place it in Resources.
 echo "==> Building CLI companion..."
-swift build --target cocxy ${SWIFT_FLAGS} 2>&1 | tail -1
+swift build --product cocxy ${SWIFT_FLAGS} 2>&1 | tail -1
 if [ -f "${BUILD_DIR}/cocxy" ]; then
     cp "${BUILD_DIR}/cocxy" "${RESOURCES}/cocxy"
     echo "    CLI companion: ${RESOURCES}/cocxy"

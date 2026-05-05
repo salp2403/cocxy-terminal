@@ -127,9 +127,65 @@ extension AppDelegate {
                     store: store,
                     service: service
                 )
+            case "cleanup-merged":
+                return try await runCleanupMerged(
+                    params: params,
+                    context: context,
+                    store: store,
+                    service: service
+                )
             default:
                 return (false, ["error": "Unknown worktree subcommand: \(kind)"])
             }
+        } catch let error as WorktreeServiceError {
+            return (false, ["error": Self.describe(error)])
+        } catch {
+            return (false, ["error": "Worktree error: \(error.localizedDescription)"])
+        }
+    }
+
+    nonisolated func performWorktreeCleanupMergedRequest(
+        originRepoPath: URL,
+        basePath: String,
+        baseRef: String,
+        force: Bool = false,
+        dryRun: Bool = false
+    ) async -> (Bool, [String: String]) {
+        let origin = Self.resolveOriginRepoRoot(from: originRepoPath)
+        let store = WorktreeManifestStore.forRepo(
+            basePath: basePath,
+            originRepoPath: origin
+        )
+        let service = Self.sharedWorktreeService
+        let effectiveBaseRef = baseRef.nilIfEmpty ?? WorktreeConfig.defaults.baseRef
+
+        do {
+            if dryRun {
+                let plan = try await service.mergedCleanupPlan(
+                    originRepoPath: origin,
+                    baseRef: effectiveBaseRef,
+                    force: force,
+                    store: store
+                )
+                return (true, Self.cleanupMergedPayload(
+                    plan: plan,
+                    removed: [],
+                    status: "dry-run"
+                ))
+            }
+
+            let result = try await service.cleanupMergedWorktrees(
+                originRepoPath: origin,
+                baseRef: effectiveBaseRef,
+                force: force,
+                store: store
+            )
+            await clearWorktreeTabBindings(ids: Set(result.removed.map(\.id)))
+            return (true, Self.cleanupMergedPayload(
+                plan: result.plan,
+                removed: result.removed,
+                status: "cleaned"
+            ))
         } catch let error as WorktreeServiceError {
             return (false, ["error": Self.describe(error)])
         } catch {
@@ -312,22 +368,7 @@ extension AppDelegate {
             store: store
         )
 
-        // Clear any tab still attached to this worktree so the badge
-        // disappears and the project-config fallback stops pointing at
-        // a deleted tree.
-        await MainActor.run {
-            for controller in self.allWindowControllers {
-                for tab in controller.tabManager.tabs where tab.worktreeID == id {
-                    controller.tabManager.updateTab(id: tab.id) { mutated in
-                        mutated.worktreeID = nil
-                        mutated.worktreeRoot = nil
-                        mutated.worktreeOriginRepo = nil
-                        mutated.worktreeBranch = nil
-                    }
-                }
-                controller.tabBarViewModel?.syncWithManager()
-            }
-        }
+        await clearWorktreeTabBindings(ids: [id])
 
         return (true, [
             "id": removed.id,
@@ -350,6 +391,44 @@ extension AppDelegate {
             "pruned": prunedIDs,
             "count": String(pruned.count)
         ])
+    }
+
+    nonisolated private func runCleanupMerged(
+        params: [String: String],
+        context: WorktreeCLIContext,
+        store: WorktreeManifestStore,
+        service: WorktreeService
+    ) async throws -> (Bool, [String: String]) {
+        let baseRef = params["base-ref"]?.nilIfEmpty ?? context.config.worktree.baseRef
+        let force = Self.parseBool(params["force"]) ?? false
+        let dryRun = Self.parseBool(params["dry-run"]) ?? false
+
+        if dryRun {
+            let plan = try await service.mergedCleanupPlan(
+                originRepoPath: context.originRepoPath,
+                baseRef: baseRef,
+                force: force,
+                store: store
+            )
+            return (true, Self.cleanupMergedPayload(
+                plan: plan,
+                removed: [],
+                status: "dry-run"
+            ))
+        }
+
+        let result = try await service.cleanupMergedWorktrees(
+            originRepoPath: context.originRepoPath,
+            baseRef: baseRef,
+            force: force,
+            store: store
+        )
+        await clearWorktreeTabBindings(ids: Set(result.removed.map(\.id)))
+        return (true, Self.cleanupMergedPayload(
+            plan: result.plan,
+            removed: result.removed,
+            status: "cleaned"
+        ))
     }
 
     // MARK: - Context builder
@@ -467,6 +546,45 @@ extension AppDelegate {
             return "Worktree has uncommitted changes at \(path). Commit or pass --force to override."
         case .manifestError(let underlying):
             return "Manifest error: \(underlying)"
+        }
+    }
+
+    nonisolated private static func cleanupMergedPayload(
+        plan: WorktreeBatchCleanupPlan,
+        removed: [WorktreeManifest.WorktreeEntry],
+        status: String
+    ) -> [String: String] {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let planJSON = (try? encoder.encode(plan))
+            .flatMap { String(data: $0, encoding: .utf8) }
+            ?? "{}"
+        return [
+            "status": status,
+            "removed": removed.map(\.id).joined(separator: ","),
+            "removed-count": String(status == "dry-run" ? plan.removable.count : removed.count),
+            "removable-count": String(plan.removable.count),
+            "blocked-count": String(plan.blocked.count),
+            "skipped-count": String(plan.skipped.count),
+            "plan": planJSON
+        ]
+    }
+
+    nonisolated private func clearWorktreeTabBindings(ids: Set<String>) async {
+        guard !ids.isEmpty else { return }
+        await MainActor.run {
+            for controller in self.allWindowControllers {
+                for tab in controller.tabManager.tabs where tab.worktreeID.map(ids.contains) == true {
+                    controller.tabManager.updateTab(id: tab.id) { mutated in
+                        mutated.worktreeID = nil
+                        mutated.worktreeRoot = nil
+                        mutated.worktreeOriginRepo = nil
+                        mutated.worktreeBranch = nil
+                    }
+                }
+                controller.tabBarViewModel?.syncWithManager()
+            }
         }
     }
 

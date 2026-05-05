@@ -96,6 +96,23 @@ struct CommandPaletteWorktreeSwiftTestingTests {
         #expect(hook.count == 1)
     }
 
+    @Test("engine registers the worktree.cleanupMerged action with coordinator routing")
+    func engineRegistersCleanupMergedAction() {
+        let coordinator = makeCoordinator()
+        let hook = Hook()
+        coordinator.onCleanupMergedWorktrees = { hook.count += 1 }
+        let engine = CommandPaletteEngineImpl(coordinator: coordinator)
+
+        guard let action = engine.allActions.first(where: { $0.id == "worktree.cleanupMerged" }) else {
+            Issue.record("worktree.cleanupMerged action is missing from the engine registry")
+            return
+        }
+
+        #expect(action.category == .worktree)
+        action.handler()
+        #expect(hook.count == 1)
+    }
+
     @Test("CommandCategory enumerates the worktree category")
     func worktreeCategoryIsPresent() {
         #expect(CommandCategory.allCases.contains(.worktree))

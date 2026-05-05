@@ -370,6 +370,9 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// `cocxy worktree-prune` — drop manifest entries whose worktrees
     /// git no longer tracks, leaving untracked git worktrees alone.
     case worktreePrune = "worktree-prune"
+    /// `cocxy worktree-cleanup-merged` — dry-run or remove clean
+    /// merged cocxy-managed worktrees.
+    case worktreeCleanupMerged = "worktree-cleanup-merged"
 
     // MARK: - GitHub pane (v0.1.84)
 

@@ -433,6 +433,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy worktree prune`
     case worktreePrune
 
+    /// `cocxy worktree cleanup-merged [--base-ref <ref>] [--force] [--dry-run]`
+    case worktreeCleanupMerged(baseRef: String?, force: Bool, dryRun: Bool)
+
     /// `cocxy github status` — auth + repository summary JSON.
     case githubStatus
 
@@ -2661,11 +2664,44 @@ public enum CLIArgumentParser {
         case "prune":
             return .worktreePrune
 
+        case "cleanup-merged", "cleanup":
+            var baseRef: String?
+            var force = false
+            var dryRun = false
+            var index = 0
+            while index < rest.count {
+                let token = rest[index]
+                switch token {
+                case "--base-ref":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(
+                            command: "worktree cleanup-merged",
+                            argument: "value for --base-ref"
+                        )
+                    }
+                    baseRef = rest[index + 1]
+                    index += 2
+                case "--force":
+                    force = true
+                    index += 1
+                case "--dry-run":
+                    dryRun = true
+                    index += 1
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "worktree cleanup-merged",
+                        argument: token,
+                        reason: "Unknown option. Valid flags: --base-ref, --force, --dry-run."
+                    )
+                }
+            }
+            return .worktreeCleanupMerged(baseRef: baseRef, force: force, dryRun: dryRun)
+
         default:
             throw CLIError.invalidArgument(
                 command: "worktree",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use add, create, list, focus, remove, or prune."
+                reason: "Unknown subcommand. Use add, create, list, focus, remove, prune, or cleanup-merged."
             )
         }
     }

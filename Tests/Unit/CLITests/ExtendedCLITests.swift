@@ -571,6 +571,56 @@ final class ReviewCommandTests: XCTestCase {
         )
     }
 
+    func testWorktreeCleanupMergedBuildRequestAndSuccessMessages() {
+        let dryRunRequest = runner.buildRequest(from: .worktreeCleanupMerged(
+            baseRef: "main",
+            force: true,
+            dryRun: true
+        ))
+        XCTAssertEqual(dryRunRequest.command, "worktree-cleanup-merged")
+        XCTAssertEqual(dryRunRequest.params?["base-ref"], "main")
+        XCTAssertEqual(dryRunRequest.params?["force"], "true")
+        XCTAssertEqual(dryRunRequest.params?["dry-run"], "true")
+
+        let dryRunResponse = CLISocketResponse(
+            id: "worktree-cleanup-1",
+            success: true,
+            data: [
+                "status": "dry-run",
+                "removed-count": "2",
+                "blocked-count": "1",
+                "skipped-count": "3"
+            ],
+            error: nil
+        )
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(
+                command: .worktreeCleanupMerged(baseRef: "main", force: false, dryRun: true),
+                response: dryRunResponse
+            ),
+            "Merged cleanup dry run: 2 removable, 1 blocked, 3 skipped."
+        )
+
+        let cleanedResponse = CLISocketResponse(
+            id: "worktree-cleanup-2",
+            success: true,
+            data: [
+                "status": "cleaned",
+                "removed-count": "1",
+                "blocked-count": "0",
+                "skipped-count": "0"
+            ],
+            error: nil
+        )
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(
+                command: .worktreeCleanupMerged(baseRef: nil, force: false, dryRun: false),
+                response: cleanedResponse
+            ),
+            "Cleaned up 1 merged worktree; 0 blocked, 0 skipped."
+        )
+    }
+
     func testReviewSuccessMessagesAreReadable() {
         let emptyResponse = CLISocketResponse(id: "review-1", success: true, data: nil, error: nil)
         XCTAssertEqual(
@@ -647,7 +697,7 @@ final class EnumParityTests: XCTestCase {
         // Local-only commands such as `cocxy open` intentionally stay
         // out of the socket protocol. Socket-facing additions must keep
         // this catalog count, help, and formatter coverage in sync.
-        XCTAssertEqual(CLICommand.allCases.count, 124)
+        XCTAssertEqual(CLICommand.allCases.count, 125)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription
@@ -685,6 +735,7 @@ final class EnumParityTests: XCTestCase {
         XCTAssertTrue(helpText.contains("config"), "Help should mention config")
         XCTAssertTrue(helpText.contains("theme"), "Help should mention theme")
         XCTAssertTrue(helpText.contains("send"), "Help should mention send")
+        XCTAssertTrue(helpText.contains("worktree cleanup-merged"), "Help should mention worktree cleanup-merged")
     }
 }
 

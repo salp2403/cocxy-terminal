@@ -203,6 +203,23 @@ struct WorktreeCLIArgumentParserTests {
         #expect(parsed == .worktreePrune)
     }
 
+    // MARK: - cleanup merged
+
+    @Test("worktree cleanup-merged parses base-ref, dry-run, and force")
+    func cleanupMergedParsesFlags() throws {
+        let parsed = try CLIArgumentParser.parse([
+            "worktree", "cleanup-merged",
+            "--base-ref", "main",
+            "--dry-run",
+            "--force"
+        ])
+        #expect(parsed == .worktreeCleanupMerged(
+            baseRef: "main",
+            force: true,
+            dryRun: true
+        ))
+    }
+
     // MARK: - shape
 
     @Test("worktree with no subcommand throws a helpful error")
