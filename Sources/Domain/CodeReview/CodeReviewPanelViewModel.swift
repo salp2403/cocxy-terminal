@@ -302,6 +302,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         pendingCommentThreads.reduce(0) { $0 + $1.suggestions.count }
     }
 
+    var diffTimelineEntries: [PRDiffTimelineEntry] {
+        PRDiffTimeline.entries(currentDiffs: currentDiffs, reviewRounds: reviewRounds)
+    }
+
     var pendingCommentCount: Int {
         pendingComments.count
     }

@@ -216,7 +216,7 @@ struct CodeReviewPanelView: View {
 
                     if !viewModel.reviewRounds.isEmpty {
                         Divider()
-                        reviewRoundsView
+                        diffTimelineView
                     }
                 }
             }
@@ -479,50 +479,67 @@ struct CodeReviewPanelView: View {
         .padding()
     }
 
-    private var reviewRoundsView: some View {
+    private var diffTimelineView: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(localized("codeReview.panel.rounds.title", fallback: "Review Rounds"))
+                Text(localized("codeReview.panel.timeline.title", fallback: "Diff Timeline"))
                     .font(.system(size: 11, weight: .semibold))
                 Spacer()
-                Text("\(viewModel.reviewRounds.count)")
+                Text("\(viewModel.diffTimelineEntries.count)")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
             }
 
             ScrollView(.vertical, showsIndicators: true) {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(viewModel.reviewRounds.reversed()) { round in
+                    ForEach(viewModel.diffTimelineEntries) { entry in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text(
-                                    String(
-                                        format: localized(
-                                            "codeReview.panel.rounds.round",
-                                            fallback: "Round %d"
-                                        ),
-                                        round.id
-                                    )
-                                )
+                                Text(localizedTimelineTitle(for: entry))
                                     .font(.system(size: 10, weight: .semibold))
                                 Spacer()
-                                Text(round.timestamp.formatted(date: .omitted, time: .shortened))
-                                    .font(.system(size: 9))
-                                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                                if let timestamp = entry.timestamp {
+                                    Text(timestamp.formatted(date: .omitted, time: .shortened))
+                                        .font(.system(size: 9))
+                                        .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                                }
                             }
                             Text(
                                 String(
                                     format: localized(
-                                        "codeReview.panel.rounds.summary",
-                                        fallback: "%d comments · %d files · %@"
+                                        "codeReview.panel.timeline.summary",
+                                        fallback: "%d files · %d hunks · +%d / -%d"
                                     ),
-                                    round.comments.count,
-                                    round.diffs.count,
-                                    String(round.baseRef.prefix(7))
+                                    entry.fileCount,
+                                    entry.hunkCount,
+                                    entry.additions,
+                                    entry.deletions
                                 )
                             )
                                 .font(.system(size: 10))
                                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                            if entry.commentCount > 0 || entry.baseRefShort != nil {
+                                HStack(spacing: 6) {
+                                    if entry.commentCount > 0 {
+                                        summaryMetric(
+                                            text: localizedCommentCount(entry.commentCount),
+                                            color: CocxyColors.yellow
+                                        )
+                                    }
+                                    if let baseRef = entry.baseRefShort {
+                                        summaryMetric(
+                                            text: String(
+                                                format: localized(
+                                                    "codeReview.panel.timeline.base",
+                                                    fallback: "base %@"
+                                                ),
+                                                baseRef
+                                            ),
+                                            color: CocxyColors.subtext0
+                                        )
+                                    }
+                                }
+                            }
                         }
                         .padding(8)
                         .background(
@@ -536,6 +553,18 @@ struct CodeReviewPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private func localizedTimelineTitle(for entry: PRDiffTimelineEntry) -> String {
+        switch entry.kind {
+        case .current:
+            return localized("codeReview.panel.timeline.current", fallback: "Current diff")
+        case .reviewRound(let roundID):
+            return String(
+                format: localized("codeReview.panel.timeline.round", fallback: "Round %d"),
+                roundID
+            )
+        }
     }
 
     private var fileListPane: some View {

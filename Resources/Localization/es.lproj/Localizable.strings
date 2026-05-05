@@ -1429,6 +1429,11 @@
 "codeReview.panel.rounds.title" = "Rondas de revisión";
 "codeReview.panel.rounds.round" = "Ronda %d";
 "codeReview.panel.rounds.summary" = "%d comentarios · %d archivos · %@";
+"codeReview.panel.timeline.title" = "Línea de tiempo del diff";
+"codeReview.panel.timeline.current" = "Diff actual";
+"codeReview.panel.timeline.round" = "Ronda %d";
+"codeReview.panel.timeline.summary" = "%d archivos · %d bloques · +%d / -%d";
+"codeReview.panel.timeline.base" = "base %@";
 "codeReview.panel.files.title" = "Archivos modificados";
 "codeReview.panel.files.ready" = "%d archivos listos para revisión";
 "codeReview.fileList.accessibility.label" = "%@, %@, más %d, menos %d";
