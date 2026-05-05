@@ -85,6 +85,30 @@ struct VerticalTabModuleSwiftTestingTests {
         #expect(command.state == .waiting)
     }
 
+    @Test("summary mode localizes state fallback metadata for visible sidebar rows")
+    func summaryModeLocalizesStateFallbackMetadata() throws {
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: try localizationBundle())
+        let session = Design.AuroraSession(
+            id: "s-localized",
+            name: "shell",
+            agent: .shell,
+            state: .idle,
+            panes: [
+                Design.AuroraPane(id: "p1", name: "zsh", agent: .shell, state: .idle),
+                Design.AuroraPane(id: "p2", name: "logs", agent: .shell, state: .idle),
+            ]
+        )
+
+        let summary = Design.VerticalTabSummaryMode(
+            session: session,
+            primaryInfo: .command,
+            localizer: spanish
+        )
+
+        #expect(summary.metadataLine == "inactivo · 2 paneles")
+        #expect(summary.state == Design.AgentStateRole.idle)
+    }
+
     @Test("hover sidecar placement stays outside the sidebar and inside the overlay")
     func hoverSidecarPlacementStaysInBounds() {
         let tooltip = Design.AuroraSidebarTooltipSnapshot(
@@ -114,5 +138,10 @@ struct VerticalTabModuleSwiftTestingTests {
         #expect(placement.x + placement.width * 0.5 <= 908)
         #expect(placement.y >= 170)
         #expect(placement.y <= 450)
+    }
+
+    private func localizationBundle() throws -> Bundle {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return try #require(Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true)))
     }
 }

@@ -702,6 +702,14 @@ struct AppLocalizationSwiftTestingTests {
         #expect(!html.contains(#"title="Table of Contents""#))
     }
 
+    @Test
+    func markdownPreviewModeUsesCompactSpanishLabelForSegmentedControl() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(MarkdownViewMode.preview.localizedLabel(using: spanish) == "Previa")
+    }
+
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))

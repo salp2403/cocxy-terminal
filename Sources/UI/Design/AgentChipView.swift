@@ -40,6 +40,7 @@ extension Design {
         let agent: AgentAccent
         let state: AgentStateRole
         var size: CGFloat = 22
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -53,7 +54,11 @@ extension Design {
             }
             .frame(width: size, height: size)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(agentDisplayName), \(stateLabel)")
+            .accessibilityLabel(Self.localizedAccessibilityLabel(
+                agent: agent,
+                state: state,
+                using: localizer
+            ))
         }
 
         // MARK: - Subviews
@@ -126,24 +131,21 @@ extension Design {
             }
         }
 
-        private var agentDisplayName: String {
+        static func localizedAccessibilityLabel(
+            agent: AgentAccent,
+            state: AgentStateRole,
+            using localizer: AppLocalizer
+        ) -> String {
+            "\(displayName(for: agent)), \(Design.localizedAgentStateLabel(state, using: localizer))"
+        }
+
+        private static func displayName(for agent: AgentAccent) -> String {
             switch agent {
             case .claude: return "Claude"
             case .codex:  return "Codex"
             case .gemini: return "Gemini"
             case .aider:  return "Aider"
             case .shell:  return "Shell"
-            }
-        }
-
-        private var stateLabel: String {
-            switch state {
-            case .idle:     return "idle"
-            case .launched: return "launched"
-            case .working:  return "working"
-            case .waiting:  return "waiting for input"
-            case .finished: return "finished"
-            case .error:    return "error"
             }
         }
 

@@ -15,6 +15,19 @@ import Testing
 @Suite("Aurora agent chip — pulse math")
 struct AgentChipViewSwiftTestingTests {
 
+    @Test("Accessibility label localizes the lifecycle state")
+    func accessibilityLabelLocalizesLifecycleState() throws {
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: try localizationBundle())
+
+        #expect(
+            Design.AgentChipView.localizedAccessibilityLabel(
+                agent: Design.AgentAccent.shell,
+                state: Design.AgentStateRole.idle,
+                using: spanish
+            ) == "Shell, inactivo"
+        )
+    }
+
     // MARK: - Keyframe anchors
 
     @Test("Pulse at t = 0 renders the minimum scale and low opacity")
@@ -81,5 +94,10 @@ struct AgentChipViewSwiftTestingTests {
             #expect(phase.scale >= 1.00 - 1e-6)
             #expect(phase.scale <= 1.06 + 1e-6)
         }
+    }
+
+    private func localizationBundle() throws -> Bundle {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return try #require(Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true)))
     }
 }

@@ -13,5 +13,17 @@ extension Design {
             self.state = session.state
             self.metadataLine = session.primaryMetadataLine(selection: primaryInfo)
         }
+
+        init(
+            session: AuroraSession,
+            primaryInfo: AuroraSidebarPrimaryInfo,
+            localizer: AppLocalizer
+        ) {
+            self.state = session.state
+            self.metadataLine = session.localizedPrimaryMetadataLine(
+                selection: primaryInfo,
+                using: localizer
+            )
+        }
     }
 }

@@ -1308,13 +1308,13 @@
 "markdown.sidebar.outline" = "Esquema";
 "markdown.sidebar.search" = "Buscar";
 "markdown.mode.source" = "Fuente";
-"markdown.mode.preview" = "Vista previa";
+"markdown.mode.preview" = "Previa";
 "markdown.mode.split" = "Split";
 "markdown.empty.noFile" = "Sin archivo";
 "markdown.empty.placeholder" = "Suelta un archivo .md aquí o elige uno en la barra lateral de Archivos.";
 "markdown.loadFailed" = "No se pudo cargar el archivo: %@";
 "markdown.toolbar.untitledFile" = "Sin título.md";
-"markdown.toolbar.mode.tooltip" = "Cambiar entre Fuente, Vista previa y Split";
+"markdown.toolbar.mode.tooltip" = "Cambiar entre Fuente, Previa y Split";
 "markdown.toolbar.gitBlame" = "Mostrar Git Blame";
 "markdown.toolbar.gitDiff" = "Mostrar Git Diff";
 "markdown.toolbar.copyAs" = "Copiar como";

@@ -517,11 +517,12 @@ extension Design {
             let layout = VerticalTabCompactMode(mode: displayMode)
             let summary = VerticalTabSummaryMode(
                 session: session,
-                primaryInfo: primaryInfo
+                primaryInfo: primaryInfo,
+                localizer: localizer
             )
             VStack(alignment: .leading, spacing: CGFloat(layout.rowSpacing)) {
                 HStack(spacing: Spacing.xSmall) {
-                    AgentChipView(agent: session.agent, state: session.state, size: 22)
+                    AgentChipView(agent: session.agent, state: session.state, size: 22, localizer: localizer)
                     Text(session.name)
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(palette.textHigh.resolvedColor())
@@ -786,7 +787,7 @@ extension Design {
 
         private var header: some View {
             HStack(alignment: .center, spacing: 10) {
-                AgentChipView(agent: session.agent, state: session.state, size: 28)
+                AgentChipView(agent: session.agent, state: session.state, size: 28, localizer: localizer)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.name)
                         .font(.system(size: 13.5, weight: .semibold))
@@ -923,7 +924,7 @@ extension Design {
 
         private func paneLine(_ pane: AuroraPane) -> some View {
             HStack(spacing: 8) {
-                AgentChipView(agent: pane.agent, state: pane.state, size: 18)
+                AgentChipView(agent: pane.agent, state: pane.state, size: 18, localizer: localizer)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(pane.name)
                         .font(.system(size: 11.5, weight: .semibold))

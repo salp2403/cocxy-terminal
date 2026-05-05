@@ -123,6 +123,10 @@ extension Design {
             panes.count == 1 ? "1 pane" : "\(panes.count) panes"
         }
 
+        func localizedPaneCountLabel(using localizer: AppLocalizer) -> String {
+            Design.localizedPaneCount(panes.count, using: localizer)
+        }
+
         /// Panes that should populate the sidebar mini-matrix. Idle
         /// panes are excluded per `AuroraPane.contributesToMatrix` so
         /// the sidebar only surfaces live / just-finished activity and
@@ -169,6 +173,25 @@ extension Design {
                 return Self.cleaned(foregroundProcessName) ?? stateMetadataLine
             case .command:
                 return Self.cleaned(lastCommandSummary) ?? stateMetadataLine
+            }
+        }
+
+        func localizedPrimaryMetadataLine(
+            selection: AuroraSidebarPrimaryInfo,
+            using localizer: AppLocalizer
+        ) -> String {
+            switch selection {
+            case .state:
+                return localizedStateMetadataLine(using: localizer)
+            case .directory:
+                return Self.cleaned(workingDirectory).map(Self.prettyDirectory)
+                    ?? localizedStateMetadataLine(using: localizer)
+            case .process:
+                return Self.cleaned(foregroundProcessName)
+                    ?? localizedStateMetadataLine(using: localizer)
+            case .command:
+                return Self.cleaned(lastCommandSummary)
+                    ?? localizedStateMetadataLine(using: localizer)
             }
         }
 
@@ -231,6 +254,10 @@ extension Design {
 
         private var stateMetadataLine: String {
             "\(state.rawValue) · \(paneCountLabel)"
+        }
+
+        private func localizedStateMetadataLine(using localizer: AppLocalizer) -> String {
+            "\(Design.localizedAgentStateLabel(state, using: localizer)) · \(localizedPaneCountLabel(using: localizer))"
         }
 
         private func searchCorpus(workspaceName: String, branch: String?) -> [String] {
