@@ -23,6 +23,9 @@ struct TimelineEventRow: View {
     /// The timeline event to display.
     let event: TimelineEvent
 
+    /// Local app-language resolver for generated timeline copy.
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
     // MARK: - Constants
 
     /// Maximum characters for a displayed file path before truncation.
@@ -177,7 +180,7 @@ struct TimelineEventRow: View {
         if let toolName = event.toolName {
             return event.isError ? "x \(toolName)" : toolName
         }
-        return event.summary
+        return Self.localizedSummary(event.summary, using: localizer)
     }
 
     /// Truncates a file path to show only the last path component.
@@ -189,9 +192,19 @@ struct TimelineEventRow: View {
     private var accessibilityDescription: String {
         var parts = [formattedTimestamp]
         if let toolName = event.toolName {
-            parts.append(event.isError ? "Error: \(toolName)" : toolName)
+            parts.append(
+                event.isError
+                    ? String(
+                        format: localizer.string(
+                            "timeline.event.errorTool",
+                            fallback: "Error: %@"
+                        ),
+                        toolName
+                    )
+                    : toolName
+            )
         } else {
-            parts.append(event.summary)
+            parts.append(Self.localizedSummary(event.summary, using: localizer))
         }
         if let windowLabel = event.windowLabel {
             parts.append(windowLabel)
@@ -201,5 +214,109 @@ struct TimelineEventRow: View {
         }
         parts.append(TimelineExporter.formatDuration(event.durationMs))
         return parts.joined(separator: ", ")
+    }
+
+    static func localizedSummary(_ summary: String, using localizer: AppLocalizer) -> String {
+        switch summary {
+        case "Session started":
+            return localizer.string("timeline.event.sessionStarted", fallback: "Session started")
+        case "Session ended":
+            return localizer.string("timeline.event.sessionEnded", fallback: "Session ended")
+        case "Agent stopped":
+            return localizer.string("timeline.event.agentStopped", fallback: "Agent stopped")
+        case "Tool use":
+            return localizer.string("timeline.event.toolUse", fallback: "Tool use")
+        case "Tool failure":
+            return localizer.string("timeline.event.toolFailure", fallback: "Tool failure")
+        case "Subagent started":
+            return localizer.string("timeline.event.subagentStarted", fallback: "Subagent started")
+        case "Subagent stopped":
+            return localizer.string("timeline.event.subagentStopped", fallback: "Subagent stopped")
+        case "Notification":
+            return localizer.string("timeline.event.notification", fallback: "Notification")
+        case "User prompt submitted":
+            return localizer.string(
+                "timeline.event.userPromptSubmitted",
+                fallback: "User prompt submitted"
+            )
+        case "Teammate idle":
+            return localizer.string("timeline.event.teammateIdle", fallback: "Teammate idle")
+        case "Task completed":
+            return localizer.string("timeline.event.taskCompleted", fallback: "Task completed")
+        case "Working directory changed":
+            return localizer.string(
+                "timeline.event.workingDirectoryChanged",
+                fallback: "Working directory changed"
+            )
+        case "File changed":
+            return localizer.string("timeline.event.fileChanged", fallback: "File changed")
+        default:
+            return localizedDynamicSummary(summary, using: localizer)
+        }
+    }
+
+    private static func localizedDynamicSummary(_ summary: String, using localizer: AppLocalizer) -> String {
+        if summary.hasPrefix("Session started: ") {
+            return String(
+                format: localizer.string(
+                    "timeline.event.sessionStartedWithAgent",
+                    fallback: "Session started: %@"
+                ),
+                String(summary.dropFirst("Session started: ".count))
+            )
+        }
+
+        if summary.hasPrefix("Subagent started: ") {
+            return String(
+                format: localizer.string(
+                    "timeline.event.subagentStartedWithName",
+                    fallback: "Subagent started: %@"
+                ),
+                String(summary.dropFirst("Subagent started: ".count))
+            )
+        }
+
+        if summary.hasPrefix("Error: ") {
+            return String(
+                format: localizer.string(
+                    "timeline.event.errorSummary",
+                    fallback: "Error: %@"
+                ),
+                String(summary.dropFirst("Error: ".count))
+            )
+        }
+
+        if summary.hasPrefix("Changed directory: ") {
+            return String(
+                format: localizer.string(
+                    "timeline.event.changedDirectory",
+                    fallback: "Changed directory: %@"
+                ),
+                String(summary.dropFirst("Changed directory: ".count))
+            )
+        }
+
+        if summary.hasPrefix("File changed: ") {
+            return String(
+                format: localizer.string(
+                    "timeline.event.fileChangedNamed",
+                    fallback: "File changed: %@"
+                ),
+                String(summary.dropFirst("File changed: ".count))
+            )
+        }
+
+        if summary.hasPrefix("File "), summary.contains(": ") {
+            let payload = String(summary.dropFirst("File ".count))
+            return String(
+                format: localizer.string(
+                    "timeline.event.fileAction",
+                    fallback: "File %@"
+                ),
+                payload
+            )
+        }
+
+        return summary
     }
 }

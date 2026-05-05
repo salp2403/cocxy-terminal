@@ -634,6 +634,20 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func englishAndSpanishLocalizationResourcesExposeTheSameKeys() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let english = try localizationKeys(
+            at: root.appendingPathComponent("Resources/Localization/en.lproj/Localizable.strings")
+        )
+        let spanish = try localizationKeys(
+            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
+        )
+
+        #expect(english.subtracting(spanish).isEmpty)
+        #expect(spanish.subtracting(english).isEmpty)
+    }
+
+    @Test
     func markdownPreviewTemplateUsesLocalizedTOCTitle() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
@@ -651,6 +665,17 @@ struct AppLocalizationSwiftTestingTests {
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
+
+    private func localizationKeys(at url: URL) throws -> Set<String> {
+        let data = try Data(contentsOf: url)
+        let propertyList = try PropertyListSerialization.propertyList(
+            from: data,
+            options: [],
+            format: nil
+        )
+        let strings = try #require(propertyList as? [String: String])
+        return Set(strings.keys)
     }
 }
 

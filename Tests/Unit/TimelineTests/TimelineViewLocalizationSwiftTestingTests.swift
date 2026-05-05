@@ -45,6 +45,37 @@ struct TimelineViewLocalizationSwiftTestingTests {
         #expect(view.localizer.resolvedLanguage == .spanish)
     }
 
+    @Test("timeline event rows localize generated summaries without changing dynamic text")
+    func timelineEventRowsLocalizeGeneratedSummaries() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(
+            TimelineEventRow.localizedSummary("Session started", using: localizer)
+                == "Sesión iniciada"
+        )
+        #expect(
+            TimelineEventRow.localizedSummary("Session started: local-agent", using: localizer)
+                == "Sesión iniciada: local-agent"
+        )
+        #expect(
+            TimelineEventRow.localizedSummary("Changed directory: /tmp/project", using: localizer)
+                == "Directorio cambiado: /tmp/project"
+        )
+        #expect(
+            TimelineEventRow.localizedSummary("File changed: App.swift", using: localizer)
+                == "Archivo modificado: App.swift"
+        )
+        #expect(
+            TimelineEventRow.localizedSummary("Subagent started: reviewer", using: localizer)
+                == "Subagente iniciado: reviewer"
+        )
+        #expect(
+            TimelineEventRow.localizedSummary("Refactor finished cleanly", using: localizer)
+                == "Refactor finished cleanly"
+        )
+    }
+
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))

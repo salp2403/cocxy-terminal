@@ -246,7 +246,7 @@ struct TimelineView: View {
                     ScrollView(.vertical, showsIndicators: true) {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(filteredEvents) { event in
-                                TimelineEventRow(event: event)
+                                TimelineEventRow(event: event, localizer: localizer)
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         navigationDispatcher?.dispatchNavigation(for: event)

@@ -1731,6 +1731,26 @@
 "timeline.empty.current.detail" = "Cambia a Todas las ventanas para inspeccionar actividad\nde cada ventana.";
 "timeline.empty.all.title" = "Sin eventos de línea de tiempo";
 "timeline.empty.all.detail" = "Las acciones del agente aparecerán aquí\ncuando ocurran en tiempo real.";
+"timeline.event.sessionStarted" = "Sesión iniciada";
+"timeline.event.sessionStartedWithAgent" = "Sesión iniciada: %@";
+"timeline.event.sessionEnded" = "Sesión finalizada";
+"timeline.event.agentStopped" = "Agente detenido";
+"timeline.event.toolUse" = "Uso de herramienta";
+"timeline.event.toolFailure" = "Fallo de herramienta";
+"timeline.event.errorSummary" = "Error: %@";
+"timeline.event.errorTool" = "Error: %@";
+"timeline.event.subagentStarted" = "Subagente iniciado";
+"timeline.event.subagentStartedWithName" = "Subagente iniciado: %@";
+"timeline.event.subagentStopped" = "Subagente detenido";
+"timeline.event.notification" = "Notificación";
+"timeline.event.userPromptSubmitted" = "Prompt de usuario enviado";
+"timeline.event.teammateIdle" = "Compañero inactivo";
+"timeline.event.taskCompleted" = "Tarea completada";
+"timeline.event.changedDirectory" = "Directorio cambiado: %@";
+"timeline.event.workingDirectoryChanged" = "Directorio de trabajo cambiado";
+"timeline.event.fileChanged" = "Archivo modificado";
+"timeline.event.fileChangedNamed" = "Archivo modificado: %@";
+"timeline.event.fileAction" = "Archivo %@";
 
 "notifications.panel.accessibility" = "Panel de notificaciones";
 "notifications.panel.title" = "Notificaciones";

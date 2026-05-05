@@ -1731,6 +1731,26 @@
 "timeline.empty.current.detail" = "Switch to All Windows to inspect activity\nfrom every window.";
 "timeline.empty.all.title" = "No timeline events";
 "timeline.empty.all.detail" = "Agent actions will appear here\nas they happen in real-time.";
+"timeline.event.sessionStarted" = "Session started";
+"timeline.event.sessionStartedWithAgent" = "Session started: %@";
+"timeline.event.sessionEnded" = "Session ended";
+"timeline.event.agentStopped" = "Agent stopped";
+"timeline.event.toolUse" = "Tool use";
+"timeline.event.toolFailure" = "Tool failure";
+"timeline.event.errorSummary" = "Error: %@";
+"timeline.event.errorTool" = "Error: %@";
+"timeline.event.subagentStarted" = "Subagent started";
+"timeline.event.subagentStartedWithName" = "Subagent started: %@";
+"timeline.event.subagentStopped" = "Subagent stopped";
+"timeline.event.notification" = "Notification";
+"timeline.event.userPromptSubmitted" = "User prompt submitted";
+"timeline.event.teammateIdle" = "Teammate idle";
+"timeline.event.taskCompleted" = "Task completed";
+"timeline.event.changedDirectory" = "Changed directory: %@";
+"timeline.event.workingDirectoryChanged" = "Working directory changed";
+"timeline.event.fileChanged" = "File changed";
+"timeline.event.fileChangedNamed" = "File changed: %@";
+"timeline.event.fileAction" = "File %@";
 
 "notifications.panel.accessibility" = "Notification Panel";
 "notifications.panel.title" = "Notifications";
