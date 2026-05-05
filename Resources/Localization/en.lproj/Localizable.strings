@@ -1486,6 +1486,9 @@
 "codeReview.toolbar.git.hint" = "Show branch, commit, and push controls inside the review panel";
 "codeReview.toolbar.discardDrafts" = "Discard Drafts";
 "codeReview.toolbar.discardDrafts.hint" = "Clear all pending inline comments";
+"codeReview.toolbar.applySuggestions.one" = "Apply suggestion";
+"codeReview.toolbar.applySuggestions.many" = "Apply %d suggestions";
+"codeReview.toolbar.applySuggestions.hint" = "Apply pending suggestion blocks to local files after conflict checks";
 "codeReview.toolbar.submit" = "Submit";
 "codeReview.toolbar.submitCount" = "Submit %d";
 "codeReview.toolbar.submit.hint" = "Send all pending comments back to the originating agent";
@@ -1511,6 +1514,11 @@
 "codeReview.toolbar.shortcuts.diffMode" = "Cycle diff mode";
 "codeReview.toolbar.shortcuts.submitAll" = "Submit all comments";
 "codeReview.toolbar.shortcuts.cancel" = "Cancel comment / close panel";
+"codeReview.suggestions.none" = "No pending suggestions to apply.";
+"codeReview.suggestions.editorDirty" = "Save or discard inline editor changes before applying suggestions.";
+"codeReview.suggestions.conflicts" = "Suggestions could not be applied: %d conflicts.";
+"codeReview.suggestions.applied.one" = "Applied 1 suggestion.";
+"codeReview.suggestions.applied.many" = "Applied %d suggestions.";
 "codeReview.gitWorkflow.accessibility" = "Git workflow";
 "codeReview.gitWorkflow.title" = "Git Workflow";
 "codeReview.gitWorkflow.refresh" = "Refresh";

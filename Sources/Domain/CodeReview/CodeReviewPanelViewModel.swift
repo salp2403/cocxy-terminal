@@ -276,12 +276,30 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         )
     }
 
+    private func localizedSuggestionAppliedMessage(count: Int) -> String {
+        if count == 1 {
+            return localizedString(
+                "codeReview.suggestions.applied.one",
+                fallback: "Applied 1 suggestion."
+            )
+        }
+        return localizedFormat(
+            "codeReview.suggestions.applied.many",
+            fallback: "Applied %d suggestions.",
+            count
+        )
+    }
+
     var pendingComments: [ReviewComment] {
         commentStore.allComments
     }
 
     var pendingCommentThreads: [PRThreadedComment] {
         PRThreadedCommentBuilder.makeThreads(from: pendingComments)
+    }
+
+    var pendingSuggestionCount: Int {
+        pendingCommentThreads.reduce(0) { $0 + $1.suggestions.count }
     }
 
     var pendingCommentCount: Int {
@@ -440,6 +458,80 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
 
     func removeComment(id: UUID) {
         commentStore.remove(id: id)
+    }
+
+    func applyPendingSuggestions() {
+        let threads = pendingCommentThreads
+        let suggestionsByFile = Dictionary(
+            grouping: threads.flatMap(\.suggestions),
+            by: \.filePath
+        )
+
+        guard !suggestionsByFile.isEmpty else {
+            lastInfoMessage = localizedString(
+                "codeReview.suggestions.none",
+                fallback: "No pending suggestions to apply."
+            )
+            lastErrorMessage = nil
+            return
+        }
+
+        guard !(isEditorVisible && isEditorDirty) else {
+            lastErrorMessage = localizedString(
+                "codeReview.suggestions.editorDirty",
+                fallback: "Save or discard inline editor changes before applying suggestions."
+            )
+            lastInfoMessage = nil
+            return
+        }
+
+        do {
+            let plans = try suggestionsByFile.keys.sorted().map { filePath in
+                try suggestionApplyPlan(
+                    filePath: filePath,
+                    suggestions: suggestionsByFile[filePath] ?? []
+                )
+            }
+            let conflicts = plans.flatMap(\.report.conflicts)
+            guard conflicts.isEmpty else {
+                lastErrorMessage = localizedFormat(
+                    "codeReview.suggestions.conflicts",
+                    fallback: "Suggestions could not be applied: %d conflicts.",
+                    conflicts.count
+                )
+                lastInfoMessage = nil
+                return
+            }
+
+            var writtenPlans: [SuggestionApplyPlan] = []
+            do {
+                for plan in plans where plan.originalContent != plan.report.updatedContent {
+                    try plan.report.updatedContent.write(
+                        to: plan.fileURL,
+                        atomically: true,
+                        encoding: .utf8
+                    )
+                    writtenPlans.append(plan)
+                }
+            } catch {
+                for plan in writtenPlans.reversed() {
+                    try? plan.originalContent.write(to: plan.fileURL, atomically: true, encoding: .utf8)
+                }
+                throw error
+            }
+
+            removeSuggestionDraftComments()
+            syncEditorAfterSuggestionApply(plans)
+            selectedLineForComment = nil
+            refreshDiffs()
+            lastErrorMessage = nil
+            lastInfoMessage = localizedSuggestionAppliedMessage(
+                count: plans.reduce(0) { $0 + $1.report.appliedSuggestions.count }
+            )
+        } catch {
+            lastErrorMessage = Self.userFacingErrorMessage(for: error)
+            lastInfoMessage = nil
+        }
     }
 
     func submitComments() {
@@ -972,6 +1064,59 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     /// the user changes the visible tab before creating or merging a PR.
     var reviewActionWorkingDirectory: URL? {
         activeWorkingDirectory ?? resolvedWorkingDirectory
+    }
+
+    private struct SuggestionApplyPlan {
+        let filePath: String
+        let fileURL: URL
+        let originalContent: String
+        let report: PRSuggestionApplyReport
+    }
+
+    private enum SuggestionApplyError: LocalizedError {
+        case invalidTarget(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidTarget(let filePath):
+                return "The suggestion target is outside the review working directory: \(filePath)"
+            }
+        }
+    }
+
+    private func suggestionApplyPlan(
+        filePath: String,
+        suggestions: [PRSuggestion]
+    ) throws -> SuggestionApplyPlan {
+        guard let fileURL = resolvedFileURL(for: filePath) else {
+            throw SuggestionApplyError.invalidTarget(filePath)
+        }
+        let originalContent = try String(contentsOf: fileURL, encoding: .utf8)
+        return SuggestionApplyPlan(
+            filePath: filePath,
+            fileURL: fileURL,
+            originalContent: originalContent,
+            report: PRSuggestionApplier.apply(suggestions, to: originalContent)
+        )
+    }
+
+    private func removeSuggestionDraftComments() {
+        let suggestionCommentIDs = pendingComments
+            .filter { !PRSuggestionExtractor.suggestions(from: $0).isEmpty }
+            .map(\.id)
+        for commentID in suggestionCommentIDs {
+            commentStore.remove(id: commentID)
+        }
+    }
+
+    private func syncEditorAfterSuggestionApply(_ plans: [SuggestionApplyPlan]) {
+        guard let editorFilePath,
+              let plan = plans.first(where: { $0.filePath == editorFilePath }) else {
+            return
+        }
+        editorContent = plan.report.updatedContent
+        editorOriginalContent = plan.report.updatedContent
+        editorErrorMessage = nil
     }
 
     private func applyAgentSessionsSnapshot(_ sessions: [AgentSessionInfo]) {

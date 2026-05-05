@@ -191,6 +191,66 @@ struct CodeReviewIntegrationSwiftTestingTests {
         #expect(viewModel.pendingComments.count == 1)
     }
 
+    @Test("apply pending suggestions writes files and clears applied suggestion comments")
+    func applyPendingSuggestionsWritesFilesAndClearsAppliedDrafts() throws {
+        let root = try makeTemporaryDirectory(named: "code-review-suggestions-apply")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fileURL = root.appendingPathComponent("Sources/App.swift")
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try "let enabled = false\nprint(enabled)\n".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let viewModel = CodeReviewPanelViewModel(tracker: SessionDiffTrackerImpl(), hookEventReceiver: nil)
+        viewModel.activeTabCwdProvider = { root }
+        viewModel.addComment(
+            filePath: "Sources/App.swift",
+            line: 1,
+            body: """
+            ```suggestion
+            let enabled = true
+            ```
+            """
+        )
+
+        viewModel.applyPendingSuggestions()
+
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let enabled = true\nprint(enabled)\n")
+        #expect(viewModel.pendingSuggestionCount == 0)
+        #expect(viewModel.pendingComments.isEmpty)
+        #expect(viewModel.lastInfoMessage?.contains("1 suggestion") == true)
+        #expect(viewModel.lastErrorMessage == nil)
+    }
+
+    @Test("apply pending suggestions keeps files unchanged when any suggestion conflicts")
+    func applyPendingSuggestionsKeepsFilesUnchangedOnConflict() throws {
+        let root = try makeTemporaryDirectory(named: "code-review-suggestions-conflict")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fileURL = root.appendingPathComponent("App.swift")
+        try "let enabled = false\n".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let viewModel = CodeReviewPanelViewModel(tracker: SessionDiffTrackerImpl(), hookEventReceiver: nil)
+        viewModel.activeTabCwdProvider = { root }
+        viewModel.addComment(
+            filePath: "App.swift",
+            line: 9,
+            body: """
+            ```suggestion
+            let enabled = true
+            ```
+            """
+        )
+
+        viewModel.applyPendingSuggestions()
+
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let enabled = false\n")
+        #expect(viewModel.pendingSuggestionCount == 1)
+        #expect(viewModel.pendingComments.count == 1)
+        #expect(viewModel.lastErrorMessage?.contains("could not be applied") == true)
+        #expect(viewModel.lastInfoMessage == nil)
+    }
+
     @Test("session end auto-triggers review when tracked files exist")
     func sessionEndAutoShowsReview() async throws {
         let tracker = SessionDiffTrackerImpl()
@@ -435,4 +495,11 @@ private func waitForReviewCondition(
 private func localizationBundle() -> Bundle? {
     let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+}
+
+private func makeTemporaryDirectory(named name: String) throws -> URL {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    return root
 }

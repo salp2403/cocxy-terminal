@@ -181,6 +181,25 @@ struct ReviewToolbarView: View {
                         )
                     }
 
+                    if viewModel.pendingSuggestionCount > 0 {
+                        Button {
+                            viewModel.applyPendingSuggestions()
+                        } label: {
+                            Label(
+                                localizedSuggestionApplyLabel(count: viewModel.pendingSuggestionCount),
+                                systemImage: "checkmark.rectangle.stack"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(viewModel.isMergingPullRequest)
+                        .accessibilityHint(
+                            localized(
+                                "codeReview.toolbar.applySuggestions.hint",
+                                fallback: "Apply pending suggestion blocks to local files after conflict checks"
+                            )
+                        )
+                    }
+
                     if let prNumber = viewModel.activePullRequestNumber {
                         mergeButton(prNumber: prNumber)
                     }
@@ -242,6 +261,17 @@ struct ReviewToolbarView: View {
 
     private func localizedCount(_ key: String, fallback: String, count: Int) -> String {
         String(format: localized(key, fallback: fallback), count)
+    }
+
+    private func localizedSuggestionApplyLabel(count: Int) -> String {
+        if count == 1 {
+            return localized("codeReview.toolbar.applySuggestions.one", fallback: "Apply suggestion")
+        }
+        return localizedCount(
+            "codeReview.toolbar.applySuggestions.many",
+            fallback: "Apply %d suggestions",
+            count: count
+        )
     }
 
     // MARK: - Merge banners (v0.1.86)

@@ -1486,6 +1486,9 @@
 "codeReview.toolbar.git.hint" = "Mostrar controles de rama, commit y push dentro del panel de revisión";
 "codeReview.toolbar.discardDrafts" = "Descartar borradores";
 "codeReview.toolbar.discardDrafts.hint" = "Limpiar todos los comentarios inline pendientes";
+"codeReview.toolbar.applySuggestions.one" = "Aplicar sugerencia";
+"codeReview.toolbar.applySuggestions.many" = "Aplicar %d sugerencias";
+"codeReview.toolbar.applySuggestions.hint" = "Aplicar bloques de sugerencia pendientes a archivos locales despues de revisar conflictos";
 "codeReview.toolbar.submit" = "Enviar";
 "codeReview.toolbar.submitCount" = "Enviar %d";
 "codeReview.toolbar.submit.hint" = "Enviar todos los comentarios pendientes al agente de origen";
@@ -1511,6 +1514,11 @@
 "codeReview.toolbar.shortcuts.diffMode" = "Cambiar modo de diff";
 "codeReview.toolbar.shortcuts.submitAll" = "Enviar todos los comentarios";
 "codeReview.toolbar.shortcuts.cancel" = "Cancelar comentario / cerrar panel";
+"codeReview.suggestions.none" = "No hay sugerencias pendientes para aplicar.";
+"codeReview.suggestions.editorDirty" = "Guarda o descarta los cambios del editor inline antes de aplicar sugerencias.";
+"codeReview.suggestions.conflicts" = "No se pudieron aplicar las sugerencias: %d conflictos.";
+"codeReview.suggestions.applied.one" = "1 sugerencia aplicada.";
+"codeReview.suggestions.applied.many" = "%d sugerencias aplicadas.";
 "codeReview.gitWorkflow.accessibility" = "Workflow Git";
 "codeReview.gitWorkflow.title" = "Workflow Git";
 "codeReview.gitWorkflow.refresh" = "Refrescar";
