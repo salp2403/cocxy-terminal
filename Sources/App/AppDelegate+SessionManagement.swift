@@ -448,7 +448,6 @@ extension AppDelegate {
         controller.handleTabSwitch(to: activeTabID)
         controller.refreshVisibleTerminalInteractionState()
         controller.window?.contentView?.layoutSubtreeIfNeeded()
-        controller.window?.displayIfNeeded()
 
         // Enter full screen if saved.
         if result.isFullScreen, controller.window?.styleMask.contains(.fullScreen) == false {

@@ -148,6 +148,28 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(trackingWindow.setFrameDisplayFlags == [false])
     }
 
+    @Test("restore does not force synchronous window display")
+    func restoreDoesNotForceSynchronousWindowDisplay() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let trackingWindow = TrackingRestoreWindow(
+            contentRect: controller.window?.frame ?? NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: controller.window?.styleMask ?? [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        trackingWindow.contentView = controller.window?.contentView
+        controller.window = trackingWindow
+
+        let session = makeSession(tabIDs: [TabID(), TabID()], activeTabIndex: 0)
+
+        #expect(delegate.restoreSession(session, into: controller))
+        #expect(trackingWindow.displayIfNeededCount == 0)
+    }
+
     private func makeSession(
         tabIDs: [TabID],
         activeTabIndex: Int,
@@ -203,9 +225,15 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
 
 private final class TrackingRestoreWindow: NSWindow {
     private(set) var setFrameDisplayFlags: [Bool] = []
+    private(set) var displayIfNeededCount = 0
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
         setFrameDisplayFlags.append(flag)
         super.setFrame(frameRect, display: flag)
+    }
+
+    override func displayIfNeeded() {
+        displayIfNeededCount += 1
+        super.displayIfNeeded()
     }
 }
