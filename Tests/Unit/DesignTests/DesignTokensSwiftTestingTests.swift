@@ -7,6 +7,7 @@
 // OKLCH math so the design reference stays synchronized with the
 // Swift source as the redesign evolves.
 
+import AppKit
 import Foundation
 import SwiftUI
 import Testing
@@ -43,6 +44,24 @@ struct DesignTokensSwiftTestingTests {
         #expect(Design.panelPalette(for: .light, current: .aurora) == .paper)
         #expect(Design.panelPalette(for: .dark, current: .aurora) == .aurora)
         #expect(Design.panelPalette(for: .light, current: .nocturne) == .nocturne)
+    }
+
+    @Test("Glass panel palette honours a forced vibrancy appearance")
+    func glassPanelPaletteHonoursForcedVibrancyAppearance() {
+        #expect(
+            Design.panelPalette(
+                for: .dark,
+                current: .aurora,
+                appearanceOverride: NSAppearance(named: .aqua)
+            ) == .paper
+        )
+        #expect(
+            Design.panelPalette(
+                for: .light,
+                current: .paper,
+                appearanceOverride: NSAppearance(named: .darkAqua)
+            ) == .aurora
+        )
     }
 
     // MARK: - OKLCH helpers

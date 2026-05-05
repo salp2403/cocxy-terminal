@@ -93,5 +93,6 @@ struct WorktreeBatchCleanupSheet: View {
         }
         .padding(20)
         .frame(width: 560)
+        .glassPanelBackground()
     }
 }

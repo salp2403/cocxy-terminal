@@ -236,6 +236,9 @@ struct CommandPaletteView: View {
     /// the chrome when the user forces a transparency theme.
     var vibrancyAppearanceOverride: NSAppearance?
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.designThemePalette) private var designPalette
+
     /// Focus state for the search text field.
     @FocusState private var isSearchFocused: Bool
 
@@ -256,22 +259,18 @@ struct CommandPaletteView: View {
                     .onTapGesture { viewModel.dismiss() }
 
                 // Palette overlay.
-                paletteContent
+                Design.GlassSurface(cornerRadius: .large) {
+                    paletteContent
+                }
+                    .designThemePalette(
+                        Design.panelPalette(
+                            for: colorScheme,
+                            current: designPalette,
+                            appearanceOverride: vibrancyAppearanceOverride
+                        )
+                    )
                     .frame(maxWidth: Self.maxWidth)
                     .frame(maxHeight: Self.maxHeight)
-                    .background(
-                        ZStack {
-                            // Solid Catppuccin Surface0 as reliable fallback.
-                            Color(nsColor: CocxyColors.surface0)
-                            // Vibrancy on top for native macOS feel.
-                            VisualEffectBackground(
-                                material: .popover,
-                                blendingMode: .behindWindow,
-                                appearanceOverride: vibrancyAppearanceOverride
-                            )
-                        }
-                    )
-                    .cornerRadius(12)
                     .shadow(color: .black.opacity(0.6), radius: 30, y: 14)
                     .padding(.top, 80)
             }

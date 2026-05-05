@@ -91,6 +91,7 @@ struct PreferencesView: View {
             detailContent
         }
         .frame(minWidth: 600, minHeight: 400)
+        .glassPanelBackground()
     }
 
     // MARK: - Sidebar

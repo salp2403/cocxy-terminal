@@ -263,11 +263,7 @@ struct StatusBarView: View {
         .frame(height: 24)
         .background {
             if useVibrancy {
-                VisualEffectBackground(
-                    material: .headerView,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
+                Design.PanelGlassBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
             } else {
                 Color(nsColor: CocxyColors.crust)
             }

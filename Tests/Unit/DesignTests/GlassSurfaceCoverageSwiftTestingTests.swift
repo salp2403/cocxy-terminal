@@ -9,11 +9,15 @@ import Testing
 struct GlassSurfaceCoverageSwiftTestingTests {
     @Test("plan surfaces use the shared glass primitive")
     func planSurfacesUseSharedGlassPrimitive() throws {
+        #expect(Self.planSurfacePaths.count >= 24)
+
         for relativePath in Self.planSurfacePaths {
             let contents = try String(contentsOf: repositoryRoot().appendingPathComponent(relativePath))
             #expect(
-                contents.contains(".glassPanelBackground()")
-                    || contents.contains("Design.GlassSurface"),
+                contents.contains(".glassPanelBackground(")
+                    || contents.contains("Design.PanelGlassBackground(")
+                    || contents.contains("Design.GlassSurface(")
+                    || contents.contains("GlassSurface("),
                 "\(relativePath) should use the shared glass primitive"
             )
         }
@@ -43,23 +47,34 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Activity/ActivityDashboardView.swift",
         "Sources/UI/Agent/AgentPanelView.swift",
         "Sources/UI/AIEditHistory/AIEditHistoryPanelView.swift",
+        "Sources/UI/Browser/BrowserHistoryView.swift",
+        "Sources/UI/Browser/BrowserPanelView.swift",
         "Sources/UI/CodeReview/CodeReviewPanelView.swift",
         "Sources/UI/CodeReview/FileListView.swift",
         "Sources/UI/CodeReview/ReviewToolbarView.swift",
+        "Sources/UI/CommandPalette/CommandPaletteView.swift",
         "Sources/UI/DBCloudHelpers/DBCloudHelperPanelView.swift",
+        "Sources/UI/Design/AuroraCommandPaletteView.swift",
+        "Sources/UI/Design/AuroraSidebarView.swift",
+        "Sources/UI/Design/AuroraStatusBarView.swift",
         "Sources/UI/GitHub/GitHubPaneView.swift",
         "Sources/UI/Macros/MacroSnippetPanelView.swift",
+        "Sources/UI/Notes/NotesOverlayView.swift",
         "Sources/UI/Notebook/NotebookPanelView.swift",
         "Sources/UI/Onboarding/OnboardingFlowView.swift",
         "Sources/UI/PluginMarketplace/PluginMarketplaceView.swift",
+        "Sources/UI/Preferences/PreferencesView.swift",
         "Sources/UI/RemoteWorkspace/RemoteConnectionView.swift",
         "Sources/UI/RemoteWorkspace/RemoteProfileEditor.swift",
         "Sources/UI/RemoteWorkspace/SSHKeyManagerView.swift",
         "Sources/UI/SessionReplay/SessionReplayPanelView.swift",
         "Sources/UI/SmartRouting/SmartRoutingOverlayView.swift",
+        "Sources/UI/StatusBar/StatusBarView.swift",
         "Sources/UI/Templates/ProjectTemplatePanelView.swift",
         "Sources/UI/Terminal/AgentProgressOverlay.swift",
         "Sources/UI/Welcome/WelcomeOverlayView.swift",
+        "Sources/UI/Worktree/WorktreeAdvancedModal.swift",
+        "Sources/UI/Worktree/WorktreeBatchCleanupSheet.swift",
         "Sources/UI/Workflow/WorkflowPanelView.swift",
     ]
 

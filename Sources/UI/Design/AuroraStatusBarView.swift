@@ -115,14 +115,10 @@ extension Design {
         }
 
         var body: some View {
-            // The status bar sits at the bottom edge of the window,
-            // so the `GlassSurface` wrapper with `.medium` corner
-            // radius used to leave a visible gap between the terminal
-            // area and the bar's top edge (the rounded corners
-            // exposed the rootView background). A flat opaque band
-            // fills the 24pt host frame exactly, matching the classic
-            // status bar's geometry and keeping the Aurora markup
-            // legible in the limited vertical budget.
+            // The status bar sits at the bottom edge of the window, so
+            // it uses a flat rectangular glass surface instead of the
+            // rounded default. That preserves exact 24pt edge geometry
+            // without exposing the rootView background.
             HStack(spacing: Spacing.large) {
                 LocalBadgeView(localizer: localizer)
                 separator
@@ -145,7 +141,11 @@ extension Design {
             }
             .padding(.horizontal, Spacing.large)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(palette.backgroundSecondary.resolvedColor())
+            .background {
+                GlassSurface(shape: Rectangle()) {
+                    Color.clear
+                }
+            }
             .overlay(
                 Rectangle()
                     .fill(palette.divider.resolvedColor())

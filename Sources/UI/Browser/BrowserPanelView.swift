@@ -149,16 +149,7 @@ struct BrowserPanelView: View {
         }
         .frame(width: layout == .sidePanel ? Self.panelWidth : nil)
         .frame(maxWidth: layout == .splitPane ? .infinity : nil, maxHeight: .infinity)
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("browser.panel.accessibility", fallback: "Browser Panel"))
         .onAppear {

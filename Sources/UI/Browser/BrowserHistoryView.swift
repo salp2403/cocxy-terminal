@@ -126,16 +126,7 @@ struct BrowserHistoryView: View {
             Divider()
             footerView
         }
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("browser.history.accessibility", fallback: "Browsing History"))
         .onAppear { loadHistory() }
