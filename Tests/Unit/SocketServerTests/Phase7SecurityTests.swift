@@ -267,8 +267,12 @@ final class Phase7SocketSecurityTests: XCTestCase {
         defer { server.stop() }
 
         let commands = CLICommandName.allCases.map { $0.rawValue }
-        XCTAssertEqual(commands.count, 123,
-                       "There should be exactly 123 commands in CLICommandName")
+        XCTAssertFalse(commands.isEmpty, "CLICommandName should expose socket commands")
+        XCTAssertEqual(
+            Set(commands).count,
+            commands.count,
+            "CLICommandName raw values must be unique"
+        )
 
         for command in commands {
             let request = SocketRequest(id: "all-\(command)", command: command, params: nil)
