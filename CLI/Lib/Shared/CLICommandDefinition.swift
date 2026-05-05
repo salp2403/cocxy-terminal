@@ -187,6 +187,10 @@ public enum CLICommand: String, CaseIterable {
     case notebookRun = "notebook-run"
     case workflowRun = "workflow-run"
     case skillList = "skill-list"
+    case skillSourceList = "skill-source-list"
+    case skillSourceAdd = "skill-source-add"
+    case skillInstall = "skill-install"
+    case skillUninstall = "skill-uninstall"
 
     // MARK: - Worktree (v0.1.81)
 
@@ -370,6 +374,10 @@ public enum CLICommand: String, CaseIterable {
         case .notebookRun: return "Run Cocxy notebook code cells locally"
         case .workflowRun: return "Run a local Cocxy workflow file"
         case .skillList: return "List local Cocxy skills as JSON"
+        case .skillSourceList: return "List decentralized skill sources"
+        case .skillSourceAdd: return "Add a decentralized skill source URL"
+        case .skillInstall: return "Install a local skill from a source URL or path"
+        case .skillUninstall: return "Uninstall a local skill by ID"
 
         // Worktree v0.1.81
         case .worktreeAdd: return "Create a cocxy-managed git worktree and attach it to the active tab"
@@ -544,6 +552,10 @@ public enum CLICommand: String, CaseIterable {
         case .notebookRun: return "cocxy notebook run <input.cocxynb> [--output <output.cocxynb>] [--cwd <dir>]"
         case .workflowRun: return "cocxy workflow run <input.toml> [--cwd <dir>]"
         case .skillList: return "cocxy skill list"
+        case .skillSourceList: return "cocxy skill source list"
+        case .skillSourceAdd: return "cocxy skill source add <url> [--name <display-name>]"
+        case .skillInstall: return "cocxy skill install <url-or-path> [--replace]"
+        case .skillUninstall: return "cocxy skill uninstall <id>"
 
         // Worktree v0.1.81
         case .worktreeAdd: return "cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]"

@@ -304,6 +304,14 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case workflowRun = "workflow-run"
     /// List local built-in, user, and project skills.
     case skillList = "skill-list"
+    /// List configured decentralized skill sources.
+    case skillSourceList = "skill-source-list"
+    /// Add a decentralized skill source URL.
+    case skillSourceAdd = "skill-source-add"
+    /// Install a local skill from a source URL or path.
+    case skillInstall = "skill-install"
+    /// Uninstall a local skill by ID.
+    case skillUninstall = "skill-uninstall"
 
     // MARK: - Session Management (v3)
 

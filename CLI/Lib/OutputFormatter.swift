@@ -302,6 +302,14 @@ public enum OutputFormatter {
             return response.data?["summary"] ?? "Executed workflow."
         case .skillList:
             return formatDataOrJSON(response: response)
+        case .skillSourceList:
+            return formatDataOrJSON(response: response)
+        case .skillSourceAdd:
+            return "Skill source added."
+        case .skillInstall:
+            return formatDataOrJSON(response: response)
+        case .skillUninstall:
+            return "Skill uninstalled."
         case .worktreeAdd:
             guard let data = response.data,
                   let id = data["id"],

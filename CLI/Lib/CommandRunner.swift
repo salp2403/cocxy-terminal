@@ -873,6 +873,24 @@ public struct CommandRunner {
         case .skillList:
             return CLISocketRequest(id: requestID, command: "skill-list", params: nil)
 
+        case .skillSourceList:
+            return CLISocketRequest(id: requestID, command: "skill-source-list", params: nil)
+
+        case .skillSourceAdd(let url, let displayName):
+            var params = ["url": url]
+            if let displayName { params["name"] = displayName }
+            return CLISocketRequest(id: requestID, command: "skill-source-add", params: params)
+
+        case .skillInstall(let url, let replaceExisting):
+            return CLISocketRequest(
+                id: requestID,
+                command: "skill-install",
+                params: ["url": url, "replace": replaceExisting ? "true" : "false"]
+            )
+
+        case .skillUninstall(let id):
+            return CLISocketRequest(id: requestID, command: "skill-uninstall", params: ["id": id])
+
         case .worktreeAdd(let agent, let branch, let baseRef):
             var params: [String: String] = [:]
             if let agent { params["agent"] = agent }

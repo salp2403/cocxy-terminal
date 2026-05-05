@@ -245,6 +245,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Provides the local skill registry for `cocxy skill list`.
     private let skillRegistryProvider: (@Sendable () -> SkillRegistry)?
 
+    /// Provides the decentralized skill source store for marketplace commands.
+    private let skillSourceStoreProvider: () -> SkillSourceStore
+
+    /// Provides the installer for skill install/uninstall commands.
+    private let skillInstallerProvider: () -> SkillMarketplaceInstaller
+
     /// Dispatches a CLI notification through the notification pipeline.
     /// Called from `handleNotify(_:)` to deliver real notifications instead
     /// of silently returning "acknowledged".
@@ -499,6 +505,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         pluginSourceStoreProvider: (() -> PluginSourceStore)? = nil,
         pluginInstallerProvider: (() -> PluginInstaller)? = nil,
         skillRegistryProvider: (@Sendable () -> SkillRegistry)? = nil,
+        skillSourceStoreProvider: (() -> SkillSourceStore)? = nil,
+        skillInstallerProvider: (() -> SkillMarketplaceInstaller)? = nil,
         notifyDispatcher: (@Sendable (String, String) -> Void)? = nil,
         tabDuplicateProvider: (@Sendable () -> (id: String, title: String)?)? = nil,
         tabPinProvider: (@Sendable (String?) -> (id: String, isPinned: Bool)?)? = nil,
@@ -570,6 +578,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.pluginSourceStoreProvider = pluginSourceStoreProvider ?? { PluginSourceStore() }
         self.pluginInstallerProvider = pluginInstallerProvider ?? { PluginInstaller() }
         self.skillRegistryProvider = skillRegistryProvider
+        self.skillSourceStoreProvider = skillSourceStoreProvider ?? { SkillSourceStore() }
+        self.skillInstallerProvider = skillInstallerProvider ?? { SkillMarketplaceInstaller() }
         self.notifyDispatcher = notifyDispatcher ?? { _, _ in }
         self.tabDuplicateProvider = tabDuplicateProvider
         self.tabPinProvider = tabPinProvider
@@ -956,6 +966,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handlePluginUninstall(request)
         case .skillList:
             return handleSkillList(request)
+        case .skillSourceList:
+            return handleSkillSourceList(request)
+        case .skillSourceAdd:
+            return handleSkillSourceAdd(request)
+        case .skillInstall:
+            return handleSkillInstall(request)
+        case .skillUninstall:
+            return handleSkillUninstall(request)
 
         // CLI notify: dispatch through the notification pipeline.
         case .notify:
@@ -2339,6 +2357,83 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .ok(id: request.id, data: ["content": content])
         } catch {
             return .failure(id: request.id, error: "Failed to load skills: \(error.localizedDescription)")
+        }
+    }
+
+    /// Lists decentralized skill source URLs configured on this Mac.
+    private func handleSkillSourceList(_ request: SocketRequest) -> SocketResponse {
+        do {
+            let sources = try skillSourceStoreProvider().load()
+            var data: [String: String] = ["count": "\(sources.count)"]
+            for (index, source) in sources.enumerated() {
+                data["source_\(index)_id"] = source.id
+                data["source_\(index)_url"] = source.url.absoluteString
+                if let displayName = source.displayName {
+                    data["source_\(index)_name"] = displayName
+                }
+            }
+            return .ok(id: request.id, data: data)
+        } catch {
+            return .failure(id: request.id, error: "Failed to load skill sources: \(error)")
+        }
+    }
+
+    /// Adds a decentralized skill source URL.
+    private func handleSkillSourceAdd(_ request: SocketRequest) -> SocketResponse {
+        guard let rawURL = request.params?["url"],
+              let url = PluginSourceURLResolver.resolve(rawURL)
+        else {
+            return .failure(id: request.id, error: "Usage: skill-source-add {\"url\": \"<url>\"}")
+        }
+
+        do {
+            try skillSourceStoreProvider().add(
+                SkillMarketplaceSource(
+                    url: url,
+                    displayName: request.params?["name"]
+                )
+            )
+            return .ok(id: request.id, data: ["url": url.absoluteString, "status": "added"])
+        } catch {
+            return .failure(id: request.id, error: "Failed to add skill source: \(error)")
+        }
+    }
+
+    /// Installs a skill from a decentralized source URL or local repository path.
+    private func handleSkillInstall(_ request: SocketRequest) -> SocketResponse {
+        guard let rawURL = request.params?["url"],
+              let url = PluginSourceURLResolver.resolve(rawURL)
+        else {
+            return .failure(id: request.id, error: "Usage: skill-install {\"url\": \"<url-or-path>\"}")
+        }
+
+        let replace = request.params?["replace"] == "true"
+        do {
+            let receipt = try skillInstallerProvider().install(from: url, replaceExisting: replace)
+            return .ok(
+                id: request.id,
+                data: [
+                    "skill": receipt.skillID,
+                    "path": receipt.installedURL.path,
+                    "status": "installed",
+                ]
+            )
+        } catch {
+            return .failure(id: request.id, error: "Failed to install skill: \(error)")
+        }
+    }
+
+    /// Uninstalls a local skill by ID.
+    private func handleSkillUninstall(_ request: SocketRequest) -> SocketResponse {
+        guard let skillID = request.params?["id"] else {
+            return .failure(id: request.id, error: "Usage: skill-uninstall {\"id\": \"<skill-id>\"}")
+        }
+
+        do {
+            try skillInstallerProvider().uninstall(id: skillID)
+            return .ok(id: request.id, data: ["skill": skillID, "status": "uninstalled"])
+        } catch {
+            return .failure(id: request.id, error: "Failed to uninstall skill: \(error)")
         }
     }
 

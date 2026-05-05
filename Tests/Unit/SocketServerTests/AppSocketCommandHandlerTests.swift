@@ -2250,6 +2250,71 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(skills.first?["source"] as? String, "built-in")
     }
 
+    func test_skillMarketplaceCommands_installAndListLocalSkills() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sourceRoot = directory.appendingPathComponent("source", isDirectory: true)
+        let skillsRoot = directory.appendingPathComponent("skills", isDirectory: true)
+        try writeSkill(id: "local-review", name: "Local Review", summary: "Local skill.", in: sourceRoot)
+
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            skillRegistryProvider: {
+                SkillRegistry(directories: [SkillDirectory(url: skillsRoot, source: .user)])
+            },
+            skillSourceStoreProvider: {
+                SkillSourceStore(fileURL: directory.appendingPathComponent("skill-sources.json"))
+            },
+            skillInstallerProvider: {
+                SkillMarketplaceInstaller(skillsDirectory: skillsRoot)
+            }
+        )
+
+        let addResponse = handler.handleCommand(SocketRequest(
+            id: "skill-source-add-1",
+            command: "skill-source-add",
+            params: ["url": sourceRoot.path, "name": "Local skills"]
+        ))
+        XCTAssertTrue(addResponse.success)
+
+        let sourceListResponse = handler.handleCommand(SocketRequest(
+            id: "skill-source-list-1",
+            command: "skill-source-list",
+            params: nil
+        ))
+        XCTAssertTrue(sourceListResponse.success)
+        XCTAssertEqual(sourceListResponse.data?["count"], "1")
+        XCTAssertEqual(sourceListResponse.data?["source_0_name"], "Local skills")
+
+        let installResponse = handler.handleCommand(SocketRequest(
+            id: "skill-install-1",
+            command: "skill-install",
+            params: ["url": sourceRoot.appendingPathComponent("local-review", isDirectory: true).path]
+        ))
+        XCTAssertTrue(installResponse.success)
+        XCTAssertEqual(installResponse.data?["skill"], "local-review")
+
+        let listResponse = handler.handleCommand(SocketRequest(
+            id: "skill-list-1",
+            command: "skill-list",
+            params: nil
+        ))
+        XCTAssertTrue(listResponse.success)
+        let content = try XCTUnwrap(listResponse.data?["content"])
+        let data = try XCTUnwrap(content.data(using: .utf8))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["count"] as? Int, 1)
+
+        let uninstallResponse = handler.handleCommand(SocketRequest(
+            id: "skill-uninstall-1",
+            command: "skill-uninstall",
+            params: ["id": "local-review"]
+        ))
+        XCTAssertTrue(uninstallResponse.success)
+        XCTAssertEqual(uninstallResponse.data?["status"], "uninstalled")
+    }
+
     func test_v4Commands_withoutProviders_returnFailure() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let commands = [

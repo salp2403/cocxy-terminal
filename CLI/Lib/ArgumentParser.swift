@@ -418,6 +418,18 @@ public enum ParsedCommand: Equatable {
     /// `cocxy skill list`
     case skillList
 
+    /// `cocxy skill source list`
+    case skillSourceList
+
+    /// `cocxy skill source add <url> [--name <display-name>]`
+    case skillSourceAdd(url: String, displayName: String?)
+
+    /// `cocxy skill install <url-or-path> [--replace]`
+    case skillInstall(url: String, replaceExisting: Bool)
+
+    /// `cocxy skill uninstall <id>`
+    case skillUninstall(id: String)
+
     /// `cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]`
     case worktreeAdd(agent: String?, branch: String?, baseRef: String?)
 
@@ -731,6 +743,14 @@ public enum CLIArgumentParser {
 
         case "skill", "skills":
             return try parseSkill(arguments: Array(arguments.dropFirst()))
+        case "skill-source-list":
+            return try parseSkill(arguments: ["source", "list"] + Array(arguments.dropFirst()))
+        case "skill-source-add":
+            return try parseSkill(arguments: ["source", "add"] + Array(arguments.dropFirst()))
+        case "skill-install":
+            return try parseSkill(arguments: ["install"] + Array(arguments.dropFirst()))
+        case "skill-uninstall":
+            return try parseSkill(arguments: ["uninstall"] + Array(arguments.dropFirst()))
 
         case "worktree":
             return try parseWorktree(arguments: Array(arguments.dropFirst()))
@@ -2557,11 +2577,75 @@ public enum CLIArgumentParser {
                 )
             }
             return .skillList
+        case "source":
+            return try parseSkillSource(arguments: rest)
+        case "install":
+            guard let url = rest.first, !url.isEmpty else {
+                throw CLIError.missingArgument(command: "skill install", argument: "url")
+            }
+            let flags = rest.dropFirst()
+            let replace = flags.contains("--replace")
+            let unknown = flags.first { $0 != "--replace" }
+            if let unknown {
+                throw CLIError.invalidArgument(
+                    command: "skill install",
+                    argument: unknown,
+                    reason: "Unknown option. Use --replace to reinstall an existing skill."
+                )
+            }
+            return .skillInstall(url: url, replaceExisting: replace)
+        case "uninstall":
+            guard let id = rest.first, !id.isEmpty else {
+                throw CLIError.missingArgument(command: "skill uninstall", argument: "id")
+            }
+            return .skillUninstall(id: id)
         default:
             throw CLIError.invalidArgument(
                 command: "skill",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use list."
+                reason: "Unknown subcommand. Use list, source, install, or uninstall."
+            )
+        }
+    }
+
+    private static func parseSkillSource(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "skill source", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "list":
+            return .skillSourceList
+        case "add":
+            let rest = Array(arguments.dropFirst())
+            guard let url = rest.first, !url.isEmpty else {
+                throw CLIError.missingArgument(command: "skill source add", argument: "url")
+            }
+            var displayName: String?
+            var index = 1
+            while index < rest.count {
+                let argument = rest[index]
+                switch argument {
+                case "--name":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(command: "skill source add", argument: "name")
+                    }
+                    displayName = rest[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "skill source add",
+                        argument: argument,
+                        reason: "Unknown option. Use --name <display-name>."
+                    )
+                }
+            }
+            return .skillSourceAdd(url: url, displayName: displayName)
+        default:
+            throw CLIError.invalidArgument(
+                command: "skill source",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list or add."
             )
         }
     }
