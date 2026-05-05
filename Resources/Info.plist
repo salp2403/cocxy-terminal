@@ -41,6 +41,10 @@
 	<string>NSApplication</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Cocxy uses on-device speech recognition to turn your local Voice input into text.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>dev.cocxy.terminal.continue</string>
+	</array>
 	<key>OSAScriptingDefinition</key>
 	<string>CocxyTerminal.sdef</string>
 	<key>SUAutomaticallyUpdate</key>

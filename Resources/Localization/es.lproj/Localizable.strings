@@ -2397,3 +2397,5 @@
 "shortcuts.error.appDelegateUnavailable" = "Cocxy aún no está listo.";
 "shortcuts.error.noActiveTerminal" = "No hay una superficie de terminal activa disponible.";
 "shortcuts.error.noWindow" = "No hay una ventana de Cocxy disponible.";
+
+"handoff.activity.title" = "Continuar Cocxy Terminal";

@@ -134,6 +134,7 @@ check_plist_exists "$CONTENTS/Info.plist" "SUPublicEDKey" "Sparkle public key"
 check_plist_exists "$CONTENTS/Info.plist" "OSAScriptingDefinition" "AppleScript definition key"
 check_plist_exists "$CONTENTS/Info.plist" "NSMicrophoneUsageDescription" "Microphone privacy description"
 check_plist_exists "$CONTENTS/Info.plist" "NSSpeechRecognitionUsageDescription" "Speech recognition privacy description"
+check_plist_string "$CONTENTS/Info.plist" "NSUserActivityTypes.0" "dev.cocxy.terminal.continue" "Handoff activity type"
 
 # 2. Frameworks
 echo ""

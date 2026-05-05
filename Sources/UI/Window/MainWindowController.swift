@@ -832,6 +832,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         window.setFrameAutosaveName("CocxyMainWindow")
         window.delegate = self
         window.backgroundColor = CocxyColors.base
+        installPrivacyPreservingHandoffActivity(makeCurrent: false)
     }
 
     override func makeTouchBar() -> NSTouchBar? {
@@ -1609,6 +1610,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         remoteUnreadCancellable?.cancel()
         remoteUnreadCancellable = nil
         removeWorkspaceWakeObservers()
+        invalidatePrivacyPreservingHandoffActivity()
 
         // Tear down any active Picture-in-Picture panels before destroying
         // surfaces so the floating windows do not outlive this controller.
@@ -1798,6 +1800,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // Ensure the terminal view has focus when the window becomes main.
         focusActiveTerminalSurface()
         refreshVisibleTerminalInteractionState()
+        installPrivacyPreservingHandoffActivity(makeCurrent: true)
     }
 
     func updatePreferredCodeReviewPanelWidth(_ width: CGFloat) {
@@ -1822,11 +1825,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         synchronizeActiveSurfaceFocusState(focused: true)
         refreshVisibleTerminalInteractionState()
         injectedAgentDetectionEngine?.resumeTimingDetector()
+        installPrivacyPreservingHandoffActivity(makeCurrent: true)
     }
 
     func windowDidResignKey(_ notification: Notification) {
         synchronizeActiveSurfaceFocusState(focused: false)
         injectedAgentDetectionEngine?.pauseTimingDetector()
+        resignPrivacyPreservingHandoffActivity()
     }
 
     // MARK: - Tab-to-Session Mapping
