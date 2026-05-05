@@ -125,7 +125,12 @@ struct DBCloudHelperSwiftTestingTests {
         )
 
         #expect(DBCloudHelperKind.database.localizedTitle(using: spanish) == "Base de datos")
+        #expect(DBCloudHelperKind.cloud.localizedTitle(using: spanish) == "Nube")
         #expect(viewModel.statusText == "10 ayudantes cargados.")
+        #expect(
+            viewModel.selectedDescriptor.map { viewModel.localizedDescription(for: $0) }
+                == "Agrega comprobaciones locales de SQLite CLI y comandos auxiliares."
+        )
 
         viewModel.selectedHelperID = "cocxy-db-sqlite"
         viewModel.sqliteDatabasePath = "/tmp/cocxy.sqlite"

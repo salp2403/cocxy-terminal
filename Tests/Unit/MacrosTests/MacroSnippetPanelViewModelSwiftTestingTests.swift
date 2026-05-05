@@ -113,13 +113,16 @@ struct MacroSnippetPanelViewModelSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let manager = SnippetManager(store: SnippetStore(fileURL: root.appendingPathComponent("snippets.json")))
         let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
         let viewModel = MacroSnippetPanelViewModel(
             snippetManager: manager,
-            localizer: AppLocalizer(languagePreference: .spanish, bundle: bundle)
+            localizer: spanish
         )
 
         try viewModel.refresh()
-        #expect(viewModel.statusText == "0 snippets")
+        #expect(MacroSnippetPanelSection.snippets.localizedTitle(using: spanish) == "Fragmentos")
+        #expect(MacroSnippetPanelSection.aliases.localizedTitle(using: spanish) == "Alias")
+        #expect(viewModel.statusText == "0 fragmentos")
 
         try viewModel.startRecordingMacro(named: "Build")
         try viewModel.recordTextEvent("swift build")

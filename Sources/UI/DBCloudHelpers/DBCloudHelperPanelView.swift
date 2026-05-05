@@ -148,7 +148,7 @@ struct DBCloudHelperPanelView: View {
             if let descriptor = viewModel.selectedDescriptor {
                 Label(descriptor.name, systemImage: descriptor.kind.systemImage)
                     .font(.title3.weight(.semibold))
-                Text(descriptor.description)
+                Text(viewModel.localizedDescription(for: descriptor))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

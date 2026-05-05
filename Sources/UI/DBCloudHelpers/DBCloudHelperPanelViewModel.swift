@@ -73,6 +73,10 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
         descriptors.first { $0.id == selectedHelperID }
     }
 
+    func localizedDescription(for descriptor: DBCloudHelperDescriptor) -> String {
+        localizer.string("dbCloud.helper.\(descriptor.id).description", fallback: descriptor.description)
+    }
+
     var commandPreview: String {
         do {
             return try makeCommand().redactedPreview
