@@ -113,6 +113,8 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case tabConfigList = "tab-config-list"
     /// Return the TOML path for a reusable tab config.
     case tabConfigPath = "tab-config-path"
+    /// Export a reusable tab config TOML file to a user-selected destination.
+    case tabConfigExport = "tab-config-export"
 
     // MARK: - Split extended (v2)
 

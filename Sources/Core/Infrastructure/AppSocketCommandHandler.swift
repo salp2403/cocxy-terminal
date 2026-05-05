@@ -199,6 +199,13 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Returns the TOML path for a saved reusable tab config.
     private let tabConfigPathProvider: (@Sendable (_ name: String) -> String?)?
 
+    /// Exports a saved reusable tab config to a user-selected destination.
+    private let tabConfigExportProvider: (@Sendable (
+        _ name: String,
+        _ output: String,
+        _ overwrite: Bool
+    ) -> (name: String, path: String)?)?
+
     /// Closure that reads the active tab's project config. Returns a dict of overrides or nil.
     private let projectConfigProvider: @Sendable () -> [String: String]?
 
@@ -477,6 +484,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         tabConfigOpenProvider: (@Sendable (_ name: String) -> (id: String, title: String, path: String)?)? = nil,
         tabConfigListProvider: (@Sendable () -> [String]?)? = nil,
         tabConfigPathProvider: (@Sendable (_ name: String) -> String?)? = nil,
+        tabConfigExportProvider: (@Sendable (
+            _ name: String,
+            _ output: String,
+            _ overwrite: Bool
+        ) -> (name: String, path: String)?)? = nil,
         projectConfigProviderOverride: (@Sendable () -> [String: String]?)? = nil,
         configProvider: (@Sendable () -> CocxyConfig)? = nil,
         statusDetailsProvider: (@Sendable () -> [String: String])? = nil,
@@ -565,6 +577,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.tabConfigOpenProvider = tabConfigOpenProvider
         self.tabConfigListProvider = tabConfigListProvider
         self.tabConfigPathProvider = tabConfigPathProvider
+        self.tabConfigExportProvider = tabConfigExportProvider
         self.configReloadProvider = configReloadProvider
         self.splitInfoProvider = splitInfoProvider
         self.splitSwapProvider = splitSwapProvider
@@ -873,6 +886,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleTabConfigList(request)
         case .tabConfigPath:
             return handleTabConfigPath(request)
+        case .tabConfigExport:
+            return handleTabConfigExport(request)
 
         // Config operations
         case .configGet:
@@ -1406,6 +1421,27 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Unable to resolve tab config path")
         }
         return .ok(id: request.id, data: ["name": name, "path": path])
+    }
+
+    private func handleTabConfigExport(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = tabConfigExportProvider else {
+            return .failure(id: request.id, error: "Tab config export not available")
+        }
+        guard let name = request.params?["name"], !name.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+        guard let output = request.params?["output"], !output.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: output")
+        }
+        let overwrite = request.params?["force"] == "true"
+        guard let result = provider(name, output, overwrite) else {
+            return .failure(id: request.id, error: "Unable to export tab config")
+        }
+        return .ok(id: request.id, data: [
+            "status": "exported",
+            "name": result.name,
+            "path": result.path,
+        ])
     }
 
     private func extractTabConfigEnvironment(from params: [String: String]?) throws -> [String: String] {

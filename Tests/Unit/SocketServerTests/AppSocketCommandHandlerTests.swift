@@ -344,6 +344,39 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
     }
 
+    func test_tabConfigExport_routesNameOutputAndForceToProvider() {
+        let captured = LockedBox<(name: String?, output: String?, force: Bool?)>(
+            (nil, nil, nil)
+        )
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            tabConfigExportProvider: { name, output, force in
+                captured.withValue { value in
+                    value = (name, output, force)
+                }
+                return (name: name, path: output)
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "tab-config-export-1",
+            command: "tab-config-export",
+            params: [
+                "name": "api",
+                "output": "/tmp/shared-api.toml",
+                "force": "true",
+            ]
+        ))
+
+        XCTAssertTrue(response.success)
+        let snapshot = captured.withValue { $0 }
+        XCTAssertEqual(snapshot.name, "api")
+        XCTAssertEqual(snapshot.output, "/tmp/shared-api.toml")
+        XCTAssertEqual(snapshot.force, true)
+        XCTAssertEqual(response.data?["path"], "/tmp/shared-api.toml")
+    }
+
     func test_reviewRequestChanges_routesToGitHubProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(

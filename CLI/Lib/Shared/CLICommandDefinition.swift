@@ -40,6 +40,7 @@ public enum CLICommand: String, CaseIterable {
     case tabConfigOpen = "tab-config-open"
     case tabConfigList = "tab-config-list"
     case tabConfigPath = "tab-config-path"
+    case tabConfigExport = "tab-config-export"
 
     // MARK: - Split extended (v2)
 
@@ -244,6 +245,7 @@ public enum CLICommand: String, CaseIterable {
         case .tabConfigOpen: return "Open a new tab from a reusable TOML config"
         case .tabConfigList: return "List saved tab configs"
         case .tabConfigPath: return "Show a tab config TOML path"
+        case .tabConfigExport: return "Export a tab config TOML file"
 
         // Split extended
         case .splitList: return "List all split panes as JSON"
@@ -416,6 +418,7 @@ public enum CLICommand: String, CaseIterable {
         case .tabConfigOpen: return "cocxy tab config open <name>"
         case .tabConfigList: return "cocxy tab config list"
         case .tabConfigPath: return "cocxy tab config path <name>"
+        case .tabConfigExport: return "cocxy tab config export <name> --output <path> [--force]"
 
         // Split extended
         case .splitList: return "cocxy split list [--json]"

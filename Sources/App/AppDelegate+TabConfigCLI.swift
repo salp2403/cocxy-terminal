@@ -83,6 +83,25 @@ extension AppDelegate {
         }
     }
 
+    func exportTabConfigForCLI(
+        named name: String,
+        destination: String,
+        overwrite: Bool
+    ) -> (name: String, path: String)? {
+        do {
+            let destinationURL = URL(fileURLWithPath: destination)
+            let exported = try TabConfigStore().export(
+                named: name,
+                to: destinationURL,
+                overwrite: overwrite
+            )
+            return (name: name, path: exported.path)
+        } catch {
+            NSLog("[AppDelegate] Failed to export tab config: %@", error.localizedDescription)
+            return nil
+        }
+    }
+
     private func applyTabConfigTheme(
         _ themeName: String?,
         to tabID: TabID,

@@ -102,6 +102,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy tab config path <name>`
     case tabConfigPath(name: String)
 
+    /// `cocxy tab config export <name> --output <path> [--force]`
+    case tabConfigExport(name: String, output: String, force: Bool)
+
     // MARK: - Split extended (v2)
 
     /// `cocxy split list`
@@ -1189,11 +1192,13 @@ public enum CLIArgumentParser {
                 throw CLIError.missingArgument(command: "tab config path", argument: "name")
             }
             return .tabConfigPath(name: name)
+        case "export":
+            return try parseTabConfigExport(arguments: Array(arguments.dropFirst()))
         default:
             throw CLIError.invalidArgument(
                 command: "tab config",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use save, open, list, or path."
+                reason: "Unknown subcommand. Use save, open, list, path, or export."
             )
         }
     }
@@ -1254,6 +1259,41 @@ public enum CLIArgumentParser {
             theme: theme,
             environment: environment
         )
+    }
+
+    private static func parseTabConfigExport(arguments: [String]) throws -> ParsedCommand {
+        guard let name = arguments.first, !name.isEmpty else {
+            throw CLIError.missingArgument(command: "tab config export", argument: "name")
+        }
+
+        var output: String?
+        var force = false
+        var index = 1
+
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--output", "-o":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "tab config export", argument: "output")
+                }
+                output = arguments[index + 1]
+                index += 2
+            case "--force":
+                force = true
+                index += 1
+            default:
+                throw CLIError.invalidArgument(
+                    command: "tab config export",
+                    argument: arguments[index],
+                    reason: "Unknown flag. Use --output <path> and optional --force."
+                )
+            }
+        }
+
+        guard let output, !output.isEmpty else {
+            throw CLIError.missingArgument(command: "tab config export", argument: "output")
+        }
+        return .tabConfigExport(name: name, output: output, force: force)
     }
 
     /// Parses `cocxy tab rename <id> <name>`.

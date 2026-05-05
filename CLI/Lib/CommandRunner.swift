@@ -399,6 +399,17 @@ public struct CommandRunner {
                 params: ["name": name]
             )
 
+        case .tabConfigExport(let name, let output, let force):
+            return CLISocketRequest(
+                id: requestID,
+                command: "tab-config-export",
+                params: [
+                    "name": name,
+                    "output": output,
+                    "force": force ? "true" : "false",
+                ]
+            )
+
         // MARK: Split extended (v2)
 
         case .splitList:

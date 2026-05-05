@@ -38,6 +38,21 @@ struct TabConfigCLIArgumentParserSwiftTestingTests {
         #expect(try CLIArgumentParser.parse(["tab", "config", "path", "api"]) == .tabConfigPath(name: "api"))
     }
 
+    @Test("tab config export parses output path and force flag")
+    func exportParsesOutputAndForce() throws {
+        #expect(
+            try CLIArgumentParser.parse([
+                "tab", "config", "export", "api",
+                "--output", "/tmp/shared-api.toml",
+                "--force",
+            ]) == .tabConfigExport(
+                name: "api",
+                output: "/tmp/shared-api.toml",
+                force: true
+            )
+        )
+    }
+
     @Test("tab config save rejects malformed env pairs")
     func saveRejectsMalformedEnv() {
         #expect(throws: CLIError.self) {
@@ -62,5 +77,19 @@ struct TabConfigCLIArgumentParserSwiftTestingTests {
         #expect(request.params?["command"] == "npm run dev")
         #expect(request.params?["theme"] == "Nord")
         #expect(request.params?["env.API_URL"] == "http://127.0.0.1:8080")
+    }
+
+    @Test("command runner builds export socket requests")
+    func buildExportRequest() {
+        let request = CommandRunner().buildRequest(from: .tabConfigExport(
+            name: "api",
+            output: "/tmp/shared-api.toml",
+            force: true
+        ))
+
+        #expect(request.command == "tab-config-export")
+        #expect(request.params?["name"] == "api")
+        #expect(request.params?["output"] == "/tmp/shared-api.toml")
+        #expect(request.params?["force"] == "true")
     }
 }

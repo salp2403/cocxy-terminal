@@ -1279,6 +1279,20 @@ final class OutputFormatterTests: XCTestCase {
         XCTAssertEqual(output, "[]")
     }
 
+    func testFormatTabConfigExportSuccess() {
+        let response = CLISocketResponse(
+            id: "r-tab-config-export",
+            success: true,
+            data: ["path": "/tmp/shared-api.toml"],
+            error: nil
+        )
+        let output = OutputFormatter.formatSuccess(
+            command: .tabConfigExport(name: "api", output: "/tmp/shared-api.toml", force: false),
+            response: response
+        )
+        XCTAssertEqual(output, "Tab config exported: /tmp/shared-api.toml")
+    }
+
     // MARK: - 31. Error formatting
 
     func testFormatUnknownCommandError() {
@@ -1411,7 +1425,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 123)
+        XCTAssertEqual(CLICommand.allCases.count, 124)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -1478,6 +1492,20 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(
             try CLIArgumentParser.parse(["worktree", "focus", "abc123"]),
             .worktreeFocus(id: "abc123")
+        )
+    }
+
+    func testTabConfigExportUsageMatchesPublicParserShape() throws {
+        XCTAssertEqual(
+            CLICommand.tabConfigExport.usageExample,
+            "cocxy tab config export <name> --output <path> [--force]"
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "tab", "config", "export", "api",
+                "--output", "/tmp/shared-api.toml",
+            ]),
+            .tabConfigExport(name: "api", output: "/tmp/shared-api.toml", force: false)
         )
     }
 }

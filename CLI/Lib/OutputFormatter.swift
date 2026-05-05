@@ -80,6 +80,11 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .tabConfigPath:
             return response.data?["path"] ?? ""
+        case .tabConfigExport:
+            if let path = response.data?["path"] {
+                return "Tab config exported: \(path)"
+            }
+            return "Tab config exported."
 
         // MARK: Split extended (v2)
 

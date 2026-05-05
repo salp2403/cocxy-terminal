@@ -1891,6 +1891,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     delegateRef.value?.tabConfigPathForCLI(named: name)
                 }
             },
+            tabConfigExportProvider: { name, output, overwrite in
+                syncOnMainActor {
+                    delegateRef.value?.exportTabConfigForCLI(
+                        named: name,
+                        destination: output,
+                        overwrite: overwrite
+                    )
+                }
+            },
             projectConfigProviderOverride: {
                 syncOnMainActor {
                     guard let controller = focusedControllerProvider(),

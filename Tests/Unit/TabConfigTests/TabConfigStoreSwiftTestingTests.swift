@@ -92,6 +92,32 @@ struct TabConfigStoreSwiftTestingTests {
         #expect(try store.fileURL(forName: suggested).lastPathComponent == "caf-api-dev.toml")
     }
 
+    @Test("export copies the exact TOML to a user selected destination")
+    func exportCopiesExactTOMLToDestination() throws {
+        let root = try temporaryDirectory()
+        let exportRoot = try temporaryDirectory()
+        let store = TabConfigStore(rootDirectory: root)
+        try store.save(TabConfig(
+            name: "api",
+            workingDirectory: "/tmp/project",
+            command: "make dev",
+            environment: ["API_URL": "http://127.0.0.1:8080"],
+            theme: "Nord"
+        ))
+
+        let source = try String(contentsOf: store.fileURL(forName: "api"), encoding: .utf8)
+        let destination = exportRoot.appendingPathComponent("shared-api.toml")
+
+        let exported = try store.export(named: "api", to: destination, overwrite: false)
+
+        #expect(exported == destination.standardizedFileURL)
+        #expect(try String(contentsOf: destination, encoding: .utf8) == source)
+        #expect(throws: TabConfigStoreError.self) {
+            _ = try store.export(named: "api", to: destination, overwrite: false)
+        }
+        _ = try store.export(named: "api", to: destination, overwrite: true)
+    }
+
     private func temporaryDirectory() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-tab-config-tests")

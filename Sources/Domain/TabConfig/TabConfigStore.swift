@@ -45,6 +45,7 @@ enum TabConfigStoreError: Error, Equatable, LocalizedError {
     case invalidName(String)
     case invalidConfig(String)
     case notFound(String)
+    case destinationExists(String)
 
     var errorDescription: String? {
         switch self {
@@ -54,6 +55,8 @@ enum TabConfigStoreError: Error, Equatable, LocalizedError {
             return "Invalid tab config: \(message)"
         case .notFound(let name):
             return "Tab config not found: \(name)"
+        case .destinationExists(let path):
+            return "Destination already exists: \(path)"
         }
     }
 }
@@ -250,6 +253,32 @@ struct TabConfigStore {
         return try TabConfigTOMLCodec.parse(source)
     }
 
+    func export(named name: String, to destinationURL: URL, overwrite: Bool = false) throws -> URL {
+        let source = try fileURL(forName: name)
+        guard fileManager.fileExists(atPath: source.path) else {
+            throw TabConfigStoreError.notFound(name)
+        }
+
+        let target = try exportDestination(for: source, requestedDestination: destinationURL)
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: target.path, isDirectory: &isDirectory) {
+            guard !isDirectory.boolValue else {
+                throw TabConfigStoreError.invalidConfig("export destination is a directory")
+            }
+            guard overwrite else {
+                throw TabConfigStoreError.destinationExists(target.path)
+            }
+            try fileManager.removeItem(at: target)
+        }
+
+        try fileManager.copyItem(at: source, to: target)
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: target.path
+        )
+        return target.standardizedFileURL
+    }
+
     func listNames() throws -> [String] {
         guard fileManager.fileExists(atPath: rootDirectory.path) else { return [] }
         let entries = try fileManager.contentsOfDirectory(
@@ -261,6 +290,32 @@ struct TabConfigStore {
             .filter { $0.pathExtension == "toml" }
             .map { $0.deletingPathExtension().lastPathComponent }
             .sorted()
+    }
+
+    private func exportDestination(for source: URL, requestedDestination: URL) throws -> URL {
+        let destination = requestedDestination.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: destination.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            return destination.appendingPathComponent(source.lastPathComponent).standardizedFileURL
+        }
+
+        if destination.hasDirectoryPath {
+            try fileManager.createDirectory(
+                at: destination,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+            return destination.appendingPathComponent(source.lastPathComponent).standardizedFileURL
+        }
+
+        let parent = destination.deletingLastPathComponent()
+        try fileManager.createDirectory(
+            at: parent,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        return destination
     }
 
     func fileURL(forName name: String) throws -> URL {
