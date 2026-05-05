@@ -37,9 +37,14 @@ actor GitHubService {
     typealias Runner = @Sendable (URL, [String], TimeInterval) throws -> GitHubCLIResult
 
     private let runner: Runner
+    private let pullRequestTemplateFiller: PRTemplateFiller
 
-    init(runner: @escaping Runner = GitHubService.defaultRunner) {
+    init(
+        runner: @escaping Runner = GitHubService.defaultRunner,
+        pullRequestTemplateFiller: PRTemplateFiller = PRTemplateFiller()
+    ) {
         self.runner = runner
+        self.pullRequestTemplateFiller = pullRequestTemplateFiller
     }
 
     /// Production default: route through `GitHubCLI.run` with its built-in
@@ -252,7 +257,12 @@ actor GitHubService {
             )
         }
 
-        var args: [String] = ["pr", "create", "--title", trimmedTitle, "--body", body ?? ""]
+        let resolvedBody = pullRequestTemplateFiller.body(
+            root: directory,
+            explicitBody: body,
+            baseBranch: baseBranch
+        )
+        var args: [String] = ["pr", "create", "--title", trimmedTitle, "--body", resolvedBody ?? ""]
         if let baseBranch, !baseBranch.isEmpty {
             args.append(contentsOf: ["--base", baseBranch])
         }

@@ -644,6 +644,67 @@ struct GitHubServiceSwiftTestingTests {
         #expect(createArgs[baseIndex + 1] == "main")
     }
 
+    @Test("createPullRequest fills empty body from repository template and commits")
+    func createPullRequest_fillsBodyFromTemplateAndCommits() async throws {
+        let root = try makeGitHubPRTemplateFillTemporaryDirectory(named: "github-pr-template-fill")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let templateDirectory = root.appendingPathComponent(".github", isDirectory: true)
+        try FileManager.default.createDirectory(at: templateDirectory, withIntermediateDirectories: true)
+        try """
+        ## Summary
+
+        -
+        """.write(
+            to: templateDirectory.appendingPathComponent("pull_request_template.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let spy = RunnerSpy()
+        spy.stub(matching: { $0.contains("create") }, result: GitHubCLIResult(
+            stdout: "https://github.com/u/r/pull/8",
+            stderr: "",
+            terminationStatus: 0
+        ))
+        spy.stub(matching: { $0.contains("view") && $0.contains("8") }, result: GitHubCLIResult(
+            stdout: #"""
+            {"number": 8, "title": "x", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/8", "updatedAt": "2026-04-23T15:47:21Z"}
+            """#,
+            stderr: "",
+            terminationStatus: 0
+        ))
+
+        let filler = PRTemplateFiller(commitSummaryProvider: { receivedRoot, receivedBase in
+            #expect(receivedRoot == root)
+            #expect(receivedBase == "main")
+            return ["Add review body defaults", "Keep explicit user input"]
+        })
+        let service = GitHubService(runner: spy.runner, pullRequestTemplateFiller: filler)
+
+        _ = try await service.createPullRequest(
+            title: "x",
+            body: nil,
+            baseBranch: "main",
+            at: root
+        )
+
+        let createArgs = spy.allInvocations.first?.args ?? []
+        guard let bodyIndex = createArgs.firstIndex(of: "--body") else {
+            Issue.record("Expected --body arg in \(createArgs)")
+            return
+        }
+        #expect(createArgs[bodyIndex + 1] == """
+        ## Summary
+
+        -
+
+        ## Commits
+
+        - Add review body defaults
+        - Keep explicit user input
+        """)
+    }
+
     // MARK: - PR number extraction
 
     @Test("extractPullRequestNumber parses the canonical gh URL")
@@ -714,4 +775,11 @@ struct GitHubServiceSwiftTestingTests {
         let args = try #require(spy.allInvocations.first?.args)
         #expect(args == ["pr", "review", "--request-changes"])
     }
+}
+
+private func makeGitHubPRTemplateFillTemporaryDirectory(named name: String) throws -> URL {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    return root
 }
