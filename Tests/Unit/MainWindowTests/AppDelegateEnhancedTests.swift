@@ -31,6 +31,46 @@ final class AppDelegateLifecycleTests: XCTestCase {
             "App must handle reopen when there are no visible windows"
         )
     }
+
+    func testDeferredLaunchDoesNotShowWindowBeforeContentSetup() {
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(MockTerminalEngine())
+
+        delegate.createMainWindowForTesting(deferSurfaceBootstrap: true)
+
+        let controller = delegate.windowController
+        XCTAssertNotNil(controller)
+        XCTAssertFalse(
+            controller?.window?.isVisible ?? true,
+            "Deferred launch must not flash an empty window before the terminal content tree exists"
+        )
+        XCTAssertNil(
+            controller?.terminalContainerView,
+            "Deferred launch keeps content setup out of the socket-ready critical path"
+        )
+    }
+
+    func testApplicationDidBecomeActiveDoesNotShowIncompleteDeferredWindow() {
+        let delegate = AppDelegate()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            deferContentSetup: true
+        )
+        delegate.installWindowControllerForTesting(controller)
+
+        delegate.applicationDidBecomeActive(Notification(name: NSApplication.didBecomeActiveNotification))
+
+        XCTAssertFalse(
+            controller.window?.isVisible ?? true,
+            "Activation must not order a deferred window before content setup completes"
+        )
+
+        controller.completeDeferredWindowSetupIfNeeded()
+        delegate.applicationDidBecomeActive(Notification(name: NSApplication.didBecomeActiveNotification))
+
+        XCTAssertTrue(controller.window?.isVisible == true)
+        controller.window?.orderOut(nil)
+    }
 }
 
 // MARK: - AppDelegate Config Integration Tests

@@ -264,8 +264,8 @@ extension AppDelegate {
             guard !result.restoredTabs.isEmpty else { continue }
             guard let controller = makeWindowController(registerInitialSession: false) else { continue }
 
-            controller.showWindow(nil)
             restoreTabsIntoController(controller, from: result)
+            controller.showWindow(nil)
 
             additionalWindowControllers.append(controller)
         }
@@ -291,6 +291,7 @@ extension AppDelegate {
         controller.window?.center()
         controller.createTerminalSurface()
         controller.tabBarViewModel?.syncWithManager()
+        controller.showWindow(nil)
         controller.focusActiveTerminalSurface()
     }
 

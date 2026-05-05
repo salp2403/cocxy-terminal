@@ -649,6 +649,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// sessions or bootstrapping a fresh terminal surface.
     private var didCompleteWindowSetup = false
 
+    var hasCompletedWindowSetup: Bool { didCompleteWindowSetup }
+
     // MARK: - Initialization
 
     /// Creates a MainWindowController with the given bridge and optional config.

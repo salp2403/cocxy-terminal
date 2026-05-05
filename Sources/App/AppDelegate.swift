@@ -469,7 +469,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         // Ensure the main window is visible when the app is activated
         // (e.g., via Dock click).
-        windowController?.showWindow(nil)
+        if let windowController, windowController.hasCompletedWindowSetup {
+            windowController.showWindow(nil)
+        }
         let allControllers = [windowController].compactMap { $0 } + additionalWindowControllers
         for controller in allControllers {
             controller.recoverTerminalRenderingAfterWake()
@@ -1161,8 +1163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        controller.showWindow(nil)
         if shouldBootstrapSurface {
+            controller.showWindow(nil)
             controller.window?.center()
 
             // Create the terminal surface after the window is visible.
@@ -1554,6 +1556,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// flows without running the full NSApplication launch path.
     func installTerminalEngineForTesting(_ bridge: any TerminalEngine) {
         self.bridge = bridge
+    }
+
+    /// Installs a window controller for unit tests that exercise lifecycle
+    /// callbacks without running the full NSApplication launch path.
+    func installWindowControllerForTesting(_ controller: MainWindowController?) {
+        self.windowController = controller
+    }
+
+    /// Exposes main-window construction for tests that verify launch ordering
+    /// without bootstrapping the full app delegate.
+    func createMainWindowForTesting(deferSurfaceBootstrap: Bool) {
+        createMainWindow(deferSurfaceBootstrap: deferSurfaceBootstrap)
     }
 
     // MARK: - Notification Stack Initialization
