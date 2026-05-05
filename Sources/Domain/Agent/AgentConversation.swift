@@ -20,6 +20,8 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
     let toolCallID: String?
     let toolCalls: [AgentToolCall]
     let imageAttachments: [AgentImageAttachment]
+    let threadID: String?
+    let parentMessageID: String?
 
     init(
         id: String,
@@ -29,7 +31,9 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         toolName: String? = nil,
         toolCallID: String? = nil,
         toolCalls: [AgentToolCall] = [],
-        imageAttachments: [AgentImageAttachment] = []
+        imageAttachments: [AgentImageAttachment] = [],
+        threadID: String? = nil,
+        parentMessageID: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -39,6 +43,8 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         self.toolCallID = toolCallID
         self.toolCalls = toolCalls
         self.imageAttachments = imageAttachments
+        self.threadID = Self.normalizedOptionalString(threadID)
+        self.parentMessageID = Self.normalizedOptionalString(parentMessageID)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -50,6 +56,8 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         case toolCallID
         case toolCalls
         case imageAttachments
+        case threadID
+        case parentMessageID
     }
 
     init(from decoder: Decoder) throws {
@@ -65,6 +73,12 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
             [AgentImageAttachment].self,
             forKey: .imageAttachments
         ) ?? []
+        self.threadID = Self.normalizedOptionalString(
+            try container.decodeIfPresent(String.self, forKey: .threadID)
+        )
+        self.parentMessageID = Self.normalizedOptionalString(
+            try container.decodeIfPresent(String.self, forKey: .parentMessageID)
+        )
     }
 
     func encode(to encoder: Encoder) throws {
@@ -81,6 +95,13 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         if !imageAttachments.isEmpty {
             try container.encode(imageAttachments, forKey: .imageAttachments)
         }
+        try container.encodeIfPresent(threadID, forKey: .threadID)
+        try container.encodeIfPresent(parentMessageID, forKey: .parentMessageID)
+    }
+
+    private static func normalizedOptionalString(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -108,6 +129,91 @@ enum AgentMessageSerializer {
 
     static func decodeLine(_ line: String) throws -> AgentMessage {
         try decoder.decode(AgentMessage.self, from: Data(line.utf8))
+    }
+}
+
+extension JSONEncoder {
+    static var agentConversation: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }
+}
+
+extension JSONDecoder {
+    static var agentConversation: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return decoder
+    }
+}
+
+enum AgentConversationExportFormat: Sendable, Equatable {
+    case json
+    case markdown
+}
+
+enum AgentConversationExporter {
+    static func export(_ messages: [AgentMessage], format: AgentConversationExportFormat) throws -> Data {
+        switch format {
+        case .json:
+            return try JSONEncoder.agentConversation.encode(messages)
+        case .markdown:
+            return Data(markdown(from: messages).utf8)
+        }
+    }
+
+    static func export(
+        conversationID: String,
+        from store: AgentConversationStore,
+        format: AgentConversationExportFormat
+    ) throws -> Data {
+        try export(try store.load(conversationID: conversationID), format: format)
+    }
+
+    private static func markdown(from messages: [AgentMessage]) -> String {
+        var lines = ["# Agent Conversation", ""]
+        let grouped = Dictionary(grouping: messages) { message in
+            message.threadID ?? "default"
+        }
+
+        for threadID in grouped.keys.sorted() {
+            lines.append("## Thread: \(threadID)")
+            lines.append("")
+            let threadMessages = grouped[threadID, default: []].sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+            }
+            for message in threadMessages {
+                lines.append("### \(message.role.rawValue.capitalized)")
+                lines.append("")
+                lines.append("- ID: \(message.id)")
+                lines.append("- Created: \(iso8601String(from: message.createdAt))")
+                if let parentMessageID = message.parentMessageID {
+                    lines.append("- Parent: \(parentMessageID)")
+                }
+                if let toolName = message.toolName {
+                    lines.append("- Tool: \(toolName)")
+                }
+                if let toolCallID = message.toolCallID {
+                    lines.append("- Tool call: \(toolCallID)")
+                }
+                lines.append("")
+                lines.append(message.content)
+                lines.append("")
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private static func iso8601String(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
     }
 }
 
@@ -163,6 +269,16 @@ struct AgentConversationStore {
             .compactMap { line in
                 try? lineCodec.decodeLine(String(line))
             }
+    }
+
+    func load(conversationID: String, threadID: String) throws -> [AgentMessage] {
+        try load(conversationID: conversationID).filter { $0.threadID == threadID }
+    }
+
+    func threadIDs(conversationID: String) throws -> [String] {
+        Array(Set(try load(conversationID: conversationID).compactMap(\.threadID))).sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }
     }
 
     func fileURL(forConversationID conversationID: String) -> URL {

@@ -120,7 +120,8 @@ struct AgentLoop {
             userPrompt: userPrompt,
             configuration: configuration,
             history: history,
-            imageAttachments: []
+            imageAttachments: [],
+            threadID: nil
         )
     }
 
@@ -129,15 +130,19 @@ struct AgentLoop {
         userPrompt: String,
         configuration: AgentModeConfig,
         history: [AgentMessage] = [],
-        imageAttachments: [AgentImageAttachment]
+        imageAttachments: [AgentImageAttachment],
+        threadID: String? = nil
     ) async throws -> AgentLoopResult {
         var messages = history
+        let activeThreadID = Self.normalizedThreadID(threadID)
         try append(
             AgentMessage(
                 id: idGenerator.nextMessageID(role: .user),
                 role: .user,
                 content: userPrompt,
-                imageAttachments: imageAttachments
+                imageAttachments: imageAttachments,
+                threadID: activeThreadID,
+                parentMessageID: Self.lastMessageID(in: messages, threadID: activeThreadID)
             ),
             conversationID: conversationID,
             messages: &messages
@@ -146,7 +151,8 @@ struct AgentLoop {
         return try await continueRun(
             conversationID: conversationID,
             configuration: configuration,
-            messages: &messages
+            messages: &messages,
+            threadID: activeThreadID
         )
     }
 
@@ -154,9 +160,12 @@ struct AgentLoop {
         conversationID: String,
         approvedRequest: AgentToolApprovalRequest,
         configuration: AgentModeConfig,
-        history: [AgentMessage]
+        history: [AgentMessage],
+        threadID: String? = nil
     ) async throws -> AgentLoopResult {
         var messages = history
+        let activeThreadID = Self.normalizedThreadID(threadID)
+            ?? Self.threadID(forToolCallID: approvedRequest.call.id, in: messages)
         let toolResult = try await toolExecutor.execute(approvedRequest.call)
         try append(
             AgentMessage(
@@ -164,7 +173,13 @@ struct AgentLoop {
                 role: .tool,
                 content: try Self.encodedToolResult(toolResult),
                 toolName: toolResult.toolID,
-                toolCallID: toolResult.callID
+                toolCallID: toolResult.callID,
+                threadID: activeThreadID,
+                parentMessageID: Self.assistantMessageID(
+                    forToolCallID: approvedRequest.call.id,
+                    in: messages,
+                    threadID: activeThreadID
+                ) ?? Self.lastMessageID(in: messages, threadID: activeThreadID)
             ),
             conversationID: conversationID,
             messages: &messages
@@ -173,14 +188,16 @@ struct AgentLoop {
         return try await continueRun(
             conversationID: conversationID,
             configuration: configuration,
-            messages: &messages
+            messages: &messages,
+            threadID: activeThreadID
         )
     }
 
     private func continueRun(
         conversationID: String,
         configuration: AgentModeConfig,
-        messages: inout [AgentMessage]
+        messages: inout [AgentMessage],
+        threadID: String?
     ) async throws -> AgentLoopResult {
         let activePermissionPolicy = AgentToolPermissionPolicy(
             autoModeEnabled: configuration.autoMode,
@@ -193,13 +210,16 @@ struct AgentLoop {
             if let usage = response.usage {
                 await usageRecorder?(usage)
             }
+            let assistantMessage = AgentMessage(
+                id: idGenerator.nextMessageID(role: .assistant),
+                role: .assistant,
+                content: response.content,
+                toolCalls: response.toolCalls,
+                threadID: threadID,
+                parentMessageID: Self.lastMessageID(in: messages, threadID: threadID)
+            )
             try append(
-                AgentMessage(
-                    id: idGenerator.nextMessageID(role: .assistant),
-                    role: .assistant,
-                    content: response.content,
-                    toolCalls: response.toolCalls
-                ),
+                assistantMessage,
                 conversationID: conversationID,
                 messages: &messages
             )
@@ -225,7 +245,9 @@ struct AgentLoop {
                             role: .tool,
                             content: try Self.encodedToolResult(toolResult),
                             toolName: toolResult.toolID,
-                            toolCallID: toolResult.callID
+                            toolCallID: toolResult.callID,
+                            threadID: threadID,
+                            parentMessageID: threadID == nil ? nil : assistantMessage.id
                         ),
                         conversationID: conversationID,
                         messages: &messages
@@ -317,5 +339,35 @@ struct AgentLoop {
             throw CocoaError(.fileWriteInapplicableStringEncoding)
         }
         return json
+    }
+
+    private static func normalizedThreadID(_ threadID: String?) -> String? {
+        let trimmed = threadID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func lastMessageID(in messages: [AgentMessage], threadID: String?) -> String? {
+        guard let threadID else { return nil }
+        return messages.last { $0.threadID == threadID }?.id
+    }
+
+    private static func threadID(forToolCallID toolCallID: String, in messages: [AgentMessage]) -> String? {
+        messages.last { message in
+            message.role == .assistant
+                && message.toolCalls.contains { $0.id == toolCallID }
+        }?.threadID
+    }
+
+    private static func assistantMessageID(
+        forToolCallID toolCallID: String,
+        in messages: [AgentMessage],
+        threadID: String?
+    ) -> String? {
+        guard let threadID else { return nil }
+        return messages.last { message in
+            message.role == .assistant
+                && message.threadID == threadID
+                && message.toolCalls.contains { $0.id == toolCallID }
+        }?.id
     }
 }

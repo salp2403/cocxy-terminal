@@ -64,6 +64,57 @@ struct AgentLoopSwiftTestingTests {
         #expect(persisted.last?.content == "The repository status is available.")
     }
 
+    @Test("loop persists parent-linked messages when a thread is provided")
+    func loopPersistsParentLinkedMessagesWhenThreadIsProvided() async throws {
+        let store = AgentConversationStore(rootDirectory: temporaryDirectory())
+        defer { try? FileManager.default.removeItem(at: store.rootDirectory) }
+        let provider = ScriptedAgentLLMClient(responses: [
+            AgentLLMResponse(
+                content: "I will inspect status.",
+                toolCalls: [AgentToolCall(id: "call-status", toolID: "git_status")]
+            ),
+            AgentLLMResponse(content: "Status is clean enough.", toolCalls: []),
+        ])
+        let executor = RecordingAgentToolExecutor(results: [
+            AgentToolResult.success(
+                callID: "call-status",
+                toolID: "git_status",
+                content: .string("## main")
+            ),
+        ])
+        let loop = AgentLoop(
+            provider: provider,
+            toolExecutor: executor,
+            conversationStore: store,
+            idGenerator: StableAgentIDGenerator(prefix: "thread")
+        )
+
+        let result = try await loop.run(
+            conversationID: "conv",
+            userPrompt: "Check status",
+            configuration: AgentModeConfig(maxIterations: 4),
+            imageAttachments: [],
+            threadID: " focused "
+        )
+
+        #expect(result.stopReason == .completed)
+        #expect(result.messages.map(\.threadID) == ["focused", "focused", "focused", "focused"])
+        #expect(result.messages.map(\.parentMessageID) == [
+            nil,
+            "thread-user-1",
+            "thread-assistant-2",
+            "thread-tool-3",
+        ])
+
+        let persisted = try store.load(conversationID: "conv", threadID: "focused")
+        #expect(persisted.map(\.id) == result.messages.map(\.id))
+        #expect(persisted.map(\.role) == result.messages.map(\.role))
+        #expect(persisted.map(\.threadID) == result.messages.map(\.threadID))
+        #expect(persisted.map(\.parentMessageID) == result.messages.map(\.parentMessageID))
+        #expect(persisted.map(\.content) == result.messages.map(\.content))
+        #expect(try store.threadIDs(conversationID: "conv") == ["focused"])
+    }
+
     @Test("loop stops before executing a command that requires approval")
     func loopStopsBeforeExecutingCommandThatRequiresApproval() async throws {
         let provider = ScriptedAgentLLMClient(responses: [

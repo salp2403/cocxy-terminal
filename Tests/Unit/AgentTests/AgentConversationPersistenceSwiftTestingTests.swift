@@ -32,6 +32,25 @@ struct AgentConversationPersistenceSwiftTestingTests {
         #expect(decoded == message)
     }
 
+    @Test("JSONL serializer round-trips thread metadata")
+    func jsonlSerializerRoundTripsThreadMetadata() throws {
+        let message = AgentMessage(
+            id: "msg-2",
+            role: .assistant,
+            content: "Continuing the focused thread.",
+            createdAt: Date(timeIntervalSince1970: 1_776_000_010),
+            threadID: "review-thread",
+            parentMessageID: "msg-1"
+        )
+
+        let line = try AgentMessageSerializer.encodeLine(message)
+        let decoded = try AgentMessageSerializer.decodeLine(line)
+
+        #expect(decoded.threadID == "review-thread")
+        #expect(decoded.parentMessageID == "msg-1")
+        #expect(decoded == message)
+    }
+
     @Test("legacy JSONL messages decode with empty tool calls")
     func legacyJSONLMessagesDecodeWithEmptyToolCalls() throws {
         let decoded = try AgentMessageSerializer.decodeLine("""
@@ -40,6 +59,18 @@ struct AgentConversationPersistenceSwiftTestingTests {
 
         #expect(decoded.toolCalls.isEmpty)
         #expect(decoded.content == "Hello")
+        #expect(decoded.threadID == nil)
+        #expect(decoded.parentMessageID == nil)
+    }
+
+    @Test("legacy JSONL empty thread metadata decodes as nil")
+    func legacyJSONLEmptyThreadMetadataDecodesAsNil() throws {
+        let decoded = try AgentMessageSerializer.decodeLine("""
+        {"content":"Hello","createdAt":1776000000,"id":"legacy","parentMessageID":" ","role":"assistant","threadID":""}
+        """)
+
+        #expect(decoded.threadID == nil)
+        #expect(decoded.parentMessageID == nil)
     }
 
     @Test("store appends and loads messages for one conversation")
@@ -70,6 +101,33 @@ struct AgentConversationPersistenceSwiftTestingTests {
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
 
         #expect(try store.load(conversationID: "conv") == [message])
+    }
+
+    @Test("store filters messages by thread")
+    func storeFiltersMessagesByThread() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentConversationStore(rootDirectory: root)
+        let main = AgentMessage(
+            id: "main-1",
+            role: .user,
+            content: "Main question",
+            createdAt: Date(timeIntervalSince1970: 1_776_000_000),
+            threadID: "main"
+        )
+        let review = AgentMessage(
+            id: "review-1",
+            role: .assistant,
+            content: "Review detail",
+            createdAt: Date(timeIntervalSince1970: 1_776_000_010),
+            threadID: "review"
+        )
+
+        try store.append(main, conversationID: "conv")
+        try store.append(review, conversationID: "conv")
+
+        #expect(try store.load(conversationID: "conv", threadID: "main") == [main])
+        #expect(try store.threadIDs(conversationID: "conv") == ["main", "review"])
     }
 
     @Test("conversation filenames are sanitized before persistence")
@@ -205,6 +263,41 @@ struct AgentConversationPersistenceSwiftTestingTests {
         #expect(throws: AgentConversationEncryptionError.invalidSaltLength) {
             try codec.encodeLine(sampleMessage(id: "msg-1", role: .user, content: "private prompt"))
         }
+    }
+
+    @Test("conversation exporter writes JSON and Markdown without remote services")
+    func conversationExporterWritesJSONAndMarkdown() throws {
+        let messages = [
+            AgentMessage(
+                id: "u1",
+                role: .user,
+                content: "Review this change",
+                createdAt: Date(timeIntervalSince1970: 1_776_000_000),
+                threadID: "review"
+            ),
+            AgentMessage(
+                id: "a1",
+                role: .assistant,
+                content: "I found one risk.",
+                createdAt: Date(timeIntervalSince1970: 1_776_000_060),
+                threadID: "review",
+                parentMessageID: "u1"
+            ),
+        ]
+
+        let jsonData = try AgentConversationExporter.export(messages, format: .json)
+        let decoded = try JSONDecoder.agentConversation.decode([AgentMessage].self, from: jsonData)
+        let markdown = try #require(String(
+            data: AgentConversationExporter.export(messages, format: .markdown),
+            encoding: .utf8
+        ))
+
+        #expect(decoded == messages)
+        #expect(markdown.contains("# Agent Conversation"))
+        #expect(markdown.contains("## Thread: review"))
+        #expect(markdown.contains("### User"))
+        #expect(markdown.contains("Review this change"))
+        #expect(markdown.contains("Parent: u1"))
     }
 
     private func sampleMessage(
