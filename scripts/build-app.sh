@@ -91,21 +91,37 @@ fi
 plutil -extract constValueProtocols json -o "${APPINTENTS_PROTOCOL_LIST}" "${APPINTENTS_PROTOCOLS_JSON}"
 printf '%s\n' "${PROJECT_ROOT}/Sources/App/Shortcuts/CocxyShortcuts.swift" > "${APPINTENTS_SOURCE_LIST}"
 
-swift build --product "${APP_NAME}" ${SWIFT_FLAGS} \
-    -Xswiftc -emit-const-values-path \
-    -Xswiftc "${APPINTENTS_CONST_VALUES}" \
-    -Xswiftc -Xfrontend \
-    -Xswiftc -const-gather-protocols-file \
-    -Xswiftc -Xfrontend \
-    -Xswiftc "${APPINTENTS_PROTOCOL_LIST}" \
-    2>&1 | tail -3
+run_appintents_swift_build() {
+    swift build --product "${APP_NAME}" ${SWIFT_FLAGS} \
+        -Xswiftc -emit-const-values-path \
+        -Xswiftc "${APPINTENTS_CONST_VALUES}" \
+        -Xswiftc -Xfrontend \
+        -Xswiftc -const-gather-protocols-file \
+        -Xswiftc -Xfrontend \
+        -Xswiftc "${APPINTENTS_PROTOCOL_LIST}" \
+        2>&1 | tail -3
+}
+
+appintents_const_values_contain_metadata() {
+    [ -s "${APPINTENTS_CONST_VALUES}" ] \
+        && grep -q '"AppIntents.AppIntent"' "${APPINTENTS_CONST_VALUES}"
+}
+
+run_appintents_swift_build
+
+if ! appintents_const_values_contain_metadata; then
+    echo "    App Intents const values did not contain AppIntent metadata; rebuilding Shortcuts source..."
+    rm -f "${APPINTENTS_CONST_VALUES}"
+    rm -f "${BUILD_DIR}/${APP_NAME}.build"/CocxyShortcuts.*
+    run_appintents_swift_build
+fi
 
 # Verify binary exists.
 if [ ! -f "${BUILD_DIR}/${APP_NAME}" ]; then
     echo "ERROR: Binary not found at ${BUILD_DIR}/${APP_NAME}"
     exit 1
 fi
-if [ ! -s "${APPINTENTS_CONST_VALUES}" ]; then
+if ! appintents_const_values_contain_metadata; then
     echo "ERROR: App Intents const values not generated at ${APPINTENTS_CONST_VALUES}"
     exit 1
 fi

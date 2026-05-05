@@ -57,6 +57,19 @@ struct CocxyShortcutsCatalogSwiftTestingTests {
         #expect(verifyScript.contains("Metadata.appintents"))
     }
 
+    @Test("app bundle script rejects stale empty Shortcuts const values")
+    func appBundleScriptRejectsStaleEmptyShortcutsConstValues() throws {
+        let root = repositoryRoot()
+        let buildScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/build-app.sh"),
+            encoding: .utf8
+        )
+
+        #expect(buildScript.contains("App Intents const values did not contain AppIntent metadata"))
+        #expect(buildScript.contains("\"AppIntents.AppIntent\""))
+        #expect(buildScript.contains("CocxyShortcuts.*"))
+    }
+
     private func repositoryRoot() -> URL {
         var url = URL(fileURLWithPath: #filePath)
         while url.path != "/" {

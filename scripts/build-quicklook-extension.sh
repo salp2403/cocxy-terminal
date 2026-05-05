@@ -79,8 +79,8 @@ if ! printf '%s' "${ENTITLEMENTS_XML}" | grep -q "<key>com.apple.security.app-sa
     exit 1
 fi
 
-if ! printf '%s' "${ENTITLEMENTS_XML}" | grep -q "<key>com.apple.security.network.client</key><true/>"; then
-    echo "ERROR: QuickLook network client entitlement was not written to ${APPEX_PATH}"
+if printf '%s' "${ENTITLEMENTS_XML}" | grep -q "<key>com.apple.security.network.client</key>"; then
+    echo "ERROR: QuickLook network client entitlement must stay absent for offline previews: ${APPEX_PATH}"
     exit 1
 fi
 

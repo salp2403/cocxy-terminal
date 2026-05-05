@@ -111,6 +111,18 @@ check_codesign_entitlement_true() {
     fi
 }
 
+check_codesign_entitlement_absent() {
+    local bundle_path="$1"
+    local keypath="$2"
+    local label="$3"
+    if codesign -d --entitlements :- "$bundle_path" 2>/dev/null | grep -q "<key>${keypath}</key>"; then
+        echo "  FAIL  $label  (unexpected entitlement present)"
+        ERRORS=$((ERRORS + 1))
+    else
+        echo "  OK  $label"
+    fi
+}
+
 echo "==> Verifying app bundle: $APP_BUNDLE"
 echo ""
 
@@ -331,7 +343,7 @@ check_plist_string "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" 
 check_plist_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" "NSExtension.NSExtensionPrincipalClass" "QuickLook principal class"
 check_plist_string "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" "NSExtension.NSExtensionAttributes.QLSupportedContentTypes.0" "net.daringfireball.markdown" "QuickLook markdown content type"
 check_codesign_entitlement_true "$CONTENTS/PlugIns/CocxyQuickLook.appex" "com.apple.security.app-sandbox" "QuickLook sandbox entitlement"
-check_codesign_entitlement_true "$CONTENTS/PlugIns/CocxyQuickLook.appex" "com.apple.security.network.client" "QuickLook network entitlement"
+check_codesign_entitlement_absent "$CONTENTS/PlugIns/CocxyQuickLook.appex" "com.apple.security.network.client" "QuickLook offline network entitlement"
 check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Resources/Markdown" "QuickLook markdown resources"
 check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Resources/Markdown/mermaid.min.js" "QuickLook Mermaid JS"
 check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Resources/Markdown/highlight.min.js" "QuickLook Highlight.js"
