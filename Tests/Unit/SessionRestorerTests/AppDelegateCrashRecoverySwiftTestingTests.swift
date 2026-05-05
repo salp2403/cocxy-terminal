@@ -2,6 +2,7 @@
 // AppDelegateCrashRecoverySwiftTestingTests.swift - App lifecycle crash recovery wiring.
 
 import Foundation
+import AppKit
 import Testing
 @testable import CocxyTerminal
 
@@ -64,6 +65,60 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         delegate.presentCrashRecoveryOfferIfNeeded()
 
         #expect(delegate.pendingCrashRecoverySnapshot?.session.windows.first?.tabs.first?.title == "Pending")
+    }
+
+    @Test("restore offer uses injectable presenter without attaching a sheet")
+    func restoreOfferUsesInjectablePresenterWithoutAttachingSheet() throws {
+        let fixture = try AppCrashRecoveryFixture()
+        defer { fixture.cleanup() }
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        delegate.pendingCrashRecoverySnapshot = CrashRecoverySnapshot(
+            savedAt: fixture.date("2026-05-03T12:00:00Z"),
+            session: fixture.session(title: "Pending")
+        )
+
+        var presentedCopy: AppAlertCopy?
+        var presentedWindow: NSWindow?
+        delegate.crashRecoveryOfferPresenter = { copy, window, completion in
+            presentedCopy = copy
+            presentedWindow = window
+            #expect(window.attachedSheet == nil)
+            completion(.alertSecondButtonReturn)
+        }
+
+        delegate.presentCrashRecoveryOfferIfNeeded()
+
+        #expect(presentedCopy?.primaryButton == "Restore")
+        #expect(presentedWindow === controller.window)
+        #expect(delegate.pendingCrashRecoverySnapshot == nil)
+    }
+
+    @Test("crash recovery offer controller floats above parent instead of becoming a sheet")
+    func crashRecoveryOfferControllerFloatsAboveParentInsteadOfSheet() throws {
+        let parent = NSWindow(
+            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        defer { parent.close() }
+        let copy = AppAlertCopy(
+            messageText: "Restore Previous Session?",
+            informativeText: "A local crash-recovery snapshot is available.",
+            primaryButton: "Restore",
+            secondaryButton: "Keep Current"
+        )
+        let offer = CrashRecoveryOfferWindowController(copy: copy) { _ in }
+        defer { offer.close() }
+
+        offer.show(over: parent)
+
+        #expect(parent.attachedSheet == nil)
+        #expect(offer.window?.sheetParent == nil)
+        #expect(parent.childWindows?.contains { $0 === offer.window } == true)
+        #expect(offer.window?.isOpaque == true)
     }
 
     @Test("crash recovery alert copy follows configured app language")

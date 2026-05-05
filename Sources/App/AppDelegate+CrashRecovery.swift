@@ -62,24 +62,28 @@ extension AppDelegate {
               let window = controller.window else { return }
         pendingCrashRecoverySnapshot = nil
 
-        let alert = NSAlert()
         let copy = Self.localizedCrashRecoveryOfferCopy(localizer: appLocalizer())
-        alert.messageText = copy.messageText
-        alert.informativeText = copy.informativeText
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: copy.primaryButton)
-        alert.addButton(withTitle: copy.secondaryButton)
 
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        alert.beginSheetModal(for: window) { [weak self, weak controller] response in
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self, weak controller] response in
+            self?.crashRecoveryOfferWindowController = nil
             guard response == .alertFirstButtonReturn,
                   let self,
                   let controller else { return }
             _ = self.restoreCrashRecoverySession(snapshot.session, into: controller)
         }
+
+        if let crashRecoveryOfferPresenter {
+            crashRecoveryOfferPresenter(copy, window, completion)
+            return
+        }
+
+        let offerController = CrashRecoveryOfferWindowController(copy: copy, completion: completion)
+        crashRecoveryOfferWindowController = offerController
+        offerController.show(over: window, runModally: true)
     }
 
     func restoreCrashRecoverySession(_ session: Session, into controller: MainWindowController) -> Bool {

@@ -261,6 +261,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var crashRecoveryManager: CrashRecoveryManager?
     var pendingCrashRecoverySnapshot: CrashRecoverySnapshot?
     var crashRecoverySnapshotTimer: Timer?
+    var crashRecoveryOfferPresenter: CrashRecoveryOfferPresenter?
+    var crashRecoveryOfferWindowController: CrashRecoveryOfferWindowController?
 
     // MARK: - NSApplicationDelegate
 
@@ -379,6 +381,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        crashRecoveryOfferWindowController?.close()
+        crashRecoveryOfferWindowController = nil
         stopCrashRecoverySnapshots()
         writeCrashRecoverySnapshot()
         stopSessionAutoSave()
