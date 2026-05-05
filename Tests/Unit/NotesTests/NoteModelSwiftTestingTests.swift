@@ -75,6 +75,19 @@ struct NoteModelSwiftTestingTests {
         #expect(Note.deriveTitle(from: "   \n   \n") == "Untitled")
     }
 
+    @Test("localized title translates only the empty-note fallback and preserves authored titles")
+    func localizedTitleTranslatesOnlyEmptyNoteFallback() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let empty = Note(workspaceID: Self.workspaceID)
+        let titled = Note(workspaceID: Self.workspaceID, body: "# Roadmap\nNext step")
+
+        #expect(empty.localizedDerivedTitle(using: spanish) == "Sin título")
+        #expect(titled.localizedDerivedTitle(using: spanish) == "Roadmap")
+        #expect(Note.localizedTitle("Untitled", using: spanish) == "Sin título")
+        #expect(Note.localizedTitle("Custom", using: spanish) == "Custom")
+    }
+
     @Test("deriveTitle ignores a heading line that has no content after the hashes so `# ` does not produce an empty title")
     func deriveTitleIgnoresEmptyHeading() {
         #expect(Note.deriveTitle(from: "#\nNot empty") == "Not empty")
@@ -160,5 +173,10 @@ struct NoteModelSwiftTestingTests {
         var withDifferentUpdatedAt = base
         withDifferentUpdatedAt.updatedAt = Date(timeIntervalSince1970: 2_000)
         #expect(withDifferentUpdatedAt != base)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

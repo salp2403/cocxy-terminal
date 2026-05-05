@@ -1140,7 +1140,7 @@ extension Design {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(palette.textLow.resolvedColor())
                         .frame(width: 12)
-                    Text(row.title)
+                    Text(Note.localizedTitle(row.title, using: localizer))
                         .font(.system(size: 11.5))
                         .foregroundStyle(palette.textHigh.resolvedColor())
                         .lineLimit(1)
@@ -1162,7 +1162,12 @@ extension Design {
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .accessibilityLabel(Self.localizedOpenNoteAccessibility(row.title, using: localizer))
+            .accessibilityLabel(
+                Self.localizedOpenNoteAccessibility(
+                    Note.localizedTitle(row.title, using: localizer),
+                    using: localizer
+                )
+            )
         }
 
         static func localizedTitle(using localizer: AppLocalizer) -> String {

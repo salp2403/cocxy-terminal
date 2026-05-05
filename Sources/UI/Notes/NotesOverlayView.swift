@@ -249,7 +249,7 @@ struct NotesOverlayView: View {
             if let selected = viewModel.selectedNote {
                 HStack(alignment: .center, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(selected.derivedTitle)
+                        Text(selected.localizedDerivedTitle(using: localizer))
                             .font(.system(size: 14, weight: .semibold))
                             .lineLimit(1)
                         Text(localizedEditedDate(selected.updatedAt))
@@ -338,7 +338,7 @@ struct NotesOverlayView: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(note.derivedTitle)
+                        Text(note.localizedDerivedTitle(using: localizer))
                             .font(.system(size: 12, weight: .semibold))
                             .lineLimit(1)
                         Spacer(minLength: 6)
@@ -369,7 +369,7 @@ struct NotesOverlayView: View {
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .accessibilityLabel(note.derivedTitle)
+        .accessibilityLabel(note.localizedDerivedTitle(using: localizer))
     }
 
     private func searchResultRow(_ result: NoteSearchResult) -> some View {
@@ -380,7 +380,7 @@ struct NotesOverlayView: View {
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(result.title)
+                    Text(Note.localizedTitle(result.title, using: localizer))
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                     Spacer()
@@ -406,7 +406,7 @@ struct NotesOverlayView: View {
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .accessibilityLabel(result.title)
+        .accessibilityLabel(Note.localizedTitle(result.title, using: localizer))
     }
 
     private func emptyState(title: String, message: String) -> some View {

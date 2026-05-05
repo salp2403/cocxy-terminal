@@ -90,6 +90,10 @@ struct Note: Sendable, Equatable, Codable, Identifiable {
         Self.deriveTitle(from: body)
     }
 
+    func localizedDerivedTitle(using localizer: AppLocalizer) -> String {
+        Self.localizedTitle(derivedTitle, using: localizer)
+    }
+
     /// Pure helper exposed for the store, the search engines, and the
     /// tests so they can derive a title without instantiating a `Note`.
     /// Kept `static` so it does not allocate, and so its contract is
@@ -116,6 +120,12 @@ struct Note: Sendable, Equatable, Codable, Identifiable {
             return trimmed
         }
         return "Untitled"
+    }
+
+    static func localizedTitle(_ title: String, using localizer: AppLocalizer) -> String {
+        title == "Untitled"
+            ? localizer.string("notes.untitled", fallback: title)
+            : title
     }
 
     // MARK: - Excerpt

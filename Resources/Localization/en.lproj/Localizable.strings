@@ -1720,6 +1720,7 @@
 "plugins.status.updatesFound.many" = "%d updates found.";
 "notes.panel.accessibility" = "Notes panel";
 "notes.title" = "Notes";
+"notes.untitled" = "Untitled";
 "notes.noWorkspace" = "No workspace";
 "notes.newNote" = "New Note";
 "notes.newNote.help" = "New note";
