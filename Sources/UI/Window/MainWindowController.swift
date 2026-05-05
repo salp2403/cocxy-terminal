@@ -2080,7 +2080,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         } else {
             // No valid outgoing tab (initial setup): just clear container.
             activeSplitView?.removeFromSuperview()
-            terminalSurfaceView?.removeFromSuperview()
+            if terminalSurfaceView?.superview === container {
+                terminalSurfaceView?.removeFromSuperview()
+            }
         }
 
         // 2. Restore the target tab's split state.

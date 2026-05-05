@@ -829,6 +829,69 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertTrue(controller.activeSplitView === splitView)
     }
 
+    func testInitialTabSwitchKeepsPrimarySurfaceInsideRestoredSplit() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        controller.terminalContainerView = container
+
+        guard let tabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab")
+            return
+        }
+
+        let splitManager = controller.tabSplitCoordinator.splitManager(for: tabID)
+        guard let primaryLeaf = splitManager.rootNode.allLeafIDs().first,
+              let panelContentID = splitManager.appendPanel(
+                panel: PanelInfo(type: .notebook),
+                focusNewPanel: true
+              ) else {
+            XCTFail("Expected a primary leaf and appended notebook panel")
+            return
+        }
+
+        let primaryView = TrackingTerminalHostView()
+        let panelView = NSView(frame: container.bounds)
+        let restoredSplitView = controller.makeStoredSplitView(
+            from: splitManager.rootNode,
+            viewsByTerminalID: [
+                primaryLeaf.terminalID: primaryView,
+                panelContentID: panelView
+            ]
+        )
+
+        guard let restoredSplitView else {
+            XCTFail("Expected a restorable split view")
+            return
+        }
+
+        controller.tabSurfaceViews[tabID] = primaryView
+        controller.terminalSurfaceView = primaryView
+        controller.savedTabSplitViews[tabID] = restoredSplitView
+        controller.savedTabPanelContentViews[tabID] = [panelContentID: panelView]
+        controller.displayedTabID = nil
+
+        XCTAssertNotNil(
+            primaryView.superview,
+            "The primary terminal starts attached inside the stored split hierarchy"
+        )
+
+        controller.handleTabSwitch(to: tabID)
+
+        let leafViews = controller.collectLeafViews()
+        XCTAssertTrue(controller.activeSplitView === restoredSplitView)
+        XCTAssertEqual(leafViews.count, splitManager.rootNode.allLeafIDs().count)
+        XCTAssertTrue(
+            leafViews.contains { $0 === primaryView },
+            "Initial restore must not detach the primary terminal from the stored split view"
+        )
+        XCTAssertTrue(
+            leafViews.contains { $0 === panelView },
+            "Initial restore must keep restored hosted panel views in the split hierarchy"
+        )
+    }
+
     func testHandleTabSwitchFallsBackToStoredSplitSurfaceWhenPrimaryMappingIsMissing() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -1509,6 +1572,63 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             splitManager.focusedLeafID,
             replayLeaf.leafID,
             "Opening Session Replay should leave the replay panel selected"
+        )
+    }
+
+    func testAppendedWorkspacePanelsKeepTerminalLeafReachableAndClosable() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithNotebookAction(nil)
+        controller.splitWithWorkflowAction(nil)
+        controller.splitWithSessionReplayAction(nil)
+
+        guard let splitManager = controller.activeSplitManager else {
+            XCTFail("Expected split manager after opening hosted workspace panels")
+            return
+        }
+
+        let leavesBeforeClose = splitManager.rootNode.allLeafIDs()
+        guard let replayLeaf = leavesBeforeClose.first(where: {
+            splitManager.panelType(for: $0.terminalID) == .sessionReplay
+        }) else {
+            XCTFail("Expected session replay panel leaf")
+            return
+        }
+
+        let leafViewsBeforeClose = controller.collectLeafViews()
+        XCTAssertEqual(leavesBeforeClose.count, 4)
+        XCTAssertEqual(
+            leafViewsBeforeClose.count,
+            leavesBeforeClose.count,
+            "The visual split hierarchy must keep one view per model leaf after append-to-end panels"
+        )
+        XCTAssertTrue(
+            leafViewsBeforeClose.first is TerminalHostView,
+            "Appending hosted panels must keep the base terminal leaf visible and reachable"
+        )
+
+        controller.closePanel(contentID: replayLeaf.terminalID)
+
+        let leavesAfterClose = splitManager.rootNode.allLeafIDs()
+        let panelTabs = (controller.horizontalTabStripView as? HorizontalTabStripView)?.tabs.map(\.title) ?? []
+        XCTAssertEqual(leavesAfterClose.count, 3)
+        XCTAssertNil(
+            controller.panelContentViews[replayLeaf.terminalID],
+            "Closing a hosted panel by content ID must remove its stored panel view"
+        )
+        XCTAssertEqual(
+            controller.collectLeafViews().count,
+            leavesAfterClose.count,
+            "Closing the hosted panel must keep the visual and model leaf counts aligned"
+        )
+        XCTAssertFalse(
+            panelTabs.contains("Replay"),
+            "Closed hosted panels should disappear from the horizontal split strip"
         )
     }
 
