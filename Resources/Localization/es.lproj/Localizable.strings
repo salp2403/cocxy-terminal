@@ -160,6 +160,17 @@
 "agent.panel.approval.send" = "Enviar";
 "agent.panel.approval.approve" = "Aprobar";
 "agent.panel.approval.reject" = "Rechazar";
+"agent.panel.approval.title.command" = "Aprobar comando";
+"agent.panel.approval.title.computerAction" = "Aprobar acción de computadora";
+"agent.panel.approval.title.externalTool" = "Aprobar herramienta externa";
+"agent.panel.approval.title.externalMCPTool" = "Aprobar herramienta MCP externa";
+"agent.panel.approval.title.userInput" = "El agente solicitó entrada";
+"agent.panel.approval.title.reviewChangesTo" = "Revisar cambios en %@";
+"agent.panel.approval.title.reviewChangesFor" = "Revisar cambios para %@";
+"agent.panel.approval.body.userInput" = "El agente solicitó entrada del usuario.";
+"agent.panel.approval.body.allowComputerAction" = "Permitir que %@ controle esta Mac localmente.";
+"agent.panel.approval.body.allowMCPTool" = "Permitir que %@ llame a un servidor MCP local configurado.";
+"agent.panel.approval.body.diffUnavailable" = "La vista previa del diff no está disponible para la llamada %@.";
 "agent.panel.message.system" = "Sistema";
 "agent.panel.message.you" = "Tú";
 "agent.panel.message.agent" = "Agente";

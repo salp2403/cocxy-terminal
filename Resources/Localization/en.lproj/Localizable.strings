@@ -160,6 +160,17 @@
 "agent.panel.approval.send" = "Send";
 "agent.panel.approval.approve" = "Approve";
 "agent.panel.approval.reject" = "Reject";
+"agent.panel.approval.title.command" = "Approve command";
+"agent.panel.approval.title.computerAction" = "Approve computer action";
+"agent.panel.approval.title.externalTool" = "Approve external tool";
+"agent.panel.approval.title.externalMCPTool" = "Approve external MCP tool";
+"agent.panel.approval.title.userInput" = "Agent requested input";
+"agent.panel.approval.title.reviewChangesTo" = "Review changes to %@";
+"agent.panel.approval.title.reviewChangesFor" = "Review changes for %@";
+"agent.panel.approval.body.userInput" = "The agent requested user input.";
+"agent.panel.approval.body.allowComputerAction" = "Allow %@ to control this Mac locally.";
+"agent.panel.approval.body.allowMCPTool" = "Allow %@ to call a configured local MCP server.";
+"agent.panel.approval.body.diffUnavailable" = "Diff preview is unavailable for call %@.";
 "agent.panel.message.system" = "System";
 "agent.panel.message.you" = "You";
 "agent.panel.message.agent" = "Agent";

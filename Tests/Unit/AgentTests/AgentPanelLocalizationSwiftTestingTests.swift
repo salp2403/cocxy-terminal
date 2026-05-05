@@ -56,6 +56,48 @@ struct AgentPanelLocalizationSwiftTestingTests {
         )
     }
 
+    @Test("localizes approval preview title and body copy in Spanish")
+    func localizesApprovalPreviewCopyInSpanish() throws {
+        let spanish = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+
+        #expect(
+            AgentPanelLocalization.approvalTitle("Approve command", using: spanish)
+                == "Aprobar comando"
+        )
+        #expect(
+            AgentPanelLocalization.approvalTitle("Review changes to Sources/App.swift", using: spanish)
+                == "Revisar cambios en Sources/App.swift"
+        )
+        #expect(
+            AgentPanelLocalization.approvalTitle("Agent requested input", using: spanish)
+                == "El agente solicitó entrada"
+        )
+        #expect(
+            AgentPanelLocalization.approvalBody(
+                "Allow computer_click to control this Mac locally.",
+                using: spanish
+            )
+                == "Permitir que computer_click controle esta Mac localmente."
+        )
+        #expect(
+            AgentPanelLocalization.approvalBody(
+                "Allow mcp_files_search to call a configured local MCP server.",
+                using: spanish
+            )
+                == "Permitir que mcp_files_search llame a un servidor MCP local configurado."
+        )
+        #expect(
+            AgentPanelLocalization.approvalBody(
+                "Diff preview is unavailable for call call-1.",
+                using: spanish
+            )
+                == "La vista previa del diff no está disponible para la llamada call-1."
+        )
+    }
+
     @Test("keeps unknown Agent Mode status unchanged")
     func keepsUnknownAgentModeStatusUnchanged() throws {
         let spanish = AppLocalizer(

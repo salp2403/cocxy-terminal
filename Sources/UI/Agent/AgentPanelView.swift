@@ -223,13 +223,13 @@ struct AgentPanelView: View {
             HStack(spacing: 6) {
                 Image(systemName: approvalIcon(for: request.preview.kind))
                     .foregroundStyle(statusColor)
-                Text(request.preview.title)
+                Text(AgentPanelLocalization.approvalTitle(request.preview.title, using: localizer))
                     .font(.system(size: 12, weight: .semibold))
                 Spacer()
             }
 
             ScrollView(.vertical, showsIndicators: true) {
-                Text(request.preview.body)
+                Text(AgentPanelLocalization.approvalBody(request.preview.body, using: localizer))
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -384,6 +384,64 @@ struct AgentPanelView: View {
 }
 
 enum AgentPanelLocalization {
+    static func approvalTitle(_ text: String, using localizer: AppLocalizer) -> String {
+        switch text {
+        case "Approve command":
+            return localizer.string("agent.panel.approval.title.command", fallback: text)
+        case "Approve computer action":
+            return localizer.string("agent.panel.approval.title.computerAction", fallback: text)
+        case "Approve external tool":
+            return localizer.string("agent.panel.approval.title.externalTool", fallback: text)
+        case "Approve external MCP tool":
+            return localizer.string("agent.panel.approval.title.externalMCPTool", fallback: text)
+        case "Agent requested input":
+            return localizer.string("agent.panel.approval.title.userInput", fallback: text)
+        default:
+            return dynamicApprovalTitle(text, using: localizer)
+        }
+    }
+
+    static func approvalBody(_ text: String, using localizer: AppLocalizer) -> String {
+        if text == "The agent requested user input." {
+            return localizer.string("agent.panel.approval.body.userInput", fallback: text)
+        }
+
+        if text.hasPrefix("Allow "), text.hasSuffix(" to control this Mac locally.") {
+            let toolID = String(text.dropFirst("Allow ".count).dropLast(" to control this Mac locally.".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.approval.body.allowComputerAction",
+                    fallback: "Allow %@ to control this Mac locally."
+                ),
+                toolID
+            )
+        }
+
+        if text.hasPrefix("Allow "), text.hasSuffix(" to call a configured local MCP server.") {
+            let toolID = String(text.dropFirst("Allow ".count).dropLast(" to call a configured local MCP server.".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.approval.body.allowMCPTool",
+                    fallback: "Allow %@ to call a configured local MCP server."
+                ),
+                toolID
+            )
+        }
+
+        if text.hasPrefix("Diff preview is unavailable for call "), text.hasSuffix(".") {
+            let callID = String(text.dropFirst("Diff preview is unavailable for call ".count).dropLast())
+            return String(
+                format: localizer.string(
+                    "agent.panel.approval.body.diffUnavailable",
+                    fallback: "Diff preview is unavailable for call %@."
+                ),
+                callID
+            )
+        }
+
+        return text
+    }
+
     static func statusText(_ text: String, using localizer: AppLocalizer) -> String {
         switch text {
         case "Ready.":
@@ -427,6 +485,32 @@ enum AgentPanelLocalization {
         default:
             return dynamicStatusText(text, using: localizer)
         }
+    }
+
+    private static func dynamicApprovalTitle(_ text: String, using localizer: AppLocalizer) -> String {
+        if text.hasPrefix("Review changes to ") {
+            let path = String(text.dropFirst("Review changes to ".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.approval.title.reviewChangesTo",
+                    fallback: "Review changes to %@"
+                ),
+                path
+            )
+        }
+
+        if text.hasPrefix("Review changes for ") {
+            let toolID = String(text.dropFirst("Review changes for ".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.approval.title.reviewChangesFor",
+                    fallback: "Review changes for %@"
+                ),
+                toolID
+            )
+        }
+
+        return text
     }
 
     private static func dynamicStatusText(_ text: String, using localizer: AppLocalizer) -> String {
