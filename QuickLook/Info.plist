@@ -27,6 +27,7 @@
 			<key>QLSupportedContentTypes</key>
 			<array>
 				<string>net.daringfireball.markdown</string>
+				<string>dev.cocxy.notebook</string>
 			</array>
 			<key>QLSupportsSearchableItems</key>
 			<false/>

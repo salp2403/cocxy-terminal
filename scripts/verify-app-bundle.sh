@@ -147,6 +147,9 @@ check_plist_exists "$CONTENTS/Info.plist" "OSAScriptingDefinition" "AppleScript 
 check_plist_exists "$CONTENTS/Info.plist" "NSMicrophoneUsageDescription" "Microphone privacy description"
 check_plist_exists "$CONTENTS/Info.plist" "NSSpeechRecognitionUsageDescription" "Speech recognition privacy description"
 check_plist_string "$CONTENTS/Info.plist" "NSUserActivityTypes.0" "dev.cocxy.terminal.continue" "Handoff activity type"
+check_plist_string "$CONTENTS/Info.plist" "UTExportedTypeDeclarations.0.UTTypeIdentifier" "dev.cocxy.notebook" "Cocxy notebook exported UTI"
+check_plist_string "$CONTENTS/Info.plist" "UTExportedTypeDeclarations.0.UTTypeTagSpecification.public\\.filename-extension.0" "cocxynb" "Cocxy notebook extension"
+check_plist_string "$CONTENTS/Info.plist" "CFBundleDocumentTypes.0.LSItemContentTypes.0" "dev.cocxy.notebook" "Cocxy notebook document type"
 
 # 2. Frameworks
 echo ""
@@ -342,6 +345,7 @@ check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" "Quick
 check_plist_string "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" "NSExtension.NSExtensionPointIdentifier" "com.apple.quicklook.preview" "QuickLook extension point"
 check_plist_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" "NSExtension.NSExtensionPrincipalClass" "QuickLook principal class"
 check_plist_string "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" "NSExtension.NSExtensionAttributes.QLSupportedContentTypes.0" "net.daringfireball.markdown" "QuickLook markdown content type"
+check_plist_string "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" "NSExtension.NSExtensionAttributes.QLSupportedContentTypes.1" "dev.cocxy.notebook" "QuickLook Cocxy notebook content type"
 check_codesign_entitlement_true "$CONTENTS/PlugIns/CocxyQuickLook.appex" "com.apple.security.app-sandbox" "QuickLook sandbox entitlement"
 check_codesign_entitlement_absent "$CONTENTS/PlugIns/CocxyQuickLook.appex" "com.apple.security.network.client" "QuickLook offline network entitlement"
 check_exists "$CONTENTS/PlugIns/CocxyQuickLook.appex/Contents/Resources/Markdown" "QuickLook markdown resources"

@@ -31,6 +31,7 @@ targets:
           NSExtensionAttributes:
             QLSupportedContentTypes:
               - net.daringfireball.markdown
+              - dev.cocxy.notebook
             QLSupportsSearchableItems: false
             QLIsDataBasedPreview: false
     settings:

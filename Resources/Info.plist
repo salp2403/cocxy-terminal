@@ -12,6 +12,21 @@
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.cocxy.terminal</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Cocxy Notebook</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>dev.cocxy.notebook</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleName</key>
 	<string>Cocxy Terminal</string>
 	<key>CFBundlePackageType</key>
@@ -55,5 +70,29 @@
 	<string>https://cocxy.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>gMWhWC+AqrUZqRg1RbTr32MDdkk7H3DhLfnEqtQnWQU=</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>net.daringfireball.markdown</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Cocxy Notebook</string>
+			<key>UTTypeIdentifier</key>
+			<string>dev.cocxy.notebook</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>cocxynb</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>text/x-cocxy-notebook</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

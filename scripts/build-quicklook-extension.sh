@@ -32,6 +32,7 @@ ensure_quicklook_extension_plist() {
     /usr/libexec/PlistBuddy -c "Add :NSExtension:NSExtensionAttributes dict" "$plist_path"
     /usr/libexec/PlistBuddy -c "Add :NSExtension:NSExtensionAttributes:QLSupportedContentTypes array" "$plist_path"
     /usr/libexec/PlistBuddy -c "Add :NSExtension:NSExtensionAttributes:QLSupportedContentTypes:0 string net.daringfireball.markdown" "$plist_path"
+    /usr/libexec/PlistBuddy -c "Add :NSExtension:NSExtensionAttributes:QLSupportedContentTypes:1 string dev.cocxy.notebook" "$plist_path"
     /usr/libexec/PlistBuddy -c "Add :NSExtension:NSExtensionAttributes:QLSupportsSearchableItems bool false" "$plist_path"
     /usr/libexec/PlistBuddy -c "Add :NSExtension:NSExtensionAttributes:QLIsDataBasedPreview bool false" "$plist_path"
 }
