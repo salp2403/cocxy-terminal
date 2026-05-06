@@ -996,8 +996,8 @@
 "auroraSidebar.paneTransfer.drag.help" = "Arrastra el panel %@ a otra pestaña";
 "auroraSidebar.paneTransfer.move.accessibility" = "Mover panel %@";
 "auroraStatus.localBadge.label" = "sin telemetría";
-"auroraStatus.localBadge.help" = "Cocxy no contacta servidores automáticamente. Los paneles remotos solo se conectan cuando los abres explícitamente.";
-"auroraStatus.localBadge.accessibility" = "Sin telemetría: Cocxy no contacta servidores automáticamente";
+"auroraStatus.localBadge.help" = "Sin telemetría ni tracking. Las actualizaciones solo consultan el appcast firmado de Cocxy.";
+"auroraStatus.localBadge.accessibility" = "Sin telemetría ni tracking";
 "auroraStatus.agents.title" = "agentes";
 "auroraStatus.agents.tooltip.empty" = "No hay agentes activos detectados en la instantánea actual del espacio Aurora.";
 "auroraStatus.agents.tooltip.active" = "Agentes activos:\n%@";

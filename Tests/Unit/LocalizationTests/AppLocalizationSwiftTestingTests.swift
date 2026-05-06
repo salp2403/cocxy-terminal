@@ -508,6 +508,14 @@ struct AppLocalizationSwiftTestingTests {
         let port = Design.AuroraPortBinding(port: 3000, name: "web", health: .ok)
 
         #expect(Design.LocalBadgeView.localizedLabel(using: spanish) == "sin telemetría")
+        #expect(
+            Design.LocalBadgeView.localizedHelp(using: spanish)
+                == "Sin telemetría ni tracking. Las actualizaciones solo consultan el appcast firmado de Cocxy."
+        )
+        #expect(
+            Design.LocalBadgeView.localizedAccessibilityLabel(using: spanish)
+                == "Sin telemetría ni tracking"
+        )
         #expect(Design.AgentMatrixView.localizedTitle(using: spanish) == "agentes")
         #expect(
             Design.AgentMatrixView.summaryText(for: panes, using: spanish)

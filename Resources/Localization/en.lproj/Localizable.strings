@@ -996,8 +996,8 @@
 "auroraSidebar.paneTransfer.drag.help" = "Drag %@ pane to another tab";
 "auroraSidebar.paneTransfer.move.accessibility" = "Move %@ pane";
 "auroraStatus.localBadge.label" = "no telemetry";
-"auroraStatus.localBadge.help" = "Cocxy does not phone home. Remote panes connect only when you explicitly open them.";
-"auroraStatus.localBadge.accessibility" = "No telemetry: Cocxy does not phone home";
+"auroraStatus.localBadge.help" = "No telemetry or tracking. Update checks only contact Cocxy's signed appcast.";
+"auroraStatus.localBadge.accessibility" = "No telemetry or tracking";
 "auroraStatus.agents.title" = "agents";
 "auroraStatus.agents.tooltip.empty" = "No active agents detected in the current Aurora workspace snapshot.";
 "auroraStatus.agents.tooltip.active" = "Active agents:\n%@";

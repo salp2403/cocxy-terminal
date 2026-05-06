@@ -1318,14 +1318,14 @@ extension Design {
         static func localizedHelp(using localizer: AppLocalizer) -> String {
             localizer.string(
                 "auroraStatus.localBadge.help",
-                fallback: "Cocxy does not phone home. Remote panes connect only when you explicitly open them."
+                fallback: "No telemetry or tracking. Update checks only contact Cocxy's signed appcast."
             )
         }
 
         static func localizedAccessibilityLabel(using localizer: AppLocalizer) -> String {
             localizer.string(
                 "auroraStatus.localBadge.accessibility",
-                fallback: "No telemetry: Cocxy does not phone home"
+                fallback: "No telemetry or tracking"
             )
         }
     }
