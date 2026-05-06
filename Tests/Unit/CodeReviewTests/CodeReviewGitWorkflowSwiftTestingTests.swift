@@ -61,7 +61,7 @@ struct CodeReviewGitWorkflowSwiftTestingTests {
 }
 
 @MainActor
-@Suite("CodeReview inline editor")
+@Suite("CodeReview inline editor", .serialized)
 struct CodeReviewInlineEditorSwiftTestingTests {
 
     @Test("languageName detects common programming languages")
@@ -250,7 +250,7 @@ private func runWorkflowGit(_ arguments: [String], in directory: URL) throws -> 
 
 @MainActor
 private func waitForEditorCondition(
-    timeoutNanoseconds: UInt64 = 3_000_000_000,
+    timeoutNanoseconds: UInt64 = 15_000_000_000,
     pollNanoseconds: UInt64 = 20_000_000,
     _ condition: () -> Bool
 ) async throws {

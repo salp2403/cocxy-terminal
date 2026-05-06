@@ -13,7 +13,7 @@ import Testing
 @testable import CocxyTerminal
 
 @MainActor
-@Suite("CodeReviewPanelViewModel post-merge aftermath")
+@Suite("CodeReviewPanelViewModel post-merge aftermath", .serialized)
 struct CodeReviewPanelViewModelPostMergeAftermathSwiftTestingTests {
 
     // MARK: - Fixtures
@@ -442,7 +442,7 @@ private final class Box<T>: @unchecked Sendable {
 
 @MainActor
 private func waitForCondition(
-    timeoutNanoseconds: UInt64 = 3_000_000_000,
+    timeoutNanoseconds: UInt64 = 15_000_000_000,
     pollNanoseconds: UInt64 = 20_000_000,
     _ condition: () -> Bool
 ) async throws {

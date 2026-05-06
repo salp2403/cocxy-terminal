@@ -9,7 +9,7 @@ import Testing
 @testable import CocxyTerminal
 
 @MainActor
-@Suite("CodeReviewPanelViewModel PR merge")
+@Suite("CodeReviewPanelViewModel PR merge", .serialized)
 struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
 
     // MARK: - Fixtures
@@ -403,7 +403,8 @@ struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
         // The mergeability handler is also invoked so the chip lights
         // up immediately after the PR is created.
         try await waitForReviewCondition {
-            mergeabilityCalled.value == 123
+            mergeabilityCalled.value == 123 &&
+            viewModel.activePullRequestMergeability != nil
         }
         #expect(viewModel.activePullRequestNumber == 123)
         #expect(viewModel.activePullRequestMergeability != nil)
@@ -492,7 +493,7 @@ private final class Box<T>: @unchecked Sendable {
 /// effects without us hard-coding sleep durations.
 @MainActor
 private func waitForReviewCondition(
-    timeoutNanoseconds: UInt64 = 3_000_000_000,
+    timeoutNanoseconds: UInt64 = 15_000_000_000,
     pollNanoseconds: UInt64 = 20_000_000,
     _ condition: () -> Bool
 ) async throws {

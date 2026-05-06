@@ -85,7 +85,7 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
         #expect(MainWindowController.localizedUnifiedQuickSwitchBrowserTitle("Docs", using: spanish) == "Navegador: Docs")
         #expect(MainWindowController.localizedUnifiedQuickSwitchWorktreeTitle("feat/a", using: spanish) == "Worktree: feat/a")
         #expect(MainWindowController.localizedUnifiedQuickSwitchNoteTitle("Ideas", using: spanish) == "Nota: Ideas")
-        #expect(MainWindowController.localizedUnifiedQuickSwitchNotesSubtitle(using: spanish) == "Notas del workspace")
+        #expect(MainWindowController.localizedUnifiedQuickSwitchNotesSubtitle(using: spanish) == "Notas del espacio")
     }
 
     @Test("activating a terminal tab focuses it through the normal tab lifecycle")

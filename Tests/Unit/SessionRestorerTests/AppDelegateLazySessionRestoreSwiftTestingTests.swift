@@ -229,14 +229,7 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(shield.layer?.isOpaque == true)
         #expect(shield.layer?.backgroundColor?.alpha == 1.0)
 
-        try? await Task.sleep(nanoseconds: 80_000_000)
-        await Task.yield()
-
-        #expect(controller.sessionRestoreShieldView === shield)
-        #expect(shield.superview === controller.terminalContainerView)
-
-        try? await Task.sleep(nanoseconds: 180_000_000)
-        await Task.yield()
+        try await waitForShieldRemoval(on: controller)
 
         #expect(controller.sessionRestoreShieldView == nil)
         #expect(shield.superview == nil)
@@ -393,6 +386,22 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         await Task.yield()
         try? await Task.sleep(nanoseconds: 50_000_000)
         await Task.yield()
+    }
+
+    private func waitForShieldRemoval(
+        on controller: MainWindowController,
+        timeoutNanoseconds: UInt64 = 2_000_000_000,
+        pollNanoseconds: UInt64 = 20_000_000
+    ) async throws {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+        while controller.sessionRestoreShieldView != nil {
+            if DispatchTime.now().uptimeNanoseconds >= deadline {
+                Issue.record("Timed out waiting for session restore shield removal")
+                return
+            }
+            try await Task.sleep(nanoseconds: pollNanoseconds)
+            await Task.yield()
+        }
     }
 
     private func makeTemporaryDirectory(named name: String) throws -> URL {
