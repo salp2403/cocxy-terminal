@@ -1125,7 +1125,7 @@ final class HorizontalTabStripView: NSView {
         btn.bezelStyle = .accessoryBarAction
         btn.isBordered = false
         btn.wantsLayer = true
-        if let img = NSImage(systemSymbolName: icon, accessibilityDescription: tooltip) {
+        if let img = NSImage(systemSymbolName: icon, accessibilityDescription: nil) {
             btn.image = img.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
         }
         btn.contentTintColor = CocxyColors.overlay1
@@ -1133,7 +1133,8 @@ final class HorizontalTabStripView: NSView {
         btn.isEnabled = isEnabled
         btn.alphaValue = isEnabled ? 1.0 : 0.35
         btn.toolTip = isEnabled ? tooltip : (disabledTooltip ?? tooltip)
-        btn.setAccessibilityLabel(accessibilityID)
+        btn.setAccessibilityLabel(tooltip)
+        btn.setAccessibilityIdentifier(accessibilityID)
         btn.target = self
         btn.action = action
 

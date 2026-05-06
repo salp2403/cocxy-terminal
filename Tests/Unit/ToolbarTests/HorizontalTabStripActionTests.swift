@@ -413,10 +413,9 @@ final class HorizontalTabStripActionTests: XCTestCase {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
-        let editorButton = findActionButtons(in: strip).first {
-            $0.accessibilityLabel() == "action:openEditor"
-        }
+        let editorButton = findActionButton(in: strip, identifier: "action:openEditor")
 
+        XCTAssertEqual(editorButton?.accessibilityLabel(), "Open Text Editor")
         XCTAssertEqual(editorButton?.toolTip, "Open Text Editor")
     }
 
@@ -424,11 +423,12 @@ final class HorizontalTabStripActionTests: XCTestCase {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
-        let buttons = findActionButtons(in: strip)
-        let notebookButton = buttons.first { $0.accessibilityLabel() == "action:openNotebook" }
-        let workflowButton = buttons.first { $0.accessibilityLabel() == "action:openWorkflow" }
+        let notebookButton = findActionButton(in: strip, identifier: "action:openNotebook")
+        let workflowButton = findActionButton(in: strip, identifier: "action:openWorkflow")
 
+        XCTAssertEqual(notebookButton?.accessibilityLabel(), "Open Notebook")
         XCTAssertEqual(notebookButton?.toolTip, "Open Notebook")
+        XCTAssertEqual(workflowButton?.accessibilityLabel(), "Open Workflow")
         XCTAssertEqual(workflowButton?.toolTip, "Open Workflow")
     }
 
@@ -436,10 +436,9 @@ final class HorizontalTabStripActionTests: XCTestCase {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
-        let replayButton = findActionButtons(in: strip).first {
-            $0.accessibilityLabel() == "action:openSessionReplay"
-        }
+        let replayButton = findActionButton(in: strip, identifier: "action:openSessionReplay")
 
+        XCTAssertEqual(replayButton?.accessibilityLabel(), "Open Session Replay")
         XCTAssertEqual(replayButton?.toolTip, "Open Session Replay")
     }
 
@@ -447,10 +446,9 @@ final class HorizontalTabStripActionTests: XCTestCase {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
-        let historyButton = findActionButtons(in: strip).first {
-            $0.accessibilityLabel() == "action:openAIEditHistory"
-        }
+        let historyButton = findActionButton(in: strip, identifier: "action:openAIEditHistory")
 
+        XCTAssertEqual(historyButton?.accessibilityLabel(), "Open Edit History")
         XCTAssertEqual(historyButton?.toolTip, "Open Edit History")
     }
 
@@ -458,10 +456,9 @@ final class HorizontalTabStripActionTests: XCTestCase {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
-        let templatesButton = findActionButtons(in: strip).first {
-            $0.accessibilityLabel() == "action:openTemplates"
-        }
+        let templatesButton = findActionButton(in: strip, identifier: "action:openTemplates")
 
+        XCTAssertEqual(templatesButton?.accessibilityLabel(), "Open Templates")
         XCTAssertEqual(templatesButton?.toolTip, "Open Templates")
     }
 
@@ -469,10 +466,9 @@ final class HorizontalTabStripActionTests: XCTestCase {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
-        let macrosButton = findActionButtons(in: strip).first {
-            $0.accessibilityLabel() == "action:openMacros"
-        }
+        let macrosButton = findActionButton(in: strip, identifier: "action:openMacros")
 
+        XCTAssertEqual(macrosButton?.accessibilityLabel(), "Open Macros")
         XCTAssertEqual(macrosButton?.toolTip, "Open Macros")
     }
 
@@ -480,10 +476,9 @@ final class HorizontalTabStripActionTests: XCTestCase {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: false)
 
-        let dbCloudButton = findActionButtons(in: strip).first {
-            $0.accessibilityLabel() == "action:openDBCloud"
-        }
+        let dbCloudButton = findActionButton(in: strip, identifier: "action:openDBCloud")
 
+        XCTAssertEqual(dbCloudButton?.accessibilityLabel(), "Open DB/Cloud Helpers")
         XCTAssertEqual(dbCloudButton?.toolTip, "Open DB/Cloud Helpers")
     }
 
@@ -517,17 +512,17 @@ final class HorizontalTabStripActionTests: XCTestCase {
         let splitButtons = findActionButtons(in: strip).prefix(2)
 
         XCTAssertEqual(splitButtons.map(\.toolTip), ["Split Side by Side", "Split Stacked"] as [String?])
-        XCTAssertEqual(splitButtons.map { $0.accessibilityLabel() }, ["action:splitSideBySide", "action:splitStacked"])
+        XCTAssertEqual(splitButtons.map { $0.accessibilityIdentifier() }, ["action:splitSideBySide", "action:splitStacked"])
+        XCTAssertEqual(splitButtons.map { $0.accessibilityLabel() }, ["Split Side by Side", "Split Stacked"])
     }
 
     func testCloseFocusedPaneActionUsesPaneSpecificTooltip() {
         let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
         strip.updateActionIcons(panelType: .terminal, canClose: true)
 
-        let closeButton = findActionButtons(in: strip).first {
-            $0.accessibilityLabel() == "action:closePanel"
-        }
+        let closeButton = findActionButton(in: strip, identifier: "action:closePanel")
 
+        XCTAssertEqual(closeButton?.accessibilityLabel(), "Close Focused Pane")
         XCTAssertEqual(closeButton?.toolTip, "Close Focused Pane")
     }
 
@@ -540,19 +535,34 @@ final class HorizontalTabStripActionTests: XCTestCase {
             maxPaneCount: 4
         )
 
-        let buttons = findActionButtons(in: strip)
-        let splitButton = buttons.first { $0.accessibilityLabel() == "action:splitSideBySide" }
-        let notebookButton = buttons.first { $0.accessibilityLabel() == "action:openNotebook" }
-        let closeButton = buttons.first { $0.accessibilityLabel() == "action:closePanel" }
+        let splitButton = findActionButton(in: strip, identifier: "action:splitSideBySide")
+        let notebookButton = findActionButton(in: strip, identifier: "action:openNotebook")
+        let closeButton = findActionButton(in: strip, identifier: "action:closePanel")
         let addButton = findAddPanelButton(in: strip)
 
         XCTAssertFalse(splitButton?.isEnabled ?? true)
+        XCTAssertEqual(splitButton?.accessibilityLabel(), "Split Side by Side")
         XCTAssertEqual(splitButton?.toolTip, "Maximum of 4 panes reached")
         XCTAssertFalse(notebookButton?.isEnabled ?? true)
+        XCTAssertEqual(notebookButton?.accessibilityLabel(), "Open Notebook")
         XCTAssertEqual(notebookButton?.toolTip, "Maximum of 4 panes reached")
         XCTAssertTrue(closeButton?.isEnabled ?? false)
         XCTAssertFalse(addButton?.isEnabled ?? true)
         XCTAssertEqual(addButton?.toolTip, "Maximum of 4 panes reached")
+    }
+
+    func testActionButtonsUseLocalizedAccessibilityLabels() throws {
+        let bundle = try XCTUnwrap(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateLocalizer(spanish)
+        strip.updateActionIcons(panelType: .terminal, canClose: true)
+
+        XCTAssertEqual(findActionButton(in: strip, identifier: "action:splitSideBySide")?.accessibilityLabel(), "Dividir lado a lado")
+        XCTAssertEqual(findActionButton(in: strip, identifier: "action:openBrowser")?.accessibilityLabel(), "Abrir navegador aquí")
+        XCTAssertEqual(findActionButton(in: strip, identifier: "action:openNotebook")?.accessibilityLabel(), "Abrir notebook")
+        XCTAssertEqual(findActionButton(in: strip, identifier: "action:closePanel")?.accessibilityLabel(), "Cerrar panel enfocado")
+        XCTAssertNil(findActionButtons(in: strip).first { $0.accessibilityLabel()?.hasPrefix("action:") == true })
     }
 
     func testActionButtonsHaveAccessibilityLabels() {
@@ -602,13 +612,31 @@ final class HorizontalTabStripActionTests: XCTestCase {
         return nil
     }
 
+    private func findActionButton(in view: NSView, identifier: String) -> NSButton? {
+        findActionButtons(in: view).first {
+            $0.accessibilityIdentifier() == identifier
+        }
+    }
+
     private func findActionButtonsRecursive(in view: NSView, result: inout [NSButton]) {
         if let button = view as? NSButton,
-           button.accessibilityLabel()?.hasPrefix("action:") == true {
+           button.accessibilityIdentifier().hasPrefix("action:") {
             result.append(button)
         }
         for child in view.subviews {
             findActionButtonsRecursive(in: child, result: &result)
         }
+    }
+
+    private func localizationBundle() -> Bundle? {
+        Bundle(url: repositoryRoot().appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
+
+    private func repositoryRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 }
