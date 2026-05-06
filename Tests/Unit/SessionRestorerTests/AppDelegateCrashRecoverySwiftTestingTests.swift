@@ -142,8 +142,8 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(offer.window?.isOpaque == true)
     }
 
-    @Test("restore action keeps the recovery offer visible while completion runs")
-    func restoreActionKeepsRecoveryOfferVisibleWhileCompletionRuns() throws {
+    @Test("restore action keeps the recovery offer visible through the restore handoff")
+    func restoreActionKeepsRecoveryOfferVisibleThroughRestoreHandoff() async throws {
         let parent = NSWindow(
             contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
             styleMask: [.titled, .resizable],
@@ -161,7 +161,10 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         var offerReference: CrashRecoveryOfferWindowController?
         var completionObservedVisibleOffer = false
         var completionObservedChildOffer = false
-        let offer = CrashRecoveryOfferWindowController(copy: copy) { response in
+        let offer = CrashRecoveryOfferWindowController(
+            copy: copy,
+            restoreDismissalDelay: 0.03
+        ) { response in
             #expect(response == .alertFirstButtonReturn)
             let window = offerReference?.window
             completionObservedVisibleOffer = window?.isVisible == true
@@ -177,6 +180,11 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
 
         #expect(completionObservedVisibleOffer == true)
         #expect(completionObservedChildOffer == true)
+        #expect(restoreButton.isEnabled == false)
+        #expect(parent.childWindows?.contains { $0 === offer.window } == true)
+
+        try await Task.sleep(nanoseconds: 80_000_000)
+
         #expect(parent.childWindows?.contains { $0 === offer.window } != true)
     }
 

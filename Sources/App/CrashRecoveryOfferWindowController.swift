@@ -22,14 +22,20 @@ final class CrashRecoveryOfferWindowController: NSWindowController, NSWindowDele
     private var completion: ((NSApplication.ModalResponse) -> Void)?
     private var didComplete = false
     private var isRunningModalSession = false
+    private let restoreDismissalDelay: TimeInterval
 
     private let messageLabel = NSTextField(labelWithString: "")
     private let informativeLabel = NSTextField(wrappingLabelWithString: "")
     private let restoreButton = NSButton(title: "", target: nil, action: nil)
     private let keepCurrentButton = NSButton(title: "", target: nil, action: nil)
 
-    init(copy: AppAlertCopy, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+    init(
+        copy: AppAlertCopy,
+        restoreDismissalDelay: TimeInterval = 0.22,
+        completion: @escaping (NSApplication.ModalResponse) -> Void
+    ) {
         self.completion = completion
+        self.restoreDismissalDelay = restoreDismissalDelay
 
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: Layout.panelSize),
@@ -100,6 +106,8 @@ final class CrashRecoveryOfferWindowController: NSWindowController, NSWindowDele
     private func complete(_ response: NSApplication.ModalResponse) {
         guard !didComplete else { return }
         didComplete = true
+        restoreButton.isEnabled = false
+        keepCurrentButton.isEnabled = false
 
         let callback = completion
         completion = nil
@@ -111,6 +119,17 @@ final class CrashRecoveryOfferWindowController: NSWindowController, NSWindowDele
 
         callback?(response)
 
+        if response == .alertFirstButtonReturn, restoreDismissalDelay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + restoreDismissalDelay) { [self, weak window] in
+                dismissWindow(window)
+            }
+            return
+        }
+
+        dismissWindow(window)
+    }
+
+    private func dismissWindow(_ window: NSWindow?) {
         if let window {
             parentWindow?.removeChildWindow(window)
             window.orderOut(nil)
