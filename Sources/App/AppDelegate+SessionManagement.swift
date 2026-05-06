@@ -319,7 +319,6 @@ extension AppDelegate {
         controller.refreshTerminalContainerBackingBackground()
         controller.installSessionRestoreShield()
         controller.window?.makeKeyAndOrderFront(nil)
-        controller.window?.displayIfNeeded()
     }
 
     private func bootstrapInitialSurfaceIfNeeded(_ controller: MainWindowController) {

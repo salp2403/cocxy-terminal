@@ -144,6 +144,15 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
         let delegate = AppDelegate()
         delegate.installTerminalEngineForTesting(bridge)
         delegate.installWindowControllerForTesting(controller)
+        let trackingWindow = LaunchTrackingRestoreWindow(
+            contentRect: controller.window?.frame ?? NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: controller.window?.styleMask ?? [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        trackingWindow.contentView = controller.window?.contentView
+        trackingWindow.backgroundColor = CocxyColors.base.withAlphaComponent(0.35)
+        controller.window = trackingWindow
 
         let manager = makeSessionManager()
         delegate.sessionManager = manager
@@ -169,6 +178,11 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
         XCTAssertTrue(
             controller.sessionRestoreShieldView?.layer?.isOpaque == true,
             "The visible restore shell must stay opaque while terminal surfaces repaint"
+        )
+        XCTAssertEqual(
+            trackingWindow.displayIfNeededCount,
+            0,
+            "Launch restore should not force a synchronous display pass before restored terminal surfaces exist"
         )
         controller.window?.orderOut(nil)
     }
@@ -234,4 +248,13 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
         )
     }
 
+}
+
+private final class LaunchTrackingRestoreWindow: NSWindow {
+    private(set) var displayIfNeededCount = 0
+
+    override func displayIfNeeded() {
+        displayIfNeededCount += 1
+        super.displayIfNeeded()
+    }
 }
