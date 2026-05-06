@@ -290,7 +290,7 @@ struct AppLocalizationSwiftTestingTests {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
 
-        #expect(spanish.string("remoteWorkspace.title", fallback: "Remote Workspaces") == "Workspaces remotos")
+        #expect(spanish.string("remoteWorkspace.title", fallback: "Remote Workspaces") == "Espacios remotos")
         #expect(spanish.string("remoteWorkspace.quickConnect.placeholder", fallback: "Quick Connect (user@host:port)") == "Conexión rápida (user@host:port)")
         #expect(spanish.string("remoteWorkspace.empty.title", fallback: "No remote profiles yet") == "Aún no hay perfiles remotos")
         #expect(spanish.string("remoteWorkspace.profile.action.connect", fallback: "Connect to %@") == "Conectar a %@")
@@ -669,8 +669,8 @@ struct AppLocalizationSwiftTestingTests {
             handler: {}
         ).localized(using: localizer)
 
-        #expect(action.name == "Abrir workspace en Visual Studio Code")
-        #expect(action.description == "Abrir el workspace de la pestaña activa usando Visual Studio Code")
+        #expect(action.name == "Abrir espacio en Visual Studio Code")
+        #expect(action.description == "Abrir el espacio de la pestaña activa usando Visual Studio Code")
     }
 
     @MainActor

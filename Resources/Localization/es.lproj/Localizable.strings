@@ -59,9 +59,9 @@
 "preferences.appearance.tabPosition.top" = "Arriba";
 "preferences.appearance.tabPosition.hidden" = "Oculta";
 "preferences.appearance.classicTabPosition.help.enabled" = "Controla la navegación clásica de pestañas: barra lateral izquierda, tira superior o pestañas ocultas.";
-"preferences.appearance.classicTabPosition.help.disabled" = "Aurora usa su propia barra lateral de workspaces. Esta posición clásica se preserva y vuelve a aplicar cuando Aurora se desactiva.";
+"preferences.appearance.classicTabPosition.help.disabled" = "Aurora usa su propia barra lateral de espacios. Esta posición clásica se preserva y vuelve a aplicar cuando Aurora se desactiva.";
 "preferences.appearance.classicTabPosition.caption.enabled" = "Arriba muestra la tira horizontal clásica y colapsa la barra lateral izquierda. Oculta deja visibles solo los controles del chrome del terminal.";
-"preferences.appearance.classicTabPosition.caption.disabled" = "Aurora está activo, así que Cocxy mantiene visible la barra lateral de workspaces e ignora Izquierda/Arriba/Oculta hasta que Aurora se desactive.";
+"preferences.appearance.classicTabPosition.caption.disabled" = "Aurora está activo, así que Cocxy mantiene visible la barra lateral de espacios e ignora Izquierda/Arriba/Oculta hasta que Aurora se desactive.";
 "preferences.appearance.windowPadding" = "Espaciado de ventana";
 "preferences.appearance.aurora.section" = "Aurora";
 "preferences.appearance.enableAurora" = "Activar chrome Aurora";
@@ -314,7 +314,7 @@
 "quickSwitch.result.switchedToTitle" = "Cambiado a: %@";
 "quickSwitch.result.switchedToUnreadTab" = "Cambiado a pestaña sin leer";
 "menu.view.smartRouting" = "Ruteo inteligente";
-"menu.view.remoteWorkspaces" = "Workspaces remotos...";
+"menu.view.remoteWorkspaces" = "Espacios remotos...";
 "menu.view.agentTimeline" = "Línea de tiempo de agentes";
 "menu.view.notifications" = "Notificaciones";
 "menu.view.browser" = "Navegador";
@@ -692,7 +692,7 @@
 "preferences.lsp.feature.section" = "Función";
 "preferences.lsp.enable" = "Activar servidores de lenguaje";
 "preferences.lsp.enable.help" = "Inicia solo los servidores de lenguaje locales seleccionados abajo.";
-"preferences.lsp.feature.caption" = "Cocxy nunca instala servidores de lenguaje automáticamente. Los servidores activados se ejecutan localmente y reciben texto de documentos abiertos más URIs del workspace.";
+"preferences.lsp.feature.caption" = "Cocxy nunca instala servidores de lenguaje automáticamente. Los servidores activados se ejecutan localmente y reciben texto de documentos abiertos más URIs del espacio.";
 "preferences.lsp.languages.section" = "Lenguajes";
 "preferences.editor.input.section" = "Entrada";
 "preferences.editor.enableVimMode" = "Activar modo Vim";
@@ -1107,8 +1107,8 @@
 "window.closeWorktreeTab.keepWorktree" = "Mantener worktree";
 "window.closeWorktreeTab.removeIfClean" = "Eliminar si está limpio";
 "window.closePane.title" = "¿Cerrar panel enfocado?";
-"window.closePane.message.one" = "Esto cerrará el %@ enfocado. La pestaña de workspace queda abierta con %d panel restante.";
-"window.closePane.message.many" = "Esto cerrará el %@ enfocado. La pestaña de workspace queda abierta con %d paneles restantes.";
+"window.closePane.message.one" = "Esto cerrará el %@ enfocado. La pestaña de espacio queda abierta con %d panel restante.";
+"window.closePane.message.many" = "Esto cerrará el %@ enfocado. La pestaña de espacio queda abierta con %d paneles restantes.";
 "window.closePane.button" = "Cerrar panel";
 "window.exportPanel.title" = "Exportar datos";
 "window.exportPanel.message" = "Elige dónde guardar el archivo exportado.";
@@ -1433,7 +1433,7 @@
 "codeReview.panel.chip.agent" = "Agente";
 "codeReview.panel.loading" = "Recolectando cambios del agente...";
 "codeReview.panel.empty.title" = "Aún no hay cambios para revisar";
-"codeReview.panel.empty.message" = "Cuando un agente escriba o edite archivos en este workspace, sus diffs aparecerán aquí para revisión.";
+"codeReview.panel.empty.message" = "Cuando un agente escriba o edite archivos en este espacio, sus diffs aparecerán aquí para revisión.";
 "codeReview.panel.empty.tip" = "Consejo: usa Cmd+Option+R para reabrir este panel rápidamente.";
 "codeReview.panel.empty.refresh" = "Refrescar revisión";
 "codeReview.panel.empty.refreshHint" = "Recargar el diff actual del agente";
@@ -2169,8 +2169,8 @@
 "command.workspace.dbCloud.name" = "Abrir ayudantes DB/Cloud";
 "command.workspace.dbCloud.description" = "Abrir consultas locales para DB y CLI de nube";
 
-"command.remote.toggle.name" = "Alternar workspaces remotos";
-"command.remote.toggle.description" = "Mostrar u ocultar el panel de workspaces remotos";
+"command.remote.toggle.name" = "Alternar espacios remotos";
+"command.remote.toggle.description" = "Mostrar u ocultar el panel de espacios remotos";
 "command.browser.history.name" = "Historial del navegador";
 "command.browser.history.description" = "Mostrar u ocultar el panel de historial del navegador";
 "command.browser.bookmarks.name" = "Marcadores del navegador";
@@ -2194,10 +2194,10 @@
 "command.worktree.remove.description" = "Eliminar el worktree gestionado por Cocxy adjunto a la pestaña activa (rechaza si hay cambios sin confirmar)";
 "command.worktree.cleanupMerged.name" = "Limpiar worktrees fusionados";
 "command.worktree.cleanupMerged.description" = "Revisar y eliminar worktrees gestionados por Cocxy que ya estén fusionados y limpios";
-"command.editor.openDefault.name" = "Abrir workspace en editor predeterminado";
-"command.editor.openDefault.description" = "Abrir el workspace de la pestaña activa con el editor predeterminado del sistema";
-"command.editor.openNamed.name" = "Abrir workspace en %@";
-"command.editor.openNamed.description" = "Abrir el workspace de la pestaña activa usando %@";
+"command.editor.openDefault.name" = "Abrir espacio en editor predeterminado";
+"command.editor.openDefault.description" = "Abrir el espacio de la pestaña activa con el editor predeterminado del sistema";
+"command.editor.openNamed.name" = "Abrir espacio en %@";
+"command.editor.openNamed.description" = "Abrir el espacio de la pestaña activa usando %@";
 
 "common.search" = "Buscar";
 
@@ -2278,10 +2278,10 @@
 "common.generate" = "Generar";
 "common.refresh" = "Refrescar";
 
-"remoteWorkspace.title" = "Workspaces remotos";
-"remoteWorkspace.accessibility" = "Workspaces remotos";
+"remoteWorkspace.title" = "Espacios remotos";
+"remoteWorkspace.accessibility" = "Espacios remotos";
 "remoteWorkspace.addProfile.accessibility" = "Agregar nuevo perfil remoto";
-"remoteWorkspace.closePanel.accessibility" = "Cerrar panel de workspaces remotos";
+"remoteWorkspace.closePanel.accessibility" = "Cerrar panel de espacios remotos";
 "remoteWorkspace.quickConnect.placeholder" = "Conexión rápida (user@host:port)";
 "remoteWorkspace.quickConnect.connect.accessibility" = "Conectar al host de conexión rápida";
 "remoteWorkspace.quickConnect.help" = "Escribe user@host:port y presiona Return o la flecha para conectar.";
@@ -2493,7 +2493,7 @@
 "shortcuts.run-command.summary" = "Enviar texto a la terminal local enfocada y opcionalmente presionar Return.";
 "shortcuts.run-command.privacy" = "Escribe solo en la superficie de terminal local enfocada por el usuario.";
 "shortcuts.open-notebook.title" = "Abrir notebook de Cocxy";
-"shortcuts.open-notebook.summary" = "Abrir un panel de notebook ejecutable local en el workspace actual.";
+"shortcuts.open-notebook.summary" = "Abrir un panel de notebook ejecutable local en el espacio actual.";
 "shortcuts.open-notebook.privacy" = "Solo abre estado local de UI; la ejecución del notebook sigue activada por el usuario.";
 "shortcuts.list-skills.title" = "Listar habilidades de Cocxy";
 "shortcuts.list-skills.summary" = "Devolver identificadores locales de habilidades integradas y del usuario.";

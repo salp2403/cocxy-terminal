@@ -29,7 +29,7 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
         #expect(closePane.messageText == "¿Cerrar panel enfocado?")
         #expect(
             closePane.informativeText ==
-                "Esto cerrará el panel de markdown enfocado. La pestaña de workspace queda abierta con 2 paneles restantes."
+                "Esto cerrará el panel de markdown enfocado. La pestaña de espacio queda abierta con 2 paneles restantes."
         )
         #expect(closePane.primaryButton == "Cerrar panel")
         #expect(closePane.secondaryButton == "Cancelar")
