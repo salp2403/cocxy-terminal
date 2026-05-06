@@ -43,7 +43,12 @@ struct NotebookPanelViewModelSwiftTestingTests {
         #expect(viewModel.sourceText.contains("panel-ok"))
         #expect(viewModel.cellPresentations.first?.outputs.map(\.text) == ["panel-ok\n"])
         #expect(try String(contentsOf: fileURL, encoding: .utf8).contains("panel-ok"))
-        #expect(runner.calls.map(\.arguments) == [["-c", "echo stale"]])
+        #expect(runner.calls.map(\.executableURL.path) == ["/usr/bin/sandbox-exec"])
+        #expect(Array(runner.calls[0].arguments.suffix(3)) == [
+            "/bin/bash",
+            "-c",
+            "echo stale",
+        ])
     }
 
     @Test("Spanish localizer updates notebook status text")

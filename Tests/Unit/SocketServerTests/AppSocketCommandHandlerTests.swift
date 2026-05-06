@@ -2153,6 +2153,51 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(rendered.contains("```cocxy-output stdout\nnotebook-ok\n```"))
     }
 
+    func test_notebookRunWorkspaceSandboxBlocksWritesOutsideWorkingDirectory() throws {
+        try requireExecutableOnPath("sandbox-exec")
+
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = root.appendingPathComponent("workspace", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let inputURL = workspace.appendingPathComponent("sandbox.cocxynb")
+        let outputURL = workspace.appendingPathComponent("sandbox-result.cocxynb")
+        let outsideURL = root.appendingPathComponent("outside.txt")
+
+        try """
+        ---
+        cocxy-notebook: "1"
+        title: "Sandbox"
+        ---
+
+        ```bash
+        echo allowed > allowed.txt
+        echo denied > ../outside.txt
+        ```
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "notebook-run-sandbox",
+            command: "notebook-run",
+            params: [
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "cwd": workspace.path,
+                "timeout": "15",
+                "sandbox": "workspace",
+            ]
+        ))
+
+        XCTAssertTrue(response.success, response.error ?? "")
+        XCTAssertEqual(response.data?["status"], "failed")
+        XCTAssertEqual(response.data?["failed-cell-index"], "0")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("allowed.txt").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outsideURL.path))
+        let rendered = try String(contentsOf: outputURL, encoding: .utf8)
+        XCTAssertTrue(rendered.contains("Operation not permitted"))
+    }
+
     func test_notebookRun_executesLocalBashPythonAndSwiftCellsThenExportsJupyter() throws {
         try requireExecutableOnPath("python3")
         try requireExecutableOnPath("swift")

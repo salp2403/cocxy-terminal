@@ -3462,6 +3462,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         let stopOnFailure = request.params?["continue-on-failure"] != "true"
+        let sandbox: NotebookSandboxPolicy
+        if let rawSandbox = request.params?["sandbox"], !rawSandbox.isEmpty {
+            guard let parsedSandbox = NotebookSandboxPolicy(rawValue: rawSandbox) else {
+                return .failure(
+                    id: request.id,
+                    error: "Sandbox must be one of: workspace, none."
+                )
+            }
+            sandbox = parsedSandbox
+        } else {
+            sandbox = .workspace
+        }
 
         do {
             let source = try String(contentsOf: inputURL, encoding: .utf8)
@@ -3470,6 +3482,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 notebook,
                 workingDirectory: workingDirectory,
                 timeoutSeconds: timeoutSeconds ?? 60,
+                sandbox: sandbox,
                 stopOnFailure: stopOnFailure
             )
             try FileManager.default.createDirectory(
@@ -3488,6 +3501,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 "status": status,
                 "input": inputURL.path,
                 "output": outputURL.path,
+                "sandbox": sandbox.rawValue,
                 "executed-cells": "\(summary.executedCellIndices.count)",
                 "summary": notebookRunSummary(
                     executedCells: summary.executedCellIndices.count,

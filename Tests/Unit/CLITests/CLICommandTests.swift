@@ -487,6 +487,7 @@ final class CLIArgumentParserTests: XCTestCase {
                 "--output", "/tmp/result.cocxynb",
                 "--cwd", "/tmp/project",
                 "--timeout", "15",
+                "--sandbox", "workspace",
                 "--continue-on-failure",
             ]),
             .notebookRun(
@@ -494,9 +495,19 @@ final class CLIArgumentParserTests: XCTestCase {
                 outputPath: "/tmp/result.cocxynb",
                 workingDirectory: "/tmp/project",
                 timeoutSeconds: 15,
+                sandbox: "workspace",
                 continueOnFailure: true
             )
         )
+    }
+
+    func testParseNotebookRunRejectsInvalidSandboxMode() {
+        XCTAssertThrowsError(try CLIArgumentParser.parse([
+            "notebook", "run", "/tmp/source.cocxynb",
+            "--sandbox", "cloud",
+        ])) { error in
+            XCTAssertTrue(String(describing: error).contains("Sandbox must be one of: workspace, none"))
+        }
     }
 
     func testParseWorkflowRunWithWorkingDirectory() throws {
@@ -887,6 +898,7 @@ final class RequestBuilderTests: XCTestCase {
             outputPath: "/tmp/result.cocxynb",
             workingDirectory: "/tmp/project",
             timeoutSeconds: 15,
+            sandbox: "workspace",
             continueOnFailure: true
         ))
 
@@ -895,6 +907,7 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.params?["output"], "/tmp/result.cocxynb")
         XCTAssertEqual(request.params?["cwd"], "/tmp/project")
         XCTAssertEqual(request.params?["timeout"], "15.0")
+        XCTAssertEqual(request.params?["sandbox"], "workspace")
         XCTAssertEqual(request.params?["continue-on-failure"], "true")
     }
 
@@ -1141,6 +1154,7 @@ final class OutputFormatterTests: XCTestCase {
                 outputPath: nil,
                 workingDirectory: nil,
                 timeoutSeconds: nil,
+                sandbox: "workspace",
                 continueOnFailure: false
             ),
             response: response

@@ -881,10 +881,12 @@ public struct CommandRunner {
             let outputPath,
             let workingDirectory,
             let timeoutSeconds,
+            let sandbox,
             let continueOnFailure
         ):
             var params = [
                 "input": inputPath,
+                "sandbox": sandbox,
                 "continue-on-failure": continueOnFailure ? "true" : "false"
             ]
             if let outputPath { params["output"] = outputPath }

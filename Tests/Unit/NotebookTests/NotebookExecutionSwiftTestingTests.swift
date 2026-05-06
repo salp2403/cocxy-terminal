@@ -41,10 +41,17 @@ struct NotebookExecutionSwiftTestingTests {
         #expect(summary.document.cells[2].outputs == [
             NotebookCellOutput(kind: .stderr, text: "swift warn\n"),
         ])
-        #expect(runner.calls.map(\.executablePath) == ["/bin/bash", "/usr/bin/env"])
-        #expect(runner.calls.map(\.arguments) == [
-            ["-c", "echo bash"],
-            ["swift", "-e", #"print("swift")"#],
+        #expect(runner.calls.map(\.executablePath) == ["/usr/bin/sandbox-exec", "/usr/bin/sandbox-exec"])
+        #expect(Array(runner.calls[0].arguments.suffix(3)) == [
+            "/bin/bash",
+            "-c",
+            "echo bash",
+        ])
+        #expect(Array(runner.calls[1].arguments.suffix(4)) == [
+            "/usr/bin/env",
+            "swift",
+            "-e",
+            #"print("swift")"#,
         ])
         #expect(runner.calls.map(\.timeoutSeconds) == [12, 12])
     }
@@ -90,6 +97,36 @@ struct NotebookExecutionSwiftTestingTests {
             _ = try executor.execute(document, workingDirectory: workspace)
         }
         #expect(runner.calls.isEmpty)
+    }
+
+    @Test("workspace sandbox wraps kernels with sandbox-exec and keeps an explicit no-sandbox escape hatch")
+    func workspaceSandboxWrapsKernelCommands() throws {
+        let workspace = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let runner = RecordingNotebookProcessRunner(results: [
+            AgentProcessResult(exitCode: 0, stdout: "sandboxed\n", stderr: ""),
+            AgentProcessResult(exitCode: 0, stdout: "direct\n", stderr: ""),
+        ])
+        let executor = NotebookExecutor(processRunner: runner)
+        let document = NotebookDocument(cells: [
+            .code(language: "bash", source: "echo sandboxed"),
+        ])
+
+        _ = try executor.execute(document, workingDirectory: workspace, sandbox: .workspace)
+        _ = try executor.execute(document, workingDirectory: workspace, sandbox: .none)
+
+        #expect(runner.calls[0].executablePath == "/usr/bin/sandbox-exec")
+        #expect(runner.calls[0].arguments.first == "-p")
+        #expect(runner.calls[0].arguments[1].contains("(deny network*)"))
+        #expect(runner.calls[0].arguments[1].contains("(deny file-write*)"))
+        #expect(runner.calls[0].arguments[1].contains(workspace.resolvingSymlinksInPath().path))
+        #expect(Array(runner.calls[0].arguments.suffix(3)) == [
+            "/bin/bash",
+            "-c",
+            "echo sandboxed",
+        ])
+        #expect(runner.calls[1].executablePath == "/bin/bash")
+        #expect(runner.calls[1].arguments == ["-c", "echo sandboxed"])
     }
 
     @Test("saves and reloads notebooks through markdown persistence")

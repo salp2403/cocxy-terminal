@@ -412,12 +412,13 @@ public enum ParsedCommand: Equatable {
     /// `cocxy notebook template create <template-id> --output <output.cocxynb> [--force]`
     case notebookTemplateCreate(templateID: String, outputPath: String, force: Bool)
 
-    /// `cocxy notebook run <input.cocxynb> [--output <output.cocxynb>] [--cwd <dir>]`
+    /// `cocxy notebook run <input.cocxynb> [--output <output.cocxynb>] [--cwd <dir>] [--sandbox workspace|none]`
     case notebookRun(
         inputPath: String,
         outputPath: String?,
         workingDirectory: String?,
         timeoutSeconds: Double?,
+        sandbox: String,
         continueOnFailure: Bool
     )
 
@@ -2374,6 +2375,7 @@ public enum CLIArgumentParser {
                 outputPath: options.output,
                 workingDirectory: options.workingDirectory,
                 timeoutSeconds: options.timeoutSeconds,
+                sandbox: options.sandbox,
                 continueOnFailure: options.continueOnFailure
             )
         default:
@@ -2523,12 +2525,14 @@ public enum CLIArgumentParser {
         output: String?,
         workingDirectory: String?,
         timeoutSeconds: Double?,
+        sandbox: String,
         continueOnFailure: Bool
     ) {
         var input: String?
         var output: String?
         var workingDirectory: String?
         var timeoutSeconds: Double?
+        var sandbox = "workspace"
         var continueOnFailure = false
         var index = 0
 
@@ -2560,6 +2564,20 @@ public enum CLIArgumentParser {
                 }
                 timeoutSeconds = parsed
                 index += 2
+            case "--sandbox":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "notebook run", argument: "sandbox")
+                }
+                let mode = arguments[index + 1]
+                guard ["workspace", "none"].contains(mode) else {
+                    throw CLIError.invalidArgument(
+                        command: "notebook run",
+                        argument: mode,
+                        reason: "Sandbox must be one of: workspace, none."
+                    )
+                }
+                sandbox = mode
+                index += 2
             case "--continue-on-failure":
                 continueOnFailure = true
                 index += 1
@@ -2568,7 +2586,7 @@ public enum CLIArgumentParser {
                     throw CLIError.invalidArgument(
                         command: "notebook run",
                         argument: token,
-                        reason: "Unknown option. Valid flags: --output, -o, --cwd, --timeout, --continue-on-failure."
+                        reason: "Unknown option. Valid flags: --output, -o, --cwd, --timeout, --sandbox, --continue-on-failure."
                     )
                 }
                 guard input == nil else {
@@ -2586,7 +2604,7 @@ public enum CLIArgumentParser {
         guard let input, !input.isEmpty else {
             throw CLIError.missingArgument(command: "notebook run", argument: "input")
         }
-        return (input, output, workingDirectory, timeoutSeconds, continueOnFailure)
+        return (input, output, workingDirectory, timeoutSeconds, sandbox, continueOnFailure)
     }
 
     // MARK: - Workflow Parser
