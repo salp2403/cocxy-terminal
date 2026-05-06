@@ -233,6 +233,28 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("~/.config/cocxy/"))
     }
 
+    @Test("Spanish public docs keep primary navigation inside the Spanish site")
+    func spanishPublicDocsKeepPrimaryNavigationInsideSpanishSite() throws {
+        let root = repositoryRoot()
+        let paths = [
+            "web/public/es/getting-started.html",
+            "web/public/es/faq.html",
+        ]
+
+        for path in paths {
+            let contents = try String(
+                contentsOf: root.appendingPathComponent(path),
+                encoding: .utf8
+            )
+
+            #expect(contents.contains(#"href="/es/""#))
+            #expect(contents.contains(#"href="/es/features.html""#))
+            #expect(contents.contains(#"href="/es/releases.html""#))
+            #expect(!contents.contains(#"<a href="/features.html">Funciones</a>"#))
+            #expect(!contents.contains(#"<a href="/releases.html">Versiones</a>"#))
+        }
+    }
+
     @Test("changelog keeps non-empty unreleased notes before the latest tagged release")
     func changelogKeepsCurrentUnreleasedNotes() throws {
         let root = repositoryRoot()
