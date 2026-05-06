@@ -255,6 +255,49 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
+    @Test("public website local links resolve in the repo checkout")
+    func publicWebsiteLocalLinksResolve() throws {
+        let root = repositoryRoot().appendingPathComponent("web/public", isDirectory: true)
+        let htmlFiles = try Self.files(under: root, fileExtension: "html")
+        let idsByFile = try Dictionary(uniqueKeysWithValues: htmlFiles.map { file in
+            (file.standardizedFileURL, Self.htmlIDs(in: try String(contentsOf: file, encoding: .utf8)))
+        })
+
+        for file in htmlFiles {
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            for reference in Self.htmlReferences(in: contents) {
+                guard let local = Self.localWebsiteReference(
+                    reference,
+                    from: file,
+                    root: root
+                ) else { continue }
+
+                guard local.target.lastPathComponent != "appcast.xml" else {
+                    // Release builds generate and deploy build/appcast.xml.
+                    continue
+                }
+
+                #expect(
+                    local.target.path.hasPrefix(root.path + "/"),
+                    "\(Self.relativePath(file, root: root)) reference escapes public site root \(reference)"
+                )
+                #expect(
+                    FileManager.default.fileExists(atPath: local.target.path),
+                    "\(Self.relativePath(file, root: root)) references missing local target \(reference)"
+                )
+
+                if let fragment = local.fragment,
+                   local.target.pathExtension == "html",
+                   let ids = idsByFile[local.target.standardizedFileURL] {
+                    #expect(
+                        ids.contains(fragment),
+                        "\(Self.relativePath(file, root: root)) references missing anchor \(reference)"
+                    )
+                }
+            }
+        }
+    }
+
     @Test("changelog keeps non-empty unreleased notes before the latest tagged release")
     func changelogKeepsCurrentUnreleasedNotes() throws {
         let root = repositoryRoot()
@@ -370,6 +413,97 @@ struct CITestGateScriptSwiftTestingTests {
         let stdout: String
         let stderr: String
         let terminationStatus: Int32
+    }
+
+    private struct LocalWebsiteReference {
+        let target: URL
+        let fragment: String?
+    }
+
+    private static func files(under root: URL, fileExtension: String) throws -> [URL] {
+        let urls = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )?.compactMap { $0 as? URL } ?? []
+
+        return try urls
+            .filter { url in
+                let values = try url.resourceValues(forKeys: [.isRegularFileKey])
+                return values.isRegularFile == true && url.pathExtension == fileExtension
+            }
+            .map(\.standardizedFileURL)
+            .sorted { $0.path < $1.path }
+    }
+
+    private static func htmlReferences(in contents: String) -> [String] {
+        let regex = try? NSRegularExpression(pattern: #"(?:href|src)="([^"]+)""#)
+        let range = NSRange(location: 0, length: (contents as NSString).length)
+        let references: [String] = regex?.matches(in: contents, range: range).compactMap { match in
+            guard match.numberOfRanges >= 2 else { return nil }
+            return (contents as NSString).substring(with: match.range(at: 1))
+        } ?? []
+        return references
+    }
+
+    private static func htmlIDs(in contents: String) -> Set<String> {
+        let regex = try? NSRegularExpression(pattern: #"id="([^"]+)""#)
+        let range = NSRange(location: 0, length: (contents as NSString).length)
+        let ids: [String] = regex?.matches(in: contents, range: range).compactMap { match in
+            guard match.numberOfRanges >= 2 else { return nil }
+            return (contents as NSString).substring(with: match.range(at: 1))
+        } ?? []
+        return Set(ids)
+    }
+
+    private static func localWebsiteReference(
+        _ rawReference: String,
+        from file: URL,
+        root: URL
+    ) -> LocalWebsiteReference? {
+        let reference = rawReference.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !reference.isEmpty else { return nil }
+
+        let lowercased = reference.lowercased()
+        guard !lowercased.hasPrefix("http://"),
+              !lowercased.hasPrefix("https://"),
+              !lowercased.hasPrefix("mailto:"),
+              !lowercased.hasPrefix("tel:"),
+              !reference.hasPrefix("//") else {
+            return nil
+        }
+
+        let parts = reference.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
+        let pathWithQuery = String(parts.first ?? "")
+        let pathPart = String(
+            pathWithQuery.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+        )
+        let fragment = parts.count == 2
+            ? String(parts[1]).removingPercentEncoding ?? String(parts[1])
+            : nil
+
+        var target: URL
+        if pathPart.isEmpty {
+            target = file
+        } else if pathPart.hasPrefix("/") {
+            target = root.appendingPathComponent(String(pathPart.dropFirst()))
+        } else {
+            target = file.deletingLastPathComponent().appendingPathComponent(pathPart)
+        }
+        if pathPart.hasSuffix("/") {
+            target.appendPathComponent("index.html")
+        }
+
+        return LocalWebsiteReference(
+            target: target.standardizedFileURL,
+            fragment: fragment?.isEmpty == false ? fragment : nil
+        )
+    }
+
+    private static func relativePath(_ url: URL, root: URL) -> String {
+        let path = url.standardizedFileURL.path
+        let prefix = root.standardizedFileURL.path + "/"
+        return path.hasPrefix(prefix) ? String(path.dropFirst(prefix.count)) : path
     }
 
     private func makePerformanceFixture(
