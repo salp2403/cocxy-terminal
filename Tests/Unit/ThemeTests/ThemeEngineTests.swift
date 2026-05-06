@@ -116,11 +116,11 @@ final class ThemeEngineBuiltInTests: XCTestCase {
         XCTAssertTrue(hasSolarized, "Built-in themes must include Solarized Light")
     }
 
-    func testBuiltInThemesHaveSixEntries() {
+    func testBuiltInThemesHaveAtLeastElevenEntries() {
         let engine = ThemeEngineImpl()
 
-        // ADR-007: 6 built-in themes
-        XCTAssertGreaterThanOrEqual(engine.availableThemes.count, 6)
+        // Built-ins are loaded before any custom user themes from disk.
+        XCTAssertGreaterThanOrEqual(engine.availableThemes.count, 11)
     }
 
     func testBuiltInThemesHaveCorrectVariants() {
