@@ -851,6 +851,17 @@ public struct CommandRunner {
                 ]
             )
 
+        case .notebookExportHTML(let inputPath, let outputPath, let force):
+            return CLISocketRequest(
+                id: requestID,
+                command: "notebook-export-html",
+                params: [
+                    "input": inputPath,
+                    "output": outputPath,
+                    "force": force ? "true" : "false"
+                ]
+            )
+
         case .notebookRun(
             let inputPath,
             let outputPath,

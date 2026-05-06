@@ -403,6 +403,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy notebook export <input.cocxynb> --output <output.ipynb> [--force]`
     case notebookExport(inputPath: String, outputPath: String, force: Bool)
 
+    /// `cocxy notebook export-html <input.cocxynb> --output <output.html> [--force]`
+    case notebookExportHTML(inputPath: String, outputPath: String, force: Bool)
+
     /// `cocxy notebook run <input.cocxynb> [--output <output.cocxynb>] [--cwd <dir>]`
     case notebookRun(
         inputPath: String,
@@ -2346,6 +2349,16 @@ public enum CLIArgumentParser {
                 outputPath: options.output,
                 force: options.force
             )
+        case "export-html":
+            let options = try parseNotebookConversionOptions(
+                command: "notebook export-html",
+                arguments: rest
+            )
+            return .notebookExportHTML(
+                inputPath: options.input,
+                outputPath: options.output,
+                force: options.force
+            )
         case "run":
             let options = try parseNotebookRunOptions(arguments: rest)
             return .notebookRun(
@@ -2359,7 +2372,7 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "notebook",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use import, export, or run."
+                reason: "Unknown subcommand. Use import, export, export-html, or run."
             )
         }
     }

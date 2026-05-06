@@ -2001,6 +2001,52 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual((outputs.first?["text"] as? [String])?.joined(), "hello\n")
     }
 
+    func test_notebookExportHTML_writesStandaloneHTML() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("source.cocxynb")
+        let outputURL = directory.appendingPathComponent("result.html")
+
+        try """
+        ---
+        cocxy-notebook: "1"
+        title: "HTML Export"
+        ---
+
+        # Intro
+
+        ```bash
+        echo hello
+        ```
+
+        ```cocxy-output stdout
+        hello
+        ```
+        """.write(to: inputURL, atomically: true, encoding: .utf8)
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "notebook-export-html-1",
+            command: "notebook-export-html",
+            params: [
+                "input": inputURL.path,
+                "output": outputURL.path,
+                "force": "false",
+            ]
+        ))
+
+        XCTAssertTrue(response.success, response.error ?? "")
+        XCTAssertEqual(response.data?["status"], "exported-html")
+        XCTAssertEqual(response.data?["input"], inputURL.standardizedFileURL.path)
+        XCTAssertEqual(response.data?["output"], outputURL.standardizedFileURL.path)
+        let html = try String(contentsOf: outputURL, encoding: .utf8)
+        XCTAssertTrue(html.hasPrefix("<!DOCTYPE html>"))
+        XCTAssertTrue(html.contains("<title>HTML Export</title>"))
+        XCTAssertTrue(html.contains("<h1 data-source-line=\"0\" id=\"heading-0\">Intro</h1>"))
+        XCTAssertTrue(html.contains("class=\"cell-output cell-output-stdout\""))
+        XCTAssertTrue(html.contains("hello"))
+    }
+
     func test_notebookImport_refusesExistingOutputWithoutForce() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

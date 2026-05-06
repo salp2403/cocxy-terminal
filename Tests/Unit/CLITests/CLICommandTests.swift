@@ -443,6 +443,21 @@ final class CLIArgumentParserTests: XCTestCase {
         )
     }
 
+    func testParseNotebookExportHTMLWithForce() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "notebook", "export-html", "/tmp/source.cocxynb",
+                "--output", "/tmp/result.html",
+                "--force",
+            ]),
+            .notebookExportHTML(
+                inputPath: "/tmp/source.cocxynb",
+                outputPath: "/tmp/result.html",
+                force: true
+            )
+        )
+    }
+
     func testParseNotebookRunWithExecutionOptions() throws {
         XCTAssertEqual(
             try CLIArgumentParser.parse([
@@ -811,6 +826,19 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.params?["force"], "false")
     }
 
+    func testBuildNotebookExportHTMLRequest() {
+        let request = runner.buildRequest(from: .notebookExportHTML(
+            inputPath: "/tmp/source.cocxynb",
+            outputPath: "/tmp/result.html",
+            force: true
+        ))
+
+        XCTAssertEqual(request.command, "notebook-export-html")
+        XCTAssertEqual(request.params?["input"], "/tmp/source.cocxynb")
+        XCTAssertEqual(request.params?["output"], "/tmp/result.html")
+        XCTAssertEqual(request.params?["force"], "true")
+    }
+
     func testBuildNotebookRunRequest() {
         let request = runner.buildRequest(from: .notebookRun(
             inputPath: "/tmp/source.cocxynb",
@@ -1015,6 +1043,26 @@ final class OutputFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(output, "Exported notebook to /tmp/result.ipynb.")
+    }
+
+    func testFormatNotebookExportHTMLUsesServerSummary() {
+        let response = CLISocketResponse(
+            id: "notebook-2b",
+            success: true,
+            data: ["summary": "Exported notebook HTML to /tmp/result.html."],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .notebookExportHTML(
+                inputPath: "/tmp/source.cocxynb",
+                outputPath: "/tmp/result.html",
+                force: false
+            ),
+            response: response
+        )
+
+        XCTAssertEqual(output, "Exported notebook HTML to /tmp/result.html.")
     }
 
     func testFormatNotebookRunUsesServerSummary() {
@@ -1447,7 +1495,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 129)
+        XCTAssertEqual(CLICommand.allCases.count, 130)
     }
 
     // MARK: - 39. Raw values match server protocol

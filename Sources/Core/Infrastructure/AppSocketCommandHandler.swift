@@ -1179,6 +1179,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleNotebookImport(request)
         case .notebookExport:
             return handleNotebookExport(request)
+        case .notebookExportHTML:
+            return handleNotebookExportHTML(request)
         case .notebookRun:
             return handleNotebookRun(request)
         case .workflowRun:
@@ -3328,7 +3330,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         handleNotebookConversion(
             request,
             operationName: "imported",
-            defaultSummaryVerb: "Imported"
+            summaryPrefix: "Imported notebook to"
         ) { inputURL, outputURL in
             let data = try Data(contentsOf: inputURL)
             let notebook = try JupyterNotebookCodec.importDocument(from: data)
@@ -3341,12 +3343,25 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         handleNotebookConversion(
             request,
             operationName: "exported",
-            defaultSummaryVerb: "Exported"
+            summaryPrefix: "Exported notebook to"
         ) { inputURL, outputURL in
             let source = try String(contentsOf: inputURL, encoding: .utf8)
             let notebook = NotebookDocument.parseMarkdown(source)
             let data = try JupyterNotebookCodec.exportData(from: notebook)
             try data.write(to: outputURL, options: [.atomic])
+        }
+    }
+
+    private func handleNotebookExportHTML(_ request: SocketRequest) -> SocketResponse {
+        handleNotebookConversion(
+            request,
+            operationName: "exported-html",
+            summaryPrefix: "Exported notebook HTML to"
+        ) { inputURL, outputURL in
+            let source = try String(contentsOf: inputURL, encoding: .utf8)
+            let notebook = NotebookDocument.parseMarkdown(source)
+            let html = NotebookHTMLExporter.render(notebook)
+            try html.write(to: outputURL, atomically: true, encoding: .utf8)
         }
     }
 
@@ -3510,7 +3525,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     private func handleNotebookConversion(
         _ request: SocketRequest,
         operationName: String,
-        defaultSummaryVerb: String,
+        summaryPrefix: String,
         convert: (URL, URL) throws -> Void
     ) -> SocketResponse {
         guard let inputPath = request.params?["input"], !inputPath.isEmpty else {
@@ -3544,7 +3559,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 "status": operationName,
                 "input": inputURL.path,
                 "output": outputURL.path,
-                "summary": "\(defaultSummaryVerb) notebook to \(outputURL.path)."
+                "summary": "\(summaryPrefix) \(outputURL.path)."
             ])
         } catch {
             return .failure(
