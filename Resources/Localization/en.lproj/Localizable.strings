@@ -1557,6 +1557,9 @@
 "codeReview.diffMode.uncommitted" = "Working Tree";
 "codeReview.diffMode.sinceSessionStart" = "Agent Session";
 "codeReview.diffMode.vsBranch" = "Reference";
+"codeReview.error.default" = "The review panel could not complete that action.";
+"codeReview.error.gitHeadUnavailable" = "Git could not access HEAD to calculate the diff. Open review in a Git repository with a base commit.";
+"codeReview.error.gitRepositoryUnavailable" = "The Git repository could not be read for this review. Open the panel in a folder that belongs to a Git repository.";
 "codeReview.editor.layout.stacked" = "Stacked";
 "codeReview.editor.layout.sideBySide" = "Side by side";
 "codeReview.editor.layout.picker" = "Editor layout";

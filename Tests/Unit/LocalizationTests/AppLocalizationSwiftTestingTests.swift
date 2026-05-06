@@ -240,7 +240,9 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("github.pane.reviewThreads.resolve.success", fallback: "Review thread resolved in %@.") == "Hilo de revisión resuelto en %@.")
         #expect(GitHubPaneSetupAction.installCLI.localizedButtonTitle(using: spanish) == "Instalar GitHub CLI")
         #expect(GitHubPaneViewModel.Tab.issues.localizedTitle(using: spanish) == "Issues")
+        #expect(GitHubPaneViewModel.Tab.checks.localizedTitle(using: spanish) == "Verificaciones")
         #expect(GitHubPaneViewModel.Tab.reviewThreads.localizedTitle(using: spanish) == "Hilos de revisión")
+        #expect(spanish.string("github.pane.refresh", fallback: "Refresh") == "Refrescar")
         #expect(GitHubBannerKind.info.localizedAccessibilityPrefix(using: spanish) == "Información")
         #expect(GitHubCheckStatus.completed.localizedDisplayName(using: spanish) == "Completado")
         #expect(GitHubCheckConclusion.success.localizedDisplayName(using: spanish) == "Correcto")
@@ -272,7 +274,9 @@ struct AppLocalizationSwiftTestingTests {
                 using: spanish
             ) == "README.md, modificado, más 2, menos 1"
         )
+        #expect(DiffMode.uncommitted.localizedTitle(using: spanish) == "Árbol de trabajo")
         #expect(DiffMode.sinceSessionStart.localizedTitle(using: spanish) == "Sesión de agente")
+        #expect(DiffMode.vsBranch.localizedTitle(using: spanish) == "Referencia")
         #expect(CodeReviewEditorSplitLayout.sideBySide.localizedTitle(using: spanish) == "Lado a lado")
     }
 

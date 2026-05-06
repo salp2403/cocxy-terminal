@@ -492,6 +492,7 @@ struct GitHubPaneView: View {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(localized("github.pane.refresh", fallback: "Refresh"))
             .help(localized("github.pane.refresh", fallback: "Refresh"))
             .keyboardShortcut("r", modifiers: [.command])
         }

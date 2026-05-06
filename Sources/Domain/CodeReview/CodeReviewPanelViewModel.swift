@@ -438,7 +438,7 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                 await MainActor.run {
                     guard generation == self.refreshGeneration else { return }
                     self.currentDiffs = []
-                    self.lastErrorMessage = Self.userFacingErrorMessage(for: error)
+                    self.lastErrorMessage = self.userFacingErrorMessage(for: error)
                     self.lastInfoMessage = nil
                     self.isLoading = false
                 }
@@ -532,7 +532,7 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                 count: plans.reduce(0) { $0 + $1.report.appliedSuggestions.count }
             )
         } catch {
-            lastErrorMessage = Self.userFacingErrorMessage(for: error)
+            lastErrorMessage = userFacingErrorMessage(for: error)
             lastInfoMessage = nil
         }
     }
@@ -719,7 +719,7 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                         self.attachActivePullRequestNumber(number)
                     }
                 case .failure(let error):
-                    self.lastErrorMessage = Self.userFacingErrorMessage(for: error)
+                    self.lastErrorMessage = self.userFacingErrorMessage(for: error)
                 }
             }
         }
@@ -755,7 +755,7 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
             editorErrorMessage = nil
             isEditorVisible = true
         } catch {
-            editorErrorMessage = Self.userFacingErrorMessage(for: error)
+            editorErrorMessage = userFacingErrorMessage(for: error)
         }
     }
 
@@ -783,7 +783,7 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
             }
             return true
         } catch {
-            editorErrorMessage = Self.userFacingErrorMessage(for: error)
+            editorErrorMessage = userFacingErrorMessage(for: error)
             return false
         }
     }
@@ -968,9 +968,9 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                     self?.lastErrorMessage = nil
                     self?.lastInfoMessage = nil
                     self?.refreshDiffs()
-                } else if case .failure(let error) = result {
-                    self?.lastErrorMessage = Self.userFacingErrorMessage(for: error)
-                    self?.lastInfoMessage = nil
+                } else if case .failure(let error) = result, let self {
+                    self.lastErrorMessage = self.userFacingErrorMessage(for: error)
+                    self.lastInfoMessage = nil
                 }
                 completion?(result)
             }
@@ -996,9 +996,9 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                     self?.lastErrorMessage = nil
                     self?.lastInfoMessage = nil
                     self?.refreshDiffs()
-                } else if case .failure(let error) = result {
-                    self?.lastErrorMessage = Self.userFacingErrorMessage(for: error)
-                    self?.lastInfoMessage = nil
+                } else if case .failure(let error) = result, let self {
+                    self.lastErrorMessage = self.userFacingErrorMessage(for: error)
+                    self.lastInfoMessage = nil
                 }
                 completion?(result)
             }
@@ -1190,9 +1190,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                 }
             } catch {
                 await MainActor.run {
-                    self?.isGitActionRunning = false
-                    self?.lastErrorMessage = Self.userFacingErrorMessage(for: error)
-                    self?.lastInfoMessage = nil
+                    guard let self else { return }
+                    self.isGitActionRunning = false
+                    self.lastErrorMessage = self.userFacingErrorMessage(for: error)
+                    self.lastInfoMessage = nil
                 }
             }
         }
@@ -1262,7 +1263,7 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         case .failure:
             currentDiffs = []
             reviewRounds = tracker.reviewRounds(for: sessionId)
-            lastErrorMessage = Self.userFacingErrorMessage(for: result.failureValue)
+            lastErrorMessage = userFacingErrorMessage(for: result.failureValue)
             lastInfoMessage = nil
             isLoading = false
         }
@@ -1335,11 +1336,40 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         }
     }
 
-    private static func userFacingErrorMessage(for error: Error?) -> String? {
+    private func userFacingErrorMessage(for error: Error?) -> String? {
         guard let error else { return nil }
         let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty else { return "The review panel could not complete that action." }
+        guard !message.isEmpty else {
+            return localizedString(
+                "codeReview.error.default",
+                fallback: "The review panel could not complete that action."
+            )
+        }
+        if Self.isGitHeadUnavailableMessage(message) {
+            return localizedString(
+                "codeReview.error.gitHeadUnavailable",
+                fallback: "Git could not access HEAD to calculate the diff. Open review in a Git repository with a base commit."
+            )
+        }
+        if Self.isGitRepositoryUnavailableMessage(message) {
+            return localizedString(
+                "codeReview.error.gitRepositoryUnavailable",
+                fallback: "The Git repository could not be read for this review. Open the panel in a folder that belongs to a Git repository."
+            )
+        }
         return message
+    }
+
+    private static func isGitHeadUnavailableMessage(_ message: String) -> Bool {
+        message.localizedCaseInsensitiveContains("Could not access 'HEAD'") ||
+            message.localizedCaseInsensitiveContains("ambiguous argument 'HEAD'") ||
+            message.localizedCaseInsensitiveContains("needed a single revision")
+    }
+
+    private static func isGitRepositoryUnavailableMessage(_ message: String) -> Bool {
+        message.localizedCaseInsensitiveContains("not a git repository") ||
+            message.localizedCaseInsensitiveContains("not a git repo") ||
+            message.localizedCaseInsensitiveContains("no git repository")
     }
 
     static func languageName(for filePath: String) -> String {

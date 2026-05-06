@@ -364,6 +364,35 @@ struct CodeReviewIntegrationSwiftTestingTests {
         #expect(viewModel.lastErrorMessage == "Loader failed.")
     }
 
+    @Test("refreshDiffs localizes common Git HEAD errors")
+    func refreshDiffsLocalizesCommonGitHeadErrors() async throws {
+        enum TestError: Error, LocalizedError {
+            case missingHead
+            var errorDescription: String? { "error: Could not access 'HEAD'" }
+        }
+
+        let bundle = try #require(localizationBundle())
+        let cwd = URL(fileURLWithPath: "/tmp/review-error", isDirectory: true)
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: SessionDiffTrackerImpl(),
+            hookEventReceiver: nil,
+            directDiffLoader: { _, _, _ in throw TestError.missingHead },
+            localizer: AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        )
+        viewModel.activeTabCwdProvider = { cwd }
+
+        viewModel.refreshDiffs()
+        try await waitForReviewCondition {
+            viewModel.isLoading == false && viewModel.lastErrorMessage != nil
+        }
+
+        #expect(viewModel.currentDiffs.isEmpty)
+        #expect(
+            viewModel.lastErrorMessage ==
+                "Git no pudo acceder a HEAD para calcular el diff. Abre la revisión en un repositorio Git con un commit base."
+        )
+    }
+
     @Test("refreshDiffs surfaces snapshot notices as informational messages")
     func refreshDiffsSurfacesSnapshotNotice() async throws {
         let tracker = NoticeTracker()
