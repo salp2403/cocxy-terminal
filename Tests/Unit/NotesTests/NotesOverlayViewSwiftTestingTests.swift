@@ -132,6 +132,18 @@ struct NotesOverlayViewSwiftTestingTests {
         )
     }
 
+    @Test("Spanish notes accessibility copy localizes controls that replace decorative symbols")
+    func notesAccessibilityCopyLocalizesSpanishControls() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(localizer.string("notes.panel.accessibility", fallback: "Notes panel") == "Panel de notas")
+        #expect(localizer.string("notes.search.accessibility", fallback: "Search notes") == "Buscar notas")
+        #expect(localizer.string("notes.search.clear", fallback: "Clear search") == "Limpiar búsqueda")
+        #expect(localizer.string("notes.newNote.help", fallback: "New note") == "Nueva nota")
+        #expect(localizer.string("notes.close", fallback: "Close notes") == "Cerrar notas")
+    }
+
     // MARK: - Test helpers
 
     @MainActor

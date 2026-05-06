@@ -101,6 +101,7 @@ struct NotesOverlayView: View {
                 Image(systemName: "note.text")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -145,6 +146,7 @@ struct NotesOverlayView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField(localized("notes.search.placeholder", fallback: "Search notes"), text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
                 .accessibilityLabel(localized("notes.search.accessibility", fallback: "Search notes"))
@@ -158,6 +160,7 @@ struct NotesOverlayView: View {
                 }
                 .buttonStyle(.borderless)
                 .help(localized("notes.search.clear", fallback: "Clear search"))
+                .accessibilityLabel(localized("notes.search.clear", fallback: "Clear search"))
             }
         }
         .padding(.horizontal, 10)

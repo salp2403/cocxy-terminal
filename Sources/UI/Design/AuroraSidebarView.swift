@@ -162,12 +162,14 @@ extension Design {
 
                 trayIconButton(
                     systemImage: "command",
+                    accessibilityLabel: Self.localizedCommandPaletteTitle(using: localizer),
                     help: Self.localizedCommandPaletteHelp(shortcut: paletteShortcutLabel, using: localizer),
                     action: onTogglePalette
                 )
                 if let onToggleNotes {
                     trayIconButton(
                         systemImage: "note.text",
+                        accessibilityLabel: Self.localizedToggleNotesTitle(using: localizer),
                         help: Self.localizedToggleNotesHelp(using: localizer),
                         action: onToggleNotes
                     )
@@ -175,12 +177,14 @@ extension Design {
                 if let onToggleNotifications {
                     trayIconButton(
                         systemImage: "bell",
+                        accessibilityLabel: Self.localizedNotificationsTitle(using: localizer),
                         help: Self.localizedNotificationsHelp(using: localizer),
                         action: onToggleNotifications
                     )
                 }
                 trayIconButton(
                     systemImage: "plus",
+                    accessibilityLabel: Self.localizedNewTabTitle(using: localizer),
                     help: Self.localizedNewTabHelp(shortcut: newTabShortcutLabel, using: localizer),
                     action: onCreateTab
                 )
@@ -198,6 +202,7 @@ extension Design {
         /// backdrop.
         private func trayIconButton(
             systemImage: String,
+            accessibilityLabel: String,
             help: String,
             action: @escaping () -> Void
         ) -> some View {
@@ -211,8 +216,10 @@ extension Design {
                             .fill(palette.glassHighlight.resolvedColor())
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
             .help(help)
         }
 
@@ -270,6 +277,10 @@ extension Design {
             localizer.string("tabbar.workspaces", fallback: "WORKSPACES")
         }
 
+        static func localizedCommandPaletteTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.commandPalette.title", fallback: "Command Palette")
+        }
+
         static func localizedCommandPaletteHelp(shortcut: String, using localizer: AppLocalizer) -> String {
             String(
                 format: localizer.string("auroraSidebar.commandPalette.help", fallback: "Command palette (%@)"),
@@ -277,12 +288,24 @@ extension Design {
             )
         }
 
+        static func localizedToggleNotesTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.notes.title", fallback: "Notes")
+        }
+
         static func localizedToggleNotesHelp(using localizer: AppLocalizer) -> String {
             localizer.string("auroraSidebar.notes.help", fallback: "Toggle notes for this workspace")
         }
 
+        static func localizedNotificationsTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.notifications.title", fallback: "Notifications")
+        }
+
         static func localizedNotificationsHelp(using localizer: AppLocalizer) -> String {
             localizer.string("tabbar.notifications.title", fallback: "Notifications")
+        }
+
+        static func localizedNewTabTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.newTab.title", fallback: "New Tab")
         }
 
         static func localizedNewTabHelp(shortcut: String, using localizer: AppLocalizer) -> String {
