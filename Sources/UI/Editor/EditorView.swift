@@ -167,6 +167,18 @@ final class EditorView: NSView, NSTextViewDelegate {
 
     func loadFile(_ url: URL) {
         fileURL = url
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            session = EditorSession(document: EditorDocument(fileURL: url, text: ""))
+            statusOverride = .markFileMissing
+            resetVimUndoState()
+            clearLSPPresentation()
+            dismissInlineCompletion()
+            applyText("", preserveSelection: false)
+            refreshSyntaxDecorations()
+            updateHeader()
+            return
+        }
+
         do {
             let text = try String(contentsOf: url, encoding: .utf8)
             session = EditorSession(document: EditorDocument(fileURL: url, text: text))
@@ -1169,7 +1181,7 @@ final class EditorView: NSView, NSTextViewDelegate {
     }
 
     static func localizedMarkFileMissing(using localizer: AppLocalizer) -> String {
-        localizer.string("editor.status.markFileMissing", fallback: "Mark file missing")
+        localizer.string("editor.status.markFileMissing", fallback: "File missing")
     }
 
     static func localizedWritten(using localizer: AppLocalizer) -> String {

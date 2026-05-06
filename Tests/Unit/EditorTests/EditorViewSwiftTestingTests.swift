@@ -20,8 +20,8 @@ struct EditorViewSwiftTestingTests {
         #expect(!view.isDirty)
     }
 
-    @Test("missing files keep load failure status visible")
-    func missingFileShowsLoadFailureStatus() {
+    @Test("missing files keep file-missing status visible")
+    func missingFileShowsFileMissingStatus() {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("missing-\(UUID().uuidString).txt")
 
@@ -29,7 +29,7 @@ struct EditorViewSwiftTestingTests {
 
         #expect(view.fileURL == fileURL)
         #expect(view.currentText == "")
-        #expect(view.statusText == "Load failed")
+        #expect(view.statusText == "File missing")
     }
 
     @Test("editor chrome strings localize to Spanish")

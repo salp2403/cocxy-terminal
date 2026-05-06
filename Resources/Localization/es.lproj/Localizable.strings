@@ -710,7 +710,7 @@
 "editor.status.saved" = "Guardado";
 "editor.status.edited" = "Editado";
 "editor.status.loadFailed" = "Error al cargar";
-"editor.status.markFileMissing" = "Archivo de marca no encontrado";
+"editor.status.markFileMissing" = "Archivo no encontrado";
 "editor.status.written" = "Escrito";
 "editor.status.writeFailed" = "Error al escribir";
 "editor.status.noWriteSinceLastChange" = "Sin escritura desde el último cambio";

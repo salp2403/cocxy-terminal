@@ -710,7 +710,7 @@
 "editor.status.saved" = "Saved";
 "editor.status.edited" = "Edited";
 "editor.status.loadFailed" = "Load failed";
-"editor.status.markFileMissing" = "Mark file missing";
+"editor.status.markFileMissing" = "File missing";
 "editor.status.written" = "Written";
 "editor.status.writeFailed" = "Write failed";
 "editor.status.noWriteSinceLastChange" = "No write since last change";
