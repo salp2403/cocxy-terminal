@@ -63,6 +63,32 @@ extension Design {
             case .opaque: return "Force opaque accessibility surface"
             }
         }
+
+        func localizedRenderModeLabel(using localizer: AppLocalizer) -> String {
+            guard let renderModeOverride else {
+                return localizer.string(
+                    "auroraTweaks.renderMode.autoLabel",
+                    fallback: "Auto (decision table)"
+                )
+            }
+            switch renderModeOverride {
+            case .liquid:
+                return localizer.string(
+                    "auroraTweaks.renderMode.liquidLabel",
+                    fallback: "Force liquid glass"
+                )
+            case .visualEffect:
+                return localizer.string(
+                    "auroraTweaks.renderMode.visualEffectLabel",
+                    fallback: "Force visual effect fallback"
+                )
+            case .opaque:
+                return localizer.string(
+                    "auroraTweaks.renderMode.opaqueLabel",
+                    fallback: "Force opaque accessibility surface"
+                )
+            }
+        }
     }
 
     // MARK: - Tweaks panel view
@@ -90,11 +116,16 @@ extension Design {
     struct AuroraTweaksPanel: View {
 
         @Binding var state: AuroraTweaksState
+        var localizer: AppLocalizer
 
         @Environment(\.designThemePalette) private var palette
 
-        public init(state: Binding<AuroraTweaksState>) {
+        public init(
+            state: Binding<AuroraTweaksState>,
+            localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+        ) {
             self._state = state
+            self.localizer = localizer
         }
 
         public var body: some View {
@@ -120,7 +151,7 @@ extension Design {
                     .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                     .tracking(1.8)
                     .foregroundStyle(palette.textLow.resolvedColor())
-                Text("inspector")
+                Text(Self.localizedInspectorTitle(using: localizer))
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(palette.textHigh.resolvedColor())
                 Spacer()
@@ -129,7 +160,7 @@ extension Design {
 
         private var themePicker: some View {
             VStack(alignment: .leading, spacing: Spacing.xxSmall) {
-                caption("Theme palette")
+                caption(Self.localizedThemePaletteTitle(using: localizer))
                 HStack(spacing: Spacing.xxSmall) {
                     ForEach(ThemeIdentity.allCases, id: \.self) { theme in
                         pill(
@@ -145,22 +176,22 @@ extension Design {
 
         private var renderModePicker: some View {
             VStack(alignment: .leading, spacing: Spacing.xxSmall) {
-                caption("Render mode override")
+                caption(Self.localizedRenderModeTitle(using: localizer))
                 HStack(spacing: Spacing.xxSmall) {
-                    pill(label: "Auto", isSelected: state.renderModeOverride == nil) {
+                    pill(label: Self.localizedAutoPillTitle(using: localizer), isSelected: state.renderModeOverride == nil) {
                         state.renderModeOverride = nil
                     }
-                    pill(label: "Liquid", isSelected: state.renderModeOverride == .liquid) {
+                    pill(label: Self.localizedLiquidPillTitle(using: localizer), isSelected: state.renderModeOverride == .liquid) {
                         state.renderModeOverride = .liquid
                     }
-                    pill(label: "Visual", isSelected: state.renderModeOverride == .visualEffect) {
+                    pill(label: Self.localizedVisualPillTitle(using: localizer), isSelected: state.renderModeOverride == .visualEffect) {
                         state.renderModeOverride = .visualEffect
                     }
-                    pill(label: "Opaque", isSelected: state.renderModeOverride == .opaque) {
+                    pill(label: Self.localizedOpaquePillTitle(using: localizer), isSelected: state.renderModeOverride == .opaque) {
                         state.renderModeOverride = .opaque
                     }
                 }
-                Text(state.renderModeLabel)
+                Text(state.localizedRenderModeLabel(using: localizer))
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(palette.textLow.resolvedColor())
                     .padding(.top, 2)
@@ -169,7 +200,7 @@ extension Design {
 
         private var backdropToggle: some View {
             Toggle(isOn: $state.backdropEnabled) {
-                Text("Ambient backdrop animation")
+                Text(Self.localizedBackdropToggleTitle(using: localizer))
                     .font(.system(size: 11.5))
                     .foregroundStyle(palette.textHigh.resolvedColor())
             }
@@ -179,7 +210,7 @@ extension Design {
 
         private var previewStack: some View {
             VStack(alignment: .leading, spacing: Spacing.xSmall) {
-                caption("Preview")
+                caption(Self.localizedPreviewTitle(using: localizer))
                 HStack(spacing: Spacing.xSmall) {
                     AgentChipView(agent: .claude, state: .working, size: 28)
                     AgentChipView(agent: .codex, state: .waiting, size: 28)
@@ -233,6 +264,42 @@ extension Design {
                     )
             }
             .buttonStyle(.plain)
+        }
+
+        static func localizedInspectorTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.inspector", fallback: "inspector")
+        }
+
+        static func localizedThemePaletteTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.themePalette", fallback: "Theme palette")
+        }
+
+        static func localizedRenderModeTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.renderMode", fallback: "Render mode override")
+        }
+
+        static func localizedAutoPillTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.pill.auto", fallback: "Auto")
+        }
+
+        static func localizedLiquidPillTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.pill.liquid", fallback: "Liquid")
+        }
+
+        static func localizedVisualPillTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.pill.visual", fallback: "Visual")
+        }
+
+        static func localizedOpaquePillTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.pill.opaque", fallback: "Opaque")
+        }
+
+        static func localizedBackdropToggleTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.backdrop", fallback: "Ambient backdrop animation")
+        }
+
+        static func localizedPreviewTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraTweaks.preview", fallback: "Preview")
         }
     }
 }

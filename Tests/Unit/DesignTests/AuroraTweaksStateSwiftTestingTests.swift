@@ -72,6 +72,24 @@ struct AuroraTweaksStateTests {
         #expect(state.renderModeLabel == "Force opaque accessibility surface")
     }
 
+    @Test("Tweaks panel chrome localizes visible Spanish copy")
+    func tweaksPanelChromeLocalizesSpanish() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        var state = Design.AuroraTweaksState.defaults
+        #expect(Design.AuroraTweaksPanel.localizedInspectorTitle(using: spanish) == "inspector")
+        #expect(Design.AuroraTweaksPanel.localizedThemePaletteTitle(using: spanish) == "Paleta de tema")
+        #expect(Design.AuroraTweaksPanel.localizedRenderModeTitle(using: spanish) == "Modo de renderizado")
+        #expect(Design.AuroraTweaksPanel.localizedBackdropToggleTitle(using: spanish) == "Animación de fondo ambiental")
+        #expect(Design.AuroraTweaksPanel.localizedPreviewTitle(using: spanish) == "Vista previa")
+        #expect(Design.AuroraTweaksPanel.localizedLiquidPillTitle(using: spanish) == "Líquido")
+        #expect(state.localizedRenderModeLabel(using: spanish) == "Auto (tabla de decisión)")
+
+        state.renderModeOverride = .opaque
+        #expect(state.localizedRenderModeLabel(using: spanish) == "Forzar superficie opaca de accesibilidad")
+    }
+
     // MARK: - Equatable
 
     @Test("Two states with the same fields are Equatable-equal")
@@ -86,5 +104,14 @@ struct AuroraTweaksStateTests {
         let a = Design.AuroraTweaksState(theme: .aurora)
         let b = Design.AuroraTweaksState(theme: .paper)
         #expect(a != b)
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
