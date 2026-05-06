@@ -121,7 +121,7 @@ for sample in "${samples[@]}"; do
     trailing_failures=0
   fi
 done
-gate_passed="$(awk "BEGIN { print ($trailing_failures < $REQUIRED_CONSECUTIVE_FAILURES) ? 1 : 0 }")"
+readiness_gate_passed="$(awk "BEGIN { print ($trailing_failures < $REQUIRED_CONSECUTIVE_FAILURES) ? 1 : 0 }")"
 
 internal_critical_path_median_ms="null"
 internal_critical_path_within_budget="null"
@@ -136,6 +136,10 @@ if (( ${#internal_critical_path_samples[@]} > 0 )); then
     internal_critical_path_median_ms="$(awk "BEGIN { print ($internal_left + $internal_right) / 2 }")"
   fi
   internal_critical_path_within_budget="$(awk "BEGIN { print ($internal_critical_path_median_ms <= $internal_critical_path_budget_ms) ? 1 : 0 }")"
+fi
+combined_gate_passed="$readiness_gate_passed"
+if [[ "$internal_critical_path_within_budget" == "0" ]]; then
+  combined_gate_passed="0"
 fi
 
 printf '{\n'
@@ -157,9 +161,9 @@ else
 fi
 printf '  "required_consecutive_failures": %s,\n' "$REQUIRED_CONSECUTIVE_FAILURES"
 printf '  "trailing_failures": %s,\n' "$trailing_failures"
-printf '  "gate_passed": %s\n' "$([[ "$gate_passed" == "1" ]] && echo true || echo false)"
+printf '  "gate_passed": %s\n' "$([[ "$combined_gate_passed" == "1" ]] && echo true || echo false)"
 printf '}\n'
 
-if [[ "$ENFORCE" == "1" && "$gate_passed" != "1" ]]; then
+if [[ "$ENFORCE" == "1" && "$combined_gate_passed" != "1" ]]; then
   exit 1
 fi

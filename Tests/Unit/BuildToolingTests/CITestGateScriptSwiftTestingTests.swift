@@ -56,6 +56,19 @@ struct CITestGateScriptSwiftTestingTests {
         #expect((baselinePayload?["metrics"] as? [[String: Any]])?.isEmpty == false)
     }
 
+    @Test("cold start enforce fails when the internal critical path is over budget")
+    func coldStartEnforceFailsOnInternalCriticalPathRegression() throws {
+        let root = repositoryRoot()
+        let script = try String(
+            contentsOf: root.appendingPathComponent("scripts/bench-cold-start.sh"),
+            encoding: .utf8
+        )
+
+        #expect(script.contains("combined_gate_passed"))
+        #expect(script.contains("internal_critical_path_within_budget\" == \"0\""))
+        #expect(script.contains("\"$ENFORCE\" == \"1\" && \"$combined_gate_passed\" != \"1\""))
+    }
+
     @Test("privacy audit script is executable and wired into bundle workflows")
     func privacyAuditScriptIsExecutableAndWiredIntoBundleWorkflows() throws {
         let root = repositoryRoot()
