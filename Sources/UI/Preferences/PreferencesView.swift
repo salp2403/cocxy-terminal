@@ -101,6 +101,7 @@ struct PreferencesView: View {
             sidebarContent
         } detail: {
             detailContent
+                .navigationTitle(selectedSection.localizedTitle(viewModel))
         }
         .frame(
             minWidth: PreferencesLayout.windowMinimumWidth,
