@@ -51,55 +51,58 @@ struct ProjectTemplatePanelView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 8) {
-            Label(localized("templates.title", fallback: "Templates"), systemImage: "square.grid.2x2")
-                .font(.system(size: 12, weight: .semibold))
-                .lineLimit(1)
+        GeometryReader { proxy in
+            let presentation = AdaptivePanelToolbarPresentation.resolve(width: proxy.size.width)
 
-            Spacer(minLength: 8)
-
-            if let errorText = viewModel.errorText {
-                Text(errorText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.red)
+            HStack(spacing: 8) {
+                Label(localized("templates.title", fallback: "Templates"), systemImage: "square.grid.2x2")
+                    .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
-            } else {
-                Text(viewModel.statusText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+                    .minimumScaleFactor(0.72)
+                    .truncationMode(.middle)
+                    .layoutPriority(1)
 
-            Button {
-                viewModel.perform {
-                    try viewModel.refresh()
-                }
-            } label: {
-                Label(localized("templates.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
-            }
-            .controlSize(.small)
+                Spacer(minLength: 6)
 
-            Button {
-                viewModel.perform {
-                    try viewModel.scaffoldSelected()
+                if presentation.showsStatus {
+                    AdaptivePanelToolbarStatusText(
+                        text: viewModel.errorText ?? viewModel.statusText,
+                        isError: viewModel.errorText != nil
+                    )
+                    .frame(maxWidth: presentation.usesCompactActions ? 96 : 160, alignment: .trailing)
                 }
-            } label: {
-                Label(localized("templates.scaffold", fallback: "Scaffold"), systemImage: "plus.square.on.square")
-            }
-            .controlSize(.small)
-            .disabled(viewModel.selectedTemplate == nil)
 
-            if let onClose {
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
+                AdaptivePanelToolbarButton(
+                    title: localized("templates.refresh", fallback: "Refresh"),
+                    systemImage: "arrow.clockwise",
+                    compact: presentation.usesCompactActions
+                ) {
+                    viewModel.perform {
+                        try viewModel.refresh()
+                    }
                 }
-                .controlSize(.small)
-                .help(localized("common.close", fallback: "Close"))
-                .accessibilityLabel(localized("templates.close", fallback: "Close templates"))
+
+                AdaptivePanelToolbarButton(
+                    title: localized("templates.scaffold", fallback: "Scaffold"),
+                    systemImage: "plus.square.on.square",
+                    compact: presentation.usesCompactActions,
+                    isDisabled: viewModel.selectedTemplate == nil
+                ) {
+                    viewModel.perform {
+                        try viewModel.scaffoldSelected()
+                    }
+                }
+
+                if let onClose {
+                    AdaptivePanelToolbarCloseButton(
+                        title: localized("templates.close", fallback: "Close templates"),
+                        action: onClose
+                    )
+                }
             }
         }
+        .frame(height: 38)
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
     }
 
     private var templateList: some View {

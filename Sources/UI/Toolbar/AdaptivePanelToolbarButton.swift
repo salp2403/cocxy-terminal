@@ -40,3 +40,31 @@ struct AdaptivePanelToolbarButton: View {
         .accessibilityLabel(title)
     }
 }
+
+struct AdaptivePanelToolbarStatusText: View {
+    let text: String
+    var isError = false
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(isError ? .red : .secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+}
+
+struct AdaptivePanelToolbarCloseButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .frame(width: 16, height: 16)
+        }
+        .controlSize(.small)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}
