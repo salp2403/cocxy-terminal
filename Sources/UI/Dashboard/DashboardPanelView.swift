@@ -89,17 +89,7 @@ struct DashboardPanelView: View {
         }
         .frame(width: Self.panelWidth)
         .frame(maxHeight: .infinity)
-        .background(
-            ZStack {
-                // Solid Catppuccin Mantle as reliable fallback.
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("agentDashboard.accessibility", fallback: "Agent Dashboard"))
     }

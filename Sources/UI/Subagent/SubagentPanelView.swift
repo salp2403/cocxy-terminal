@@ -52,16 +52,7 @@ struct SubagentPanelView: View {
                 waitingView
             }
         }
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
     }
 
     // MARK: - Header

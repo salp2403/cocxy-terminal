@@ -66,16 +66,7 @@ struct CodeReviewPanelView: View {
         }
         .frame(minWidth: Self.minimumPanelWidth, maxWidth: .infinity)
         .frame(maxHeight: .infinity)
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
         .overlay(
             ReviewKeyMonitor(
                 isComposerActive: viewModel.selectedLineForComment != nil,

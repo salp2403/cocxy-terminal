@@ -94,17 +94,7 @@ struct TimelineView: View {
             Divider()
             eventListView
         }
-        .background(
-            ZStack {
-                // Solid Catppuccin Mantle as reliable fallback.
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("timeline.accessibility", fallback: "Agent Timeline"))
     }

@@ -138,16 +138,7 @@ struct NotificationPanelView: View {
         }
         .frame(width: Self.panelWidth)
         .frame(maxHeight: .infinity)
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("notifications.panel.accessibility", fallback: "Notification Panel"))
     }

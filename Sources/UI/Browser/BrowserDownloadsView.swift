@@ -126,16 +126,7 @@ struct BrowserDownloadsView: View {
             Divider()
             footerView
         }
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("browser.downloads.title", fallback: "Downloads"))
     }

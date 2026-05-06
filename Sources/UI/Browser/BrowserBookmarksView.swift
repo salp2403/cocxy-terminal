@@ -86,16 +86,7 @@ struct BrowserBookmarksView: View {
             Divider()
             bookmarkListView
         }
-        .background(
-            ZStack {
-                Color(nsColor: CocxyColors.mantle)
-                VisualEffectBackground(
-                    material: .sidebar,
-                    blendingMode: .behindWindow,
-                    appearanceOverride: vibrancyAppearanceOverride
-                )
-            }
-        )
+        .glassPanelBackground(vibrancyAppearanceOverride: vibrancyAppearanceOverride)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("browser.bookmarks.accessibility", fallback: "Bookmarks"))
         .alert(deleteConfirmationCopy.messageText, isPresented: $showDeleteConfirmation) {
