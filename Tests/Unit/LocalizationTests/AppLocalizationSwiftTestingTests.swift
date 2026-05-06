@@ -59,7 +59,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.worktrees.enable", fallback: "Enable worktrees") == "Activar worktrees")
         #expect(spanish.string("preferences.worktrees.onClose.remove", fallback: "Remove if clean") == "Eliminar si está limpio")
         #expect(spanish.string("preferences.agentMode.enable", fallback: "Enable Agent Mode") == "Activar modo agente")
-        #expect(spanish.string("preferences.agentMode.apiKey.saved", fallback: "A key is saved in the macOS Keychain for this provider.") == "Hay una llave guardada en Keychain de macOS para este provider.")
+        #expect(spanish.string("preferences.agentMode.apiKey.saved", fallback: "A key is saved in the macOS Keychain for this provider.") == "Hay una llave guardada en Keychain de macOS para este proveedor.")
         #expect(spanish.string("preferences.mcp.configFile.section", fallback: "Config File") == "Archivo de configuración")
         #expect(spanish.string("preferences.mcp.json.section", fallback: "__missing_key__") != "__missing_key__")
         #expect(spanish.string("preferences.mcp.noServers", fallback: "No MCP servers configured.") == "No hay servidores MCP configurados.")
@@ -323,8 +323,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("agent.panel.prompt.placeholder", fallback: "Ask Agent Mode") == "Preguntar a Modo agente")
         #expect(spanish.string("agent.panel.approval.approve", fallback: "Approve") == "Aprobar")
         #expect(spanish.string("agent.panel.message.you", fallback: "You") == "Tú")
-        #expect(AgentPanelView.localizedSkillPickerTitle(selectedCount: 0, using: spanish) == "Skills")
-        #expect(AgentPanelView.localizedSkillPickerTitle(selectedCount: 2, using: spanish) == "2 skills")
+        #expect(AgentPanelView.localizedSkillPickerTitle(selectedCount: 0, using: spanish) == "Habilidades")
+        #expect(AgentPanelView.localizedSkillPickerTitle(selectedCount: 2, using: spanish) == "2 habilidades")
     }
 
     @Test
