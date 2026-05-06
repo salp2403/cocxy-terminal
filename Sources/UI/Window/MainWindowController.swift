@@ -1093,7 +1093,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sessionRestoreShieldView = shield
     }
 
-    func scheduleSessionRestoreShieldRemoval(after delay: TimeInterval = 0.35) {
+    func scheduleSessionRestoreShieldRemoval(after delay: TimeInterval = 0.65) {
         guard let shield = sessionRestoreShieldView else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak shield] in
             guard let self, let shield, self.sessionRestoreShieldView === shield else { return }
