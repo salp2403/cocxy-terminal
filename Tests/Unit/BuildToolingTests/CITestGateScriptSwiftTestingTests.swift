@@ -233,6 +233,28 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("~/.config/cocxy/"))
     }
 
+    @Test("changelog keeps non-empty unreleased notes before the latest tagged release")
+    func changelogKeepsCurrentUnreleasedNotes() throws {
+        let root = repositoryRoot()
+        let changelog = try String(
+            contentsOf: root.appendingPathComponent("CHANGELOG.md"),
+            encoding: .utf8
+        )
+
+        #expect(changelog.components(separatedBy: "## [Unreleased]").count == 2)
+        let unreleasedRange = try #require(changelog.range(of: "## [Unreleased]"))
+        let latestReleaseRange = try #require(changelog.range(of: "## [0.1.92]"))
+        #expect(unreleasedRange.lowerBound < latestReleaseRange.lowerBound)
+
+        let unreleasedSection = String(changelog[unreleasedRange.upperBound..<latestReleaseRange.lowerBound])
+        #expect(unreleasedSection.contains("### Added"))
+        #expect(unreleasedSection.contains("### Fixed"))
+        #expect(unreleasedSection.contains("CocxyCoreKit 0.15.0"))
+        #expect(unreleasedSection.contains("100+"))
+        #expect(!unreleasedSection.contains("docs/" + "project"))
+        #expect(!unreleasedSection.contains("/Users/" + "Galf"))
+    }
+
     @Test("performance regression checker accepts metrics inside tolerance")
     func performanceRegressionCheckerAcceptsMetricsInsideTolerance() throws {
         let root = repositoryRoot()

@@ -5,6 +5,68 @@ All notable changes to Cocxy Terminal are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Native editor foundation with reusable editor sessions, multi-cursor
+  gestures, readable source theming, Markdown source/preview improvements,
+  tree-sitter syntax, LSP plumbing, Vim mode, inline suggestions, and
+  reusable editor UI surfaces.
+- Local notebook and workflow execution: bash, Python, and Swift cell
+  execution, Jupyter import/export, standalone HTML export, built-in notebook
+  templates, and sandboxed local code execution.
+- Agent and automation surfaces: local skills, MCP foundations, codebase
+  indexing, terminal command blocks, session replay, macros, snippets,
+  clipboard history, activity insights, local edit history timeline/revert,
+  and automatic local backups.
+- Collaboration and workspace tools: GitHub pane review threads, PR checks,
+  review-thread resolution actions, Code Review suggestion application, safe
+  merge flow, worktree cleanup/templates, remote workspace profiles, SSH key
+  import, SFTP panes, project templates, local plugin catalog/events, and
+  DB/cloud helper previews.
+- macOS integrations for Quick Look notebook previews, shortcuts, local
+  clipboard observation, Handoff metadata, and Spotlight notes indexing with a
+  privacy opt-out.
+- Public EN/ES website coverage for landing, features, releases,
+  getting-started, FAQ, migration guidance, and release workflow deployment of
+  the Spanish surface.
+- Bundled CocxyCoreKit 0.15.0 with expanded stable API coverage and updated
+  device-attribute version reporting.
+
+### Changed
+- Launch and session restore now keep socket readiness and first paint on the
+  critical path while deferring hidden-tab metadata, config watcher startup,
+  and other warm-up work.
+- Restore handoff keeps terminal backing opaque before rebuilding tabs, avoiding
+  visible transparent frames during manual restore and launch restore.
+- Spanish localization now covers app chrome, panel titles, menus,
+  preferences, built-in templates, plugin metadata, review UI, and common
+  status copy.
+- Performance and CI gates now include split Swift Testing execution, a stable
+  monolithic `swift test` path, privacy audit checks, performance regression
+  baselines, local SSH smoke, and a read-only GitHub PR smoke script.
+
+### Fixed
+- Editor source text remains readable before first draw, across theme changes,
+  and after missing-file restore states.
+- Code Review local edit history now serializes recording after pending git
+  snapshots, preventing completed hook events from losing tracked-file edits
+  when `HEAD` resolution is still in flight.
+- Narrow panel polish across notebook, workflow, replay, edit history,
+  templates, macros, browser DevTools, remote workspaces, and restored split
+  views.
+- Public privacy and CLI copy now matches the shipped app behavior, including
+  the `100+` command CLI surface and explicit local-first network boundaries.
+
+### Security
+- Notebook execution is sandboxed by default for local code cells, denying
+  network access and writes outside the selected workspace unless explicitly
+  disabled for trusted notebooks.
+- Plugin signatures remain optional while plugin execution stays gated by local
+  sandboxing, explicit enablement, and bounded helper capabilities.
+- Privacy audit scripts guard against telemetry SDKs, automatic crash upload,
+  and overbroad public privacy claims.
+
 ## [0.1.92] - 2026-04-30
 
 ### Added
@@ -153,8 +215,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - `cocxyd` helper is codesigned with Developer ID, hardened runtime, and
   a secure timestamp to satisfy Apple notarization.
-
-## [Unreleased]
 
 ## [0.1.90] - 2026-04-27
 
