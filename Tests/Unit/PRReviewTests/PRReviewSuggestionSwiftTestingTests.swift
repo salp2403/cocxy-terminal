@@ -44,6 +44,36 @@ struct PRReviewSuggestionSwiftTestingTests {
         #expect(thread.suggestions[0].replacementText == "guard isReady else { return }")
     }
 
+    @Test("remote review threads expose suggestion blocks as local suggestions")
+    func remoteReviewThreadsExposeSuggestionBlocks() throws {
+        let thread = GitHubPullRequestReviewThread(
+            id: "PRRT_1",
+            path: "Sources/App.swift",
+            line: 8,
+            startLine: 6,
+            isResolved: false,
+            comments: [
+                GitHubPullRequestReviewThreadComment(
+                    id: "PRRC_1",
+                    body: """
+                    Use a guard here.
+
+                    ```suggestion
+                    guard isReady else { return }
+                    render()
+                    ```
+                    """,
+                    authorLogin: "reviewer"
+                ),
+            ]
+        )
+
+        let suggestion = try #require(thread.reviewSuggestions.only)
+        #expect(suggestion.filePath == "Sources/App.swift")
+        #expect(suggestion.lineRange == 6...8)
+        #expect(suggestion.replacementText == "guard isReady else { return }\nrender()")
+    }
+
     @Test("suggestion applier applies non-overlapping suggestions from bottom to top")
     func suggestionApplierAppliesNonOverlappingSuggestions() {
         let original = """

@@ -180,6 +180,8 @@ struct GitHubPaneUISwiftTestingTests {
         let localizer = AppLocalizer(languagePreference: .english)
         #expect(GitHubReviewThreadRow.statusTitle(for: unresolved, using: localizer) == "Unresolved")
         #expect(GitHubReviewThreadRow.statusTitle(for: resolved, using: localizer) == "Resolved")
+        #expect(GitHubReviewThreadRow.suggestionCountTitle(count: 1, using: localizer) == "1 suggestion")
+        #expect(GitHubReviewThreadRow.suggestionCountTitle(count: 2, using: localizer) == "2 suggestions")
         _ = GitHubReviewThreadRow(thread: unresolved, localizer: localizer).body
         _ = GitHubReviewThreadRow(thread: resolved, localizer: localizer).body
     }

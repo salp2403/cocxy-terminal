@@ -893,6 +893,231 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.lastInfoMessage?.contains("Reopened review thread") == true)
     }
 
+    @Test("review thread suggestions apply to the local working tree")
+    func reviewThreadSuggestionsApplyToLocalWorkingTree() async throws {
+        let root = try makeTemporaryDirectory(named: "github-review-thread-suggestions")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceURL = root.appendingPathComponent("Sources/App.swift")
+        try FileManager.default.createDirectory(
+            at: sourceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try "let enabled = false\nprint(enabled)\n".write(to: sourceURL, atomically: true, encoding: .utf8)
+
+        let service = makeService { spy in
+            spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+                stdout: "",
+                stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "defaultBranchRef": {"name": "main"},
+                  "description": "",
+                  "hasIssuesEnabled": true,
+                  "isEmpty": false,
+                  "isPrivate": false,
+                  "name": "r",
+                  "owner": {"login": "u"},
+                  "url": "https://github.com/u/r"
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: #"""
+                [
+                  {"number": 1, "title": "first", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/1", "updatedAt": "2026-04-23T15:47:21Z"}
+                ]
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("issue") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("checks") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("api") && $0.contains("graphql") && $0.contains("number=1") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "data": {
+                    "repository": {
+                      "pullRequest": {
+                        "reviewThreads": {
+                          "nodes": [
+                            {
+                              "id": "PRRT_1",
+                              "isResolved": false,
+                              "isOutdated": false,
+                              "viewerCanResolve": true,
+                              "viewerCanUnresolve": false,
+                              "path": "Sources/App.swift",
+                              "line": 1,
+                              "startLine": null,
+                              "comments": {
+                                "nodes": [
+                                  {
+                                    "id": "PRRC_1",
+                                    "body": "Please apply this change.\n\n```suggestion\nlet enabled = true\n```",
+                                    "author": {"login": "reviewer"},
+                                    "createdAt": "2026-05-05T10:00:00Z",
+                                    "url": "https://github.com/u/r/pull/1#discussion_r1"
+                                  }
+                                ]
+                              }
+                            }
+                          ],
+                          "pageInfo": {"hasNextPage": false, "endCursor": null}
+                        }
+                      }
+                    }
+                  }
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { root }
+        viewModel.refresh()
+        await flush()
+
+        let thread = try #require(viewModel.reviewThreads.first)
+        #expect(viewModel.reviewThreadSuggestionCount(thread) == 1)
+        #expect(viewModel.canApplyReviewThreadSuggestions(thread))
+
+        viewModel.applyReviewThreadSuggestions(thread)
+        await flush()
+
+        #expect(try String(contentsOf: sourceURL, encoding: .utf8) == "let enabled = true\nprint(enabled)\n")
+        #expect(viewModel.reviewThreadSuggestionsBeingApplied.isEmpty)
+        #expect(viewModel.lastInfoMessage?.contains("Applied 1 review suggestion") == true)
+        #expect(viewModel.lastErrorMessage == nil)
+    }
+
+    @Test("review thread suggestions reject symlink paths that escape the working tree")
+    func reviewThreadSuggestionsRejectSymlinkEscapes() async throws {
+        let root = try makeTemporaryDirectory(named: "github-review-thread-symlink")
+        let outside = try makeTemporaryDirectory(named: "github-review-thread-outside")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: outside)
+        }
+
+        let sourceDirectory = root.appendingPathComponent("Sources", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+        let externalURL = outside.appendingPathComponent("Escaped.swift")
+        try "let enabled = false\n".write(to: externalURL, atomically: true, encoding: .utf8)
+        let symlinkURL = sourceDirectory.appendingPathComponent("App.swift")
+        try FileManager.default.createSymbolicLink(at: symlinkURL, withDestinationURL: externalURL)
+
+        let service = makeService { spy in
+            spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+                stdout: "",
+                stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "defaultBranchRef": {"name": "main"},
+                  "description": "",
+                  "hasIssuesEnabled": true,
+                  "isEmpty": false,
+                  "isPrivate": false,
+                  "name": "r",
+                  "owner": {"login": "u"},
+                  "url": "https://github.com/u/r"
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: #"""
+                [
+                  {"number": 1, "title": "first", "state": "OPEN", "author": {"login": "u"}, "headRefName": "a", "baseRefName": "main", "labels": [], "isDraft": false, "reviewDecision": null, "url": "https://github.com/u/r/pull/1", "updatedAt": "2026-04-23T15:47:21Z"}
+                ]
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("issue") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("checks") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("api") && $0.contains("graphql") && $0.contains("number=1") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "data": {
+                    "repository": {
+                      "pullRequest": {
+                        "reviewThreads": {
+                          "nodes": [
+                            {
+                              "id": "PRRT_1",
+                              "isResolved": false,
+                              "isOutdated": false,
+                              "viewerCanResolve": true,
+                              "viewerCanUnresolve": false,
+                              "path": "Sources/App.swift",
+                              "line": 1,
+                              "startLine": null,
+                              "comments": {
+                                "nodes": [
+                                  {
+                                    "id": "PRRC_1",
+                                    "body": "Please apply this change.\n\n```suggestion\nlet enabled = true\n```",
+                                    "author": {"login": "reviewer"},
+                                    "createdAt": "2026-05-05T10:00:00Z",
+                                    "url": "https://github.com/u/r/pull/1#discussion_r1"
+                                  }
+                                ]
+                              }
+                            }
+                          ],
+                          "pageInfo": {"hasNextPage": false, "endCursor": null}
+                        }
+                      }
+                    }
+                  }
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { root }
+        viewModel.refresh()
+        await flush()
+
+        let thread = try #require(viewModel.reviewThreads.first)
+        viewModel.applyReviewThreadSuggestions(thread)
+        await flush()
+
+        #expect(try String(contentsOf: externalURL, encoding: .utf8) == "let enabled = false\n")
+        #expect(viewModel.lastErrorMessage?.contains("outside the working directory") == true)
+        #expect(viewModel.lastInfoMessage == nil)
+    }
+
     @Test("isVisible toggle starts and stops auto-refresh without crashing")
     func isVisible_togglesAutoRefreshLifecycle() {
         let service = makeService { _ in }
@@ -924,5 +1149,12 @@ struct GitHubPaneViewModelSwiftTestingTests {
         viewModel.onOpenURL = { opened.append($0) }
         viewModel.open(URL(string: "https://github.com/u/r/pull/1")!)
         #expect(opened.count == 1)
+    }
+
+    private func makeTemporaryDirectory(named name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 }

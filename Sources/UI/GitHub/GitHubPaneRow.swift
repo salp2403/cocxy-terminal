@@ -338,6 +338,19 @@ struct GitHubReviewThreadRow: View {
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                     }
+
+                    let suggestionCount = thread.reviewSuggestions.count
+                    if suggestionCount > 0 {
+                        Label(
+                            Self.suggestionCountTitle(
+                                count: suggestionCount,
+                                using: localizer
+                            ),
+                            systemImage: "checkmark.rectangle.stack"
+                        )
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    }
                 }
             }
 
@@ -373,6 +386,22 @@ struct GitHubReviewThreadRow: View {
             statusTitle(for: thread, using: localizer),
             thread.displayLocation,
             thread.comments.count
+        )
+    }
+
+    static func suggestionCountTitle(count: Int, using localizer: AppLocalizer) -> String {
+        if count == 1 {
+            return localizer.string(
+                "github.pane.reviewThreads.suggestions.one",
+                fallback: "1 suggestion"
+            )
+        }
+        return String(
+            format: localizer.string(
+                "github.pane.reviewThreads.suggestions.many",
+                fallback: "%d suggestions"
+            ),
+            count
         )
     }
 

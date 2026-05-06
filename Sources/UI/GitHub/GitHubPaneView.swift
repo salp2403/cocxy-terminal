@@ -393,7 +393,6 @@ struct GitHubPaneView: View {
                                 GitHubReviewThreadRow(thread: thread, localizer: localizer)
                             }
                             .buttonStyle(.plain)
-                            .disabled(thread.comments.first?.url == nil)
                             .contextMenu {
                                 if let url = thread.comments.first?.url {
                                     Button(
@@ -404,6 +403,21 @@ struct GitHubPaneView: View {
                                     ) {
                                         viewModel.open(url)
                                     }
+                                }
+                                if viewModel.reviewThreadSuggestionCount(thread) > 0 {
+                                    Divider()
+                                    Button {
+                                        viewModel.applyReviewThreadSuggestions(thread)
+                                    } label: {
+                                        Label(
+                                            localized(
+                                                "github.pane.context.applyReviewThreadSuggestions",
+                                                fallback: "Apply Suggestions"
+                                            ),
+                                            systemImage: "checkmark.rectangle.stack"
+                                        )
+                                    }
+                                    .disabled(!viewModel.canApplyReviewThreadSuggestions(thread))
                                 }
                                 if viewModel.canOfferResolveReviewThread(thread) {
                                     Divider()

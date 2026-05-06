@@ -817,6 +817,7 @@
 "github.pane.context.reviewThreads" = "Mostrar hilos de revisión";
 "github.pane.context.resolveReviewThread" = "Resolver hilo";
 "github.pane.context.reopenReviewThread" = "Reabrir hilo";
+"github.pane.context.applyReviewThreadSuggestions" = "Aplicar sugerencias";
 "github.pane.merge.action" = "Fusionar pull request...";
 "github.pane.merge.inProgress" = "Fusionando...";
 "github.pane.merge.disabled" = "La fusión de pull requests está desactivada en [github].merge-enabled.";
@@ -859,6 +860,14 @@
 "github.pane.reviewThreads.updateFailed" = "No se pudo actualizar el hilo de revisión.";
 "github.pane.reviewThreads.resolve.success" = "Hilo de revisión resuelto en %@.";
 "github.pane.reviewThreads.unresolve.success" = "Hilo de revisión reabierto en %@.";
+"github.pane.reviewThreads.suggestions.one" = "1 sugerencia";
+"github.pane.reviewThreads.suggestions.many" = "%d sugerencias";
+"github.pane.reviewThreads.apply.reloadRequired" = "Recarga el panel de GitHub antes de aplicar sugerencias de revisión.";
+"github.pane.reviewThreads.apply.none" = "No se encontraron bloques de sugerencia en este hilo de revisión.";
+"github.pane.reviewThreads.apply.success.one" = "1 sugerencia de revisión aplicada.";
+"github.pane.reviewThreads.apply.success.many" = "%d sugerencias de revisión aplicadas.";
+"github.pane.reviewThreads.apply.unsafePath" = "El destino de la sugerencia está fuera del directorio de trabajo: %@";
+"github.pane.reviewThreads.apply.unreadableFile" = "No se pudo leer el destino de la sugerencia: %@";
 "github.pane.check.status.queued" = "En cola";
 "github.pane.check.status.inProgress" = "En progreso";
 "github.pane.check.status.completed" = "Completado";

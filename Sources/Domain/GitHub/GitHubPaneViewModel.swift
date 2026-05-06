@@ -124,6 +124,7 @@ final class GitHubPaneViewModel: ObservableObject {
     @Published private(set) var checks: [GitHubCheck] = []
     @Published private(set) var reviewThreads: [GitHubPullRequestReviewThread] = []
     @Published private(set) var reviewThreadsBeingUpdated: Set<String> = []
+    @Published private(set) var reviewThreadSuggestionsBeingApplied: Set<String> = []
 
     /// PR number whose checks the view currently highlights. Set by
     /// the UI row selection and read by `refresh()` to decide which
@@ -371,6 +372,74 @@ final class GitHubPaneViewModel: ObservableObject {
 
     func isUpdatingReviewThread(_ threadID: String) -> Bool {
         reviewThreadsBeingUpdated.contains(threadID)
+    }
+
+    func reviewThreadSuggestionCount(_ thread: GitHubPullRequestReviewThread) -> Int {
+        thread.reviewSuggestions.count
+    }
+
+    func canApplyReviewThreadSuggestions(_ thread: GitHubPullRequestReviewThread) -> Bool {
+        guard reviewThreadSuggestionCount(thread) > 0 else { return false }
+        guard pullRequestsWorkingDirectory != nil else { return false }
+        return !reviewThreadSuggestionsBeingApplied.contains(thread.id)
+    }
+
+    func isApplyingReviewThreadSuggestions(_ threadID: String) -> Bool {
+        reviewThreadSuggestionsBeingApplied.contains(threadID)
+    }
+
+    func applyReviewThreadSuggestions(_ thread: GitHubPullRequestReviewThread) {
+        guard let workingDirectory = pullRequestsWorkingDirectory else {
+            lastErrorMessage = localized(
+                "github.pane.reviewThreads.apply.reloadRequired",
+                fallback: "Reload the GitHub pane before applying review suggestions."
+            )
+            lastInfoMessage = nil
+            return
+        }
+        let suggestions = thread.reviewSuggestions
+        guard !suggestions.isEmpty else {
+            lastInfoMessage = localized(
+                "github.pane.reviewThreads.apply.none",
+                fallback: "No suggestion blocks found in this review thread."
+            )
+            lastErrorMessage = nil
+            return
+        }
+        guard !reviewThreadSuggestionsBeingApplied.contains(thread.id) else { return }
+
+        reviewThreadSuggestionsBeingApplied.insert(thread.id)
+        lastErrorMessage = nil
+        lastInfoMessage = nil
+
+        Task { [weak self] in
+            do {
+                let count = try Self.applyReviewThreadSuggestions(
+                    suggestions,
+                    workingDirectory: workingDirectory
+                )
+                await MainActor.run {
+                    guard let self else { return }
+                    self.reviewThreadSuggestionsBeingApplied.remove(thread.id)
+                    self.lastInfoMessage = self.localizedReviewThreadSuggestionAppliedMessage(count: count)
+                    self.lastErrorMessage = nil
+                }
+            } catch let error as ReviewThreadSuggestionApplyError {
+                await MainActor.run {
+                    guard let self else { return }
+                    self.reviewThreadSuggestionsBeingApplied.remove(thread.id)
+                    self.lastErrorMessage = self.localizedReviewThreadSuggestionError(error)
+                    self.lastInfoMessage = nil
+                }
+            } catch {
+                await MainActor.run {
+                    guard let self else { return }
+                    self.reviewThreadSuggestionsBeingApplied.remove(thread.id)
+                    self.lastErrorMessage = error.localizedDescription
+                    self.lastInfoMessage = nil
+                }
+            }
+        }
     }
 
     func resolveReviewThread(_ thread: GitHubPullRequestReviewThread) {
@@ -1109,6 +1178,119 @@ final class GitHubPaneViewModel: ObservableObject {
         )
     }
 
+    private func localizedReviewThreadSuggestionAppliedMessage(count: Int) -> String {
+        if count == 1 {
+            return localized(
+                "github.pane.reviewThreads.apply.success.one",
+                fallback: "Applied 1 review suggestion."
+            )
+        }
+        return String(
+            format: localized(
+                "github.pane.reviewThreads.apply.success.many",
+                fallback: "Applied %d review suggestions."
+            ),
+            count
+        )
+    }
+
+    private func localizedReviewThreadSuggestionError(
+        _ error: ReviewThreadSuggestionApplyError
+    ) -> String {
+        switch error {
+        case .conflicts(let conflicts):
+            return PRSuggestionConflictResolver.localizedSummary(
+                for: conflicts,
+                using: localizer
+            )
+        case .unsafePath(let path):
+            return String(
+                format: localized(
+                    "github.pane.reviewThreads.apply.unsafePath",
+                    fallback: "Suggestion target is outside the working directory: %@"
+                ),
+                path
+            )
+        case .unreadableFile(let path):
+            return String(
+                format: localized(
+                    "github.pane.reviewThreads.apply.unreadableFile",
+                    fallback: "Could not read the suggestion target: %@"
+                ),
+                path
+            )
+        }
+    }
+
+    private static func applyReviewThreadSuggestions(
+        _ suggestions: [PRSuggestion],
+        workingDirectory: URL
+    ) throws -> Int {
+        let suggestionsByFile = Dictionary(grouping: suggestions, by: \.filePath)
+        let plans = try suggestionsByFile.keys.sorted().map { filePath in
+            let fileURL = try reviewSuggestionFileURL(
+                filePath: filePath,
+                workingDirectory: workingDirectory
+            )
+            guard let originalContent = try? String(contentsOf: fileURL, encoding: .utf8) else {
+                throw ReviewThreadSuggestionApplyError.unreadableFile(filePath)
+            }
+            return ReviewThreadSuggestionApplyPlan(
+                fileURL: fileURL,
+                originalContent: originalContent,
+                report: PRSuggestionApplier.apply(suggestionsByFile[filePath] ?? [], to: originalContent)
+            )
+        }
+
+        let conflicts = plans.flatMap(\.report.conflicts)
+        guard conflicts.isEmpty else {
+            throw ReviewThreadSuggestionApplyError.conflicts(conflicts)
+        }
+
+        var writtenPlans: [ReviewThreadSuggestionApplyPlan] = []
+        do {
+            for plan in plans where plan.originalContent != plan.report.updatedContent {
+                try plan.report.updatedContent.write(to: plan.fileURL, atomically: true, encoding: .utf8)
+                writtenPlans.append(plan)
+            }
+        } catch {
+            for plan in writtenPlans.reversed() {
+                try? plan.originalContent.write(to: plan.fileURL, atomically: true, encoding: .utf8)
+            }
+            throw error
+        }
+
+        return plans.reduce(0) { $0 + $1.report.appliedSuggestions.count }
+    }
+
+    private static func reviewSuggestionFileURL(
+        filePath: String,
+        workingDirectory: URL
+    ) throws -> URL {
+        let trimmed = filePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("/") else {
+            throw ReviewThreadSuggestionApplyError.unsafePath(filePath)
+        }
+        let components = trimmed.split(separator: "/", omittingEmptySubsequences: false)
+        guard components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
+            throw ReviewThreadSuggestionApplyError.unsafePath(filePath)
+        }
+
+        let root = workingDirectory.resolvingSymlinksInPath().standardizedFileURL
+        let fileURL = root.appendingPathComponent(trimmed).resolvingSymlinksInPath().standardizedFileURL
+        guard isDescendant(fileURL, of: root) else {
+            throw ReviewThreadSuggestionApplyError.unsafePath(filePath)
+        }
+        return fileURL
+    }
+
+    private static func isDescendant(_ fileURL: URL, of root: URL) -> Bool {
+        let fileComponents = fileURL.standardizedFileURL.pathComponents
+        let rootComponents = root.standardizedFileURL.pathComponents
+        guard fileComponents.count > rootComponents.count else { return false }
+        return Array(fileComponents.prefix(rootComponents.count)) == rootComponents
+    }
+
     private func refreshAfterMergeCleanup(mergedWorkingDirectory: URL) {
         if let currentWorkingDirectory = workingDirectoryProvider?(),
            currentWorkingDirectory == mergedWorkingDirectory,
@@ -1247,4 +1429,16 @@ final class GitHubPaneViewModel: ObservableObject {
             method.displayName
         )
     }
+}
+
+private struct ReviewThreadSuggestionApplyPlan: Sendable {
+    let fileURL: URL
+    let originalContent: String
+    let report: PRSuggestionApplyReport
+}
+
+private enum ReviewThreadSuggestionApplyError: Error, Sendable {
+    case conflicts([PRSuggestionConflict])
+    case unsafePath(String)
+    case unreadableFile(String)
 }
