@@ -574,6 +574,7 @@ struct AppLocalizationSwiftTestingTests {
                 == "Sin telemetría ni tracking"
         )
         #expect(Design.AgentMatrixView.localizedTitle(using: spanish) == "agentes")
+        #expect(Design.AgentMatrixView.summaryText(for: [], using: spanish) == "sin actividad")
         #expect(
             Design.AgentMatrixView.summaryText(for: panes, using: spanish)
                 == "1 trabajando · 1 esperando · 1 error · 1 finalizado"

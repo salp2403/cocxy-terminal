@@ -1037,7 +1037,7 @@
 "auroraStatus.agents.title" = "agentes";
 "auroraStatus.agents.tooltip.empty" = "No hay agentes activos detectados en la instantánea actual del espacio Aurora.";
 "auroraStatus.agents.tooltip.active" = "Agentes activos:\n%@";
-"auroraStatus.summary.idle" = "inactivo";
+"auroraStatus.summary.idle" = "sin actividad";
 "auroraStatus.summary.working.one" = "%d trabajando";
 "auroraStatus.summary.working.many" = "%d trabajando";
 "auroraStatus.summary.waiting.one" = "%d esperando";
