@@ -90,6 +90,7 @@ extension MainWindowController {
         updateTerminalHostLocalizers(localizer)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         updateRemoteWorkspacePanelLocalizer(localizer)
+        refreshTabStrip(syncFromFirstResponder: false)
         refreshVisibleActivityDashboardLocalizer()
         refreshVisibleAgentModeLocalizer()
         tabBarView?.flashTabEnabled = config.notifications.flashTab

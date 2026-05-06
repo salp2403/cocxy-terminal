@@ -1575,6 +1575,47 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testConfigLanguageChangeRelocalizesHorizontalPanelTabs() throws {
+        let provider = InMemoryConfigFileProvider(content: """
+        [appearance]
+        app-language = "en"
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge, configService: configService)
+        if let bundle = localizationBundle() {
+            controller.appLocalizationBundle = bundle
+        }
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        controller.splitWithBrowserAction(nil)
+        controller.splitWithSessionReplayAction(nil)
+
+        guard let strip = controller.horizontalTabStripView as? HorizontalTabStripView else {
+            XCTFail("Expected horizontal tab strip")
+            return
+        }
+        XCTAssertTrue(strip.tabs.map(\.title).contains("Browser"))
+        XCTAssertTrue(strip.tabs.map(\.title).contains("Replay"))
+
+        provider.content = """
+        [appearance]
+        app-language = "es"
+        """
+        try configService.reload()
+        controller.applyConfig(configService.current)
+
+        let localizedTabs = strip.tabs.map(\.title)
+        XCTAssertTrue(localizedTabs.contains("Navegador"))
+        XCTAssertTrue(localizedTabs.contains("Reproducción"))
+        XCTAssertFalse(localizedTabs.contains("Browser"))
+        XCTAssertFalse(localizedTabs.contains("Replay"))
+    }
+
     func testAppendedWorkspacePanelsKeepTerminalLeafReachableAndClosable() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -2049,5 +2090,10 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             }
         }
         return nil
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }
