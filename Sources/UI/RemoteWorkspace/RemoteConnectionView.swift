@@ -321,6 +321,15 @@ struct RemoteConnectionView: View {
     @State private var sftpBrowserVM: SFTPBrowserViewModel?
 
     static let panelWidth: CGFloat = 380
+    static let subPanelPickerMinimumItemWidth: CGFloat = 78
+    static let subPanelPickerSpacing: CGFloat = 8
+
+    static func subPanelPickerColumnCount(for width: CGFloat) -> Int {
+        let contentWidth = max(0, width - 24)
+        let itemWithSpacing = subPanelPickerMinimumItemWidth + subPanelPickerSpacing
+        guard itemWithSpacing > 0 else { return 1 }
+        return max(1, Int((contentWidth + subPanelPickerSpacing) / itemWithSpacing))
+    }
 
     // MARK: - Body
 
@@ -555,16 +564,23 @@ struct RemoteConnectionView: View {
     // MARK: - Sub-Panel Picker
 
     private var subPanelPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(RemoteConnectionViewModel.SubPanel.allCases) { panel in
-                    subPanelTab(panel)
-                }
+        LazyVGrid(
+            columns: [
+                GridItem(
+                    .adaptive(minimum: Self.subPanelPickerMinimumItemWidth),
+                    spacing: Self.subPanelPickerSpacing
+                )
+            ],
+            alignment: .leading,
+            spacing: Self.subPanelPickerSpacing
+        ) {
+            ForEach(RemoteConnectionViewModel.SubPanel.allCases) { panel in
+                subPanelTab(panel)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
         }
-        .frame(height: 50)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 84)
         .background(Color(nsColor: CocxyColors.crust).opacity(0.35))
     }
 
@@ -585,6 +601,7 @@ struct RemoteConnectionView: View {
                     : Color(nsColor: CocxyColors.overlay1)
             )
             .padding(.horizontal, 11)
+            .frame(maxWidth: .infinity)
             .frame(height: 32)
             .background(
                 Capsule()
