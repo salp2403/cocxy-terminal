@@ -264,12 +264,12 @@ struct SessionReplayPanelViewModelSwiftTestingTests {
         let copy = SessionReplayPanelView.localizedDeleteAllRecordingsCopy(localizer: localizer)
 
         #expect(copy.messageText == "¿Eliminar todas las grabaciones?")
-        #expect(copy.informativeText == "Esto elimina todas las grabaciones locales de Session Replay de esta Mac.")
+        #expect(copy.informativeText == "Esto elimina todas las grabaciones locales de reproducción de sesiones de esta Mac.")
         #expect(copy.primaryButton == "Eliminar todo")
         #expect(copy.secondaryButton == "Cancelar")
 
         let exportCopy = SessionReplayPanelView.localizedExportPanelCopy(localizer: localizer)
-        #expect(exportCopy.title == "Exportar Session Replay")
+        #expect(exportCopy.title == "Exportar reproducción de sesiones")
         #expect(exportCopy.message == "Elige dónde guardar esta grabación.")
         #expect(exportCopy.prompt == "Exportar")
     }

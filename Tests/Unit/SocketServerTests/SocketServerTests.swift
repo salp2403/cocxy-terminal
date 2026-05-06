@@ -110,6 +110,7 @@ enum SocketTestClient {
                 NSLocalizedDescriptionKey: "Failed to create client socket"
             ])
         }
+        disableSigPipe(for: clientFD)
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -136,6 +137,19 @@ enum SocketTestClient {
         }
 
         return clientFD
+    }
+
+    private static func disableSigPipe(for fd: Int32) {
+        #if os(macOS)
+        var enabled: Int32 = 1
+        _ = setsockopt(
+            fd,
+            SOL_SOCKET,
+            SO_NOSIGPIPE,
+            &enabled,
+            socklen_t(MemoryLayout<Int32>.size)
+        )
+        #endif
     }
 
     /// Sends a framed request and reads the framed response from a socket FD.

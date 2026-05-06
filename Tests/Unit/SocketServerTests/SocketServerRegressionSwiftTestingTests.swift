@@ -105,6 +105,7 @@ private func connectClient(to socketPath: String) throws -> Int32 {
             NSLocalizedDescriptionKey: "socket() failed: \(String(cString: strerror(errno)))"
         ])
     }
+    disableSigPipe(for: fd)
 
     var addr = sockaddr_un()
     addr.sun_family = sa_family_t(AF_UNIX)
@@ -129,6 +130,19 @@ private func connectClient(to socketPath: String) throws -> Int32 {
         ])
     }
     return fd
+}
+
+private func disableSigPipe(for fd: Int32) {
+    #if os(macOS)
+    var enabled: Int32 = 1
+    _ = setsockopt(
+        fd,
+        SOL_SOCKET,
+        SO_NOSIGPIPE,
+        &enabled,
+        socklen_t(MemoryLayout<Int32>.size)
+    )
+    #endif
 }
 
 /// Sends a framed request and reads the framed response.
@@ -368,15 +382,6 @@ struct SocketServerRegressionSwiftTestingTests {
     /// connections once 10 workers are busy.
     @Test("kernel backlog absorbs bursts larger than the active worker cap (Bug A/C)")
     func backlogAbsorbsConcurrentConnects() async throws {
-        // Ignore SIGPIPE so a broken write returns errno=EPIPE rather
-        // than terminating the xctest process (signal 13). Signal
-        // handlers are process-global, so we save the previous handler
-        // and restore it on exit to keep test isolation — without this,
-        // later tests that rely on the default SIGPIPE behaviour would
-        // silently observe our override.
-        let previousSIGPIPE = signal(SIGPIPE, SIG_IGN)
-        defer { _ = signal(SIGPIPE, previousSIGPIPE) }
-
         let tempPaths = uniqueSocketPath()
         defer {
             removeTempDirectory(tempPaths.directory, socketPath: tempPaths.path)

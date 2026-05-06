@@ -2,6 +2,7 @@
 // MCPStdioTransport.swift - Newline-delimited JSON-RPC transport for local MCP servers.
 
 import Foundation
+import Darwin
 
 protocol MCPStdioProcess: Sendable {
     var isRunning: Bool { get }
@@ -56,7 +57,7 @@ actor MCPStdioTransport: MCPTransport {
             try process.write(requestData)
             return try readResponse(for: request, from: process, serverID: server.id)
         } catch {
-            if !process.isRunning {
+            if !process.isRunning || Self.isBrokenPipe(error) {
                 processesByServerID[server.id] = nil
             }
             throw error
@@ -105,6 +106,17 @@ actor MCPStdioTransport: MCPTransport {
 
             return try JSONDecoder().decode(MCPJSONRPCResponse.self, from: responseData)
         }
+    }
+
+    private static func isBrokenPipe(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSPOSIXErrorDomain, nsError.code == Int(EPIPE) {
+            return true
+        }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
+            return isBrokenPipe(underlying)
+        }
+        return false
     }
 }
 

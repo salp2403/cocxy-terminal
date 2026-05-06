@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // MCPFoundationSwiftTestingTests.swift - Local MCP integration contracts.
 
+import Darwin
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -640,6 +641,39 @@ struct MCPFoundationSwiftTestingTests {
         #expect(decodedRequests.map(\.method) == ["tools/list", "tools/list"])
     }
 
+    @Test("stdio transport reconnects when write sees broken pipe before process state updates")
+    func stdioTransportReconnectsAfterBrokenPipeWrite() async throws {
+        let launcher = ScriptedMCPStdioProcessLauncher(processes: [
+            ScriptedMCPStdioProcess(
+                responseLines: [],
+                writeError: Self.brokenPipeWriteError(),
+                runningAfterWriteError: true
+            ),
+            ScriptedMCPStdioProcess(responseLines: [
+                #"{"id":"2","jsonrpc":"2.0","result":{"server":"second"}}"#,
+            ]),
+        ])
+        let transport = MCPStdioTransport(processLauncher: launcher)
+        let server = MCPServer(
+            id: "local",
+            transport: .stdio(command: "mcp-server", arguments: ["--stdio"])
+        )
+
+        do {
+            _ = try await transport.send(MCPJSONRPCRequest(id: "1", method: "tools/list"), to: server)
+            Issue.record("Expected the first write to fail with broken pipe")
+        } catch {
+            let nsError = error as NSError
+            let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+            #expect(underlying?.code == Int(EPIPE))
+        }
+
+        let second = try await transport.send(MCPJSONRPCRequest(id: "2", method: "tools/list"), to: server)
+
+        #expect(second.result == .object(["server": .string("second")]))
+        #expect(launcher.launchedProcesses.count == 2)
+    }
+
     @Test("stdio transport skips notifications until the matching response")
     func stdioTransportSkipsNotificationsUntilMatchingResponse() async throws {
         let launcher = ScriptedMCPStdioProcessLauncher(processes: [
@@ -870,6 +904,16 @@ struct MCPFoundationSwiftTestingTests {
             .map { URL(fileURLWithPath: $0) }
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
+
+    private static func brokenPipeWriteError() -> NSError {
+        NSError(
+            domain: NSCocoaErrorDomain,
+            code: 512,
+            userInfo: [
+                NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(EPIPE))
+            ]
+        )
+    }
 }
 
 private actor RecordingMCPTransport: MCPTransport {
@@ -930,6 +974,8 @@ private final class ScriptedMCPStdioProcessLauncher: MCPStdioProcessLaunching, @
 private final class ScriptedMCPStdioProcess: MCPStdioProcess, @unchecked Sendable {
     private let lock = NSLock()
     private var responseLines: [String]
+    private let writeError: Error?
+    private let runningAfterWriteError: Bool
     private var runningStorage = true
     private var sentPayloadStorage: [Data] = []
 
@@ -945,14 +991,26 @@ private final class ScriptedMCPStdioProcess: MCPStdioProcess, @unchecked Sendabl
         return sentPayloadStorage
     }
 
-    init(responseLines: [String]) {
+    init(
+        responseLines: [String],
+        writeError: Error? = nil,
+        runningAfterWriteError: Bool = false
+    ) {
         self.responseLines = responseLines
+        self.writeError = writeError
+        self.runningAfterWriteError = runningAfterWriteError
     }
 
     func write(_ data: Data) throws {
         lock.lock()
         sentPayloadStorage.append(data)
+        if writeError != nil {
+            runningStorage = runningAfterWriteError
+        }
         lock.unlock()
+        if let writeError {
+            throw writeError
+        }
     }
 
     func readLine() throws -> String {

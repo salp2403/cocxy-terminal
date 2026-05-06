@@ -102,12 +102,23 @@ struct AgentToolApprovalPreviewSwiftTestingTests {
     }
 
     private func makeWorkspace() throws -> URL {
+        let fileManager = FileManager.default
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-agent-preview-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: root.appendingPathComponent("Sources", isDirectory: true),
-            withIntermediateDirectories: true
+        try fileManager.createDirectory(
+            at: root,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
         )
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+
+        let sources = root.appendingPathComponent("Sources", isDirectory: true)
+        try fileManager.createDirectory(
+            at: sources,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: sources.path)
         return root
     }
 }

@@ -133,24 +133,15 @@ struct AuroraNotesIntegrationSwiftTestingTests {
             ]
         }
         auroraController.onOpenNoteInWorkspace = { _, _ in }
-        auroraController.refreshNotesSummaries()
-        _ = try await waitForMap(
-            on: auroraController,
-            condition: { $0["id-alpha"]?.count == 1 },
-            timeout: 1.0
-        )
+        await auroraController.refreshNotesSummaries()?.value
+        #expect(auroraController.notesByWorkspace["id-alpha"]?.count == 1)
 
         mainController.refreshAuroraNotesAvailability(on: auroraController)
 
         #expect(auroraController.onToggleNotes == nil)
         #expect(auroraController.notesSummariesProvider == nil)
         #expect(auroraController.onOpenNoteInWorkspace == nil)
-        let cleared = try await waitForMap(
-            on: auroraController,
-            condition: { $0.isEmpty },
-            timeout: 1.0
-        )
-        #expect(cleared.isEmpty)
+        #expect(auroraController.notesByWorkspace.isEmpty)
     }
 
     @Test("refreshAuroraNotesAvailability defaults to enabled when no config service is wired so a fresh window does not hide the button while bootstrapping")
@@ -299,20 +290,4 @@ struct AuroraNotesIntegrationSwiftTestingTests {
         #expect(mainController.notesViewModel?.selectedNote?.id == second.id)
     }
 
-    private func waitForMap(
-        on controller: AuroraChromeController,
-        condition: @escaping ([String: Design.AuroraWorkspaceNotesSummary]) -> Bool,
-        timeout: TimeInterval
-    ) async throws -> [String: Design.AuroraWorkspaceNotesSummary] {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition(controller.notesByWorkspace) {
-                return controller.notesByWorkspace
-            }
-            try await Task.sleep(nanoseconds: 5_000_000)
-        }
-        throw WaitError.timeout
-    }
-
-    private enum WaitError: Error { case timeout }
 }

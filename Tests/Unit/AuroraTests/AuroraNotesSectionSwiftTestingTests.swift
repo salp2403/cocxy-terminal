@@ -162,25 +162,16 @@ struct AuroraNotesSectionSwiftTestingTests {
             ]
         }
 
-        controller.refreshNotesSummaries()
-        _ = try await waitForMap(
-            on: controller,
-            condition: { $0["id-alpha"]?.count == 1 },
-            timeout: 1.0
-        )
+        await controller.refreshNotesSummaries()?.value
+        #expect(controller.notesByWorkspace["id-alpha"]?.count == 1)
 
         // Drop the provider as if the host's config service flipped
         // `[notes].enabled` off mid-session. Refresh should clear the
         // published map without leaving stale rows.
         controller.notesSummariesProvider = nil
-        controller.refreshNotesSummaries()
+        _ = controller.refreshNotesSummaries()
 
-        let cleared = try await waitForMap(
-            on: controller,
-            condition: { $0.isEmpty },
-            timeout: 1.0
-        )
-        #expect(cleared.isEmpty)
+        #expect(controller.notesByWorkspace.isEmpty)
     }
 
     @Test("refreshNotesSummaries calls the provider with every visible workspace identifier so the sidebar is fed the right keys")
@@ -228,9 +219,10 @@ struct AuroraNotesSectionSwiftTestingTests {
             ]
         }
 
-        controller.refreshNotesSummaries()
+        let refreshTask = controller.refreshNotesSummaries()
 
         let recordedIDs = try await recorded.firstSet(timeout: 1.0)
+        await refreshTask?.value
         #expect(recordedIDs == Set(["id-alpha", "id-beta"]))
     }
 
@@ -265,14 +257,9 @@ struct AuroraNotesSectionSwiftTestingTests {
             ["id-alpha": summary]
         }
 
-        controller.refreshNotesSummaries()
+        await controller.refreshNotesSummaries()?.value
 
-        let published = try await waitForMap(
-            on: controller,
-            condition: { $0["id-alpha"] == summary },
-            timeout: 1.0
-        )
-        #expect(published["id-alpha"] == summary)
+        #expect(controller.notesByWorkspace["id-alpha"] == summary)
     }
 
     @Test("refreshNotesSummaries drops summaries whose workspace disappeared between request and response so the published map never carries stale rows for closed tabs")
@@ -310,15 +297,10 @@ struct AuroraNotesSectionSwiftTestingTests {
             ]
         }
 
-        controller.refreshNotesSummaries()
+        await controller.refreshNotesSummaries()?.value
 
-        let published = try await waitForMap(
-            on: controller,
-            condition: { $0["id-alpha"]?.count == 1 },
-            timeout: 1.0
-        )
-        #expect(published.keys.contains("id-alpha"))
-        #expect(published.keys.contains("id-stale") == false)
+        #expect(controller.notesByWorkspace.keys.contains("id-alpha"))
+        #expect(controller.notesByWorkspace.keys.contains("id-stale") == false)
     }
 
     @Test("onOpenNoteInWorkspace is nil by default so the sidebar suppresses every notes row click until the host wires it")
@@ -399,21 +381,4 @@ struct AuroraNotesSectionSwiftTestingTests {
         enum RecorderError: Error { case timeout }
     }
 
-    @MainActor
-    private func waitForMap(
-        on controller: AuroraChromeController,
-        condition: @escaping ([String: Design.AuroraWorkspaceNotesSummary]) -> Bool,
-        timeout: TimeInterval
-    ) async throws -> [String: Design.AuroraWorkspaceNotesSummary] {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition(controller.notesByWorkspace) {
-                return controller.notesByWorkspace
-            }
-            try await Task.sleep(nanoseconds: 5_000_000) // 5ms
-        }
-        throw WaitError.timeout
-    }
-
-    private enum WaitError: Error { case timeout }
 }

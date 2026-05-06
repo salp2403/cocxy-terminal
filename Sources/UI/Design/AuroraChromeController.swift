@@ -350,9 +350,10 @@ final class AuroraChromeController: ObservableObject {
     /// shown. Public so the host can call it after note CRUD without
     /// waiting for the next workspace-list change. Idempotent — the
     /// previous in-flight task is cancelled so the latest input wins.
-    func refreshNotesSummaries() {
+    @discardableResult
+    func refreshNotesSummaries() -> Task<Void, Never>? {
         let ids = Set(workspaces.compactMap(\.notesWorkspaceID))
-        fetchNotesSummaries(for: ids)
+        return fetchNotesSummaries(for: ids)
     }
 
     /// Schedules a notes summaries fetch when the visible workspace
@@ -363,7 +364,7 @@ final class AuroraChromeController: ObservableObject {
     private func refreshNotesSummariesIfWorkspacesChanged() {
         let ids = Set(workspaces.compactMap(\.notesWorkspaceID))
         if ids == lastRequestedNotesWorkspaceIDs { return }
-        fetchNotesSummaries(for: ids)
+        _ = fetchNotesSummaries(for: ids)
     }
 
     /// Internal fetcher shared by the public refresher and the
@@ -371,7 +372,8 @@ final class AuroraChromeController: ObservableObject {
     /// in-flight task so the latest request always wins, even when
     /// several refreshes pile up faster than the provider can serve
     /// them.
-    private func fetchNotesSummaries(for ids: Set<String>) {
+    @discardableResult
+    private func fetchNotesSummaries(for ids: Set<String>) -> Task<Void, Never>? {
         notesSummariesTask?.cancel()
         notesSummariesTask = nil
         lastRequestedNotesWorkspaceIDs = ids
@@ -384,14 +386,14 @@ final class AuroraChromeController: ObservableObject {
             if !notesByWorkspace.isEmpty {
                 notesByWorkspace = [:]
             }
-            return
+            return nil
         }
 
         guard let provider = notesSummariesProvider else {
             if !notesByWorkspace.isEmpty {
                 notesByWorkspace = [:]
             }
-            return
+            return nil
         }
 
         notesSummariesTask = Task { [weak self] in
@@ -406,6 +408,7 @@ final class AuroraChromeController: ObservableObject {
                 self.notesByWorkspace = filtered
             }
         }
+        return notesSummariesTask
     }
 
     // MARK: - Snapshot refresh

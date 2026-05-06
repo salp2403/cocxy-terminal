@@ -65,9 +65,14 @@ let package = Package(
                 "CocxyTerminal",
                 "CocxyShared",
                 "CocxyMarkdownLib",
+                "CocxyTestRuntime",
             ],
             path: "Tests",
-            exclude: ["Unit/CLITests"]
+            exclude: ["Unit/CLITests", "TestRuntime"]
+        ),
+        .target(
+            name: "CocxyTestRuntime",
+            path: "Tests/TestRuntime"
         ),
         .binaryTarget(
             name: "CocxyCoreKit",
