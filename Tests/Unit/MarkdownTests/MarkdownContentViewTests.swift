@@ -53,6 +53,15 @@ struct MarkdownContentViewTests {
         #expect(view.wantsLayer == true)
     }
 
+    @Test("view installs the shared AppKit glass backing behind readable content")
+    func installsSharedAppKitGlassBacking() {
+        let view = MarkdownContentView(filePath: nil)
+
+        #expect(view.subviews.first is Design.AppKitGlassPanelBackgroundView)
+        #expect(view.sourceViewForTesting.editorTextView.backgroundColor == CocxyColors.base)
+        #expect(view.sourceViewForTesting.editorTextView.drawsBackground == true)
+    }
+
     // MARK: - File Loading
 
     @Test("loadFile updates filePath and parses content")

@@ -23,6 +23,17 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         }
     }
 
+    @Test("AppKit plan surfaces use the shared glass backing")
+    func appKitPlanSurfacesUseSharedGlassBacking() throws {
+        for relativePath in Self.appKitPlanSurfacePaths {
+            let contents = try String(contentsOf: repositoryRoot().appendingPathComponent(relativePath))
+            #expect(
+                contents.contains("installAppKitGlassPanelBackground("),
+                "\(relativePath) should use the shared AppKit glass backing"
+            )
+        }
+    }
+
     @Test("UI sources no longer use old direct full-panel backgrounds")
     func uiSourcesDoNotUseDirectFullPanelBackgrounds() throws {
         let root = repositoryRoot().appendingPathComponent("Sources/UI", isDirectory: true)
@@ -83,6 +94,10 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Worktree/WorktreeAdvancedModal.swift",
         "Sources/UI/Worktree/WorktreeBatchCleanupSheet.swift",
         "Sources/UI/Workflow/WorkflowPanelView.swift",
+    ]
+
+    private static let appKitPlanSurfacePaths = [
+        "Sources/UI/Markdown/MarkdownContentView.swift",
     ]
 
     private static let legacyFullPanelBackgroundMarkers = [

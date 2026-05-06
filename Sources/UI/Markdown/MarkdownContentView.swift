@@ -289,7 +289,11 @@ final class MarkdownContentView: NSView {
 
     private func setupUI() {
         wantsLayer = true
-        layer?.backgroundColor = CocxyColors.base.cgColor
+        layer?.backgroundColor = NSColor.clear.cgColor
+        installAppKitGlassPanelBackground(
+            tintColor: CocxyColors.base.withAlphaComponent(0.46),
+            opaqueFallbackColor: CocxyColors.base
+        )
 
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         addSubview(toolbar)
