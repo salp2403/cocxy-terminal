@@ -249,7 +249,10 @@ struct MarkdownContentViewTests {
         #expect(MarkdownViewMode.source.localizedLabel(using: localizer) == "Fuente")
         #expect(MarkdownToolbarView.localizedUntitledFileName(using: localizer) == "Sin título.md")
         #expect(toolbar.fileName == "Sin título.md")
+        #expect(MarkdownToolbarView.localizedShowGitBlame(using: localizer) == "Mostrar autoría Git")
+        #expect(MarkdownToolbarView.localizedShowGitDiff(using: localizer) == "Mostrar diferencias Git")
         #expect(MarkdownToolbarView.localizedCopyAsMarkdown(using: localizer) == "Copiar como Markdown")
+        #expect(MarkdownToolbarView.localizedExportSlides(using: localizer) == "Exportar diapositivas (Cmd+Shift+S)")
         #expect(MarkdownToolbarView.localizedReloadFile(using: localizer) == "Recargar archivo (Cmd+R)")
         #expect(MarkdownContentView.localizedNoFile(using: localizer) == "Sin archivo")
         #expect(
@@ -274,10 +277,22 @@ struct MarkdownContentViewTests {
                 == "Exportar"
         )
         #expect(
+            MarkdownContentView.localizedExportPanelCopy(kind: .slides, using: localizer).title
+                == "Exportar diapositivas Markdown"
+        )
+        #expect(
+            MarkdownContentView.localizedExportPanelCopy(kind: .slides, using: localizer).message
+                == "Elige dónde guardar la exportación de diapositivas."
+        )
+        #expect(
             MarkdownSearchView.localizedMatches(matches: 2, files: 1, using: localizer)
                 == "2 coincidencias en 1 archivo"
         )
         #expect(MarkdownDiffView.localizedNoChanges(using: localizer) == "Sin cambios detectados")
+        #expect(
+            MarkdownDiffView.localizedNoBlameData(using: localizer)
+                == "Sin datos de autoría (el archivo no está versionado o no está en un repositorio Git)"
+        )
         #expect(
             MarkdownDiffView.localizedBlameSummary(lines: 2, authors: 1, commits: 2, using: localizer)
                 == "2 líneas · 1 autor · 2 commits"

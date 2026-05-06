@@ -68,6 +68,12 @@ struct AgentPanelLocalizationSwiftTestingTests {
             summary: "Review a local pull request diff and report correctness risks first.",
             source: .builtIn
         )
+        let gitBlameSkill = AgentPanelSkillOption(
+            id: "git-blame-explain",
+            name: "Git Blame Explain",
+            summary: "Explain why a line changed using local git history and code context.",
+            source: .builtIn
+        )
         let userSkill = AgentPanelSkillOption(
             id: "custom-review",
             name: "Custom Review",
@@ -82,6 +88,14 @@ struct AgentPanelLocalizationSwiftTestingTests {
         #expect(
             AgentPanelLocalization.skillSummary(builtInSkill, using: spanish)
                 == "Revisa un diff local de pull request y reporta primero riesgos de corrección."
+        )
+        #expect(
+            AgentPanelLocalization.skillMenuTitle(gitBlameSkill, using: spanish)
+                == "Explicar autoría Git (incluida)"
+        )
+        #expect(
+            AgentPanelLocalization.skillSummary(gitBlameSkill, using: spanish)
+                == "Explica por qué cambió una línea usando historial Git local y contexto de código."
         )
         #expect(
             AgentPanelLocalization.skillMenuTitle(userSkill, using: spanish)
