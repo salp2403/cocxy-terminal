@@ -79,43 +79,100 @@
       <nav aria-label="Tabla de contenidos" style="background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:1.5rem 2rem;margin-bottom:3rem;">
         <h2 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--overlay0);margin-bottom:1rem;font-weight:600;">En esta p&aacute;gina</h2>
         <ul style="list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.4rem;font-size:0.9rem;">
-          <li><a href="#agents" style="color:var(--lavender);">Agentes</a></li>
-          <li><a href="#review" style="color:var(--lavender);">Revisi&oacute;n</a></li>
+          <li><a href="#agent-detection" style="color:var(--lavender);">Detecci&oacute;n de agentes</a></li>
+          <li><a href="#code-review" style="color:var(--lavender);">Revisi&oacute;n de c&oacute;digo</a></li>
+          <li><a href="#github-pane" style="color:var(--lavender);">Panel GitHub</a></li>
           <li><a href="#markdown" style="color:var(--lavender);">Markdown</a></li>
+          <li><a href="#quicklook" style="color:var(--lavender);">QuickLook</a></li>
+          <li><a href="#gpu" style="color:var(--lavender);">Motor GPU</a></li>
           <li><a href="#remote" style="color:var(--lavender);">Remoto</a></li>
+          <li><a href="#browser" style="color:var(--lavender);">Navegador</a></li>
+          <li><a href="#web-terminal" style="color:var(--lavender);">Web Terminal</a></li>
           <li><a href="#plugins" style="color:var(--lavender);">Plugins</a></li>
+          <li><a href="#per-project" style="color:var(--lavender);">Config por proyecto</a></li>
+          <li><a href="#applescript" style="color:var(--lavender);">AppleScript</a></li>
+          <li><a href="#shell" style="color:var(--lavender);">Shell</a></li>
           <li><a href="#privacy" style="color:var(--lavender);">Privacidad</a></li>
+          <li><a href="#cli" style="color:var(--lavender);">CLI local</a></li>
         </ul>
       </nav>
 
-      <section id="agents" style="margin-bottom:3.5rem;">
+      <section id="agent-detection" style="margin-bottom:3.5rem;">
         <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Detecci&oacute;n local de agentes</h2>
-        <p style="color:var(--subtext1);line-height:1.75;">Cocxy detecta sesiones de agentes de c&oacute;digo mediante hooks, secuencias OSC, patrones y heur&iacute;sticas de tiempo. Las se&ntilde;ales se procesan localmente, por superficie, y alimentan dashboard, timeline, sidebar y rutas de feedback.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">Cocxy detecta sesiones de agentes de c&oacute;digo mediante hooks locales, secuencias OSC, patrones de salida y heur&iacute;sticas de tiempo. Las se&ntilde;ales se procesan por superficie y alimentan dashboard, timeline, sidebar, Smart Routing y rutas de feedback.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">Ejecuta <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy setup-hooks</code> para configurar agentes compatibles instalados localmente. Los perfiles personalizados se auditan en <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">~/.config/cocxy/agents.toml</code>.</p>
       </section>
 
-      <section id="review" style="margin-bottom:3.5rem;">
+      <section id="code-review" style="margin-bottom:3.5rem;">
         <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Panel de revisi&oacute;n de c&oacute;digo</h2>
-        <p style="color:var(--subtext1);line-height:1.75;">Muestra archivos modificados, diffs, comentarios inline, acciones por hunk y feedback estructurado hacia el agente. El objetivo es revisar cambios reales sin abandonar la terminal.</p>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">Muestra archivos modificados, diffs, comentarios inline, acciones por hunk, estad&iacute;sticas, templates de respuesta y feedback estructurado hacia el agente. El objetivo es revisar cambios reales sin abandonar la terminal.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">El panel entrega feedback por la PTY original, aplica suggestions localmente con guards contra rutas inseguras y puede preparar commits o pull requests desde el flujo Git local.</p>
+      </section>
+
+      <section id="github-pane" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Panel GitHub integrado</h2>
+        <p style="color:var(--subtext1);line-height:1.75;margin-bottom:1rem;">El panel GitHub lista pull requests, issues, checks y review threads del repo activo usando tu propia sesi&oacute;n de <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">gh</code>. Cocxy no almacena tokens propios.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">La CLI incluye comandos como <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy github status</code>, <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy github prs</code> y <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy github refresh</code> para automatizar el panel desde scripts locales.</p>
       </section>
 
       <section id="markdown" style="margin-bottom:3.5rem;">
         <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Workspace Markdown</h2>
-        <p style="color:var(--subtext1);line-height:1.75;">Editor de fuente, preview local, Mermaid, KaTeX, callouts, footnotes, tabla de contenido, QuickLook offline, b&uacute;squeda, exportaci&oacute;n HTML/PDF y helpers para im&aacute;genes.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">Editor de fuente, preview local, modo split, Mermaid, KaTeX, callouts, footnotes, tabla de contenido, resaltado de sintaxis, b&uacute;squeda, adjuntos de imagen y exportaci&oacute;n HTML/PDF. El editor y preview usan colores legibles en temas claros y oscuros.</p>
+      </section>
+
+      <section id="quicklook" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">QuickLook offline</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Los notebooks de Cocxy generan previews QuickLook sin red. El contenido necesario se conserva localmente, y el bundle verifica que la extensi&oacute;n y metadatos se empaqueten junto a la app.</p>
+      </section>
+
+      <section id="gpu" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Motor GPU con CocxyCore</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">CocxyCore es el motor de terminal escrito en Zig con ABI C estable y renderizado Metal. Mantiene parser, scrollback, hyperlinks, bloques sem&aacute;nticos, protocolo de im&aacute;genes y diagn&oacute;sticos expuestos al bundle Swift.</p>
       </section>
 
       <section id="remote" style="margin-bottom:3.5rem;">
         <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Workspaces remotos</h2>
-        <p style="color:var(--subtext1);line-height:1.75;">Perfiles SSH, ControlMaster, t&uacute;neles, SFTP, tmux, daemon opcional y Keychain local para sostener sesiones remotas persistentes sin servidor Cocxy.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">Perfiles SSH, ControlMaster, jump hosts, t&uacute;neles, SFTP, tmux, proxy, relay y daemon opcional para sostener sesiones remotas persistentes sin servidor Cocxy obligatorio. Las llaves se importan y gestionan localmente con Keychain cuando el usuario lo decide.</p>
+      </section>
+
+      <section id="browser" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Navegador integrado</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Preview de servidores locales, documentaci&oacute;n y apps web junto a la terminal. Incluye perfiles aislados, bookmarks, descargas, find, DevTools, panel overlay o split, e integraci&oacute;n con chips de puertos detectados.</p>
+      </section>
+
+      <section id="web-terminal" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Web Terminal local</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Expone una terminal local por HTTP cuando lo activas con <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy web-start --port 8080</code>. Sirve para pair programming, asistencia interna o dashboards privados, con control expl&iacute;cito de inicio, estado y cierre.</p>
       </section>
 
       <section id="plugins" style="margin-bottom:3.5rem;">
-        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Plugins y CLI</h2>
-        <p style="color:var(--subtext1);line-height:1.75;">Plugins con sandbox, eventos de terminal, permisos expl&iacute;citos y timeout. La CLI <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy</code> controla tabs, splits, sesiones, agentes, hooks, Markdown, remoto, plugins y diagn&oacute;sticos mediante socket local.</p>
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Sistema de plugins</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Plugins descentralizados con sandbox, permisos expl&iacute;citos, timeout, fuentes locales y eventos de terminal. Pueden vivir en usuario, proyecto o bundle, y se ejecutan con el contexto m&iacute;nimo que el evento necesita.</p>
+      </section>
+
+      <section id="per-project" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Configuraci&oacute;n por proyecto</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Un <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">.cocxy.toml</code> en el repo permite ajustar fuente, opacidad, patrones extra, keybindings y preferencias de workspace solo para ese proyecto, con hot reload conservador.</p>
+      </section>
+
+      <section id="applescript" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">AppleScript y Shortcuts</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Automatiza tabs, comandos, splits, foco y conteo de sesiones desde herramientas de macOS. Las acciones de Shortcuts.app ejecutan solo operaciones locales y describen claramente su frontera de privacidad.</p>
+      </section>
+
+      <section id="shell" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Integraci&oacute;n de shell</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Marcadores OSC para directorio, prompt, l&iacute;mites de comando, bloques, hyperlinks y estado sem&aacute;ntico. La integraci&oacute;n conserva configuraciones zsh, bash y fish existentes y degrada de forma segura cuando un shell no soporta una se&ntilde;al.</p>
       </section>
 
       <section id="privacy" style="margin-bottom:3.5rem;">
         <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Cero telemetr&iacute;a</h2>
-        <p style="color:var(--subtext1);line-height:1.75;">Sin analytics, tracking, reporte autom&aacute;tico de crashes ni backend propietario. La red solo aparece cuando instalas, actualizas o usas una herramienta externa configurada por ti.</p>
+        <p style="color:var(--subtext1);line-height:1.75;">Sin analytics, tracking, reporte autom&aacute;tico de crashes ni backend propietario. La red solo aparece cuando instalas, actualizas o usas una herramienta externa configurada por ti; los audits del repo bloquean SDKs de telemetr&iacute;a y copy p&uacute;blico impreciso.</p>
+      </section>
+
+      <section id="cli" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">CLI local</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">La CLI <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy</code> controla tabs, ventanas, splits, sesiones, agentes, hooks, Markdown, remoto, plugins, GitHub, web terminal, temas y diagn&oacute;sticos mediante un Unix Domain Socket local con autenticaci&oacute;n por usuario.</p>
       </section>
 
       <section style="text-align:center;margin-top:4rem;padding:3rem 2rem;background:var(--surface0);border:1px solid var(--surface1);border-radius:16px;">

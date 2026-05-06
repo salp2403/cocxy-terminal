@@ -339,6 +339,48 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!spanish.contains("AI agent workflows"))
     }
 
+    @Test("Spanish feature docs cover every primary public feature anchor")
+    func spanishFeatureDocsCoverEveryPrimaryPublicFeatureAnchor() throws {
+        let root = repositoryRoot()
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/features.html"),
+            encoding: .utf8
+        )
+        let requiredAnchors = [
+            "agent-detection",
+            "code-review",
+            "github-pane",
+            "markdown",
+            "quicklook",
+            "gpu",
+            "remote",
+            "browser",
+            "web-terminal",
+            "plugins",
+            "per-project",
+            "applescript",
+            "shell",
+            "privacy",
+            "cli",
+        ]
+
+        for anchor in requiredAnchors {
+            #expect(
+                spanish.contains(#"id="\#(anchor)""#),
+                "Spanish features docs should include #\(anchor)"
+            )
+            #expect(
+                spanish.contains("href=\"#\(anchor)\""),
+                "Spanish features table of contents should link to #\(anchor)"
+            )
+        }
+
+        #expect(spanish.contains("CocxyCore"))
+        #expect(spanish.contains("cocxy setup-hooks"))
+        #expect(spanish.contains("cocxy github"))
+        #expect(spanish.contains("cero telemetr&iacute;a"))
+    }
+
     @Test("Spanish public docs keep primary navigation inside the Spanish site")
     func spanishPublicDocsKeepPrimaryNavigationInsideSpanishSite() throws {
         let root = repositoryRoot()
