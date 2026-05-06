@@ -160,11 +160,12 @@ struct AgentPanelView: View {
                     viewModel.setSkill(skill.id, selected: !viewModel.isSkillSelected(skill.id))
                 }) {
                     Label(
-                        skillMenuTitle(skill),
+                        AgentPanelLocalization.skillMenuTitle(skill, using: localizer),
                         systemImage: viewModel.isSkillSelected(skill.id)
                             ? "checkmark.circle.fill"
                             : "circle"
                     )
+                    .help(AgentPanelLocalization.skillSummary(skill, using: localizer))
                 }
             }
         } label: {
@@ -312,10 +313,6 @@ struct AgentPanelView: View {
         )
     }
 
-    private func skillMenuTitle(_ skill: AgentPanelSkillOption) -> String {
-        "\(skill.name) (\(skill.source.rawValue))"
-    }
-
     private var statusColor: Color {
         switch viewModel.state {
         case .failed:
@@ -384,6 +381,18 @@ struct AgentPanelView: View {
 }
 
 enum AgentPanelLocalization {
+    static func skillMenuTitle(_ skill: AgentPanelSkillOption, using localizer: AppLocalizer) -> String {
+        "\(skillName(skill, using: localizer)) (\(skillSource(skill.source, using: localizer)))"
+    }
+
+    static func skillSummary(_ skill: AgentPanelSkillOption, using localizer: AppLocalizer) -> String {
+        guard skill.source == .builtIn else { return skill.summary }
+        return localizer.string(
+            "agent.panel.skill.builtIn.\(skill.id).summary",
+            fallback: skill.summary
+        )
+    }
+
     static func approvalTitle(_ text: String, using localizer: AppLocalizer) -> String {
         switch text {
         case "Approve command":
@@ -484,6 +493,25 @@ enum AgentPanelLocalization {
             )
         default:
             return dynamicStatusText(text, using: localizer)
+        }
+    }
+
+    private static func skillName(_ skill: AgentPanelSkillOption, using localizer: AppLocalizer) -> String {
+        guard skill.source == .builtIn else { return skill.name }
+        return localizer.string(
+            "agent.panel.skill.builtIn.\(skill.id).name",
+            fallback: skill.name
+        )
+    }
+
+    private static func skillSource(_ source: SkillSource, using localizer: AppLocalizer) -> String {
+        switch source {
+        case .builtIn:
+            return localizer.string("agent.panel.skill.source.builtIn", fallback: "built-in")
+        case .user:
+            return localizer.string("agent.panel.skill.source.user", fallback: "user")
+        case .project:
+            return localizer.string("agent.panel.skill.source.project", fallback: "project")
         }
     }
 

@@ -45,7 +45,7 @@ struct AgentPanelLocalizationSwiftTestingTests {
         )
         #expect(
             AgentPanelLocalization.statusText("Failed to load skills: unreadable", using: spanish)
-                == "No se pudieron cargar las skills: unreadable"
+                == "No se pudieron cargar las habilidades: unreadable"
         )
         #expect(
             AgentPanelLocalization.statusText(
@@ -54,6 +54,40 @@ struct AgentPanelLocalizationSwiftTestingTests {
             )
                 == "Foundation Models no admite adjuntos de imagen en Modo agente."
         )
+    }
+
+    @Test("localizes built-in skill menu metadata in Spanish")
+    func localizesBuiltInSkillMenuMetadataInSpanish() throws {
+        let spanish = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        let builtInSkill = AgentPanelSkillOption(
+            id: "review-pr",
+            name: "Review PR",
+            summary: "Review a local pull request diff and report correctness risks first.",
+            source: .builtIn
+        )
+        let userSkill = AgentPanelSkillOption(
+            id: "custom-review",
+            name: "Custom Review",
+            summary: "User-defined skill.",
+            source: .user
+        )
+
+        #expect(
+            AgentPanelLocalization.skillMenuTitle(builtInSkill, using: spanish)
+                == "Revisar PR (incluida)"
+        )
+        #expect(
+            AgentPanelLocalization.skillSummary(builtInSkill, using: spanish)
+                == "Revisa un diff local de pull request y reporta primero riesgos de corrección."
+        )
+        #expect(
+            AgentPanelLocalization.skillMenuTitle(userSkill, using: spanish)
+                == "Custom Review (usuario)"
+        )
+        #expect(AgentPanelLocalization.skillSummary(userSkill, using: spanish) == "User-defined skill.")
     }
 
     @Test("localizes approval preview title and body copy in Spanish")
