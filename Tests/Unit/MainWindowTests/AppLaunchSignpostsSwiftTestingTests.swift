@@ -4,7 +4,7 @@
 import Testing
 @testable import CocxyTerminal
 
-@Suite("App launch cold-start signposts")
+@Suite("App launch cold-start signposts", .serialized)
 struct AppLaunchSignpostsSwiftTestingTests {
 
     @Test("catalog covers the launch phases called by AppDelegate")
@@ -50,6 +50,37 @@ struct AppLaunchSignpostsSwiftTestingTests {
         let value = AppLaunchSignposts.measure(.configService) { 42 }
 
         #expect(value == 42)
+    }
+
+    @Test("measure records app-owned launch step durations for local diagnostics")
+    func measureRecordsLaunchStepDurations() {
+        AppLaunchTimingRecorder.resetForTesting()
+
+        let value = AppLaunchSignposts.measure(.configService) { 42 }
+        let snapshot = AppLaunchTimingRecorder.snapshot(pendingDeferredWarmupBatches: [])
+
+        #expect(value == 42)
+        #expect(snapshot.recordedSteps.contains(.configService))
+        #expect(snapshot.durationNanoseconds(for: .configService) != nil)
+        #expect(snapshot.statusFields()["launch_critical_path_budget_ms"] == "50")
+    }
+
+    @Test("timing snapshot reports pending warmup and the slowest recorded launch step")
+    func timingSnapshotReportsPendingWarmupAndSlowestStep() {
+        AppLaunchTimingRecorder.resetForTesting()
+        AppLaunchTimingRecorder.record(.configService, durationNanoseconds: 1_000_000)
+        AppLaunchTimingRecorder.record(.mainWindow, durationNanoseconds: 3_500_000)
+
+        let snapshot = AppLaunchTimingRecorder.snapshot(
+            pendingDeferredWarmupBatches: [[.sessionRestore], [.plugins, .quickTerminal]]
+        )
+        let fields = snapshot.statusFields()
+
+        #expect(snapshot.recordedSteps == [.configService, .mainWindow])
+        #expect(snapshot.pendingDeferredWarmupSteps == 3)
+        #expect(fields["launch_slowest_step"] == "Main window")
+        #expect(fields["launch_slowest_step_ms"] == "3.50")
+        #expect(fields["launch_deferred_pending"] == "3")
     }
 
     @Test("critical path and deferred warm-up partition the launch catalog")

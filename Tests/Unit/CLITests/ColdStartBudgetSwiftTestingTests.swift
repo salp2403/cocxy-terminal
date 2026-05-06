@@ -44,7 +44,7 @@ struct ColdStartBudgetSwiftTestingTests {
         #expect(evaluation.shouldFailGate)
     }
 
-    @Test("documented budgets separate app readiness from future internal signpost work")
+    @Test("documented budgets separate app readiness from local internal launch timing")
     func budgetConstantsDocumentMeasurementScope() {
         #expect(ColdStartBudget.defaultBudgetMilliseconds == 400)
         #expect(ColdStartBudget.internalCriticalPathBudgetMilliseconds == 50)

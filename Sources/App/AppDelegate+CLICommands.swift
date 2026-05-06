@@ -84,11 +84,11 @@ extension AppDelegate {
 
     @MainActor
     func runtimeStatusDetailsForCLI() -> [String: String] {
-        guard let (_, surfaceID, cocxyBridge) = activeCocxyCoreSurfaceForCLI() else {
-            return [:]
-        }
+        var data = launchWarmupStatusDetailsForCLI()
 
-        var data: [String: String] = [:]
+        guard let (_, surfaceID, cocxyBridge) = activeCocxyCoreSurfaceForCLI() else {
+            return data
+        }
 
         if let search = cocxyBridge.searchDiagnostics(for: surfaceID) {
             data["search_mode"] = search.gpuActive ? "gpu" : "cpu"

@@ -309,6 +309,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @MainActor
+    func launchWarmupStatusDetailsForCLI() -> [String: String] {
+        AppLaunchTimingRecorder
+            .snapshot(pendingDeferredWarmupBatches: pendingDeferredLaunchWorkBatches)
+            .statusFields()
+    }
+
     private func runDeferredLaunchStep(_ step: AppLaunchStep) {
         switch step {
         case .bundledFonts:

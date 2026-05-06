@@ -2,11 +2,12 @@
 // AppLaunchSignposts.swift - Cold-start signposts for app launch analysis.
 
 import Foundation
+import CocxyShared
 import os.signpost
 
 /// App-owned launch phases that can be profiled independently from
 /// LaunchServices, AppKit process startup, and CLI socket round trips.
-enum AppLaunchStep: CaseIterable, Equatable, Sendable {
+enum AppLaunchStep: CaseIterable, Equatable, Hashable, Sendable {
     case bundledFonts
     case themeEngine
     case configService
@@ -162,6 +163,121 @@ enum AppLaunchStep: CaseIterable, Equatable, Sendable {
     }
 }
 
+struct AppLaunchTimingSnapshot: Equatable, Sendable {
+    let durationsNanoseconds: [AppLaunchStep: UInt64]
+    let pendingDeferredWarmupSteps: Int
+
+    var recordedSteps: [AppLaunchStep] {
+        AppLaunchStep.allCases.filter { durationsNanoseconds[$0] != nil }
+    }
+
+    var completedDeferredWarmupSteps: Int {
+        max(0, AppLaunchStep.deferredWarmupSteps.count - pendingDeferredWarmupSteps)
+    }
+
+    var criticalPathNanoseconds: UInt64 {
+        AppLaunchStep.criticalPathSteps.reduce(UInt64(0)) { total, step in
+            total + (durationsNanoseconds[step] ?? 0)
+        }
+    }
+
+    var slowestStep: (step: AppLaunchStep, durationNanoseconds: UInt64)? {
+        recordedSteps
+            .compactMap { step -> (AppLaunchStep, UInt64)? in
+                guard let duration = durationsNanoseconds[step] else { return nil }
+                return (step, duration)
+            }
+            .max { lhs, rhs in
+                lhs.1 < rhs.1
+            }
+    }
+
+    func durationNanoseconds(for step: AppLaunchStep) -> UInt64? {
+        durationsNanoseconds[step]
+    }
+
+    func statusFields() -> [String: String] {
+        var fields: [String: String] = [
+            "launch_status": pendingDeferredWarmupSteps == 0 ? "ready" : "warming",
+            "launch_recorded_steps": "\(recordedSteps.count)",
+            "launch_critical_path_ms": Self.formatMilliseconds(criticalPathNanoseconds),
+            "launch_critical_path_budget_ms": Self.formatMilliseconds(
+                UInt64(ColdStartBudget.internalCriticalPathBudgetMilliseconds * 1_000_000),
+                trimIntegerFraction: true
+            ),
+            "launch_deferred_completed": "\(completedDeferredWarmupSteps)",
+            "launch_deferred_pending": "\(pendingDeferredWarmupSteps)",
+            "launch_deferred_total": "\(AppLaunchStep.deferredWarmupSteps.count)"
+        ]
+
+        if let slowestStep {
+            fields["launch_slowest_step"] = slowestStep.step.label
+            fields["launch_slowest_step_ms"] = Self.formatMilliseconds(slowestStep.durationNanoseconds)
+        }
+        return fields
+    }
+
+    private static func formatMilliseconds(
+        _ nanoseconds: UInt64,
+        trimIntegerFraction: Bool = false
+    ) -> String {
+        let milliseconds = Double(nanoseconds) / 1_000_000
+        if trimIntegerFraction, milliseconds.rounded() == milliseconds {
+            return String(format: "%.0f", milliseconds)
+        }
+        return String(format: "%.2f", milliseconds)
+    }
+}
+
+private final class AppLaunchTimingStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var durationsNanoseconds: [AppLaunchStep: UInt64] = [:]
+
+    func record(_ step: AppLaunchStep, durationNanoseconds: UInt64) {
+        lock.lock()
+        durationsNanoseconds[step, default: 0] += durationNanoseconds
+        lock.unlock()
+    }
+
+    func snapshot(
+        pendingDeferredWarmupBatches: [[AppLaunchStep]]
+    ) -> AppLaunchTimingSnapshot {
+        lock.lock()
+        let durations = durationsNanoseconds
+        lock.unlock()
+        return AppLaunchTimingSnapshot(
+            durationsNanoseconds: durations,
+            pendingDeferredWarmupSteps: pendingDeferredWarmupBatches.reduce(0) { total, batch in
+                total + batch.count
+            }
+        )
+    }
+
+    func reset() {
+        lock.lock()
+        durationsNanoseconds.removeAll()
+        lock.unlock()
+    }
+}
+
+enum AppLaunchTimingRecorder {
+    private static let store = AppLaunchTimingStore()
+
+    static func record(_ step: AppLaunchStep, durationNanoseconds: UInt64) {
+        store.record(step, durationNanoseconds: durationNanoseconds)
+    }
+
+    static func snapshot(
+        pendingDeferredWarmupBatches: [[AppLaunchStep]]
+    ) -> AppLaunchTimingSnapshot {
+        store.snapshot(pendingDeferredWarmupBatches: pendingDeferredWarmupBatches)
+    }
+
+    static func resetForTesting() {
+        store.reset()
+    }
+}
+
 enum AppLaunchSignposts {
     private static let log = OSLog(
         subsystem: "dev.cocxy.terminal",
@@ -170,8 +286,15 @@ enum AppLaunchSignposts {
 
     @discardableResult
     static func measure<T>(_ step: AppLaunchStep, _ work: () throws -> T) rethrows -> T {
+        let start = DispatchTime.now().uptimeNanoseconds
         os_signpost(.begin, log: log, name: step.signpostName)
-        defer { os_signpost(.end, log: log, name: step.signpostName) }
+        defer {
+            AppLaunchTimingRecorder.record(
+                step,
+                durationNanoseconds: DispatchTime.now().uptimeNanoseconds - start
+            )
+            os_signpost(.end, log: log, name: step.signpostName)
+        }
         return try work()
     }
 }

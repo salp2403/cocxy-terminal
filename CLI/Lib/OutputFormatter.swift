@@ -406,6 +406,17 @@ public enum OutputFormatter {
             lines.append("Socket: \(socketInfo)")
         }
 
+        if let criticalPath = data["launch_critical_path_ms"] {
+            let budget = data["launch_critical_path_budget_ms"] ?? "50"
+            let slowestStep = data["launch_slowest_step"] ?? "unknown"
+            let slowestStepDuration = data["launch_slowest_step_ms"] ?? "0.00"
+            let completed = data["launch_deferred_completed"] ?? "0"
+            let pending = data["launch_deferred_pending"] ?? "0"
+            lines.append(
+                "Launch: critical \(criticalPath)ms / \(budget)ms, slowest \(slowestStep) \(slowestStepDuration)ms, warmup \(completed) done / \(pending) pending"
+            )
+        }
+
         if let searchMode = data["search_mode"] {
             let indexedRows = data["search_indexed_rows"] ?? "0"
             lines.append("Search: \(searchMode) (\(indexedRows) indexed rows)")

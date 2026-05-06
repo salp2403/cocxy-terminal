@@ -51,17 +51,16 @@ public enum ColdStartBudget {
     /// with `/usr/bin/open` and wait until the bundled `cocxy status` command
     /// can reach the app socket.
     ///
-    /// This is intentionally different from a future in-process signpost budget
-    /// for synchronous work inside `applicationDidFinishLaunching`. That inner
-    /// budget can target tens of milliseconds once it is instrumented. The
+    /// This is intentionally different from the in-process budget for
+    /// synchronous work inside `applicationDidFinishLaunching`. The
     /// bundle-readiness path crosses LaunchServices, app startup, socket
     /// binding, and CLI round-trip overhead, so a 50 ms gate would fail even for
     /// healthy local builds and would not protect users from real regressions.
     public static let defaultBudgetMilliseconds: Double = 400
 
-    /// Target kept for the future signpost-level benchmark that measures only
-    /// Cocxy-owned synchronous launch work, not LaunchServices or socket
-    /// round-trips.
+    /// Target for the local launch timing exposed through `cocxy status`.
+    /// This measures only Cocxy-owned synchronous launch work, not
+    /// LaunchServices or socket round-trips.
     public static let internalCriticalPathBudgetMilliseconds: Double = 50
 
     public static let defaultToleranceRatio: Double = 0.10

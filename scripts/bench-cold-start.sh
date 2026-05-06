@@ -55,6 +55,8 @@ quit_existing_app() {
 }
 
 samples=()
+internal_critical_path_samples=()
+internal_critical_path_budget_ms="50"
 for ((i = 1; i <= RUNS; i++)); do
   quit_existing_app
   sleep 0.35
@@ -62,7 +64,8 @@ for ((i = 1; i <= RUNS; i++)); do
   start_ns="$(perl -MTime::HiRes=time -e 'printf "%.0f\n", time() * 1000000000')"
   /usr/bin/open -n "$APP_PATH"
   deadline=$((SECONDS + 10))
-  until "$CLI" status >/dev/null 2>&1; do
+  status_output=""
+  until status_output="$("$CLI" status 2>/dev/null)"; do
     if (( SECONDS >= deadline )); then
       echo "Timed out waiting for Cocxy status on run $i" >&2
       exit 1
@@ -72,6 +75,24 @@ for ((i = 1; i <= RUNS; i++)); do
   end_ns="$(perl -MTime::HiRes=time -e 'printf "%.0f\n", time() * 1000000000')"
   elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
   samples+=("$elapsed_ms")
+
+  # Readiness stops as soon as the socket responds. The first response can
+  # legitimately be "warming" while the main actor is still painting restore
+  # work, so collect launch diagnostics after recording app-readiness time.
+  launch_status_output="$status_output"
+  launch_regex="Launch: critical ([0-9.]+)ms / ([0-9.]+)ms"
+  diagnostics_deadline=$((SECONDS + 2))
+  until [[ "$launch_status_output" =~ "$launch_regex" ]]; do
+    if (( SECONDS >= diagnostics_deadline )); then
+      break
+    fi
+    sleep 0.05
+    launch_status_output="$("$CLI" status 2>/dev/null || true)"
+  done
+  if [[ "$launch_status_output" =~ "$launch_regex" ]]; then
+    internal_critical_path_samples+=("$match[1]")
+    internal_critical_path_budget_ms="$match[2]"
+  fi
 done
 
 sorted=("${(@f)$(printf '%s\n' "${samples[@]}" | sort -n)}")
@@ -102,6 +123,21 @@ for sample in "${samples[@]}"; do
 done
 gate_passed="$(awk "BEGIN { print ($trailing_failures < $REQUIRED_CONSECUTIVE_FAILURES) ? 1 : 0 }")"
 
+internal_critical_path_median_ms="null"
+internal_critical_path_within_budget="null"
+if (( ${#internal_critical_path_samples[@]} > 0 )); then
+  sorted_internal=("${(@f)$(printf '%s\n' "${internal_critical_path_samples[@]}" | sort -n)}")
+  internal_count="${#sorted_internal[@]}"
+  if (( internal_count % 2 == 1 )); then
+    internal_critical_path_median_ms="${sorted_internal[$((internal_count / 2 + 1))]}"
+  else
+    internal_left="${sorted_internal[$((internal_count / 2))]}"
+    internal_right="${sorted_internal[$((internal_count / 2 + 1))]}"
+    internal_critical_path_median_ms="$(awk "BEGIN { print ($internal_left + $internal_right) / 2 }")"
+  fi
+  internal_critical_path_within_budget="$(awk "BEGIN { print ($internal_critical_path_median_ms <= $internal_critical_path_budget_ms) ? 1 : 0 }")"
+fi
+
 printf '{\n'
 printf '  "app": "%s",\n' "$APP_PATH"
 printf '  "benchmark_kind": "%s",\n' "$BENCHMARK_KIND"
@@ -111,6 +147,14 @@ printf '  "median_ms": %s,\n' "$median"
 printf '  "budget_ms": %s,\n' "$BUDGET_MS"
 printf '  "tolerated_budget_ms": %s,\n' "$tolerated"
 printf '  "within_budget": %s,\n' "$([[ "$within" == "1" ]] && echo true || echo false)"
+printf '  "internal_critical_path_samples_ms": [%s],\n' "${(j:,:)internal_critical_path_samples}"
+printf '  "internal_critical_path_median_ms": %s,\n' "$internal_critical_path_median_ms"
+printf '  "internal_critical_path_budget_ms": %s,\n' "$internal_critical_path_budget_ms"
+if [[ "$internal_critical_path_within_budget" == "null" ]]; then
+  printf '  "internal_critical_path_within_budget": null,\n'
+else
+  printf '  "internal_critical_path_within_budget": %s,\n' "$([[ "$internal_critical_path_within_budget" == "1" ]] && echo true || echo false)"
+fi
 printf '  "required_consecutive_failures": %s,\n' "$REQUIRED_CONSECUTIVE_FAILURES"
 printf '  "trailing_failures": %s,\n' "$trailing_failures"
 printf '  "gate_passed": %s\n' "$([[ "$gate_passed" == "1" ]] && echo true || echo false)"

@@ -955,6 +955,28 @@ final class OutputFormatterTests: XCTestCase {
         XCTAssertEqual(output, "Cocxy Terminal - status unavailable")
     }
 
+    func testFormatStatusIncludesLaunchTimingDiagnostics() {
+        let response = CLISocketResponse(
+            id: "r-7a",
+            success: true,
+            data: [
+                "version": "0.1.92",
+                "tabs": "12",
+                "launch_critical_path_ms": "37.50",
+                "launch_critical_path_budget_ms": "50",
+                "launch_slowest_step": "Main window",
+                "launch_slowest_step_ms": "14.25",
+                "launch_deferred_completed": "3",
+                "launch_deferred_pending": "2"
+            ],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(command: .status, response: response)
+
+        XCTAssertTrue(output.contains("Launch: critical 37.50ms / 50ms, slowest Main window 14.25ms, warmup 3 done / 2 pending"))
+    }
+
     func testFormatNotebookImportUsesServerSummary() {
         let response = CLISocketResponse(
             id: "notebook-1",
