@@ -270,10 +270,8 @@ struct AuroraWorkspaceModelTests {
     @Test("AuroraSession diagnostic tooltip summarizes workspace, process, commands, and active panes")
     func sessionDiagnosticTooltipIncludesUsefulHoverContext() {
         // Use `NSHomeDirectory()` so the tilde abbreviation produced by
-        // `prettyDirectory` is comparable on every runner. Hardcoded
-        // `/Users/Galf/...` paths only abbreviate when the current user is
-        // `Galf`, which fails on CI runners (`/Users/runner`) and on any
-        // other developer's machine.
+        // `prettyDirectory` is comparable on every runner. Hardcoded home
+        // paths only abbreviate for one local user and fail on CI runners.
         let workingDirectory = NSHomeDirectory() + "/sisocs-v3"
 
         let session = Design.AuroraSession(

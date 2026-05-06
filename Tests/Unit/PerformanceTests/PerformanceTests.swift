@@ -440,9 +440,22 @@ final class PerformanceTests: XCTestCase {
     // MARK: - Test 15: Git Branch Cache Performance
 
     /// Verifies that cached branch lookups are sub-millisecond.
-    func test_gitBranchCache_repeatedLookups_subMillisecond() {
+    func test_gitBranchCache_repeatedLookups_subMillisecond() throws {
         let provider = GitInfoProviderImpl(cacheTTLSeconds: 60.0)
-        let repoDirectory = URL(fileURLWithPath: "/Users/Galf/claude-terminal")
+        let repoDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-git-cache-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: repoDirectory.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try "ref: refs/heads/main\n".write(
+            to: repoDirectory.appendingPathComponent(".git/HEAD"),
+            atomically: true,
+            encoding: .utf8
+        )
+        defer {
+            try? FileManager.default.removeItem(at: repoDirectory)
+        }
 
         // Prime the cache with the first lookup.
         _ = provider.currentBranch(at: repoDirectory)

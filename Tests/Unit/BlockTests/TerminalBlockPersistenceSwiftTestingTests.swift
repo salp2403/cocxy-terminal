@@ -23,7 +23,7 @@ struct TerminalBlockPersistenceSwiftTestingTests {
     @Test("JSONL serializer decodes legacy unversioned records")
     func jsonlSerializerDecodesLegacyUnversionedRecords() throws {
         let legacyLine = """
-        {"blockType":2,"command":"echo legacy","durationNs":150,"endRow":4,"endTimeNs":250,"exitCode":0,"id":42,"output":"legacy\\n","pwd":"/Users/Galf/project","startRow":3,"startTimeNs":100,"streamID":0}
+        {"blockType":2,"command":"echo legacy","durationNs":150,"endRow":4,"endTimeNs":250,"exitCode":0,"id":42,"output":"legacy\\n","pwd":"/Users/example/project","startRow":3,"startTimeNs":100,"streamID":0}
         """
 
         let decoded = try TerminalBlockSerializer.decodeLine(legacyLine)
@@ -37,7 +37,7 @@ struct TerminalBlockPersistenceSwiftTestingTests {
     @Test("JSONL serializer rejects future schema versions")
     func jsonlSerializerRejectsFutureSchemaVersions() throws {
         let futureLine = """
-        {"schemaVersion":99,"blockType":2,"command":"echo future","durationNs":150,"endRow":4,"endTimeNs":250,"exitCode":0,"id":42,"isBookmarked":false,"output":"future\\n","pwd":"/Users/Galf/project","startRow":3,"startTimeNs":100,"streamID":0}
+        {"schemaVersion":99,"blockType":2,"command":"echo future","durationNs":150,"endRow":4,"endTimeNs":250,"exitCode":0,"id":42,"isBookmarked":false,"output":"future\\n","pwd":"/Users/example/project","startRow":3,"startTimeNs":100,"streamID":0}
         """
 
         #expect(throws: DecodingError.self) {
@@ -271,7 +271,7 @@ struct TerminalBlockPersistenceSwiftTestingTests {
             command: command,
             output: output,
             exitCode: 0,
-            pwd: "/Users/Galf/project",
+            pwd: "/Users/example/project",
             startTimeNs: startTimeNs,
             endTimeNs: startTimeNs + 150,
             durationNs: 150,

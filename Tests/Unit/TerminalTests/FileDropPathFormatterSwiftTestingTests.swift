@@ -156,12 +156,11 @@ struct FileDropPathFormatterSwiftTestingTests {
     @Test("matches the canonical shell-escape produced for a typical macOS Screenshot path")
     func realWorldScreenshotPath() {
         // This path is exactly the form macOS produces under the
-        // default Screenshots Capture preferences, and is the one Said
-        // reported as breaking the agent's image-detection on drop.
-        let url = URL(fileURLWithPath: "/Users/Galf/Screenshots/Screenshot 2026-04-27 at 8.41.00 AM.png")
+        // default Screenshots Capture preferences.
+        let url = URL(fileURLWithPath: "/Users/example/Screenshots/Screenshot 2026-04-27 at 8.41.00 AM.png")
 
         let result = FileDropPathFormatter.format([url])
 
-        #expect(result == "/Users/Galf/Screenshots/Screenshot\\ 2026-04-27\\ at\\ 8.41.00\\ AM.png")
+        #expect(result == "/Users/example/Screenshots/Screenshot\\ 2026-04-27\\ at\\ 8.41.00\\ AM.png")
     }
 }
