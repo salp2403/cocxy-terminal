@@ -1409,6 +1409,8 @@
 "notebook.status.failed.many" = "Notebook falló en la celda %d después de %d celdas.";
 "workflow.run" = "Ejecutar";
 "workflow.running" = "Ejecutando";
+"workflow.defaultSource.name" = "Flujo local";
+"workflow.defaultSource.command" = "echo flujo listo";
 "workflow.status.loaded" = "%@ cargado";
 "workflow.status.new" = "Flujo nuevo";
 "workflow.status.unsaved" = "Flujo sin guardar";

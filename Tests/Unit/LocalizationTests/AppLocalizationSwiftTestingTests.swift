@@ -213,6 +213,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("horizontalTab.action.openWorkflow", fallback: "Open Workflow") == "Abrir flujo")
         #expect(spanish.string("horizontalTab.add.workflow", fallback: "Workflow") == "Flujo")
         #expect(spanish.string("window.pane.workflowPanel", fallback: "workflow panel") == "panel de flujo")
+        #expect(spanish.string("workflow.defaultSource.name", fallback: "Local Workflow") == "Flujo local")
+        #expect(spanish.string("workflow.defaultSource.command", fallback: "echo workflow ready") == "echo flujo listo")
         #expect(spanish.string("workflow.status.new", fallback: "New workflow") == "Flujo nuevo")
         #expect(spanish.string("workflow.status.completed.one", fallback: "Workflow %@ completed after %d step.") == "Flujo %@ completado después de %d paso.")
         #expect(spanish.string("workflow.step.status.completed", fallback: "Completed") == "Completado")

@@ -7,6 +7,26 @@ import Testing
 
 @Suite("Workflow panel view model")
 struct WorkflowPanelViewModelSwiftTestingTests {
+    @Test("Spanish localizer seeds new workflow source with Spanish visible copy")
+    @MainActor
+    func spanishLocalizerSeedsNewWorkflowSourceWithSpanishVisibleCopy() throws {
+        let workspace = try temporaryWorkflowPanelDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        let viewModel = WorkflowPanelViewModel(
+            fileURL: nil,
+            workspaceRoot: workspace,
+            localizer: spanish
+        )
+
+        #expect(viewModel.statusText == "Flujo nuevo")
+        #expect(viewModel.sourceText.contains("name = \"Flujo local\""))
+        #expect(viewModel.sourceText.contains("command = \"echo flujo listo\""))
+        #expect(viewModel.workflowID == "local")
+    }
+
     @Test("loads, saves and executes workflow TOML")
     @MainActor
     func runsWorkflowAndExposesStepResults() async throws {

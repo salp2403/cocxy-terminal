@@ -1409,6 +1409,8 @@
 "notebook.status.failed.many" = "Notebook failed at cell %d after %d cells.";
 "workflow.run" = "Run";
 "workflow.running" = "Running";
+"workflow.defaultSource.name" = "Local Workflow";
+"workflow.defaultSource.command" = "echo workflow ready";
 "workflow.status.loaded" = "Loaded %@";
 "workflow.status.new" = "New workflow";
 "workflow.status.unsaved" = "Unsaved workflow";

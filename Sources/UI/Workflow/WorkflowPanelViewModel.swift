@@ -96,7 +96,7 @@ final class WorkflowPanelViewModel: ObservableObject {
             sourceText = loaded
             statusState = .loaded(fileURL.lastPathComponent)
         } else {
-            sourceText = Self.defaultWorkflowSource()
+            sourceText = Self.defaultWorkflowSource(localizer: localizer)
             statusState = .new
         }
         statusText = Self.localizedStatusText(statusState, localizer: localizer)
@@ -231,15 +231,21 @@ final class WorkflowPanelViewModel: ObservableObject {
         }
     }
 
-    private static func defaultWorkflowSource() -> String {
-        """
-        [workflow]
-        id = "local"
-        name = "Local Workflow"
-        steps = ["verify"]
-
-        [step.verify]
-        command = "echo workflow ready"
-        """
+    private static func defaultWorkflowSource(localizer: AppLocalizer) -> String {
+        WorkflowTOMLCodec.render(WorkflowDocument(
+            id: "local",
+            name: localizer.string("workflow.defaultSource.name", fallback: "Local Workflow"),
+            description: nil,
+            steps: [
+                WorkflowStep(
+                    id: "verify",
+                    title: nil,
+                    command: localizer.string(
+                        "workflow.defaultSource.command",
+                        fallback: "echo workflow ready"
+                    )
+                ),
+            ]
+        )).trimmingCharacters(in: .newlines)
     }
 }
