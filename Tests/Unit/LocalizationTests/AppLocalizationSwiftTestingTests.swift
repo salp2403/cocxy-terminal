@@ -788,6 +788,38 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func visibleUILiteralsStayOnApprovedTechnicalAllowlist() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let allowed: [String: Set<String>] = [
+            "Sources/UI/Design/AuroraTweaksPanel.swift": ["AURORA"],
+            "Sources/UI/GitHub/GitHubPaneView.swift": ["GitHub"],
+            "Sources/UI/Preferences/PreferencesView.swift": [
+                "0Oo Il1 | [] {} () => -> == != --",
+                "Cocxy Terminal",
+            ],
+            "Sources/UI/RemoteWorkspace/PortForwardingView.swift": ["SOCKS"],
+            "Sources/UI/RemoteWorkspace/RemoteProfileEditor.swift": ["L", "R", "D"],
+            "Sources/UI/RemoteWorkspace/SSHKeyManagerView.swift": ["Ed25519", "RSA", "ECDSA"],
+            "Sources/UI/ScrollbackSearch/ScrollbackSearchBarView.swift": ["aA"],
+        ]
+        let literals = try hardcodedVisibleUILiterals(
+            at: [
+                root.appendingPathComponent("Sources/App", isDirectory: true),
+                root.appendingPathComponent("Sources/UI", isDirectory: true),
+            ],
+            relativeTo: root
+        )
+        let violations = literals.filter { literal in
+            !allowed[literal.path, default: []].contains(literal.value)
+        }
+
+        #expect(
+            violations.isEmpty,
+            Comment(rawValue: hardcodedVisibleLiteralMessage(violations))
+        )
+    }
+
+    @Test
     func markdownPreviewTemplateUsesLocalizedTOCTitle() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
@@ -874,6 +906,138 @@ struct AppLocalizationSwiftTestingTests {
             }
             .joined(separator: "; ")
         return "Missing \(localeName) localization keys: \(missing)"
+    }
+
+    private struct HardcodedVisibleLiteral: Comparable {
+        let path: String
+        let line: Int
+        let value: String
+
+        static func < (lhs: HardcodedVisibleLiteral, rhs: HardcodedVisibleLiteral) -> Bool {
+            if lhs.path != rhs.path { return lhs.path < rhs.path }
+            if lhs.line != rhs.line { return lhs.line < rhs.line }
+            return lhs.value < rhs.value
+        }
+    }
+
+    private func hardcodedVisibleUILiterals(
+        at roots: [URL],
+        relativeTo root: URL
+    ) throws -> [HardcodedVisibleLiteral] {
+        let expressions = try [
+            #"\b(?:Text|Button|Label)\(\s*"([^"\n]+)""#,
+            #"\bNSButton\(title:\s*"([^"\n]+)""#,
+            #"\bNSTextField\(labelWithString:\s*"([^"\n]+)""#,
+            #"\bsetAccessibilityLabel\(\s*"([^"\n]+)""#,
+            #"\.help\(\s*"([^"\n]+)""#,
+        ].map { try NSRegularExpression(pattern: $0, options: []) }
+        var result: [HardcodedVisibleLiteral] = []
+
+        for rootURL in roots {
+            guard let enumerator = FileManager.default.enumerator(
+                at: rootURL,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+
+            for case let fileURL as URL in enumerator {
+                guard fileURL.pathExtension == "swift" else { continue }
+                let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+                guard values.isRegularFile == true else { continue }
+
+                let source = try String(contentsOf: fileURL, encoding: .utf8)
+                let sourceRange = NSRange(source.startIndex..<source.endIndex, in: source)
+                for expression in expressions {
+                    for match in expression.matches(in: source, options: [], range: sourceRange) {
+                        guard let valueRange = Range(match.range(at: 1), in: source) else { continue }
+                        let value = String(source[valueRange])
+                        guard literalContainsLocalizableLetters(value) else {
+                            continue
+                        }
+                        result.append(
+                            HardcodedVisibleLiteral(
+                                path: relativePath(for: fileURL, from: root),
+                                line: lineNumber(in: source, at: match.range.location),
+                                value: value
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return result.sorted()
+    }
+
+    private func lineNumber(in source: String, at utf16Offset: Int) -> Int {
+        let clampedOffset = min(max(utf16Offset, 0), source.utf16.count)
+        let index = String.Index(utf16Offset: clampedOffset, in: source)
+        return source[..<index].reduce(1) { partial, character in
+            partial + (character == "\n" ? 1 : 0)
+        }
+    }
+
+    private func literalContainsLocalizableLetters(_ literal: String) -> Bool {
+        var staticText = ""
+        var index = literal.startIndex
+        while index < literal.endIndex {
+            if literal[index] == "\\",
+               literal.index(after: index) < literal.endIndex,
+               literal[literal.index(after: index)] == "(" {
+                index = endIndexOfSwiftInterpolation(startingAt: index, in: literal)
+            } else {
+                staticText.append(literal[index])
+                index = literal.index(after: index)
+            }
+        }
+        guard staticText.range(of: #"[A-Za-z]"#, options: .regularExpression) != nil else {
+            return false
+        }
+        let compactText = staticText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "")
+        return !isTechnicalUnitFragment(compactText)
+    }
+
+    private func isTechnicalUnitFragment(_ text: String) -> Bool {
+        let allowedUnits: Set<String> = ["f", "ms", "pt", "px", "t", "x"]
+        if allowedUnits.contains(text) {
+            return true
+        }
+        return text.range(of: #"^\d+(?:\.\d+)?x$"#, options: .regularExpression) != nil
+    }
+
+    private func endIndexOfSwiftInterpolation(startingAt start: String.Index, in literal: String) -> String.Index {
+        var index = literal.index(start, offsetBy: 2)
+        var depth = 1
+        var isEscaped = false
+        var isInsideString = false
+
+        while index < literal.endIndex {
+            let character = literal[index]
+            if isEscaped {
+                isEscaped = false
+            } else if character == "\\" {
+                isEscaped = true
+            } else if character == "\"" {
+                isInsideString.toggle()
+            } else if !isInsideString, character == "(" {
+                depth += 1
+            } else if !isInsideString, character == ")" {
+                depth -= 1
+                if depth == 0 {
+                    return literal.index(after: index)
+                }
+            }
+            index = literal.index(after: index)
+        }
+        return literal.endIndex
+    }
+
+    private func hardcodedVisibleLiteralMessage(_ violations: [HardcodedVisibleLiteral]) -> String {
+        let sample = violations.prefix(25).map { literal in
+            "\(literal.path):\(literal.line) \"\(literal.value)\""
+        }.joined(separator: "; ")
+        return "Hardcoded visible UI literals must be localized or added to the technical allowlist: \(sample)"
     }
 
     private func relativePath(for fileURL: URL, from root: URL) -> String {
