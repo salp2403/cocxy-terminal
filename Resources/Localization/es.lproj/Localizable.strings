@@ -44,8 +44,8 @@
 "preferences.appearance.fontPreview.command" = "cocxy run --local-agent --dry-run";
 "preferences.appearance.fontResolution.included" = "Incluida con Cocxy: %@";
 "preferences.appearance.fontResolution.installed" = "Usando fuente instalada: %@";
-"preferences.appearance.fontResolution.fallbackBundled" = "\"%@\" no está instalada. Cocxy usará como fallback la fuente incluida %@.";
-"preferences.appearance.fontResolution.fallback" = "\"%@\" no está instalada. Cocxy usará como fallback %@.";
+"preferences.appearance.fontResolution.fallbackBundled" = "\"%@\" no está instalada. Cocxy usará como alternativa la fuente incluida %@.";
+"preferences.appearance.fontResolution.fallback" = "\"%@\" no está instalada. Cocxy usará como alternativa %@.";
 "preferences.appearance.enableLigatures" = "Activar ligaduras";
 "preferences.appearance.enableLigatures.help" = "Algunas fuentes combinan pares de símbolos como --, ==, -> en un solo glifo más ancho. Desactiva esta opción si texto de comandos como --local-agent --dry-run se ve desalineado o apretado en el prompt.";
 "preferences.appearance.enableLigatures.caption" = "Algunas fuentes combinan pares de símbolos como --, ==, -> en un solo glifo. Desactívalo si el texto de comandos se ve desalineado en el prompt.";
@@ -119,7 +119,7 @@
 "preferences.agentMode.confirmComputerActions.help" = "Requiere aprobación explícita antes de ejecutar acciones locales de mouse, teclado o captura.";
 "preferences.agentMode.provider.section" = "Proveedor";
 "preferences.agentMode.preferredProvider" = "Proveedor preferido";
-"preferences.agentMode.provider.detail.foundationModels" = "Corre en el dispositivo cuando está soportado. Si no está disponible, Cocxy te pide elegir otro proveedor en vez de hacer fallback silencioso.";
+"preferences.agentMode.provider.detail.foundationModels" = "Corre en el dispositivo cuando está soportado. Si no está disponible, Cocxy te pide elegir otro proveedor en vez de cambiar silenciosamente.";
 "preferences.agentMode.provider.detail.remote" = "Usa la llave API del proveedor guardada en Keychain de macOS. Las solicitudes van directamente desde esta Mac al proveedor seleccionado.";
 "preferences.agentMode.apiKey.section" = "Llave API";
 "preferences.agentMode.apiKey" = "Llave API";
@@ -575,7 +575,7 @@
 "preferences.voice.resolution.systemLanguageFallback" = "Usando el idioma compatible más cercano al idioma actual del sistema.";
 "preferences.voice.resolution.systemUnsupportedFallback" = "Speech no lista el idioma actual del sistema; usando el primer reconocedor local compatible.";
 "preferences.voice.resolution.manualOverride" = "Usando el idioma seleccionado manualmente.";
-"preferences.voice.resolution.manualUnsupportedSystemFallback" = "%@ no está listado por Speech; usando fallback al idioma del sistema.";
+"preferences.voice.resolution.manualUnsupportedSystemFallback" = "%@ no está listado por Speech; usando el idioma del sistema como alternativa.";
 "preferences.voice.resolution.unavailable" = "macOS no reportó idiomas locales de reconocimiento de voz.";
 "preferences.activity.privacy.section" = "Privacidad";
 "preferences.activity.enable" = "Activar panel local de Actividad";
