@@ -16,7 +16,7 @@ struct MenuBarStatusItemSwiftTestingTests {
 
         #expect(MenuBarStatusItem.localizedNoActiveAgents(using: spanish) == "No hay agentes activos")
         #expect(MenuBarStatusItem.localizedShowCocxy(using: spanish) == "Mostrar Cocxy")
-        #expect(MenuBarStatusItem.localizedShowDashboard(using: spanish) == "Mostrar dashboard")
+        #expect(MenuBarStatusItem.localizedShowDashboard(using: spanish) == "Mostrar panel de agentes")
         #expect(MenuBarStatusItem.localizedQuitCocxy(using: spanish) == "Cerrar Cocxy")
         #expect(MenuBarStatusItem.localizedAgentState("waitingForInput", using: spanish) == "Esperando entrada")
         #expect(MenuBarStatusItem.localizedAgentState("launched", using: spanish) == "Iniciando")
