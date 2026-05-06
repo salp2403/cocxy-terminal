@@ -394,6 +394,92 @@ struct ICloudSyncFoundationSwiftTestingTests {
         #expect(try posixPermissions(at: localURL) == 0o600)
         #expect(try posixPermissions(at: backupURL) == 0o600)
     }
+
+    @Test("local two device smoke exports imports and resolves manual conflicts")
+    func localTwoDeviceSmokeExportsImportsAndResolvesManualConflicts() throws {
+        let root = temporaryDirectory(named: "icloud-sync-two-device")
+        let deviceARoots = try makeArtifactRoots(in: root.appendingPathComponent("device-a", isDirectory: true))
+        let deviceBRoots = try makeArtifactRoots(in: root.appendingPathComponent("device-b", isDirectory: true))
+        let remoteContainer = root.appendingPathComponent("ubiquity", isDirectory: true)
+        let provider = RecordingICloudContainerProvider(root: remoteContainer)
+        let rootResolver = ICloudSyncRootResolver(containerProvider: provider)
+        let config = ICloudSyncConfig(enabled: true, artifactKinds: [.notebooks, .settings])
+        let password = "sync password"
+
+        let deviceANotebook = deviceARoots.notebooks.appendingPathComponent("daily.cocxynb")
+        try "device A v1".write(to: deviceANotebook, atomically: true, encoding: .utf8)
+        try "theme = \"dark\"".write(to: deviceARoots.settings, atomically: true, encoding: .utf8)
+
+        let exporter = ICloudSyncExportService(rootResolver: rootResolver)
+        let initialExport = try exporter.exportLocalArtifacts(
+            config: config,
+            roots: deviceARoots,
+            password: password
+        )
+        guard case .exported(let initialExportResult) = initialExport else {
+            Issue.record("Expected initial export")
+            return
+        }
+        #expect(initialExportResult.manifest.entries.map(\.relativePath) == ["daily.cocxynb", "config.toml"])
+
+        let importer = ICloudSyncImportService(rootResolver: rootResolver)
+        let firstImport = try importer.importRemoteArtifacts(
+            config: config,
+            roots: deviceBRoots,
+            password: password
+        )
+        guard case .imported(let firstImportResult) = firstImport else {
+            Issue.record("Expected first import")
+            return
+        }
+        let deviceBNotebook = deviceBRoots.notebooks.appendingPathComponent("daily.cocxynb")
+        #expect(firstImportResult.conflicts.isEmpty)
+        #expect(Set(firstImportResult.importedArtifactURLs) == [
+            deviceBNotebook.standardizedFileURL,
+            deviceBRoots.settings.standardizedFileURL,
+        ])
+        #expect(try String(contentsOf: deviceBNotebook, encoding: .utf8) == "device A v1")
+
+        try "device A v2".write(to: deviceANotebook, atomically: true, encoding: .utf8)
+        _ = try exporter.exportLocalArtifacts(config: config, roots: deviceARoots, password: password)
+        try "device B local edit".write(to: deviceBNotebook, atomically: true, encoding: .utf8)
+
+        let conflictedImport = try importer.importRemoteArtifacts(
+            config: config,
+            roots: deviceBRoots,
+            password: password
+        )
+        guard case .imported(let conflictedImportResult) = conflictedImport else {
+            Issue.record("Expected conflicted import")
+            return
+        }
+        #expect(conflictedImportResult.importedArtifactURLs.isEmpty)
+        #expect(conflictedImportResult.conflicts.count == 1)
+        let conflict = try #require(conflictedImportResult.conflicts.first)
+        #expect(conflict.local.relativePath == "daily.cocxynb")
+        #expect(conflict.remote.relativePath == "daily.cocxynb")
+        #expect(try String(contentsOf: deviceBNotebook, encoding: .utf8) == "device B local edit")
+
+        let resolver = ICloudSyncConflictResolutionService(rootResolver: rootResolver)
+        let resolution = try resolver.resolveConflict(
+            config: config,
+            conflict: conflict,
+            resolution: .useRemote,
+            roots: deviceBRoots,
+            backupRoot: root.appendingPathComponent("conflict-backups", isDirectory: true),
+            password: password
+        )
+        guard case .resolved(let resolutionResult) = resolution else {
+            Issue.record("Expected conflict resolution")
+            return
+        }
+        let backupURL = try #require(resolutionResult.backupURL)
+        #expect(resolutionResult.localURL == deviceBNotebook.standardizedFileURL)
+        #expect(try String(contentsOf: deviceBNotebook, encoding: .utf8) == "device A v2")
+        #expect(try String(contentsOf: backupURL, encoding: .utf8) == "device B local edit")
+        #expect(try posixPermissions(at: deviceBNotebook) == 0o600)
+        #expect(try posixPermissions(at: backupURL) == 0o600)
+    }
 }
 
 private final class RecordingICloudContainerProvider: ICloudContainerProviding, @unchecked Sendable {
