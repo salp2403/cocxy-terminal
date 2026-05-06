@@ -120,6 +120,45 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!release.contains("smoke-local-ssh.sh"))
     }
 
+    @Test("GitHub PR smoke script is read-only and kept out of unauthenticated CI")
+    func gitHubPRSmokeScriptIsReadOnlyAndManualOnly() throws {
+        let root = repositoryRoot()
+        let scriptURL = root.appendingPathComponent("scripts/smoke-github-pr-readonly.sh")
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let ci = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let nightly = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/nightly.yml"),
+            encoding: .utf8
+        )
+        let release = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
+        #expect(script.contains("read-only `gh` operations only"))
+        #expect(script.contains("gh pr view"))
+        #expect(script.contains("gh pr diff"))
+        #expect(script.contains("gh pr checks"))
+        #expect(script.contains("reviewThreads"))
+        #expect(!script.contains("gh pr create"))
+        #expect(!script.contains("gh pr review"))
+        #expect(!script.contains("gh pr merge"))
+        #expect(!script.contains("mutation "))
+        #expect(!script.contains("resolveReviewThread"))
+        #expect(!script.contains("unresolveReviewThread"))
+        #expect(!ci.contains("smoke-github-pr-readonly.sh"))
+        #expect(!nightly.contains("smoke-github-pr-readonly.sh"))
+        #expect(!release.contains("smoke-github-pr-readonly.sh"))
+
+        let result = try runProcess(scriptURL, arguments: ["--help"])
+        #expect(result.terminationStatus == 0)
+        #expect(result.stdout.contains("--repo owner/name --pr 123"))
+    }
+
     @Test("performance regression checker accepts metrics inside tolerance")
     func performanceRegressionCheckerAcceptsMetricsInsideTolerance() throws {
         let root = repositoryRoot()
