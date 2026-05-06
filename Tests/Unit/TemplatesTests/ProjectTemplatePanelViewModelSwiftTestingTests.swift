@@ -115,6 +115,44 @@ struct ProjectTemplatePanelViewModelSwiftTestingTests {
         #expect(viewModel.statusText == "Created 1 file")
     }
 
+    @Test("Spanish localizer translates built-in template metadata")
+    func spanishLocalizerTranslatesBuiltInTemplateMetadata() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let templatesRoot = root.appendingPathComponent("templates", isDirectory: true)
+        try writeTemplate(
+            id: "docker-service",
+            name: "Docker Service",
+            summary: "Creates a minimal local service with Docker assets.",
+            variables: [
+                ProjectTemplateVariable(name: "project_name", prompt: "Project name", defaultValue: "cocxy-service"),
+                ProjectTemplateVariable(name: "service_name", prompt: "Service name", defaultValue: "cocxy-service"),
+            ],
+            in: templatesRoot
+        )
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let viewModel = ProjectTemplatePanelViewModel(
+            registry: ProjectTemplateRegistry(
+                directories: [ProjectTemplateDirectory(url: templatesRoot, source: .builtIn)]
+            ),
+            destinationRootURL: root.appendingPathComponent("output", isDirectory: true),
+            localizer: spanish
+        )
+
+        try viewModel.refresh()
+
+        #expect(viewModel.templates.first?.name == "Servicio Docker")
+        #expect(viewModel.templates.first?.summary == "Crea un servicio local mínimo con archivos Docker.")
+        #expect(viewModel.selectedVariables.map(\.prompt) == ["Nombre del proyecto", "Nombre del servicio"])
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.templates.first?.name == "Docker Service")
+        #expect(viewModel.templates.first?.summary == "Creates a minimal local service with Docker assets.")
+        #expect(viewModel.selectedVariables.map(\.prompt) == ["Project name", "Service name"])
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-template-panel-tests-\(UUID().uuidString)", isDirectory: true)

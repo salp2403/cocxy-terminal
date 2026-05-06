@@ -62,6 +62,7 @@ final class ProjectTemplatePanelViewModel: ObservableObject {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        templates = loadedTemplates.map(localizedPresentation(for:))
         statusText = Self.localizedStatusText(statusState, localizer: localizer)
         if let currentError {
             errorText = Self.localizedErrorDescription(currentError, localizer: localizer)
@@ -74,22 +75,15 @@ final class ProjectTemplatePanelViewModel: ObservableObject {
     }
 
     var selectedVariables: [ProjectTemplateVariable] {
-        selectedLoadedTemplate?.variables ?? []
+        guard let template = selectedLoadedTemplate else { return [] }
+        return template.variables.map { localizedVariable($0, template: template) }
     }
 
     func refresh() throws {
         do {
             let loaded = try registry.loadTemplates()
             loadedTemplates = loaded
-            templates = loaded.map { template in
-                ProjectTemplatePresentation(
-                    id: template.id,
-                    name: template.name,
-                    summary: template.summary,
-                    source: template.source,
-                    variableCount: template.variables.count
-                )
-            }
+            templates = loaded.map(localizedPresentation(for:))
             selectedTemplateID = templates.first?.id
             populateDefaultsForSelectedTemplate()
             createdFiles = []
@@ -175,6 +169,49 @@ final class ProjectTemplatePanelViewModel: ObservableObject {
     private var selectedLoadedTemplate: ProjectTemplate? {
         guard let selectedTemplateID else { return nil }
         return loadedTemplates.first { $0.id == selectedTemplateID }
+    }
+
+    private func localizedPresentation(for template: ProjectTemplate) -> ProjectTemplatePresentation {
+        ProjectTemplatePresentation(
+            id: template.id,
+            name: localizedTemplateName(template),
+            summary: localizedTemplateSummary(template),
+            source: template.source,
+            variableCount: template.variables.count
+        )
+    }
+
+    private func localizedTemplateName(_ template: ProjectTemplate) -> String {
+        guard template.source == .builtIn else { return template.name }
+        return localizer.string(
+            "templates.builtIn.\(template.id).name",
+            fallback: template.name
+        )
+    }
+
+    private func localizedTemplateSummary(_ template: ProjectTemplate) -> String {
+        guard template.source == .builtIn else { return template.summary }
+        return localizer.string(
+            "templates.builtIn.\(template.id).summary",
+            fallback: template.summary
+        )
+    }
+
+    private func localizedVariable(
+        _ variable: ProjectTemplateVariable,
+        template: ProjectTemplate
+    ) -> ProjectTemplateVariable {
+        guard template.source == .builtIn else { return variable }
+        let prompt = localizer.string(
+            "templates.builtIn.\(template.id).variable.\(variable.name).prompt",
+            fallback: variable.prompt
+        )
+        return ProjectTemplateVariable(
+            name: variable.name,
+            prompt: prompt,
+            defaultValue: variable.defaultValue,
+            required: variable.required
+        )
     }
 
     private func populateDefaultsForSelectedTemplate() {
