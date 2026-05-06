@@ -89,6 +89,37 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.stdout.contains("Privacy audit passed"))
     }
 
+    @Test("local SSH smoke script covers direct jump and forward gates without CI flakiness")
+    func localSSHSmokeScriptCoversDirectJumpAndForwardGates() throws {
+        let root = repositoryRoot()
+        let scriptURL = root.appendingPathComponent("scripts/smoke-local-ssh.sh")
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let ci = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let nightly = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/nightly.yml"),
+            encoding: .utf8
+        )
+        let release = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
+        #expect(script.contains("/usr/sbin/sshd"))
+        #expect(script.contains("ProxyJump cocxy-jump"))
+        #expect(script.contains("-N -L"))
+        #expect(script.contains("direct-ok"))
+        #expect(script.contains("jump-ok"))
+        #expect(script.contains("forward-ok"))
+        #expect(script.contains("No external network, system service changes, or persistent keys are used."))
+        #expect(!ci.contains("smoke-local-ssh.sh"))
+        #expect(!nightly.contains("smoke-local-ssh.sh"))
+        #expect(!release.contains("smoke-local-ssh.sh"))
+    }
+
     @Test("performance regression checker accepts metrics inside tolerance")
     func performanceRegressionCheckerAcceptsMetricsInsideTolerance() throws {
         let root = repositoryRoot()
