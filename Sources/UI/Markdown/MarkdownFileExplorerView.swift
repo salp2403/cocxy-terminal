@@ -324,53 +324,186 @@ final class FileTreeNode {
         self.children = children
     }
 
+    struct BuildOptions: Sendable {
+        var maxScannedEntries: Int
+        var maxMarkdownFiles: Int
+        var maxDirectoryDepth: Int
+        var skippedDirectoryNames: Set<String>
+
+        static let `default` = BuildOptions(
+            maxScannedEntries: 4_000,
+            maxMarkdownFiles: 800,
+            maxDirectoryDepth: 8,
+            skippedDirectoryNames: [
+                "node_modules",
+                "build",
+                "dist",
+                "target",
+                "deriveddata",
+                "pods",
+                "carthage",
+                "vendor",
+                "venv",
+                ".venv",
+                "__pycache__"
+            ]
+        )
+    }
+
     /// Builds a filtered tree from a root directory, keeping only directories
     /// that contain .md/.markdown files (recursively) and the files themselves.
-    static func buildTree(from root: URL) -> [FileTreeNode] {
+    static func buildTree(from root: URL, options: BuildOptions = .default) -> [FileTreeNode] {
         let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        let root = root.standardizedFileURL
+        var isRootDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: root.path, isDirectory: &isRootDirectory),
+              isRootDirectory.boolValue,
+              let enumerator = fm.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                errorHandler: { _, _ in true }
+              ) else { return [] }
 
-        var nodes: [FileTreeNode] = []
+        var markdownFiles: [URL] = []
+        var scannedEntries = 0
 
-        let sorted = contents.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+        while let next = enumerator.nextObject() as? URL {
+            scannedEntries += 1
+            if scannedEntries > options.maxScannedEntries {
+                break
+            }
 
-        for url in sorted {
-            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-
-            if isDir {
-                let children = buildTree(from: url)
-                // Only include directories that have markdown content
-                if !children.isEmpty {
-                    nodes.append(FileTreeNode(
-                        url: url,
-                        name: url.lastPathComponent,
-                        isDirectory: true,
-                        children: children
-                    ))
+            let url = next.standardizedFileURL
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey])
+            if values?.isSymbolicLink == true {
+                if values?.isDirectory == true {
+                    enumerator.skipDescendants()
                 }
-            } else {
-                let ext = url.pathExtension.lowercased()
-                if ext == "md" || ext == "markdown" {
-                    nodes.append(FileTreeNode(
-                        url: url,
-                        name: url.lastPathComponent,
-                        isDirectory: false
-                    ))
+                continue
+            }
+
+            if values?.isDirectory == true {
+                if shouldSkipDirectory(url, root: root, options: options) {
+                    enumerator.skipDescendants()
                 }
+                continue
+            }
+
+            guard values?.isRegularFile != false,
+                  isMarkdownFile(url) else {
+                continue
+            }
+
+            markdownFiles.append(url)
+            if markdownFiles.count >= options.maxMarkdownFiles {
+                break
             }
         }
 
-        // Sort: directories first, then files, both alphabetically
-        return nodes.sorted { lhs, rhs in
-            if lhs.isDirectory != rhs.isDirectory {
-                return lhs.isDirectory
-            }
+        return sortedTree(from: markdownFiles, root: root)
+    }
+
+    private static func isMarkdownFile(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        return ext == "md" || ext == "markdown"
+    }
+
+    private static func shouldSkipDirectory(
+        _ url: URL,
+        root: URL,
+        options: BuildOptions
+    ) -> Bool {
+        if directoryDepth(url, relativeTo: root) >= options.maxDirectoryDepth {
+            return true
+        }
+
+        if options.skippedDirectoryNames.contains(url.lastPathComponent.lowercased()) {
+            return true
+        }
+
+        let homeLibrary = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library", isDirectory: true)
+            .standardizedFileURL
+        if url == homeLibrary {
+            return true
+        }
+
+        return false
+    }
+
+    private static func sortedTree(from markdownFiles: [URL], root: URL) -> [FileTreeNode] {
+        var nodes: [FileTreeNode] = []
+        for file in markdownFiles {
+            let components = relativeComponents(for: file, root: root)
+            guard !components.isEmpty else { continue }
+            insertFile(
+                file,
+                components: components,
+                root: root,
+                into: &nodes
+            )
+        }
+        return sort(nodes)
+    }
+
+    private static func insertFile(
+        _ file: URL,
+        components: [String],
+        root: URL,
+        into nodes: inout [FileTreeNode]
+    ) {
+        guard let first = components.first else { return }
+        if components.count == 1 {
+            nodes.append(FileTreeNode(
+                url: file,
+                name: first,
+                isDirectory: false
+            ))
+            return
+        }
+
+        let directoryURL = root.appendingPathComponent(first, isDirectory: true)
+        let directoryNode: FileTreeNode
+        if let existing = nodes.first(where: { $0.isDirectory && $0.name == first }) {
+            directoryNode = existing
+        } else {
+            directoryNode = FileTreeNode(
+                url: directoryURL,
+                name: first,
+                isDirectory: true
+            )
+            nodes.append(directoryNode)
+        }
+
+        insertFile(
+            file,
+            components: Array(components.dropFirst()),
+            root: directoryURL,
+            into: &directoryNode.children
+        )
+    }
+
+    private static func relativeComponents(for url: URL, root: URL) -> [String] {
+        let rootComponents = root.standardizedFileURL.pathComponents
+        let urlComponents = url.standardizedFileURL.pathComponents
+        guard urlComponents.count > rootComponents.count else { return [] }
+        return Array(urlComponents.dropFirst(rootComponents.count))
+    }
+
+    private static func directoryDepth(_ url: URL, relativeTo root: URL) -> Int {
+        relativeComponents(for: url, root: root).count
+    }
+
+    private static func sort(_ nodes: [FileTreeNode]) -> [FileTreeNode] {
+        let sortedNodes = nodes.sorted { lhs, rhs in
+            if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
+        for node in sortedNodes where node.isDirectory {
+            node.children = sort(node.children)
+        }
+        return sortedNodes
     }
 }
 

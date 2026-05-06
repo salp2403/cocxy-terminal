@@ -128,6 +128,51 @@ struct MarkdownFileExplorerTests {
         #expect(tree[0].name == "visible.md")
     }
 
+    @Test("buildTree skips generated dependency directories")
+    func buildTreeSkipsGeneratedDependencyDirectories() throws {
+        let dir = createTempDir()
+        defer { cleanup(dir) }
+
+        let docs = dir.appendingPathComponent("docs")
+        try FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+        try "# Guide".write(to: docs.appendingPathComponent("guide.md"), atomically: true, encoding: .utf8)
+
+        let dependencyDocs = dir.appendingPathComponent("node_modules/pkg/docs")
+        try FileManager.default.createDirectory(at: dependencyDocs, withIntermediateDirectories: true)
+        try "# Vendored".write(to: dependencyDocs.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+
+        let tree = FileTreeNode.buildTree(from: dir)
+        #expect(tree.count == 1)
+        #expect(tree.first?.name == "docs")
+        #expect(tree.first?.children.first?.name == "guide.md")
+    }
+
+    @Test("buildTree caps markdown files to keep restore responsive")
+    func buildTreeCapsMarkdownFiles() throws {
+        let dir = createTempDir()
+        defer { cleanup(dir) }
+
+        for index in 0..<5 {
+            try "# \(index)".write(
+                to: dir.appendingPathComponent("doc-\(index).md"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+
+        let tree = FileTreeNode.buildTree(
+            from: dir,
+            options: FileTreeNode.BuildOptions(
+                maxScannedEntries: 20,
+                maxMarkdownFiles: 2,
+                maxDirectoryDepth: 8,
+                skippedDirectoryNames: []
+            )
+        )
+
+        #expect(tree.count == 2)
+    }
+
     @Test("renameItem renames a markdown file and refreshes root")
     func renameItemRenamesFile() throws {
         let dir = createTempDir()
