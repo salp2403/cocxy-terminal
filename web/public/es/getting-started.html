@@ -100,63 +100,150 @@
 
       <div class="faq-list">
         <details class="faq-item" id="install" open>
-          <summary><span>Requisitos del sistema</span></summary>
-          <p>macOS 14.0 Sonoma o posterior, Apple Silicon o Intel, y cerca de 60 MB de espacio en disco. El acceso a internet solo es necesario para descargar actualizaciones, instalar desde Homebrew o usar herramientas externas que t&uacute; ejecutes.</p>
+          <summary><span>Instalaci&oacute;n y primera apertura</span></summary>
+          <p>Requiere macOS 14.0 Sonoma o posterior, Apple Silicon o Intel, y cerca de 60 MB de espacio en disco. Instala con <code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code>, o descarga el DMG firmado desde <a href="https://github.com/salp2403/cocxy-terminal/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>. Al abrir por primera vez, Cocxy crea <code>~/.config/cocxy/</code> con valores locales y seguros.</p>
+          <p>Para actualizar desde Homebrew usa <code>brew update &amp;&amp; brew upgrade --cask cocxy</code>. Si instalas por DMG, arrastra <strong>Cocxy Terminal</strong> a <code>/Applications</code>; si macOS muestra un aviso inicial, usa clic derecho y <strong>Open</strong>.</p>
         </details>
 
-        <details class="faq-item">
-          <summary><span>Instalar con Homebrew</span></summary>
-          <p>La ruta recomendada es <code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code>. Para actualizar despu&eacute;s, ejecuta <code>brew update &amp;&amp; brew upgrade --cask cocxy</code>. El cask instala la app y deja disponible el binario <code>cocxy</code> incluido en el bundle.</p>
+        <details class="faq-item" id="visual-tour">
+          <summary><span>Tour visual</span></summary>
+          <p>La interfaz principal se organiza alrededor de la barra Aurora, tabs verticales, splits, paleta de comandos, panel de agentes, navegador integrado y Preferences. Las capturas de la gu&iacute;a inglesa usan im&aacute;genes reales del bundle para mostrar sidebar, dashboard, splits, navegador, comandos y ajustes; esta gu&iacute;a mantiene las mismas superficies cubiertas en espa&ntilde;ol.</p>
         </details>
 
-        <details class="faq-item">
-          <summary><span>Instalar con DMG</span></summary>
-          <p>Descarga el DMG m&aacute;s reciente desde <a href="https://github.com/salp2403/cocxy-terminal/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>, abre la imagen y arrastra <strong>Cocxy Terminal</strong> a <code>/Applications</code>. La app est&aacute; firmada y notarizada por Apple; si macOS muestra un aviso inicial, usa clic derecho y <strong>Open</strong>.</p>
+        <details class="faq-item" id="concepts">
+          <summary><span>Conceptos base</span></summary>
+          <p>Un workspace agrupa sesiones por proyecto. Cada tab tiene su propia terminal, directorio, rama Git, estado de agente y paneles asociados. Los splits permiten combinar terminal, navegador, Markdown, remoto o revisi&oacute;n de c&oacute;digo sin salir de la ventana.</p>
+          <p><strong>Sin telemetr&iacute;a:</strong> Cocxy no env&iacute;a anal&iacute;ticas, tracking ni reportes autom&aacute;ticos de crashes. Las sesiones, notas, perfiles, plugins, backups y configuraci&oacute;n permanecen locales salvo que ejecutes una herramienta externa de forma expl&iacute;cita.</p>
         </details>
 
-        <details class="faq-item">
-          <summary><span>Primera apertura</span></summary>
-          <p>Al iniciar, Cocxy crea <code>~/.config/cocxy/</code> con valores seguros por defecto. Puedes reabrir la gu&iacute;a inicial desde el men&uacute; Help y cambiar idioma, shell, apariencia, atajos, plugins y paneles desde Preferences.</p>
+        <details class="faq-item" id="configuration">
+          <summary><span>Configuraci&oacute;n local</span></summary>
+          <p>La configuraci&oacute;n vive en <code>~/.config/cocxy/config.toml</code>. Puedes ajustar shell, directorio inicial, tema, fuente, tama&ntilde;o, cursor, scrollback, copy-on-select, protecci&oacute;n de paste, idioma, tabs, splits, detecci&oacute;n de agentes, notificaciones y Quick Terminal.</p>
+          <p>Los cambios v&aacute;lidos se recargan de forma conservadora. Valores fuera de rango se normalizan cuando es seguro hacerlo; si el TOML est&aacute; roto, corrige el archivo y vuelve a guardar.</p>
+        </details>
+
+        <details class="faq-item" id="keyboard-shortcuts">
+          <summary><span>Atajos de teclado</span></summary>
+          <p>Los atajos principales son <kbd>Cmd</kbd>+<kbd>T</kbd> para nueva pesta&ntilde;a, <kbd>Cmd</kbd>+<kbd>W</kbd> para cerrar, <kbd>Cmd</kbd>+<kbd>D</kbd> para dividir, <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> para la paleta, <kbd>Cmd</kbd>+<kbd>F</kbd> para buscar y <kbd>Esc</kbd> para cerrar overlays. El editor de atajos en Preferences permite reasignar acciones y bloquea conflictos antes de guardar.</p>
         </details>
 
         <details class="faq-item" id="privacy">
           <summary><span>Privacidad y red</span></summary>
-          <p>Cocxy no incluye anal&iacute;ticas, tracking ni reporte autom&aacute;tico de crashes. La revisi&oacute;n de actualizaciones usa el appcast firmado de Cocxy. Cualquier provider remoto, GitHub CLI, SSH, nube o base de datos se ejecuta solo cuando t&uacute; lo configuras y lo invocas de forma expl&iacute;cita.</p>
+          <p>Cocxy no incluye SDKs de anal&iacute;ticas ni crash upload autom&aacute;tico. La verificaci&oacute;n de actualizaciones usa el appcast firmado de Cocxy. GitHub CLI, SSH, bases de datos, nube, providers remotos o cualquier otra red se ejecutan solo cuando t&uacute; lo configuras y disparas.</p>
         </details>
 
         <details class="faq-item" id="workflows">
-          <summary><span>Agentes de c&oacute;digo</span></summary>
-          <p>Cocxy detecta agentes de c&oacute;digo compatibles mediante hooks, secuencias OSC, patrones y heur&iacute;sticas de tiempo. Puedes agregar agentes personalizados en <code>~/.config/cocxy/agents.toml</code> y ejecutar <code>cocxy setup-hooks</code> para configurar integraciones locales compatibles.</p>
+          <summary><span>Flujos de trabajo</span></summary>
+          <p>Los flujos comunes combinan terminal local, panel de agente, revisi&oacute;n de c&oacute;digo, Markdown, navegador, remoto, plugins y CLI local. La paleta de comandos es el punto de entrada r&aacute;pido para abrir paneles, cambiar tema, saltar a sesiones y ejecutar acciones.</p>
         </details>
 
-        <details class="faq-item">
-          <summary><span>Revisi&oacute;n de c&oacute;digo integrada</span></summary>
-          <p>El panel de revisi&oacute;n muestra archivos tocados por una sesi&oacute;n de agente, diffs, comentarios inline y acciones para aceptar o revertir cambios de forma granular. &Aacute;brelo con <kbd>Cmd</kbd>+<kbd>Option</kbd>+<kbd>R</kbd> o desde la paleta de comandos.</p>
+        <details class="faq-item" id="agent-detection">
+          <summary><span>Detecci&oacute;n de agentes</span></summary>
+          <p>Cocxy detecta agentes de c&oacute;digo mediante hooks locales, secuencias OSC, patrones de salida y heur&iacute;sticas de tiempo. Ejecuta <code>cocxy setup-hooks</code> para configurar integraciones compatibles instaladas localmente. Los perfiles personalizados viven en <code>~/.config/cocxy/agents.toml</code>.</p>
+          <p>Los estados visibles son inactivo, lanzando, trabajando, esperando entrada, terminado y error. La detecci&oacute;n se eval&uacute;a sobre salida local ya renderizada; no intercepta tr&aacute;fico ni sube contenido.</p>
         </details>
 
-        <details class="faq-item">
+        <details class="faq-item" id="code-review">
+          <summary><span>Revisi&oacute;n de c&oacute;digo</span></summary>
+          <p>El panel de revisi&oacute;n muestra archivos modificados por una sesi&oacute;n de agente, diffs, hunks, comentarios inline, estad&iacute;sticas y acciones para aceptar o revertir cambios de forma granular. &Aacute;brelo con <kbd>Cmd</kbd>+<kbd>Option</kbd>+<kbd>R</kbd> o <code>cocxy review</code>.</p>
+          <p>Cuando env&iacute;as comentarios, Cocxy los formatea y los entrega por la PTY de la sesi&oacute;n original. Las operaciones Git usan el repo local y mantienen guards contra rutas inseguras.</p>
+        </details>
+
+        <details class="faq-item" id="markdown">
           <summary><span>Workspace Markdown</span></summary>
-          <p>El panel Markdown permite editar y previsualizar documentos junto a la terminal. Incluye Mermaid, KaTeX, callouts, footnotes, resaltado de sintaxis, tabla de contenido, QuickLook offline y exportaci&oacute;n a HTML/PDF desde flujos locales.</p>
+          <p>El panel Markdown ofrece editor, preview, modo split, tabla de contenido, callouts, footnotes, Mermaid, KaTeX, resaltado de sintaxis, export HTML/PDF y manejo offline de adjuntos. El texto fuente y la preview comparten tema legible con la app.</p>
         </details>
 
-        <details class="faq-item">
-          <summary><span>Espacios remotos y DB/Cloud</span></summary>
-          <p>Remote Workspaces usa OpenSSH, perfiles locales, Keychain opcional, t&uacute;neles, SFTP y tmux. Los helpers DB/Cloud son plugins locales que muestran comandos y previews redactados; no guardan credenciales nuevas ni ejecutan llamadas autom&aacute;ticas.</p>
+        <details class="faq-item" id="quicklook">
+          <summary><span>QuickLook offline</span></summary>
+          <p>Los notebooks de Cocxy usan QuickLook para previsualizar contenido local sin red. El generador evita cargas remotas y mantiene los recursos necesarios dentro del archivo o del bundle.</p>
         </details>
 
-        <details class="faq-item">
+        <details class="faq-item" id="browser">
+          <summary><span>Navegador integrado</span></summary>
+          <p>El navegador sirve para revisar servidores locales, docs y apps web junto a la terminal. Incluye perfiles aislados, bookmarks, descargas, find, DevTools y port chips para saltar a servicios detectados sin cambiar de app.</p>
+        </details>
+
+        <details class="faq-item" id="remote-workspaces">
+          <summary><span>Remote Workspaces</span></summary>
+          <p>Remote Workspaces usa OpenSSH, perfiles locales, Keychain opcional, ControlMaster, t&uacute;neles, SFTP, tmux y daemon local opcional. Los perfiles y llaves se gestionan desde Preferences o el panel remoto; Cocxy no guarda credenciales nuevas de terceros por su cuenta.</p>
+        </details>
+
+        <details class="faq-item" id="web-terminal">
+          <summary><span>Web Terminal</span></summary>
+          <p><code>cocxy web-start --port 8080</code> expone la terminal activa en un servidor local para peer programming, asistencia o dashboards internos. Usa <code>cocxy web-status</code> y <code>cocxy web-stop</code> para controlar el ciclo de vida.</p>
+        </details>
+
+        <details class="faq-item" id="shell-integration">
+          <summary><span>Integraci&oacute;n de shell</span></summary>
+          <p>La integraci&oacute;n de shell emite marcadores OSC para directorio, l&iacute;mites de comando, bloques y estado. Funciona con zsh, bash y fish conservando configuraci&oacute;n existente. Si necesitas diagnosticarlo, revisa <code>cocxy status</code> y <code>cocxy core-modes</code>.</p>
+        </details>
+
+        <details class="faq-item" id="per-project-config">
+          <summary><span>Configuraci&oacute;n por proyecto</span></summary>
+          <p>Un archivo <code>.cocxy.toml</code> dentro del repo puede ajustar fuente, opacidad, patrones extra de agentes, keybindings y opciones de workspace solo para ese proyecto. Cocxy lo detecta al cambiar de directorio y aplica overrides sin reiniciar.</p>
+        </details>
+
+        <details class="faq-item" id="applescript">
+          <summary><span>AppleScript y automatizaci&oacute;n</span></summary>
+          <p>Cocxy expone comandos para crear tabs, ejecutar texto, dividir terminales, enfocar tabs, cerrar y leer estado desde automatizaciones de macOS. Tambi&eacute;n ofrece acciones para Shortcuts.app con ejecuci&oacute;n local.</p>
+        </details>
+
+        <details class="faq-item" id="plugin-system">
+          <summary><span>Sistema de plugins</span></summary>
+          <p>Los plugins viven en <code>~/.config/cocxy/plugins/</code> o dentro del proyecto. Responden a eventos como inicio de sesi&oacute;n, agente detectado, cambio de estado, comando completado, tab creado, tab cerrado y cambio de directorio. Se ejecutan con sandbox, timeout y permisos expl&iacute;citos.</p>
+        </details>
+
+        <details class="faq-item" id="splits">
+          <summary><span>Splits</span></summary>
+          <p>Divide una pesta&ntilde;a con <kbd>Cmd</kbd>+<kbd>D</kbd> o <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>. Cada split puede alojar una terminal o un panel. La app protege el &uacute;ltimo terminal activo y permite navegar entre panes con atajos.</p>
+        </details>
+
+        <details class="faq-item" id="quick-terminal">
+          <summary><span>Quick Terminal</span></summary>
+          <p>Quick Terminal muestra una terminal desplegable con <kbd>Cmd</kbd>+<kbd>`</kbd>. Se configura en <code>[quick-terminal]</code> con posici&oacute;n, alto, hotkey y comportamiento al perder foco.</p>
+        </details>
+
+        <details class="faq-item" id="notifications">
+          <summary><span>Notificaciones</span></summary>
+          <p>Cocxy muestra badges por tab, Dock badge, notificaciones de macOS, panel de historial y Smart Routing para saltar a la sesi&oacute;n que requiere atenci&oacute;n. Todo se controla desde Preferences y se puede desactivar.</p>
+        </details>
+
+        <details class="faq-item" id="command-palette">
+          <summary><span>Paleta de comandos</span></summary>
+          <p>Presiona <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> para buscar acciones, abrir paneles, cambiar tema, navegar a tabs, ejecutar herramientas y revisar atajos. La paleta respeta el idioma seleccionado y las reasignaciones de keybindings.</p>
+        </details>
+
+        <details class="faq-item" id="sessions">
+          <summary><span>Sesiones y restore</span></summary>
+          <p>Las sesiones guardan tabs, directorios, splits, paneles y estado de workspace. Restore-on-launch y crash recovery usan snapshots locales; si hubo cierre inesperado, Cocxy ofrece restaurar o mantener la sesi&oacute;n actual.</p>
+        </details>
+
+        <details class="faq-item" id="cli-companion">
           <summary><span>CLI local</span></summary>
-          <p>El binario <code>cocxy</code> controla tabs, splits, sesiones, paneles, plugins, temas, timeline y diagn&oacute;sticos mediante un Unix Domain Socket local con permisos de usuario. Prueba <code>cocxy status</code>, <code>cocxy new-tab</code>, <code>cocxy list-tabs</code> y <code>cocxy help</code>.</p>
+          <p>El binario <code>cocxy</code> controla tabs, ventanas, splits, sesi&oacute;n, paneles, plugins, remoto, Markdown, timeline, status y diagn&oacute;sticos mediante un Unix Domain Socket local con permisos por usuario. Prueba <code>cocxy status</code>, <code>cocxy new-tab</code>, <code>cocxy list-tabs</code>, <code>cocxy review</code>, <code>cocxy setup-hooks</code> y <code>cocxy help</code>.</p>
         </details>
 
-        <details class="faq-item">
+        <details class="faq-item" id="themes">
+          <summary><span>Temas</span></summary>
+          <p>Cocxy incluye temas oscuros y claros y permite agregar TOML de tema en <code>~/.config/cocxy/themes/</code>. Puedes configurar par claro/oscuro para seguir la apariencia de macOS y recargar sin recrear superficies de terminal.</p>
+        </details>
+
+        <details class="faq-item" id="agents-toml">
+          <summary><span>Referencia agents.toml</span></summary>
+          <p><code>agents.toml</code> define <code>display-name</code>, soporte OSC, patrones de lanzamiento, patrones de espera, errores, indicadores de finalizaci&oacute;n y timeouts por agente. Usa strings TOML con comillas simples para regex con backslashes, por ejemplo <code>'^my-agent\\b'</code>.</p>
+        </details>
+
+        <details class="faq-item" id="migration-guide">
           <summary><span>Migrar desde versiones v0.x</span></summary>
-          <p>Antes de actualizar, revisa <a href="/es/releases.html">Versiones</a> y mant&eacute;n una copia de <code>~/.config/cocxy/</code> si usas perfiles SSH, snippets, temas o plugins personalizados. Las versiones nuevas migran archivos locales de forma conservadora y preservan configuraci&oacute;n existente siempre que el TOML sea v&aacute;lido.</p>
+          <p>Antes de actualizar, revisa <a href="/es/releases.html">Versiones</a> y mant&eacute;n una copia de <code>~/.config/cocxy/</code> si usas perfiles SSH, snippets, temas, plugins, browser data o workspaces guardados. Las migraciones preservan TOML v&aacute;lido y agregan defaults solo cuando hacen falta para mantener un flujo existente.</p>
+          <p><code>cp -R ~/.config/cocxy ~/Desktop/cocxy-config-backup</code> crea una copia r&aacute;pida antes de <code>brew update &amp;&amp; brew upgrade --cask cocxy</code>.</p>
         </details>
 
-        <details class="faq-item">
+        <details class="faq-item" id="troubleshooting">
           <summary><span>Soluci&oacute;n r&aacute;pida de problemas</span></summary>
-          <p>Si una preferencia no cambia, guarda <code>config.toml</code> y revisa que no tenga errores TOML. Si Homebrew no ve una versi&oacute;n nueva, ejecuta <code>brew update</code>. Para resetear, cierra Cocxy y elimina <code>~/.config/cocxy/</code>; esto tambi&eacute;n borra perfiles, bookmarks y datos locales guardados ah&iacute;.</p>
+          <p>Si una preferencia no cambia, revisa que <code>config.toml</code> sea TOML v&aacute;lido. Si Homebrew no ve una versi&oacute;n nueva, ejecuta <code>brew update</code>. Si la detecci&oacute;n de agentes no aparece, confirma <code>[agent-detection] enabled = true</code> y regenera <code>agents.toml</code> si fue editado a mano.</p>
+          <p>Para resetear, cierra Cocxy y elimina <code>~/.config/cocxy/</code>. Esto borra perfiles, bookmarks, plugins, snippets y datos locales guardados ah&iacute;, as&iacute; que haz backup primero si quieres conservarlos.</p>
         </details>
       </div>
 

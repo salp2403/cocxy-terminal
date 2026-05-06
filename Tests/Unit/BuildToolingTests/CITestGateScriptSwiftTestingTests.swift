@@ -290,6 +290,55 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("~/.config/cocxy/"))
     }
 
+    @Test("Spanish getting started docs cover the same core user guide surfaces")
+    func spanishGettingStartedDocsCoverCoreUserGuideSurfaces() throws {
+        let root = repositoryRoot()
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/getting-started.html"),
+            encoding: .utf8
+        )
+        let requiredAnchors = [
+            "install",
+            "visual-tour",
+            "concepts",
+            "configuration",
+            "keyboard-shortcuts",
+            "agent-detection",
+            "code-review",
+            "markdown",
+            "quicklook",
+            "browser",
+            "remote-workspaces",
+            "web-terminal",
+            "shell-integration",
+            "per-project-config",
+            "applescript",
+            "plugin-system",
+            "splits",
+            "quick-terminal",
+            "notifications",
+            "command-palette",
+            "sessions",
+            "cli-companion",
+            "themes",
+            "agents-toml",
+            "migration-guide",
+            "troubleshooting",
+        ]
+
+        for anchor in requiredAnchors {
+            #expect(
+                spanish.contains(#"id="\#(anchor)""#),
+                "Spanish getting-started docs should include #\(anchor)"
+            )
+        }
+
+        #expect(spanish.contains("cocxy setup-hooks"))
+        #expect(spanish.contains("cocxy status"))
+        #expect(spanish.contains("Sin telemetr&iacute;a"))
+        #expect(!spanish.contains("AI agent workflows"))
+    }
+
     @Test("Spanish public docs keep primary navigation inside the Spanish site")
     func spanishPublicDocsKeepPrimaryNavigationInsideSpanishSite() throws {
         let root = repositoryRoot()
