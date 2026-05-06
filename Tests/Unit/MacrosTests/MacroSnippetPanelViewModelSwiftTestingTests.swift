@@ -107,6 +107,27 @@ struct MacroSnippetPanelViewModelSwiftTestingTests {
         #expect(viewModel.statusText == "2 clipboard items")
     }
 
+    @Test("observes system clipboard changes into local bounded history")
+    func observesSystemClipboardChangesIntoLocalBoundedHistory() {
+        var snapshot = ClipboardHistorySnapshot(changeCount: 1, text: "existing")
+        let viewModel = MacroSnippetPanelViewModel(
+            observeSystemClipboard: true,
+            clipboardSnapshotProvider: { snapshot }
+        )
+
+        #expect(viewModel.clipboardItems.isEmpty)
+
+        snapshot = ClipboardHistorySnapshot(changeCount: 2, text: "from universal clipboard")
+        viewModel.pollSystemClipboardForTesting()
+        snapshot = ClipboardHistorySnapshot(changeCount: 2, text: "ignored without change count")
+        viewModel.pollSystemClipboardForTesting()
+        snapshot = ClipboardHistorySnapshot(changeCount: 3, text: "   ")
+        viewModel.pollSystemClipboardForTesting()
+
+        #expect(viewModel.clipboardItems.map(\.text) == ["from universal clipboard"])
+        #expect(viewModel.statusText == "1 clipboard item")
+    }
+
     @Test("spanish localizer updates macro panel status text")
     func spanishLocalizerUpdatesMacroPanelStatusText() throws {
         let root = try makeTemporaryDirectory()

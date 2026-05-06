@@ -99,6 +99,7 @@ final class MacroSnippetPanelViewModel: ObservableObject {
     private var recorder = MacroRecorder()
     private var macroLibrary: [TerminalMacro] = []
     private var clipboardHistory: ClipboardHistoryStore
+    private var clipboardObserver: ClipboardHistoryObserver?
     private var localizer: AppLocalizer
     private var statusState: StatusState = .ready
 
@@ -108,6 +109,8 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         player: MacroPlayer = MacroPlayer(),
         clipboardHistory: ClipboardHistoryStore = ClipboardHistoryStore(),
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        observeSystemClipboard: Bool = false,
+        clipboardSnapshotProvider: @escaping ClipboardHistoryObserver.SnapshotProvider = ClipboardHistoryObserver.generalPasteboardSnapshot,
         macroPlaybackHandler: ((MacroPlaybackPlan) throws -> Int)? = nil,
         terminalTextHandler: ((String) throws -> Void)? = nil
     ) {
@@ -121,6 +124,13 @@ final class MacroSnippetPanelViewModel: ObservableObject {
         self.clipboardItems = clipboardHistory.items
         self.statusText = Self.localizedStatusText(.ready, localizer: localizer)
         self.macroName = localizer.string("macros.default.macroName", fallback: "New Macro")
+        if observeSystemClipboard {
+            startClipboardObservation(snapshotProvider: clipboardSnapshotProvider)
+        }
+    }
+
+    deinit {
+        clipboardObserver?.stop()
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
@@ -310,17 +320,35 @@ final class MacroSnippetPanelViewModel: ObservableObject {
     }
 
     func recordClipboardDraft() {
-        _ = clipboardHistory.record(text: clipboardDraft)
-        clipboardItems = clipboardHistory.items
+        recordClipboardText(clipboardDraft)
         clipboardDraft = ""
-        errorText = nil
-        setStatus(.clipboardItems(clipboardItems.count))
     }
 
     func clearClipboard() {
         clipboardHistory.clear()
         clipboardItems = []
         setStatus(.clipboardCleared)
+    }
+
+    func pollSystemClipboardForTesting() {
+        clipboardObserver?.pollNow()
+    }
+
+    private func startClipboardObservation(
+        snapshotProvider: @escaping ClipboardHistoryObserver.SnapshotProvider
+    ) {
+        let observer = ClipboardHistoryObserver(snapshotProvider: snapshotProvider) { [weak self] text in
+            self?.recordClipboardText(text)
+        }
+        observer.start()
+        clipboardObserver = observer
+    }
+
+    private func recordClipboardText(_ text: String) {
+        _ = clipboardHistory.record(text: text)
+        clipboardItems = clipboardHistory.items
+        errorText = nil
+        setStatus(.clipboardItems(clipboardItems.count))
     }
 
     private func refreshMacroPresentations(selecting id: String?) {

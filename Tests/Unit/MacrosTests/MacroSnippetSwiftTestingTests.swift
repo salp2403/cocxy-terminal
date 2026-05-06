@@ -234,6 +234,17 @@ struct MacroSnippetSwiftTestingTests {
         #expect(store.items.isEmpty)
     }
 
+    @Test("clipboard observation records only changed non-empty pasteboard text")
+    func clipboardObservationRecordsOnlyChangedNonEmptyPasteboardText() {
+        var state = ClipboardHistoryObservationState()
+
+        state.reset(to: ClipboardHistorySnapshot(changeCount: 10, text: "existing"))
+        #expect(state.textToRecord(from: ClipboardHistorySnapshot(changeCount: 10, text: "existing")) == nil)
+        #expect(state.textToRecord(from: ClipboardHistorySnapshot(changeCount: 11, text: "from universal clipboard")) == "from universal clipboard")
+        #expect(state.textToRecord(from: ClipboardHistorySnapshot(changeCount: 12, text: "   ")) == nil)
+        #expect(state.textToRecord(from: ClipboardHistorySnapshot(changeCount: 12, text: "late text")) == nil)
+    }
+
     @Test("macro event payloads codable round-trip")
     func macroEventPayloadsCodableRoundTrip() throws {
         let macro = TerminalMacro(

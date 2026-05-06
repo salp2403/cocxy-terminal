@@ -326,6 +326,7 @@ extension MainWindowController {
             let targetSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
             let viewModel = MacroSnippetPanelViewModel(
                 localizer: appLocalizer(),
+                observeSystemClipboard: true,
                 macroPlaybackHandler: { [weak self] plan in
                     guard let self else {
                         throw MacroTerminalInputReplayError.noTargetSurface
