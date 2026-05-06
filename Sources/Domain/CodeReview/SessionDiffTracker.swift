@@ -360,29 +360,31 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
 
     private func recordEditHistoryIfNeeded(sessionId: String) {
         guard let editHistoryRecorder else { return }
-        let payload = lock.withLock { () -> (sessionID: String, agentID: String, workingDirectory: URL, baseRef: String?, trackedFiles: Set<String>)? in
-            guard var snapshot = snapshots[sessionId],
-                  !snapshot.trackedFiles.isEmpty,
-                  !snapshot.editHistoryRecorded else {
-                return nil
+        queue.async { [weak self, editHistoryRecorder] in
+            guard let self else { return }
+            let payload = self.lock.withLock {
+                () -> (sessionID: String, agentID: String, workingDirectory: URL, baseRef: String?, trackedFiles: Set<String>)? in
+                guard var snapshot = self.snapshots[sessionId],
+                      !snapshot.trackedFiles.isEmpty,
+                      !snapshot.editHistoryRecorded else {
+                    return nil
+                }
+                snapshot.editHistoryRecorded = true
+                snapshot.updatedAt = Date()
+                self.snapshots[sessionId] = snapshot
+                let agentID = snapshot.fileAgentNames.values.sorted().first
+                    ?? snapshot.agentName
+                    ?? "local-agent"
+                return (
+                    sessionID: sessionId,
+                    agentID: agentID,
+                    workingDirectory: snapshot.repoRoot ?? snapshot.workingDirectory,
+                    baseRef: snapshot.ref,
+                    trackedFiles: snapshot.trackedFiles
+                )
             }
-            snapshot.editHistoryRecorded = true
-            snapshot.updatedAt = Date()
-            snapshots[sessionId] = snapshot
-            let agentID = snapshot.fileAgentNames.values.sorted().first
-                ?? snapshot.agentName
-                ?? "local-agent"
-            return (
-                sessionID: sessionId,
-                agentID: agentID,
-                workingDirectory: snapshot.repoRoot ?? snapshot.workingDirectory,
-                baseRef: snapshot.ref,
-                trackedFiles: snapshot.trackedFiles
-            )
-        }
-        guard let payload else { return }
+            guard let payload else { return }
 
-        queue.async {
             _ = try? editHistoryRecorder.recordSession(
                 sessionID: payload.sessionID,
                 agentID: payload.agentID,

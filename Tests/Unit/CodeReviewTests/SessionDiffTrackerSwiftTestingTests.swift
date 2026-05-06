@@ -259,6 +259,89 @@ struct SessionDiffTrackerSwiftTestingTests {
         #expect(call.trackedFiles == Set(["Sources/App.swift"]))
     }
 
+    @Test("hook completion waits for pending HEAD snapshot before writing edit history")
+    func hookCompletionWaitsForPendingSnapshotBeforeWritingEditHistory() async throws {
+        let repo = try makeGitFixtureRepo()
+        let storeRoot = try makeTemporaryDirectory(named: "ai-edit-history-hook-store")
+        defer {
+            cleanup(repo)
+            try? FileManager.default.removeItem(at: storeRoot)
+        }
+
+        let trackedFile = repo.url.appendingPathComponent("tracked.txt")
+        try "baseline\n".write(to: trackedFile, atomically: true, encoding: .utf8)
+
+        let headGate = DispatchSemaphore(value: 0)
+        let headCalls = CounterBox()
+        let store = AIEditStore(rootDirectory: storeRoot)
+        let recorder = AIEditHistoryGitRecorder(store: store)
+        let tracker = SessionDiffTrackerImpl(
+            gitRunner: { workingDirectory, arguments in
+                if arguments == ["rev-parse", "--show-toplevel"] {
+                    return repo.url.path + "\n"
+                }
+                if arguments == ["rev-parse", "HEAD"] {
+                    headCalls.increment()
+                    headGate.wait()
+                    return repo.head + "\n"
+                }
+                return try SessionDiffTrackerImpl.runGit(workingDirectory, arguments)
+            },
+            editHistoryRecorder: recorder
+        )
+
+        let sessionID = "session-hook-history"
+        tracker.handleHookEvent(HookEvent(
+            type: .sessionStart,
+            sessionId: sessionID,
+            timestamp: Date(),
+            data: .sessionStart(SessionStartData(
+                model: nil,
+                agentType: "local-agent",
+                workingDirectory: repo.url.path
+            )),
+            cwd: repo.url.path
+        ))
+
+        try await waitForTrackerCondition {
+            headCalls.value == 1
+        }
+
+        try "baseline\nchanged by agent\n".write(to: trackedFile, atomically: true, encoding: .utf8)
+        tracker.handleHookEvent(HookEvent(
+            type: .postToolUse,
+            sessionId: sessionID,
+            timestamp: Date(),
+            data: .toolUse(ToolUseData(
+                toolName: "Edit",
+                toolInput: ["file_path": trackedFile.path],
+                result: nil,
+                error: nil
+            )),
+            cwd: repo.url.path
+        ))
+        tracker.handleHookEvent(HookEvent(
+            type: .taskCompleted,
+            sessionId: sessionID,
+            timestamp: Date(),
+            data: .taskCompleted(TaskCompletedData(taskDescription: "local edit")),
+            cwd: repo.url.path
+        ))
+
+        headGate.signal()
+
+        let repoID = try AIEditRepositoryIdentifier.id(for: repo.url)
+        try await waitForTrackerCondition {
+            ((try? store.load(repoID: repoID, sessionID: sessionID).isEmpty) == false)
+        }
+
+        let record = try #require(try store.load(repoID: repoID, sessionID: sessionID).first)
+        #expect(record.agentID == "local-agent")
+        #expect(record.changes.map(\.filePath) == ["tracked.txt"])
+        #expect(record.changes.first?.beforeContent == "baseline\n")
+        #expect(record.changes.first?.afterContent == "baseline\nchanged by agent\n")
+    }
+
     @Test("review rounds append per session")
     func reviewRoundsAppend() {
         let tracker = SessionDiffTrackerImpl()
@@ -491,6 +574,13 @@ struct SessionDiffTrackerSwiftTestingTests {
         }
 
         return result.stdout
+    }
+
+    private func makeTemporaryDirectory(named name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 
     private func waitForTrackerCondition(
