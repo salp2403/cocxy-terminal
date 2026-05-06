@@ -49,11 +49,11 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
         #expect(MainWindowController.localizedNewTabActivitySummary(localizer: localizer) == "Nueva pestaña")
         #expect(
             MainWindowController.localizedSplitCreatedActivitySummary(isVertical: true, localizer: localizer) ==
-                "Split lado a lado"
+                "Dividir lado a lado"
         )
         #expect(
             MainWindowController.localizedSplitCreatedActivitySummary(isVertical: false, localizer: localizer) ==
-                "Split apilado"
+                "Dividir apilado"
         )
 
         let exportCopy = MainWindowController.localizedExportedDataPanelCopy(localizer: localizer)

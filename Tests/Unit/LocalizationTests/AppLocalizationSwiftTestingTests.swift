@@ -166,6 +166,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("browser.profile.defaultBadge", fallback: "(Default)") == "(Predeterminado)")
         #expect(spanish.string("browser.downloads.unknownSize", fallback: "Unknown size") == "Tamaño desconocido")
         #expect(BrowserDownloadsView.localizedProgressAccessibilityValue(0.42, using: spanish) == "42 por ciento")
+        #expect(spanish.string("markdown.toolbar.mode.tooltip", fallback: "Switch between Source, Preview, and Split") == "Cambiar entre Fuente, Previa y Dividida")
         #expect(DevToolsTab.console.localizedTitle(using: spanish) == "Consola")
         #expect(DevToolsTab.network.localizedTitle(using: spanish) == "Red")
         #expect(DevToolsTab.dom.localizedTitle(using: spanish) == "DOM")
@@ -249,6 +250,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("github.pane.reviewThreads.resolve.success", fallback: "Review thread resolved in %@.") == "Hilo de revisión resuelto en %@.")
         #expect(GitHubPaneSetupAction.installCLI.localizedButtonTitle(using: spanish) == "Instalar GitHub CLI")
         #expect(GitHubPaneViewModel.Tab.issues.localizedTitle(using: spanish) == "Incidencias")
+        #expect(spanish.string("github.pane.empty.issues", fallback: "No issues") == "No hay incidencias")
+        #expect(spanish.string("github.pane.footer.counts", fallback: "%d PRs · %d issues") == "%d PR · %d incidencias")
         #expect(GitHubPaneViewModel.Tab.checks.localizedTitle(using: spanish) == "Verificaciones")
         #expect(GitHubPaneViewModel.Tab.reviewThreads.localizedTitle(using: spanish) == "Hilos de revisión")
         #expect(spanish.string("github.pane.refresh", fallback: "Refresh") == "Refrescar")
@@ -273,7 +276,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("codeReview.toolbar.shortcuts.title", fallback: "Review Shortcuts") == "Atajos de revisión")
         #expect(MainWindowController.localizedOpenInDefaultEditorTitle(localizer: spanish) == "Abrir en editor predeterminado")
         #expect(MainWindowController.localizedOpenInEditorTitle("Nova", localizer: spanish) == "Abrir en Nova")
-        #expect(FileListView.localizedAccessibilityHint(using: spanish) == "Selecciona este archivo para revisar sus hunks")
+        #expect(FileListView.localizedAccessibilityHint(using: spanish) == "Selecciona este archivo para revisar sus bloques")
         #expect(
             FileListView.localizedAccessibilityLabel(
                 displayName: "README.md",
@@ -302,6 +305,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("codeReview.gitWorkflow.stat.ahead", fallback: "ahead %d") == "%d por delante")
         #expect(spanish.string("codeReview.gitWorkflow.stat.behind", fallback: "behind %d") == "%d por detrás")
         #expect(spanish.string("codeReview.gitWorkflow.stat.staged", fallback: "%d staged") == "%d preparados")
+        #expect(spanish.string("codeReview.gitWorkflow.footer", fallback: "Commit All stages current review changes, Push sends the branch to origin, Create Pull Request opens a PR on GitHub via gh.") == "Commit de todo prepara los cambios actuales de revisión, Enviar sube la rama a origin y Crear pull request abre un PR en GitHub vía gh.")
+        #expect(spanish.string("codeReview.prMerge.aftermath.synced.ahead", fallback: "`%@` is %d ahead of origin (no pull needed).") == "`%@` está %d por delante de origin (no hace falta pull).")
         #expect(spanish.string("codeReview.inlineComment.title", fallback: "Inline Comment") == "Comentario inline")
         #expect(spanish.string("codeReview.activity.title", fallback: "Live Agent Workstream") == "Actividad del agente en vivo")
         #expect(spanish.string("codeReview.activity.metric.tools", fallback: "tools") == "herramientas")
@@ -325,6 +330,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("remoteWorkspace.profileEditor.placeholder.name", fallback: "production-web") == "web-produccion")
         #expect(spanish.string("remoteWorkspace.profileEditor.placeholder.host", fallback: "192.168.1.100 or host.example.com") == "192.168.1.100 o host.ejemplo.com")
         #expect(spanish.string("remoteWorkspace.profileEditor.placeholder.group", fallback: "production, staging, personal...") == "producción, pruebas, personal...")
+        #expect(spanish.string("remoteWorkspace.profileEditor.section.jumpHosts", fallback: "Jump Hosts") == "Hosts de salto")
         #expect(spanish.string("remoteWorkspace.proxy.systemWide.detail", fallback: "Routes all macOS traffic through the SSH tunnel. Requires admin password.") == "Enruta todo el tráfico de macOS por el túnel SSH. Requiere contraseña de administrador.")
         #expect(spanish.string("remoteWorkspace.daemon.controls", fallback: "Controls") == "Controles")
         #expect(spanish.string("remoteWorkspace.relay.activeChannels", fallback: "Active Channels") == "Canales activos")
@@ -439,6 +445,8 @@ struct AppLocalizationSwiftTestingTests {
 
         #expect(StatusBarView.localizedCommandRunning(using: spanish) == "Comando ejecutándose")
         #expect(KeyboardShortcutsButton.localizedTitle(using: spanish) == "Atajos de teclado")
+        #expect(spanish.string("keyboardShortcuts.section.splits", fallback: "Splits") == "Divisiones")
+        #expect(spanish.string("keyboardShortcuts.splits.close", fallback: "Close split") == "Cerrar división")
         #expect(spanish.string("keyboardShortcuts.terminal.interrupt", fallback: "Interrupt process") == "Interrumpir proceso")
         #expect(AgentState.waitingInput.accessibilityDescription(using: spanish) == "El agente necesita tu entrada")
         #expect(AgentState.error.accessibilityDescription(using: spanish) == "El agente encontró un error")

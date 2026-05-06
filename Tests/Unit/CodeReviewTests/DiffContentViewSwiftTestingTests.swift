@@ -55,14 +55,14 @@ struct DiffContentViewSwiftTestingTests {
 
         let labels = accessibilityLabels(in: view)
         #expect(DiffContentLocalization.emptyMessage(using: spanish) == "Selecciona un archivo modificado para revisarlo aquí")
-        #expect(DiffContentLocalization.noTextualHunks(using: spanish) == "No hay hunks textuales disponibles para este archivo.")
+        #expect(DiffContentLocalization.noTextualHunks(using: spanish) == "No hay bloques textuales disponibles para este archivo.")
         #expect(
             DiffContentLocalization.largeDiffTruncated(lineLimit: 10, using: spanish)
                 == "Diff grande detectado. Se muestran las primeras 10 líneas para mantener la revisión fluida."
         )
-        #expect(labels.contains("Hunk de diff \(hunk.header)"))
-        #expect(labels.contains("Aceptar hunk"))
-        #expect(labels.contains("Rechazar hunk"))
+        #expect(labels.contains("Bloque de diff \(hunk.header)"))
+        #expect(labels.contains("Aceptar bloque"))
+        #expect(labels.contains("Rechazar bloque"))
         #expect(labels.contains("Adición línea 1: line 1"))
     }
 }
