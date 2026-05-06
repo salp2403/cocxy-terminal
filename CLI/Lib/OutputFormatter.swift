@@ -298,6 +298,10 @@ public enum OutputFormatter {
             return response.data?["summary"] ?? "Exported notebook to \(outputPath)."
         case .notebookExportHTML(_, let outputPath, _):
             return response.data?["summary"] ?? "Exported notebook HTML to \(outputPath)."
+        case .notebookTemplateList:
+            return formatDataOrJSON(response: response)
+        case .notebookTemplateCreate(let templateID, let outputPath, _):
+            return response.data?["summary"] ?? "Created notebook from template \(templateID) at \(outputPath)."
         case .notebookRun:
             return response.data?["summary"] ?? "Executed notebook."
         case .workflowRun:

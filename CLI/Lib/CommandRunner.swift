@@ -862,6 +862,20 @@ public struct CommandRunner {
                 ]
             )
 
+        case .notebookTemplateList:
+            return CLISocketRequest(id: requestID, command: "notebook-template-list", params: nil)
+
+        case .notebookTemplateCreate(let templateID, let outputPath, let force):
+            return CLISocketRequest(
+                id: requestID,
+                command: "notebook-template-create",
+                params: [
+                    "template": templateID,
+                    "output": outputPath,
+                    "force": force ? "true" : "false"
+                ]
+            )
+
         case .notebookRun(
             let inputPath,
             let outputPath,

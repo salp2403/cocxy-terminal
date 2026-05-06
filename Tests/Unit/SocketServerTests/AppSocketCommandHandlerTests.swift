@@ -2047,6 +2047,46 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(html.contains("hello"))
     }
 
+    func test_notebookTemplateList_returnsBuiltInTemplates() throws {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "notebook-template-list-1",
+            command: "notebook-template-list",
+            params: nil
+        ))
+
+        XCTAssertTrue(response.success, response.error ?? "")
+        XCTAssertEqual(response.data?["status"], "listed")
+        XCTAssertEqual(response.data?["count"], "3")
+        XCTAssertEqual(response.data?["templates"], "scratch,python-analysis,swift-script")
+    }
+
+    func test_notebookTemplateCreate_writesTemplateNotebook() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let outputURL = directory.appendingPathComponent("analysis.cocxynb")
+
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "notebook-template-create-1",
+            command: "notebook-template-create",
+            params: [
+                "template": "python-analysis",
+                "output": outputURL.path,
+                "force": "false",
+            ]
+        ))
+
+        XCTAssertTrue(response.success, response.error ?? "")
+        XCTAssertEqual(response.data?["status"], "created")
+        XCTAssertEqual(response.data?["template"], "python-analysis")
+        XCTAssertEqual(response.data?["output"], outputURL.standardizedFileURL.path)
+        let rendered = try String(contentsOf: outputURL, encoding: .utf8)
+        XCTAssertTrue(rendered.contains("title: \"Python Analysis\""))
+        XCTAssertTrue(rendered.contains("```python"))
+        XCTAssertTrue(rendered.contains("print(summary)"))
+    }
+
     func test_notebookImport_refusesExistingOutputWithoutForce() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

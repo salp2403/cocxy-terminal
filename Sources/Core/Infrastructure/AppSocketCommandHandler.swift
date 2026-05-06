@@ -1181,6 +1181,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleNotebookExport(request)
         case .notebookExportHTML:
             return handleNotebookExportHTML(request)
+        case .notebookTemplateList:
+            return handleNotebookTemplateList(request)
+        case .notebookTemplateCreate:
+            return handleNotebookTemplateCreate(request)
         case .notebookRun:
             return handleNotebookRun(request)
         case .workflowRun:
@@ -3362,6 +3366,61 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             let notebook = NotebookDocument.parseMarkdown(source)
             let html = NotebookHTMLExporter.render(notebook)
             try html.write(to: outputURL, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func handleNotebookTemplateList(_ request: SocketRequest) -> SocketResponse {
+        let templates = NotebookTemplateCatalog.builtInTemplates
+        return .ok(id: request.id, data: [
+            "status": "listed",
+            "count": "\(templates.count)",
+            "templates": templates.map(\.id).joined(separator: ","),
+            "titles": templates.map(\.title).joined(separator: "|"),
+            "summaries": templates.map(\.summary).joined(separator: "|")
+        ])
+    }
+
+    private func handleNotebookTemplateCreate(_ request: SocketRequest) -> SocketResponse {
+        guard let templateID = request.params?["template"], !templateID.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: template")
+        }
+        guard let outputPath = request.params?["output"], !outputPath.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: output")
+        }
+        guard let template = NotebookTemplateCatalog.template(id: templateID) else {
+            return .failure(id: request.id, error: "Unknown notebook template: \(templateID)")
+        }
+
+        let outputURL = fileURL(fromCLIPath: outputPath)
+        let force = request.params?["force"] == "true"
+        if !force, FileManager.default.fileExists(atPath: outputURL.path) {
+            return .failure(
+                id: request.id,
+                error: "Output file already exists: \(outputURL.path). Re-run with --force to replace it."
+            )
+        }
+
+        do {
+            try FileManager.default.createDirectory(
+                at: outputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try NotebookMarkdownCodec.render(template.document).write(
+                to: outputURL,
+                atomically: true,
+                encoding: .utf8
+            )
+            return .ok(id: request.id, data: [
+                "status": "created",
+                "template": template.id,
+                "output": outputURL.path,
+                "summary": "Created notebook from template \(template.id) at \(outputURL.path)."
+            ])
+        } catch {
+            return .failure(
+                id: request.id,
+                error: "Notebook template creation failed: \(error.localizedDescription)"
+            )
         }
     }
 

@@ -458,6 +458,28 @@ final class CLIArgumentParserTests: XCTestCase {
         )
     }
 
+    func testParseNotebookTemplateList() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["notebook", "template", "list"]),
+            .notebookTemplateList
+        )
+    }
+
+    func testParseNotebookTemplateCreateWithForce() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "notebook", "template", "create", "python-analysis",
+                "--output", "/tmp/analysis.cocxynb",
+                "--force",
+            ]),
+            .notebookTemplateCreate(
+                templateID: "python-analysis",
+                outputPath: "/tmp/analysis.cocxynb",
+                force: true
+            )
+        )
+    }
+
     func testParseNotebookRunWithExecutionOptions() throws {
         XCTAssertEqual(
             try CLIArgumentParser.parse([
@@ -839,6 +861,26 @@ final class RequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.params?["force"], "true")
     }
 
+    func testBuildNotebookTemplateListRequest() {
+        let request = runner.buildRequest(from: .notebookTemplateList)
+
+        XCTAssertEqual(request.command, "notebook-template-list")
+        XCTAssertNil(request.params)
+    }
+
+    func testBuildNotebookTemplateCreateRequest() {
+        let request = runner.buildRequest(from: .notebookTemplateCreate(
+            templateID: "swift-script",
+            outputPath: "/tmp/script.cocxynb",
+            force: false
+        ))
+
+        XCTAssertEqual(request.command, "notebook-template-create")
+        XCTAssertEqual(request.params?["template"], "swift-script")
+        XCTAssertEqual(request.params?["output"], "/tmp/script.cocxynb")
+        XCTAssertEqual(request.params?["force"], "false")
+    }
+
     func testBuildNotebookRunRequest() {
         let request = runner.buildRequest(from: .notebookRun(
             inputPath: "/tmp/source.cocxynb",
@@ -1063,6 +1105,26 @@ final class OutputFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(output, "Exported notebook HTML to /tmp/result.html.")
+    }
+
+    func testFormatNotebookTemplateCreateUsesServerSummary() {
+        let response = CLISocketResponse(
+            id: "notebook-template-1",
+            success: true,
+            data: ["summary": "Created notebook from template swift-script at /tmp/script.cocxynb."],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .notebookTemplateCreate(
+                templateID: "swift-script",
+                outputPath: "/tmp/script.cocxynb",
+                force: false
+            ),
+            response: response
+        )
+
+        XCTAssertEqual(output, "Created notebook from template swift-script at /tmp/script.cocxynb.")
     }
 
     func testFormatNotebookRunUsesServerSummary() {
@@ -1495,7 +1557,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 130)
+        XCTAssertEqual(CLICommand.allCases.count, 132)
     }
 
     // MARK: - 39. Raw values match server protocol

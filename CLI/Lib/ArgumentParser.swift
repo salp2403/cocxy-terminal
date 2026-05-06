@@ -406,6 +406,12 @@ public enum ParsedCommand: Equatable {
     /// `cocxy notebook export-html <input.cocxynb> --output <output.html> [--force]`
     case notebookExportHTML(inputPath: String, outputPath: String, force: Bool)
 
+    /// `cocxy notebook template list`
+    case notebookTemplateList
+
+    /// `cocxy notebook template create <template-id> --output <output.cocxynb> [--force]`
+    case notebookTemplateCreate(templateID: String, outputPath: String, force: Bool)
+
     /// `cocxy notebook run <input.cocxynb> [--output <output.cocxynb>] [--cwd <dir>]`
     case notebookRun(
         inputPath: String,
@@ -2359,6 +2365,8 @@ public enum CLIArgumentParser {
                 outputPath: options.output,
                 force: options.force
             )
+        case "template":
+            return try parseNotebookTemplate(arguments: rest)
         case "run":
             let options = try parseNotebookRunOptions(arguments: rest)
             return .notebookRun(
@@ -2372,9 +2380,90 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "notebook",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use import, export, export-html, or run."
+                reason: "Unknown subcommand. Use import, export, export-html, template, or run."
             )
         }
+    }
+
+    private static func parseNotebookTemplate(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "notebook template", argument: "list|create")
+        }
+
+        let rest = Array(arguments.dropFirst())
+        switch subcommand {
+        case "list":
+            guard rest.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "notebook template list",
+                    argument: rest[0],
+                    reason: "No arguments are accepted."
+                )
+            }
+            return .notebookTemplateList
+        case "create":
+            let options = try parseNotebookTemplateCreateOptions(arguments: rest)
+            return .notebookTemplateCreate(
+                templateID: options.templateID,
+                outputPath: options.output,
+                force: options.force
+            )
+        default:
+            throw CLIError.invalidArgument(
+                command: "notebook template",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list or create."
+            )
+        }
+    }
+
+    private static func parseNotebookTemplateCreateOptions(
+        arguments: [String]
+    ) throws -> (templateID: String, output: String, force: Bool) {
+        var templateID: String?
+        var output: String?
+        var force = false
+        var index = 0
+
+        while index < arguments.count {
+            let token = arguments[index]
+            switch token {
+            case "--output", "-o":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "notebook template create", argument: "output")
+                }
+                output = arguments[index + 1]
+                index += 2
+            case "--force":
+                force = true
+                index += 1
+            default:
+                if token.hasPrefix("-") {
+                    throw CLIError.invalidArgument(
+                        command: "notebook template create",
+                        argument: token,
+                        reason: "Unknown option. Valid flags: --output, -o, --force."
+                    )
+                }
+                guard templateID == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "notebook template create",
+                        argument: token,
+                        reason: "Only one template id is accepted."
+                    )
+                }
+                templateID = token
+                index += 1
+            }
+        }
+
+        guard let templateID, !templateID.isEmpty else {
+            throw CLIError.missingArgument(command: "notebook template create", argument: "template-id")
+        }
+        guard let output, !output.isEmpty else {
+            throw CLIError.missingArgument(command: "notebook template create", argument: "output")
+        }
+        return (templateID, output, force)
     }
 
     private static func parseNotebookConversionOptions(

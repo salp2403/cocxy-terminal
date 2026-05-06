@@ -300,6 +300,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case notebookExport = "notebook-export"
     /// Export Cocxy notebook markdown to standalone local HTML.
     case notebookExportHTML = "notebook-export-html"
+    /// List built-in local notebook templates.
+    case notebookTemplateList = "notebook-template-list"
+    /// Create a notebook from a built-in local template.
+    case notebookTemplateCreate = "notebook-template-create"
     /// Run Cocxy notebook code cells locally.
     case notebookRun = "notebook-run"
     /// Run a local Cocxy workflow file.
