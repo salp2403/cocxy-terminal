@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FAQ — Cocxy Terminal | Questions About the Native macOS Terminal for AI Agents</title>
   <meta name="description" content="Answers to common questions about Cocxy Terminal: supported AI agents, pricing, privacy, installation, migration, code review panel, Markdown workspace, system requirements, and more.">
-  <meta name="keywords" content="Cocxy Terminal FAQ, macOS terminal questions, AI coding agent terminal, Claude Code terminal, Codex CLI, Gemini CLI, privacy, zero telemetry, MIT license, Apple Silicon terminal">
+  <meta name="keywords" content="Cocxy Terminal FAQ, macOS terminal questions, AI coding agent terminal, local agent detection, privacy, zero telemetry, MIT license, Apple Silicon terminal">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
 
@@ -68,7 +68,7 @@
       {
         "@type": "Question",
         "name": "Which AI coding agents does Cocxy support?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Six agents are detected out of the box: Claude Code, Codex CLI, Gemini CLI, Aider, Kiro, and OpenCode. Detection uses four layers: hooks (Claude Code, Codex, Kiro, Gemini), OSC escape sequences, output pattern matching, and timing heuristics. You can add custom agents in ~/.config/cocxy/agents.toml."}
+        "acceptedAnswer": {"@type": "Answer", "text": "Cocxy ships bundled local agent profiles for hook-capable, OSC-aware, pattern-only, and timing-fallback CLIs. Detection uses four layers: hook events, OSC escape sequences, output pattern matching, and timing heuristics. You can add custom agents in ~/.config/cocxy/agents.toml."}
       },
       {
         "@type": "Question",
@@ -219,7 +219,7 @@
 
         <details class="faq-item" id="agents">
           <summary><span>Which AI coding agents does Cocxy support?</span></summary>
-          <p>Six agents are detected out of the box: <strong>Claude Code</strong>, <strong>Codex CLI</strong>, <strong>Gemini CLI</strong>, <strong>Aider</strong>, <strong>Kiro</strong>, and <strong>OpenCode</strong>. Detection uses four layers: hook events (Claude Code, Codex, Kiro, Gemini), OSC escape sequences, output pattern matching, and timing heuristics. You can add custom agents in <code>~/.config/cocxy/agents.toml</code>.</p>
+          <p>Cocxy ships bundled local agent profiles for hook-capable, OSC-aware, pattern-only, and timing-fallback CLIs. Detection uses four layers: hook events, OSC escape sequences, output pattern matching, and timing heuristics. You can add custom agents in <code>~/.config/cocxy/agents.toml</code>.</p>
         </details>
 
         <details class="faq-item" id="privacy">

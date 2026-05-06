@@ -521,12 +521,7 @@
     </div>
     <div class="sidebar-group">
       <h3>Agent Integrations</h3>
-      <a href="#agent-claude" class="sidebar-link sub">Claude Code</a>
-      <a href="#agent-codex" class="sidebar-link sub">Codex CLI</a>
-      <a href="#agent-gemini" class="sidebar-link sub">Gemini CLI</a>
-      <a href="#agent-aider" class="sidebar-link sub">Aider</a>
-      <a href="#agent-kiro" class="sidebar-link sub">Kiro</a>
-      <a href="#agent-opencode" class="sidebar-link sub">OpenCode</a>
+      <a href="#agent-bundled" class="sidebar-link sub">Bundled Profiles</a>
       <a href="#agent-custom" class="sidebar-link sub">Custom Agents</a>
     </div>
     <div class="sidebar-group">
@@ -544,7 +539,7 @@
 
     <!-- Getting Started -->
     <h1 id="getting-started">Getting Started</h1>
-    <p>Cocxy Terminal is a native macOS terminal built for AI agent workflows. Zero telemetry, GPU-accelerated rendering, an inline agent code review panel, a full native Markdown workspace, and first-class support for Claude Code, Codex CLI, Gemini CLI, Aider, Kiro, and OpenCode.</p>
+    <p>Cocxy Terminal is a native macOS terminal built for AI agent workflows. Zero telemetry, GPU-accelerated rendering, an inline agent code review panel, a full native Markdown workspace, and bundled local profiles for common coding-agent CLIs.</p>
 
     <h3>System Requirements</h3>
     <ul>
@@ -621,7 +616,7 @@
     <p>The vertical sidebar on the left is your workspace. Each entry is a <strong>tab</strong> with its own terminal session. Tabs show the current directory, git branch, and agent state in real time.</p>
 
     <h3>Agent Detection</h3>
-    <p>Cocxy automatically detects AI agents running in your terminal. When you launch <code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>aider</code>, <code>kiro</code>, or <code>opencode</code>, the tab indicator changes to show the agent's state: launching, working, waiting for input, finished, or error.</p>
+    <p>Cocxy automatically detects AI agents running in your terminal. When a configured local agent profile matches a launch command, hook event, OSC marker, or output pattern, the tab indicator changes to show the agent's state: launching, working, waiting for input, finished, or error.</p>
 
     <h3>Splits</h3>
     <p>Any tab can be split horizontally or vertically to show multiple terminal sessions or panels (browser, markdown preview) side by side.</p>
@@ -757,7 +752,7 @@ restore-on-launch = true</code></pre>
     <h2 id="agent-detection">Agent Detection</h2>
     <p>Cocxy uses a multi-layer detection engine to identify AI agents running in your terminal. Each layer cross-validates with the others for high-confidence results:</p>
     <ol>
-      <li><strong>Hook Events</strong> (highest priority) — Multi-agent hook integration streams events from Claude Code, Codex CLI, Gemini CLI, and Kiro in real time: tool calls, responses, session lifecycle, subagent spawn, and error signals. Run <code>cocxy setup-hooks</code> to auto-configure hooks across every installed agent.</li>
+      <li><strong>Hook Events</strong> (highest priority) — Multi-agent hook integration streams local events in real time: tool calls, responses, session lifecycle, subagent spawn, and error signals. Run <code>cocxy setup-hooks</code> to auto-configure hooks for compatible installed agents.</li>
       <li><strong>OSC Sequences</strong> — Shell integration markers (OSC 133, OSC 7) for working directory and command boundary detection.</li>
       <li><strong>Pattern Matching</strong> — Regex patterns matched against terminal output to detect agent launch commands, waiting prompts, completion markers, and errors.</li>
       <li><strong>Timing Heuristics</strong> (fallback) — Detects idle timeouts and sustained output patterns when the other layers don't match.</li>
@@ -774,29 +769,9 @@ restore-on-launch = true</code></pre>
       <tr><td>Error</td><td>Red dot with <code>!</code></td><td>Error occurred</td></tr>
     </table>
 
-    <h3 id="agent-claude">Claude Code</h3>
-    <p>Claude Code has first-class integration through the full hook event set. Cocxy receives real-time events (session start/end, tool use, subagent spawn, errors) for accurate state tracking. The tab sidebar shows the current tool being used (for example, "Read: main.swift"). OSC 7 and OSC 133 provide the working directory and prompt boundaries.</p>
-    <p>Detection patterns: <code>^claude\b</code>, <code>^claude-code\b</code>, <code>npx claude</code>, <code>Claude Code v[0-9]</code>, <code>Claude (Max|Pro)</code></p>
-
-    <h3 id="agent-codex">Codex CLI</h3>
-    <p>Codex CLI uses the same hook protocol as Claude Code (its implementation reads hooks from <code>~/.codex/hooks.json</code>). Detection falls back to pattern matching for the launch banner and waiting prompts.</p>
-    <p>Detection patterns: <code>^codex\b</code>, <code>Welcome to Codex</code>, <code>OpenAI's command-line coding agent</code></p>
-
-    <h3 id="agent-gemini">Gemini CLI</h3>
-    <p>Gemini CLI exposes an 11-event hook system whose events are mapped to Cocxy's normalized protocol at ingestion time. Has an 8-second idle timeout for slower initial responses.</p>
-    <p>Detection patterns: <code>^gemini\b</code>, <code>Gemini CLI v\d+</code></p>
-
-    <h3 id="agent-aider">Aider</h3>
-    <p>Aider is detected through pattern matching only (it does not expose a hook system). It has a longer 10-second idle timeout because it takes longer to respond.</p>
-    <p>Detection patterns: <code>^aider(?:\s|$)</code>, <code>^python.*aider</code>, <code>Aider v\d+\.\d+</code>, <code>Main model:.*edit format</code></p>
-
-    <h3 id="agent-kiro">Kiro</h3>
-    <p>Kiro supports hooks via its five-event system (<code>preToolUse</code>, <code>postToolUse</code>, <code>agentSpawn</code>, <code>stop</code>, <code>userPromptSubmit</code>). Hook support is the primary detection layer; pattern matching is the fallback.</p>
-    <p>Detection patterns: <code>^kiro\b</code>, <code>^kiro-cli\b</code>, <code>Welcome to Kiro</code></p>
-
-    <h3 id="agent-opencode">OpenCode</h3>
-    <p>OpenCode is detected through pattern matching. Hooks are not wired because the agent's plugin system is more invasive to integrate, but detection is reliable through the launch banner and prompt patterns.</p>
-    <p>Detection patterns: <code>^opencode\b</code>, <code>Loading plugins</code></p>
+    <h3 id="agent-bundled">Bundled Agent Profiles</h3>
+    <p>Cocxy ships bundled local profiles for hook-capable, OSC-aware, pattern-only, and timing-fallback coding-agent CLIs. Hook-capable profiles provide the richest state because Cocxy receives local events for session start/end, tool use, subagent spawn, errors, and prompt handoff. Profiles without hooks still use OSC markers, output patterns, and timing heuristics.</p>
+    <p>Detection patterns stay local and are evaluated with NSRegularExpression against terminal output already rendered in Cocxy. You can inspect or override profile behavior from <code>~/.config/cocxy/agents.toml</code>.</p>
 
     <h3 id="agent-custom">Custom Agents</h3>
     <p>Add your own agents by editing <code>~/.config/cocxy/agents.toml</code>:</p>
@@ -1295,7 +1270,7 @@ light-theme = "catppuccin-latte"</code></pre>
       <tr><td><code>idle-timeout-override</code></td><td>integer</td><td>Custom idle timeout in seconds (optional)</td></tr>
     </table>
 
-    <p>Patterns use NSRegularExpression syntax. Use single-quoted TOML strings so backslashes are literal: <code>'^claude\b'</code>.</p>
+    <p>Patterns use NSRegularExpression syntax. Use single-quoted TOML strings so backslashes are literal: <code>'^my-agent\b'</code>.</p>
 
     <!-- Migration Guide -->
     <h2 id="migration-guide">Migration from v0.x</h2>

@@ -125,19 +125,19 @@ function initTerminalDemo() {
         { class: "", text: "" },
         {
           class: "accent",
-          text: "  Claude Code     " +
+          text: "  Local Agent     " +
             '<span class="success">running</span>' +
             '   <span class="dim">pid 4821  tab:1</span>',
         },
         {
           class: "accent",
-          text: "  Codex CLI       " +
+          text: "  Review Agent    " +
             '<span class="warn">waiting</span>' +
             '   <span class="dim">pid 4903  tab:2</span>',
         },
         {
           class: "accent",
-          text: "  Aider           " +
+          text: "  Docs Agent      " +
             '<span class="success">running</span>' +
             '   <span class="dim">pid 5012  tab:3</span>',
         },

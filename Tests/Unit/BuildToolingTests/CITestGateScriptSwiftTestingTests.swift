@@ -245,6 +245,31 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
+    @Test("public marketing copy avoids named third-party agent brands")
+    func publicMarketingCopyAvoidsNamedThirdPartyAgentBrands() throws {
+        let root = repositoryRoot()
+        let webRoot = root.appendingPathComponent("web/public", isDirectory: true)
+        var files = [
+            root.appendingPathComponent("README.md"),
+        ]
+        files += try Self.files(under: webRoot, fileExtension: "html")
+        files += try Self.files(under: webRoot, fileExtension: "js")
+
+        let pattern = try NSRegularExpression(
+            pattern: #"\b(claude|codex|gemini|aider|kiro|opencode|anthropic|openai|warp)\b"#,
+            options: [.caseInsensitive]
+        )
+
+        for file in files {
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            let range = NSRange(location: 0, length: (contents as NSString).length)
+            #expect(
+                pattern.firstMatch(in: contents, range: range) == nil,
+                "\(Self.relativePath(file, root: root)) should describe bundled local agent profiles generically"
+            )
+        }
+    }
+
     @Test("public getting started docs include v0 migration guidance in both locales")
     func publicGettingStartedDocsIncludeMigrationGuidanceInBothLocales() throws {
         let root = repositoryRoot()

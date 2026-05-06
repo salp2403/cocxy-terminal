@@ -78,8 +78,8 @@ Passive detection engine that identifies coding agent state in real time without
 | **Pattern** | Output pattern matching | Launch signatures, waiting prompts, completion markers |
 | **Timing** | Activity heuristics | Active vs idle periods, session boundaries |
 
-- **Six Agents** — Claude Code (full hook parity), Codex CLI, Gemini CLI, Aider, Kiro, OpenCode
-- **Multi-Agent Hook Support** — Shared hook protocol across Claude Code, Codex, Kiro, Gemini, and custom sources, with per-agent attribution
+- **Bundled Agent Profiles** — Local profiles cover hook-capable, OSC-aware, pattern-only, and timing-fallback CLIs without vendor lock-in
+- **Multi-Agent Hook Support** — Shared hook protocol across supported local CLIs and custom sources, with per-agent attribution
 - **`cocxy setup-hooks`** — Auto-configures hooks in every installed agent with one command
 - **Agent Dashboard** — Live view of all sessions with state, working directory, active tool, duration, file touches, and error counts (`Cmd+Option+A`)
 - **Agent Timeline** — Chronological event log with six filters (All / Tools / Errors / Agents / Tasks / Session), JSON and Markdown export (`Cmd+Shift+T`)
@@ -266,16 +266,15 @@ Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, an
 | Jump to Tab 1–9 | `Cmd+1` through `Cmd+9` |
 | Dismiss Overlay | `Esc` |
 
-## Supported Agents
+## Agent Profile Coverage
 
-| Agent | Hooks | OSC 7 / 133 | Pattern | Timing |
-|-------|-------|-------------|---------|--------|
-| Claude Code | Yes (full event set) | Yes | Yes | Yes |
-| Codex CLI | Yes | — | Yes | Yes |
-| Gemini CLI | Yes (mapped events) | — | Yes | Yes |
-| Aider | — | — | Yes | Yes |
-| Kiro | Yes | — | Yes | Yes |
-| OpenCode | — | — | Yes | Yes |
+| Profile class | Hooks | OSC 7 / 133 | Pattern | Timing |
+|---------------|-------|-------------|---------|--------|
+| Hook-capable local CLIs | Yes | Optional | Yes | Yes |
+| OSC-aware shells and tools | Optional | Yes | Yes | Yes |
+| Pattern-only local CLIs | — | — | Yes | Yes |
+| Timing fallback profiles | — | — | Optional | Yes |
+| Custom profiles | Optional | Optional | Yes | Yes |
 
 Custom agents are defined in `~/.config/cocxy/agents.toml`:
 
