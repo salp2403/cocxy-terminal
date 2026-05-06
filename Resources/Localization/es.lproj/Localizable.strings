@@ -943,7 +943,7 @@
 "workspaceToolbar.panel.editor" = "Editor";
 "workspaceToolbar.panel.notebook" = "Notebook";
 "workspaceToolbar.panel.workflow" = "Workflow";
-"workspaceToolbar.panel.sessionReplay" = "Replay";
+"workspaceToolbar.panel.sessionReplay" = "Reproducción";
 "workspaceToolbar.panel.aiEditHistory" = "Historial de ediciones";
 "workspaceToolbar.panel.templates" = "Plantillas";
 "workspaceToolbar.panel.macros" = "Macros";
@@ -1078,7 +1078,7 @@
 "horizontalTab.add.textEditor" = "Editor de texto";
 "horizontalTab.add.notebook" = "Notebook";
 "horizontalTab.add.workflow" = "Workflow";
-"horizontalTab.add.sessionReplay" = "Replay de sesión";
+"horizontalTab.add.sessionReplay" = "Reproducción de sesiones";
 "horizontalTab.add.editHistory" = "Historial de edición";
 "horizontalTab.add.templates" = "Plantillas";
 "horizontalTab.add.macros" = "Macros";
@@ -1090,7 +1090,7 @@
 "horizontalTab.action.openTextEditor" = "Abrir editor de texto";
 "horizontalTab.action.openNotebook" = "Abrir notebook";
 "horizontalTab.action.openWorkflow" = "Abrir workflow";
-"horizontalTab.action.openSessionReplay" = "Abrir replay de sesión";
+"horizontalTab.action.openSessionReplay" = "Abrir reproducción de sesiones";
 "horizontalTab.action.openEditHistory" = "Abrir historial de edición";
 "horizontalTab.action.openTemplates" = "Abrir plantillas";
 "horizontalTab.action.openMacros" = "Abrir macros";
@@ -1196,7 +1196,7 @@
 "activity.event.errors" = "Errores";
 "activity.event.projectSwitches" = "Cambios de proyecto";
 "sessionReplay.deleteAll.title" = "¿Eliminar todas las grabaciones?";
-"sessionReplay.deleteAll.message" = "Esto elimina todas las grabaciones locales de Session Replay de esta Mac.";
+"sessionReplay.deleteAll.message" = "Esto elimina todas las grabaciones locales de reproducción de sesiones de esta Mac.";
 "sessionReplay.deleteAll.button" = "Eliminar todo";
 "scripting.error.applicationNotReady" = "La aplicación no está lista";
 "scripting.error.noCommandTextProvided" = "No se proporcionó texto de comando";
@@ -1221,14 +1221,14 @@
 "sessionReplay.bookmark.placeholder" = "Etiqueta del marcador";
 "sessionReplay.bookmark" = "Marcador";
 "sessionReplay.export" = "Exportar";
-"sessionReplay.exportPanel.title" = "Exportar Session Replay";
+"sessionReplay.exportPanel.title" = "Exportar reproducción de sesiones";
 "sessionReplay.exportPanel.message" = "Elige dónde guardar esta grabación.";
 "sessionReplay.search.placeholder" = "Buscar en grabación";
 "sessionReplay.search" = "Buscar";
 "sessionReplay.bookmarks" = "Marcadores";
-"sessionReplay.error.noSelection" = "No hay una grabación de Session Replay seleccionada.";
-"sessionReplay.error.replayDisabled" = "Session Replay está desactivado en preferencias.";
-"sessionReplay.error.playbackUnavailable" = "La reproducción de Session Replay no está disponible para este motor de terminal.";
+"sessionReplay.error.noSelection" = "No hay una grabación de reproducción de sesiones seleccionada.";
+"sessionReplay.error.replayDisabled" = "La reproducción de sesiones está desactivada en preferencias.";
+"sessionReplay.error.playbackUnavailable" = "La reproducción de sesiones no está disponible para este motor de terminal.";
 "sessionReplay.error.targetSurfaceUnavailable" = "No hay superficie de terminal disponible para la reproducción.";
 "dbCloud.title" = "DB/Cloud";
 "dbCloud.refresh" = "Actualizar";
@@ -2158,8 +2158,8 @@
 "command.workspace.notebook.description" = "Abrir un notebook ejecutable local junto al terminal";
 "command.workspace.workflow.name" = "Abrir panel de workflow";
 "command.workspace.workflow.description" = "Abrir un runner de workflows local junto al terminal";
-"command.workspace.sessionReplay.name" = "Abrir panel de replay de sesión";
-"command.workspace.sessionReplay.description" = "Abrir grabaciones locales de sesión y controles de replay";
+"command.workspace.sessionReplay.name" = "Abrir panel de reproducción de sesiones";
+"command.workspace.sessionReplay.description" = "Abrir grabaciones locales de sesión y controles de reproducción";
 "command.workspace.aiEditHistory.name" = "Abrir historial de ediciones";
 "command.workspace.aiEditHistory.description" = "Abrir historial local de ediciones del agente y controles de reversión";
 "command.workspace.templates.name" = "Abrir panel de plantillas";

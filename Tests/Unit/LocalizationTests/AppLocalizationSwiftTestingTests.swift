@@ -499,12 +499,17 @@ struct AppLocalizationSwiftTestingTests {
         #expect(HorizontalTabStripView.localizedSwitchToDarkTheme(using: spanish) == "Cambiar a tema oscuro")
         #expect(HorizontalTabStripView.localizedTerminalSideBySide(using: spanish) == "Terminal (lado a lado)")
         #expect(HorizontalTabStripView.localizedTerminalTitle(using: spanish) == "Terminal")
+        #expect(HorizontalTabStripView.localizedSessionReplay(using: spanish) == "Reproducción de sesiones")
+        #expect(HorizontalTabStripView.localizedOpenSessionReplay(using: spanish) == "Abrir reproducción de sesiones")
         #expect(HorizontalTabStripView.localizedOpenDBCloudHelpers(using: spanish) == "Abrir ayudas DB/Cloud")
         #expect(HorizontalTabStripView.localizedPanelRenamePlaceholder(using: spanish) == "Nombre del panel")
         #expect(MainWindowController.localizedTerminalTitle(using: spanish) == "Terminal")
         #expect(MainWindowController.localizedPanelTitle(.browser, using: spanish) == "Navegador")
+        #expect(MainWindowController.localizedPanelTitle(.sessionReplay, using: spanish) == "Reproducción")
         #expect(MainWindowController.localizedPanelTitle(.aiEditHistory, using: spanish) == "Historial de ediciones")
         #expect(MainWindowController.localizedPanelTitle(.subagent, using: spanish) == "Agente")
+        #expect(spanish.string("command.workspace.sessionReplay.name", fallback: "Open Session Replay Panel") == "Abrir panel de reproducción de sesiones")
+        #expect(spanish.string("sessionReplay.exportPanel.title", fallback: "Export Session Replay") == "Exportar reproducción de sesiones")
     }
 
     @MainActor
