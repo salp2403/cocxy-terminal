@@ -9,6 +9,7 @@ import WebKit
 /// Keeping the script-message setup and enable/disable JavaScript here lets
 /// both browser hosts (`BrowserPanelView` and `BrowserContentView`) share the
 /// same behavior instead of drifting between overlay and split-pane browsers.
+@MainActor
 enum BrowserDOMGrabWebKitSupport {
 
     /// Registers the bundled DOM-grab script and message bridge.
@@ -58,7 +59,7 @@ enum BrowserDOMGrabWebKitSupport {
     static func setEnabled(
         _ enabled: Bool,
         on webView: WKWebView,
-        completion: ((Bool) -> Void)? = nil
+        completion: (@MainActor @Sendable (Bool) -> Void)? = nil
     ) {
         webView.evaluateJavaScript(setEnabledScript(enabled)) { result, error in
             if let error {

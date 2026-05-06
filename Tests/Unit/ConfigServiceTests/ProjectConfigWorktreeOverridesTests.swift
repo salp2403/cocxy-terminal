@@ -12,7 +12,7 @@ struct ProjectConfigWorktreeOverridesTests {
     // MARK: - Parsing
 
     @Test("cocxy.toml with full [worktree] overrides populates every field")
-    func fullWorktreeOverridesPopulate() {
+    func fullWorktreeOverridesPopulate() throws {
         let toml = """
         [worktree]
         enabled = true
@@ -24,33 +24,33 @@ struct ProjectConfigWorktreeOverridesTests {
         show-badge = false
         """
         let parsed = ProjectConfigService().parse(toml)
-        let unwrapped = try? #require(parsed)
+        let unwrapped = try #require(parsed)
 
-        #expect(unwrapped?.worktreeEnabled == true)
-        #expect(unwrapped?.worktreeBaseRef == "release/v2")
-        #expect(unwrapped?.worktreeBranchTemplate == "feat/{agent}-{id}")
-        #expect(unwrapped?.worktreeOnClose == .prompt)
-        #expect(unwrapped?.worktreeOpenInNewTab == false)
-        #expect(unwrapped?.worktreeInheritProjectConfig == false)
-        #expect(unwrapped?.worktreeShowBadge == false)
+        #expect(unwrapped.worktreeEnabled == true)
+        #expect(unwrapped.worktreeBaseRef == "release/v2")
+        #expect(unwrapped.worktreeBranchTemplate == "feat/{agent}-{id}")
+        #expect(unwrapped.worktreeOnClose == .prompt)
+        #expect(unwrapped.worktreeOpenInNewTab == false)
+        #expect(unwrapped.worktreeInheritProjectConfig == false)
+        #expect(unwrapped.worktreeShowBadge == false)
     }
 
     @Test("partial [worktree] overrides leave unset fields nil")
-    func partialWorktreeOverridesKeepRestNil() {
+    func partialWorktreeOverridesKeepRestNil() throws {
         let toml = """
         [worktree]
         enabled = true
         """
         let parsed = ProjectConfigService().parse(toml)
-        let unwrapped = try? #require(parsed)
+        let unwrapped = try #require(parsed)
 
-        #expect(unwrapped?.worktreeEnabled == true)
-        #expect(unwrapped?.worktreeBaseRef == nil)
-        #expect(unwrapped?.worktreeBranchTemplate == nil)
-        #expect(unwrapped?.worktreeOnClose == nil)
-        #expect(unwrapped?.worktreeOpenInNewTab == nil)
-        #expect(unwrapped?.worktreeInheritProjectConfig == nil)
-        #expect(unwrapped?.worktreeShowBadge == nil)
+        #expect(unwrapped.worktreeEnabled == true)
+        #expect(unwrapped.worktreeBaseRef == nil)
+        #expect(unwrapped.worktreeBranchTemplate == nil)
+        #expect(unwrapped.worktreeOnClose == nil)
+        #expect(unwrapped.worktreeOpenInNewTab == nil)
+        #expect(unwrapped.worktreeInheritProjectConfig == nil)
+        #expect(unwrapped.worktreeShowBadge == nil)
     }
 
     @Test("unknown on-close string yields nil override, never a wrong enum")
