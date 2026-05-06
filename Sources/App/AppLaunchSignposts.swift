@@ -192,6 +192,17 @@ struct AppLaunchTimingSnapshot: Equatable, Sendable {
             }
     }
 
+    var slowestCriticalPathStep: (step: AppLaunchStep, durationNanoseconds: UInt64)? {
+        AppLaunchStep.criticalPathSteps
+            .compactMap { step -> (AppLaunchStep, UInt64)? in
+                guard let duration = durationsNanoseconds[step] else { return nil }
+                return (step, duration)
+            }
+            .max { lhs, rhs in
+                lhs.1 < rhs.1
+            }
+    }
+
     func durationNanoseconds(for step: AppLaunchStep) -> UInt64? {
         durationsNanoseconds[step]
     }
@@ -213,6 +224,12 @@ struct AppLaunchTimingSnapshot: Equatable, Sendable {
         if let slowestStep {
             fields["launch_slowest_step"] = slowestStep.step.label
             fields["launch_slowest_step_ms"] = Self.formatMilliseconds(slowestStep.durationNanoseconds)
+        }
+        if let slowestCriticalPathStep {
+            fields["launch_critical_slowest_step"] = slowestCriticalPathStep.step.label
+            fields["launch_critical_slowest_step_ms"] = Self.formatMilliseconds(
+                slowestCriticalPathStep.durationNanoseconds
+            )
         }
         return fields
     }

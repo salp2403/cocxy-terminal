@@ -1049,6 +1049,29 @@ final class OutputFormatterTests: XCTestCase {
                 "launch_critical_path_budget_ms": "50",
                 "launch_slowest_step": "Main window",
                 "launch_slowest_step_ms": "14.25",
+                "launch_critical_slowest_step": "Socket server",
+                "launch_critical_slowest_step_ms": "9.75",
+                "launch_deferred_completed": "3",
+                "launch_deferred_pending": "2"
+            ],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(command: .status, response: response)
+
+        XCTAssertTrue(output.contains("Launch: critical 37.50ms / 50ms, slowest Main window 14.25ms, critical slowest Socket server 9.75ms, warmup 3 done / 2 pending"))
+    }
+
+    func testFormatStatusOmitsCriticalSlowestWhenUnavailable() {
+        let response = CLISocketResponse(
+            id: "r-7b",
+            success: true,
+            data: [
+                "version": "0.1.91",
+                "launch_critical_path_ms": "37.50",
+                "launch_critical_path_budget_ms": "50",
+                "launch_slowest_step": "Main window",
+                "launch_slowest_step_ms": "14.25",
                 "launch_deferred_completed": "3",
                 "launch_deferred_pending": "2"
             ],
@@ -1058,6 +1081,7 @@ final class OutputFormatterTests: XCTestCase {
         let output = OutputFormatter.formatSuccess(command: .status, response: response)
 
         XCTAssertTrue(output.contains("Launch: critical 37.50ms / 50ms, slowest Main window 14.25ms, warmup 3 done / 2 pending"))
+        XCTAssertFalse(output.contains("critical slowest unknown"))
     }
 
     func testFormatNotebookImportUsesServerSummary() {

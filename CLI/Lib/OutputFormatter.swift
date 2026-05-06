@@ -418,9 +418,13 @@ public enum OutputFormatter {
             let slowestStepDuration = data["launch_slowest_step_ms"] ?? "0.00"
             let completed = data["launch_deferred_completed"] ?? "0"
             let pending = data["launch_deferred_pending"] ?? "0"
-            lines.append(
-                "Launch: critical \(criticalPath)ms / \(budget)ms, slowest \(slowestStep) \(slowestStepDuration)ms, warmup \(completed) done / \(pending) pending"
-            )
+            var launchLine = "Launch: critical \(criticalPath)ms / \(budget)ms, slowest \(slowestStep) \(slowestStepDuration)ms"
+            if let criticalSlowestStep = data["launch_critical_slowest_step"],
+               let criticalSlowestDuration = data["launch_critical_slowest_step_ms"] {
+                launchLine += ", critical slowest \(criticalSlowestStep) \(criticalSlowestDuration)ms"
+            }
+            launchLine += ", warmup \(completed) done / \(pending) pending"
+            lines.append(launchLine)
         }
 
         if let searchMode = data["search_mode"] {

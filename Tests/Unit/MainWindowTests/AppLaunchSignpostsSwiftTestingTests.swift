@@ -70,16 +70,19 @@ struct AppLaunchSignpostsSwiftTestingTests {
         AppLaunchTimingRecorder.resetForTesting()
         AppLaunchTimingRecorder.record(.configService, durationNanoseconds: 1_000_000)
         AppLaunchTimingRecorder.record(.mainWindow, durationNanoseconds: 3_500_000)
+        AppLaunchTimingRecorder.record(.sessionRestore, durationNanoseconds: 5_000_000)
 
         let snapshot = AppLaunchTimingRecorder.snapshot(
             pendingDeferredWarmupBatches: [[.sessionRestore], [.plugins, .quickTerminal]]
         )
         let fields = snapshot.statusFields()
 
-        #expect(snapshot.recordedSteps == [.configService, .mainWindow])
+        #expect(snapshot.recordedSteps == [.configService, .mainWindow, .sessionRestore])
         #expect(snapshot.pendingDeferredWarmupSteps == 3)
-        #expect(fields["launch_slowest_step"] == "Main window")
-        #expect(fields["launch_slowest_step_ms"] == "3.50")
+        #expect(fields["launch_slowest_step"] == "Session restore")
+        #expect(fields["launch_slowest_step_ms"] == "5.00")
+        #expect(fields["launch_critical_slowest_step"] == "Main window")
+        #expect(fields["launch_critical_slowest_step_ms"] == "3.50")
         #expect(fields["launch_deferred_pending"] == "3")
     }
 
