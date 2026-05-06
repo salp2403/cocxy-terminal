@@ -35,6 +35,16 @@ enum DevToolsTab: String, CaseIterable, Identifiable {
     }
 }
 
+struct BrowserDevToolsHeaderPresentation: Equatable, Sendable {
+    static let iconOnlyTabThreshold: CGFloat = 260
+
+    let usesIconOnlyTabs: Bool
+
+    static func resolve(width: CGFloat) -> BrowserDevToolsHeaderPresentation {
+        BrowserDevToolsHeaderPresentation(usesIconOnlyTabs: width < iconOnlyTabThreshold)
+    }
+}
+
 // MARK: - DOM Node
 
 /// A simplified DOM node for the tree inspector.
@@ -164,40 +174,48 @@ struct BrowserDevToolsView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        HStack(spacing: 0) {
-            ForEach(DevToolsTab.allCases) { tab in
-                devToolsTabButton(tab)
-            }
+        GeometryReader { proxy in
+            let presentation = BrowserDevToolsHeaderPresentation.resolve(width: proxy.size.width)
 
-            Spacer()
+            HStack(spacing: 0) {
+                ForEach(DevToolsTab.allCases) { tab in
+                    devToolsTabButton(tab, iconOnly: presentation.usesIconOnlyTabs)
+                }
 
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
+                Spacer()
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 24, height: 24)
+                .accessibilityLabel(localized("browser.devTools.close", fallback: "Close DevTools"))
             }
-            .buttonStyle(.plain)
-            .frame(width: 24, height: 24)
-            .accessibilityLabel(localized("browser.devTools.close", fallback: "Close DevTools"))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .frame(height: 32)
     }
 
-    private func devToolsTabButton(_ tab: DevToolsTab) -> some View {
+    private func devToolsTabButton(_ tab: DevToolsTab, iconOnly: Bool) -> some View {
         Button(action: { selectedTab = tab }) {
             HStack(spacing: 4) {
                 Image(systemName: tab.symbolName)
                     .font(.system(size: 10))
-                Text(tab.localizedTitle(using: localizer))
-                    .font(.system(size: 11, weight: selectedTab == tab ? .semibold : .regular))
+                if !iconOnly {
+                    Text(tab.localizedTitle(using: localizer))
+                        .font(.system(size: 11, weight: selectedTab == tab ? .semibold : .regular))
+                        .lineLimit(1)
+                }
             }
             .foregroundColor(
                 selectedTab == tab
                     ? Color(nsColor: CocxyColors.text)
                     : Color(nsColor: CocxyColors.overlay1)
             )
-            .padding(.horizontal, 10)
+            .padding(.horizontal, iconOnly ? 7 : 10)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 4)
@@ -207,6 +225,7 @@ struct BrowserDevToolsView: View {
             )
         }
         .buttonStyle(.plain)
+        .help(tab.localizedTitle(using: localizer))
         .accessibilityLabel(
             String(
                 format: localized("browser.devTools.tab.accessibility", fallback: "%@ tab"),

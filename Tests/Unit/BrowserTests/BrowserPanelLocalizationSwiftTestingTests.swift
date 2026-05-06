@@ -8,6 +8,14 @@ import Testing
 @Suite("Browser panel localization")
 struct BrowserPanelLocalizationSwiftTestingTests {
 
+    @Test("DevTools header switches tabs to icon-only before labels wrap")
+    func devToolsHeaderUsesIconOnlyTabsInNarrowPanes() {
+        #expect(BrowserDevToolsHeaderPresentation.resolve(width: 220).usesIconOnlyTabs == true)
+        #expect(BrowserDevToolsHeaderPresentation.resolve(width: 259).usesIconOnlyTabs == true)
+        #expect(BrowserDevToolsHeaderPresentation.resolve(width: 260).usesIconOnlyTabs == false)
+        #expect(BrowserDevToolsHeaderPresentation.resolve(width: 360).usesIconOnlyTabs == false)
+    }
+
     @Test("history clear confirmation localizes range copy")
     func historyClearConfirmationLocalizes() throws {
         let bundle = try #require(localizationBundle())
