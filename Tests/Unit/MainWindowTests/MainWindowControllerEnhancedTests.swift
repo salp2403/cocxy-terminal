@@ -484,6 +484,130 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
         XCTAssertFalse(editorView.isVimModeEnabled)
     }
 
+    func testSSHOpenedTabCanHostEditorVimLSPAndBlocksSmoke() throws {
+        let fileURL = try makeSwiftFile(contents: "let value = 1\nprint(value)\n")
+        let configService = try makeConfigService(toml: """
+        [lsp]
+        enabled = true
+        enabled-languages = ["swift"]
+
+        [vim]
+        enabled = true
+        """)
+        let factory = MainWindowCapturingLSPProcessFactory()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        controller.lspServerDiscoveryFactory = {
+            LSPServerDiscovery(
+                executableResolver: { executable in
+                    executable == "sourcekit-lsp" ? "/usr/bin/sourcekit-lsp" : nil
+                },
+                homebrewDetector: { true }
+            )
+        }
+        controller.lspProcessFactory = factory.makeProcess(configuration:)
+        let controllerRef = WeakReference(controller)
+        let workspaceURL = fileURL.deletingLastPathComponent()
+        let block = TerminalCommandBlock(
+            id: 91,
+            command: "printf block-ok",
+            output: "block-ok",
+            exitCode: 0,
+            pwd: workspaceURL.path,
+            startTimeNs: 1,
+            endTimeNs: 2,
+            durationNs: 1,
+            startRow: 4,
+            endRow: 5,
+            streamID: 1,
+            blockType: 3
+        )
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            sshProvider: { destination, port, identityFile in
+                XCTAssertEqual(destination, "local-user@127.0.0.1")
+                XCTAssertEqual(port, 2222)
+                XCTAssertEqual(identityFile, "/tmp/cocxy-e2e-key")
+                return syncOnMainActor {
+                    guard let controller = controllerRef.value else { return nil }
+                    let tab = controller.tabManager.addTab(workingDirectory: workspaceURL)
+                    controller.tabManager.renameTab(id: tab.id, newTitle: destination)
+                    controller.tabManager.setActive(id: tab.id)
+                    return (id: tab.id.rawValue.uuidString, title: destination)
+                }
+            },
+            blockListProvider: { limit in
+                XCTAssertEqual(limit, 4)
+                return [
+                    "count": "1",
+                    "block_0_id": "\(block.id)",
+                    "block_0_command": block.command,
+                    "block_0_output": block.output,
+                    "block_0_exit_code": "\(block.exitCode ?? -1)",
+                ]
+            }
+        )
+
+        let sshResponse = handler.handleCommand(SocketRequest(
+            id: "e2e-ssh",
+            command: "ssh",
+            params: [
+                "destination": "local-user@127.0.0.1",
+                "port": "2222",
+                "identity": "/tmp/cocxy-e2e-key",
+            ]
+        ))
+
+        XCTAssertTrue(sshResponse.success)
+        XCTAssertEqual(sshResponse.data?["status"], "connected")
+        let tabID = try XCTUnwrap(
+            sshResponse.data?["id"].flatMap(UUID.init(uuidString:)).map(TabID.init(rawValue:))
+        )
+        XCTAssertEqual(controller.tabManager.activeTabID, tabID)
+        XCTAssertEqual(controller.tabManager.tab(for: tabID)?.displayTitle, "local-user@127.0.0.1")
+        XCTAssertEqual(controller.tabManager.tab(for: tabID)?.workingDirectory, workspaceURL)
+
+        let editorView = EditorView(fileURL: fileURL)
+        controller.wireEditorVimMode(editorView: editorView, tabID: tabID)
+        XCTAssertTrue(editorView.isVimModeEnabled)
+        editorView.setSelection(.caret(at: 0))
+        XCTAssertTrue(editorView.handleVimInput(.character("l")))
+        XCTAssertEqual(editorView.session.selection, .caret(at: 1))
+
+        controller.wireEditorLSPIfNeeded(editorView: editorView, fileURL: fileURL, tabID: tabID)
+        XCTAssertTrue(editorView.isLSPControlsEnabled)
+        XCTAssertTrue(editorView.requestLSPHoverAtSelection())
+        let process = try XCTUnwrap(factory.lastProcess)
+        XCTAssertEqual(try process.decodedMessages().compactMap(\.methodForTest), [
+            "initialize",
+            "textDocument/didOpen",
+            "textDocument/hover",
+        ])
+
+        let blockEntries = TerminalBlockOverlayLayout.entries(
+            blocks: [block],
+            visibleStartRow: 0,
+            visibleRowCount: 24,
+            cellHeight: 12,
+            padding: CGPoint(x: 8, y: 4),
+            width: 480
+        )
+        XCTAssertEqual(blockEntries.map(\.block.id), [block.id])
+
+        let blockResponse = handler.handleCommand(SocketRequest(
+            id: "e2e-block",
+            command: "block-list",
+            params: ["limit": "4"]
+        ))
+        XCTAssertTrue(blockResponse.success)
+        XCTAssertEqual(blockResponse.data?["count"], "1")
+        XCTAssertEqual(blockResponse.data?["block_0_command"], "printf block-ok")
+    }
+
     func testEditorCompletionWiringUsesEffectiveConfig() throws {
         let fileURL = try makeSwiftFile(contents: "let value = ")
         let configService = try makeConfigService(toml: """
