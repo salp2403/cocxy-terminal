@@ -94,6 +94,10 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
             delegate.hasRestorableSessionOnLaunch(),
             "Launch should not defer bootstrap surface creation when the saved session has no tabs"
         )
+        XCTAssertNil(
+            delegate.pendingRestorableLaunchSession,
+            "Empty saved sessions must not be cached for launch restore"
+        )
     }
 
     func testHasRestorableSessionOnLaunchIsTrueWhenSavedSessionHasTabs() throws {
@@ -127,6 +131,46 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
             delegate.hasRestorableSessionOnLaunch(),
             "Launch should defer bootstrap surface creation when a real saved session can be restored"
         )
+        XCTAssertEqual(
+            delegate.pendingRestorableLaunchSession?.windows.first?.tabs.first?.title,
+            "Galf",
+            "The launch restore preflight should cache the decoded session for restoreSessionOnLaunch"
+        )
+    }
+
+    func testRestoreSessionOnLaunchConsumesCachedSessionAndShowsOpaqueShield() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+        delegate.installWindowControllerForTesting(controller)
+
+        let manager = makeSessionManager()
+        delegate.sessionManager = manager
+
+        try manager.saveSession(makeSession(tabTitle: "Cached launch"), named: nil)
+        XCTAssertTrue(delegate.hasRestorableSessionOnLaunch())
+
+        try manager.saveSession(makeEmptySession(), named: nil)
+        delegate.restoreSessionOnLaunch()
+
+        XCTAssertNil(
+            delegate.pendingRestorableLaunchSession,
+            "restoreSessionOnLaunch should consume the preflight cache"
+        )
+        XCTAssertTrue(
+            controller.tabManager.tabs.contains { $0.title == "Cached launch" },
+            "restoreSessionOnLaunch should restore the cached launch snapshot instead of re-reading a changed file"
+        )
+        XCTAssertTrue(
+            controller.window?.isVisible == true,
+            "Launch restore should make an opaque shell visible before rebuilding the restored tabs"
+        )
+        XCTAssertTrue(
+            controller.sessionRestoreShieldView?.layer?.isOpaque == true,
+            "The visible restore shell must stay opaque while terminal surfaces repaint"
+        )
+        controller.window?.orderOut(nil)
     }
 
     private func makeSessionManager() -> SessionManagerImpl {
@@ -151,6 +195,42 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
                 autoSaveInterval: interval,
                 restoreOnLaunch: true
             )
+        )
+    }
+
+    private func makeSession(tabTitle: String) -> Session {
+        Session(
+            windows: [
+                WindowState(
+                    frame: CodableRect(x: 0, y: 0, width: 1200, height: 800),
+                    isFullScreen: false,
+                    tabs: [
+                        TabState(
+                            id: TabID(),
+                            title: tabTitle,
+                            workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                            splitTree: .leaf(
+                                workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                                command: nil
+                            )
+                        ),
+                    ],
+                    activeTabIndex: 0
+                ),
+            ]
+        )
+    }
+
+    private func makeEmptySession() -> Session {
+        Session(
+            windows: [
+                WindowState(
+                    frame: CodableRect(x: 0, y: 0, width: 1200, height: 800),
+                    isFullScreen: false,
+                    tabs: [],
+                    activeTabIndex: 0
+                ),
+            ]
         )
     }
 

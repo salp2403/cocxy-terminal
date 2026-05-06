@@ -10,30 +10,44 @@ import Combine
 /// persisting to disk, and restoring tabs on launch.
 extension AppDelegate {
 
-    /// Returns true when launch should defer bootstrap surface creation
-    /// because a persisted session with real tabs is available to restore.
+    /// Returns true when the deferred launch restore pass has a persisted
+    /// session with real tabs available to restore.
     ///
-    /// This avoids creating a throwaway primary surface/session that then has
-    /// to be torn down milliseconds later during restore-on-launch.
+    /// The decoded snapshot is cached so the restore pass can show an opaque
+    /// shell and rebuild from the same data without reading `last.json` again.
     func hasRestorableSessionOnLaunch() -> Bool {
+        if let pendingRestorableLaunchSession,
+           Self.sessionContainsRestorableTabs(pendingRestorableLaunchSession) {
+            return true
+        }
+
         let config = configService?.current ?? .defaults
         guard config.sessions.restoreOnLaunch, let sessionManager else {
+            pendingRestorableLaunchSession = nil
             return false
         }
 
         let session: Session
         do {
             guard let loaded = try sessionManager.loadLastSession() else {
+                pendingRestorableLaunchSession = nil
                 return false
             }
             session = loaded
         } catch {
+            pendingRestorableLaunchSession = nil
             NSLog("[AppDelegate] Failed to load session for restore: %@",
                   String(describing: error))
             return false
         }
 
-        return session.windows.contains { !$0.tabs.isEmpty }
+        guard Self.sessionContainsRestorableTabs(session) else {
+            pendingRestorableLaunchSession = nil
+            return false
+        }
+
+        pendingRestorableLaunchSession = session
+        return true
     }
 
     // MARK: - Session Manager Initialization
@@ -221,22 +235,25 @@ extension AppDelegate {
 
     /// Restores the last saved session on launch, if configured.
     ///
-    /// Loads the last session from SessionManager, validates it via
+    /// Preflights and consumes the cached last session, validates it via
     /// SessionRestorer, and recreates tabs with their working directories.
     /// For multi-window sessions, creates additional window controllers.
     func restoreSessionOnLaunch() {
         let config = configService?.current ?? .defaults
         guard let windowController = windowController else { return }
         guard config.sessions.restoreOnLaunch else {
+            pendingRestorableLaunchSession = nil
             bootstrapInitialSurfaceIfNeeded(windowController)
             return
         }
-        guard let sessionManager = sessionManager else {
+        guard sessionManager != nil else {
+            pendingRestorableLaunchSession = nil
             bootstrapInitialSurfaceIfNeeded(windowController)
             return
         }
 
-        guard let session = try? sessionManager.loadLastSession() else {
+        guard hasRestorableSessionOnLaunch(),
+              let session = takePendingRestorableLaunchSession() else {
             bootstrapInitialSurfaceIfNeeded(windowController)
             return
         }
@@ -254,6 +271,7 @@ extension AppDelegate {
         // Restore the primary window (index 0) — it already exists.
         if let primaryResult = restorationPairs.first?.1,
            !primaryResult.restoredTabs.isEmpty {
+            prepareVisibleSessionRestoreShell(windowController, from: primaryResult)
             restoreTabsIntoController(windowController, from: primaryResult)
         } else {
             bootstrapInitialSurfaceIfNeeded(windowController)
@@ -276,6 +294,32 @@ extension AppDelegate {
         if focusedIndex >= 0, focusedIndex < allControllers.count {
             allControllers[focusedIndex].window?.makeKeyAndOrderFront(nil)
         }
+    }
+
+    private func takePendingRestorableLaunchSession() -> Session? {
+        defer { pendingRestorableLaunchSession = nil }
+        return pendingRestorableLaunchSession
+    }
+
+    private static func sessionContainsRestorableTabs(_ session: Session) -> Bool {
+        session.windows.contains { !$0.tabs.isEmpty }
+    }
+
+    private func prepareVisibleSessionRestoreShell(
+        _ controller: MainWindowController,
+        from result: RestorationResult
+    ) {
+        let frame = NSRect(
+            x: result.windowFrame.x,
+            y: result.windowFrame.y,
+            width: result.windowFrame.width,
+            height: result.windowFrame.height
+        )
+        controller.window?.setFrame(frame, display: false)
+        controller.refreshTerminalContainerBackingBackground()
+        controller.installSessionRestoreShield()
+        controller.window?.makeKeyAndOrderFront(nil)
+        controller.window?.displayIfNeeded()
     }
 
     private func bootstrapInitialSurfaceIfNeeded(_ controller: MainWindowController) {

@@ -91,6 +91,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal setter: extensions (+SessionManagement) assign during init.
     var sessionManager: SessionManagerImpl?
 
+    /// Restorable launch snapshot loaded by the deferred restore preflight.
+    /// Keeps launch restore from decoding `last.json` more than once.
+    var pendingRestorableLaunchSession: Session?
+
     /// Subscription for hot-reloading the periodic session auto-save timer
     /// when the `[sessions]` config changes.
     var sessionAutoSaveConfigCancellable: AnyCancellable?
