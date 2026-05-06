@@ -73,7 +73,7 @@ struct WorkflowPanelViewModelSwiftTestingTests {
 
         await viewModel.run()
 
-        #expect(viewModel.statusText == "Workflow local completado después de 1 paso.")
+        #expect(viewModel.statusText == "Flujo local completado después de 1 paso.")
         #expect(viewModel.stepPresentations.first?.status == "Completado")
         #expect(viewModel.stepPresentations.first?.statusKind == .completed)
 

@@ -348,7 +348,7 @@
 "menu.view.openMarkdownPanel" = "Abrir panel Markdown";
 "menu.view.openTextEditorPanel" = "Abrir panel de editor";
 "menu.view.openNotebookPanel" = "Abrir panel Notebook";
-"menu.view.openWorkflowPanel" = "Abrir panel Workflow";
+"menu.view.openWorkflowPanel" = "Abrir panel de flujo";
 "menu.view.openSessionReplayPanel" = "Abrir panel de reproducción";
 "menu.view.openEditHistoryPanel" = "Abrir panel de historial de edición";
 "menu.view.openTemplatesPanel" = "Abrir panel de plantillas";
@@ -645,7 +645,7 @@
 "preferences.iCloud.conflictPolicy.manual" = "manual";
 "preferences.iCloud.artifacts.section" = "Artefactos";
 "preferences.iCloud.artifact.notebooks" = "Notebooks";
-"preferences.iCloud.artifact.workflows" = "Workflows";
+"preferences.iCloud.artifact.workflows" = "Flujos";
 "preferences.iCloud.artifact.skills" = "Habilidades";
 "preferences.iCloud.artifact.settings" = "Ajustes";
 "preferences.iCloud.artifact.themes" = "Temas";
@@ -682,7 +682,7 @@
 "preferences.backup.artifacts.section" = "Artefactos";
 "preferences.backup.artifact.settings" = "Ajustes";
 "preferences.backup.artifact.notebooks" = "Notebooks";
-"preferences.backup.artifact.workflows" = "Workflows";
+"preferences.backup.artifact.workflows" = "Flujos";
 "preferences.backup.artifact.skills" = "Habilidades personalizadas";
 "preferences.backup.artifact.notes" = "Notas";
 "preferences.backup.artifact.macros" = "Macros y fragmentos";
@@ -978,7 +978,7 @@
 "workspaceToolbar.panel.markdown" = "Markdown";
 "workspaceToolbar.panel.editor" = "Editor";
 "workspaceToolbar.panel.notebook" = "Notebook";
-"workspaceToolbar.panel.workflow" = "Workflow";
+"workspaceToolbar.panel.workflow" = "Flujo";
 "workspaceToolbar.panel.sessionReplay" = "Reproducción";
 "workspaceToolbar.panel.aiEditHistory" = "Historial de ediciones";
 "workspaceToolbar.panel.templates" = "Plantillas";
@@ -1126,7 +1126,7 @@
 "horizontalTab.add.markdown" = "Markdown";
 "horizontalTab.add.textEditor" = "Editor de texto";
 "horizontalTab.add.notebook" = "Notebook";
-"horizontalTab.add.workflow" = "Workflow";
+"horizontalTab.add.workflow" = "Flujo";
 "horizontalTab.add.sessionReplay" = "Reproducción de sesiones";
 "horizontalTab.add.editHistory" = "Historial de edición";
 "horizontalTab.add.templates" = "Plantillas";
@@ -1138,7 +1138,7 @@
 "horizontalTab.action.openMarkdown" = "Abrir Markdown";
 "horizontalTab.action.openTextEditor" = "Abrir editor de texto";
 "horizontalTab.action.openNotebook" = "Abrir notebook";
-"horizontalTab.action.openWorkflow" = "Abrir workflow";
+"horizontalTab.action.openWorkflow" = "Abrir flujo";
 "horizontalTab.action.openSessionReplay" = "Abrir reproducción de sesiones";
 "horizontalTab.action.openEditHistory" = "Abrir historial de edición";
 "horizontalTab.action.openTemplates" = "Abrir plantillas";
@@ -1173,7 +1173,7 @@
 "window.pane.markdownPanel" = "panel de markdown";
 "window.pane.editorPanel" = "panel de editor";
 "window.pane.notebookPanel" = "panel de notebook";
-"window.pane.workflowPanel" = "panel de workflow";
+"window.pane.workflowPanel" = "panel de flujo";
 "window.pane.sessionReplayPanel" = "panel de reproducción de sesión";
 "window.pane.editHistoryPanel" = "panel de historial de ediciones";
 "window.pane.templatesPanel" = "panel de plantillas";
@@ -1410,13 +1410,13 @@
 "workflow.run" = "Ejecutar";
 "workflow.running" = "Ejecutando";
 "workflow.status.loaded" = "%@ cargado";
-"workflow.status.new" = "Workflow nuevo";
-"workflow.status.unsaved" = "Workflow sin guardar";
+"workflow.status.new" = "Flujo nuevo";
+"workflow.status.unsaved" = "Flujo sin guardar";
 "workflow.status.saved" = "%@ guardado";
-"workflow.status.runFailed" = "Falló la ejecución del workflow";
-"workflow.status.completed.one" = "Workflow %@ completado después de %d paso.";
-"workflow.status.completed.many" = "Workflow %@ completado después de %d pasos.";
-"workflow.status.failed" = "Workflow %@ falló en %@ con salida %d.";
+"workflow.status.runFailed" = "Falló la ejecución del flujo";
+"workflow.status.completed.one" = "Flujo %@ completado después de %d paso.";
+"workflow.status.completed.many" = "Flujo %@ completado después de %d pasos.";
+"workflow.status.failed" = "Flujo %@ falló en %@ con salida %d.";
 "workflow.step.status.pending" = "Pendiente";
 "workflow.step.status.completed" = "Completado";
 "workflow.step.status.failed" = "Fallido";
@@ -2116,7 +2116,7 @@
 "onboarding.agentAutoMode" = "Modo agente automático";
 "onboarding.createStarterTabConfig" = "Crear configuración inicial de pestaña";
 "onboarding.createPrimerSkill" = "Crear habilidad inicial";
-"onboarding.createFirstWorkflow" = "Crear primer workflow";
+"onboarding.createFirstWorkflow" = "Crear primer flujo";
 "onboarding.skip" = "Omitir";
 "onboarding.back" = "Atrás";
 "onboarding.next" = "Siguiente";
@@ -2127,7 +2127,7 @@
 "onboarding.step.languageServers" = "Servidores de lenguaje";
 "onboarding.step.starterTabConfig" = "Configuración inicial de pestaña";
 "onboarding.step.primerSkill" = "Habilidad inicial";
-"onboarding.step.firstWorkflow" = "Primer workflow";
+"onboarding.step.firstWorkflow" = "Primer flujo";
 
 "command.category.tabs" = "Pestañas";
 "command.category.splits" = "Paneles";
@@ -2248,8 +2248,8 @@
 "command.workspace.editor.description" = "Abrir un editor de texto local junto al terminal";
 "command.workspace.notebook.name" = "Abrir panel de notebook";
 "command.workspace.notebook.description" = "Abrir un notebook ejecutable local junto al terminal";
-"command.workspace.workflow.name" = "Abrir panel de workflow";
-"command.workspace.workflow.description" = "Abrir un runner de workflows local junto al terminal";
+"command.workspace.workflow.name" = "Abrir panel de flujo";
+"command.workspace.workflow.description" = "Abrir un ejecutor de flujos local junto al terminal";
 "command.workspace.sessionReplay.name" = "Abrir panel de reproducción de sesiones";
 "command.workspace.sessionReplay.description" = "Abrir grabaciones locales de sesión y controles de reproducción";
 "command.workspace.aiEditHistory.name" = "Abrir historial de ediciones";

@@ -210,7 +210,11 @@ struct AppLocalizationSwiftTestingTests {
 
         #expect(spanish.string("notebook.untitledTitle", fallback: "Untitled Notebook") == "Notebook sin título")
         #expect(spanish.string("notebook.status.executed.one", fallback: "Executed %d notebook cell.") == "%d celda de notebook ejecutada.")
-        #expect(spanish.string("workflow.status.completed.one", fallback: "Workflow %@ completed after %d step.") == "Workflow %@ completado después de %d paso.")
+        #expect(spanish.string("horizontalTab.action.openWorkflow", fallback: "Open Workflow") == "Abrir flujo")
+        #expect(spanish.string("horizontalTab.add.workflow", fallback: "Workflow") == "Flujo")
+        #expect(spanish.string("window.pane.workflowPanel", fallback: "workflow panel") == "panel de flujo")
+        #expect(spanish.string("workflow.status.new", fallback: "New workflow") == "Flujo nuevo")
+        #expect(spanish.string("workflow.status.completed.one", fallback: "Workflow %@ completed after %d step.") == "Flujo %@ completado después de %d paso.")
         #expect(spanish.string("workflow.step.status.completed", fallback: "Completed") == "Completado")
     }
 
