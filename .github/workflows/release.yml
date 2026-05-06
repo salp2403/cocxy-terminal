@@ -137,6 +137,12 @@ jobs:
           chmod +x scripts/verify-app-bundle.sh
           ./scripts/verify-app-bundle.sh "$APP_DIR"
 
+      - name: Privacy audit
+        run: |
+          APP_DIR="build/Cocxy Terminal.app"
+          chmod +x scripts/run-privacy-audit.sh
+          ./scripts/run-privacy-audit.sh --app "$APP_DIR"
+
       - name: Code sign with Developer ID
         env:
           SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}

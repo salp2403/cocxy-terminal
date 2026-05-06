@@ -43,3 +43,8 @@ jobs:
         run: |
           chmod +x scripts/verify-app-bundle.sh
           ./scripts/verify-app-bundle.sh build/CocxyTerminal.app
+
+      - name: Privacy Audit
+        run: |
+          chmod +x scripts/run-privacy-audit.sh
+          ./scripts/run-privacy-audit.sh --app build/CocxyTerminal.app

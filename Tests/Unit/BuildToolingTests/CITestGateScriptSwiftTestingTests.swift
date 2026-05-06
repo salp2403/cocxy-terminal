@@ -56,6 +56,39 @@ struct CITestGateScriptSwiftTestingTests {
         #expect((baselinePayload?["metrics"] as? [[String: Any]])?.isEmpty == false)
     }
 
+    @Test("privacy audit script is executable and wired into bundle workflows")
+    func privacyAuditScriptIsExecutableAndWiredIntoBundleWorkflows() throws {
+        let root = repositoryRoot()
+        let scriptURL = root.appendingPathComponent("scripts/run-privacy-audit.sh")
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let ci = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let nightly = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/nightly.yml"),
+            encoding: .utf8
+        )
+        let release = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
+        #expect(script.contains("No telemetry SDKs or auto crash upload"))
+        #expect(script.contains("Provider endpoint boundaries"))
+        #expect(script.contains("--runtime-seconds"))
+        #expect(script.contains("PostHog|Sentry|Crashlytics|Mixpanel|Amplitude"))
+        #expect(script.contains("api\\.openai\\.com|api\\.anthro[p]ic\\.com|generativelanguage\\.googleapis\\.com"))
+        #expect(ci.contains("./scripts/run-privacy-audit.sh --app build/CocxyTerminal.app"))
+        #expect(nightly.contains("./scripts/run-privacy-audit.sh --app \"$APP_DIR\""))
+        #expect(release.contains("./scripts/run-privacy-audit.sh --app \"$APP_DIR\""))
+
+        let result = try runProcess(scriptURL, arguments: [])
+        #expect(result.terminationStatus == 0)
+        #expect(result.stdout.contains("Privacy audit passed"))
+    }
+
     @Test("performance regression checker accepts metrics inside tolerance")
     func performanceRegressionCheckerAcceptsMetricsInsideTolerance() throws {
         let root = repositoryRoot()
