@@ -137,6 +137,43 @@ struct WorktreeAdvancedSwiftTestingTests {
         #expect(viewModel.skippedDetails == ["open: not merged into main"])
     }
 
+    @MainActor
+    @Test("advanced worktree sheets localize visible Spanish chrome")
+    func advancedWorktreeSheetsLocalizeSpanishChrome() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let removable = makeEntry(id: "merged", branch: "feat/merged")
+        let blocked = makeEntry(id: "dirty", branch: "feat/dirty")
+        let skipped = makeEntry(id: "open", branch: "feat/open")
+        let plan = WorktreeBatchCleanupPlan(
+            removable: [removable, makeEntry(id: "merged-2", branch: "feat/merged-2")],
+            blocked: [
+                WorktreeBatchCleanupBlock(
+                    entry: blocked,
+                    reason: .uncommittedChanges(statusOutput: " M README.md")
+                )
+            ],
+            skipped: [
+                WorktreeBatchCleanupSkip(entry: skipped, reason: .notMerged)
+            ]
+        )
+        let cleanup = WorktreeBatchCleanupSheetViewModel(plan: plan, baseRef: "main")
+
+        #expect(WorktreeAdvancedModal.localizedTitle(using: spanish) == "Nuevo worktree")
+        #expect(WorktreeAdvancedModal.localizedCreateButtonTitle(using: spanish) == "Crear")
+        #expect(WorktreeAdvancedModal.localizedShortDescriptionPlaceholder(using: spanish) == "Descripción corta")
+        #expect(WorktreeTemplate.feature.localizedDisplayName(using: spanish) == "Rama de funcionalidad")
+        #expect(WorktreeTemplate.experiment.localizedDescription(using: spanish) == "Spike descartable o rama de prototipo.")
+        #expect(WorktreeBranchNamePreview.localizedTitle(using: spanish) == "Vista previa de rama")
+
+        #expect(WorktreeBatchCleanupSheet.localizedTitle(using: spanish) == "Limpiar worktrees fusionados")
+        #expect(cleanup.localizedPrimarySummary(using: spanish) == "2 worktrees fusionados listos para limpiar")
+        #expect(cleanup.localizedBlockedDetails(using: spanish) == ["dirty: cambios sin commit"])
+        #expect(cleanup.localizedSkippedDetails(using: spanish) == ["open: no fusionado en main"])
+        #expect(WorktreeBatchCleanupSheet.localizedCleanUpButtonTitle(using: spanish) == "Limpiar")
+        #expect(MainWindowController.localizedWorktreeFeatureDisabled(using: spanish) == "Activa [worktree].enabled en ~/.config/cocxy/config.toml o en .cocxy.toml del repositorio activo.")
+    }
+
     private func makeEntry(id: String, branch: String) -> WorktreeManifest.WorktreeEntry {
         WorktreeManifest.WorktreeEntry(
             id: id,
@@ -146,5 +183,14 @@ struct WorktreeAdvancedSwiftTestingTests {
             agent: nil,
             tabID: nil
         )
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

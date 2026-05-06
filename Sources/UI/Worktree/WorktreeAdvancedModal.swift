@@ -86,42 +86,43 @@ final class WorktreeAdvancedModalViewModel: ObservableObject {
 
 struct WorktreeAdvancedModal: View {
     @ObservedObject var viewModel: WorktreeAdvancedModalViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     let onCancel: () -> Void
     let onCreate: (WorktreeAdvancedCreationRequest) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("New Worktree")
+            Text(Self.localizedTitle(using: localizer))
                 .font(.title2.weight(.semibold))
 
             Form {
-                WorktreeTemplatePicker(viewModel: viewModel)
+                WorktreeTemplatePicker(viewModel: viewModel, localizer: localizer)
 
-                TextField("Short description", text: $viewModel.summary)
+                TextField(Self.localizedShortDescriptionPlaceholder(using: localizer), text: $viewModel.summary)
                     .textFieldStyle(.roundedBorder)
 
                 if viewModel.selectedTemplate.branchKind == .hotfix {
-                    TextField("Issue key", text: $viewModel.issue)
+                    TextField(Self.localizedIssueKeyPlaceholder(using: localizer), text: $viewModel.issue)
                         .textFieldStyle(.roundedBorder)
                 }
 
-                Picker("Base branch", selection: $viewModel.baseRef) {
+                Picker(Self.localizedBaseBranchTitle(using: localizer), selection: $viewModel.baseRef) {
                     ForEach(viewModel.availableBaseRefs, id: \.self) { ref in
                         Text(ref).tag(ref)
                     }
                 }
 
-                TextField("Agent", text: $viewModel.agent)
+                TextField(Self.localizedAgentPlaceholder(using: localizer), text: $viewModel.agent)
                     .textFieldStyle(.roundedBorder)
 
-                WorktreeBranchNamePreview(branch: viewModel.previewBranch)
+                WorktreeBranchNamePreview(branch: viewModel.previewBranch, localizer: localizer)
             }
 
             HStack {
                 Spacer()
-                Button("Cancel", action: onCancel)
+                Button(localizer.string("common.cancel", fallback: "Cancel"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Create") {
+                Button(Self.localizedCreateButtonTitle(using: localizer)) {
                     guard let request = viewModel.creationRequest() else { return }
                     onCreate(request)
                 }
@@ -133,18 +134,43 @@ struct WorktreeAdvancedModal: View {
         .frame(width: 560)
         .glassPanelBackground()
     }
+
+    static func localizedTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.advanced.title", fallback: "New Worktree")
+    }
+
+    static func localizedShortDescriptionPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.advanced.shortDescription", fallback: "Short description")
+    }
+
+    static func localizedIssueKeyPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.advanced.issueKey", fallback: "Issue key")
+    }
+
+    static func localizedBaseBranchTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.advanced.baseBranch", fallback: "Base branch")
+    }
+
+    static func localizedAgentPlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.advanced.agent", fallback: "Agent")
+    }
+
+    static func localizedCreateButtonTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.advanced.create", fallback: "Create")
+    }
 }
 
 struct WorktreeTemplatePicker: View {
     @ObservedObject var viewModel: WorktreeAdvancedModalViewModel
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
-        Picker("Template", selection: $viewModel.selectedTemplateID) {
+        Picker(localizer.string("worktree.advanced.template", fallback: "Template"), selection: $viewModel.selectedTemplateID) {
             ForEach(viewModel.templates) { template in
-                Text(template.displayName).tag(template.id)
+                Text(template.localizedDisplayName(using: localizer)).tag(template.id)
             }
         }
-        Text(viewModel.selectedTemplate.description)
+        Text(viewModel.selectedTemplate.localizedDescription(using: localizer))
             .font(.caption)
             .foregroundStyle(.secondary)
     }
@@ -152,10 +178,11 @@ struct WorktreeTemplatePicker: View {
 
 struct WorktreeBranchNamePreview: View {
     let branch: String
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Branch Preview")
+            Text(Self.localizedTitle(using: localizer))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(branch)
@@ -165,6 +192,10 @@ struct WorktreeBranchNamePreview: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
         }
+    }
+
+    static func localizedTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.advanced.branchPreview", fallback: "Branch Preview")
     }
 }
 

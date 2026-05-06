@@ -49,6 +49,14 @@ struct WorktreeTemplate: Identifiable, Codable, Sendable, Equatable {
         .hotfix,
         .experiment
     ]
+
+    func localizedDisplayName(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.template.\(id).name", fallback: displayName)
+    }
+
+    func localizedDescription(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.template.\(id).description", fallback: description)
+    }
 }
 
 struct WorktreeAdvancedCreationRequest: Sendable, Equatable {

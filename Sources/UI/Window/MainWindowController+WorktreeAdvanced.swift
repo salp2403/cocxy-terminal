@@ -10,6 +10,7 @@ extension MainWindowController {
         guard let window else { return }
 
         let config = configService?.current.worktree ?? WorktreeConfig.defaults
+        let localizer = appLocalizer()
         let viewModel = WorktreeAdvancedModalViewModel(
             initialBaseRef: config.baseRef,
             availableBaseRefs: availableWorktreeBaseRefs(),
@@ -20,6 +21,7 @@ extension MainWindowController {
         var sheet: NSWindow!
         let view = WorktreeAdvancedModal(
             viewModel: viewModel,
+            localizer: localizer,
             onCancel: { [weak window] in
                 if let sheet { window?.endSheet(sheet) }
             },
@@ -32,13 +34,15 @@ extension MainWindowController {
                         params: request.cliParams
                     )
                     if !result.0 {
-                        self?.presentWorktreeError(result.1["error"] ?? "Worktree creation failed.")
+                        self?.presentWorktreeError(
+                            result.1["error"] ?? Self.localizedWorktreeCreationFailed(using: localizer)
+                        )
                     }
                 }
             }
         )
         sheet = NSWindow(contentViewController: NSHostingController(rootView: view))
-        sheet.title = "New Worktree"
+        sheet.title = WorktreeAdvancedModal.localizedTitle(using: localizer)
         sheet.styleMask = [.titled]
         sheet.isReleasedWhenClosed = false
         window.beginSheet(sheet)
@@ -47,12 +51,13 @@ extension MainWindowController {
     @MainActor
     func showWorktreeBatchCleanupSheet() {
         guard let window else { return }
+        let localizer = appLocalizer()
         guard let config = configService?.current.worktree, config.enabled else {
-            presentWorktreeError(AppDelegate.worktreeEnablementErrorMessage)
+            presentWorktreeError(Self.localizedWorktreeFeatureDisabled(using: localizer))
             return
         }
         guard let originRepo = currentWorktreeOriginRepo() else {
-            presentWorktreeError("No active repository is available for worktree cleanup.")
+            presentWorktreeError(Self.localizedNoActiveWorktreeRepository(using: localizer))
             return
         }
 
@@ -80,7 +85,12 @@ extension MainWindowController {
                 }
             } catch {
                 await MainActor.run {
-                    self?.presentWorktreeError("Worktree cleanup failed: \(error.localizedDescription)")
+                    self?.presentWorktreeError(
+                        Self.localizedWorktreeCleanupFailed(
+                            error.localizedDescription,
+                            using: localizer
+                        )
+                    )
                 }
             }
         }
@@ -95,10 +105,12 @@ extension MainWindowController {
         window: NSWindow?
     ) {
         guard let window else { return }
+        let localizer = appLocalizer()
         let viewModel = WorktreeBatchCleanupSheetViewModel(plan: plan, baseRef: baseRef)
         var sheet: NSWindow!
         let view = WorktreeBatchCleanupSheet(
             viewModel: viewModel,
+            localizer: localizer,
             onCancel: { [weak window] in
                 if let sheet { window?.endSheet(sheet) }
             },
@@ -112,13 +124,15 @@ extension MainWindowController {
                         baseRef: baseRef
                     )
                     if !result.0 {
-                        self?.presentWorktreeError(result.1["error"] ?? "Worktree cleanup failed.")
+                        self?.presentWorktreeError(
+                            result.1["error"] ?? Self.localizedWorktreeCleanupFailed(using: localizer)
+                        )
                     }
                 }
             }
         )
         sheet = NSWindow(contentViewController: NSHostingController(rootView: view))
-        sheet.title = "Clean Up Worktrees"
+        sheet.title = WorktreeBatchCleanupSheet.localizedTitle(using: localizer)
         sheet.styleMask = [.titled]
         sheet.isReleasedWhenClosed = false
         window.beginSheet(sheet)
@@ -158,15 +172,54 @@ extension MainWindowController {
 
     @MainActor
     private func presentWorktreeError(_ message: String) {
+        let localizer = appLocalizer()
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Worktree"
+        alert.messageText = Self.localizedWorktreeAlertTitle(using: localizer)
         alert.informativeText = message
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: localizer.string("common.ok", fallback: "OK"))
         if let window {
             alert.beginSheetModal(for: window)
         } else {
             alert.runModal()
         }
+    }
+
+    static func localizedWorktreeCreationFailed(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.advanced.creationFailed", fallback: "Worktree creation failed.")
+    }
+
+    static func localizedWorktreeCleanupFailed(
+        _ detail: String? = nil,
+        using localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) -> String {
+        if let detail, !detail.isEmpty {
+            return String(
+                format: localizer.string(
+                    "worktree.batchCleanup.failedWithDetail",
+                    fallback: "Worktree cleanup failed: %@"
+                ),
+                detail
+            )
+        }
+        return localizer.string("worktree.batchCleanup.failed", fallback: "Worktree cleanup failed.")
+    }
+
+    static func localizedNoActiveWorktreeRepository(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "worktree.batchCleanup.noActiveRepository",
+            fallback: "No active repository is available for worktree cleanup."
+        )
+    }
+
+    static func localizedWorktreeFeatureDisabled(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "worktree.featureDisabled",
+            fallback: AppDelegate.worktreeEnablementErrorMessage
+        )
+    }
+
+    static func localizedWorktreeAlertTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("worktree.alert.title", fallback: "Worktree")
     }
 }
