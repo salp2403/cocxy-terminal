@@ -92,6 +92,10 @@ final class AppMenuStructureTests: XCTestCase {
             helpMenu.items.first(where: { $0.title == "Ayuda de Cocxy Terminal" })?.action,
             #selector(MainWindowController.showWelcomeAction(_:))
         )
+        XCTAssertEqual(
+            helpMenu.items.first(where: { $0.title == "Mostrar configuración guiada" })?.action,
+            #selector(MainWindowController.showOnboardingAction(_:))
+        )
     }
 }
 

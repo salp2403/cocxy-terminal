@@ -350,7 +350,7 @@
 "menu.window.bringAllToFront" = "Traer todo al frente";
 "menu.help.title" = "Ayuda";
 "menu.help.cocxyTerminalHelp" = "Ayuda de Cocxy Terminal";
-"menu.help.showOnboarding" = "Mostrar onboarding";
+"menu.help.showOnboarding" = "Mostrar configuración guiada";
 "terminal.smartCopy.openURL" = "Abrir URL";
 "terminal.smartCopy.openPath" = "Abrir ruta";
 "terminal.smartCopy.copyIPAddress" = "Copiar dirección IP";
@@ -2016,20 +2016,20 @@
 "welcome.getStarted" = "Comenzar";
 "welcome.dismiss.accessibilityLabel" = "Cerrar bienvenida";
 
-"onboarding.accessibilityLabel" = "Onboarding de Cocxy";
+"onboarding.accessibilityLabel" = "Configuración guiada de Cocxy";
 "onboarding.title" = "Configuración de Cocxy";
 "onboarding.subtitle" = "Elige valores predeterminados locales para esta Mac";
 "onboarding.theme" = "Tema";
 "onboarding.enableLanguageServers" = "Activar servidores de lenguaje";
 "onboarding.agentAutoMode" = "Modo agente automático";
 "onboarding.createStarterTabConfig" = "Crear configuración inicial de pestaña";
-"onboarding.createPrimerSkill" = "Crear skill inicial";
+"onboarding.createPrimerSkill" = "Crear habilidad inicial";
 "onboarding.createFirstWorkflow" = "Crear primer workflow";
 "onboarding.skip" = "Omitir";
 "onboarding.back" = "Atrás";
 "onboarding.next" = "Siguiente";
 "onboarding.apply" = "Aplicar";
-"onboarding.error.apply" = "No se pudieron aplicar los ajustes de onboarding.";
+"onboarding.error.apply" = "No se pudieron aplicar los ajustes de configuración guiada.";
 "onboarding.step.theme" = "Elegir tema";
 "onboarding.step.agentAutonomy" = "Autonomía del agente";
 "onboarding.step.languageServers" = "Servidores de lenguaje";
@@ -2135,7 +2135,7 @@
 "command.preferences.show.description" = "Abrir ajustes del terminal";
 "command.welcome.show.name" = "Mostrar bienvenida";
 "command.welcome.show.description" = "Mostrar el overlay de bienvenida con atajos";
-"command.onboarding.show.name" = "Mostrar onboarding";
+"command.onboarding.show.name" = "Mostrar configuración guiada";
 "command.onboarding.show.description" = "Abrir configuración local guiada";
 "command.tabbar.toggle.name" = "Alternar barra de pestañas";
 "command.tabbar.toggle.description" = "Mostrar u ocultar la barra lateral de pestañas";

@@ -114,6 +114,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("commandPalette.footer.action.plural", fallback: "actions") == "acciones")
         #expect(spanish.string("quickSwitch.item.browser.title", fallback: "Browser: %@") == "Navegador: %@")
         #expect(spanish.string("quickSwitch.kind.browserTab", fallback: "Browser tab") == "Pestaña de navegador")
+        #expect(spanish.string("command.onboarding.show.name", fallback: "Show Onboarding") == "Mostrar configuración guiada")
     }
 
     @Test
@@ -145,10 +146,12 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("welcome.shortcut.agentDashboard", fallback: "Agent Dashboard") == "Panel de agentes")
         #expect(spanish.string("welcome.highlight.dashboard.title", fallback: "Dashboard") == "Panel de agentes")
         #expect(spanish.string("onboarding.title", fallback: "Cocxy Setup") == "Configuración de Cocxy")
+        #expect(spanish.string("onboarding.accessibilityLabel", fallback: "Cocxy onboarding") == "Configuración guiada de Cocxy")
         #expect(spanish.string("onboarding.subtitle", fallback: "Choose local defaults for this Mac") == "Elige valores predeterminados locales para esta Mac")
         #expect(spanish.string("onboarding.enableLanguageServers", fallback: "Enable language servers") == "Activar servidores de lenguaje")
+        #expect(spanish.string("onboarding.createPrimerSkill", fallback: "Create primer skill") == "Crear habilidad inicial")
         #expect(spanish.string("onboarding.apply", fallback: "Apply") == "Aplicar")
-        #expect(spanish.string("onboarding.error.apply", fallback: "Unable to apply onboarding settings.") == "No se pudieron aplicar los ajustes de onboarding.")
+        #expect(spanish.string("onboarding.error.apply", fallback: "Unable to apply onboarding settings.") == "No se pudieron aplicar los ajustes de configuración guiada.")
         #expect(spanish.string("onboarding.step.primerSkill", fallback: "Primer Skill") == "Habilidad inicial")
     }
 
