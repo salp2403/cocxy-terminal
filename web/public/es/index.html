@@ -62,6 +62,10 @@
       "Sesiones remotas SSH persistentes",
       "Sistema de plugins con sandbox",
       "CLI local por Unix Domain Socket",
+      "Browser integrado para localhost",
+      "Terminal web local",
+      "Shell integration para zsh, bash y fish",
+      "Configuracion por proyecto",
       "Cero telemetria"
     ],
     "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock"},
@@ -108,6 +112,81 @@
           <span class="version-badge">v0.0.0</span>
           <span class="version-req">macOS 14.0+</span>
         </div>
+
+        <div class="hero-mockup" aria-label="Vista previa de Cocxy Terminal con workspaces y una sesi&oacute;n local activa">
+          <div class="mock-window">
+            <div class="mock-titlebar">
+              <div class="mock-dots"><span class="d r"></span><span class="d y"></span><span class="d g"></span></div>
+              <div class="mock-tabs">
+                <span class="mock-tab active"><span class="ti working"></span>api-local</span>
+                <span class="mock-tab"><span class="ti waiting"></span>frontend</span>
+                <span class="mock-tab"><span class="ti idle"></span>docs</span>
+              </div>
+            </div>
+            <div class="mock-body">
+              <aside class="mock-sidebar">
+                <div class="mock-sidebar-header">WORKSPACES</div>
+                <div class="mock-ws active">
+                  <span class="ws-dot working"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">api-local</span>
+                    <span class="ws-detail">Trabajando &middot; 2m 14s &middot; Edit</span>
+                    <span class="ws-path">~/proyectos/api-local</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot waiting"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">frontend</span>
+                    <span class="ws-detail">Esperando entrada</span>
+                    <span class="ws-path">~/proyectos/frontend</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot idle"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">docs</span>
+                    <span class="ws-detail">Markdown &middot; Listo</span>
+                    <span class="ws-path">~/proyectos/docs</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot connected"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">prod-srv</span>
+                    <span class="ws-detail ssh">SSH conectado</span>
+                    <span class="ws-path">deploy@10.0.1.5</span>
+                  </div>
+                </div>
+              </aside>
+              <div class="mock-terminal">
+                <div class="tl"><span class="tp">$</span> <span class="tc">local-agent</span> <span class="ta">"Agrega l&iacute;mite de tasa a /api/users"</span></div>
+                <div class="tl"><span class="agent-badge">Agente local</span> <span class="agent-status">Trabajando</span> <span class="agent-time">2m 14s</span></div>
+                <div class="tl dim">  Creando middleware/rateLimit.swift...</div>
+                <div class="tl dim">  Actualizando routes/users.swift...</div>
+                <div class="tl dim">  Escribiendo pruebas de l&iacute;mites...</div>
+                <div class="tl"><span class="ts">&#10003;</span> 3 archivos cambiados, 147 inserciones</div>
+                <div class="tl">&nbsp;</div>
+                <div class="tl dim">  <span class="ts">&#8984;&#8997;R</span> Revisar cambios inline &middot; 3 archivos, 4 hunks</div>
+                <div class="tl">&nbsp;</div>
+                <div class="tl"><span class="tp">$</span> <span class="tc">swift</span> <span class="ta">test --filter RateLimit</span></div>
+                <div class="tl dim">  PASS  RateLimitTests</div>
+                <div class="tl dim">  PASS  UserRouteTests</div>
+                <div class="tl"><span class="ts">&#10003;</span> Tests: 24 passed, 24 total</div>
+                <div class="tl"><span class="tp">$</span> <span class="cursor">|</span></div>
+              </div>
+            </div>
+            <div class="mock-statusbar">
+              <span class="sb-item"><span class="sb-chevron">&#9656;</span> user@MacBook</span>
+              <span class="sb-divider"></span>
+              <span class="sb-item"><span class="sb-branch">&#9739;</span> main</span>
+              <span class="sb-spacer"></span>
+              <span class="sb-item port">:3000 :5173</span>
+              <span class="sb-pill working">1 trabajando</span>
+              <span class="sb-pill waiting">1 esperando</span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -117,35 +196,124 @@
         <p class="section-subtitle">Cocxy combina terminal, revisi&oacute;n, docs, remoto y automatizaci&oacute;n local en una app nativa.</p>
         <div class="features-grid">
           <article class="feature-card" data-animate>
-            <div class="feature-icon feature-icon--agents"></div>
+            <div class="feature-icon feature-icon--agents" aria-hidden="true"></div>
             <h3>Detecci&oacute;n de agentes</h3>
             <p>Hooks, secuencias OSC, patrones y heur&iacute;sticas locales detectan estado de agentes sin enviar salida de terminal a servidores.</p>
           </article>
           <article class="feature-card" data-animate>
-            <div class="feature-icon feature-icon--review"></div>
+            <div class="feature-icon feature-icon--review" aria-hidden="true"></div>
             <h3>Revisi&oacute;n integrada</h3>
             <p>Panel nativo para ver diffs, comentar l&iacute;neas, aceptar o revertir hunks y devolver feedback al agente desde el flujo local.</p>
           </article>
           <article class="feature-card" data-animate>
-            <div class="feature-icon feature-icon--markdown"></div>
+            <div class="feature-icon feature-icon--markdown" aria-hidden="true"></div>
             <h3>Workspace Markdown</h3>
             <p>Editor y preview con Mermaid, KaTeX, callouts, footnotes, QuickLook offline, b&uacute;squeda y exportaci&oacute;n local.</p>
           </article>
           <article class="feature-card" data-animate>
-            <div class="feature-icon feature-icon--ssh"></div>
+            <div class="feature-icon feature-icon--ssh" aria-hidden="true"></div>
             <h3>Sesiones remotas</h3>
             <p>SSH, perfiles, Keychain opcional, t&uacute;neles, SFTP y tmux para workspaces remotos persistentes sin backend propietario.</p>
           </article>
           <article class="feature-card" data-animate>
-            <div class="feature-icon feature-icon--gpu"></div>
+            <div class="feature-icon feature-icon--browser" aria-hidden="true"></div>
+            <h3>Browser integrado</h3>
+            <p>Perfiles, DevTools, favoritos, descargas y preview de localhost en split junto a la terminal.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--privacy" aria-hidden="true"></div>
+            <h3>Cero telemetr&iacute;a</h3>
+            <p>Sin analytics, tracking ni reporte autom&aacute;tico de crashes. La app funciona localmente y la red es expl&iacute;cita.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--gpu" aria-hidden="true"></div>
             <h3>Renderizado GPU</h3>
             <p>CocxyCore usa Metal para scroll fluido, atlas de glifos, protocolos de imagen inline y diagn&oacute;sticos de terminal.</p>
           </article>
           <article class="feature-card" data-animate>
-            <div class="feature-icon feature-icon--privacy"></div>
-            <h3>Cero telemetr&iacute;a</h3>
-            <p>Sin analytics, tracking ni reporte autom&aacute;tico de crashes. La app funciona localmente y la red es expl&iacute;cita.</p>
+            <div class="feature-icon feature-icon--cli" aria-hidden="true"></div>
+            <h3>CLI local</h3>
+            <p>API por Unix socket para manejar tabs, sesiones, agentes, remotos, dashboards, plugins y revisiones desde shell.</p>
           </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--plugin" aria-hidden="true"></div>
+            <h3>Sistema de plugins</h3>
+            <p>Plugins por eventos con ejecuci&oacute;n en sandbox para adaptar Cocxy al flujo de cada proyecto sin backend central.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--config" aria-hidden="true"></div>
+            <h3>Config por proyecto</h3>
+            <p>Un archivo <code>.cocxy.toml</code> permite ajustar fuentes, opacidad, detecci&oacute;n y atajos con hot-reload.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--web" aria-hidden="true"></div>
+            <h3>Terminal web local</h3>
+            <p>Expone una terminal local por HTTP con frontend sin dependencias y control de frame rate, conexiones y attach.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--shell" aria-hidden="true"></div>
+            <h3>Shell integration</h3>
+            <p>Integraci&oacute;n nativa para zsh, bash y fish con CWD, l&iacute;mites de comando y bootstrap que respeta tu setup.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="terminal-demo" id="demo" aria-labelledby="demo-title">
+      <div class="container">
+        <h2 class="visually-hidden" id="demo-title">Animaci&oacute;n de vista previa de terminal</h2>
+        <div class="terminal-window">
+          <div class="terminal-titlebar">
+            <div class="terminal-dots">
+              <span class="dot dot--close"></span>
+              <span class="dot dot--minimize"></span>
+              <span class="dot dot--maximize"></span>
+            </div>
+            <div class="terminal-title">cocxy &mdash; zsh</div>
+            <div class="terminal-dots" style="visibility:hidden">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </div>
+          </div>
+          <div class="terminal-body" aria-label="Contenido de demo de terminal">
+            <div class="terminal-line">
+              <span class="prompt">~</span>
+              <span class="command" id="typedCommand"></span>
+              <span class="cursor" id="cursor">|</span>
+            </div>
+            <div class="terminal-output" id="terminalOutput"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="comparison" id="comparison" aria-labelledby="comparison-title">
+      <div class="container">
+        <h2 class="visually-hidden" id="comparison-title">Atributos principales</h2>
+        <div class="comparison-strip">
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Licencia</span>
+            <span class="comparison-value comparison-value--highlight">MIT</span>
+          </div>
+          <div class="comparison-divider"></div>
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Telemetr&iacute;a</span>
+            <span class="comparison-value comparison-value--highlight">Cero</span>
+          </div>
+          <div class="comparison-divider"></div>
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Runtime</span>
+            <span class="comparison-value comparison-value--highlight">Nativo</span>
+          </div>
+          <div class="comparison-divider"></div>
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Renderizado</span>
+            <span class="comparison-value comparison-value--highlight">Metal GPU</span>
+          </div>
+          <div class="comparison-divider"></div>
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Framework</span>
+            <span class="comparison-value comparison-value--highlight">Swift + AppKit</span>
+          </div>
         </div>
       </div>
     </section>
@@ -197,6 +365,36 @@
             </div>
             <span class="download-meta">Actualizar: brew update &amp;&amp; brew upgrade --cask cocxy</span>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="opensource" id="opensource" aria-labelledby="opensource-title">
+      <div class="container">
+        <div class="opensource-content" data-animate>
+          <h2 class="section-title" id="opensource-title">100% open source.</h2>
+          <p class="opensource-text">
+            Todo el c&oacute;digo es p&uacute;blico bajo licencia MIT.
+            Puedes auditarlo, bifurcarlo y contribuir.
+            Sin lock-in de proveedor, sin blobs propietarios y con cero telemetr&iacute;a.
+          </p>
+          <div class="opensource-stats">
+            <div class="stat">
+              <span class="stat-value">6</span>
+              <span class="stat-label">Perfiles detectados</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">100+</span>
+              <span class="stat-label">Comandos CLI</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">0</span>
+              <span class="stat-label">Telemetr&iacute;a</span>
+            </div>
+          </div>
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg" aria-label="Ver Cocxy Terminal en GitHub (abre una pesta&ntilde;a nueva)">
+            Ver en GitHub
+          </a>
         </div>
       </div>
     </section>

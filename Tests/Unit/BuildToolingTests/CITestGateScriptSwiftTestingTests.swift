@@ -403,6 +403,69 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
+    @Test("Spanish homepage covers the same primary public sections")
+    func spanishHomepageCoversSamePrimaryPublicSections() throws {
+        let root = repositoryRoot()
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/index.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/index.html"),
+            encoding: .utf8
+        )
+        let requiredSections = [
+            "hero",
+            "features",
+            "demo",
+            "comparison",
+            "faq",
+            "download",
+            "opensource",
+        ]
+
+        for section in requiredSections {
+            #expect(
+                english.contains(#"id="\#(section)""#),
+                "English homepage should include #\(section)"
+            )
+            #expect(
+                spanish.contains(#"id="\#(section)""#),
+                "Spanish homepage should include #\(section)"
+            )
+        }
+
+        let requiredFeatureClasses = [
+            "feature-icon--agents",
+            "feature-icon--review",
+            "feature-icon--markdown",
+            "feature-icon--ssh",
+            "feature-icon--browser",
+            "feature-icon--privacy",
+            "feature-icon--gpu",
+            "feature-icon--cli",
+            "feature-icon--plugin",
+            "feature-icon--config",
+            "feature-icon--web",
+            "feature-icon--shell",
+        ]
+
+        for featureClass in requiredFeatureClasses {
+            #expect(
+                english.contains(featureClass),
+                "English homepage should include \(featureClass)"
+            )
+            #expect(
+                spanish.contains(featureClass),
+                "Spanish homepage should include \(featureClass)"
+            )
+        }
+
+        #expect(spanish.contains("100% open source"))
+        #expect(spanish.contains("cero telemetr&iacute;a"))
+        #expect(spanish.contains("Metal GPU"))
+    }
+
     @Test("public website local links resolve in the repo checkout")
     func publicWebsiteLocalLinksResolve() throws {
         let root = repositoryRoot().appendingPathComponent("web/public", isDirectory: true)
