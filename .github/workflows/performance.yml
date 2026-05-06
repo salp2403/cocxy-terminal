@@ -28,15 +28,30 @@ jobs:
 
       - name: Measure cold start
         run: |
+          set -euo pipefail
+          mkdir -p build/performance
           chmod +x scripts/bench-cold-start.sh
-          scripts/bench-cold-start.sh --app build/CocxyTerminal.app --runs 5 --enforce
+          scripts/bench-cold-start.sh --app build/CocxyTerminal.app --runs 5 --enforce | tee build/performance/cold-start.json
 
       - name: Measure memory baseline
         run: |
+          set -euo pipefail
+          mkdir -p build/performance
           chmod +x scripts/bench-memory-baseline.sh
-          scripts/bench-memory-baseline.sh --app build/CocxyTerminal.app --enforce
+          scripts/bench-memory-baseline.sh --app build/CocxyTerminal.app --enforce | tee build/performance/memory-baseline.json
 
       - name: Run performance benchmark suite
         run: |
+          set -euo pipefail
+          mkdir -p build/performance
           chmod +x scripts/run-performance-benchmarks.sh scripts/run-cocxycore-benchmarks.sh
-          scripts/run-performance-benchmarks.sh
+          scripts/run-performance-benchmarks.sh 2>&1 | tee build/performance/benchmark-suite.log
+
+      - name: Check performance regression baselines
+        run: |
+          scripts/check-performance-regression.py \
+            --baseline scripts/performance-baselines.json \
+            --metric-file build/performance/cold-start.json \
+            --metric-file build/performance/memory-baseline.json \
+            --log-file build/performance/benchmark-suite.log \
+            --enforce
