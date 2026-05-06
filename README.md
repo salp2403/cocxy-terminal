@@ -338,7 +338,7 @@ Ships with Catppuccin (Mocha and Latte), One Dark, and Solarized (Dark and Light
 
 ## CLI Companion
 
-Ninety-three commands for scripting and automation via a Unix Domain Socket with per-UID authentication.
+More than 100 commands for scripting and automation via a Unix Domain Socket with per-UID authentication.
 
 ```bash
 cocxy setup-hooks                # Auto-configure hooks across every installed agent
@@ -412,7 +412,7 @@ Sources/
     Timeline/          Event store
     SmartRouting/      Priority-based tab routing
   UI/                Windows, tabs, panels, overlays, animations
-CLI/                 cocxy companion tool (ninety-three commands)
+CLI/                 cocxy companion tool (100+ commands)
 QuickLook/           Markdown QuickLook extension
 Tests/               Swift Testing suite
 Resources/

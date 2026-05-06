@@ -188,6 +188,34 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!versionRewriteBlock.contains("|| true"))
     }
 
+    @Test("primary public docs do not pin the retired CLI command count")
+    func primaryPublicDocsDoNotPinRetiredCLICommandCount() throws {
+        let root = repositoryRoot()
+        let paths = [
+            "README.md",
+            "web/public/index.html",
+            "web/public/features.html",
+            "web/public/faq.html",
+            "web/public/getting-started.html",
+        ]
+
+        for path in paths {
+            let rawContents = try String(
+                contentsOf: root.appendingPathComponent(path),
+                encoding: .utf8
+            )
+            let scanStart = path == "web/public/features.html"
+                ? (rawContents.range(of: "<body")?.lowerBound ?? rawContents.startIndex)
+                : rawContents.startIndex
+            let contents = String(rawContents[scanStart...]).lowercased()
+
+            #expect(!contents.contains("ninety-three"))
+            #expect(!contents.contains("93-command"))
+            #expect(!contents.contains("93 commands"))
+            #expect(!contents.contains("full list of 93"))
+        }
+    }
+
     @Test("performance regression checker accepts metrics inside tolerance")
     func performanceRegressionCheckerAcceptsMetricsInsideTolerance() throws {
         let root = repositoryRoot()
