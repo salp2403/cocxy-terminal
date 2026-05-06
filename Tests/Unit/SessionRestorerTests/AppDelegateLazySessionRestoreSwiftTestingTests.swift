@@ -236,6 +236,21 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(controller.terminalContainerView?.layer?.backgroundColor?.alpha == 1.0)
     }
 
+    @Test("restore shield stays visible through the first repaint window")
+    func restoreShieldStaysVisibleThroughFirstRepaintWindow() async throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+
+        controller.installSessionRestoreShield()
+        let shield = try #require(controller.sessionRestoreShieldView)
+        controller.scheduleSessionRestoreShieldRemoval()
+
+        try await Task.sleep(nanoseconds: 250_000_000)
+        #expect(controller.sessionRestoreShieldView === shield)
+        #expect(shield.superview === controller.terminalContainerView)
+
+        try await waitForShieldRemoval(on: controller)
+    }
+
     @Test("restore does not force an intermediate window display before surfaces exist")
     func restoreDoesNotForceIntermediateWindowDisplayBeforeSurfacesExist() throws {
         let bridge = MockTerminalEngine()
