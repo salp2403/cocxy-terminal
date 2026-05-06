@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es-HN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Funciones &mdash; Cocxy Terminal</title>
+  <meta name="description" content="Funciones de Cocxy Terminal: detecci&oacute;n de agentes, revisi&oacute;n de c&oacute;digo, Markdown, QuickLook, renderizado GPU, sesiones remotas, plugins, CLI y cero telemetr&iacute;a.">
+  <meta name="keywords" content="Cocxy funciones, terminal macOS, agentes de codigo, revision de codigo, Markdown, SSH, plugins, CLI, cero telemetria">
+  <meta name="author" content="Said Arturo Lopez">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cocxy Terminal">
+  <meta property="og:title" content="Funciones &mdash; Cocxy Terminal">
+  <meta property="og:description" content="Vista detallada de funciones: agentes, revisi&oacute;n, Markdown, remoto, plugins, CLI y privacidad.">
+  <meta property="og:url" content="https://cocxy.dev/es/features.html">
+  <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Funciones de Cocxy Terminal">
+  <meta property="og:locale" content="es_HN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@cocxyterminal">
+  <meta name="twitter:title" content="Funciones &mdash; Cocxy Terminal">
+  <meta name="twitter:description" content="Agentes, revisi&oacute;n, Markdown, remoto, plugins, CLI y cero telemetr&iacute;a.">
+  <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
+  <meta name="theme-color" content="#1e1e2e">
+  <link rel="canonical" href="https://cocxy.dev/es/features.html">
+  <link rel="alternate" hreflang="en" href="https://cocxy.dev/features.html">
+  <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features.html">
+  <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features.html">
+  <link rel="icon" type="image/png" href="/images/icon.png">
+  <link rel="apple-touch-icon" href="/images/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Inicio", "item": "https://cocxy.dev/es/"},
+      {"@type": "ListItem", "position": 2, "name": "Funciones", "item": "https://cocxy.dev/es/features.html"}
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido principal</a>
+  <header class="site-header" role="banner">
+    <nav class="nav" aria-label="Navegaci&oacute;n principal">
+      <a href="/es/" class="nav-logo" aria-label="Inicio de Cocxy Terminal">
+        <img src="/images/icon.png" alt="" width="28" height="28">
+        <span>Cocxy</span>
+      </a>
+      <div class="nav-links">
+        <a href="/es/features.html" class="nav-active">Funciones</a>
+        <a href="/es/releases.html">Versiones</a>
+        <a href="/es/getting-started.html">Docs</a>
+        <a href="/es/faq.html">FAQ</a>
+        <a href="/es/#download">Descargar</a>
+        <a href="/features.html" hreflang="en" lang="en">English</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="container" style="padding-top:8rem;padding-bottom:4rem;max-width:960px;">
+      <nav class="breadcrumb" aria-label="Ruta">
+        <ol>
+          <li><a href="/es/">Inicio</a></li>
+          <li aria-hidden="true">/</li>
+          <li>Funciones</li>
+        </ol>
+      </nav>
+      <h1 style="font-size:2.75rem;font-weight:700;margin-bottom:0.75rem;">Funciones principales</h1>
+      <p style="color:var(--subtext0);font-size:1.1rem;max-width:720px;margin-bottom:3rem;">Cocxy Terminal est&aacute; dise&ntilde;ada como una app nativa para macOS: terminal diaria, paneles de desarrollo, automatizaci&oacute;n local y flujos con agentes sin backend propietario.</p>
+
+      <nav aria-label="Tabla de contenidos" style="background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:1.5rem 2rem;margin-bottom:3rem;">
+        <h2 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--overlay0);margin-bottom:1rem;font-weight:600;">En esta p&aacute;gina</h2>
+        <ul style="list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.4rem;font-size:0.9rem;">
+          <li><a href="#agents" style="color:var(--lavender);">Agentes</a></li>
+          <li><a href="#review" style="color:var(--lavender);">Revisi&oacute;n</a></li>
+          <li><a href="#markdown" style="color:var(--lavender);">Markdown</a></li>
+          <li><a href="#remote" style="color:var(--lavender);">Remoto</a></li>
+          <li><a href="#plugins" style="color:var(--lavender);">Plugins</a></li>
+          <li><a href="#privacy" style="color:var(--lavender);">Privacidad</a></li>
+        </ul>
+      </nav>
+
+      <section id="agents" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Detecci&oacute;n local de agentes</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Cocxy detecta sesiones de agentes de c&oacute;digo mediante hooks, secuencias OSC, patrones y heur&iacute;sticas de tiempo. Las se&ntilde;ales se procesan localmente, por superficie, y alimentan dashboard, timeline, sidebar y rutas de feedback.</p>
+      </section>
+
+      <section id="review" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Panel de revisi&oacute;n de c&oacute;digo</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Muestra archivos modificados, diffs, comentarios inline, acciones por hunk y feedback estructurado hacia el agente. El objetivo es revisar cambios reales sin abandonar la terminal.</p>
+      </section>
+
+      <section id="markdown" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Workspace Markdown</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Editor de fuente, preview local, Mermaid, KaTeX, callouts, footnotes, tabla de contenido, QuickLook offline, b&uacute;squeda, exportaci&oacute;n HTML/PDF y helpers para im&aacute;genes.</p>
+      </section>
+
+      <section id="remote" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Workspaces remotos</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Perfiles SSH, ControlMaster, t&uacute;neles, SFTP, tmux, daemon opcional y Keychain local para sostener sesiones remotas persistentes sin servidor Cocxy.</p>
+      </section>
+
+      <section id="plugins" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Plugins y CLI</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Plugins con sandbox, eventos de terminal, permisos expl&iacute;citos y timeout. La CLI <code style="color:var(--peach);background:var(--crust);padding:0.15em 0.4em;border-radius:4px;">cocxy</code> controla tabs, splits, sesiones, agentes, hooks, Markdown, remoto, plugins y diagn&oacute;sticos mediante socket local.</p>
+      </section>
+
+      <section id="privacy" style="margin-bottom:3.5rem;">
+        <h2 style="font-size:1.85rem;font-weight:700;margin-bottom:0.75rem;">Cero telemetr&iacute;a</h2>
+        <p style="color:var(--subtext1);line-height:1.75;">Sin analytics, tracking, reporte autom&aacute;tico de crashes ni backend propietario. La red solo aparece cuando instalas, actualizas o usas una herramienta externa configurada por ti.</p>
+      </section>
+
+      <section style="text-align:center;margin-top:4rem;padding:3rem 2rem;background:var(--surface0);border:1px solid var(--surface1);border-radius:16px;">
+        <h2 style="font-size:1.75rem;font-weight:700;margin-bottom:0.75rem;">Siguiente paso</h2>
+        <p style="color:var(--subtext0);margin-bottom:2rem;max-width:520px;margin-left:auto;margin-right:auto;">Instala Cocxy, abre un proyecto real y prueba dashboard, Markdown y revisi&oacute;n integrada.</p>
+        <div style="display:inline-flex;gap:0.75rem;flex-wrap:wrap;justify-content:center;">
+          <a href="/es/#download" class="btn btn-primary">Descargar</a>
+          <a href="/es/getting-started.html" class="btn btn-secondary">Leer docs</a>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <img src="/images/icon.png" alt="" width="24" height="24">
+          <span>Cocxy Terminal</span>
+        </div>
+        <nav class="footer-links" aria-label="Navegaci&oacute;n inferior">
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Licencia MIT</a>
+          <a href="/es/releases.html">Versiones</a>
+          <a href="/es/getting-started.html">Docs</a>
+          <a href="/features.html" hreflang="en" lang="en">English</a>
+        </nav>
+        <p class="footer-credit">Hecho por Said Arturo Lopez &middot; Honduras</p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

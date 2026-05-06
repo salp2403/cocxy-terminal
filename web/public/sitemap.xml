@@ -5,13 +5,37 @@
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
   <url>
     <loc>https://cocxy.dev/</loc>
-    <lastmod>2026-04-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/"/>
+    <lastmod>2026-05-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/"/>
+    <lastmod>2026-05-06</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://cocxy.dev/features.html</loc>
-    <lastmod>2026-04-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features.html"/>
+    <lastmod>2026-05-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features.html"/>
+    <lastmod>2026-05-06</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -53,7 +77,19 @@
   </url>
   <url>
     <loc>https://cocxy.dev/releases.html</loc>
-    <lastmod>2026-04-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html"/>
+    <lastmod>2026-05-06</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/releases.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html"/>
+    <lastmod>2026-05-06</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>

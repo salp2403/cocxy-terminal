@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es-HN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cocxy Terminal &mdash; Terminal nativa para macOS</title>
+  <meta name="description" content="Cocxy Terminal es una terminal nativa para macOS con detecci&oacute;n de agentes de c&oacute;digo, revisi&oacute;n integrada, workspace Markdown, sesiones remotas, renderizado GPU y cero telemetr&iacute;a.">
+  <meta name="keywords" content="Cocxy Terminal, terminal macOS, agentes de codigo, revision de codigo, Markdown, SSH, cero telemetria">
+  <meta name="author" content="Said Arturo Lopez">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cocxy Terminal">
+  <meta property="og:title" content="Cocxy Terminal &mdash; Terminal nativa para macOS">
+  <meta property="og:description" content="Terminal nativa para flujos con agentes de c&oacute;digo, revisi&oacute;n integrada, Markdown, sesiones remotas y cero telemetr&iacute;a.">
+  <meta property="og:url" content="https://cocxy.dev/es/">
+  <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Vista previa de Cocxy Terminal">
+  <meta property="og:locale" content="es_HN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@cocxyterminal">
+  <meta name="twitter:title" content="Cocxy Terminal">
+  <meta name="twitter:description" content="Terminal nativa para macOS con agentes, revisi&oacute;n, Markdown, remoto y cero telemetr&iacute;a.">
+  <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
+  <meta name="theme-color" content="#1e1e2e">
+  <link rel="canonical" href="https://cocxy.dev/es/">
+  <link rel="alternate" hreflang="en" href="https://cocxy.dev/">
+  <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/">
+  <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/">
+  <link rel="icon" type="image/png" href="/images/icon.png">
+  <link rel="apple-touch-icon" href="/images/icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="alternate" type="application/rss+xml" title="Versiones de Cocxy Terminal" href="/appcast.xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <link rel="preload" as="image" href="/images/icon.png">
+  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Cocxy Terminal",
+    "alternateName": "Cocxy",
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "Terminal Emulator",
+    "operatingSystem": "macOS 14.0+",
+    "url": "https://cocxy.dev/es/",
+    "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
+    "screenshot": "https://cocxy.dev/images/og-image.png",
+    "softwareVersion": "0.0.0",
+    "softwareRequirements": "macOS 14.0 o posterior",
+    "description": "Terminal nativa para macOS con deteccion de agentes de codigo, revision integrada, workspace Markdown, renderizado GPU, sesiones remotas y cero telemetria.",
+    "inLanguage": "es-HN",
+    "featureList": [
+      "Deteccion local de agentes de codigo",
+      "Panel de revision de codigo con comentarios inline",
+      "Workspace Markdown con preview local",
+      "Renderizado acelerado por GPU",
+      "Sesiones remotas SSH persistentes",
+      "Sistema de plugins con sandbox",
+      "CLI local por Unix Domain Socket",
+      "Cero telemetria"
+    ],
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock"},
+    "author": {"@type": "Person", "name": "Said Arturo Lopez", "url": "https://github.com/salp2403"},
+    "license": "https://opensource.org/licenses/MIT",
+    "isAccessibleForFree": true
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#hero">Saltar al contenido principal</a>
+  <header class="site-header" role="banner">
+    <nav class="nav" aria-label="Navegaci&oacute;n principal">
+      <a href="/es/" class="nav-logo" aria-label="Inicio de Cocxy Terminal">
+        <img src="/images/icon.png" alt="" width="28" height="28">
+        <span>Cocxy</span>
+      </a>
+      <div class="nav-links">
+        <a href="/es/features.html">Funciones</a>
+        <a href="/es/releases.html">Versiones</a>
+        <a href="/es/getting-started.html">Docs</a>
+        <a href="/es/faq.html">FAQ</a>
+        <a href="#download">Descargar</a>
+        <a href="/" hreflang="en" lang="en">English</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" id="hero" aria-labelledby="hero-title">
+      <canvas class="hero-grid" id="heroGrid" aria-hidden="true"></canvas>
+      <div class="hero-content">
+        <div class="hero-icon">
+          <img src="/images/icon.png" alt="Icono de Cocxy Terminal" width="96" height="96">
+        </div>
+        <h1 class="hero-title" id="hero-title">Cocxy Terminal</h1>
+        <p class="hero-tagline">Tu terminal entiende flujos con agentes de c&oacute;digo.</p>
+        <p class="hero-sub">Terminal nativa para macOS con detecci&oacute;n local de agentes, revisi&oacute;n de c&oacute;digo integrada, workspace Markdown, sesiones remotas persistentes y cero telemetr&iacute;a. Construida en Swift. Licencia MIT.</p>
+        <div class="hero-actions">
+          <a href="#download" class="btn btn-primary">Descargar para macOS</a>
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Ver en GitHub</a>
+        </div>
+        <div class="hero-version">
+          <span class="version-badge">v0.0.0</span>
+          <span class="version-req">macOS 14.0+</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features" aria-labelledby="features-title">
+      <div class="container">
+        <h2 class="section-title" id="features-title">Hecha para desarrollo diario con agentes.</h2>
+        <p class="section-subtitle">Cocxy combina terminal, revisi&oacute;n, docs, remoto y automatizaci&oacute;n local en una app nativa.</p>
+        <div class="features-grid">
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--agents"></div>
+            <h3>Detecci&oacute;n de agentes</h3>
+            <p>Hooks, secuencias OSC, patrones y heur&iacute;sticas locales detectan estado de agentes sin enviar salida de terminal a servidores.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--review"></div>
+            <h3>Revisi&oacute;n integrada</h3>
+            <p>Panel nativo para ver diffs, comentar l&iacute;neas, aceptar o revertir hunks y devolver feedback al agente desde el flujo local.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--markdown"></div>
+            <h3>Workspace Markdown</h3>
+            <p>Editor y preview con Mermaid, KaTeX, callouts, footnotes, QuickLook offline, b&uacute;squeda y exportaci&oacute;n local.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--ssh"></div>
+            <h3>Sesiones remotas</h3>
+            <p>SSH, perfiles, Keychain opcional, t&uacute;neles, SFTP y tmux para workspaces remotos persistentes sin backend propietario.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--gpu"></div>
+            <h3>Renderizado GPU</h3>
+            <p>CocxyCore usa Metal para scroll fluido, atlas de glifos, protocolos de imagen inline y diagn&oacute;sticos de terminal.</p>
+          </article>
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--privacy"></div>
+            <h3>Cero telemetr&iacute;a</h3>
+            <p>Sin analytics, tracking ni reporte autom&aacute;tico de crashes. La app funciona localmente y la red es expl&iacute;cita.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="faq" id="faq" aria-labelledby="faq-title">
+      <div class="container">
+        <h2 class="section-title" id="faq-title">Preguntas r&aacute;pidas.</h2>
+        <div class="faq-list">
+          <details class="faq-item" open>
+            <summary><span>&iquest;Cocxy es gratis?</span></summary>
+            <p>S&iacute;. Cocxy es gratuito bajo licencia MIT. No requiere cuenta, suscripci&oacute;n ni login para funcionar.</p>
+          </details>
+          <details class="faq-item">
+            <summary><span>&iquest;Cocxy recopila datos?</span></summary>
+            <p>No. Cocxy no incluye telemetr&iacute;a, analytics, tracking ni reporte autom&aacute;tico de crashes.</p>
+          </details>
+          <details class="faq-item">
+            <summary><span>&iquest;Puedo usarla como terminal diaria?</span></summary>
+            <p>S&iacute;. Incluye tabs, splits, b&uacute;squeda, shell integration, SSH, CLI, temas, imagen inline y renderizado GPU.</p>
+          </details>
+        </div>
+        <div style="text-align:center;margin-top:2rem;">
+          <a href="/es/faq.html" class="btn btn-secondary">Leer FAQ completa</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="download" id="download" aria-labelledby="download-title">
+      <div class="container">
+        <h2 class="section-title" id="download-title">Instala Cocxy.</h2>
+        <p class="section-subtitle">macOS 14.0 o posterior, Apple Silicon o Intel.</p>
+        <div class="download-options">
+          <div class="download-card download-card--primary" data-animate>
+            <div class="download-card-header">
+              <h3>DMG firmado</h3>
+              <span class="download-version">v0.0.0</span>
+            </div>
+            <p>Descarga la versi&oacute;n m&aacute;s reciente firmada y notarizada.</p>
+            <a href="https://github.com/salp2403/cocxy-terminal/releases/latest/download/CocxyTerminal-0.0.0.dmg" class="btn btn-primary btn-lg">Descargar DMG</a>
+            <span class="download-meta">macOS 14.0+ requerido</span>
+          </div>
+          <div class="download-card" data-animate>
+            <div class="download-card-header">
+              <h3>Homebrew</h3>
+            </div>
+            <p>Instala y actualiza desde la terminal.</p>
+            <div class="code-block">
+              <code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code>
+            </div>
+            <span class="download-meta">Actualizar: brew update &amp;&amp; brew upgrade --cask cocxy</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <img src="/images/icon.png" alt="" width="24" height="24">
+          <span>Cocxy Terminal</span>
+        </div>
+        <nav class="footer-links" aria-label="Navegaci&oacute;n inferior">
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Licencia MIT</a>
+          <a href="/es/releases.html">Versiones</a>
+          <a href="/es/getting-started.html">Docs</a>
+          <a href="/" hreflang="en" lang="en">English</a>
+        </nav>
+        <p class="footer-credit">Hecho por Said Arturo Lopez &middot; Honduras</p>
+      </div>
+    </div>
+  </footer>
+  <script src="/js/main.js" defer></script>
+</body>
+</html>
