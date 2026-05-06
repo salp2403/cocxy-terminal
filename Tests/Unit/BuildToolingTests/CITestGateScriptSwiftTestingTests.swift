@@ -204,10 +204,7 @@ struct CITestGateScriptSwiftTestingTests {
                 contentsOf: root.appendingPathComponent(path),
                 encoding: .utf8
             )
-            let scanStart = path == "web/public/features.html"
-                ? (rawContents.range(of: "<body")?.lowerBound ?? rawContents.startIndex)
-                : rawContents.startIndex
-            let contents = String(rawContents[scanStart...]).lowercased()
+            let contents = rawContents.lowercased()
 
             #expect(!contents.contains("ninety-three"))
             #expect(!contents.contains("93-command"))
