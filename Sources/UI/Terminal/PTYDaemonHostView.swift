@@ -10,6 +10,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     var terminalViewModel: TerminalViewModel? { viewModel }
     var onFileDrop: (([URL]) -> Bool)?
     var onUserInputSubmitted: (() -> Void)?
+    var onFramePresented: (() -> Void)?
 
     private weak var bridge: (any TerminalEngine)?
     private var surfaceID: SurfaceID?
@@ -218,6 +219,11 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             default:
                 context.fill(cursorRect)
             }
+        }
+
+        if let onFramePresented {
+            self.onFramePresented = nil
+            onFramePresented()
         }
     }
 

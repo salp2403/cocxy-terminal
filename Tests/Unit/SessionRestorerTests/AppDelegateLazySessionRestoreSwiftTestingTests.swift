@@ -266,6 +266,33 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         try await waitForShieldRemoval(on: controller)
     }
 
+    @Test("restore shield removes after the active terminal presents a frame")
+    func restoreShieldRemovesAfterActiveTerminalFrame() async throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let hostView = FrameReportingTerminalHostView(frame: controller.terminalContainerView?.bounds ?? .zero)
+        let tabID = try #require(controller.tabManager.activeTabID)
+        controller.tabSurfaceViews[tabID] = hostView
+        controller.terminalSurfaceView = hostView
+        controller.terminalContainerView?.addSubview(hostView)
+
+        controller.installSessionRestoreShield()
+        let shield = try #require(controller.sessionRestoreShieldView)
+        controller.scheduleSessionRestoreShieldRemoval()
+
+        #expect(hostView.onFramePresented != nil)
+        hostView.onFramePresented?()
+
+        try await Task.sleep(nanoseconds: 120_000_000)
+
+        #expect(controller.sessionRestoreShieldView == nil)
+        #expect(shield.superview == nil)
+    }
+
+    @Test("restore shield timeout covers slower first paints")
+    func restoreShieldTimeoutCoversSlowerFirstPaints() {
+        #expect(MainWindowController.sessionRestoreShieldRemovalTimeout >= 1.0)
+    }
+
     @Test("restore does not force an intermediate window display before surfaces exist")
     func restoreDoesNotForceIntermediateWindowDisplayBeforeSurfacesExist() throws {
         let bridge = MockTerminalEngine()
@@ -464,4 +491,21 @@ private final class TrackingRestoreWindow: NSWindow {
         displayIfNeededCount += 1
         super.displayIfNeeded()
     }
+}
+
+@MainActor
+private final class FrameReportingTerminalHostView: NSView, TerminalHostingView {
+    var terminalViewModel: TerminalViewModel?
+    var onFileDrop: (([URL]) -> Bool)?
+    var onUserInputSubmitted: (() -> Void)?
+    var onFramePresented: (() -> Void)?
+
+    func syncSizeWithTerminal() {}
+    func showNotificationRing(color: NSColor) {}
+    func hideNotificationRing() {}
+    func handleShellPrompt(row: Int, column: Int) {}
+    func updateInteractionMetrics() {}
+    func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {}
+    func requestImmediateRedraw() {}
+    func refreshDisplayLinkAnchor() {}
 }

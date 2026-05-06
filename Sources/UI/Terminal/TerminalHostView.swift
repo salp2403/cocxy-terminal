@@ -15,6 +15,7 @@ protocol TerminalHostingView: AnyObject {
     var terminalViewModel: TerminalViewModel? { get }
     var onFileDrop: (([URL]) -> Bool)? { get set }
     var onUserInputSubmitted: (() -> Void)? { get set }
+    var onFramePresented: (() -> Void)? { get set }
 
     func syncSizeWithTerminal()
     func showNotificationRing(color: NSColor)

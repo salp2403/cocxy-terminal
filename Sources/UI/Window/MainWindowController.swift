@@ -768,6 +768,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Horizontal tab strip height.
     private static let tabStripHeight: CGFloat = 32
+    static let sessionRestoreShieldRemovalTimeout: TimeInterval = 1.25
+    static let sessionRestoreShieldPostFrameDelay: TimeInterval = 0.05
 
     /// The status bar hosting view at the bottom of the window.
     private(set) var statusBarHostingView: NSHostingView<StatusBarView>?
@@ -1093,13 +1095,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sessionRestoreShieldView = shield
     }
 
-    func scheduleSessionRestoreShieldRemoval(after delay: TimeInterval = 0.65) {
+    func scheduleSessionRestoreShieldRemoval(after delay: TimeInterval = MainWindowController.sessionRestoreShieldRemovalTimeout) {
         guard let shield = sessionRestoreShieldView else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak shield] in
+
+        let removeShield: @MainActor () -> Void = { [weak self, weak shield] in
             guard let self, let shield, self.sessionRestoreShieldView === shield else { return }
             self.refreshTerminalContainerBackingBackground()
             shield.removeFromSuperview()
             self.sessionRestoreShieldView = nil
+        }
+
+        activeTerminalSurfaceView?.onFramePresented = {
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + Self.sessionRestoreShieldPostFrameDelay
+            ) {
+                MainActor.assumeIsolated {
+                    removeShield()
+                }
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            MainActor.assumeIsolated {
+                removeShield()
+            }
         }
     }
 

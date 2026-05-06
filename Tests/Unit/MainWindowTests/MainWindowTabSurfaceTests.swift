@@ -11,6 +11,7 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     var terminalViewModel: TerminalViewModel?
     var onFileDrop: (([URL]) -> Bool)?
     var onUserInputSubmitted: (() -> Void)?
+    var onFramePresented: (() -> Void)?
     private(set) var syncSizeCallCount = 0
     private(set) var redrawCallCount = 0
     private(set) var updateMetricsCallCount = 0

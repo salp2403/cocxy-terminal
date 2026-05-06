@@ -11,6 +11,7 @@ private final class MockTerminalHostView: NSView, TerminalHostingView {
     var terminalViewModel: TerminalViewModel?
     var onFileDrop: (([URL]) -> Bool)?
     var onUserInputSubmitted: (() -> Void)?
+    var onFramePresented: (() -> Void)?
 
     func syncSizeWithTerminal() {}
     func showNotificationRing(color: NSColor) {}

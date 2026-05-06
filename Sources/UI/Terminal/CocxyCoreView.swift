@@ -59,6 +59,9 @@ final class CocxyCoreView: NSView {
     /// Closure called when the user submits input (Enter key).
     var onUserInputSubmitted: (() -> Void)?
 
+    /// Closure fired once after the next successful Metal frame commit.
+    var onFramePresented: (() -> Void)?
+
     /// Closure called when the user directly interacts with this
     /// surface and expects it to become the focused split. The window
     /// controller uses this to keep split-manager focus, the top tab
@@ -352,6 +355,9 @@ final class CocxyCoreView: NSView {
         )
         if !drawn {
             needsRender = true
+        } else if let onFramePresented {
+            self.onFramePresented = nil
+            onFramePresented()
         }
     }
 
