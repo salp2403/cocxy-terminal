@@ -2618,6 +2618,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         applyFontToTab(tabID, size: newSize)
     }
 
+    /// Toggles native macOS full screen while preserving Cocxy's localized menu title.
+    @objc func toggleFullScreenAction(_ sender: Any?) {
+        window?.toggleFullScreen(sender)
+    }
+
     // MARK: - Tab Bar Toggle
 
     /// Whether the tab bar sidebar is currently hidden.

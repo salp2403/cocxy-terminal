@@ -85,6 +85,10 @@ final class AppMenuStructureTests: XCTestCase {
         XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Nueva pestaña" }))
         XCTAssertNotNil(viewMenu.items.first(where: { $0.title == "Abrir panel Notebook" }))
         XCTAssertEqual(
+            viewMenu.items.first(where: { $0.title == "Entrar a pantalla completa" })?.action,
+            #selector(MainWindowController.toggleFullScreenAction(_:))
+        )
+        XCTAssertEqual(
             helpMenu.items.first(where: { $0.title == "Ayuda de Cocxy Terminal" })?.action,
             #selector(MainWindowController.showWelcomeAction(_:))
         )
@@ -241,6 +245,7 @@ final class ViewMenuItemTests: XCTestCase {
             $0.title.contains("Full Screen")
         })
         XCTAssertNotNil(fullScreen, "View menu must have a Full Screen item")
+        XCTAssertEqual(fullScreen?.action, #selector(MainWindowController.toggleFullScreenAction(_:)))
     }
 
     func testViewMenuHasZoomInItem() {

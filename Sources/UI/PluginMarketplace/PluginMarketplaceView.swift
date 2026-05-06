@@ -272,9 +272,9 @@ struct PluginMarketplaceView: View {
                 } else {
                     ForEach(viewModel.bundledPlugins) { plugin in
                         PluginCardView(
-                            title: plugin.name,
+                            title: Self.localizedPluginName(plugin, using: localizer),
                             subtitle: plugin.id,
-                            detail: plugin.description,
+                            detail: Self.localizedPluginDescription(plugin, using: localizer),
                             capabilities: plugin.capabilities,
                             primaryAction: PluginCardAction(
                                 title: localized("plugins.install", fallback: "Install"),
@@ -300,9 +300,9 @@ struct PluginMarketplaceView: View {
                 } else {
                     ForEach(viewModel.plugins) { plugin in
                         PluginCardView(
-                            title: plugin.manifest.name,
+                            title: Self.localizedPluginName(plugin.manifest, using: localizer),
                             subtitle: plugin.id,
-                            detail: plugin.manifest.description,
+                            detail: Self.localizedPluginDescription(plugin.manifest, using: localizer),
                             capabilities: plugin.manifest.capabilities,
                             primaryAction: PluginCardAction(
                                 title: plugin.isEnabled
@@ -387,5 +387,13 @@ struct PluginMarketplaceView: View {
 
     private func localized(_ key: String, fallback: String) -> String {
         localizer.string(key, fallback: fallback)
+    }
+
+    static func localizedPluginName(_ plugin: PluginManifest, using localizer: AppLocalizer) -> String {
+        localizer.string("plugins.builtin.\(plugin.id).name", fallback: plugin.name)
+    }
+
+    static func localizedPluginDescription(_ plugin: PluginManifest, using localizer: AppLocalizer) -> String {
+        localizer.string("plugins.builtin.\(plugin.id).description", fallback: plugin.description)
     }
 }

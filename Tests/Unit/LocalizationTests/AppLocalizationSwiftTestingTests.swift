@@ -167,6 +167,27 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("plugins.replaceExisting", fallback: "Replace existing") == "Reemplazar existente")
         #expect(spanish.string("plugins.empty.installed", fallback: "No plugins installed.") == "No hay plugins instalados.")
         #expect(spanish.string("plugins.status.noUpdates", fallback: "No updates found.") == "No se encontraron actualizaciones.")
+        let bundledPlugin = PluginManifest(
+            id: "cocxy-github-pane",
+            name: "GitHub Pane",
+            description: "Adds local shell context for repository and pull request workflows.",
+            version: "1.0.0",
+            author: "Cocxy",
+            minCocxyVersion: nil,
+            events: [.sessionStart],
+            directoryPath: "/tmp/cocxy-github-pane",
+            manifestFileName: PluginManifest.marketplaceManifestFileName,
+            repositoryURL: "bundled://cocxy-github-pane",
+            homepageURL: nil,
+            license: "MIT",
+            capabilities: [.environmentRead],
+            signature: nil
+        )
+        #expect(PluginMarketplaceView.localizedPluginName(bundledPlugin, using: spanish) == "Panel GitHub")
+        #expect(
+            PluginMarketplaceView.localizedPluginDescription(bundledPlugin, using: spanish)
+                == "Agrega contexto local de shell para flujos de repositorios y pull requests."
+        )
     }
 
     @Test
@@ -628,6 +649,42 @@ struct AppLocalizationSwiftTestingTests {
 
         #expect(action.name == "Abrir workspace en Visual Studio Code")
         #expect(action.description == "Abrir el workspace de la pestaña activa usando Visual Studio Code")
+    }
+
+    @MainActor
+    @Test
+    func wiredCommandPaletteActionsHaveLocalizationKeys() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let english = try localizationKeys(
+            at: root.appendingPathComponent("Resources/Localization/en.lproj/Localizable.strings")
+        )
+        let spanish = try localizationKeys(
+            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
+        )
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let actionIDs = controller.createWiredCommandPaletteEngine().allActions
+            .map(\.id)
+            .filter { id in
+                !id.hasPrefix("editor.open.")
+                    && !id.hasPrefix("codex.account.switch.")
+            }
+
+        let expectedKeys = Set(actionIDs.flatMap { id in
+            if id == "window.pictureInPicture" {
+                return [
+                    "command.\(id).name",
+                    "command.\(id).description.enabled",
+                    "command.\(id).description.disabled",
+                ]
+            }
+            return [
+                "command.\(id).name",
+                "command.\(id).description",
+            ]
+        })
+
+        #expect(english.isSuperset(of: expectedKeys))
+        #expect(spanish.isSuperset(of: expectedKeys))
     }
 
     @Test

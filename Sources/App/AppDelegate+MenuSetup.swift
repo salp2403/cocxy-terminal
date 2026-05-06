@@ -455,7 +455,7 @@ extension AppDelegate {
 
         let fullScreenItem = NSMenuItem(
             title: menuString("menu.view.enterFullScreen", "Enter Full Screen", localizer),
-            action: #selector(NSWindow.toggleFullScreen(_:)),
+            action: #selector(MainWindowController.toggleFullScreenAction(_:)),
             keyEquivalent: ""
         )
         MenuKeybindingsBinder.tag(fullScreenItem, with: KeybindingActionCatalog.windowToggleFullScreen)
