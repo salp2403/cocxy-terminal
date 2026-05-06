@@ -39,6 +39,7 @@ struct CocxyCorePerformanceBenchmarks {
         let elapsed = secondsSince(startedAt)
         defer { bridge.destroySurface(surfaceID) }
 
+        print("CocxyCore surface creation time: \(formatMilliseconds(elapsed))")
         #expect(
             elapsed < 0.25,
             Comment("Measured CocxyCore surface creation time: \(formatSeconds(elapsed))")
@@ -71,6 +72,7 @@ struct CocxyCorePerformanceBenchmarks {
         }
 
         let latency = secondsSince(startedAt)
+        print("CocxyCore echo latency: \(formatMilliseconds(latency))")
         #expect(
             latency < 0.25,
             Comment("Measured CocxyCore echo latency: \(formatMilliseconds(latency))")
@@ -140,6 +142,7 @@ struct CocxyCorePerformanceBenchmarks {
         let elapsed = secondsSince(startedAt)
         let throughputValue = Double(Self.throughputPayloadBytes) / elapsed / 1_048_576.0
 
+        print("CocxyCore output throughput: \(String(format: "%.2f", throughputValue)) MB/s")
         #expect(
             throughputValue >= Self.throughputThresholdMBps,
             Comment("Measured CocxyCore throughput: \(String(format: "%.2f", throughputValue)) MB/s")
@@ -161,17 +164,31 @@ struct CocxyCorePerformanceBenchmarks {
 
         _ = renderer.prepareFrameResources(terminal: terminal)
 
-        let iterations = 40
-        let startedAt = DispatchTime.now().uptimeNanoseconds
+        let iterations = 120
+        var samples: [Double] = []
+        samples.reserveCapacity(iterations)
+        var allFramesPrepared = true
         for _ in 0..<iterations {
-            #expect(renderer.prepareFrameResources(terminal: terminal) == true)
+            let sampleStartedAt = DispatchTime.now().uptimeNanoseconds
+            if renderer.prepareFrameResources(terminal: terminal) == false {
+                allFramesPrepared = false
+            }
+            samples.append(secondsSince(sampleStartedAt))
         }
-        let elapsed = secondsSince(startedAt)
-        let averageFrameTime = elapsed / Double(iterations)
+        let averageFrameTime = samples.reduce(0, +) / Double(iterations)
+        let p99FrameTime = percentile(0.99, in: samples)
 
+        print("CocxyCore frame preparation average: \(formatMilliseconds(averageFrameTime))")
+        print("CocxyCore frame preparation p99: \(formatMilliseconds(p99FrameTime))")
+
+        #expect(allFramesPrepared)
         #expect(
             averageFrameTime < 0.016,
             Comment("Measured average CocxyCore frame preparation time: \(formatMilliseconds(averageFrameTime))")
+        )
+        #expect(
+            p99FrameTime < 0.0166,
+            Comment("Measured p99 CocxyCore frame preparation time: \(formatMilliseconds(p99FrameTime))")
         )
     }
 
@@ -212,6 +229,7 @@ struct CocxyCorePerformanceBenchmarks {
         let deltaBytes = rssAfter >= rssBefore ? rssAfter - rssBefore : 0
         let deltaMB = Double(deltaBytes) / 1_048_576.0
 
+        print("CocxyCore idle surface RSS delta: \(String(format: "%.2f", deltaMB)) MB")
         #expect(
             deltaMB < Self.memoryDeltaThresholdMB,
             Comment("Measured idle CocxyCore RSS delta: \(String(format: "%.2f", deltaMB)) MB")
@@ -278,6 +296,14 @@ private func formatSeconds(_ value: Double) -> String {
 
 private func formatMilliseconds(_ value: Double) -> String {
     String(format: "%.2f ms", value * 1_000.0)
+}
+
+private func percentile(_ target: Double, in samples: [Double]) -> Double {
+    guard !samples.isEmpty else { return 0 }
+    let sorted = samples.sorted()
+    let clampedTarget = max(0, min(target, 1))
+    let index = min(sorted.count - 1, max(0, Int(ceil(clampedTarget * Double(sorted.count))) - 1))
+    return sorted[index]
 }
 
 private func benchmarkShellQuote(_ value: String) -> String {

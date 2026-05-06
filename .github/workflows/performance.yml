@@ -30,3 +30,13 @@ jobs:
         run: |
           chmod +x scripts/bench-cold-start.sh
           scripts/bench-cold-start.sh --app build/CocxyTerminal.app --runs 5 --enforce
+
+      - name: Measure memory baseline
+        run: |
+          chmod +x scripts/bench-memory-baseline.sh
+          scripts/bench-memory-baseline.sh --app build/CocxyTerminal.app --enforce
+
+      - name: Run performance benchmark suite
+        run: |
+          chmod +x scripts/run-performance-benchmarks.sh scripts/run-cocxycore-benchmarks.sh
+          scripts/run-performance-benchmarks.sh
