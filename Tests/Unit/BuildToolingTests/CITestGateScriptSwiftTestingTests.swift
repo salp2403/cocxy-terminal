@@ -79,6 +79,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("Provider endpoint boundaries"))
         #expect(script.contains("--runtime-seconds"))
         #expect(script.contains("PostHog|Sentry|Crashlytics|Mixpanel|Amplitude"))
+        #expect(script.contains("network entitlement " + "beyond"))
+        #expect(script.contains("zero data to any " + "external server"))
         #expect(script.contains("api\\.openai\\.com|api\\.anthro[p]ic\\.com|generativelanguage\\.googleapis\\.com"))
         #expect(ci.contains("./scripts/run-privacy-audit.sh --app build/CocxyTerminal.app"))
         #expect(nightly.contains("./scripts/run-privacy-audit.sh --app \"$APP_DIR\""))

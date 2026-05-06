@@ -233,7 +233,7 @@ Native shell integration for zsh, bash, and fish — installed automatically, no
 
 ### Zero Telemetry
 
-Cocxy sends **zero data** to any external server. No analytics. No crash reporting. No tracking. No exceptions. Your terminal activity stays on your machine. Verify with any network monitor.
+Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Network use exists only for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend. Verify with any network monitor.
 
 ## Keyboard Shortcuts
 
