@@ -47,6 +47,7 @@ final class NotesViewModel: ObservableObject {
     private let store: NoteStore
     private let resolver: any NoteWorkspaceResolving
     private let searchEngine: any NoteSearching
+    private let spotlightScopePolicy: NoteSpotlightScopePolicy
     private let autoSaveEnabled: Bool
 
     /// Last in-flight search. Cancelled when a fresh query arrives so
@@ -59,11 +60,13 @@ final class NotesViewModel: ObservableObject {
         store: NoteStore,
         resolver: any NoteWorkspaceResolving,
         searchEngine: any NoteSearching,
+        spotlightScopePolicy: NoteSpotlightScopePolicy = NoteSpotlightScopePolicy(),
         autoSaveEnabled: Bool = true
     ) {
         self.store = store
         self.resolver = resolver
         self.searchEngine = searchEngine
+        self.spotlightScopePolicy = spotlightScopePolicy
         self.autoSaveEnabled = autoSaveEnabled
     }
 
@@ -206,15 +209,21 @@ final class NotesViewModel: ObservableObject {
     func runSearch() async {
         searchTask?.cancel()
         let query = searchQuery
-        let workspaceID = workspace?.workspaceID
-        guard let workspaceID else {
+        guard let workspace else {
             searchResults = []
             isSearching = false
             return
         }
+        let workspaceID = workspace.workspaceID
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             searchResults = []
+            isSearching = false
+            return
+        }
+        guard allowsSearch(in: workspace) else {
+            searchResults = []
+            lastError = nil
             isSearching = false
             return
         }
@@ -263,6 +272,11 @@ final class NotesViewModel: ObservableObject {
         if let index = notes.firstIndex(where: { $0.id == note.id }) {
             notes[index] = note
         }
+    }
+
+    private func allowsSearch(in workspace: ResolvedNoteWorkspace) -> Bool {
+        guard searchEngine.kind == .spotlight else { return true }
+        return spotlightScopePolicy.allowsSpotlightSearch(in: workspace.rootURL)
     }
 
     /// Re-runs the search whenever `searchQuery` changes. The actual

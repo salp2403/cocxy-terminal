@@ -17,9 +17,19 @@ struct NotesViewModelSwiftTestingTests {
     /// the search tests are deterministic without depending on the
     /// real Spotlight index or sqlite3.
     private struct StubSearchEngine: NoteSearching {
-        let kind: NoteSearchEngineKind = .grep
+        let kind: NoteSearchEngineKind
         var results: [NoteSearchResult] = []
         var error: NoteSearchError?
+
+        init(
+            kind: NoteSearchEngineKind = .grep,
+            results: [NoteSearchResult] = [],
+            error: NoteSearchError? = nil
+        ) {
+            self.kind = kind
+            self.results = results
+            self.error = error
+        }
 
         func search(
             query: String,
@@ -41,13 +51,13 @@ struct NotesViewModelSwiftTestingTests {
         }
     }
 
-    private func makeWorkspace() -> (URL, ResolvedNoteWorkspace) {
+    private func makeWorkspace(workspaceRoot: URL? = nil) -> (URL, ResolvedNoteWorkspace) {
         let storageRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent(
                 "cocxy-notes-vm-tests-\(UUID().uuidString)",
                 isDirectory: true
             )
-        let workspaceRoot = URL(fileURLWithPath: "/Users/sample/projects/foo")
+        let workspaceRoot = workspaceRoot ?? URL(fileURLWithPath: "/Users/sample/projects/foo")
         let resolved = ResolvedNoteWorkspace(
             workspaceID: NoteWorkspaceID(workspaceRoot: workspaceRoot),
             rootURL: workspaceRoot,
@@ -58,9 +68,10 @@ struct NotesViewModelSwiftTestingTests {
 
     private func makeViewModel(
         searchEngine: any NoteSearching = StubSearchEngine(),
-        autoSaveEnabled: Bool = true
+        autoSaveEnabled: Bool = true,
+        workspaceRoot: URL? = nil
     ) -> (NotesViewModel, NoteStore, ResolvedNoteWorkspace, URL) {
-        let (storageRoot, resolved) = makeWorkspace()
+        let (storageRoot, resolved) = makeWorkspace(workspaceRoot: workspaceRoot)
         let store = NoteStore(storageRoot: storageRoot, format: .markdown, autoSaveInterval: 0)
         let resolver = StubResolver(canned: resolved)
         let viewModel = NotesViewModel(
@@ -272,6 +283,43 @@ struct NotesViewModelSwiftTestingTests {
 
         #expect(viewModel.searchResults.isEmpty)
         #expect(viewModel.lastError != nil)
+    }
+
+    @Test("Spotlight search honors .cocxy-spotlight-ignore at the workspace root")
+    func spotlightSearchHonorsWorkspaceIgnoreMarker() async throws {
+        let hit = NoteSearchResult(
+            noteID: UUID(),
+            title: "Hidden",
+            preview: "alpha",
+            score: 1
+        )
+        let workspaceRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent(
+                "cocxy-notes-spotlight-ignore-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: workspaceRoot,
+            withIntermediateDirectories: true
+        )
+        try Data().write(to: workspaceRoot.appendingPathComponent(NoteSpotlightScopePolicy.ignoreFileName))
+
+        let stub = StubSearchEngine(kind: .spotlight, results: [hit])
+        let (viewModel, _, resolved, root) = makeViewModel(
+            searchEngine: stub,
+            workspaceRoot: workspaceRoot
+        )
+        defer {
+            cleanup(root)
+            cleanup(workspaceRoot)
+        }
+        await viewModel.load(directory: resolved.rootURL)
+
+        viewModel.searchQuery = "alpha"
+        await viewModel.runSearch()
+
+        #expect(viewModel.searchResults.isEmpty)
+        #expect(viewModel.lastError == nil)
     }
 
     // MARK: - Select by raw ID
