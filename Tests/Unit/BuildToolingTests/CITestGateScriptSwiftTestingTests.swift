@@ -213,6 +213,26 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
+    @Test("public getting started docs include v0 migration guidance in both locales")
+    func publicGettingStartedDocsIncludeMigrationGuidanceInBothLocales() throws {
+        let root = repositoryRoot()
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/getting-started.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/getting-started.html"),
+            encoding: .utf8
+        )
+
+        #expect(english.contains(#"<h2 id="migration-guide">Migration from v0.x</h2>"#))
+        #expect(english.contains(##"<a href="#migration-guide" class="sidebar-link">Migration Guide</a>"##))
+        #expect(english.contains("~/.config/cocxy/"))
+        #expect(english.contains("brew update && brew upgrade --cask cocxy"))
+        #expect(spanish.contains("Migrar desde versiones v0.x"))
+        #expect(spanish.contains("~/.config/cocxy/"))
+    }
+
     @Test("performance regression checker accepts metrics inside tolerance")
     func performanceRegressionCheckerAcceptsMetricsInsideTolerance() throws {
         let root = repositoryRoot()

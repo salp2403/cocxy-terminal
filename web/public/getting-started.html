@@ -534,6 +534,7 @@
       <a href="#cli-companion" class="sidebar-link">CLI Companion</a>
       <a href="#themes" class="sidebar-link">Themes</a>
       <a href="#agents-toml" class="sidebar-link">agents.toml</a>
+      <a href="#migration-guide" class="sidebar-link">Migration Guide</a>
       <a href="#troubleshooting" class="sidebar-link">Troubleshooting</a>
     </div>
   </aside>
@@ -1295,6 +1296,19 @@ light-theme = "catppuccin-latte"</code></pre>
     </table>
 
     <p>Patterns use NSRegularExpression syntax. Use single-quoted TOML strings so backslashes are literal: <code>'^claude\b'</code>.</p>
+
+    <!-- Migration Guide -->
+    <h2 id="migration-guide">Migration from v0.x</h2>
+    <p>Before upgrading across v0.x releases, review the <a href="/releases.html">Releases</a> page and keep a local copy of <code>~/.config/cocxy/</code> if you rely on SSH profiles, snippets, custom themes, plugins, browser data, or saved workspaces.</p>
+    <p>Cocxy migrations are conservative: valid TOML is preserved, unknown user-defined plugin and theme files stay in place, and local-only stores remain on your Mac. New defaults are added only when the app needs a missing key to keep an existing workflow working.</p>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>cp -R ~/.config/cocxy ~/Desktop/cocxy-config-backup
+brew update && brew upgrade --cask cocxy</code></pre>
+    </div>
+    <div class="callout info">
+      <p><strong>Tip:</strong> If a custom config stops applying after an upgrade, keep the backup, launch Cocxy once to regenerate missing defaults, then copy your custom sections back into the new file.</p>
+    </div>
 
     <!-- Troubleshooting -->
     <h2 id="troubleshooting">Troubleshooting</h2>
