@@ -91,6 +91,38 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.stdout.contains("Privacy audit passed"))
     }
 
+    @Test("internal security audit script aggregates privacy bundle and focused regression gates")
+    func internalSecurityAuditScriptAggregatesFocusedGates() throws {
+        let root = repositoryRoot()
+        let scriptURL = root.appendingPathComponent("scripts/run-security-audit.sh")
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let ci = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+
+        #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
+        #expect(script.contains("set -euo pipefail"))
+        #expect(script.contains("./scripts/run-privacy-audit.sh"))
+        #expect(script.contains("./scripts/verify-app-bundle.sh"))
+        #expect(script.contains("codesign --verify --deep --strict"))
+        #expect(script.contains("QuickLookOfflineSecuritySwiftTestingTests"))
+        #expect(script.contains("Phase7SocketSecurityTests"))
+        #expect(script.contains("SocketServerRegressionSwiftTestingTests"))
+        #expect(script.contains("LSPProcessPrivacySwiftTestingTests"))
+        #expect(script.contains("AgentToolPermissionSwiftTestingTests"))
+        #expect(script.contains("AgentSecretsSwiftTestingTests"))
+        #expect(script.contains("ICloudSyncSecretsSwiftTestingTests"))
+        #expect(script.contains("PluginEventWiringSwiftTestingTests"))
+        #expect(script.contains("NotebookExecutionSwiftTestingTests"))
+        #expect(script.contains("reviewThreadSuggestionsRejectSymlinkEscapes"))
+        #expect(!ci.contains("run-security-audit.sh --skip-tests"))
+
+        let result = try runProcess(scriptURL, arguments: ["--help"])
+        #expect(result.terminationStatus == 0)
+        #expect(result.stdout.contains("--app build/CocxyTerminal.app"))
+    }
+
     @Test("local SSH smoke script covers direct jump and forward gates without CI flakiness")
     func localSSHSmokeScriptCoversDirectJumpAndForwardGates() throws {
         let root = repositoryRoot()
