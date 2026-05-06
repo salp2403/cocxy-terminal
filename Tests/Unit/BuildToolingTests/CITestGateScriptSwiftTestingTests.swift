@@ -159,6 +159,33 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.stdout.contains("--repo owner/name --pr 123"))
     }
 
+    @Test("release website deploy keeps Spanish public site wired")
+    func releaseWebsiteDeployKeepsSpanishPublicSiteWired() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        #expect(workflow.contains("web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/"))
+        #expect(workflow.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html">"#))
+        #expect(workflow.contains(#"<a href="/es/releases.html" hreflang="es" lang="es">Espa&ntilde;ol</a>"#))
+        #expect(workflow.contains("${DEPLOY_PATH}es/index.html"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/getting-started.html"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/features.html"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/faq.html"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/releases.html"))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html"#))
+
+        let rewriteStart = try #require(workflow.range(of: "# Update version-specific values"))
+        let cleanupStart = try #require(
+            workflow.range(of: "rm /tmp/deploy_key", range: rewriteStart.upperBound..<workflow.endIndex)
+        )
+        let versionRewriteBlock = String(workflow[rewriteStart.lowerBound..<cleanupStart.lowerBound])
+        #expect(versionRewriteBlock.contains("set -e;"))
+        #expect(!versionRewriteBlock.contains("|| true"))
+    }
+
     @Test("performance regression checker accepts metrics inside tolerance")
     func performanceRegressionCheckerAcceptsMetricsInsideTolerance() throws {
         let root = repositoryRoot()

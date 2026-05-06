@@ -562,6 +562,12 @@ jobs:
             scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
               web/public/faq.html ${DEPLOY_TARGET}:${DEPLOY_PATH}faq.html
           fi
+          if [ -d web/public/es ]; then
+            ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+              "mkdir -p ${DEPLOY_PATH}es"
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/
+          fi
 
           # Fetch releases with body content for release notes (gh release list lacks body field, use API)
           gh api repos/salp2403/cocxy-terminal/releases?per_page=50 \
@@ -648,6 +654,9 @@ jobs:
             <meta name="twitter:description" content="Release history and changelog for Cocxy Terminal.">
             <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
             <link rel="canonical" href="https://cocxy.dev/releases.html">
+            <link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html">
+            <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html">
+            <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html">
             <link rel="stylesheet" href="/css/style.css?v={version}">
             <link rel="icon" href="/images/icon.png" type="image/png">
             <link rel="apple-touch-icon" href="/images/icon.png">
@@ -679,6 +688,7 @@ jobs:
                   <a href="/releases.html">Releases</a>
                   <a href="/getting-started.html">Docs</a>
                   <a href="/#download">Download</a>
+                  <a href="/es/releases.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
                   <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
                 </div>
               </nav>
@@ -706,6 +716,7 @@ jobs:
                     <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
                     <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
                     <a href="/releases.html">Releases</a>
+                    <a href="/es/releases.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
                   </div>
                   <p class="footer-credit">Made by Said Arturo Lopez</p>
                 </div>
@@ -733,14 +744,23 @@ jobs:
           # become the real version when these sed commands rewrite them on the server.
           # Match the regex [0-9]*\.[0-9]*\.[0-9]* so any prior version also gets replaced.
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-            "sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}index.html && \
-             sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html && \
-             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html && \
-             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html && \
-             [ -f ${DEPLOY_PATH}features.html ] && sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}features.html || true; \
-             [ -f ${DEPLOY_PATH}faq.html ] && sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}faq.html || true; \
-             [ -f ${DEPLOY_PATH}releases.html ] && sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}releases.html || true; \
-             sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}index.html"
+            "set -e; \
+             sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}index.html; \
+             sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html; \
+             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html; \
+             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html; \
+             if [ -f ${DEPLOY_PATH}features.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}features.html; fi; \
+             if [ -f ${DEPLOY_PATH}faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}faq.html; fi; \
+             if [ -f ${DEPLOY_PATH}releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}releases.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/index.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}es/index.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/index.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/getting-started.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/getting-started.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/features.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/features.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/faq.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/releases.html; fi; \
+             sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}index.html; \
+             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html; fi"
 
           rm /tmp/deploy_key
           echo "Website deployed to cocxy.dev"
