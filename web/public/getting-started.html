@@ -518,6 +518,7 @@
       <a href="#notifications" class="sidebar-link">Notifications</a>
       <a href="#command-palette" class="sidebar-link">Command Palette</a>
       <a href="#sessions" class="sidebar-link">Sessions</a>
+      <a href="#local-backups" class="sidebar-link">Local Backups</a>
     </div>
     <div class="sidebar-group">
       <h3>Agent Integrations</h3>
@@ -1176,6 +1177,26 @@ auto-save-interval = 30     # seconds
 restore-on-launch = true</code></pre>
     </div>
     <p>Sessions are saved to <code>~/Library/Application Support/dev.cocxy.terminal/sessions/</code>.</p>
+
+    <!-- Local Backups -->
+    <h2 id="local-backups">Local Backups</h2>
+    <p>Cocxy writes local backup snapshots to your Mac by default. They cover settings, notebooks, workflows, custom skills, notes, snippets, themes, and encrypted SSH host metadata when those sources exist. Nothing is uploaded.</p>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>[backup]
+enabled = true
+storage-directory = "~/Library/Backups/Cocxy"
+daily-retention-count = 30
+monthly-retention-count = 12</code></pre>
+    </div>
+    <ul>
+      <li><strong>Review snapshots</strong> — Open <strong>Preferences > Backups</strong> and use <strong>Refresh</strong> to scan the configured backup folder.</li>
+      <li><strong>Restore manually</strong> — Pick a backup, choose one artifact type, then press <strong>Restore</strong>. Restore only the selected artifact; other local files are left in place.</li>
+      <li><strong>Move to another Mac</strong> — Copy the backup folder, point Cocxy at that location, refresh, and restore only the artifacts you want.</li>
+    </ul>
+    <div class="callout warn">
+      <p><strong>Before restoring:</strong> save or discard pending preference edits. Cocxy blocks manual restore while Preferences has unsaved changes so a restore cannot be overwritten by an old settings form.</p>
+    </div>
 
     <!-- CLI Companion -->
     <h2 id="cli-companion">CLI Companion</h2>

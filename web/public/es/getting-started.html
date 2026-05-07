@@ -219,6 +219,13 @@
           <p>Las sesiones guardan pesta&ntilde;as, directorios, divisiones, paneles y estado del espacio. La restauraci&oacute;n al iniciar y la recuperaci&oacute;n de fallos usan instant&aacute;neas locales; si hubo cierre inesperado, Cocxy ofrece restaurar o mantener la sesi&oacute;n actual.</p>
         </details>
 
+        <details class="faq-item" id="local-backups">
+          <summary><span>Copias locales</span></summary>
+          <p>Cocxy crea copias locales en <code>~/Library/Backups/Cocxy</code> con ajustes, notebooks, flujos, habilidades personalizadas, notas, fragmentos, temas y metadatos SSH cifrados cuando esas fuentes existen. Nada se sube a un servicio externo.</p>
+          <p>Abre <strong>Preferencias &gt; Backups</strong>, usa <strong>Actualizar</strong>, elige una copia y selecciona un artefacto. Restaura solo el artefacto seleccionado; los dem&aacute;s archivos locales permanecen intactos.</p>
+          <p>Para migrar a otra Mac, copia la carpeta de backups, configura esa ruta en Preferencias y restaura solo los artefactos que quieras conservar. Cocxy bloquea la restauraci&oacute;n manual si hay cambios de preferencias sin guardar.</p>
+        </details>
+
         <details class="faq-item" id="cli-companion">
           <summary><span>CLI local</span></summary>
           <p>El binario <code>cocxy</code> controla pesta&ntilde;as, ventanas, divisiones, sesi&oacute;n, paneles, plugins, remoto, Markdown, historial, estado y diagn&oacute;sticos mediante un Unix Domain Socket local con permisos por usuario. Prueba <code>cocxy status</code>, <code>cocxy new-tab</code>, <code>cocxy list-tabs</code>, <code>cocxy review</code>, <code>cocxy setup-hooks</code> y <code>cocxy help</code>.</p>

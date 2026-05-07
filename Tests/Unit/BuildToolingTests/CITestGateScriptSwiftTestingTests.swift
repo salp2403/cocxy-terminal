@@ -384,6 +384,27 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("~/.config/cocxy/"))
     }
 
+    @Test("public getting started docs include local backup restore guidance in both locales")
+    func publicGettingStartedDocsIncludeLocalBackupRestoreGuidanceInBothLocales() throws {
+        let root = repositoryRoot()
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/getting-started.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/getting-started.html"),
+            encoding: .utf8
+        )
+
+        #expect(english.contains(#"<h2 id="local-backups">Local Backups</h2>"#))
+        #expect(english.contains(##"<a href="#local-backups" class="sidebar-link">Local Backups</a>"##))
+        #expect(english.contains("Preferences > Backups"))
+        #expect(english.contains("Restore only the selected artifact"))
+        #expect(spanish.contains("Copias locales"))
+        #expect(spanish.contains("Preferencias &gt; Backups"))
+        #expect(spanish.contains("Restaura solo el artefacto seleccionado"))
+    }
+
     @Test("Spanish getting started docs cover the same core user guide surfaces")
     func spanishGettingStartedDocsCoverCoreUserGuideSurfaces() throws {
         let root = repositoryRoot()
@@ -413,6 +434,7 @@ struct CITestGateScriptSwiftTestingTests {
             "notifications",
             "command-palette",
             "sessions",
+            "local-backups",
             "cli-companion",
             "themes",
             "agents-toml",
