@@ -2179,6 +2179,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             self.terminalSurfaceView = targetSurfaceView
         }
         self.displayedTabID = tabID
+        applyCurrentSplitRatiosAfterLayout()
 
         if let buffer = tabOutputBuffers[tabID] {
             terminalOutputBuffer = buffer

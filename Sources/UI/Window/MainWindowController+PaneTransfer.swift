@@ -200,6 +200,9 @@ extension MainWindowController {
         if let splitView = view as? NSSplitView {
             return splitView.subviews.flatMap { paneTransferLeaves(from: $0) }
         }
+        if let paneHost = view as? SplitPaneHostView {
+            return [paneHost.contentView]
+        }
         return [view]
     }
 

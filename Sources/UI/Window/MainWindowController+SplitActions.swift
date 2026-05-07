@@ -422,7 +422,8 @@ extension MainWindowController {
             rebuildSplitViewHierarchy(for: tabID)
         } else {
             // Build the visual split at the focused position.
-            let parentView = focusedSurface.superview ?? container
+            let focusedSplitSubview = splitSubviewContainingLeafView(focusedSurface)
+            let parentView = focusedSplitSubview.superview ?? container
 
             if activeSplitView == nil {
                 focusedSurface.removeFromSuperview()
@@ -433,12 +434,13 @@ extension MainWindowController {
                     second: panelView,
                     splitID: newSplitID
                 )
+                splitView.autoresizingMask = [.width, .height]
                 container.addSubview(splitView, positioned: .below, relativeTo: nil)
                 self.activeSplitView = splitView
             } else if let parentSplit = parentView as? NSSplitView {
-                let paneFrame = focusedSurface.frame
-                let subviewIndex = parentSplit.subviews.firstIndex(of: focusedSurface)
-                focusedSurface.removeFromSuperview()
+                let paneFrame = focusedSplitSubview.frame
+                let subviewIndex = parentSplit.subviews.firstIndex(of: focusedSplitSubview)
+                focusedSplitSubview.removeFromSuperview()
                 let nestedSplit = createSplitView(
                     isVertical: isVertical,
                     frame: paneFrame,
@@ -454,6 +456,8 @@ extension MainWindowController {
                 parentSplit.adjustSubviews()
             }
         }
+
+        applyCurrentSplitRatiosAfterLayout()
 
         // When focusNewPanel is false, keep focus on the terminal so the
         // user's workflow is not disrupted. When true, the panel receives
@@ -620,7 +624,8 @@ extension MainWindowController {
         }
 
         // Determine the parent of the focused surface view.
-        let parentView = focusedSurface.superview ?? container
+        let focusedSplitSubview = splitSubviewContainingLeafView(focusedSurface)
+        let parentView = focusedSplitSubview.superview ?? container
 
         if activeSplitView == nil {
             // First split: wrap primary + new in a split view.
@@ -633,15 +638,16 @@ extension MainWindowController {
                 second: newSurfaceView,
                 splitID: newSplitID
             )
+            splitView.autoresizingMask = [.width, .height]
 
             container.addSubview(splitView, positioned: .below, relativeTo: nil)
             self.activeSplitView = splitView
         } else if let parentSplit = parentView as? NSSplitView {
             // Recursive split: replace the focused pane inside its parent split
             // with a new nested split containing the focused pane + new pane.
-            let paneFrame = focusedSurface.frame
-            let subviewIndex = parentSplit.subviews.firstIndex(of: focusedSurface)
-            focusedSurface.removeFromSuperview()
+            let paneFrame = focusedSplitSubview.frame
+            let subviewIndex = parentSplit.subviews.firstIndex(of: focusedSplitSubview)
+            focusedSplitSubview.removeFromSuperview()
 
             let nestedSplit = createSplitView(
                 isVertical: isVertical,
@@ -658,6 +664,8 @@ extension MainWindowController {
             }
             parentSplit.adjustSubviews()
         }
+
+        applyCurrentSplitRatiosAfterLayout()
 
         // Focus the new pane.
         window?.makeFirstResponder(newSurfaceView)
@@ -757,8 +765,9 @@ extension MainWindowController {
         }
 
         // Remove the view from its parent split and collapse if needed.
-        if let parentSplit = viewToRemove.superview as? NSSplitView {
-            viewToRemove.removeFromSuperview()
+        let splitSubviewToRemove = splitSubviewContainingLeafView(viewToRemove)
+        if let parentSplit = splitSubviewToRemove.superview as? NSSplitView {
+            splitSubviewToRemove.removeFromSuperview()
 
             // If the parent split now has one child, promote it.
             if parentSplit.subviews.count == 1, let remaining = parentSplit.subviews.first {
@@ -767,7 +776,7 @@ extension MainWindowController {
 
                 remaining.removeFromSuperview()
                 parentSplit.removeFromSuperview()
-                promotedRemainingView = remaining
+                promotedRemainingView = paneContentView(from: remaining)
 
                 remaining.frame = parentFrame
                 remaining.autoresizingMask = [.width, .height]
@@ -829,6 +838,7 @@ extension MainWindowController {
             if let next = nextFocus {
                 window?.makeFirstResponder(next)
             }
+            applyCurrentSplitRatiosAfterLayout()
         }
 
         // Update toolbar to reflect panel changes.
@@ -880,6 +890,7 @@ extension MainWindowController {
     /// Called after split/close operations to keep the toolbar in sync.
     func updateWorkspaceToolbar() {
         refreshTabStrip()
+        applyCurrentSplitRatiosAfterLayout()
     }
 
     // MARK: - Split View Helpers
@@ -894,18 +905,29 @@ extension MainWindowController {
         ratio: CGFloat = 0.5
     ) -> NSSplitView {
         let splitView = NSSplitView(frame: frame)
+        splitView.bounds = NSRect(origin: .zero, size: frame.size)
         splitView.isVertical = isVertical
         splitView.dividerStyle = .thin
-        splitView.autoresizingMask = [.width, .height]
+        SplitLayoutGeometry.installFlexibleDelegate(on: splitView)
         if let splitID {
             splitView.identifier = NSUserInterfaceItemIdentifier(splitID.uuidString)
         }
 
-        first.frame = NSRect(origin: .zero, size: frame.size)
-        second.frame = NSRect(origin: .zero, size: frame.size)
+        let firstChild = splitChildView(for: first)
+        let secondChild = splitChildView(for: second)
+        let childFrames = SplitLayoutGeometry.childFrames(
+            in: NSRect(origin: .zero, size: frame.size),
+            isVertical: isVertical,
+            ratio: ratio,
+            dividerThickness: splitView.dividerThickness
+        )
+        firstChild.frame = childFrames.first
+        secondChild.frame = childFrames.second
 
-        splitView.addSubview(first)
-        splitView.addSubview(second)
+        splitView.addSubview(firstChild)
+        splitView.addSubview(secondChild)
+        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
+        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
         splitView.adjustSubviews()
 
         // Defer position setting to after layout is complete.
@@ -917,11 +939,61 @@ extension MainWindowController {
                 ? splitView.bounds.width
                 : splitView.bounds.height
             guard totalSize > 0 else { return }
-            let position = (totalSize - splitView.dividerThickness) * SplitNode.clampRatio(ratio)
+            let position = SplitLayoutGeometry.dividerPosition(
+                totalSize: totalSize,
+                dividerThickness: splitView.dividerThickness,
+                ratio: ratio
+            )
             splitView.setPosition(position, ofDividerAt: 0)
         }
 
         return splitView
+    }
+
+    private func splitChildView(for view: NSView) -> NSView {
+        if view is NSSplitView {
+            return view
+        }
+        if view is SplitPaneHostView {
+            return view
+        }
+        return SplitPaneHostView(contentView: view)
+    }
+
+    private func splitSubviewContainingLeafView(_ view: NSView) -> NSView {
+        var current: NSView? = view
+        while let currentView = current,
+              let superview = currentView.superview,
+              !(superview is NSSplitView) {
+            current = superview
+        }
+        return current ?? view
+    }
+
+    private func paneContentView(from view: NSView) -> NSView {
+        if let paneHost = view as? SplitPaneHostView {
+            return paneHost.contentView
+        }
+        return view
+    }
+
+    func applyCurrentSplitRatiosAfterLayout() {
+        guard activeSplitView != nil else { return }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.applyCurrentSplitRatiosNow()
+            DispatchQueue.main.async { [weak self] in
+                self?.applyCurrentSplitRatiosNow()
+            }
+        }
+    }
+
+    private func applyCurrentSplitRatiosNow() {
+        guard let splitView = activeSplitView,
+              let rootNode = activeSplitManager?.rootNode else {
+            return
+        }
+        SplitLayoutGeometry.applyRatios(from: rootNode, to: splitView)
     }
 
     /// Finds a rendered split view by its logical split node ID.
@@ -962,6 +1034,9 @@ extension MainWindowController {
     private func collectLeaves(from view: NSView) -> [NSView] {
         if let splitView = view as? NSSplitView {
             return splitView.subviews.flatMap { collectLeaves(from: $0) }
+        }
+        if let paneHost = view as? SplitPaneHostView {
+            return [paneHost.contentView]
         }
         return [view]
     }
@@ -1061,13 +1136,18 @@ extension MainWindowController {
         terminalSurfaceView?.removeFromSuperview()
 
         // Rebuild from the domain model.
-        let newSplitView = buildNSSplitView(from: sm.rootNode, viewsByTerminalID: viewsByTerminalID)
+        let newSplitView = buildNSSplitView(
+            from: sm.rootNode,
+            viewsByTerminalID: viewsByTerminalID,
+            frame: container.bounds
+        )
 
         if let splitView = newSplitView as? NSSplitView {
             splitView.frame = container.bounds
             splitView.autoresizingMask = [.width, .height]
             container.addSubview(splitView, positioned: .below, relativeTo: nil)
             activeSplitView = splitView
+            applyCurrentSplitRatiosAfterLayout()
         } else if let singleView = newSplitView {
             // Back to a single pane (shouldn't happen here but defensive).
             singleView.frame = container.bounds
@@ -1081,22 +1161,46 @@ extension MainWindowController {
     /// Recursively builds an NSView hierarchy from a SplitNode tree.
     private func buildNSSplitView(
         from node: SplitNode,
-        viewsByTerminalID: [UUID: NSView]
+        viewsByTerminalID: [UUID: NSView],
+        frame: NSRect? = nil
     ) -> NSView? {
         switch node {
         case .leaf(_, let terminalID):
-            return viewsByTerminalID[terminalID]
+            let view = viewsByTerminalID[terminalID]
                 ?? panelContentViews[terminalID]
+            if let frame {
+                view?.frame = frame
+            }
+            return view
 
         case .split(let id, let direction, let first, let second, let ratio):
-            guard let firstView = buildNSSplitView(from: first, viewsByTerminalID: viewsByTerminalID),
-                  let secondView = buildNSSplitView(from: second, viewsByTerminalID: viewsByTerminalID) else {
-                return buildNSSplitView(from: first, viewsByTerminalID: viewsByTerminalID)
-                    ?? buildNSSplitView(from: second, viewsByTerminalID: viewsByTerminalID)
+            let splitFrame = frame ?? terminalContainerView?.bounds ?? .zero
+            let isVertical = direction == .horizontal
+            let sizingSplitView = NSSplitView()
+            sizingSplitView.dividerStyle = .thin
+            let childFrames = SplitLayoutGeometry.childFrames(
+                in: NSRect(origin: .zero, size: splitFrame.size),
+                isVertical: isVertical,
+                ratio: ratio,
+                dividerThickness: sizingSplitView.dividerThickness
+            )
+
+            guard let firstView = buildNSSplitView(
+                from: first,
+                viewsByTerminalID: viewsByTerminalID,
+                frame: childFrames.first
+            ),
+                let secondView = buildNSSplitView(
+                    from: second,
+                    viewsByTerminalID: viewsByTerminalID,
+                    frame: childFrames.second
+                )
+            else {
+                return buildNSSplitView(from: first, viewsByTerminalID: viewsByTerminalID, frame: splitFrame)
+                    ?? buildNSSplitView(from: second, viewsByTerminalID: viewsByTerminalID, frame: splitFrame)
             }
-            let splitFrame = terminalContainerView?.bounds ?? .zero
             return createSplitView(
-                isVertical: direction == .horizontal,
+                isVertical: isVertical,
                 frame: splitFrame,
                 first: firstView,
                 second: secondView,
