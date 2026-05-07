@@ -507,6 +507,36 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
+    @Test("Spanish public docs use localized documentation labels")
+    func spanishPublicDocsUseLocalizedDocumentationLabels() throws {
+        let root = repositoryRoot()
+        let webRoot = root.appendingPathComponent("web/public/es", isDirectory: true)
+        let files = try Self.files(under: webRoot, fileExtension: "html")
+
+        for file in files {
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            #expect(
+                !contents.contains(#">Docs</a>"#),
+                "\(Self.relativePath(file, root: root)) should localize nav/footer documentation labels"
+            )
+            #expect(
+                !contents.contains("Leer docs"),
+                "\(Self.relativePath(file, root: root)) should localize documentation CTA labels"
+            )
+        }
+
+        let spanishHomepage = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/index.html"),
+            encoding: .utf8
+        )
+        let spanishGettingStarted = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/getting-started.html"),
+            encoding: .utf8
+        )
+        #expect(!spanishHomepage.contains("revisi&oacute;n, docs, remoto"))
+        #expect(!spanishGettingStarted.contains("servidores locales, docs y apps web"))
+    }
+
     @Test("Spanish public docs keep primary navigation inside the Spanish site")
     func spanishPublicDocsKeepPrimaryNavigationInsideSpanishSite() throws {
         let root = repositoryRoot()
