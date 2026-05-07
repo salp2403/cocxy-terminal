@@ -277,6 +277,18 @@ final class PreferencesViewModel: ObservableObject {
     /// Artifact classes selected for local backup.
     @Published var backupArtifactKinds: [BackupArtifactKind]
 
+    /// Timestamped local backups discovered in the configured storage folder.
+    @Published private(set) var backupSnapshots: [BackupSnapshotSummary]
+
+    /// Selected backup snapshot ID for a manual restore.
+    @Published private(set) var selectedBackupSnapshotID: BackupSnapshotSummary.ID?
+
+    /// Selected artifact kind for a manual restore.
+    @Published private(set) var selectedBackupArtifactKind: BackupArtifactKind?
+
+    /// Short status for the last manual local backup restore action.
+    @Published var backupRestoreStatus: String?
+
     // MARK: - Code Review
 
     /// Whether Cocxy opens the Code Review panel automatically when an
@@ -682,6 +694,12 @@ final class PreferencesViewModel: ObservableObject {
     /// Destination for local backups created before accepting a remote conflict.
     private let iCloudSyncConflictBackupRoot: URL
 
+    /// Local-only backup manager used for manual restore actions.
+    private let localBackupManager: LocalBackupManager
+
+    /// Local artifact roots restored by explicit backup actions.
+    private let backupArtifactRoots: BackupArtifactRoots
+
     /// Resolves Voice locale availability without any network fallback.
     private let voiceLocaleResolver: VoiceLocaleResolver
 
@@ -724,6 +742,8 @@ final class PreferencesViewModel: ObservableObject {
         iCloudSyncArtifactRoots: ICloudSyncArtifactRoots = .defaults(),
         iCloudSyncConflictBackupRoot: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/icloud-conflict-backups", isDirectory: true),
+        localBackupManager: LocalBackupManager = LocalBackupManager(),
+        backupArtifactRoots: BackupArtifactRoots = .defaults(),
         mcpConfigURL: URL = MCPServerConfigLoader().defaultConfigURL(),
         mcpConfigLoader: MCPServerConfigLoader = MCPServerConfigLoader(),
         appLocalizationBundle: Bundle = .main
@@ -738,6 +758,8 @@ final class PreferencesViewModel: ObservableObject {
         self.iCloudSyncConflictResolver = iCloudSyncConflictResolver
         self.iCloudSyncArtifactRoots = iCloudSyncArtifactRoots
         self.iCloudSyncConflictBackupRoot = iCloudSyncConflictBackupRoot.standardizedFileURL
+        self.localBackupManager = localBackupManager
+        self.backupArtifactRoots = backupArtifactRoots
         self.mcpConfigURL = mcpConfigURL
         self.mcpConfigLoader = mcpConfigLoader
         self.appLocalizationBundle = appLocalizationBundle
@@ -826,6 +848,10 @@ final class PreferencesViewModel: ObservableObject {
         self.backupDailyRetentionCount = config.backup.dailyRetentionCount
         self.backupMonthlyRetentionCount = config.backup.monthlyRetentionCount
         self.backupArtifactKinds = config.backup.artifactKinds
+        self.backupSnapshots = []
+        self.selectedBackupSnapshotID = nil
+        self.selectedBackupArtifactKind = nil
+        self.backupRestoreStatus = nil
 
         // Code Review
         self.codeReviewAutoShowOnSessionEnd = config.codeReview.autoShowOnSessionEnd
@@ -1722,6 +1748,105 @@ final class PreferencesViewModel: ObservableObject {
         backupArtifactKinds = BackupConfig.normalizedArtifactKinds(next)
     }
 
+    var selectedBackupSnapshot: BackupSnapshotSummary? {
+        guard let selectedBackupSnapshotID else { return nil }
+        return backupSnapshots.first { $0.id == selectedBackupSnapshotID }
+    }
+
+    var selectedBackupSnapshotArtifactKinds: [BackupArtifactKind] {
+        selectedBackupSnapshot?.artifacts.map(\.kind) ?? []
+    }
+
+    var canRestoreSelectedBackupArtifact: Bool {
+        selectedBackupSnapshot != nil
+            && selectedBackupArtifactKind != nil
+            && !hasUnsavedChanges
+    }
+
+    func refreshBackupSnapshots() {
+        do {
+            let snapshots = try localBackupManager.availableBackups(storageDirectory: backupStorageDirectory)
+            backupSnapshots = snapshots
+            selectBackupSnapshot(id: snapshots.first(where: { $0.id == selectedBackupSnapshotID })?.id ?? snapshots.first?.id)
+            backupRestoreStatus = snapshots.isEmpty
+                ? localizedString(
+                    "preferences.backup.restore.noBackups",
+                    fallback: "No local backups found."
+                )
+                : nil
+        } catch {
+            backupSnapshots = []
+            selectBackupSnapshot(id: nil)
+            backupRestoreStatus = String(
+                format: localizedString(
+                    "preferences.backup.restore.failed",
+                    fallback: "Backup restore failed: %@"
+                ),
+                error.localizedDescription
+            )
+        }
+    }
+
+    func selectBackupSnapshot(id: BackupSnapshotSummary.ID?) {
+        selectedBackupSnapshotID = id
+        let availableKinds = selectedBackupSnapshotArtifactKinds
+        if let selectedBackupArtifactKind, availableKinds.contains(selectedBackupArtifactKind) {
+            return
+        }
+        selectedBackupArtifactKind = availableKinds.first
+    }
+
+    func selectBackupArtifactKind(_ kind: BackupArtifactKind?) {
+        guard let kind else {
+            selectedBackupArtifactKind = nil
+            return
+        }
+        selectedBackupArtifactKind = selectedBackupSnapshotArtifactKinds.contains(kind)
+            ? kind
+            : selectedBackupSnapshotArtifactKinds.first
+    }
+
+    func restoreSelectedBackupArtifact() {
+        guard !hasUnsavedChanges else {
+            backupRestoreStatus = localizedString(
+                "preferences.backup.restore.unsaved",
+                fallback: "Save or discard preference changes before restoring a backup."
+            )
+            return
+        }
+        guard let snapshot = selectedBackupSnapshot else {
+            backupRestoreStatus = localizedString(
+                "preferences.backup.restore.missingSnapshot",
+                fallback: "Select a backup before restoring."
+            )
+            return
+        }
+        guard let kind = selectedBackupArtifactKind else {
+            backupRestoreStatus = localizedString(
+                "preferences.backup.restore.missingArtifact",
+                fallback: "Select an artifact before restoring."
+            )
+            return
+        }
+
+        do {
+            let result = try localBackupManager.restore(kind: kind, from: snapshot.backupURL, to: backupArtifactRoots)
+            backupRestoreStatus = backupRestoreSuccessStatus(for: result)
+            if kind == .settings {
+                try reloadSettingsAfterBackupRestore()
+                onSave?()
+            }
+        } catch {
+            backupRestoreStatus = String(
+                format: localizedString(
+                    "preferences.backup.restore.failed",
+                    fallback: "Backup restore failed: %@"
+                ),
+                error.localizedDescription
+            )
+        }
+    }
+
     func isICloudSyncArtifactKindEnabled(_ kind: ICloudSyncArtifactKind) -> Bool {
         iCloudSyncArtifactKinds.contains(kind)
     }
@@ -1740,6 +1865,68 @@ final class PreferencesViewModel: ObservableObject {
         from kinds: Set<ICloudSyncArtifactKind>
     ) -> [ICloudSyncArtifactKind] {
         ICloudSyncArtifactKind.allCases.filter { kinds.contains($0) }
+    }
+
+    func backupArtifactDisplayName(_ kind: BackupArtifactKind) -> String {
+        switch kind {
+        case .settings:
+            return localizedString("preferences.backup.artifact.settings", fallback: "Settings")
+        case .notebooks:
+            return localizedString("preferences.backup.artifact.notebooks", fallback: "Notebooks")
+        case .workflows:
+            return localizedString("preferences.backup.artifact.workflows", fallback: "Workflows")
+        case .skills:
+            return localizedString("preferences.backup.artifact.skills", fallback: "Custom skills")
+        case .notes:
+            return localizedString("preferences.backup.artifact.notes", fallback: "Notes")
+        case .macros:
+            return localizedString("preferences.backup.artifact.macros", fallback: "Macros and snippets")
+        case .themes:
+            return localizedString("preferences.backup.artifact.themes", fallback: "Custom themes")
+        case .encryptedSSHHosts:
+            return localizedString("preferences.backup.artifact.encryptedSSHHosts", fallback: "Encrypted SSH hosts")
+        case .aiConversations:
+            return localizedString("preferences.backup.artifact.aiConversations", fallback: "AI conversations")
+        }
+    }
+
+    func backupSnapshotDisplayName(_ snapshot: BackupSnapshotSummary) -> String {
+        String(
+            format: localizedString(
+                "preferences.backup.restore.snapshot.title",
+                fallback: "%@ - %d files"
+            ),
+            snapshot.createdAt.formatted(date: .abbreviated, time: .shortened),
+            snapshot.totalFileCount
+        )
+    }
+
+    private func backupRestoreSuccessStatus(for result: BackupRestoreResult) -> String {
+        let artifactName = backupArtifactDisplayName(result.kind)
+        if result.restoredFiles == 1 {
+            return String(
+                format: localizedString(
+                    "preferences.backup.restore.status.restored.one",
+                    fallback: "Restored %@ from 1 file."
+                ),
+                artifactName
+            )
+        }
+        return String(
+            format: localizedString(
+                "preferences.backup.restore.status.restored.many",
+                fallback: "Restored %@ from %d files."
+            ),
+            artifactName,
+            result.restoredFiles
+        )
+    }
+
+    private func reloadSettingsAfterBackupRestore() throws {
+        let service = ConfigService(fileProvider: fileProvider)
+        try service.reload()
+        savedConfig = service.current
+        discardChanges()
     }
 
     private static func agentProviderDisplayName(_ provider: AgentProviderKind) -> String {

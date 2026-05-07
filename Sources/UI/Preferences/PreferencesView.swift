@@ -2153,10 +2153,112 @@ struct BackupPreferencesSection: View {
                 }
             }
 
+            Section(viewModel.localizedString("preferences.backup.restore.section", fallback: "Manual Restore")) {
+                HStack {
+                    Button {
+                        viewModel.refreshBackupSnapshots()
+                    } label: {
+                        Label(
+                            viewModel.localizedString("preferences.backup.restore.refresh", fallback: "Refresh"),
+                            systemImage: "arrow.clockwise"
+                        )
+                    }
+                    .help(
+                        viewModel.localizedString(
+                            "preferences.backup.restore.refresh.help",
+                            fallback: "Scan the local backup folder for restorable snapshots."
+                        )
+                    )
+
+                    Spacer()
+
+                    Text(
+                        String(
+                            format: viewModel.localizedString(
+                                "preferences.backup.restore.snapshotCount",
+                                fallback: "%d snapshot(s)"
+                            ),
+                            viewModel.backupSnapshots.count
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
+                if viewModel.backupSnapshots.isEmpty {
+                    Text(
+                        viewModel.backupRestoreStatus
+                            ?? viewModel.localizedString(
+                                "preferences.backup.restore.noBackups",
+                                fallback: "No local backups found."
+                            )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Picker(
+                        viewModel.localizedString("preferences.backup.restore.snapshot", fallback: "Backup"),
+                        selection: Binding(
+                            get: { viewModel.selectedBackupSnapshotID ?? "" },
+                            set: { viewModel.selectBackupSnapshot(id: $0.isEmpty ? nil : $0) }
+                        )
+                    ) {
+                        ForEach(viewModel.backupSnapshots) { snapshot in
+                            Text(viewModel.backupSnapshotDisplayName(snapshot))
+                                .tag(snapshot.id)
+                        }
+                    }
+
+                    Picker(
+                        viewModel.localizedString("preferences.backup.restore.artifact", fallback: "Artifact"),
+                        selection: Binding(
+                            get: { viewModel.selectedBackupArtifactKind?.rawValue ?? "" },
+                            set: { viewModel.selectBackupArtifactKind(BackupArtifactKind(rawValue: $0)) }
+                        )
+                    ) {
+                        ForEach(viewModel.selectedBackupSnapshotArtifactKinds, id: \.self) { kind in
+                            Text(backupArtifactTitle(kind))
+                                .tag(kind.rawValue)
+                        }
+                    }
+
+                    Button {
+                        viewModel.restoreSelectedBackupArtifact()
+                    } label: {
+                        Label(
+                            viewModel.localizedString("preferences.backup.restore.button", fallback: "Restore"),
+                            systemImage: "arrow.uturn.backward.circle"
+                        )
+                    }
+                    .disabled(!viewModel.canRestoreSelectedBackupArtifact)
+                    .help(
+                        viewModel.hasUnsavedChanges
+                            ? viewModel.localizedString(
+                                "preferences.backup.restore.unsaved",
+                                fallback: "Save or discard preference changes before restoring a backup."
+                            )
+                            : viewModel.localizedString(
+                                "preferences.backup.restore.help",
+                                fallback: "Restores only the selected artifact from the selected local backup."
+                            )
+                    )
+                }
+
+                if let status = viewModel.backupRestoreStatus, !viewModel.backupSnapshots.isEmpty {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
         .navigationTitle(viewModel.localizedString("preferences.section.backup", fallback: "Backups"))
+        .onAppear {
+            viewModel.refreshBackupSnapshots()
+        }
     }
 
     @MainActor

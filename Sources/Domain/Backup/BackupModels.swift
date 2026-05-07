@@ -183,6 +183,27 @@ struct BackupCreateResult: Sendable, Equatable {
     let manifest: BackupManifest
 }
 
+struct BackupSnapshotSummary: Identifiable, Sendable, Equatable {
+    let backupURL: URL
+    let manifest: BackupManifest
+
+    var id: String {
+        backupURL.standardizedFileURL.path
+    }
+
+    var createdAt: Date {
+        manifest.createdAt
+    }
+
+    var artifacts: [BackupManifestEntry] {
+        manifest.artifacts
+    }
+
+    var totalFileCount: Int {
+        artifacts.reduce(0) { $0 + $1.fileCount }
+    }
+}
+
 struct BackupRestoreResult: Sendable, Equatable {
     let kind: BackupArtifactKind
     let restoredFiles: Int

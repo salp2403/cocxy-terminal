@@ -80,6 +80,28 @@ struct LocalBackupManager: @unchecked Sendable {
         return BackupRestoreResult(kind: kind, restoredFiles: restored)
     }
 
+    func availableBackups(storageDirectory: String) throws -> [BackupSnapshotSummary] {
+        let backupRoot = Self.expandedURL(storageDirectory)
+        guard fileManager.fileExists(atPath: backupRoot.path) else {
+            return []
+        }
+
+        return try backupDirectories(in: backupRoot)
+            .compactMap { directory in
+                let manifestURL = directory.url.appendingPathComponent("manifest.json", isDirectory: false)
+                guard let manifest = try? readManifest(from: manifestURL) else {
+                    return nil
+                }
+                return BackupSnapshotSummary(backupURL: directory.url, manifest: manifest)
+            }
+            .sorted { lhs, rhs in
+                if lhs.createdAt == rhs.createdAt {
+                    return lhs.backupURL.lastPathComponent > rhs.backupURL.lastPathComponent
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+    }
+
     func pruneBackups(config: BackupConfig) throws -> BackupPruneResult {
         let backupRoot = Self.expandedURL(config.storageDirectory)
         guard fileManager.fileExists(atPath: backupRoot.path) else {

@@ -148,6 +148,45 @@ struct LocalBackupSwiftTestingTests {
         #expect(names.contains("2026-05-03_12-00-00"))
         #expect(names.contains("2026-04-01_12-00-00"))
     }
+
+    @Test("available backups are read from manifests and sorted newest first")
+    func availableBackupsAreReadFromManifestsAndSortedNewestFirst() throws {
+        let fixture = try BackupFixture()
+        defer { fixture.cleanup() }
+        try fixture.writeFixtureFiles()
+
+        let older = try LocalBackupManager(now: { fixture.date("2026-05-02T12:00:00Z") })
+            .createBackup(
+                config: BackupConfig(
+                    enabled: true,
+                    storageDirectory: fixture.backupRoot.path,
+                    artifactKinds: [.settings]
+                ),
+                roots: fixture.roots
+            )
+        let newer = try LocalBackupManager(now: { fixture.date("2026-05-03T12:00:00Z") })
+            .createBackup(
+                config: BackupConfig(
+                    enabled: true,
+                    storageDirectory: fixture.backupRoot.path,
+                    artifactKinds: [.settings, .notebooks]
+                ),
+                roots: fixture.roots
+            )
+        try FileManager.default.createDirectory(
+            at: fixture.backupRoot.appendingPathComponent("2026-05-04_12-00-00", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        let snapshots = try LocalBackupManager().availableBackups(storageDirectory: fixture.backupRoot.path)
+
+        #expect(snapshots.map(\.backupURL.lastPathComponent) == [
+            newer.backupURL.lastPathComponent,
+            older.backupURL.lastPathComponent,
+        ])
+        #expect(snapshots[0].artifacts.map(\.kind) == [.notebooks, .settings])
+        #expect(snapshots[0].totalFileCount == 2)
+    }
 }
 
 struct BackupFixture {
