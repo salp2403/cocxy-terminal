@@ -1116,6 +1116,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
                 }
             }
         }
+        activeTerminalSurfaceView?.requestImmediateRedraw()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             MainActor.assumeIsolated {

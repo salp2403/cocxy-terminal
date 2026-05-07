@@ -288,6 +288,29 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(shield.superview == nil)
     }
 
+    @Test("restore shield requests a fresh frame after installing the frame callback")
+    func restoreShieldRequestsFreshFrameAfterInstallingFrameCallback() async throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let hostView = FrameReportingTerminalHostView(frame: controller.terminalContainerView?.bounds ?? .zero)
+        hostView.presentsFrameOnImmediateRedraw = true
+        let tabID = try #require(controller.tabManager.activeTabID)
+        controller.tabSurfaceViews[tabID] = hostView
+        controller.terminalSurfaceView = hostView
+        controller.terminalContainerView?.addSubview(hostView)
+
+        controller.installSessionRestoreShield()
+        let shield = try #require(controller.sessionRestoreShieldView)
+        controller.scheduleSessionRestoreShieldRemoval()
+
+        #expect(hostView.immediateRedrawRequestCount == 1)
+        #expect(controller.sessionRestoreShieldView === shield)
+
+        try await Task.sleep(nanoseconds: 430_000_000)
+
+        #expect(controller.sessionRestoreShieldView == nil)
+        #expect(shield.superview == nil)
+    }
+
     @Test("restore shield remains through compositor settling after first frame")
     func restoreShieldRemainsThroughCompositorSettlingAfterFirstFrame() async throws {
         let controller = MainWindowController(bridge: MockTerminalEngine())
@@ -545,6 +568,8 @@ private final class FrameReportingTerminalHostView: NSView, TerminalHostingView 
     var onFileDrop: (([URL]) -> Bool)?
     var onUserInputSubmitted: (() -> Void)?
     var onFramePresented: (() -> Void)?
+    var immediateRedrawRequestCount = 0
+    var presentsFrameOnImmediateRedraw = false
 
     func syncSizeWithTerminal() {}
     func showNotificationRing(color: NSColor) {}
@@ -552,6 +577,11 @@ private final class FrameReportingTerminalHostView: NSView, TerminalHostingView 
     func handleShellPrompt(row: Int, column: Int) {}
     func updateInteractionMetrics() {}
     func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {}
-    func requestImmediateRedraw() {}
+    func requestImmediateRedraw() {
+        immediateRedrawRequestCount += 1
+        if presentsFrameOnImmediateRedraw {
+            onFramePresented?()
+        }
+    }
     func refreshDisplayLinkAnchor() {}
 }
