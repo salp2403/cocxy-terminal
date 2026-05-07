@@ -20,7 +20,10 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
     private var dataSource: FileTreeDataSource?
     private var delegateObject: FileTreeDelegate?
     private var localizer: AppLocalizer
+    private let treeBuilder: @Sendable (URL, FileTreeNode.BuildOptions) -> [FileTreeNode]
     private var pendingRootDirectoryForVisibleLoad: URL?
+    private var rebuildTask: Task<Void, Never>?
+    private var rebuildGeneration = 0
 
     /// Invoked when a file is clicked. The URL points to the selected .md file.
     var onFileSelected: ((URL) -> Void)?
@@ -45,8 +48,14 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
 
     // MARK: - Init
 
-    init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
+    init(
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        treeBuilder: @escaping @Sendable (URL, FileTreeNode.BuildOptions) -> [FileTreeNode] = {
+            FileTreeNode.buildTree(from: $0, options: $1)
+        }
+    ) {
         self.localizer = localizer
+        self.treeBuilder = treeBuilder
         super.init(frame: .zero)
         setupUI()
     }
@@ -54,6 +63,10 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("MarkdownFileExplorerView does not support NSCoding")
+    }
+
+    deinit {
+        rebuildTask?.cancel()
     }
 
     // MARK: - Public API
@@ -85,10 +98,32 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
 
     private func rebuildTree(from url: URL) {
         pendingRootDirectoryForVisibleLoad = nil
-        let tree = FileTreeNode.buildTree(from: url)
+        rebuildGeneration += 1
+        let generation = rebuildGeneration
+        let treeBuilder = treeBuilder
+        let root = url.standardizedFileURL
+        rebuildTask?.cancel()
+        dataSource?.rootNodes = []
+        outlineView.reloadData()
+        rebuildTask = Task { [weak self] in
+            let tree = await Task.detached(priority: .userInitiated) {
+                treeBuilder(root, .default)
+            }.value
+            guard !Task.isCancelled else { return }
+            self?.applyRebuiltTree(tree, generation: generation)
+        }
+    }
+
+    private func applyRebuiltTree(_ tree: [FileTreeNode], generation: Int) {
+        guard generation == rebuildGeneration else { return }
         dataSource?.rootNodes = tree
         outlineView.reloadData()
         outlineView.expandItem(nil, expandChildren: true)
+        rebuildTask = nil
+    }
+
+    func waitForPendingLoadForTesting() async {
+        await rebuildTask?.value
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
@@ -311,7 +346,7 @@ final class MarkdownFileExplorerView: NSView, NSMenuDelegate {
 // MARK: - File Tree Node
 
 /// A node in the file tree. Either a directory (with children) or a file.
-final class FileTreeNode {
+final class FileTreeNode: @unchecked Sendable {
     let url: URL
     let name: String
     let isDirectory: Bool

@@ -191,7 +191,7 @@ struct MarkdownFileExplorerTests {
     }
 
     @Test("deferred root scan waits until the explorer is attached to a window")
-    func deferredRootScanWaitsUntilVisible() throws {
+    func deferredRootScanWaitsUntilVisible() async throws {
         let dir = createTempDir()
         defer { cleanup(dir) }
 
@@ -212,6 +212,42 @@ struct MarkdownFileExplorerTests {
         let contentView = NSView(frame: window.contentView?.bounds ?? .zero)
         window.contentView = contentView
         contentView.addSubview(view)
+
+        await view.waitForPendingLoadForTesting()
+
+        #expect(view.rootNodesForTesting.count == 1)
+        #expect(view.rootNodesForTesting.first?.name == "README.md")
+    }
+
+    @Test("visible root scan does not block the main thread")
+    func visibleRootScanDoesNotBlockMainThread() async throws {
+        let dir = createTempDir()
+        defer { cleanup(dir) }
+
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let view = MarkdownFileExplorerView(treeBuilder: { root, _ in
+            started.signal()
+            _ = release.wait(timeout: .now() + 2)
+            return [
+                FileTreeNode(
+                    url: root.appendingPathComponent("README.md"),
+                    name: "README.md",
+                    isDirectory: false
+                )
+            ]
+        })
+
+        view.setRootDirectory(dir)
+
+        let startedResult = await Task.detached {
+            waitForSemaphore(started, timeout: .now() + 1)
+        }.value
+        #expect(startedResult == .success)
+        #expect(view.rootNodesForTesting.isEmpty)
+
+        release.signal()
+        await view.waitForPendingLoadForTesting()
 
         #expect(view.rootNodesForTesting.count == 1)
         #expect(view.rootNodesForTesting.first?.name == "README.md")
@@ -283,4 +319,11 @@ struct MarkdownFileExplorerTests {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
+}
+
+private func waitForSemaphore(
+    _ semaphore: DispatchSemaphore,
+    timeout: DispatchTime
+) -> DispatchTimeoutResult {
+    semaphore.wait(timeout: timeout)
 }
