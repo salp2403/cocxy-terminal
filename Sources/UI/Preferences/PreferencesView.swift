@@ -1659,6 +1659,7 @@ struct ActivityPreferencesSection: View {
                         value: $viewModel.activityInputCostMicrosPerMillionTokens,
                         format: .number
                     )
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .disabled(!viewModel.activityTrackingEnabled || !viewModel.activityCostTrackingEnabled)
                 }
@@ -1668,6 +1669,7 @@ struct ActivityPreferencesSection: View {
                         value: $viewModel.activityOutputCostMicrosPerMillionTokens,
                         format: .number
                     )
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .disabled(!viewModel.activityTrackingEnabled || !viewModel.activityCostTrackingEnabled)
                 }
@@ -1761,6 +1763,7 @@ struct SessionReplayPreferencesSection: View {
                         value: $viewModel.sessionReplayMaxRecordingBytes,
                         format: .number
                     )
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .disabled(!viewModel.sessionReplayEnabled)
                 }
@@ -2688,6 +2691,7 @@ struct WorktreesPreferencesSection: View {
                         "~/.cocxy/worktrees",
                         text: $viewModel.worktreeBasePath
                     )
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                 }
                 Text(
@@ -2707,6 +2711,7 @@ struct WorktreesPreferencesSection: View {
                         "cocxy/{agent}/{id}",
                         text: $viewModel.worktreeBranchTemplate
                     )
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                 }
                 LabeledContent(viewModel.localizedString("preferences.worktrees.baseRef", fallback: "Base ref")) {
@@ -2714,6 +2719,7 @@ struct WorktreesPreferencesSection: View {
                         "HEAD",
                         text: $viewModel.worktreeBaseRef
                     )
+                    .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                 }
                 Text(
