@@ -646,6 +646,7 @@ struct CITestGateScriptSwiftTestingTests {
             "web/public/es/releases.html",
             "web/public/es/getting-started.html",
             "web/public/es/faq.html",
+            "web/public/es/press.html",
         ]
 
         for path in paths {
@@ -663,6 +664,35 @@ struct CITestGateScriptSwiftTestingTests {
             #expect(!contents.contains(#"<a href="/faq.html">FAQ</a>"#))
             #expect(!contents.contains(#"<a href="/#download">Descargar</a>"#))
         }
+    }
+
+    @Test("public press kit keeps launch copy media assets and demo outline wired")
+    func publicPressKitKeepsLaunchCopyMediaAssetsAndDemoOutlineWired() throws {
+        let root = repositoryRoot()
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/press.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/press.html"),
+            encoding: .utf8
+        )
+
+        #expect(english.contains("Launch note draft"))
+        #expect(english.contains("Demo outline"))
+        #expect(english.contains("/images/icon.png"))
+        #expect(english.contains("/images/og-image.png"))
+        #expect(english.contains("/images/cocxy-preview.png"))
+        #expect(english.contains("No telemetry pipeline"))
+        #expect(english.contains(#""@type": "Article""#))
+        #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html">"#))
+
+        #expect(spanish.contains("Borrador de nota de lanzamiento"))
+        #expect(spanish.contains("Guion de demo"))
+        #expect(spanish.contains("Recursos visuales"))
+        #expect(spanish.contains("Sin sistema de telemetr&iacute;a"))
+        #expect(spanish.contains(#""@type": "Article""#))
+        #expect(spanish.contains(#"<link rel="alternate" hreflang="en" href="https://cocxy.dev/press.html">"#))
     }
 
     @Test("public website locale alternates are reciprocal for every public page")
@@ -1050,6 +1080,14 @@ struct CITestGateScriptSwiftTestingTests {
             spanishURL: "https://cocxy.dev/es/faq.html",
             englishHref: "/faq.html",
             spanishHref: "/es/faq.html"
+        ),
+        PublicWebsiteLocalePair(
+            englishPath: "press.html",
+            spanishPath: "es/press.html",
+            englishURL: "https://cocxy.dev/press.html",
+            spanishURL: "https://cocxy.dev/es/press.html",
+            englishHref: "/press.html",
+            spanishHref: "/es/press.html"
         ),
     ]
 
