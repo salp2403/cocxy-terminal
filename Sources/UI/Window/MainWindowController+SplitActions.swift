@@ -386,6 +386,7 @@ extension MainWindowController {
         }
         let currentPaneCount = countSplitPanes()
         guard currentPaneCount < Self.maxPaneCount else { return }
+        guard hasRoomForPaneCreation(appendingToEnd: appendToEnd, isVertical: isVertical) else { return }
         guard let focusedSurface = focusedSplitSurfaceView else { return }
         let currentTabID = visibleTabID ?? tabManager.activeTabID
         let splitManager = activeSplitManager
@@ -564,6 +565,10 @@ extension MainWindowController {
         let currentPaneCount = countSplitPanes()
         guard currentPaneCount < Self.maxPaneCount else {
             NSLog("[MainWindowController] Max pane count (%d) reached", Self.maxPaneCount)
+            return
+        }
+        guard hasRoomForPaneCreation(appendingToEnd: false, isVertical: isVertical) else {
+            NSLog("[MainWindowController] Not enough room to split pane")
             return
         }
 

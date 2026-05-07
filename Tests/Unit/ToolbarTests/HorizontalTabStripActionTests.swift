@@ -551,6 +551,28 @@ final class HorizontalTabStripActionTests: XCTestCase {
         XCTAssertEqual(addButton?.toolTip, "Maximum of 4 panes reached")
     }
 
+    func testPaneCreationControlsUseLayoutLimitMessage() {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateActionIcons(
+            panelType: .terminal,
+            canClose: true,
+            canAddPane: false,
+            maxPaneCount: 4,
+            paneCreationLimitMessage: "Not enough room for another pane"
+        )
+
+        let splitButton = findActionButton(in: strip, identifier: "action:splitSideBySide")
+        let sessionReplayButton = findActionButton(in: strip, identifier: "action:openSessionReplay")
+        let addButton = findAddPanelButton(in: strip)
+
+        XCTAssertFalse(splitButton?.isEnabled ?? true)
+        XCTAssertEqual(splitButton?.toolTip, "Not enough room for another pane")
+        XCTAssertFalse(sessionReplayButton?.isEnabled ?? true)
+        XCTAssertEqual(sessionReplayButton?.toolTip, "Not enough room for another pane")
+        XCTAssertFalse(addButton?.isEnabled ?? true)
+        XCTAssertEqual(addButton?.toolTip, "Not enough room for another pane")
+    }
+
     func testActionButtonsUseLocalizedAccessibilityLabels() throws {
         let bundle = try XCTUnwrap(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
@@ -601,7 +623,8 @@ final class HorizontalTabStripActionTests: XCTestCase {
     private func findAddPanelButton(in view: NSView) -> NSButton? {
         if let button = view as? NSButton,
            button.accessibilityLabel() == "Add Panel"
-            || button.accessibilityLabel() == "Maximum of 4 panes reached" {
+            || button.accessibilityLabel() == "Maximum of 4 panes reached"
+            || button.accessibilityLabel() == "Not enough room for another pane" {
             return button
         }
         for child in view.subviews {

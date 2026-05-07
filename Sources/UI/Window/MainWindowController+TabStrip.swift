@@ -177,7 +177,13 @@ extension MainWindowController {
             let sm = tabSplitCoordinator.splitManager(for: targetTabID)
             let leaves = sm.rootNode.allLeafIDs()
             let canClose = leaves.count > 1
-            let canAddPane = leaves.count < Self.maxPaneCount
+            let paneCreationLimitMessage = paneCreationLimitMessageForCurrentLayout(
+                leafCount: leaves.count,
+                appendingToEnd: true,
+                isVertical: true,
+                using: appLocalizer()
+            )
+            let canAddPane = paneCreationLimitMessage == nil
 
             let focusedType: PanelType
             if let focusedID = sm.focusedLeafID,
@@ -191,7 +197,8 @@ extension MainWindowController {
                 panelType: focusedType,
                 canClose: canClose,
                 canAddPane: canAddPane,
-                maxPaneCount: Self.maxPaneCount
+                maxPaneCount: Self.maxPaneCount,
+                paneCreationLimitMessage: paneCreationLimitMessage
             )
         }
     }

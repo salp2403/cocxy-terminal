@@ -1146,6 +1146,7 @@
 "smartRouting.state.finished" = "Finalizado";
 "horizontalTab.addPanel" = "Agregar panel";
 "horizontalTab.addPanel.maxReached" = "Máximo de %d paneles alcanzado";
+"horizontalTab.addPanel.notEnoughRoom" = "No hay espacio suficiente para otro panel";
 "horizontalTab.themeToggle.accessibility" = "Alternar tema claro u oscuro";
 "horizontalTab.themeToggle.dark" = "Cambiar a tema oscuro";
 "horizontalTab.themeToggle.light" = "Cambiar a tema claro";

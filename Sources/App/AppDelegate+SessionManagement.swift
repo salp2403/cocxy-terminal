@@ -523,7 +523,8 @@ extension AppDelegate {
         for restoredTab: RestoredTab,
         in controller: MainWindowController
     ) {
-        let leafInfos = restoredTab.splitNode.allLeafIDs()
+        let restoredSplitNode = controller.readableRestoredSplitNode(restoredTab.splitNode)
+        let leafInfos = restoredSplitNode.allLeafIDs()
         guard !leafInfos.isEmpty else { return }
 
         var restoredPanelTypes: [UUID: PanelInfo] = [:]
@@ -544,7 +545,7 @@ extension AppDelegate {
         }
 
         controller.tabSplitCoordinator.splitManager(for: restoredTab.tabID).restoreLayout(
-            rootNode: restoredTab.splitNode,
+            rootNode: restoredSplitNode,
             focusedLeafID: leafInfos.first?.leafID,
             panelTypes: restoredPanelTypes,
             panelTitles: restoredPanelTitles
@@ -555,7 +556,8 @@ extension AppDelegate {
         for restoredTab: RestoredTab,
         in controller: MainWindowController
     ) {
-        let leafInfos = restoredTab.splitNode.allLeafIDs()
+        let restoredSplitNode = controller.readableRestoredSplitNode(restoredTab.splitNode)
+        let leafInfos = restoredSplitNode.allLeafIDs()
         guard !leafInfos.isEmpty else { return }
 
         let leafDirectories = leafWorkingDirectories(in: restoredTab.splitTreeState)
@@ -680,8 +682,8 @@ extension AppDelegate {
 
         let splitManager = controller.tabSplitCoordinator.splitManager(for: restoredTab.tabID)
         splitManager.restoreLayout(
-            rootNode: restoredTab.splitNode,
-            focusedLeafID: restoredTab.splitNode.allLeafIDs().first?.leafID,
+            rootNode: restoredSplitNode,
+            focusedLeafID: leafInfos.first?.leafID,
             panelTypes: restoredPanelTypes,
             panelTitles: restoredPanelTitles
         )
@@ -693,7 +695,7 @@ extension AppDelegate {
         guard leafInfos.count > 1 else { return }
 
         if let splitView = controller.makeStoredSplitView(
-            from: restoredTab.splitNode,
+            from: restoredSplitNode,
             viewsByTerminalID: viewsByTerminalID
         ) {
             controller.savedTabSplitViews[restoredTab.tabID] = splitView

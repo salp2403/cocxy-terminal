@@ -537,6 +537,74 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
     }
 
+    func testPaneCreationStopsBeforeRightmostPaneBecomesUnreadablyNarrow() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        controller.window?.setContentSize(NSSize(width: 1600, height: 760))
+        controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+
+        controller.splitWithEditorAction(nil)
+        controller.splitWithWorkflowAction(nil)
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.updateWorkspaceToolbar()
+
+        XCTAssertEqual(controller.countSplitPanes(), 3)
+        XCTAssertFalse(
+            controller.canCreateAdditionalPaneForCurrentLayout(),
+            "A fourth side-by-side pane would split the rightmost workflow panel below its readable width"
+        )
+        let splitButton = findMainWindowActionButton(
+            in: controller.horizontalTabStripView,
+            identifier: "action:splitSideBySide"
+        )
+        let addButton = findMainWindowButton(
+            in: controller.horizontalTabStripView,
+            accessibilityLabel: "Not enough room for another pane"
+        )
+        XCTAssertFalse(splitButton?.isEnabled ?? true)
+        XCTAssertEqual(splitButton?.toolTip, "Not enough room for another pane")
+        XCTAssertFalse(addButton?.isEnabled ?? true)
+        XCTAssertEqual(addButton?.toolTip, "Not enough room for another pane")
+    }
+
+    func testRestoredNarrowHorizontalPaneChainReflowsToReadableGrid() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        controller.window?.setContentSize(NSSize(width: 1180, height: 760))
+        controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+
+        let leaves = (0..<4).map { _ in LeafInfo(leafID: UUID(), terminalID: UUID()) }
+        let restoredChain = SplitNode.split(
+            id: UUID(),
+            direction: .horizontal,
+            first: .leaf(id: leaves[0].leafID, terminalID: leaves[0].terminalID),
+            second: .split(
+                id: UUID(),
+                direction: .horizontal,
+                first: .leaf(id: leaves[1].leafID, terminalID: leaves[1].terminalID),
+                second: .split(
+                    id: UUID(),
+                    direction: .horizontal,
+                    first: .leaf(id: leaves[2].leafID, terminalID: leaves[2].terminalID),
+                    second: .leaf(id: leaves[3].leafID, terminalID: leaves[3].terminalID),
+                    ratio: 0.5
+                ),
+                ratio: 0.5
+            ),
+            ratio: 0.5
+        )
+
+        let readable = controller.readableRestoredSplitNode(restoredChain)
+
+        XCTAssertEqual(readable.allLeafIDs().map(\.terminalID), leaves.map(\.terminalID))
+        guard case .split(_, .vertical, let topRow, let bottomRow, _) = readable,
+              case .split(_, .horizontal, _, _, _) = topRow,
+              case .split(_, .horizontal, _, _, _) = bottomRow else {
+            XCTFail("A restored narrow horizontal chain should become a two-row readable grid")
+            return
+        }
+    }
+
     // MARK: - Close Tab Cleanup
 
     func testCloseTabRemovesSurfaceViewMapping() {
@@ -703,6 +771,34 @@ private func withIsolatedGitHubPanePanelWidthPreference(_ body: () -> Void) {
 
 private let layoutTestGitHubRunner: GitHubService.Runner = { _, _, _ in
     throw GitHubCLIError.notInstalled
+}
+
+private func findMainWindowActionButton(in view: NSView?, identifier: String) -> NSButton? {
+    guard let view else { return nil }
+    if let button = view as? NSButton,
+       button.accessibilityIdentifier() == identifier {
+        return button
+    }
+    for subview in view.subviews {
+        if let match = findMainWindowActionButton(in: subview, identifier: identifier) {
+            return match
+        }
+    }
+    return nil
+}
+
+private func findMainWindowButton(in view: NSView?, accessibilityLabel: String) -> NSButton? {
+    guard let view else { return nil }
+    if let button = view as? NSButton,
+       button.accessibilityLabel() == accessibilityLabel {
+        return button
+    }
+    for subview in view.subviews {
+        if let match = findMainWindowButton(in: subview, accessibilityLabel: accessibilityLabel) {
+            return match
+        }
+    }
+    return nil
 }
 
 private struct LayoutTestAgentPromptRunner: AgentPromptRunning {

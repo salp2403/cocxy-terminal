@@ -145,7 +145,13 @@ final class HorizontalTabStripView: NSView {
 
     /// Last action-icon state so language changes can rebuild tooltips
     /// without waiting for the next focus change.
-    private var lastActionIconState: (panelType: PanelType, canClose: Bool, canAddPane: Bool, maxPaneCount: Int?)?
+    private var lastActionIconState: (
+        panelType: PanelType,
+        canClose: Bool,
+        canAddPane: Bool,
+        maxPaneCount: Int?,
+        paneCreationLimitMessage: String?
+    )?
 
     /// Whether the focused workspace can accept another split/panel leaf.
     /// The window controller owns the real limit; the strip only reflects it
@@ -154,6 +160,10 @@ final class HorizontalTabStripView: NSView {
 
     /// Maximum pane count used for the disabled Add Panel tooltip, if known.
     private var maxPaneCountForAddPaneLimit: Int?
+
+    /// Specific disabled-state copy when pane creation is blocked by layout
+    /// constraints before the hard max pane count is reached.
+    private var paneCreationLimitMessage: String?
 
     /// Leading inset used by the split/panel toolbar variant.
     private static let panelLeadingInset: CGFloat = 8
@@ -330,17 +340,19 @@ final class HorizontalTabStripView: NSView {
                 panelType: lastActionIconState.panelType,
                 canClose: lastActionIconState.canClose,
                 canAddPane: lastActionIconState.canAddPane,
-                maxPaneCount: lastActionIconState.maxPaneCount
+                maxPaneCount: lastActionIconState.maxPaneCount,
+                paneCreationLimitMessage: lastActionIconState.paneCreationLimitMessage
             )
         }
     }
 
     private func applyLocalizedChrome() {
         let addPanelTitle = Self.localizedAddPanel(using: localizer)
-        let addPanelLimitTitle = Self.localizedAddPanelLimit(
-            maxPaneCount: maxPaneCountForAddPaneLimit,
-            using: localizer
-        )
+        let addPanelLimitTitle = paneCreationLimitMessage
+            ?? Self.localizedAddPanelLimit(
+                maxPaneCount: maxPaneCountForAddPaneLimit,
+                using: localizer
+            )
         addButton.isEnabled = canAddPane
         addButton.alphaValue = canAddPane ? 1.0 : 0.45
         addButton.toolTip = canAddPane ? addPanelTitle : addPanelLimitTitle
@@ -622,6 +634,13 @@ final class HorizontalTabStripView: NSView {
             fallback: "Maximum of %d panes reached"
         )
         return String(format: format, maxPaneCount ?? 4)
+    }
+
+    static func localizedAddPanelSpaceLimit(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "horizontalTab.addPanel.notEnoughRoom",
+            fallback: "Not enough room for another pane"
+        )
     }
 
     static func localizedThemeToggleAccessibility(using localizer: AppLocalizer) -> String {
@@ -937,18 +956,21 @@ final class HorizontalTabStripView: NSView {
         panelType: PanelType,
         canClose: Bool,
         canAddPane: Bool = true,
-        maxPaneCount: Int? = nil
+        maxPaneCount: Int? = nil,
+        paneCreationLimitMessage: String? = nil
     ) {
         self.canAddPane = canAddPane
         maxPaneCountForAddPaneLimit = maxPaneCount
+        self.paneCreationLimitMessage = paneCreationLimitMessage
         applyLocalizedChrome()
-        lastActionIconState = (panelType, canClose, canAddPane, maxPaneCount)
+        lastActionIconState = (panelType, canClose, canAddPane, maxPaneCount, paneCreationLimitMessage)
         actionStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
         // Split actions are available for all panel types.
         let createPaneTooltip = canAddPane
             ? nil
-            : Self.localizedAddPanelLimit(maxPaneCount: maxPaneCount, using: localizer)
+            : paneCreationLimitMessage
+                ?? Self.localizedAddPanelLimit(maxPaneCount: maxPaneCount, using: localizer)
         actionStack.addArrangedSubview(
             createActionButton(
                 icon: "rectangle.split.2x1",
