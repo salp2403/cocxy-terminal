@@ -282,10 +282,33 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(hostView.onFramePresented != nil)
         hostView.onFramePresented?()
 
-        try await Task.sleep(nanoseconds: 120_000_000)
+        try await Task.sleep(nanoseconds: 220_000_000)
 
         #expect(controller.sessionRestoreShieldView == nil)
         #expect(shield.superview == nil)
+    }
+
+    @Test("restore shield remains through compositor settling after first frame")
+    func restoreShieldRemainsThroughCompositorSettlingAfterFirstFrame() async throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let hostView = FrameReportingTerminalHostView(frame: controller.terminalContainerView?.bounds ?? .zero)
+        let tabID = try #require(controller.tabManager.activeTabID)
+        controller.tabSurfaceViews[tabID] = hostView
+        controller.terminalSurfaceView = hostView
+        controller.terminalContainerView?.addSubview(hostView)
+
+        controller.installSessionRestoreShield()
+        let shield = try #require(controller.sessionRestoreShieldView)
+        controller.scheduleSessionRestoreShieldRemoval()
+
+        hostView.onFramePresented?()
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(controller.sessionRestoreShieldView === shield)
+        #expect(shield.superview === controller.terminalContainerView)
+
+        try await waitForShieldRemoval(on: controller)
     }
 
     @Test("restore shield timeout covers slower first paints")
