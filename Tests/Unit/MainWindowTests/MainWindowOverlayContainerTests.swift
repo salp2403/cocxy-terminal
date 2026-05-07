@@ -167,4 +167,30 @@ final class OverlayContainerTests: XCTestCase {
         )
         XCTAssertEqual(controller.notesHostingView?.appearance?.name, NSAppearance.Name.aqua)
     }
+
+    func testNotesAndNotificationPanelsTileWithoutOverlap() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.window?.setContentSize(NSSize(width: 960, height: 720))
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+
+        controller.showNotes()
+        controller.toggleNotificationPanel()
+
+        guard let overlayContainer = controller.overlayContainerView,
+              let notesHost = controller.notesHostingView,
+              let notificationHost = controller.notificationPanelHostingView else {
+            XCTFail("Notes and notification panels must both be mounted")
+            return
+        }
+
+        XCTAssertFalse(
+            notesHost.frame.intersects(notificationHost.frame),
+            "Notes and notification panels must tile instead of visually clipping each other"
+        )
+        XCTAssertLessThanOrEqual(notesHost.frame.maxX, notificationHost.frame.minX + 0.5)
+        XCTAssertEqual(notificationHost.frame.maxX, overlayContainer.bounds.width, accuracy: 0.5)
+        XCTAssertEqual(notesHost.rootView.panelWidth, notesHost.frame.width, accuracy: 0.5)
+    }
 }

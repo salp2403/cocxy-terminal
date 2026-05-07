@@ -1765,6 +1765,19 @@ extension MainWindowController {
             let width: CGFloat
             let view: NSView
             let avoidsStatusBar: Bool
+            let applyFittedWidth: ((CGFloat) -> Void)?
+
+            init(
+                width: CGFloat,
+                view: NSView,
+                avoidsStatusBar: Bool,
+                applyFittedWidth: ((CGFloat) -> Void)? = nil
+            ) {
+                self.width = width
+                self.view = view
+                self.avoidsStatusBar = avoidsStatusBar
+                self.applyFittedWidth = applyFittedWidth
+            }
         }
 
         if isGitHubPaneVisible {
@@ -1806,12 +1819,25 @@ extension MainWindowController {
             isAgentModeVisible ? DockedPanel(width: AgentPanelView.panelWidth, view: agentModeHostingView!, avoidsStatusBar: true) : nil,
             isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!, avoidsStatusBar: true) : nil,
             isGitHubPaneVisible ? DockedPanel(width: gitHubPanePanelWidth, view: gitHubPaneHostingView!, avoidsStatusBar: true) : nil,
-            isNotesVisible ? DockedPanel(width: clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width), view: notesHostingView!, avoidsStatusBar: true) : nil
+            isNotesVisible ? DockedPanel(
+                width: clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width),
+                view: notesHostingView!,
+                avoidsStatusBar: true,
+                applyFittedWidth: { [weak self] width in
+                    self?.syncNotesRootView(panelWidth: width)
+                }
+            ) : nil,
+            isNotificationPanelVisible ? DockedPanel(
+                width: NotificationPanelView.panelWidth,
+                view: notificationPanelHostingView!,
+                avoidsStatusBar: false
+            ) : nil
         ].compactMap { $0 }
 
         var currentX = overlayContainer.bounds.width
         for panel in visiblePanels.reversed() {
             let fittedWidth = min(panel.width, max(0, currentX))
+            panel.applyFittedWidth?(fittedWidth)
             currentX -= fittedWidth
             let panelY = panel.avoidsStatusBar ? statusBarHostingView?.frame.height ?? 24 : 0
             panel.view.frame = NSRect(
@@ -2002,6 +2028,7 @@ extension MainWindowController {
 
         overlayContainer.addSubview(hostingView)
         isNotificationPanelVisible = true
+        layoutRightDockedAgentPanels()
     }
 
     func dismissNotificationPanel() {
@@ -2025,6 +2052,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.notificationPanelHostingView?.removeFromSuperview()
                 self?.notificationPanelHostingView = nil
+                self?.layoutRightDockedAgentPanels()
             }
         })
 
