@@ -253,8 +253,13 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains("${DEPLOY_PATH}es/getting-started.html"))
         #expect(workflow.contains("${DEPLOY_PATH}es/features.html"))
         #expect(workflow.contains("${DEPLOY_PATH}es/faq.html"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/press.html"))
         #expect(workflow.contains("${DEPLOY_PATH}es/releases.html"))
+        #expect(workflow.contains("web/public/press.html ${DEPLOY_TARGET}:${DEPLOY_PATH}press.html"))
+        #expect(workflow.contains("web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/"))
         #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html"#))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}press.html"#))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/press.html"#))
 
         let rewriteStart = try #require(workflow.range(of: "# Update version-specific values"))
         let cleanupStart = try #require(
@@ -683,6 +688,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(english.contains("/images/icon.png"))
         #expect(english.contains("/images/og-image.png"))
         #expect(english.contains("/images/cocxy-preview.png"))
+        #expect(english.contains("/videos/cocxy-demo.mp4"))
+        #expect(english.contains(#"<video controls preload="metadata" poster="/images/og-image.png""#))
         #expect(english.contains("No telemetry pipeline"))
         #expect(english.contains(#""@type": "Article""#))
         #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html">"#))
@@ -690,9 +697,17 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("Borrador de nota de lanzamiento"))
         #expect(spanish.contains("Guion de demo"))
         #expect(spanish.contains("Recursos visuales"))
+        #expect(spanish.contains("/videos/cocxy-demo.mp4"))
+        #expect(spanish.contains("Video demo"))
         #expect(spanish.contains("Sin sistema de telemetr&iacute;a"))
         #expect(spanish.contains(#""@type": "Article""#))
         #expect(spanish.contains(#"<link rel="alternate" hreflang="en" href="https://cocxy.dev/press.html">"#))
+
+        let video = root.appendingPathComponent("web/public/videos/cocxy-demo.mp4")
+        let attributes = try FileManager.default.attributesOfItem(atPath: video.path)
+        let byteCount = try #require(attributes[.size] as? NSNumber).intValue
+        #expect(byteCount > 100_000)
+        #expect(byteCount < 8_000_000)
     }
 
     @Test("public website locale alternates are reciprocal for every public page")

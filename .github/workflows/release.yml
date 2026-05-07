@@ -540,6 +540,12 @@ jobs:
             "mkdir -p ${DEPLOY_PATH}images"
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/public/images/*.png ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
+          if [ -d web/public/videos ]; then
+            ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+              "mkdir -p ${DEPLOY_PATH}videos"
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/
+          fi
 
           # Deploy SEO files
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
@@ -561,6 +567,10 @@ jobs:
           if [ -f web/public/faq.html ]; then
             scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
               web/public/faq.html ${DEPLOY_TARGET}:${DEPLOY_PATH}faq.html
+          fi
+          if [ -f web/public/press.html ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/press.html ${DEPLOY_TARGET}:${DEPLOY_PATH}press.html
           fi
           if [ -d web/public/es ]; then
             ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
@@ -818,6 +828,7 @@ jobs:
              sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html; \
              if [ -f ${DEPLOY_PATH}features.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}features.html; fi; \
              if [ -f ${DEPLOY_PATH}faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}faq.html; fi; \
+             if [ -f ${DEPLOY_PATH}press.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}press.html; fi; \
              if [ -f ${DEPLOY_PATH}releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}releases.html; fi; \
              if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/index.html; fi; \
              if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}es/index.html; fi; \
@@ -825,10 +836,13 @@ jobs:
              if [ -f ${DEPLOY_PATH}es/getting-started.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/getting-started.html; fi; \
              if [ -f ${DEPLOY_PATH}es/features.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/features.html; fi; \
              if [ -f ${DEPLOY_PATH}es/faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/faq.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/press.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/press.html; fi; \
              if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/releases.html; fi; \
              sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}index.html; \
+             if [ -f ${DEPLOY_PATH}press.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}press.html; fi; \
              if [ -f ${DEPLOY_PATH}releases.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}releases.html; fi; \
              if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/press.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/press.html; fi; \
              if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/releases.html; fi"
 
           rm /tmp/deploy_key
