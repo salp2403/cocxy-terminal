@@ -88,6 +88,9 @@ struct AuroraTweaksStateTests {
 
         state.renderModeOverride = .opaque
         #expect(state.localizedRenderModeLabel(using: spanish) == "Forzar superficie opaca de accesibilidad")
+
+        state.renderModeOverride = .visualEffect
+        #expect(state.localizedRenderModeLabel(using: spanish) == "Forzar efecto visual alternativo")
     }
 
     // MARK: - Equatable

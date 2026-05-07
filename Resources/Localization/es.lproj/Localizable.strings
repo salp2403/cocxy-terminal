@@ -1098,7 +1098,7 @@
 "auroraTweaks.pill.opaque" = "Opaco";
 "auroraTweaks.renderMode.autoLabel" = "Auto (tabla de decisión)";
 "auroraTweaks.renderMode.liquidLabel" = "Forzar Liquid Glass";
-"auroraTweaks.renderMode.visualEffectLabel" = "Forzar fallback de efecto visual";
+"auroraTweaks.renderMode.visualEffectLabel" = "Forzar efecto visual alternativo";
 "auroraTweaks.renderMode.opaqueLabel" = "Forzar superficie opaca de accesibilidad";
 "auroraTweaks.backdrop" = "Animación de fondo ambiental";
 "auroraTweaks.preview" = "Vista previa";
