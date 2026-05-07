@@ -641,6 +641,9 @@ struct CITestGateScriptSwiftTestingTests {
     func spanishPublicDocsKeepPrimaryNavigationInsideSpanishSite() throws {
         let root = repositoryRoot()
         let paths = [
+            "web/public/es/index.html",
+            "web/public/es/features.html",
+            "web/public/es/releases.html",
             "web/public/es/getting-started.html",
             "web/public/es/faq.html",
         ]
@@ -656,6 +659,88 @@ struct CITestGateScriptSwiftTestingTests {
             #expect(contents.contains(#"href="/es/releases.html""#))
             #expect(!contents.contains(#"<a href="/features.html">Funciones</a>"#))
             #expect(!contents.contains(#"<a href="/releases.html">Versiones</a>"#))
+            #expect(!contents.contains(#"<a href="/getting-started.html">Gu&iacute;a</a>"#))
+            #expect(!contents.contains(#"<a href="/faq.html">FAQ</a>"#))
+            #expect(!contents.contains(#"<a href="/#download">Descargar</a>"#))
+        }
+    }
+
+    @Test("public website locale alternates are reciprocal for every public page")
+    func publicWebsiteLocaleAlternatesAreReciprocalForEveryPublicPage() throws {
+        let root = repositoryRoot().appendingPathComponent("web/public", isDirectory: true)
+
+        for pair in Self.publicWebsiteLocalePairs {
+            let english = try String(
+                contentsOf: root.appendingPathComponent(pair.englishPath),
+                encoding: .utf8
+            )
+            let spanish = try String(
+                contentsOf: root.appendingPathComponent(pair.spanishPath),
+                encoding: .utf8
+            )
+
+            #expect(
+                english.contains(#"<link rel="canonical" href="\#(pair.englishURL)">"#),
+                "\(pair.englishPath) should canonicalize to the English route"
+            )
+            #expect(
+                english.contains(#"<link rel="alternate" hreflang="en" href="\#(pair.englishURL)">"#),
+                "\(pair.englishPath) should expose its English alternate"
+            )
+            #expect(
+                english.contains(#"<link rel="alternate" hreflang="es" href="\#(pair.spanishURL)">"#),
+                "\(pair.englishPath) should expose its Spanish alternate"
+            )
+            #expect(
+                english.contains(#"<link rel="alternate" hreflang="x-default" href="\#(pair.englishURL)">"#),
+                "\(pair.englishPath) should keep x-default on English"
+            )
+            #expect(
+                english.contains(#"href="\#(pair.spanishHref)" hreflang="es" lang="es""#),
+                "\(pair.englishPath) should link to the matching Spanish page"
+            )
+
+            #expect(
+                spanish.contains(#"<link rel="canonical" href="\#(pair.spanishURL)">"#),
+                "\(pair.spanishPath) should canonicalize to the Spanish route"
+            )
+            #expect(
+                spanish.contains(#"<link rel="alternate" hreflang="en" href="\#(pair.englishURL)">"#),
+                "\(pair.spanishPath) should expose its English alternate"
+            )
+            #expect(
+                spanish.contains(#"<link rel="alternate" hreflang="es" href="\#(pair.spanishURL)">"#),
+                "\(pair.spanishPath) should expose its Spanish alternate"
+            )
+            #expect(
+                spanish.contains(#"<link rel="alternate" hreflang="x-default" href="\#(pair.englishURL)">"#),
+                "\(pair.spanishPath) should keep x-default on English"
+            )
+            #expect(
+                spanish.contains(#"href="\#(pair.englishHref)" hreflang="en" lang="en""#),
+                "\(pair.spanishPath) should link to the matching English page"
+            )
+        }
+    }
+
+    @Test("public sitemap lists reciprocal localized routes")
+    func publicSitemapListsReciprocalLocalizedRoutes() throws {
+        let root = repositoryRoot()
+        let sitemap = try String(
+            contentsOf: root.appendingPathComponent("web/public/sitemap.xml"),
+            encoding: .utf8
+        )
+
+        for pair in Self.publicWebsiteLocalePairs {
+            for url in [pair.englishURL, pair.spanishURL] {
+                let block = try #require(
+                    Self.sitemapURLBlock(for: url, in: sitemap),
+                    "sitemap.xml should include \(url)"
+                )
+                #expect(block.contains(#"<xhtml:link rel="alternate" hreflang="en" href="\#(pair.englishURL)"/>"#))
+                #expect(block.contains(#"<xhtml:link rel="alternate" hreflang="es" href="\#(pair.spanishURL)"/>"#))
+                #expect(block.contains(#"<xhtml:link rel="alternate" hreflang="x-default" href="\#(pair.englishURL)"/>"#))
+            }
         }
     }
 
@@ -916,6 +1001,58 @@ struct CITestGateScriptSwiftTestingTests {
         let fragment: String?
     }
 
+    private struct PublicWebsiteLocalePair {
+        let englishPath: String
+        let spanishPath: String
+        let englishURL: String
+        let spanishURL: String
+        let englishHref: String
+        let spanishHref: String
+    }
+
+    private static let publicWebsiteLocalePairs = [
+        PublicWebsiteLocalePair(
+            englishPath: "index.html",
+            spanishPath: "es/index.html",
+            englishURL: "https://cocxy.dev/",
+            spanishURL: "https://cocxy.dev/es/",
+            englishHref: "/",
+            spanishHref: "/es/"
+        ),
+        PublicWebsiteLocalePair(
+            englishPath: "features.html",
+            spanishPath: "es/features.html",
+            englishURL: "https://cocxy.dev/features.html",
+            spanishURL: "https://cocxy.dev/es/features.html",
+            englishHref: "/features.html",
+            spanishHref: "/es/features.html"
+        ),
+        PublicWebsiteLocalePair(
+            englishPath: "releases.html",
+            spanishPath: "es/releases.html",
+            englishURL: "https://cocxy.dev/releases.html",
+            spanishURL: "https://cocxy.dev/es/releases.html",
+            englishHref: "/releases.html",
+            spanishHref: "/es/releases.html"
+        ),
+        PublicWebsiteLocalePair(
+            englishPath: "getting-started.html",
+            spanishPath: "es/getting-started.html",
+            englishURL: "https://cocxy.dev/getting-started.html",
+            spanishURL: "https://cocxy.dev/es/getting-started.html",
+            englishHref: "/getting-started.html",
+            spanishHref: "/es/getting-started.html"
+        ),
+        PublicWebsiteLocalePair(
+            englishPath: "faq.html",
+            spanishPath: "es/faq.html",
+            englishURL: "https://cocxy.dev/faq.html",
+            spanishURL: "https://cocxy.dev/es/faq.html",
+            englishHref: "/faq.html",
+            spanishHref: "/es/faq.html"
+        ),
+    ]
+
     private static func files(under root: URL, fileExtension: String) throws -> [URL] {
         let urls = FileManager.default.enumerator(
             at: root,
@@ -950,6 +1087,20 @@ struct CITestGateScriptSwiftTestingTests {
             return (contents as NSString).substring(with: match.range(at: 1))
         } ?? []
         return Set(ids)
+    }
+
+    private static func sitemapURLBlock(for loc: String, in contents: String) -> String? {
+        guard let locRange = contents.range(of: "<loc>\(loc)</loc>"),
+              let blockStart = contents[..<locRange.lowerBound].range(
+                of: "<url>",
+                options: .backwards
+              ),
+              let blockEnd = contents[locRange.upperBound...].range(of: "</url>")
+        else {
+            return nil
+        }
+
+        return String(contents[blockStart.lowerBound..<blockEnd.upperBound])
     }
 
     private static func htmlSearchableText(_ contents: String) -> String {
