@@ -29,42 +29,66 @@ struct DBCloudHelperPanelView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            HStack(spacing: 0) {
-                sidebar
-                    .frame(minWidth: 240, idealWidth: 280, maxWidth: 340)
+        GeometryReader { proxy in
+            let compact = proxy.size.width < DBCloudHelperPanelLayout.compactSplitWidth
+
+            VStack(spacing: 0) {
+                header(width: proxy.size.width)
                 Divider()
-                detail
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if compact {
+                    VStack(spacing: 0) {
+                        sidebar(compact: true)
+                            .frame(height: DBCloudHelperPanelLayout.compactSidebarHeight)
+                        Divider()
+                        detailScroll
+                    }
+                } else {
+                    HStack(spacing: 0) {
+                        sidebar(compact: false)
+                            .frame(minWidth: 240, idealWidth: 280, maxWidth: 340)
+                        Divider()
+                        detailScroll
+                    }
+                }
             }
         }
-        .frame(minWidth: 720, minHeight: 460)
+        .frame(
+            minWidth: DBCloudHelperPanelLayout.minimumPanelWidth,
+            minHeight: 420
+        )
         .glassPanelBackground()
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
+    private func header(width: CGFloat) -> some View {
+        let presentation = AdaptivePanelToolbarPresentation.resolve(width: width)
+
+        return HStack(spacing: 8) {
             Label(localized("dbCloud.title", fallback: "DB/Cloud"), systemImage: "externaldrive.connected.to.line.below")
-                .font(.headline)
-            Text(viewModel.statusText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .layoutPriority(1)
+            if presentation.showsStatus {
+                Text(viewModel.statusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
             Spacer()
-            Button {
+
+            AdaptivePanelToolbarButton(
+                title: localized("dbCloud.refresh", fallback: "Refresh"),
+                systemImage: "arrow.clockwise",
+                compact: presentation.usesCompactActions
+            ) {
                 viewModel.refresh()
-            } label: {
-                Label(localized("dbCloud.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
             }
-            .controlSize(.small)
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.plain)
-            .help(localized("common.close", fallback: "Close"))
-            .accessibilityLabel(localized("dbCloud.close", fallback: "Close DB/Cloud helpers"))
+
+            AdaptivePanelToolbarCloseButton(
+                title: localized("dbCloud.close", fallback: "Close DB/Cloud helpers"),
+                action: onClose
+            )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -90,15 +114,9 @@ struct DBCloudHelperPanelView: View {
         panelPalette.accent.resolvedColor()
     }
 
-    private var sidebar: some View {
+    private func sidebar(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker(localized("dbCloud.kindPicker", fallback: "Kind"), selection: $viewModel.selectedKind) {
-                ForEach(DBCloudHelperKind.allCases) { kind in
-                    Label(kind.localizedTitle(using: localizer), systemImage: kind.systemImage).tag(kind)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            kindPicker(compact: compact)
 
             ScrollView {
                 LazyVStack(spacing: 8) {
@@ -115,6 +133,26 @@ struct DBCloudHelperPanelView: View {
             }
         }
         .padding(14)
+    }
+
+    @ViewBuilder
+    private func kindPicker(compact: Bool) -> some View {
+        if compact {
+            Picker(localized("dbCloud.kindPicker", fallback: "Kind"), selection: $viewModel.selectedKind) {
+                ForEach(DBCloudHelperKind.allCases) { kind in
+                    Label(kind.localizedTitle(using: localizer), systemImage: kind.systemImage).tag(kind)
+                }
+            }
+            .pickerStyle(.menu)
+        } else {
+            Picker(localized("dbCloud.kindPicker", fallback: "Kind"), selection: $viewModel.selectedKind) {
+                ForEach(DBCloudHelperKind.allCases) { kind in
+                    Label(kind.localizedTitle(using: localizer), systemImage: kind.systemImage).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
     }
 
     private func helperRow(_ descriptor: DBCloudHelperDescriptor) -> some View {
@@ -189,6 +227,14 @@ struct DBCloudHelperPanelView: View {
         .padding(16)
     }
 
+    private var detailScroll: some View {
+        ScrollView {
+            detail
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     @ViewBuilder
     private func actionFields(for helperID: String) -> some View {
         switch helperID {
@@ -260,4 +306,10 @@ struct DBCloudHelperPanelView: View {
     private func localized(_ key: String, fallback: String) -> String {
         localizer.string(key, fallback: fallback)
     }
+}
+
+private enum DBCloudHelperPanelLayout {
+    static let minimumPanelWidth: CGFloat = 280
+    static let compactSplitWidth: CGFloat = 620
+    static let compactSidebarHeight: CGFloat = 190
 }

@@ -126,161 +126,196 @@ struct MacroSnippetPanelView: View {
     }
 
     private var macrosPane: some View {
-        HSplitView {
-            List(selection: $viewModel.selectedMacroID) {
-                ForEach(viewModel.macros) { macro in
-                    MacroRow(macro: macro, localizer: localizer)
-                        .tag(Optional(macro.id))
+        GeometryReader { proxy in
+            if proxy.size.width < MacroSnippetPanelLayout.compactSplitWidth {
+                VStack(spacing: 0) {
+                    macroList
+                        .frame(height: MacroSnippetPanelLayout.compactListHeight)
+                    Divider()
+                    macroEditor
+                }
+            } else {
+                HSplitView {
+                    macroList
+                        .frame(minWidth: 220, idealWidth: 260)
+                    macroEditor
+                        .frame(minWidth: 360)
                 }
             }
-            .listStyle(.sidebar)
-            .frame(minWidth: 220, idealWidth: 260)
+        }
+    }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    TextField(localized("macros.macroName", fallback: "Macro name"), text: $viewModel.macroName)
-                        .textFieldStyle(.roundedBorder)
+    private var macroList: some View {
+        List(selection: $viewModel.selectedMacroID) {
+            ForEach(viewModel.macros) { macro in
+                MacroRow(macro: macro, localizer: localizer)
+                    .tag(Optional(macro.id))
+            }
+        }
+        .listStyle(.sidebar)
+    }
 
-                    TextField(localized("macros.textEvent", fallback: "Text event"), text: $viewModel.macroTextDraft)
-                        .textFieldStyle(.roundedBorder)
+    private var macroEditor: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField(localized("macros.macroName", fallback: "Macro name"), text: $viewModel.macroName)
+                    .textFieldStyle(.roundedBorder)
 
-                    HStack(spacing: 8) {
-                        Button {
-                            viewModel.perform {
-                                try viewModel.startRecordingMacro()
-                            }
-                        } label: {
-                            Label(localized("macros.record", fallback: "Record"), systemImage: "record.circle")
+                TextField(localized("macros.textEvent", fallback: "Text event"), text: $viewModel.macroTextDraft)
+                    .textFieldStyle(.roundedBorder)
+
+                AdaptiveActionGrid {
+                    Button {
+                        viewModel.perform {
+                            try viewModel.startRecordingMacro()
                         }
-                        .disabled(viewModel.isRecording)
-
-                        Button {
-                            viewModel.perform {
-                                try viewModel.recordTextEvent()
-                            }
-                        } label: {
-                            Label(localized("macros.addText", fallback: "Add Text"), systemImage: "text.cursor")
-                        }
-                        .disabled(!viewModel.isRecording)
-
-                        Button {
-                            viewModel.perform {
-                                try viewModel.recordKeyEvent("return")
-                            }
-                        } label: {
-                            Label(localized("macros.returnKey", fallback: "Return"), systemImage: "return")
-                        }
-                        .disabled(!viewModel.isRecording)
-
-                        Button {
-                            viewModel.perform {
-                                try viewModel.stopRecordingMacro()
-                            }
-                        } label: {
-                            Label(localized("macros.stop", fallback: "Stop"), systemImage: "stop.fill")
-                        }
-                        .disabled(!viewModel.isRecording)
-
-                        Button {
-                            viewModel.cancelRecordingMacro()
-                        } label: {
-                            Label(localized("common.cancel", fallback: "Cancel"), systemImage: "xmark.circle")
-                        }
-                        .disabled(!viewModel.isRecording)
+                    } label: {
+                        Label(localized("macros.record", fallback: "Record"), systemImage: "record.circle")
                     }
-                    .controlSize(.small)
+                    .disabled(viewModel.isRecording)
 
-                    Stepper(
-                        String(
-                            format: localized("macros.repeat", fallback: "Repeat %dx"),
-                            viewModel.repeatCount
-                        ),
-                        value: $viewModel.repeatCount,
-                        in: 1...20
-                    )
+                    Button {
+                        viewModel.perform {
+                            try viewModel.recordTextEvent()
+                        }
+                    } label: {
+                        Label(localized("macros.addText", fallback: "Add Text"), systemImage: "text.cursor")
+                    }
+                    .disabled(!viewModel.isRecording)
 
-                    eventList(title: localized("macros.playback", fallback: "Playback"), rows: viewModel.playbackEvents)
+                    Button {
+                        viewModel.perform {
+                            try viewModel.recordKeyEvent("return")
+                        }
+                    } label: {
+                        Label(localized("macros.returnKey", fallback: "Return"), systemImage: "return")
+                    }
+                    .disabled(!viewModel.isRecording)
+
+                    Button {
+                        viewModel.perform {
+                            try viewModel.stopRecordingMacro()
+                        }
+                    } label: {
+                        Label(localized("macros.stop", fallback: "Stop"), systemImage: "stop.fill")
+                    }
+                    .disabled(!viewModel.isRecording)
+
+                    Button {
+                        viewModel.cancelRecordingMacro()
+                    } label: {
+                        Label(localized("common.cancel", fallback: "Cancel"), systemImage: "xmark.circle")
+                    }
+                    .disabled(!viewModel.isRecording)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Stepper(
+                    String(
+                        format: localized("macros.repeat", fallback: "Repeat %dx"),
+                        viewModel.repeatCount
+                    ),
+                    value: $viewModel.repeatCount,
+                    in: 1...20
+                )
+
+                eventList(title: localized("macros.playback", fallback: "Playback"), rows: viewModel.playbackEvents)
             }
-            .frame(minWidth: 360)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private var snippetsPane: some View {
-        HSplitView {
-            List(selection: Binding(
-                get: { viewModel.selectedSnippetID },
-                set: { viewModel.selectSnippet(id: $0) }
-            )) {
-                ForEach(viewModel.snippets) { snippet in
-                    SnippetRow(snippet: snippet)
-                        .tag(Optional(snippet.id))
+        GeometryReader { proxy in
+            if proxy.size.width < MacroSnippetPanelLayout.compactSplitWidth {
+                VStack(spacing: 0) {
+                    snippetList
+                        .frame(height: MacroSnippetPanelLayout.compactListHeight)
+                    Divider()
+                    snippetEditor
+                }
+            } else {
+                HSplitView {
+                    snippetList
+                        .frame(minWidth: 220, idealWidth: 260)
+                    snippetEditor
+                        .frame(minWidth: 380)
                 }
             }
-            .listStyle(.sidebar)
-            .frame(minWidth: 220, idealWidth: 260)
+        }
+    }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField(localized("macros.snippet.name", fallback: "Name"), text: $viewModel.snippetName)
+    private var snippetList: some View {
+        List(selection: Binding(
+            get: { viewModel.selectedSnippetID },
+            set: { viewModel.selectSnippet(id: $0) }
+        )) {
+            ForEach(viewModel.snippets) { snippet in
+                SnippetRow(snippet: snippet)
+                    .tag(Optional(snippet.id))
+            }
+        }
+        .listStyle(.sidebar)
+    }
+
+    private var snippetEditor: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                TextField(localized("macros.snippet.name", fallback: "Name"), text: $viewModel.snippetName)
+                    .textFieldStyle(.roundedBorder)
+
+                VStack(spacing: 8) {
+                    TextField(localized("macros.snippet.trigger", fallback: "Trigger"), text: $viewModel.snippetTrigger)
                         .textFieldStyle(.roundedBorder)
-                    HStack(spacing: 8) {
-                        TextField(localized("macros.snippet.trigger", fallback: "Trigger"), text: $viewModel.snippetTrigger)
-                            .textFieldStyle(.roundedBorder)
-                        TextField(localized("macros.snippet.scope", fallback: "Scope"), text: $viewModel.snippetScope)
-                            .textFieldStyle(.roundedBorder)
+                    TextField(localized("macros.snippet.scope", fallback: "Scope"), text: $viewModel.snippetScope)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                TextEditor(text: $viewModel.snippetBody)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(minHeight: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                AdaptiveActionGrid {
+                    Button {
+                        viewModel.perform {
+                            try viewModel.saveSnippetDraft()
+                        }
+                    } label: {
+                        Label(localized("macros.saveSnippet", fallback: "Save Snippet"), systemImage: "square.and.arrow.down")
                     }
 
-                    TextEditor(text: $viewModel.snippetBody)
-                        .font(.system(size: 12, design: .monospaced))
-                        .frame(minHeight: 120)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-
-                    HStack(spacing: 8) {
-                        Button {
-                            viewModel.perform {
-                                try viewModel.saveSnippetDraft()
-                            }
-                        } label: {
-                            Label(localized("macros.saveSnippet", fallback: "Save Snippet"), systemImage: "square.and.arrow.down")
+                    Button {
+                        viewModel.perform {
+                            try viewModel.expandSelectedSnippet()
                         }
-
-                        Button {
-                            viewModel.perform {
-                                try viewModel.expandSelectedSnippet()
-                            }
-                        } label: {
-                            Label(localized("macros.expand", fallback: "Expand"), systemImage: "text.append")
-                        }
-
-                        Button {
-                            viewModel.perform {
-                                try viewModel.insertSelectedSnippetIntoTerminal()
-                            }
-                        } label: {
-                            Label(localized("macros.insert", fallback: "Insert"), systemImage: "terminal")
-                        }
+                    } label: {
+                        Label(localized("macros.expand", fallback: "Expand"), systemImage: "text.append")
                     }
-                    .controlSize(.small)
 
-                    if !viewModel.snippetExpansionText.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(localized("macros.expansion", fallback: "Expansion"))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                            Text(viewModel.snippetExpansionText)
-                                .font(.system(size: 12, design: .monospaced))
-                                .textSelection(.enabled)
-                            eventList(title: localized("macros.tabStops", fallback: "Tab Stops"), rows: viewModel.snippetTabStopLabels)
+                    Button {
+                        viewModel.perform {
+                            try viewModel.insertSelectedSnippetIntoTerminal()
                         }
+                    } label: {
+                        Label(localized("macros.insert", fallback: "Insert"), systemImage: "terminal")
                     }
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !viewModel.snippetExpansionText.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(localized("macros.expansion", fallback: "Expansion"))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text(viewModel.snippetExpansionText)
+                            .font(.system(size: 12, design: .monospaced))
+                            .textSelection(.enabled)
+                        eventList(title: localized("macros.tabStops", fallback: "Tab Stops"), rows: viewModel.snippetTabStopLabels)
+                    }
+                }
             }
-            .frame(minWidth: 380)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -302,7 +337,7 @@ struct MacroSnippetPanelView: View {
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 220)
 
-                HStack(spacing: 8) {
+                AdaptiveActionGrid {
                     Button {
                         viewModel.perform {
                             try viewModel.saveAliasDraft()
@@ -327,7 +362,6 @@ struct MacroSnippetPanelView: View {
                         Label(localized("macros.apply", fallback: "Apply"), systemImage: "terminal")
                     }
                 }
-                .controlSize(.small)
 
                 eventList(
                     title: localized("macros.aliases", fallback: "Aliases"),
@@ -351,9 +385,10 @@ struct MacroSnippetPanelView: View {
 
     private var clipboardPane: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                TextField(localized("macros.clipboard.text", fallback: "Clipboard text"), text: $viewModel.clipboardDraft)
-                    .textFieldStyle(.roundedBorder)
+            TextField(localized("macros.clipboard.text", fallback: "Clipboard text"), text: $viewModel.clipboardDraft)
+                .textFieldStyle(.roundedBorder)
+
+            AdaptiveActionGrid {
                 Button {
                     viewModel.recordClipboardDraft()
                 } label: {
@@ -365,7 +400,6 @@ struct MacroSnippetPanelView: View {
                     Label(localized("macros.clear", fallback: "Clear"), systemImage: "trash")
                 }
             }
-            .controlSize(.small)
 
             TextField(localized("common.search", fallback: "Search"), text: $viewModel.clipboardQuery)
                 .textFieldStyle(.roundedBorder)
@@ -402,6 +436,32 @@ struct MacroSnippetPanelView: View {
 
     private func localized(_ key: String, fallback: String) -> String {
         localizer.string(key, fallback: fallback)
+    }
+}
+
+private enum MacroSnippetPanelLayout {
+    static let compactSplitWidth: CGFloat = 560
+    static let compactListHeight: CGFloat = 118
+}
+
+private struct AdaptiveActionGrid<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    private var columns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(minimum: 160),
+                spacing: 8,
+                alignment: .leading
+            ),
+        ]
+    }
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+            content
+        }
+        .controlSize(.small)
     }
 }
 
