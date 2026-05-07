@@ -11,7 +11,7 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasTwentyCases() {
+    func test_allSections_hasTwentyOneCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
@@ -22,12 +22,13 @@ final class PreferencesSectionTests: XCTestCase {
         // Activity privacy controls bring it to 16; local plugin management
         // brings it to 17; iCloud Sync opt-in settings bring it to 18;
         // Session Replay opt-in and consent settings bring it to 19;
-        // GitHub pane settings bring it to 20.
+        // GitHub pane settings bring it to 20; Spotlight privacy controls
+        // bring it to 21.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 20)
+        XCTAssertEqual(PreferencesSection.allCases.count, 21)
     }
 
     @MainActor
@@ -124,6 +125,12 @@ final class PreferencesSectionTests: XCTestCase {
         let section = PreferencesSection.voice
         XCTAssertEqual(section.title, "Voice")
         XCTAssertEqual(section.iconName, "mic")
+    }
+
+    func test_spotlightSection_hasTitleAndIcon() {
+        let section = PreferencesSection.spotlight
+        XCTAssertEqual(section.title, "Spotlight")
+        XCTAssertEqual(section.iconName, "magnifyingglass.circle")
     }
 
     func test_activitySection_hasTitleAndIcon() {
@@ -250,24 +257,26 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertLessThan(editorIndex, keybindingsIndex)
     }
 
-    func test_agentModeMCPVoiceActivitySessionReplayBackupAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
+    func test_agentModeMCPVoiceSpotlightActivitySessionReplayBackupAndCodeReviewSections_appearBetweenAgentDetectionAndNotifications() {
         let allCases = PreferencesSection.allCases
         guard let agentIndex = allCases.firstIndex(of: .agentDetection),
               let agentModeIndex = allCases.firstIndex(of: .agentMode),
               let mcpIndex = allCases.firstIndex(of: .mcpServers),
               let voiceIndex = allCases.firstIndex(of: .voice),
+              let spotlightIndex = allCases.firstIndex(of: .spotlight),
               let activityIndex = allCases.firstIndex(of: .activity),
               let sessionReplayIndex = allCases.firstIndex(of: .sessionReplay),
               let backupIndex = allCases.firstIndex(of: .backup),
               let codeReviewIndex = allCases.firstIndex(of: .codeReview),
               let notificationsIndex = allCases.firstIndex(of: .notifications) else {
-            XCTFail("agent detection, agent mode, MCP, voice, activity, session replay, backup, code review, and notifications sections must exist")
+            XCTFail("agent detection, agent mode, MCP, voice, Spotlight, activity, session replay, backup, code review, and notifications sections must exist")
             return
         }
         XCTAssertLessThan(agentIndex, agentModeIndex)
         XCTAssertLessThan(agentModeIndex, mcpIndex)
         XCTAssertLessThan(mcpIndex, voiceIndex)
-        XCTAssertLessThan(voiceIndex, activityIndex)
+        XCTAssertLessThan(voiceIndex, spotlightIndex)
+        XCTAssertLessThan(spotlightIndex, activityIndex)
         XCTAssertLessThan(activityIndex, sessionReplayIndex)
         XCTAssertLessThan(sessionReplayIndex, backupIndex)
         XCTAssertLessThan(backupIndex, codeReviewIndex)

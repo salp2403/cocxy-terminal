@@ -5,6 +5,7 @@
 "preferences.section.agentMode" = "Agent Mode";
 "preferences.section.mcpServers" = "MCP Servers";
 "preferences.section.voice" = "Voice";
+"preferences.section.spotlight" = "Spotlight";
 "preferences.section.activity" = "Activity";
 "preferences.section.sessionReplay" = "Session Replay";
 "preferences.section.iCloudSync" = "iCloud Sync";
@@ -148,6 +149,15 @@
 "preferences.agentMode.masterPassword.deleted.status" = "Conversation master password deleted.";
 "preferences.agentMode.masterPassword.save.failed" = "Failed to save master password: %@";
 "preferences.agentMode.masterPassword.delete.failed" = "Failed to delete master password: %@";
+"preferences.spotlight.privacy.section" = "Privacy";
+"preferences.spotlight.enable" = "Enable local Spotlight indexing";
+"preferences.spotlight.commandHistory" = "Index command history";
+"preferences.spotlight.agentConversations" = "Index Agent conversations";
+"preferences.spotlight.sensitive.section" = "Sensitive Fields";
+"preferences.spotlight.commandOutput" = "Include command output";
+"preferences.spotlight.workingDirectories" = "Include working directories";
+"preferences.spotlight.toolMetadata" = "Include tool metadata";
+"preferences.spotlight.ignore.caption" = "Create .cocxy-spotlight-ignore in a workspace to block indexing for that project.";
 "agent.panel.title" = "Agent Mode";
 "agent.panel.accessibility" = "Agent Mode";
 "agent.panel.close" = "Close Agent Mode";

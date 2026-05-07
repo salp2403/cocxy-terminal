@@ -861,8 +861,16 @@ extension MainWindowController {
 
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
         recordCommandBlockActivity(block, tabID: tabID, surfaceID: surfaceID)
+        let spotlightConfig = configService?.current.spotlight ?? .defaults
         Task.detached(priority: .utility) {
             try? TerminalBlockStore().append(block, sessionID: sessionID)
+            if spotlightConfig.enabled {
+                _ = try? await SpotlightIncrementalIndexer.indexCommandBlock(
+                    block,
+                    sessionID: sessionID,
+                    config: spotlightConfig
+                )
+            }
         }
     }
 
@@ -917,8 +925,16 @@ extension MainWindowController {
         (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
 
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
+        let spotlightConfig = configService?.current.spotlight ?? .defaults
         Task.detached(priority: .utility) {
             try? TerminalBlockStore().append(updated, sessionID: sessionID)
+            if spotlightConfig.enabled {
+                _ = try? await SpotlightIncrementalIndexer.indexCommandBlock(
+                    updated,
+                    sessionID: sessionID,
+                    config: spotlightConfig
+                )
+            }
         }
     }
 

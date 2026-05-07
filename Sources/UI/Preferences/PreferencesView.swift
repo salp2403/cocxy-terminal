@@ -150,6 +150,8 @@ struct PreferencesView: View {
             MCPServersPreferencesSection(viewModel: viewModel)
         case .voice:
             VoicePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .spotlight:
+            SpotlightPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .activity:
             ActivityPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .sessionReplay:
@@ -203,6 +205,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case agentMode
     case mcpServers
     case voice
+    case spotlight
     case activity
     case sessionReplay
     case iCloudSync
@@ -234,6 +237,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .agentMode: return "Agent Mode"
         case .mcpServers: return "MCP Servers"
         case .voice: return "Voice"
+        case .spotlight: return "Spotlight"
         case .activity: return "Activity"
         case .sessionReplay: return "Session Replay"
         case .iCloudSync: return "iCloud Sync"
@@ -260,6 +264,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .agentMode: return "sparkles"
         case .mcpServers: return "link"
         case .voice: return "mic"
+        case .spotlight: return "magnifyingglass.circle"
         case .activity: return "chart.bar"
         case .sessionReplay: return "record.circle"
         case .iCloudSync: return "icloud"
@@ -1610,6 +1615,84 @@ struct VoicePreferencesSection: View {
 
     private func optionTitle(_ option: VoiceLocaleOption) -> String {
         "\(option.localizedName) (\(option.identifier))"
+    }
+}
+
+// MARK: - Spotlight Section
+
+/// Editable local Spotlight indexing preferences.
+struct SpotlightPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section(viewModel.localizedString("preferences.spotlight.privacy.section", fallback: "Privacy")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.spotlight.enable",
+                        fallback: "Enable local Spotlight indexing"
+                    ),
+                    isOn: $viewModel.spotlightIndexingEnabled
+                )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.spotlight.commandHistory",
+                        fallback: "Index command history"
+                    ),
+                    isOn: $viewModel.spotlightIndexCommandHistory
+                )
+                    .disabled(!viewModel.spotlightIndexingEnabled)
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.spotlight.agentConversations",
+                        fallback: "Index Agent conversations"
+                    ),
+                    isOn: $viewModel.spotlightIndexAgentConversations
+                )
+                    .disabled(!viewModel.spotlightIndexingEnabled)
+            }
+
+            Section(viewModel.localizedString("preferences.spotlight.sensitive.section", fallback: "Sensitive Fields")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.spotlight.commandOutput",
+                        fallback: "Include command output"
+                    ),
+                    isOn: $viewModel.spotlightIncludeCommandOutput
+                )
+                    .disabled(!viewModel.spotlightIndexingEnabled || !viewModel.spotlightIndexCommandHistory)
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.spotlight.workingDirectories",
+                        fallback: "Include working directories"
+                    ),
+                    isOn: $viewModel.spotlightIncludeWorkingDirectories
+                )
+                    .disabled(!viewModel.spotlightIndexingEnabled || !viewModel.spotlightIndexCommandHistory)
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.spotlight.toolMetadata",
+                        fallback: "Include tool metadata"
+                    ),
+                    isOn: $viewModel.spotlightIncludeToolMetadata
+                )
+                    .disabled(!viewModel.spotlightIndexingEnabled || !viewModel.spotlightIndexAgentConversations)
+                Text(
+                    viewModel.localizedString(
+                        "preferences.spotlight.ignore.caption",
+                        fallback: "Create .cocxy-spotlight-ignore in a workspace to block indexing for that project."
+                    )
+                )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle(viewModel.localizedString("preferences.section.spotlight", fallback: "Spotlight"))
     }
 }
 

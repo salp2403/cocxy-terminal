@@ -57,6 +57,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let voice: VoiceConfig
     let iCloudSync: ICloudSyncConfig
     let completions: CompletionConfig
+    let spotlight: SpotlightIndexConfig
     let codeReview: CodeReviewConfig
     let notifications: NotificationConfig
     let quickTerminal: QuickTerminalConfig
@@ -81,6 +82,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         voice: VoiceConfig = .defaults,
         iCloudSync: ICloudSyncConfig = .defaults,
         completions: CompletionConfig = .defaults,
+        spotlight: SpotlightIndexConfig = .defaults,
         codeReview: CodeReviewConfig = .defaults,
         notifications: NotificationConfig,
         quickTerminal: QuickTerminalConfig,
@@ -104,6 +106,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.voice = voice
         self.iCloudSync = iCloudSync
         self.completions = completions
+        self.spotlight = spotlight
         self.codeReview = codeReview
         self.notifications = notifications
         self.quickTerminal = quickTerminal
@@ -131,6 +134,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             voice: .defaults,
             iCloudSync: .defaults,
             completions: .defaults,
+            spotlight: .defaults,
             codeReview: .defaults,
             notifications: .defaults,
             quickTerminal: .defaults,
@@ -153,7 +157,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, codeReview
+        case general, appearance, terminal, agentDetection, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -177,6 +181,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.iCloudSync = try container.decodeIfPresent(ICloudSyncConfig.self, forKey: .iCloudSync)
             ?? .defaults
         self.completions = try container.decodeIfPresent(CompletionConfig.self, forKey: .completions)
+            ?? .defaults
+        self.spotlight = try container.decodeIfPresent(SpotlightIndexConfig.self, forKey: .spotlight)
             ?? .defaults
         self.codeReview = try container.decodeIfPresent(CodeReviewConfig.self, forKey: .codeReview)
             ?? .defaults
@@ -314,6 +320,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // provider can read local source text. Repository config must
             // not enable or route completions on the user's behalf.
             completions: completions,
+            // Spotlight indexing exposes local command and conversation text
+            // to a system index. It is a global user opt-in; project config
+            // may only opt out through `.cocxy-spotlight-ignore`.
+            spotlight: spotlight,
             codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
@@ -1136,6 +1146,74 @@ struct CompletionConfig: Codable, Sendable, Equatable {
         Array(Set(rawLanguageIDs.map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         }.filter { !$0.isEmpty })).sorted()
+    }
+}
+
+// MARK: - Spotlight Index Config
+
+/// `[spotlight]` section for local macOS Spotlight indexing.
+///
+/// The master switch defaults off because command history and Agent Mode
+/// conversations can contain sensitive local context. When enabled, the
+/// broad local scopes are available, but outputs, working directories, and
+/// tool metadata stay excluded unless the user opts into those fields too.
+struct SpotlightIndexConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let indexCommandHistory: Bool
+    let indexAgentConversations: Bool
+    let includeCommandOutput: Bool
+    let includeWorkingDirectories: Bool
+    let includeToolMetadata: Bool
+
+    static let defaults = SpotlightIndexConfig(
+        enabled: false,
+        indexCommandHistory: true,
+        indexAgentConversations: true,
+        includeCommandOutput: false,
+        includeWorkingDirectories: false,
+        includeToolMetadata: false
+    )
+
+    init(
+        enabled: Bool = false,
+        indexCommandHistory: Bool = true,
+        indexAgentConversations: Bool = true,
+        includeCommandOutput: Bool = false,
+        includeWorkingDirectories: Bool = false,
+        includeToolMetadata: Bool = false
+    ) {
+        self.enabled = enabled
+        self.indexCommandHistory = indexCommandHistory
+        self.indexAgentConversations = indexAgentConversations
+        self.includeCommandOutput = includeCommandOutput
+        self.includeWorkingDirectories = includeWorkingDirectories
+        self.includeToolMetadata = includeToolMetadata
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case indexCommandHistory
+        case indexAgentConversations
+        case includeCommandOutput
+        case includeWorkingDirectories
+        case includeToolMetadata
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = Self.defaults
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+            ?? defaults.enabled
+        self.indexCommandHistory = try container.decodeIfPresent(Bool.self, forKey: .indexCommandHistory)
+            ?? defaults.indexCommandHistory
+        self.indexAgentConversations = try container.decodeIfPresent(Bool.self, forKey: .indexAgentConversations)
+            ?? defaults.indexAgentConversations
+        self.includeCommandOutput = try container.decodeIfPresent(Bool.self, forKey: .includeCommandOutput)
+            ?? defaults.includeCommandOutput
+        self.includeWorkingDirectories = try container.decodeIfPresent(Bool.self, forKey: .includeWorkingDirectories)
+            ?? defaults.includeWorkingDirectories
+        self.includeToolMetadata = try container.decodeIfPresent(Bool.self, forKey: .includeToolMetadata)
+            ?? defaults.includeToolMetadata
     }
 }
 

@@ -88,6 +88,22 @@ struct AgentConversationPersistenceSwiftTestingTests {
         ])
     }
 
+    @Test("store lists only regular JSONL conversation files")
+    func storeListsOnlyRegularJSONLConversationFiles() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentConversationStore(rootDirectory: root)
+
+        try store.append(sampleMessage(id: "msg-1", role: .user, content: "Hello"), conversationID: "conv-1")
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("not-a-conversation.jsonl", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try "ignored".write(to: root.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+
+        #expect(try store.conversationIDs() == ["conv-1"])
+    }
+
     @Test("store skips corrupt JSONL lines without losing valid messages")
     func storeSkipsCorruptJSONLLines() throws {
         let root = temporaryDirectory()

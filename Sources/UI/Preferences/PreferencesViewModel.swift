@@ -200,6 +200,26 @@ final class PreferencesViewModel: ObservableObject {
     /// Normalized language IDs eligible for inline completions.
     @Published var completionEnabledLanguageIDs: Set<String>
 
+    // MARK: - Spotlight
+
+    /// Master opt-in for local macOS Spotlight indexing.
+    @Published var spotlightIndexingEnabled: Bool
+
+    /// Whether command history is included when Spotlight indexing is enabled.
+    @Published var spotlightIndexCommandHistory: Bool
+
+    /// Whether Agent Mode conversations are included when Spotlight indexing is enabled.
+    @Published var spotlightIndexAgentConversations: Bool
+
+    /// Whether command output is included in command-history Spotlight documents.
+    @Published var spotlightIncludeCommandOutput: Bool
+
+    /// Whether working directories are included in command-history Spotlight documents.
+    @Published var spotlightIncludeWorkingDirectories: Bool
+
+    /// Whether tool names and tool call IDs are included in conversation documents.
+    @Published var spotlightIncludeToolMetadata: Bool
+
     // MARK: - Activity
 
     /// Master opt-in for local activity dashboard persistence.
@@ -520,6 +540,7 @@ final class PreferencesViewModel: ObservableObject {
             || agentModeHasUnsavedChanges(comparedTo: c.agent)
             || voiceHasUnsavedChanges(comparedTo: c.voice)
             || completionHasUnsavedChanges(comparedTo: c.completions)
+            || spotlightHasUnsavedChanges(comparedTo: c.spotlight)
             || activityHasUnsavedChanges(comparedTo: c.activity)
             || sessionReplayHasUnsavedChanges(comparedTo: c.sessionReplay)
             || iCloudSyncHasUnsavedChanges(comparedTo: c.iCloudSync)
@@ -626,6 +647,12 @@ final class PreferencesViewModel: ObservableObject {
         completionIdleDelaySeconds = c.completions.idleDelaySeconds
         completionMaxContextUTF16Length = c.completions.maxContextUTF16Length
         completionEnabledLanguageIDs = Set(c.completions.enabledLanguageIDs)
+        spotlightIndexingEnabled = c.spotlight.enabled
+        spotlightIndexCommandHistory = c.spotlight.indexCommandHistory
+        spotlightIndexAgentConversations = c.spotlight.indexAgentConversations
+        spotlightIncludeCommandOutput = c.spotlight.includeCommandOutput
+        spotlightIncludeWorkingDirectories = c.spotlight.includeWorkingDirectories
+        spotlightIncludeToolMetadata = c.spotlight.includeToolMetadata
         activityTrackingEnabled = c.activity.enabled
         activityCostTrackingEnabled = c.activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = c.activity.inputCostMicrosPerMillionTokens
@@ -838,6 +865,14 @@ final class PreferencesViewModel: ObservableObject {
         self.completionIdleDelaySeconds = config.completions.idleDelaySeconds
         self.completionMaxContextUTF16Length = config.completions.maxContextUTF16Length
         self.completionEnabledLanguageIDs = Set(config.completions.enabledLanguageIDs)
+
+        // Spotlight
+        self.spotlightIndexingEnabled = config.spotlight.enabled
+        self.spotlightIndexCommandHistory = config.spotlight.indexCommandHistory
+        self.spotlightIndexAgentConversations = config.spotlight.indexAgentConversations
+        self.spotlightIncludeCommandOutput = config.spotlight.includeCommandOutput
+        self.spotlightIncludeWorkingDirectories = config.spotlight.includeWorkingDirectories
+        self.spotlightIncludeToolMetadata = config.spotlight.includeToolMetadata
 
         // Activity
         self.activityTrackingEnabled = config.activity.enabled
@@ -1490,6 +1525,7 @@ final class PreferencesViewModel: ObservableObject {
         let backup = buildBackupConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
+        let spotlight = buildSpotlightConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
             .applyingFallbackShortcut(
@@ -1554,6 +1590,7 @@ final class PreferencesViewModel: ObservableObject {
             voice: voice,
             iCloudSync: iCloudSync,
             completions: completions,
+            spotlight: spotlight,
             codeReview: buildCodeReviewConfigFromViewModel(),
             notifications: NotificationConfig(
                 macosNotifications: macosNotifications,
@@ -1597,6 +1634,12 @@ final class PreferencesViewModel: ObservableObject {
         completionIdleDelaySeconds = completions.idleDelaySeconds
         completionMaxContextUTF16Length = completions.maxContextUTF16Length
         completionEnabledLanguageIDs = Set(completions.enabledLanguageIDs)
+        spotlightIndexingEnabled = spotlight.enabled
+        spotlightIndexCommandHistory = spotlight.indexCommandHistory
+        spotlightIndexAgentConversations = spotlight.indexAgentConversations
+        spotlightIncludeCommandOutput = spotlight.includeCommandOutput
+        spotlightIncludeWorkingDirectories = spotlight.includeWorkingDirectories
+        spotlightIncludeToolMetadata = spotlight.includeToolMetadata
         pendingKeybindings = nil
     }
 
@@ -1677,6 +1720,33 @@ final class PreferencesViewModel: ObservableObject {
             next.remove(normalized)
         }
         completionEnabledLanguageIDs = next
+    }
+
+    private func buildSpotlightConfigFromViewModel() -> SpotlightIndexConfig {
+        SpotlightIndexConfig(
+            enabled: spotlightIndexingEnabled,
+            indexCommandHistory: spotlightIndexCommandHistory,
+            indexAgentConversations: spotlightIndexAgentConversations,
+            includeCommandOutput: spotlightIndexingEnabled
+                && spotlightIndexCommandHistory
+                && spotlightIncludeCommandOutput,
+            includeWorkingDirectories: spotlightIndexingEnabled
+                && spotlightIndexCommandHistory
+                && spotlightIncludeWorkingDirectories,
+            includeToolMetadata: spotlightIndexingEnabled
+                && spotlightIndexAgentConversations
+                && spotlightIncludeToolMetadata
+        )
+    }
+
+    private func spotlightHasUnsavedChanges(comparedTo config: SpotlightIndexConfig) -> Bool {
+        let spotlight = buildSpotlightConfigFromViewModel()
+        return spotlight.enabled != config.enabled
+            || spotlight.indexCommandHistory != config.indexCommandHistory
+            || spotlight.indexAgentConversations != config.indexAgentConversations
+            || spotlight.includeCommandOutput != config.includeCommandOutput
+            || spotlight.includeWorkingDirectories != config.includeWorkingDirectories
+            || spotlight.includeToolMetadata != config.includeToolMetadata
     }
 
     private func buildActivityConfigFromViewModel() -> ActivityConfig {
@@ -2143,6 +2213,7 @@ final class PreferencesViewModel: ObservableObject {
         let backup = buildBackupConfigFromViewModel()
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
+        let spotlight = buildSpotlightConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
@@ -2224,6 +2295,14 @@ final class PreferencesViewModel: ObservableObject {
         idle-delay-seconds = \(Self.tomlNumber(completions.idleDelaySeconds))
         max-context-utf16-length = \(completions.maxContextUTF16Length)
         enabled-languages = \(Self.tomlStringArray(completions.enabledLanguageIDs))
+
+        [spotlight]
+        enabled = \(spotlight.enabled)
+        index-command-history = \(spotlight.indexCommandHistory)
+        index-agent-conversations = \(spotlight.indexAgentConversations)
+        include-command-output = \(spotlight.includeCommandOutput)
+        include-working-directories = \(spotlight.includeWorkingDirectories)
+        include-tool-metadata = \(spotlight.includeToolMetadata)
 
         [activity]
         enabled = \(activity.enabled)

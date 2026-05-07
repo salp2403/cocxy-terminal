@@ -281,6 +281,30 @@ struct AgentConversationStore {
         }
     }
 
+    func conversationIDs() throws -> [String] {
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: rootDirectory.path, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else {
+            return []
+        }
+
+        return try fileManager.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+        .compactMap { url in
+            guard url.pathExtension == "jsonl" else { return nil }
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+            guard values?.isRegularFile == true else { return nil }
+            return url.deletingPathExtension().lastPathComponent
+        }
+        .sorted { lhs, rhs in
+            lhs.localizedStandardCompare(rhs) == .orderedAscending
+        }
+    }
+
     func fileURL(forConversationID conversationID: String) -> URL {
         rootDirectory.appendingPathComponent("\(Self.sanitizedConversationID(conversationID)).jsonl")
     }

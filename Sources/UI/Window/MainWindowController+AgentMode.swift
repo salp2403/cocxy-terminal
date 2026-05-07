@@ -105,6 +105,9 @@ extension MainWindowController {
             mcpManager: MCPConfiguredManager(),
             usageRecorder: { [weak self] usage in
                 await self?.recordCurrentAgentModeTokenUsage(usage)
+            },
+            spotlightConfigProvider: { [weak self] in
+                self?.configService?.current.spotlight ?? .defaults
             }
         )
         let viewModel = AgentPanelViewModel(

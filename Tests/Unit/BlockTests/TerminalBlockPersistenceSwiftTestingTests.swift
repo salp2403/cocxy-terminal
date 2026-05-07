@@ -73,6 +73,22 @@ struct TerminalBlockPersistenceSwiftTestingTests {
         #expect(try store.load(sessionID: "tab-1").map(\.command) == ["echo one", "echo two"])
     }
 
+    @Test("store lists only regular JSONL session files")
+    func storeListsOnlyRegularJSONLSessionFiles() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = TerminalBlockStore(rootDirectory: root)
+
+        try store.append(sampleBlock(id: 1, command: "echo one"), sessionID: "tab-1")
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("not-a-session.jsonl", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try "ignored".write(to: root.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+
+        #expect(try store.sessionIDs() == ["tab-1"])
+    }
+
     @Test("store skips corrupt JSONL lines without losing valid blocks")
     func storeSkipsCorruptJSONLLinesWithoutLosingValidBlocks() throws {
         let root = temporaryDirectory()

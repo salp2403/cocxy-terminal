@@ -94,6 +94,8 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
     private let commandAllowlist: any AgentCommandAllowlistLoading
     private let agentSecrets: AgentSecrets
     private let usageRecorder: AgentUsageRecording?
+    private let spotlightConfigProvider: @MainActor @Sendable () -> SpotlightIndexConfig
+    private let spotlightIndexWriter: any SpotlightIndexWriting
 
     init(
         clientFactory: any AgentLLMClientMaking = AgentProviderClientFactory(),
@@ -108,7 +110,9 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         computerUseController: any ComputerUseControlling = ComputerUseActor.liveDefault(),
         commandAllowlist: any AgentCommandAllowlistLoading = AgentCommandAllowlist(),
         agentSecrets: AgentSecrets = AgentSecrets(),
-        usageRecorder: AgentUsageRecording? = nil
+        usageRecorder: AgentUsageRecording? = nil,
+        spotlightConfigProvider: @escaping @MainActor @Sendable () -> SpotlightIndexConfig = { .defaults },
+        spotlightIndexWriter: any SpotlightIndexWriting = CoreSpotlightIndexWriter()
     ) {
         self.clientFactory = clientFactory
         self.workspaceRootProvider = workspaceRootProvider
@@ -123,6 +127,8 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         self.commandAllowlist = commandAllowlist
         self.agentSecrets = agentSecrets
         self.usageRecorder = usageRecorder
+        self.spotlightConfigProvider = spotlightConfigProvider
+        self.spotlightIndexWriter = spotlightIndexWriter
     }
 
     func run(
@@ -210,6 +216,14 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
             rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir),
             lineCodec: lineCodec
         )
+        let spotlightConfig = await spotlightConfigProvider()
+        let conversationRecorder: any AgentConversationRecording = SpotlightIndexingAgentConversationRecorder(
+            base: store,
+            conversationID: conversationID,
+            workspaceRoot: workspaceRoot,
+            config: spotlightConfig,
+            writer: spotlightIndexWriter
+        )
         let effectivePermissionPolicy = AgentToolPermissionPolicy(
             autoModeEnabled: permissionPolicy.autoModeEnabled,
             computerUseConfirm: configuration.computerUseConfirm,
@@ -222,7 +236,7 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
             toolPreviewer: executor,
             registry: effectiveRegistry,
             permissionPolicy: effectivePermissionPolicy,
-            conversationStore: store,
+            conversationStore: conversationRecorder,
             usageRecorder: usageRecorder
         )
     }

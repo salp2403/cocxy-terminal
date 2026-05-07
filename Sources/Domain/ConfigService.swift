@@ -389,6 +389,18 @@ final class ConfigService: ConfigProviding {
         max-context-utf16-length = \(defaults.completions.maxContextUTF16Length)
         enabled-languages = \(tomlStringArray(defaults.completions.enabledLanguageIDs))
 
+        [spotlight]
+        # Local macOS Spotlight indexing for command history and Agent
+        # conversations. Disabled by default because the system index can
+        # surface local text outside Cocxy. A workspace can opt out even
+        # when this is enabled by creating `.cocxy-spotlight-ignore`.
+        enabled = \(defaults.spotlight.enabled)
+        index-command-history = \(defaults.spotlight.indexCommandHistory)
+        index-agent-conversations = \(defaults.spotlight.indexAgentConversations)
+        include-command-output = \(defaults.spotlight.includeCommandOutput)
+        include-working-directories = \(defaults.spotlight.includeWorkingDirectories)
+        include-tool-metadata = \(defaults.spotlight.includeToolMetadata)
+
         [code-review]
         auto-show-on-session-end = \(defaults.codeReview.autoShowOnSessionEnd)
 
@@ -579,6 +591,7 @@ final class ConfigService: ConfigProviding {
         let voice = parseVoiceConfig(from: parsed)
         let iCloudSync = parseICloudSyncConfig(from: parsed)
         let completions = parseCompletionConfig(from: parsed)
+        let spotlight = parseSpotlightConfig(from: parsed)
         let codeReview = parseCodeReviewConfig(from: parsed)
         let notifications = parseNotificationConfig(from: parsed)
         let quickTerminal = parseQuickTerminalConfig(from: parsed)
@@ -607,6 +620,7 @@ final class ConfigService: ConfigProviding {
             voice: voice,
             iCloudSync: iCloudSync,
             completions: completions,
+            spotlight: spotlight,
             codeReview: codeReview,
             notifications: notifications,
             quickTerminal: quickTerminal,
@@ -985,6 +999,29 @@ final class ConfigService: ConfigProviding {
             idleDelaySeconds: idleDelay,
             maxContextUTF16Length: maxContext,
             enabledLanguageIDs: languages
+        )
+    }
+
+    /// Parses `[spotlight]` as an explicit local macOS indexing opt-in.
+    ///
+    /// Missing or wrong-shaped values fall back to disabled, privacy-preserving
+    /// defaults so malformed config cannot silently enable indexing.
+    private func parseSpotlightConfig(from parsed: [String: TOMLValue]) -> SpotlightIndexConfig {
+        let table = extractTable("spotlight", from: parsed)
+        let defaults = SpotlightIndexConfig.defaults
+
+        return SpotlightIndexConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            indexCommandHistory: boolValue(table["index-command-history"])
+                ?? defaults.indexCommandHistory,
+            indexAgentConversations: boolValue(table["index-agent-conversations"])
+                ?? defaults.indexAgentConversations,
+            includeCommandOutput: boolValue(table["include-command-output"])
+                ?? defaults.includeCommandOutput,
+            includeWorkingDirectories: boolValue(table["include-working-directories"])
+                ?? defaults.includeWorkingDirectories,
+            includeToolMetadata: boolValue(table["include-tool-metadata"])
+                ?? defaults.includeToolMetadata
         )
     }
 

@@ -57,6 +57,7 @@ let package = Package(
                 .linkedFramework("UniformTypeIdentifiers"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("NaturalLanguage"),
+                .linkedFramework("CoreSpotlight"),
             ]
         ),
         .testTarget(
