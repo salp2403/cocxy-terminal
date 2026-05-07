@@ -732,6 +732,35 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
+    @Test("public crawl policy avoids named third-party crawler brands")
+    func publicCrawlPolicyAvoidsNamedThirdPartyCrawlerBrands() throws {
+        let root = repositoryRoot()
+        let files = [
+            root.appendingPathComponent("web/public/robots.txt"),
+            root.appendingPathComponent("web/public/manifest.webmanifest"),
+            root.appendingPathComponent("web/public/sitemap.xml"),
+        ]
+        let forbiddenFragments = [
+            "GPTBot",
+            "ChatGPT-User",
+            "Google-Extended",
+            "ClaudeBot",
+            "anthropic-ai",
+            "PerplexityBot",
+            "CCBot",
+        ]
+
+        for file in files {
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            for fragment in forbiddenFragments {
+                #expect(
+                    !contents.localizedCaseInsensitiveContains(fragment),
+                    "\(Self.relativePath(file, root: root)) should keep crawler policy generic: \(fragment)"
+                )
+            }
+        }
+    }
+
     @Test("changelog keeps non-empty unreleased notes before the latest tagged release")
     func changelogKeepsCurrentUnreleasedNotes() throws {
         let root = repositoryRoot()
