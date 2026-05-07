@@ -1761,6 +1761,15 @@ extension MainWindowController {
             let avoidsStatusBar: Bool
         }
 
+        if isGitHubPaneVisible {
+            let ghWidth = clampedGitHubPanePanelWidth(
+                preferredGitHubPanePanelWidth,
+                containerWidth: overlayContainer.bounds.width
+            )
+            gitHubPanePanelWidth = ghWidth
+            syncGitHubPaneRootView(panelWidth: ghWidth)
+        }
+
         if isCodeReviewVisible {
             let reviewWidth = clampedCodeReviewPanelWidth(
                 preferredCodeReviewPanelWidth,
@@ -1796,12 +1805,13 @@ extension MainWindowController {
 
         var currentX = overlayContainer.bounds.width
         for panel in visiblePanels.reversed() {
-            currentX -= panel.width
+            let fittedWidth = min(panel.width, max(0, currentX))
+            currentX -= fittedWidth
             let panelY = panel.avoidsStatusBar ? statusBarHostingView?.frame.height ?? 24 : 0
             panel.view.frame = NSRect(
                 x: currentX,
                 y: panelY,
-                width: panel.width,
+                width: fittedWidth,
                 height: max(0, overlayContainer.bounds.height - panelY)
             )
         }
@@ -1865,7 +1875,10 @@ extension MainWindowController {
         let occupiedSiblingWidth =
             (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
             (isDashboardVisible ? DashboardPanelView.panelWidth : 0) +
-            (isAgentModeVisible ? AgentPanelView.panelWidth : 0)
+            (isActivityDashboardVisible ? ActivityDashboardView.panelWidth : 0) +
+            (isAgentModeVisible ? AgentPanelView.panelWidth : 0) +
+            (isGitHubPaneVisible ? gitHubPanePanelWidth : 0) +
+            (isNotesVisible ? clampedNotesPanelWidth(containerWidth: effectiveContainerWidth) : 0)
         let reservedTerminalWidth: CGFloat = 280
         let adaptiveMinimum = max(360, effectiveContainerWidth - occupiedSiblingWidth - reservedTerminalWidth)
         return min(CodeReviewPanelView.minimumPanelWidth, adaptiveMinimum)
@@ -1876,7 +1889,10 @@ extension MainWindowController {
         let occupiedSiblingWidth =
             (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
             (isDashboardVisible ? DashboardPanelView.panelWidth : 0) +
-            (isAgentModeVisible ? AgentPanelView.panelWidth : 0)
+            (isActivityDashboardVisible ? ActivityDashboardView.panelWidth : 0) +
+            (isAgentModeVisible ? AgentPanelView.panelWidth : 0) +
+            (isGitHubPaneVisible ? gitHubPanePanelWidth : 0) +
+            (isNotesVisible ? clampedNotesPanelWidth(containerWidth: effectiveContainerWidth) : 0)
         let reservedTerminalWidth: CGFloat = 280
         let minimumWidth = minimumCodeReviewPanelWidth(containerWidth: effectiveContainerWidth)
         let adaptiveMaximum = effectiveContainerWidth - occupiedSiblingWidth - reservedTerminalWidth

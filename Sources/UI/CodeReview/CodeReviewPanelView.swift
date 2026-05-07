@@ -23,7 +23,7 @@ struct CodeReviewPanelView: View {
     var vibrancyAppearanceOverride: NSAppearance?
 
     static let defaultPanelWidth: CGFloat = 640
-    static let minimumPanelWidth: CGFloat = 460
+    static let minimumPanelWidth: CGFloat = 360
     static let maximumPanelWidth: CGFloat = 1400
     static let panelResizeStep: CGFloat = 160
     private static let toolbarReservedHeight: CGFloat = 108

@@ -484,6 +484,59 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
     }
 
+    func testRightDockedAgentReviewAndGitHubPanelsStayInsideOverlay() {
+        withIsolatedCodeReviewPanelWidthPreference {
+            withIsolatedGitHubPanePanelWidthPreference {
+                let controller = MainWindowController(bridge: MockTerminalEngine())
+                controller.injectedAgentPromptRunner = LayoutTestAgentPromptRunner()
+                controller.injectedGitHubPaneViewModel = GitHubPaneViewModel(
+                    service: GitHubService(runner: layoutTestGitHubRunner)
+                )
+                controller.showWindow(nil)
+                controller.window?.setContentSize(NSSize(width: 1100, height: 760))
+
+                let reviewViewModel = CodeReviewPanelViewModel(
+                    tracker: SessionDiffTrackerImpl(),
+                    hookEventReceiver: nil,
+                    directDiffLoader: { _, _, _ in [] }
+                )
+                controller.injectedCodeReviewViewModel = reviewViewModel
+
+                controller.showAgentModePanel()
+                controller.showCodeReviewPanel()
+                controller.showGitHubPanePanel()
+                controller.layoutRightDockedAgentPanels()
+
+                guard let overlayContainer = controller.overlayContainerView,
+                      let agentPanel = controller.agentModeHostingView,
+                      let codeReviewPanel = controller.codeReviewHostingView,
+                      let gitHubPanel = controller.gitHubPaneHostingView else {
+                    XCTFail("Expected all right-docked panels to be visible")
+                    return
+                }
+
+                XCTAssertGreaterThanOrEqual(
+                    agentPanel.frame.minX,
+                    0,
+                    "Stacking Agent Mode, Code Review, and GitHub must not push the leftmost panel off-screen"
+                )
+                XCTAssertLessThanOrEqual(agentPanel.frame.maxX, codeReviewPanel.frame.minX + 0.5)
+                XCTAssertLessThanOrEqual(codeReviewPanel.frame.maxX, gitHubPanel.frame.minX + 0.5)
+                XCTAssertEqual(gitHubPanel.frame.maxX, overlayContainer.bounds.width, accuracy: 0.5)
+                XCTAssertLessThanOrEqual(
+                    codeReviewPanel.frame.width,
+                    CodeReviewPanelView.minimumPanelWidth + 0.5,
+                    "Code Review should collapse to its compact minimum before docked panels overflow"
+                )
+                XCTAssertLessThanOrEqual(
+                    gitHubPanel.frame.width,
+                    GitHubPaneView.minimumPanelWidth + 0.5,
+                    "GitHub should collapse to its compact minimum before docked panels overflow"
+                )
+            }
+        }
+    }
+
     // MARK: - Close Tab Cleanup
 
     func testCloseTabRemovesSurfaceViewMapping() {
@@ -630,6 +683,36 @@ private func withIsolatedCodeReviewPanelWidthPreference(_ body: () -> Void) {
         }
     }
     body()
+}
+
+@MainActor
+private func withIsolatedGitHubPanePanelWidthPreference(_ body: () -> Void) {
+    let defaults = UserDefaults.standard
+    let key = MainWindowController.gitHubPanePanelWidthDefaultsKey
+    let previousValue = defaults.object(forKey: key)
+    defaults.removeObject(forKey: key)
+    defer {
+        if let previousValue {
+            defaults.set(previousValue, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+    }
+    body()
+}
+
+private let layoutTestGitHubRunner: GitHubService.Runner = { _, _, _ in
+    throw GitHubCLIError.notInstalled
+}
+
+private struct LayoutTestAgentPromptRunner: AgentPromptRunning {
+    func run(
+        prompt: String,
+        history: [AgentMessage],
+        configuration: AgentModeConfig
+    ) async throws -> AgentLoopResult {
+        AgentLoopResult(messages: history, stopReason: .completed)
+    }
 }
 
 // MARK: - Tab Navigation Surface Switching Tests
