@@ -15,6 +15,10 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: scriptURL,
             encoding: .utf8
         )
+        let serialScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/run-swift-testing-serial.sh"),
+            encoding: .utf8
+        )
         let ci = try String(
             contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
             encoding: .utf8
@@ -28,6 +32,11 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(script.contains("swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks"))
         #expect(script.contains("./scripts/run-swift-testing-serial.sh"))
+        #expect(serialScript.contains("swift-testing-serial-profraw"))
+        #expect(serialScript.contains("xcrun llvm-profdata merge -sparse"))
+        #expect(serialScript.contains("xcrun llvm-cov export -format=text"))
+        #expect(serialScript.contains("CocxyTerminal-SwiftTesting.json"))
+        #expect(!serialScript.contains("mapfile"))
         #expect(ci.contains("./scripts/run-tests.sh"))
         #expect(pullRequestTemplate.contains("`./scripts/run-tests.sh` passes locally"))
     }
