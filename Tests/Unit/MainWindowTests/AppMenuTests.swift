@@ -49,6 +49,17 @@ final class AppMenuStructureTests: XCTestCase {
         XCTAssertNotNil(editMenu, "Edit menu must exist")
     }
 
+    func testEditMenuHasHiddenEscapeDismissOverlayCommand() throws {
+        let mainMenu = try XCTUnwrap(NSApplication.shared.mainMenu)
+        let editMenu = try XCTUnwrap(mainMenu.items.first(where: { $0.submenu?.title == "Edit" })?.submenu)
+        let dismissItem = try XCTUnwrap(editMenu.items.first(where: { $0.action == #selector(MainWindowController.dismissActiveOverlay(_:)) }))
+
+        XCTAssertEqual(dismissItem.title, "Dismiss Overlay")
+        XCTAssertEqual(dismissItem.keyEquivalent, "\u{1B}")
+        XCTAssertEqual(dismissItem.keyEquivalentModifierMask, [])
+        XCTAssertTrue(dismissItem.isHidden, "Escape overlay dismissal should stay hidden from visible Edit menu chrome.")
+    }
+
     func testViewMenuExists() {
         let mainMenu = NSApplication.shared.mainMenu
         let viewMenu = mainMenu?.items.first(where: { $0.submenu?.title == "View" })

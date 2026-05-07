@@ -365,6 +365,21 @@ final class SmartRoutingIntegrationTests: XCTestCase {
         )
     }
 
+    func testDismissActiveOverlayHidesSmartRouting() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.showSmartRouting()
+        controller.dismissActiveOverlay(nil)
+
+        XCTAssertFalse(
+            controller.isSmartRoutingVisible,
+            "Escape dismiss command must hide Smart Routing when it is the active overlay"
+        )
+        XCTAssertNil(controller.smartRoutingHostingView)
+    }
+
     func testSmartRoutingActionIsObjCCallable() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
