@@ -1352,6 +1352,7 @@
 "templates.source.builtIn" = "built-in";
 "templates.source.user" = "user";
 "templates.source.project" = "project";
+"templates.defaultDestinationName" = "NewProject";
 "templates.destination" = "Destination";
 "templates.folderName" = "Folder name";
 "templates.variables" = "Variables";

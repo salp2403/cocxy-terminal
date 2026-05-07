@@ -153,6 +153,31 @@ struct ProjectTemplatePanelViewModelSwiftTestingTests {
         #expect(viewModel.selectedVariables.map(\.prompt) == ["Project name", "Service name"])
     }
 
+    @Test("Spanish localizer translates the default destination folder")
+    func spanishLocalizerTranslatesDefaultDestinationFolder() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let viewModel = ProjectTemplatePanelViewModel(
+            registry: ProjectTemplateRegistry(directories: []),
+            destinationRootURL: root.appendingPathComponent("output", isDirectory: true),
+            localizer: spanish
+        )
+
+        #expect(viewModel.destinationName == "NuevoProyecto")
+
+        viewModel.updateLocalizer(english)
+
+        #expect(viewModel.destinationName == "NewProject")
+
+        viewModel.destinationName = "MiHerramienta"
+        viewModel.updateLocalizer(spanish)
+
+        #expect(viewModel.destinationName == "MiHerramienta")
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-template-panel-tests-\(UUID().uuidString)", isDirectory: true)

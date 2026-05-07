@@ -30,7 +30,7 @@ final class ProjectTemplatePanelViewModel: ObservableObject {
             populateDefaultsForSelectedTemplate()
         }
     }
-    @Published var destinationName: String = "NewProject"
+    @Published var destinationName: String
     @Published private(set) var createdFiles: [String] = []
     @Published private(set) var pendingHookCommands: [String] = []
     @Published private(set) var progress: Double = 0
@@ -46,6 +46,7 @@ final class ProjectTemplatePanelViewModel: ObservableObject {
     private var currentError: Error?
     private var loadedTemplates: [ProjectTemplate] = []
     private var valuesByVariableName: [String: String] = [:]
+    private var lastLocalizedDefaultDestinationName: String
 
     init(
         registry: ProjectTemplateRegistry = .localDefault(),
@@ -57,11 +58,20 @@ final class ProjectTemplatePanelViewModel: ObservableObject {
         self.destinationRootURL = destinationRootURL.standardizedFileURL
         self.scaffolder = scaffolder
         self.localizer = localizer
+        let defaultDestinationName = Self.localizedDefaultDestinationName(localizer: localizer)
+        self.destinationName = defaultDestinationName
+        self.lastLocalizedDefaultDestinationName = defaultDestinationName
         self.statusText = Self.localizedStatusText(.noTemplates, localizer: localizer)
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
+        let previousDefaultDestinationName = lastLocalizedDefaultDestinationName
         self.localizer = localizer
+        let nextDefaultDestinationName = Self.localizedDefaultDestinationName(localizer: localizer)
+        if destinationName == previousDefaultDestinationName {
+            destinationName = nextDefaultDestinationName
+        }
+        lastLocalizedDefaultDestinationName = nextDefaultDestinationName
         templates = loadedTemplates.map(localizedPresentation(for:))
         statusText = Self.localizedStatusText(statusState, localizer: localizer)
         if let currentError {
@@ -229,8 +239,12 @@ final class ProjectTemplatePanelViewModel: ObservableObject {
 
     private func destinationURL(for destinationName: String, root: URL) -> URL {
         let trimmed = destinationName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let safeName = trimmed.isEmpty ? "NewProject" : trimmed
+        let safeName = trimmed.isEmpty ? Self.localizedDefaultDestinationName(localizer: localizer) : trimmed
         return root.appendingPathComponent(safeName, isDirectory: true).standardizedFileURL
+    }
+
+    private static func localizedDefaultDestinationName(localizer: AppLocalizer) -> String {
+        localizer.string("templates.defaultDestinationName", fallback: "NewProject")
     }
 
     private static func localizedStatusText(
