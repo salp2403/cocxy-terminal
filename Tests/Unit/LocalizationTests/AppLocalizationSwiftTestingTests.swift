@@ -71,6 +71,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.iCloud.optIn.section", fallback: "Opt-In") == "Activación")
         #expect(spanish.string("preferences.iCloud.encryptArtifacts.help", fallback: "Encryption is required for iCloud Sync.") == "El cifrado es obligatorio para la sincronización iCloud.")
         #expect(spanish.string("preferences.iCloud.artifact.settings", fallback: "Settings") == "Ajustes")
+        #expect(spanish.string("preferences.iCloud.artifact.notebooks", fallback: "Notebooks") == "Cuadernos")
         #expect(spanish.string("preferences.iCloud.export", fallback: "Export Encrypted Artifacts") == "Exportar artefactos cifrados")
         #expect(spanish.string("preferences.iCloud.conflict.useRemote", fallback: "Use Remote") == "Usar remoto")
         #expect(spanish.string("preferences.iCloud.status.disabled", fallback: "iCloud Sync is disabled.") == "La sincronización iCloud está desactivada.")

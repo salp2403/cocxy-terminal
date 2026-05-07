@@ -644,7 +644,7 @@
 "preferences.iCloud.conflictPolicy" = "Política de conflictos";
 "preferences.iCloud.conflictPolicy.manual" = "manual";
 "preferences.iCloud.artifacts.section" = "Artefactos";
-"preferences.iCloud.artifact.notebooks" = "Notebooks";
+"preferences.iCloud.artifact.notebooks" = "Cuadernos";
 "preferences.iCloud.artifact.workflows" = "Flujos";
 "preferences.iCloud.artifact.skills" = "Habilidades";
 "preferences.iCloud.artifact.settings" = "Ajustes";
@@ -681,7 +681,7 @@
 "preferences.backup.monthlySnapshots" = "Copias mensuales: %d";
 "preferences.backup.artifacts.section" = "Artefactos";
 "preferences.backup.artifact.settings" = "Ajustes";
-"preferences.backup.artifact.notebooks" = "Notebooks";
+"preferences.backup.artifact.notebooks" = "Cuadernos";
 "preferences.backup.artifact.workflows" = "Flujos";
 "preferences.backup.artifact.skills" = "Habilidades personalizadas";
 "preferences.backup.artifact.notes" = "Notas";

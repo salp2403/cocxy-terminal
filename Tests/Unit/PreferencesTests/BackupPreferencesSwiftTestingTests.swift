@@ -20,6 +20,11 @@ struct BackupPreferencesSwiftTestingTests {
         return (PreferencesViewModel(config: config, fileProvider: provider), provider)
     }
 
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
+
     @Test("init populates Backup fields from the saved config")
     func initPopulatesBackupFieldsFromConfig() {
         let config = CocxyConfig(
@@ -90,6 +95,63 @@ struct BackupPreferencesSwiftTestingTests {
         vm.setBackupArtifactKind(.settings, enabled: false)
 
         #expect(vm.backupArtifactKinds == [.settings])
+    }
+
+    @Test("Spanish Backup artifact labels and snapshot dates use the app language")
+    func spanishBackupArtifactLabelsAndSnapshotDatesUseAppLanguage() throws {
+        let base = CocxyConfig.defaults
+        let spanishAppearance = AppearanceConfig(
+            theme: base.appearance.theme,
+            lightTheme: base.appearance.lightTheme,
+            fontFamily: base.appearance.fontFamily,
+            fontSize: base.appearance.fontSize,
+            tabPosition: base.appearance.tabPosition,
+            windowPadding: base.appearance.windowPadding,
+            windowPaddingX: base.appearance.windowPaddingX,
+            windowPaddingY: base.appearance.windowPaddingY,
+            ligatures: base.appearance.ligatures,
+            fontThicken: base.appearance.fontThicken,
+            backgroundOpacity: base.appearance.backgroundOpacity,
+            backgroundBlurRadius: base.appearance.backgroundBlurRadius,
+            transparencyChromeTheme: base.appearance.transparencyChromeTheme,
+            auroraEnabled: base.appearance.auroraEnabled,
+            auroraSidebarDisplayMode: base.appearance.auroraSidebarDisplayMode,
+            auroraSidebarPrimaryInfo: base.appearance.auroraSidebarPrimaryInfo,
+            rateLimitIndicatorEnabled: base.appearance.rateLimitIndicatorEnabled,
+            quickSwitchMode: base.appearance.quickSwitchMode,
+            appLanguage: .spanish
+        )
+        let config = CocxyConfig(
+            general: base.general,
+            appearance: spanishAppearance,
+            terminal: base.terminal,
+            agentDetection: base.agentDetection,
+            backup: base.backup,
+            notifications: base.notifications,
+            quickTerminal: base.quickTerminal,
+            keybindings: base.keybindings,
+            sessions: base.sessions
+        )
+        let vm = PreferencesViewModel(
+            config: config,
+            fileProvider: InMemoryProvider(),
+            appLocalizationBundle: localizationBundle() ?? .main
+        )
+        let snapshot = BackupSnapshotSummary(
+            backupURL: URL(fileURLWithPath: "/tmp/cocxy-backup"),
+            manifest: BackupManifest(
+                createdAt: try #require(ISO8601DateFormatter().date(from: "2026-01-07T12:08:00Z")),
+                artifacts: [BackupManifestEntry(kind: .notebooks, path: "notebooks", fileCount: 4)]
+            )
+        )
+
+        let displayName = vm.backupArtifactDisplayName(.notebooks)
+        let snapshotName = vm.backupSnapshotDisplayName(snapshot)
+
+        #expect(displayName == "Cuadernos")
+        #expect(snapshotName.contains("4 archivos"))
+        #expect(!snapshotName.contains("Jan"))
+        #expect(!snapshotName.contains(" at "))
     }
 
     @Test("save then reload preserves Backup fields")

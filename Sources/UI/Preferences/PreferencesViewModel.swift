@@ -1896,9 +1896,17 @@ final class PreferencesViewModel: ObservableObject {
                 "preferences.backup.restore.snapshot.title",
                 fallback: "%@ - %d files"
             ),
-            snapshot.createdAt.formatted(date: .abbreviated, time: .shortened),
+            localizedBackupSnapshotDate(snapshot.createdAt),
             snapshot.totalFileCount
         )
+    }
+
+    private func localizedBackupSnapshotDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = appLocalizer().locale
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     private func backupRestoreSuccessStatus(for result: BackupRestoreResult) -> String {
