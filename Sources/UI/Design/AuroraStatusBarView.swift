@@ -6,14 +6,11 @@
 //   | no telemetry ● | agents ■■■ | ports :3000 :4001 :9000 | HH:MM |
 //
 // The design reference also drew a timeline scrubber between the ports
-// and the clock. `TimelineScrubberView` still ships in this file so a
-// future release can re-mount it once there is a real
-// activity-replay feed, but the body deliberately omits it today: the
-// scrubber had no backing data, the "replay" button fired into an
-// intentionally empty closure, and the `Xs ago` label could not
-// advance because nothing was publishing progress. Showing a control
-// that looks interactive but does nothing would mislead the user, so
-// we hide it until the replay subsystem is wired.
+// and the clock. `TimelineScrubberView` still ships in this file for a
+// future seekable replay feed, but the production status bar exposes a
+// compact replay button instead. That button is only mounted when the
+// host wires it to the real Session Replay panel, so Aurora never shows
+// controls that look interactive but do nothing.
 //
 // In production, `AuroraChromeController` feeds the remaining groups
 // from the live per-surface agent store and port scanner while the
@@ -87,7 +84,7 @@ extension Design {
         let ports: [AuroraPortBinding]
         @Binding var timeline: AuroraTimelineState
         let clockLabel: String
-        let onReplay: () -> Void
+        let onReplay: (() -> Void)?
         let onCopyPort: (AuroraPortBinding) -> Void
         let onOpenPort: (AuroraPortBinding) -> Void
         var localizer: AppLocalizer
@@ -99,7 +96,7 @@ extension Design {
             ports: [AuroraPortBinding],
             timeline: Binding<AuroraTimelineState>,
             clockLabel: String,
-            onReplay: @escaping () -> Void,
+            onReplay: (() -> Void)? = nil,
             onCopyPort: @escaping (AuroraPortBinding) -> Void = { _ in },
             onOpenPort: @escaping (AuroraPortBinding) -> Void = { _ in },
             localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
@@ -130,10 +127,14 @@ extension Design {
                     onOpenPort: onOpenPort,
                     localizer: localizer
                 )
-                // Timeline scrubber intentionally omitted. See the file
-                // header: the replay subsystem that would feed it is
-                // not implemented yet, and keeping a non-functional
-                // control in the status bar is worse than hiding it.
+                if let onReplay {
+                    separator
+                    SessionReplayStatusButtonView(
+                        timeline: timeline,
+                        onReplay: onReplay,
+                        localizer: localizer
+                    )
+                }
                 Spacer()
                 Text(verbatim: clockLabel)
                     .font(.system(size: 11, design: .monospaced))
@@ -168,6 +169,34 @@ extension Design {
             workspaces.flatMap { ws in
                 ws.sessions.flatMap { $0.panes }
             }
+        }
+    }
+
+    // MARK: - Session replay
+
+    struct SessionReplayStatusButtonView: View {
+        let timeline: AuroraTimelineState
+        let onReplay: () -> Void
+        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
+        @Environment(\.designThemePalette) private var palette
+
+        var body: some View {
+            Button(action: onReplay) {
+                Text(TimelineScrubberView.localizedReplayButton(using: localizer))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(palette.textMedium.resolvedColor())
+                    .lineLimit(1)
+                    .padding(.horizontal, Spacing.xSmall)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(palette.glassBorder.resolvedColor(), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(TimelineScrubberView.localizedReplayAccessibility(timeline, using: localizer))
+            .accessibilityLabel(TimelineScrubberView.localizedReplayAccessibility(timeline, using: localizer))
         }
     }
 

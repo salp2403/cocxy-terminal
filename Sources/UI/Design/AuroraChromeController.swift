@@ -152,6 +152,19 @@ final class AuroraChromeController: ObservableObject {
     /// open the same overlay.
     var onToggleNotifications: (() -> Void)?
 
+    /// Invoked when the user opens replay from the Aurora status bar.
+    /// Wired by the host to the existing Session Replay panel action,
+    /// so the status bar never exposes a dead control.
+    var onOpenSessionReplay: (() -> Void)?
+
+    var statusBarReplayAvailable: Bool {
+        onOpenSessionReplay != nil
+    }
+
+    func openSessionReplayFromStatusBar() {
+        onOpenSessionReplay?()
+    }
+
     /// Invoked when the user clicks the note glyph in the Aurora
     /// sidebar tray. The host wires this to `toggleNotes()` so the
     /// per-workspace notes overlay opens for the visible tab. Stays
@@ -757,7 +770,9 @@ struct AuroraStatusBarHost: View {
                 set: { controller.timeline = $0 }
             ),
             clockLabel: controller.clockLabel,
-            onReplay: { /* Reserved for a future timeline replay hook. */ },
+            onReplay: controller.statusBarReplayAvailable
+                ? { controller.openSessionReplayFromStatusBar() }
+                : nil,
             onCopyPort: { port in
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(port.localhostURLString, forType: .string)

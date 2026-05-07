@@ -104,6 +104,24 @@ struct AuroraChromeControllerSwiftTestingTests {
         #expect(primaryInfos == [.directory])
     }
 
+    @Test
+    func statusBarReplayActionIsOnlyAvailableWhenHostIsWired() {
+        let harness = makeHarness()
+        var openCount = 0
+
+        #expect(harness.controller.statusBarReplayAvailable == false)
+        harness.controller.openSessionReplayFromStatusBar()
+        #expect(openCount == 0)
+
+        harness.controller.onOpenSessionReplay = {
+            openCount += 1
+        }
+
+        #expect(harness.controller.statusBarReplayAvailable == true)
+        harness.controller.openSessionReplayFromStatusBar()
+        #expect(openCount == 1)
+    }
+
     // MARK: - Domain reactivity
 
     @Test

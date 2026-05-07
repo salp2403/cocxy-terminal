@@ -291,6 +291,9 @@ extension MainWindowController {
         controller.onToggleNotifications = { [weak self] in
             self?.toggleNotificationPanel()
         }
+        controller.onOpenSessionReplay = { [weak self] in
+            self?.splitWithSessionReplayAction(nil)
+        }
         // Notes tray button is only meaningful when the user has the
         // feature enabled in `[notes]`. Initialise the callback once
         // here and let `refreshAuroraNotesAvailability` toggle it on
