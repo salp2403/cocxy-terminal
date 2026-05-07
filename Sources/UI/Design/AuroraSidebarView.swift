@@ -1286,15 +1286,24 @@ extension Design {
         static func localizedDragPaneHelp(_ name: String, using localizer: AppLocalizer) -> String {
             String(
                 format: localizer.string("auroraSidebar.paneTransfer.drag.help", fallback: "Drag %@ pane to another tab"),
-                name
+                localizedPaneReferenceName(name, using: localizer)
             )
         }
 
         static func localizedMovePaneAccessibility(_ name: String, using localizer: AppLocalizer) -> String {
             String(
                 format: localizer.string("auroraSidebar.paneTransfer.move.accessibility", fallback: "Move %@ pane"),
-                name
+                localizedPaneReferenceName(name, using: localizer)
             )
+        }
+
+        private static func localizedPaneReferenceName(_ name: String, using localizer: AppLocalizer) -> String {
+            guard localizer.resolvedLanguage == .spanish else { return name }
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let prefix = "pane "
+            guard trimmed.lowercased().hasPrefix(prefix) else { return name }
+            let suffix = trimmed.dropFirst(prefix.count)
+            return suffix.allSatisfy(\.isNumber) ? String(suffix) : name
         }
     }
 

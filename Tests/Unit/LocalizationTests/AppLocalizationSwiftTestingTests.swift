@@ -631,6 +631,14 @@ struct AppLocalizationSwiftTestingTests {
             Design.PaneTransferHandleView.localizedDragPaneHelp("editor", using: spanish)
                 == "Arrastra el panel editor a otra pestaña"
         )
+        #expect(
+            Design.PaneTransferHandleView.localizedDragPaneHelp("pane 2", using: spanish)
+                == "Arrastra el panel 2 a otra pestaña"
+        )
+        #expect(
+            Design.PaneTransferHandleView.localizedMovePaneAccessibility("pane 2", using: spanish)
+                == "Mover panel 2"
+        )
     }
 
     @MainActor
