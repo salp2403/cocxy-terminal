@@ -59,12 +59,18 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.backup.enable", fallback: "Enable local automatic backups") == "Activar copias automáticas locales")
         #expect(spanish.string("preferences.backup.artifact.aiConversations", fallback: "AI conversations") == "Conversaciones IA")
         #expect(spanish.string("preferences.codeReview.autoShow", fallback: "Auto-show review panel when an agent session ends") == "Mostrar panel de revisión automáticamente cuando termina una sesión de agente")
-        #expect(spanish.string("preferences.notifications.dockBadge", fallback: "Dock badge") == "Badge en el Dock")
+        #expect(spanish.string("preferences.notifications.dockBadge", fallback: "Dock badge") == "Insignia en el Dock")
+        #expect(spanish.string("preferences.terminal.scrollbackLines", fallback: "Scrollback lines") == "Líneas de historial")
+        #expect(spanish.string("preferences.terminal.cursorStyle.bar", fallback: "Bar") == "Barra")
         #expect(spanish.string("preferences.terminal.imageMemoryBudget", fallback: "Image memory budget: %d MiB") == "Memoria para imágenes: %d MiB")
+        #expect(spanish.string("preferences.terminal.inlineImages.section", fallback: "Inline Images") == "Imágenes en línea")
         #expect(spanish.string("preferences.lsp.enable", fallback: "Enable language servers") == "Activar servidores de lenguaje")
+        #expect(spanish.string("preferences.lsp.install.swift", fallback: "Install Xcode or Xcode Command Line Tools to provide sourcekit-lsp.") == "Instala Xcode o las herramientas de línea de comandos de Xcode para usar sourcekit-lsp.")
         #expect(spanish.string("preferences.editor.enableVimMode", fallback: "Enable Vim mode") == "Activar modo Vim")
+        #expect(spanish.string("preferences.editor.inlineCompletions.section", fallback: "Inline Completions") == "Autocompletado en línea")
         #expect(spanish.string("preferences.editor.contextWindow", fallback: "Context window: %d UTF-16") == "Ventana de contexto: %d UTF-16")
         #expect(spanish.string("preferences.worktrees.enable", fallback: "Enable worktrees") == "Activar worktrees")
+        #expect(spanish.string("preferences.worktrees.showBadge", fallback: "Show worktree badge on tabs") == "Mostrar insignia de worktree en pestañas")
         #expect(spanish.string("preferences.worktrees.onClose.remove", fallback: "Remove if clean") == "Eliminar si está limpio")
         #expect(spanish.string("preferences.agentMode.enable", fallback: "Enable Agent Mode") == "Activar modo agente")
         #expect(spanish.string("preferences.agentMode.apiKey.saved", fallback: "A key is saved in the macOS Keychain for this provider.") == "Hay una llave guardada en Keychain de macOS para este proveedor.")
@@ -80,8 +86,11 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("preferences.iCloud.conflict.useRemote", fallback: "Use Remote") == "Usar remoto")
         #expect(spanish.string("preferences.iCloud.status.disabled", fallback: "iCloud Sync is disabled.") == "La sincronización iCloud está desactivada.")
         #expect(spanish.string("preferences.github.enable", fallback: "Enable GitHub pane") == "Activar panel de GitHub")
-        #expect(spanish.string("preferences.github.defaultState.merged", fallback: "Merged (PRs only)") == "Fusionados (solo PRs)")
+        #expect(spanish.string("preferences.github.autoRefresh", fallback: "Auto-refresh every %d s") == "Actualizar automáticamente cada %d s")
+        #expect(spanish.string("preferences.github.includeDrafts", fallback: "Include draft pull requests") == "Incluir solicitudes en borrador")
+        #expect(spanish.string("preferences.github.defaultState.merged", fallback: "Merged (PRs only)") == "Fusionadas (solo solicitudes)")
         #expect(spanish.string("preferences.about.subtitle", fallback: "Agent-aware terminal for macOS") == "Terminal para macOS con conciencia de agentes")
+        #expect(spanish.string("preferences.about.zeroTelemetry", fallback: "Zero telemetry. Zero tracking.") == "Cero telemetría. Cero rastreo.")
         #expect(spanish.string("preferences.about.checkForUpdates", fallback: "Check for Updates") == "Buscar actualizaciones")
         #expect(spanish.string("agentState.indicator.waitingInput", fallback: "Agent state: waiting for input") == "Estado del agente: esperando entrada")
         #expect(spanish.string("markdown.toolbar.untitledFile", fallback: "Untitled.md") == "Sin título.md")
@@ -210,7 +219,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(PluginMarketplaceView.localizedPluginName(bundledPlugin, using: spanish) == "Panel GitHub")
         #expect(
             PluginMarketplaceView.localizedPluginDescription(bundledPlugin, using: spanish)
-                == "Agrega contexto local de shell para flujos de repositorios y pull requests."
+                == "Agrega contexto local de shell para flujos de repositorios y solicitudes de cambio."
         )
     }
 
@@ -248,9 +257,9 @@ struct AppLocalizationSwiftTestingTests {
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
 
         #expect(spanish.string("github.pane.accessibility", fallback: "GitHub pane") == "Panel de GitHub")
-        #expect(spanish.string("github.pane.empty.pullRequests", fallback: "No pull requests") == "No hay pull requests")
+        #expect(spanish.string("github.pane.empty.pullRequests", fallback: "No pull requests") == "No hay solicitudes de cambio")
         #expect(spanish.string("github.pane.context.openInBrowser", fallback: "Open in Browser") == "Abrir en navegador")
-        #expect(spanish.string("github.pane.merge.action", fallback: "Merge Pull Request...") == "Fusionar pull request...")
+        #expect(spanish.string("github.pane.merge.action", fallback: "Merge Pull Request...") == "Fusionar solicitud...")
         #expect(spanish.string("github.pane.empty.noReviewThreads", fallback: "No review threads") == "No hay hilos de revisión")
         #expect(spanish.string("github.pane.context.reviewThreads", fallback: "Show review threads") == "Mostrar hilos de revisión")
         #expect(spanish.string("github.pane.context.resolveReviewThread", fallback: "Resolve thread") == "Resolver hilo")
@@ -278,8 +287,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("codeReview.panel.title", fallback: "Agent Code Review") == "Revisión de código")
         #expect(spanish.string("codeReview.panel.empty.title", fallback: "No reviewable changes yet") == "Aún no hay cambios para revisar")
         #expect(spanish.string("codeReview.banner.submitRouteMissing", fallback: "Review feedback could not be sent because the original agent terminal is no longer available.") == "No se pudo enviar el feedback porque la terminal original del agente ya no está disponible.")
-        #expect(spanish.string("codeReview.prMerge.noPullRequest", fallback: "No pull request is attached to this review.") == "No hay un pull request adjunto a esta revisión.")
-        #expect(spanish.string("github.merge.error.conflict", fallback: "The pull request has merge conflicts. Resolve them in a browser before retrying.") == "El pull request tiene conflictos de merge. Resuélvelos en un navegador antes de reintentar.")
+        #expect(spanish.string("codeReview.prMerge.noPullRequest", fallback: "No pull request is attached to this review.") == "No hay una solicitud adjunta a esta revisión.")
+        #expect(spanish.string("github.merge.error.conflict", fallback: "The pull request has merge conflicts. Resolve them in a browser before retrying.") == "La solicitud tiene conflictos de fusión. Resuélvelos en un navegador antes de reintentar.")
         #expect(spanish.string("codeReview.toolbar.editFile", fallback: "Edit File") == "Editar archivo")
         #expect(spanish.string("codeReview.toolbar.shortcuts.title", fallback: "Review Shortcuts") == "Atajos de revisión")
         #expect(MainWindowController.localizedOpenInDefaultEditorTitle(localizer: spanish) == "Abrir en editor predeterminado")
@@ -313,9 +322,9 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("codeReview.gitWorkflow.stat.ahead", fallback: "ahead %d") == "%d por delante")
         #expect(spanish.string("codeReview.gitWorkflow.stat.behind", fallback: "behind %d") == "%d por detrás")
         #expect(spanish.string("codeReview.gitWorkflow.stat.staged", fallback: "%d staged") == "%d preparados")
-        #expect(spanish.string("codeReview.gitWorkflow.footer", fallback: "Commit All stages current review changes, Push sends the branch to origin, Create Pull Request opens a PR on GitHub via gh.") == "Commit de todo prepara los cambios actuales de revisión, Enviar sube la rama a origin y Crear pull request abre un PR en GitHub vía gh.")
+        #expect(spanish.string("codeReview.gitWorkflow.footer", fallback: "Commit All stages current review changes, Push sends the branch to origin, Create Pull Request opens a PR on GitHub via gh.") == "Commit de todo prepara los cambios actuales de revisión, Enviar sube la rama a origin y Crear solicitud abre un PR en GitHub vía gh.")
         #expect(spanish.string("codeReview.prMerge.aftermath.synced.ahead", fallback: "`%@` is %d ahead of origin (no pull needed).") == "`%@` está %d por delante de origin (no hace falta pull).")
-        #expect(spanish.string("codeReview.inlineComment.title", fallback: "Inline Comment") == "Comentario inline")
+        #expect(spanish.string("codeReview.inlineComment.title", fallback: "Inline Comment") == "Comentario en línea")
         #expect(spanish.string("codeReview.activity.title", fallback: "Live Agent Workstream") == "Actividad del agente en vivo")
         #expect(spanish.string("codeReview.activity.metric.tools", fallback: "tools") == "herramientas")
         #expect(spanish.string("codeReview.activity.state.idle", fallback: "idle") == "inactivo")
@@ -407,7 +416,7 @@ struct AppLocalizationSwiftTestingTests {
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
         let viewModel = ScrollbackSearchBarViewModel()
 
-        #expect(spanish.string("scrollbackSearch.placeholder", fallback: "Search scrollback...") == "Buscar en scrollback...")
+        #expect(spanish.string("scrollbackSearch.placeholder", fallback: "Search scrollback...") == "Buscar en historial...")
         #expect(spanish.string("scrollbackSearch.close", fallback: "Close search") == "Cerrar búsqueda")
         #expect(viewModel.localizedResultCountDisplay(using: spanish) == "Sin coincidencias")
 
@@ -608,11 +617,11 @@ struct AppLocalizationSwiftTestingTests {
         #expect(Design.LocalBadgeView.localizedLabel(using: spanish) == "sin telemetría")
         #expect(
             Design.LocalBadgeView.localizedHelp(using: spanish)
-                == "Sin telemetría ni tracking. Las actualizaciones solo consultan el appcast firmado de Cocxy."
+                == "Sin telemetría ni rastreo. Las actualizaciones solo consultan el appcast firmado de Cocxy."
         )
         #expect(
             Design.LocalBadgeView.localizedAccessibilityLabel(using: spanish)
-                == "Sin telemetría ni tracking"
+                == "Sin telemetría ni rastreo"
         )
         #expect(Design.AgentMatrixView.localizedTitle(using: spanish) == "agentes")
         #expect(Design.AgentMatrixView.summaryText(for: [], using: spanish) == "sin actividad")

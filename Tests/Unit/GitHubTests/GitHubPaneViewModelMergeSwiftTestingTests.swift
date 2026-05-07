@@ -273,7 +273,7 @@ struct GitHubPaneViewModelMergeSwiftTestingTests {
         try await waitForGitHubPaneCondition {
             viewModel.lastErrorMessage != nil
         }
-        #expect(viewModel.lastErrorMessage == "El pull request tiene conflictos de merge. Resuélvelos en un navegador antes de reintentar.")
+        #expect(viewModel.lastErrorMessage == "La solicitud tiene conflictos de fusión. Resuélvelos en un navegador antes de reintentar.")
     }
 
     @Test("requestMergePullRequest with merge feature disabled sets error banner immediately")

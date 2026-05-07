@@ -87,7 +87,7 @@ struct AgentPanelLocalizationSwiftTestingTests {
         )
         #expect(
             AgentPanelLocalization.skillSummary(builtInSkill, using: spanish)
-                == "Revisa un diff local de pull request y reporta primero riesgos de corrección."
+                == "Revisa un diff local de solicitud de cambio y reporta primero riesgos de corrección."
         )
         #expect(
             AgentPanelLocalization.skillMenuTitle(gitBlameSkill, using: spanish)

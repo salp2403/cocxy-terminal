@@ -555,6 +555,27 @@ final class PreferencesViewModel: ObservableObject {
         AppLocalizer(languagePreference: appLanguage, bundle: appLocalizationBundle)
     }
 
+    func localizedCursorStyle() -> String {
+        switch savedConfig.terminal.cursorStyle {
+        case .block:
+            return localizedString("preferences.terminal.cursorStyle.block", fallback: "Block")
+        case .bar:
+            return localizedString("preferences.terminal.cursorStyle.bar", fallback: "Bar")
+        case .underline:
+            return localizedString("preferences.terminal.cursorStyle.underline", fallback: "Underline")
+        }
+    }
+
+    func localizedLSPInstallDetail(for server: LSPServerConfiguration) -> String {
+        if let command = server.installSuggestion.command {
+            return command
+        }
+        return localizedString(
+            "preferences.lsp.install.\(server.languageID)",
+            fallback: server.installSuggestion.message
+        )
+    }
+
     var mcpConfigPath: String {
         mcpConfigURL.path
     }

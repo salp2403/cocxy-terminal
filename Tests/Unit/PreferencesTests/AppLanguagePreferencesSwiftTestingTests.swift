@@ -123,14 +123,23 @@ struct AppLanguagePreferencesSwiftTestingTests {
         #expect(vm.localizedString("preferences.codeReview.panel.section", fallback: "Panel") == "Panel")
         #expect(vm.localizedString("preferences.notifications.visual.section", fallback: "Visual Indicators") == "Indicadores visuales")
         #expect(vm.localizedString("preferences.terminal.cursorBlink.on", fallback: "On") == "Activado")
+        #expect(vm.localizedCursorStyle() == "Barra")
         #expect(vm.localizedString("preferences.lsp.languages.section", fallback: "Languages") == "Lenguajes")
-        #expect(vm.localizedString("preferences.editor.inlineCompletions.section", fallback: "Inline Completions") == "Completados inline")
+        let swiftServer = LSPLanguageRegistry.defaults.server(forLanguageID: "swift")
+        #expect(swiftServer != nil)
+        if let swiftServer {
+            #expect(
+                vm.localizedLSPInstallDetail(for: swiftServer)
+                    == "Instala Xcode o las herramientas de línea de comandos de Xcode para usar sourcekit-lsp."
+            )
+        }
+        #expect(vm.localizedString("preferences.editor.inlineCompletions.section", fallback: "Inline Completions") == "Autocompletado en línea")
         #expect(vm.localizedString("preferences.worktrees.randomIDLength", fallback: "Random id length: %d") == "Longitud de id aleatorio: %d")
         #expect(vm.localizedString("preferences.agentMode.provider.detail.remote", fallback: "Uses your provider API key from the macOS Keychain. Requests go directly from this Mac to the selected provider.") == "Usa la llave API del proveedor guardada en Keychain de macOS. Las solicitudes van directamente desde esta Mac al proveedor seleccionado.")
         #expect(vm.localizedString("preferences.mcp.save", fallback: "Save MCP Config") == "Guardar configuración MCP")
         #expect(vm.localizedString("preferences.iCloud.status.exported.many", fallback: "Exported %d encrypted artifacts.") == "%d artefactos cifrados exportados.")
         #expect(vm.localizedString("preferences.iCloud.conflict.versionsDiffer", fallback: "Local and remote versions differ.") == "Las versiones local y remota son diferentes.")
-        #expect(vm.localizedString("preferences.github.autoRefresh", fallback: "Auto-refresh every %d s") == "Auto-refrescar cada %d s")
+        #expect(vm.localizedString("preferences.github.autoRefresh", fallback: "Auto-refresh every %d s") == "Actualizar automáticamente cada %d s")
         #expect(vm.localizedString("preferences.about.updates", fallback: "Updates") == "Actualizaciones")
         #expect(vm.localizedString("preferences.unsaved.title", fallback: "Unsaved Changes") == "Cambios sin guardar")
         #expect(vm.localizedString("tabbar.context.close", fallback: "Close Tab") == "Cerrar pestaña")

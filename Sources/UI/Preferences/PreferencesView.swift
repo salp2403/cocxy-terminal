@@ -2401,7 +2401,7 @@ struct TerminalPreferencesSection: View {
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent(viewModel.localizedString("preferences.terminal.cursorStyle", fallback: "Cursor style")) {
-                    Text(viewModel.cursorStyle)
+                    Text(viewModel.localizedCursorStyle())
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent(viewModel.localizedString("preferences.terminal.cursorBlink", fallback: "Cursor blink")) {
@@ -2524,7 +2524,7 @@ struct LanguageServersPreferencesSection: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Text(installDetail(for: server))
+                        Text(viewModel.localizedLSPInstallDetail(for: server))
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .textSelection(.enabled)
@@ -2545,12 +2545,6 @@ struct LanguageServersPreferencesSection: View {
         return "\(server.languageID) - \(extensions)"
     }
 
-    private func installDetail(for server: LSPServerConfiguration) -> String {
-        if let command = server.installSuggestion.command {
-            return command
-        }
-        return server.installSuggestion.message
-    }
 }
 
 // MARK: - Editor Section

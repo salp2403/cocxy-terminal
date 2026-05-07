@@ -721,6 +721,9 @@
 "preferences.terminal.core.section" = "Core Defaults";
 "preferences.terminal.scrollbackLines" = "Scrollback lines";
 "preferences.terminal.cursorStyle" = "Cursor style";
+"preferences.terminal.cursorStyle.block" = "Block";
+"preferences.terminal.cursorStyle.bar" = "Bar";
+"preferences.terminal.cursorStyle.underline" = "Underline";
 "preferences.terminal.cursorBlink" = "Cursor blink";
 "preferences.terminal.cursorBlink.on" = "On";
 "preferences.terminal.cursorBlink.off" = "Off";
@@ -736,6 +739,8 @@
 "preferences.lsp.enable" = "Enable language servers";
 "preferences.lsp.enable.help" = "Starts only the local language servers selected below.";
 "preferences.lsp.feature.caption" = "Cocxy never auto-installs language servers. Enabled servers run locally and receive opened document text plus workspace URIs.";
+"preferences.lsp.install.swift" = "Install Xcode or Xcode Command Line Tools to provide sourcekit-lsp.";
+"preferences.lsp.install.php" = "Install Intelephense, configure its path, then enable PHP LSP in Cocxy preferences.";
 "preferences.lsp.languages.section" = "Languages";
 "preferences.editor.input.section" = "Input";
 "preferences.editor.enableVimMode" = "Enable Vim mode";

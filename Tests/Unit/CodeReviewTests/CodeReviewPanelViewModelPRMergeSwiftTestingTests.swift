@@ -329,7 +329,7 @@ struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
         let viewModel = makeViewModel(localizer: try spanishLocalizer())
 
         viewModel.requestMergePullRequest(method: .squash, deleteBranch: true)
-        #expect(viewModel.pullRequestMergeErrorMessage == "No hay un pull request adjunto a esta revisión.")
+        #expect(viewModel.pullRequestMergeErrorMessage == "No hay una solicitud adjunta a esta revisión.")
 
         viewModel.activePullRequestNumber = 42
         viewModel.requestMergePullRequest(method: .squash, deleteBranch: true)
@@ -374,7 +374,7 @@ struct CodeReviewPanelViewModelPRMergeSwiftTestingTests {
         try await waitForReviewCondition {
             viewModel.pullRequestMergeErrorMessage != nil
         }
-        #expect(viewModel.pullRequestMergeErrorMessage == "El pull request tiene conflictos de merge. Resuélvelos en un navegador antes de reintentar.")
+        #expect(viewModel.pullRequestMergeErrorMessage == "La solicitud tiene conflictos de fusión. Resuélvelos en un navegador antes de reintentar.")
     }
 
     // MARK: - Regression: Create PR captures number

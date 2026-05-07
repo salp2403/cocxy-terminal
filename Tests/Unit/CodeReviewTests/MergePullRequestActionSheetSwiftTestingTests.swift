@@ -157,11 +157,11 @@ struct MergePullRequestActionSheetSwiftTestingTests {
             pullRequestNumber: 42
         )
 
-        #expect(copy.messageText == "¿Fusionar pull request #42?")
-        #expect(copy.informativeText == "Elige cómo fusionar este pull request. Una vez iniciada, esta acción no puede deshacerse desde Cocxy.")
-        #expect(copy.squashButton == "Squash y merge")
-        #expect(copy.mergeCommitButton == "Commit de merge")
-        #expect(copy.rebaseButton == "Rebase y merge")
+        #expect(copy.messageText == "¿Fusionar solicitud #42?")
+        #expect(copy.informativeText == "Elige cómo fusionar esta solicitud. Una vez iniciada, esta acción no puede deshacerse desde Cocxy.")
+        #expect(copy.squashButton == "Squash y fusión")
+        #expect(copy.mergeCommitButton == "Commit de fusión")
+        #expect(copy.rebaseButton == "Rebase y fusión")
         #expect(copy.cancelButton == "Cancelar")
         #expect(copy.deleteBranchTitle == "Eliminar rama después de fusionar")
         #expect(copy.deleteBranchTooltip == "Elimina la rama local y remota cuando la fusión termina correctamente.")
