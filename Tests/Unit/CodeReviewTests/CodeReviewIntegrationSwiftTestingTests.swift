@@ -187,7 +187,7 @@ struct CodeReviewIntegrationSwiftTestingTests {
         viewModel.addComment(filePath: "foo.swift", line: 3, body: "Still pending")
         viewModel.submitComments()
 
-        #expect(viewModel.lastErrorMessage == "No se pudo enviar el feedback porque la terminal original del agente ya no está disponible.")
+        #expect(viewModel.lastErrorMessage == "No se pudieron enviar los comentarios porque la terminal original del agente ya no está disponible.")
         #expect(viewModel.pendingComments.count == 1)
     }
 

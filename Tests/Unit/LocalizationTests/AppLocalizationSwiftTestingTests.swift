@@ -286,7 +286,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("codeReview.panel.accessibility", fallback: "Agent code review panel") == "Panel de revisión de código")
         #expect(spanish.string("codeReview.panel.title", fallback: "Agent Code Review") == "Revisión de código")
         #expect(spanish.string("codeReview.panel.empty.title", fallback: "No reviewable changes yet") == "Aún no hay cambios para revisar")
-        #expect(spanish.string("codeReview.banner.submitRouteMissing", fallback: "Review feedback could not be sent because the original agent terminal is no longer available.") == "No se pudo enviar el feedback porque la terminal original del agente ya no está disponible.")
+        #expect(spanish.string("codeReview.banner.submitRouteMissing", fallback: "Review feedback could not be sent because the original agent terminal is no longer available.") == "No se pudieron enviar los comentarios porque la terminal original del agente ya no está disponible.")
         #expect(spanish.string("codeReview.prMerge.noPullRequest", fallback: "No pull request is attached to this review.") == "No hay una solicitud adjunta a esta revisión.")
         #expect(spanish.string("github.merge.error.conflict", fallback: "The pull request has merge conflicts. Resolve them in a browser before retrying.") == "La solicitud tiene conflictos de fusión. Resuélvelos en un navegador antes de reintentar.")
         #expect(spanish.string("codeReview.toolbar.editFile", fallback: "Edit File") == "Editar archivo")
@@ -306,7 +306,14 @@ struct AppLocalizationSwiftTestingTests {
         #expect(DiffMode.uncommitted.localizedTitle(using: spanish) == "Árbol de trabajo")
         #expect(DiffMode.sinceSessionStart.localizedTitle(using: spanish) == "Sesión de agente")
         #expect(DiffMode.vsBranch.localizedTitle(using: spanish) == "Referencia")
+        #expect(spanish.string("codeReview.panel.anchorHint", fallback: "Click a line to anchor feedback") == "Haz clic en una línea para anclar un comentario")
+        #expect(spanish.string("codeReview.error.invalidWorkingDirectory", fallback: "The working directory for the hunk action is invalid.") == "El directorio de trabajo para la acción del bloque no es válido.")
+        #expect(spanish.string("codeReview.editor.layout.picker", fallback: "Editor layout") == "Disposición del editor")
+        #expect(spanish.string("codeReview.editor.layout.help", fallback: "Switch between stacked and side-by-side editor/diff layout") == "Cambiar entre disposición apilada y lado a lado para editor/diff")
         #expect(CodeReviewEditorSplitLayout.sideBySide.localizedTitle(using: spanish) == "Lado a lado")
+        #expect(spanish.string("codeReview.toolbar.applySuggestions.hint", fallback: "Apply pending suggestion blocks to local files after conflict checks") == "Aplicar bloques de sugerencia pendientes a archivos locales después de revisar conflictos")
+        #expect(spanish.string("codeReview.toolbar.shortcuts.nextHunk", fallback: "Next / previous hunk") == "Bloque siguiente / anterior")
+        #expect(spanish.string("codeReview.toolbar.shortcuts.acceptReject", fallback: "Accept / reject hunk") == "Aceptar / rechazar bloque")
     }
 
     @Test
@@ -865,6 +872,30 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func spanishCodeReviewStringsAvoidResidualEnglishReviewTerms() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let spanish = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
+        )
+        let staleTermPattern = #"\b(feedback|hunk|layout)\b|despues"#
+        let violations = spanish
+            .filter { key, value in
+                key.hasPrefix("codeReview.")
+                    && value.range(
+                        of: staleTermPattern,
+                        options: [.regularExpression, .caseInsensitive]
+                    ) != nil
+            }
+            .map { key, value in "\(key)=\(value)" }
+            .sorted()
+
+        #expect(
+            violations.isEmpty,
+            Comment(rawValue: "Spanish Code Review strings contain residual English terms: \(violations.prefix(20).joined(separator: "; "))")
+        )
+    }
+
+    @Test
     func visibleUILiteralsStayOnApprovedTechnicalAllowlist() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let allowed: [String: Set<String>] = [
@@ -930,14 +961,17 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     private func localizationKeys(at url: URL) throws -> Set<String> {
+        Set(try localizationStrings(at: url).keys)
+    }
+
+    private func localizationStrings(at url: URL) throws -> [String: String] {
         let data = try Data(contentsOf: url)
         let propertyList = try PropertyListSerialization.propertyList(
             from: data,
             options: [],
             format: nil
         )
-        let strings = try #require(propertyList as? [String: String])
-        return Set(strings.keys)
+        return try #require(propertyList as? [String: String])
     }
 
     private func sourceLiteralFallbackLocalizationKeys(

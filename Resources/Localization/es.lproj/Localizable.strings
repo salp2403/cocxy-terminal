@@ -1573,11 +1573,11 @@
 "codeReview.fileList.status.renamed" = "renombrado";
 "codeReview.panel.metric.hunks" = "%d bloques";
 "codeReview.panel.metric.comments" = "%d comentarios";
-"codeReview.panel.anchorHint" = "Haz clic en una línea para anclar feedback";
+"codeReview.panel.anchorHint" = "Haz clic en una línea para anclar un comentario";
 "codeReview.panel.banner.error" = "Error de revisión";
 "codeReview.panel.banner.info" = "Aviso de revisión";
-"codeReview.banner.submitRouteMissing" = "No se pudo enviar el feedback porque la terminal original del agente ya no está disponible.";
-"codeReview.error.invalidWorkingDirectory" = "El directorio de trabajo para la acción del hunk no es válido.";
+"codeReview.banner.submitRouteMissing" = "No se pudieron enviar los comentarios porque la terminal original del agente ya no está disponible.";
+"codeReview.error.invalidWorkingDirectory" = "El directorio de trabajo para la acción del bloque no es válido.";
 "codeReview.diff.empty" = "Selecciona un archivo modificado para revisarlo aquí";
 "codeReview.diff.noTextualHunks" = "No hay bloques textuales disponibles para este archivo.";
 "codeReview.diff.largeTruncated" = "Diff grande detectado. Se muestran las primeras %@ líneas para mantener la revisión fluida.";
@@ -1600,8 +1600,8 @@
 "codeReview.error.gitRepositoryUnavailable" = "No se pudo leer el repositorio Git para esta revisión. Abre el panel en una carpeta que pertenezca a un repositorio Git.";
 "codeReview.editor.layout.stacked" = "Apilado";
 "codeReview.editor.layout.sideBySide" = "Lado a lado";
-"codeReview.editor.layout.picker" = "Layout del editor";
-"codeReview.editor.layout.help" = "Cambiar entre layout apilado y lado a lado para editor/diff";
+"codeReview.editor.layout.picker" = "Disposición del editor";
+"codeReview.editor.layout.help" = "Cambiar entre disposición apilada y lado a lado para editor/diff";
 "codeReview.editor.lines" = "%@ · %d líneas";
 "codeReview.editor.undo" = "Deshacer cambio del editor";
 "codeReview.editor.redo" = "Rehacer cambio del editor";
@@ -1642,7 +1642,7 @@
 "codeReview.toolbar.discardDrafts.hint" = "Limpiar todos los comentarios en línea pendientes";
 "codeReview.toolbar.applySuggestions.one" = "Aplicar sugerencia";
 "codeReview.toolbar.applySuggestions.many" = "Aplicar %d sugerencias";
-"codeReview.toolbar.applySuggestions.hint" = "Aplicar bloques de sugerencia pendientes a archivos locales despues de revisar conflictos";
+"codeReview.toolbar.applySuggestions.hint" = "Aplicar bloques de sugerencia pendientes a archivos locales después de revisar conflictos";
 "codeReview.toolbar.submit" = "Enviar";
 "codeReview.toolbar.submitCount" = "Enviar %d";
 "codeReview.toolbar.submit.hint" = "Enviar todos los comentarios pendientes al agente de origen";
@@ -1662,10 +1662,10 @@
 "codeReview.toolbar.merge.tooltip.pending" = "Se está calculando si se puede fusionar.";
 "codeReview.toolbar.shortcuts.help" = "Atajos de revisión";
 "codeReview.toolbar.shortcuts.title" = "Atajos de revisión";
-"codeReview.toolbar.shortcuts.nextHunk" = "Hunk siguiente / anterior";
+"codeReview.toolbar.shortcuts.nextHunk" = "Bloque siguiente / anterior";
 "codeReview.toolbar.shortcuts.nextFile" = "Archivo siguiente / anterior";
 "codeReview.toolbar.shortcuts.comment" = "Comentar línea actual";
-"codeReview.toolbar.shortcuts.acceptReject" = "Aceptar / rechazar hunk";
+"codeReview.toolbar.shortcuts.acceptReject" = "Aceptar / rechazar bloque";
 "codeReview.toolbar.shortcuts.diffMode" = "Cambiar modo de diff";
 "codeReview.toolbar.shortcuts.submitAll" = "Enviar todos los comentarios";
 "codeReview.toolbar.shortcuts.cancel" = "Cancelar comentario / cerrar panel";
@@ -1779,7 +1779,7 @@
 "codeReview.inlineComment.draftHint" = "Describe el cambio que quieres que haga el agente";
 "codeReview.inlineComment.keyboardHint" = "Enter para agregar, Cmd+Enter para enviar todo";
 "codeReview.inlineComment.add" = "Agregar comentario";
-"codeReview.inlineComment.addHint" = "Agregar este comentario en línea al feedback pendiente de revisión";
+"codeReview.inlineComment.addHint" = "Agregar este comentario en línea a la revisión pendiente";
 "codeReview.inlineComment.templates.help" = "Insertar plantilla de respuesta";
 "codeReview.inlineComment.templates.accessibility" = "Insertar plantilla de respuesta";
 "codeReview.inlineComment.templates.needsTests.title" = "Pedir pruebas";
