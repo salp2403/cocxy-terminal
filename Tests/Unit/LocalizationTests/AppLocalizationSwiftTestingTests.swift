@@ -686,6 +686,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(newTab.name == "Nueva pestaña")
         #expect(newTab.description == "Abrir una nueva pestaña de terminal")
         #expect(viewModel.localizedCategoryTitle(.tabs) == "Pestañas")
+        #expect(viewModel.localizedCategoryTitle(.worktree) == "Git")
 
         viewModel.query = "pesta"
 

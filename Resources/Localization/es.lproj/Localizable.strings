@@ -2158,7 +2158,7 @@
 "command.category.theme" = "Tema";
 "command.category.config" = "Ajustes";
 "command.category.cli" = "CLI";
-"command.category.worktree" = "Worktree";
+"command.category.worktree" = "Git";
 "command.category.editor" = "Editor";
 
 "command.window.new.name" = "Nueva ventana";
