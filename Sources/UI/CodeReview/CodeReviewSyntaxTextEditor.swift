@@ -10,6 +10,22 @@ struct CodeReviewSyntaxTextEditor: NSViewRepresentable {
     let fontSize: CGFloat
     let commandToken: CodeReviewEditorCommandToken?
 
+    @MainActor
+    static func applyReadableTheme(to textView: NSTextView, fontSize: CGFloat) {
+        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        textView.drawsBackground = true
+        textView.backgroundColor = CocxyColors.base
+        textView.textColor = CocxyColors.text
+        textView.insertionPointColor = CocxyColors.text
+        textView.font = font
+        textView.typingAttributes[.font] = font
+        textView.typingAttributes[.foregroundColor] = CocxyColors.text
+        textView.selectedTextAttributes = [
+            .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.28),
+            .foregroundColor: CocxyColors.text,
+        ]
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -39,8 +55,7 @@ struct CodeReviewSyntaxTextEditor: NSViewRepresentable {
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = false
-        textView.backgroundColor = CocxyColors.base
-        textView.insertionPointColor = CocxyColors.text
+        Self.applyReadableTheme(to: textView, fontSize: fontSize)
         textView.delegate = context.coordinator
 
         scrollView.documentView = textView
@@ -69,6 +84,7 @@ struct CodeReviewSyntaxTextEditor: NSViewRepresentable {
 
         func apply(parent: CodeReviewSyntaxTextEditor) {
             guard let textView else { return }
+            CodeReviewSyntaxTextEditor.applyReadableTheme(to: textView, fontSize: parent.fontSize)
             let needsTextSync = textView.string != parent.text
             let needsStyleSync = lastLanguage != parent.language || lastFontSize != parent.fontSize
 
@@ -81,7 +97,11 @@ struct CodeReviewSyntaxTextEditor: NSViewRepresentable {
                     language: parent.language,
                     fontSize: parent.fontSize
                 )
+                let undoManager = textView.undoManager
+                undoManager?.disableUndoRegistration()
                 textView.textStorage?.setAttributedString(highlighted)
+                CodeReviewSyntaxTextEditor.applyReadableTheme(to: textView, fontSize: parent.fontSize)
+                undoManager?.enableUndoRegistration()
                 let safeLocation = min(selectedRange.location, highlighted.length)
                 let safeLength = min(selectedRange.length, max(highlighted.length - safeLocation, 0))
                 textView.setSelectedRange(NSRange(location: safeLocation, length: safeLength))
@@ -113,6 +133,7 @@ struct CodeReviewSyntaxTextEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard !isApplying, let textView else { return }
             parent.text = textView.string
+            lastLanguage = ""
             apply(parent: parent)
         }
     }

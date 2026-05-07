@@ -2,6 +2,7 @@
 
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import CocxyTerminal
 
@@ -86,6 +87,51 @@ struct CodeReviewInlineEditorSwiftTestingTests {
 
         #expect(highlighted.attribute(.foregroundColor, at: functionRange.location, effectiveRange: nil) as? NSColor == CocxyColors.mauve)
         #expect(highlighted.attribute(.foregroundColor, at: variableRange.location, effectiveRange: nil) as? NSColor == CocxyColors.blue)
+    }
+
+    @Test("inline editor typing attributes stay readable on dark background")
+    func inlineEditorTypingAttributesStayReadableOnDarkBackground() {
+        let textView = NSTextView()
+        textView.textColor = .black
+        textView.insertionPointColor = .black
+        textView.typingAttributes[.foregroundColor] = NSColor.black
+
+        CodeReviewSyntaxTextEditor.applyReadableTheme(to: textView, fontSize: 13)
+
+        #expect(textView.drawsBackground)
+        #expect(textView.backgroundColor == CocxyColors.base)
+        #expect(textView.textColor == CocxyColors.text)
+        #expect(textView.insertionPointColor == CocxyColors.text)
+        #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
+    }
+
+    @Test("inline editor re-highlights direct edits instead of keeping AppKit black text")
+    func inlineEditorRehighlightsDirectEdits() {
+        var text = "alpha\n"
+        let binding = Binding<String>(
+            get: { text },
+            set: { text = $0 }
+        )
+        let parent = CodeReviewSyntaxTextEditor(
+            text: binding,
+            language: "Plain Text",
+            fontSize: 13,
+            commandToken: nil
+        )
+        let coordinator = CodeReviewSyntaxTextEditor.Coordinator(parent: parent)
+        let textView = NSTextView()
+        coordinator.textView = textView
+
+        coordinator.apply(parent: parent)
+        textView.string = "alpha\nbeta\n"
+        let betaRange = (textView.string as NSString).range(of: "beta")
+        textView.textStorage?.addAttribute(.foregroundColor, value: NSColor.black, range: betaRange)
+
+        coordinator.textDidChange(Notification(name: NSText.didChangeNotification, object: textView))
+
+        #expect(text == "alpha\nbeta\n")
+        #expect(textView.textStorage?.attribute(.foregroundColor, at: betaRange.location, effectiveRange: nil) as? NSColor == CocxyColors.text)
+        #expect(textView.typingAttributes[.foregroundColor] as? NSColor == CocxyColors.text)
     }
 
     @Test("editor sizing and Git workflow visibility are controlled by the view model")
