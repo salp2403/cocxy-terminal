@@ -23,8 +23,7 @@ struct GitInfoProviderWorktreeSwiftTestingTests {
     /// and returns a block that the test must call to clean it up.
     private func makeTempDir() throws -> URL {
         let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cocxy-gitinfo-worktree-tests", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("cocxy-gitinfo-worktree-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
             at: base,
             withIntermediateDirectories: true
@@ -122,12 +121,12 @@ struct GitInfoProviderWorktreeSwiftTestingTests {
 
         let worktree = try buildLinkedWorktreeFixture(
             root: tempRoot,
-            headContents: "ref: refs/heads/cocxy/claude/abc123\n",
+            headContents: "ref: refs/heads/cocxy/local-agent/abc123\n",
             useAbsolutePath: true
         )
 
         let provider = GitInfoProviderImpl()
-        #expect(provider.currentBranch(at: worktree) == "cocxy/claude/abc123")
+        #expect(provider.currentBranch(at: worktree) == "cocxy/local-agent/abc123")
     }
 
     @Test("detached HEAD in a linked worktree returns nil (no branch name)")

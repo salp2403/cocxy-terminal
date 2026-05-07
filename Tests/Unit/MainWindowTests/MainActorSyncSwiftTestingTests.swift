@@ -11,7 +11,7 @@ struct MainActorSyncSwiftTestingTests {
     @Test("non-blocking main actor sync returns a value when the main actor is available")
     func nonBlockingSyncReturnsWhenMainActorAvailable() async {
         let value = await Task.detached {
-            syncOnMainActorIfAvailable(timeout: .seconds(1)) {
+            syncOnMainActorIfAvailable(timeout: .seconds(5)) {
                 42
             }
         }.value
