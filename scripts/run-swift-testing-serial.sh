@@ -12,11 +12,26 @@ common_args=(
   --skip CocxyCorePerformanceBenchmarks
 )
 
+coverage_enabled=false
+list_extra_args=()
+for arg in "$@"; do
+  if [[ "$arg" == "--enable-code-coverage" ]]; then
+    coverage_enabled=true
+    continue
+  fi
+  list_extra_args+=("$arg")
+done
+
+list_args=("${common_args[@]}")
+if [[ ${#list_extra_args[@]} -gt 0 ]]; then
+  list_args+=("${list_extra_args[@]}")
+fi
+
 suites=()
 while IFS= read -r suite; do
   suites+=("$suite")
 done < <(
-  swift test list "${common_args[@]}" "$@" \
+  swift test list "${list_args[@]}" \
     | awk -F'[./]' '/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+\// { print $2 }' \
     | sort -u
 )
@@ -41,7 +56,11 @@ index=0
 for suite in "${suites[@]}"; do
   index=$((index + 1))
   echo "::group::Swift Testing suite ${index}/${#suites[@]}: ${suite}"
-  swift test --skip-build "${common_args[@]}" "$@" --filter "$suite"
+  if [[ "$coverage_enabled" == true ]]; then
+    swift test "${common_args[@]}" "$@" --filter "$suite"
+  else
+    swift test --skip-build "${common_args[@]}" "$@" --filter "$suite"
+  fi
   echo "::endgroup::"
 done
 

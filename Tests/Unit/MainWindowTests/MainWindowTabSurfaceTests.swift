@@ -1232,6 +1232,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
+        setPanelTestCanvas(width: 1600, height: 760, on: controller)
         if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
             controller.createTerminalSurface()
         }
@@ -1768,6 +1769,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             controller.appLocalizationBundle = bundle
         }
         controller.showWindow(nil)
+        setPanelTestCanvas(width: 1600, height: 760, on: controller)
         if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
             controller.createTerminalSurface()
         }
@@ -1800,6 +1802,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
+        setPanelTestCanvas(width: 2600, height: 760, on: controller)
         if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
             controller.createTerminalSurface()
         }
@@ -2270,6 +2273,14 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             }
         }
         return nil
+    }
+
+    private func setPanelTestCanvas(width: CGFloat, height: CGFloat, on controller: MainWindowController) {
+        let size = NSSize(width: width, height: height)
+        controller.window?.setContentSize(size)
+        controller.terminalContainerView?.setFrameSize(size)
+        controller.activeSplitView?.setFrameSize(size)
+        controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
     }
 
     private func localizationBundle() -> Bundle? {
