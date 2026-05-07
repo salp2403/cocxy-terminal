@@ -56,7 +56,7 @@
     "inLanguage": "es-HN",
     "featureList": [
       "Deteccion local de agentes de codigo",
-      "Panel de revision de codigo con comentarios inline",
+      "Panel de revision de codigo con comentarios en linea",
       "Espacio Markdown con previsualizaci&oacute;n local",
       "Renderizado acelerado por GPU",
       "Sesiones remotas SSH persistentes",
@@ -167,7 +167,7 @@
                 <div class="tl dim">  Escribiendo pruebas de l&iacute;mites...</div>
                 <div class="tl"><span class="ts">&#10003;</span> 3 archivos cambiados, 147 inserciones</div>
                 <div class="tl">&nbsp;</div>
-                <div class="tl dim">  <span class="ts">&#8984;&#8997;R</span> Revisar cambios inline &middot; 3 archivos, 4 hunks</div>
+                <div class="tl dim">  <span class="ts">&#8984;&#8997;R</span> Revisar cambios en l&iacute;nea &middot; 3 archivos, 4 fragmentos</div>
                 <div class="tl">&nbsp;</div>
                 <div class="tl"><span class="tp">$</span> <span class="tc">swift</span> <span class="ta">test --filter RateLimit</span></div>
                 <div class="tl dim">  PASS  RateLimitTests</div>
@@ -203,12 +203,12 @@
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--review" aria-hidden="true"></div>
             <h3>Revisi&oacute;n integrada</h3>
-            <p>Panel nativo para ver diffs, comentar l&iacute;neas, aceptar o revertir hunks y devolver comentarios al agente desde el flujo local.</p>
+            <p>Panel nativo para ver diffs, comentar l&iacute;neas, aceptar o revertir fragmentos y devolver comentarios al agente desde el flujo local.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--markdown" aria-hidden="true"></div>
             <h3>Espacio Markdown</h3>
-            <p>Editor y previsualizaci&oacute;n con Mermaid, KaTeX, callouts, footnotes, QuickLook offline, b&uacute;squeda y exportaci&oacute;n local.</p>
+            <p>Editor y previsualizaci&oacute;n con Mermaid, KaTeX, avisos, notas al pie, QuickLook sin red, b&uacute;squeda y exportaci&oacute;n local.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--ssh" aria-hidden="true"></div>
@@ -218,22 +218,22 @@
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--browser" aria-hidden="true"></div>
             <h3>Navegador integrado</h3>
-            <p>Perfiles, DevTools, favoritos, descargas y previsualizaci&oacute;n de localhost en una divisi&oacute;n junto a la terminal.</p>
+            <p>Perfiles, herramientas de desarrollo, favoritos, descargas y previsualizaci&oacute;n de localhost en una divisi&oacute;n junto a la terminal.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--privacy" aria-hidden="true"></div>
             <h3>Cero telemetr&iacute;a</h3>
-            <p>Sin analytics, tracking ni reporte autom&aacute;tico de crashes. La app funciona localmente y la red es expl&iacute;cita.</p>
+            <p>Sin anal&iacute;ticas, rastreo ni reporte autom&aacute;tico de fallos. La app funciona localmente y la red es expl&iacute;cita.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--gpu" aria-hidden="true"></div>
             <h3>Renderizado GPU</h3>
-            <p>CocxyCore usa Metal para scroll fluido, atlas de glifos, protocolos de imagen inline y diagn&oacute;sticos de terminal.</p>
+            <p>CocxyCore usa Metal para scroll fluido, atlas de glifos, protocolos de imagen en l&iacute;nea y diagn&oacute;sticos de terminal.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--cli" aria-hidden="true"></div>
             <h3>CLI local</h3>
-            <p>API por Unix socket para manejar pesta&ntilde;as, sesiones, agentes, remotos, dashboards, plugins y revisiones desde shell.</p>
+            <p>API por Unix socket para manejar pesta&ntilde;as, sesiones, agentes, remotos, paneles, plugins y revisiones desde shell.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--plugin" aria-hidden="true"></div>
@@ -248,12 +248,12 @@
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--web" aria-hidden="true"></div>
             <h3>Terminal web local</h3>
-            <p>Expone una terminal local por HTTP con frontend sin dependencias y control de frame rate, conexiones y attach.</p>
+            <p>Expone una terminal local por HTTP con interfaz web sin dependencias y control de frecuencia de cuadros, conexiones y uni&oacute;n a sesiones.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--shell" aria-hidden="true"></div>
             <h3>Integraci&oacute;n de shell</h3>
-            <p>Integraci&oacute;n nativa para zsh, bash y fish con CWD, l&iacute;mites de comando y bootstrap que respeta tu setup.</p>
+            <p>Integraci&oacute;n nativa para zsh, bash y fish con CWD, l&iacute;mites de comando y arranque que respeta tu configuraci&oacute;n.</p>
           </article>
         </div>
       </div>
@@ -301,7 +301,7 @@
           </div>
           <div class="comparison-divider"></div>
           <div class="comparison-item" data-animate>
-            <span class="comparison-label">Runtime</span>
+            <span class="comparison-label">Ejecuci&oacute;n</span>
             <span class="comparison-value comparison-value--highlight">Nativo</span>
           </div>
           <div class="comparison-divider"></div>
@@ -311,7 +311,7 @@
           </div>
           <div class="comparison-divider"></div>
           <div class="comparison-item" data-animate>
-            <span class="comparison-label">Framework</span>
+            <span class="comparison-label">Tecnolog&iacute;a</span>
             <span class="comparison-value comparison-value--highlight">Swift + AppKit</span>
           </div>
         </div>
@@ -324,15 +324,15 @@
         <div class="faq-list">
           <details class="faq-item" open>
             <summary><span>&iquest;Cocxy es gratis?</span></summary>
-            <p>S&iacute;. Cocxy es gratuito bajo licencia MIT. No requiere cuenta, suscripci&oacute;n ni login para funcionar.</p>
+            <p>S&iacute;. Cocxy es gratuito bajo licencia MIT. No requiere cuenta, suscripci&oacute;n ni inicio de sesi&oacute;n para funcionar.</p>
           </details>
           <details class="faq-item">
             <summary><span>&iquest;Cocxy recopila datos?</span></summary>
-            <p>No. Cocxy no incluye telemetr&iacute;a, analytics, tracking ni reporte autom&aacute;tico de crashes.</p>
+            <p>No. Cocxy no incluye telemetr&iacute;a, anal&iacute;ticas, rastreo ni reporte autom&aacute;tico de fallos.</p>
           </details>
           <details class="faq-item">
             <summary><span>&iquest;Puedo usarla como terminal diaria?</span></summary>
-            <p>S&iacute;. Incluye pesta&ntilde;as, divisiones, b&uacute;squeda, integraci&oacute;n de shell, SSH, CLI, temas, imagen inline y renderizado GPU.</p>
+            <p>S&iacute;. Incluye pesta&ntilde;as, divisiones, b&uacute;squeda, integraci&oacute;n de shell, SSH, CLI, temas, imagen en l&iacute;nea y renderizado GPU.</p>
           </details>
         </div>
         <div style="text-align:center;margin-top:2rem;">
@@ -372,11 +372,11 @@
     <section class="opensource" id="opensource" aria-labelledby="opensource-title">
       <div class="container">
         <div class="opensource-content" data-animate>
-          <h2 class="section-title" id="opensource-title">100% open source.</h2>
+          <h2 class="section-title" id="opensource-title">100% c&oacute;digo abierto.</h2>
           <p class="opensource-text">
             Todo el c&oacute;digo es p&uacute;blico bajo licencia MIT.
             Puedes auditarlo, bifurcarlo y contribuir.
-            Sin lock-in de proveedor, sin blobs propietarios y con cero telemetr&iacute;a.
+            Sin dependencia cerrada de proveedor, sin blobs propietarios y con cero telemetr&iacute;a.
           </p>
           <div class="opensource-stats">
             <div class="stat">

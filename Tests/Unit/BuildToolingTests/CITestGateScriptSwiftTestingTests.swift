@@ -492,6 +492,47 @@ struct CITestGateScriptSwiftTestingTests {
             "snippets",
             "tabs,",
             "splits",
+            "preferences",
+            "smart routing",
+            "quick terminal",
+            "web terminal",
+            "restore-on-launch",
+            "crash recovery",
+            "sidebar",
+            "dashboard",
+            "overlays",
+            "keybindings",
+            "overrides",
+            "bookmarks",
+            "devtools",
+            "hotkey",
+            "badges",
+            "tab creado",
+            "tab cerrado",
+            "snapshots",
+            "clic derecho y open",
+            "open source",
+            "lock-in",
+            "runtime",
+            "framework",
+            "pair programming",
+            "frame rate",
+            "attach",
+            "tu setup",
+            "copy p&uacute;blico",
+            "audits del repo",
+            "analytics",
+            "tracking",
+            "crashes",
+            "crash upload",
+            "review threads",
+            "inline",
+            "hunk",
+            "hunks",
+            "quicklook offline",
+            "auto-updates",
+            "bundle incluye",
+            "releases con firma",
         ]
 
         for file in files {
@@ -617,7 +658,7 @@ struct CITestGateScriptSwiftTestingTests {
             )
         }
 
-        #expect(spanish.contains("100% open source"))
+        #expect(spanish.contains("100% c&oacute;digo abierto"))
         #expect(spanish.contains("cero telemetr&iacute;a"))
         #expect(spanish.contains("Metal GPU"))
     }
@@ -824,9 +865,14 @@ struct CITestGateScriptSwiftTestingTests {
     }
 
     private static func htmlSearchableText(_ contents: String) -> String {
+        let withoutScripts = replacing(
+            #"(?is)<script\b[^>]*>.*?</script>"#,
+            in: contents,
+            with: " "
+        )
         let withoutStyles = replacing(
             #"(?is)<style\b[^>]*>.*?</style>"#,
-            in: contents,
+            in: withoutScripts,
             with: " "
         )
         let withoutComments = replacing(

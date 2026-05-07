@@ -41,7 +41,7 @@
     "inLanguage": "es-HN",
     "mainEntity": [
       {"@type": "Question", "name": "Que es Cocxy Terminal?", "acceptedAnswer": {"@type": "Answer", "text": "Cocxy Terminal es una terminal nativa para macOS construida para desarrolladores que trabajan con agentes de codigo. Detecta estado de agentes en tiempo real, incluye revision de codigo, espacio Markdown, renderizado GPU, sesiones remotas y cero telemetria."}},
-      {"@type": "Question", "name": "Cocxy recopila datos?", "acceptedAnswer": {"@type": "Answer", "text": "No. Cocxy no incluye analiticas, tracking ni reporte automatico de crashes. La app funciona localmente y las llamadas a servicios externos requieren accion o configuracion explicita del usuario."}},
+      {"@type": "Question", "name": "Cocxy recopila datos?", "acceptedAnswer": {"@type": "Answer", "text": "No. Cocxy no incluye analiticas, rastreo ni reporte automatico de fallos. La app funciona localmente y las llamadas a servicios externos requieren accion o configuracion explicita del usuario."}},
       {"@type": "Question", "name": "Como instalo Cocxy?", "acceptedAnswer": {"@type": "Answer", "text": "La ruta recomendada es Homebrew: brew tap salp2403/tap && brew install --cask cocxy. Tambien puedes descargar el DMG firmado desde GitHub Releases."}}
     ]
   }
@@ -116,7 +116,7 @@
 
         <details class="faq-item" id="privacy">
           <summary><span>&iquest;Cocxy recopila datos?</span></summary>
-          <p>No. Cocxy no incluye anal&iacute;ticas, tracking ni reporte autom&aacute;tico de crashes. La revisi&oacute;n de actualizaciones consulta el appcast firmado. GitHub, SSH, proveedores remotos, DB/Cloud y otras herramientas externas solo se usan cuando t&uacute; las configuras o ejecutas.</p>
+          <p>No. Cocxy no incluye anal&iacute;ticas, rastreo ni reporte autom&aacute;tico de fallos. La revisi&oacute;n de actualizaciones consulta el appcast firmado. GitHub, SSH, proveedores remotos, bases de datos/nube y otras herramientas externas solo se usan cuando t&uacute; las configuras o ejecutas.</p>
         </details>
 
         <details class="faq-item">
@@ -141,12 +141,12 @@
 
         <details class="faq-item" id="workflows">
           <summary><span>&iquest;Puedo usar Cocxy como terminal diaria?</span></summary>
-          <p>S&iacute;. Incluye pesta&ntilde;as, divisiones, b&uacute;squeda en scrollback, im&aacute;genes inline, ligaduras, integraci&oacute;n zsh/bash/fish, SSH, AppleScript, atajos configurables, temas y CLI local.</p>
+          <p>S&iacute;. Incluye pesta&ntilde;as, divisiones, b&uacute;squeda en scrollback, im&aacute;genes en l&iacute;nea, ligaduras, integraci&oacute;n zsh/bash/fish, SSH, AppleScript, atajos configurables, temas y CLI local.</p>
         </details>
 
         <details class="faq-item">
           <summary><span>&iquest;Funciona con mi configuraci&oacute;n zsh o bash?</span></summary>
-          <p>S&iacute;. La integraci&oacute;n de shell est&aacute; dise&ntilde;ada para coexistir con frameworks y prompts existentes. Cocxy restaura variables como <code>ZDOTDIR</code>, <code>HOME</code> y <code>XDG_CONFIG_HOME</code> antes de cargar tu entorno.</p>
+          <p>S&iacute;. La integraci&oacute;n de shell est&aacute; dise&ntilde;ada para coexistir con entornos y prompts existentes. Cocxy restaura variables como <code>ZDOTDIR</code>, <code>HOME</code> y <code>XDG_CONFIG_HOME</code> antes de cargar tu entorno.</p>
         </details>
 
         <details class="faq-item">
@@ -156,7 +156,7 @@
 
         <details class="faq-item">
           <summary><span>&iquest;Qu&eacute; es el espacio Markdown?</span></summary>
-          <p>Es un panel Markdown nativo junto a la terminal. Permite editar, previsualizar Mermaid y KaTeX, usar callouts, footnotes, resaltado de sintaxis, QuickLook offline y exportaci&oacute;n desde flujos locales.</p>
+          <p>Es un panel Markdown nativo junto a la terminal. Permite editar, previsualizar Mermaid y KaTeX, usar avisos, notas al pie, resaltado de sintaxis, QuickLook sin red y exportaci&oacute;n desde flujos locales.</p>
         </details>
 
         <details class="faq-item">
@@ -166,27 +166,27 @@
 
         <details class="faq-item">
           <summary><span>&iquest;D&oacute;nde vive la configuraci&oacute;n?</span></summary>
-          <p>La configuraci&oacute;n principal vive en <code>~/.config/cocxy/config.toml</code>. Los agentes se configuran en <code>agents.toml</code>. Tambi&eacute;n puedes usar <code>.cocxy.toml</code> dentro de un proyecto para overrides locales.</p>
+          <p>La configuraci&oacute;n principal vive en <code>~/.config/cocxy/config.toml</code>. Los agentes se configuran en <code>agents.toml</code>. Tambi&eacute;n puedes usar <code>.cocxy.toml</code> dentro de un proyecto para sobrescrituras locales.</p>
         </details>
 
         <details class="faq-item">
           <summary><span>&iquest;Hay CLI?</span></summary>
-          <p>S&iacute;. El comando <code>cocxy</code> controla pesta&ntilde;as, divisiones, ventanas, sesiones, agentes, hooks, revisi&oacute;n, Markdown, navegador, remoto, proxy, plugins, temas, timeline y diagn&oacute;sticos. Usa <code>cocxy help</code> para ver la referencia.</p>
+          <p>S&iacute;. El comando <code>cocxy</code> controla pesta&ntilde;as, divisiones, ventanas, sesiones, agentes, hooks, revisi&oacute;n, Markdown, navegador, remoto, proxy, plugins, temas, historial y diagn&oacute;sticos. Usa <code>cocxy help</code> para ver la referencia.</p>
         </details>
 
         <details class="faq-item">
           <summary><span>&iquest;Soporta plugins?</span></summary>
-          <p>S&iacute;. Los plugins responden a eventos de terminal como inicio/fin de sesi&oacute;n, agente detectado, cambio de estado, comando completado, pesta&ntilde;a creada/cerrada y cambio de directorio. Se ejecutan con sandbox, timeout y permisos expl&iacute;citos.</p>
+          <p>S&iacute;. Los plugins responden a eventos de terminal como inicio/fin de sesi&oacute;n, agente detectado, cambio de estado, comando completado, pesta&ntilde;a creada/cerrada y cambio de directorio. Se ejecutan con sandbox, tiempo l&iacute;mite y permisos expl&iacute;citos.</p>
         </details>
 
         <details class="faq-item">
-          <summary><span>&iquest;C&oacute;mo reporto un bug?</span></summary>
+          <summary><span>&iquest;C&oacute;mo reporto un fallo?</span></summary>
           <p>Abre un issue en <a href="https://github.com/salp2403/cocxy-terminal/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a> con versi&oacute;n de Cocxy, versi&oacute;n de macOS, chip y pasos para reproducir. Para vulnerabilidades, escribe a <a href="mailto:security@cocxy.dev">security@cocxy.dev</a>.</p>
         </details>
 
         <details class="faq-item">
           <summary><span>&iquest;C&oacute;mo desinstalo Cocxy?</span></summary>
-          <p>Si instalaste con Homebrew: <code>brew uninstall --cask cocxy</code>. Si instalaste con DMG, mueve la app a Trash. Para borrar configuraci&oacute;n y sesiones locales elimina <code>~/.config/cocxy/</code> y <code>~/Library/Application Support/dev.cocxy.terminal/</code>.</p>
+          <p>Si instalaste con Homebrew: <code>brew uninstall --cask cocxy</code>. Si instalaste con DMG, mueve la app a la Papelera. Para borrar configuraci&oacute;n y sesiones locales elimina <code>~/.config/cocxy/</code> y <code>~/Library/Application Support/dev.cocxy.terminal/</code>.</p>
         </details>
       </div>
 
