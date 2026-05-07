@@ -251,6 +251,11 @@ extension AppDelegate {
             bootstrapInitialSurfaceIfNeeded(windowController)
             return
         }
+        guard pendingCrashRecoverySnapshot == nil else {
+            pendingRestorableLaunchSession = nil
+            bootstrapInitialSurfaceIfNeeded(windowController)
+            return
+        }
 
         guard hasRestorableSessionOnLaunch(),
               let session = takePendingRestorableLaunchSession() else {

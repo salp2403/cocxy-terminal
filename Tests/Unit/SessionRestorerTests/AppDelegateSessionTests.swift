@@ -187,6 +187,48 @@ final class AppDelegateSessionIntegrationTests: XCTestCase {
         controller.window?.orderOut(nil)
     }
 
+    func testRestoreSessionOnLaunchWaitsForUserChoiceWhenCrashRecoverySnapshotIsPending() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+        delegate.installWindowControllerForTesting(controller)
+        let manager = makeSessionManager()
+        delegate.sessionManager = manager
+        delegate.pendingCrashRecoverySnapshot = CrashRecoverySnapshot(
+            savedAt: Date(),
+            session: makeSession(tabTitle: "Crash snapshot")
+        )
+
+        try manager.saveSession(makeSession(tabTitle: "Cached launch"), named: nil)
+
+        delegate.restoreSessionOnLaunch()
+
+        XCTAssertNil(
+            delegate.pendingRestorableLaunchSession,
+            "Crash recovery is the source of truth, so launch restore must not cache or consume last.json first"
+        )
+        XCTAssertTrue(
+            controller.window?.isVisible == true,
+            "The recovery offer still needs a stable parent window while the user chooses"
+        )
+        XCTAssertEqual(
+            bridge.createSurfaceRequests.count,
+            1,
+            "Only the fresh shell should be bootstrapped before the user chooses Restore"
+        )
+        XCTAssertFalse(
+            controller.tabManager.tabs.contains { $0.title == "Cached launch" },
+            "The regular launch session must not be visibly restored behind the crash recovery prompt"
+        )
+        XCTAssertEqual(
+            delegate.pendingCrashRecoverySnapshot?.session.windows.first?.tabs.first?.title,
+            "Crash snapshot",
+            "The crash snapshot must remain available for the Restore button"
+        )
+        controller.window?.orderOut(nil)
+    }
+
     private func makeSessionManager() -> SessionManagerImpl {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("AppDelegateSessionTests-\(UUID().uuidString)")
