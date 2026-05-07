@@ -60,13 +60,13 @@
 "preferences.appearance.tabPosition.hidden" = "Oculta";
 "preferences.appearance.classicTabPosition.help.enabled" = "Controla la navegación clásica de pestañas: barra lateral izquierda, tira superior o pestañas ocultas.";
 "preferences.appearance.classicTabPosition.help.disabled" = "Aurora usa su propia barra lateral de espacios. Esta posición clásica se preserva y vuelve a aplicar cuando Aurora se desactiva.";
-"preferences.appearance.classicTabPosition.caption.enabled" = "Arriba muestra la tira horizontal clásica y colapsa la barra lateral izquierda. Oculta deja visibles solo los controles del chrome del terminal.";
+"preferences.appearance.classicTabPosition.caption.enabled" = "Arriba muestra la tira horizontal clásica y colapsa la barra lateral izquierda. Oculta deja visibles solo los controles del marco del terminal.";
 "preferences.appearance.classicTabPosition.caption.disabled" = "Aurora está activo, así que Cocxy mantiene visible la barra lateral de espacios e ignora Izquierda/Arriba/Oculta hasta que Aurora se desactive.";
 "preferences.appearance.windowPadding" = "Espaciado de ventana";
 "preferences.appearance.aurora.section" = "Aurora";
-"preferences.appearance.enableAurora" = "Activar chrome Aurora";
-"preferences.appearance.enableAurora.help" = "Cambia el chrome de la ventana a la barra lateral, barra de estado y paleta de comandos experimental de Aurora. Guarda para aplicar por el flujo normal de hot-reload de configuración.";
-"preferences.appearance.enableAurora.caption" = "Aurora es una vista previa opt-in del chrome rediseñado. Desactívalo para volver a la barra lateral y barra de estado clásicas.";
+"preferences.appearance.enableAurora" = "Activar interfaz Aurora";
+"preferences.appearance.enableAurora.help" = "Cambia la interfaz de la ventana a la barra lateral, barra de estado y paleta de comandos experimental de Aurora. Guarda para aplicar por la ruta normal de recarga en caliente de configuración.";
+"preferences.appearance.enableAurora.caption" = "Aurora es una vista previa opcional de la interfaz rediseñada. Desactívalo para volver a la barra lateral y barra de estado clásicas.";
 "preferences.appearance.sidebarDensity" = "Densidad de barra lateral";
 "preferences.appearance.sidebarDensity.detailed" = "Detallada";
 "preferences.appearance.sidebarDensity.summary" = "Resumen";
@@ -77,7 +77,7 @@
 "preferences.appearance.sidebarRowDetail.process" = "Proceso";
 "preferences.appearance.sidebarRowDetail.command" = "Comando";
 "preferences.appearance.statusBar.section" = "Barra de estado";
-"preferences.appearance.showRateLimitIndicator" = "Mostrar indicador de rate limit";
+"preferences.appearance.showRateLimitIndicator" = "Mostrar indicador de límite de uso";
 "preferences.appearance.showRateLimitIndicator.help" = "Muestra una píldora en la barra de estado con uso estimado localmente para el agente activo. Solo aparece cuando el agente activo tiene un proveedor local registrado con datos disponibles; desactivarlo lo oculta para todos los agentes.";
 "preferences.appearance.showRateLimitIndicator.caption" = "Lee solo archivos locales que la CLI del agente ya guarda en disco. Nada sale de tu máquina.";
 "preferences.appearance.notes.section" = "Notas";
@@ -92,8 +92,8 @@
 "preferences.appearance.notes.caption" = "Las notas se guardan por espacio en la carpeta local configurada.";
 "preferences.appearance.transparency.section" = "Transparencia";
 "preferences.appearance.backgroundOpacity" = "Opacidad de fondo";
-"preferences.appearance.backgroundOpacity.caption" = "Valores menores activan un efecto glass en la barra lateral, tira de pestañas y barra de estado.";
-"preferences.appearance.glassChromeTint" = "Tinte del chrome glass";
+"preferences.appearance.backgroundOpacity.caption" = "Valores menores activan un efecto translúcido en la barra lateral, tira de pestañas y barra de estado.";
+"preferences.appearance.glassChromeTint" = "Tinte de superficies translúcidas";
 "preferences.appearance.glassChromeTint.followSystem" = "Seguir sistema";
 "preferences.appearance.glassChromeTint.light" = "Claro";
 "preferences.appearance.glassChromeTint.dark" = "Oscuro";
@@ -101,7 +101,7 @@
 "preferences.appearance.glassChromeTint.help.disabled" = "La selección se guarda, pero solo tiene efecto mientras la ventana es transparente. Baja la opacidad de fondo arriba para verlo en vivo.";
 "preferences.appearance.glassChromeTint.accessibilityHint" = "Elige si la barra lateral, tira de pestañas y barra de estado translúcidas siguen la apariencia del sistema o quedan fijas en un tinte claro u oscuro.";
 "preferences.appearance.glassChromeTint.hidden.caption" = "Tu selección se guarda, pero solo verás el tinte cuando la ventana sea transparente. Baja la opacidad de fondo por debajo de 100% para verlo en vivo.";
-"preferences.appearance.glassChromeTint.hidden.accessibilityLabel" = "Información: el tinte del chrome glass se guarda pero solo es visible mientras la ventana es transparente.";
+"preferences.appearance.glassChromeTint.hidden.accessibilityLabel" = "Información: el tinte de superficies translúcidas se guarda pero solo es visible mientras la ventana es transparente.";
 "preferences.appearance.glassChromeTint.pinned.caption" = "Fija la barra lateral, tira de pestañas y barra de estado a un tinte claro u oscuro independiente de macOS mientras la ventana siga transparente.";
 "preferences.agentDetection.detection.section" = "Detección";
 "preferences.agentDetection.enabled" = "Activada";
@@ -109,7 +109,7 @@
 "preferences.agentDetection.patternMatching" = "Coincidencia de patrones";
 "preferences.agentDetection.timingHeuristics" = "Heurísticas de tiempo";
 "preferences.agentDetection.timing.section" = "Tiempo";
-"preferences.agentDetection.idleTimeout" = "Timeout de inactividad: %d s";
+"preferences.agentDetection.idleTimeout" = "Tiempo de inactividad: %d s";
 "preferences.agentMode.feature.section" = "Función";
 "preferences.agentMode.enable" = "Activar modo agente";
 "preferences.agentMode.enable.help" = "Activa los puntos de entrada locales del modo agente integrado.";
@@ -1749,7 +1749,7 @@
 "github.merge.error.cli.notAuthenticated" = "Inicia sesión con `gh auth login` antes de fusionar.";
 "github.merge.error.cli.noRemote" = "No se detectó un remote de GitHub para este repositorio.";
 "github.merge.error.cli.notGitRepository" = "Abre un repositorio Git para fusionar pull requests.";
-"github.merge.error.cli.rateLimited" = "Se alcanzó el rate limit de GitHub. Inténtalo más tarde.";
+"github.merge.error.cli.rateLimited" = "Se alcanzó el límite de GitHub. Inténtalo más tarde.";
 "github.merge.error.cli.timeout" = "GitHub CLI agotó el tiempo después de %ds. Revisa tu red.";
 "github.merge.error.cli.invalidJSON" = "Salida inesperada de gh: %@";
 "github.merge.error.cli.unsupportedVersion" = "Actualiza GitHub CLI (`gh`). Usuarios de Homebrew pueden ejecutar: brew upgrade gh";
