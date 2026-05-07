@@ -299,6 +299,22 @@ struct MarkdownContentViewTests {
         )
     }
 
+    @Test("Markdown Spanish mode switcher uses compact labels without changing full mode names")
+    func markdownSpanishModeSwitcherUsesCompactLabels() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let toolbar = MarkdownToolbarView(localizer: localizer)
+        let segmented = try #require(
+            toolbar.subviews.compactMap { $0 as? NSSegmentedControl }.first
+        )
+
+        #expect(MarkdownViewMode.split.localizedLabel(using: localizer) == "Dividida")
+        #expect(segmented.label(forSegment: 0) == "Fuente")
+        #expect(segmented.label(forSegment: 1) == "Previa")
+        #expect(segmented.label(forSegment: 2) == "Dual")
+        #expect(segmented.toolTip == "Cambiar entre Fuente, Previa y Dividida")
+    }
+
     // MARK: - Helpers
 
     private func createTempMarkdownFile(content: String) -> URL {

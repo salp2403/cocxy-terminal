@@ -134,8 +134,9 @@ final class MarkdownToolbarView: NSView {
         modeSegmented.segmentStyle = .rounded
         modeSegmented.segmentCount = 3
         for (index, mode) in MarkdownViewMode.allCases.enumerated() {
-            modeSegmented.setLabel(mode.localizedLabel(using: localizer), forSegment: index)
+            modeSegmented.setLabel(mode.localizedToolbarLabel(using: localizer), forSegment: index)
             modeSegmented.setWidth(60, forSegment: index)
+            modeSegmented.setToolTip(mode.localizedLabel(using: localizer), forSegment: index)
         }
         modeSegmented.selectedSegment = 0
         modeSegmented.toolTip = Self.localizedModeTooltip(using: localizer)
@@ -280,7 +281,8 @@ final class MarkdownToolbarView: NSView {
             fileName = Self.localizedUntitledFileName(using: localizer)
         }
         for (index, mode) in MarkdownViewMode.allCases.enumerated() {
-            modeSegmented.setLabel(mode.localizedLabel(using: localizer), forSegment: index)
+            modeSegmented.setLabel(mode.localizedToolbarLabel(using: localizer), forSegment: index)
+            modeSegmented.setToolTip(mode.localizedLabel(using: localizer), forSegment: index)
         }
         modeSegmented.toolTip = Self.localizedModeTooltip(using: localizer)
         applyButtonCopy(blameButton, Self.localizedShowGitBlame(using: localizer))

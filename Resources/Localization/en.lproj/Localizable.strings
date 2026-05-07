@@ -1429,6 +1429,7 @@
 "markdown.mode.source" = "Source";
 "markdown.mode.preview" = "Preview";
 "markdown.mode.split" = "Split";
+"markdown.mode.split.compact" = "Split";
 "markdown.empty.noFile" = "No file";
 "markdown.empty.placeholder" = "Drop a .md file here or choose one from the Files sidebar.";
 "markdown.loadFailed" = "Failed to load file: %@";

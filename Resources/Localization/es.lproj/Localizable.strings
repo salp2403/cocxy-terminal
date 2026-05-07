@@ -1429,6 +1429,7 @@
 "markdown.mode.source" = "Fuente";
 "markdown.mode.preview" = "Previa";
 "markdown.mode.split" = "Dividida";
+"markdown.mode.split.compact" = "Dual";
 "markdown.empty.noFile" = "Sin archivo";
 "markdown.empty.placeholder" = "Suelta un archivo .md aquí o elige uno en la barra lateral de Archivos.";
 "markdown.loadFailed" = "No se pudo cargar el archivo: %@";

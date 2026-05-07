@@ -38,6 +38,15 @@ public enum MarkdownViewMode: String, CaseIterable, Sendable, Equatable {
         }
     }
 
+    func localizedToolbarLabel(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .split where localizer.resolvedLanguage == .spanish:
+            return localizer.string("markdown.mode.split.compact", fallback: "Dual")
+        default:
+            return localizedLabel(using: localizer)
+        }
+    }
+
     /// Keyboard shortcut key (used alongside ⌘ in menu items and tooltips).
     public var shortcutKey: String {
         switch self {
