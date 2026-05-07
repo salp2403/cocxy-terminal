@@ -769,7 +769,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Horizontal tab strip height.
     private static let tabStripHeight: CGFloat = 32
     static let sessionRestoreShieldRemovalTimeout: TimeInterval = 1.25
-    static let sessionRestoreShieldPostFrameDelay: TimeInterval = 0.16
+    // Keep the opaque restore shield through crash-recovery prompt dismissal
+    // and a short compositor settle window after the terminal's first frame.
+    static let sessionRestoreShieldPostFrameDelay: TimeInterval = 0.35
 
     /// The status bar hosting view at the bottom of the window.
     private(set) var statusBarHostingView: NSHostingView<StatusBarView>?
