@@ -261,6 +261,55 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!versionRewriteBlock.contains("|| true"))
     }
 
+    @Test("public release website gate keeps badge and structured data wired")
+    func publicReleaseWebsiteGateKeepsBadgeAndStructuredDataWired() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+        let englishHome = try String(
+            contentsOf: root.appendingPathComponent("web/public/index.html"),
+            encoding: .utf8
+        )
+        let spanishHome = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/index.html"),
+            encoding: .utf8
+        )
+        let englishReleases = try String(
+            contentsOf: root.appendingPathComponent("web/public/releases.html"),
+            encoding: .utf8
+        )
+        let spanishReleases = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/releases.html"),
+            encoding: .utf8
+        )
+
+        for homepage in [englishHome, spanishHome] {
+            #expect(homepage.contains(#"<div class="hero-version">"#))
+            #expect(homepage.contains(#"<span class="version-badge">v0.0.0</span>"#))
+            #expect(homepage.contains(#""@type": "SoftwareApplication""#))
+            #expect(homepage.contains(#""softwareVersion": "0.0.0""#))
+        }
+
+        for releasePage in [englishReleases, spanishReleases] {
+            #expect(releasePage.contains(#""@type": "BreadcrumbList""#))
+            #expect(releasePage.contains(#""@type": "CollectionPage""#))
+            #expect(releasePage.contains(#""@type": "ItemList""#))
+            #expect(releasePage.contains(#""softwareVersion": "0.0.0""#))
+            #expect(releasePage.contains(#"href="/appcast.xml""#))
+            #expect(releasePage.contains("https://github.com/salp2403/cocxy-terminal/releases/latest"))
+        }
+
+        #expect(workflow.contains("release_items = []"))
+        #expect(workflow.contains(#""@type": "CollectionPage""#))
+        #expect(workflow.contains(#""@type": "ItemList""#))
+        #expect(workflow.contains(#""softwareVersion": version"#))
+        #expect(workflow.contains(#"<link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">"#))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}releases.html"#))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/releases.html"#))
+    }
+
     @Test("primary public docs do not pin the retired CLI command count")
     func primaryPublicDocsDoNotPinRetiredCLICommandCount() throws {
         let root = repositoryRoot()

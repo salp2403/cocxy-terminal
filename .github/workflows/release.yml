@@ -600,6 +600,7 @@ jobs:
               return t
 
           cards = []
+          release_items = []
           for i, r in enumerate(releases):
               tag = r.get("tagName", "")
               ver = tag.lstrip("v")
@@ -623,6 +624,16 @@ jobs:
                     <a href="{gh}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Release Notes</a>
                   </div>
                 </article>''')
+              release_items.append({
+                  "@type": "SoftwareApplication",
+                  "name": f"Cocxy Terminal {tag}",
+                  "applicationCategory": "DeveloperApplication",
+                  "operatingSystem": "macOS 14.0+",
+                  "softwareVersion": version,
+                  "url": gh,
+                  "downloadUrl": dmg,
+                  "datePublished": date_str,
+              })
 
           show_more = ""
           if len(releases) > PER_PAGE:
@@ -633,6 +644,58 @@ jobs:
                     Show {hidden_count} older release{"s" if hidden_count != 1 else ""}
                   </button>
                 </div>'''
+
+          structured_data = json.dumps([
+              {
+                  "@context": "https://schema.org",
+                  "@type": "BreadcrumbList",
+                  "itemListElement": [
+                      {
+                          "@type": "ListItem",
+                          "position": 1,
+                          "name": "Home",
+                          "item": "https://cocxy.dev/",
+                      },
+                      {
+                          "@type": "ListItem",
+                          "position": 2,
+                          "name": "Releases",
+                          "item": "https://cocxy.dev/releases.html",
+                      },
+                  ],
+              },
+              {
+                  "@context": "https://schema.org",
+                  "@type": "CollectionPage",
+                  "@id": "https://cocxy.dev/releases.html#releases",
+                  "name": "Cocxy Terminal Releases",
+                  "url": "https://cocxy.dev/releases.html",
+                  "description": "Release history and changelog for Cocxy Terminal.",
+                  "inLanguage": "en",
+                  "about": {
+                      "@type": "SoftwareApplication",
+                      "name": "Cocxy Terminal",
+                      "applicationCategory": "DeveloperApplication",
+                      "operatingSystem": "macOS 14.0+",
+                      "softwareVersion": version,
+                      "url": "https://cocxy.dev",
+                      "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
+                  },
+                  "mainEntity": {
+                      "@type": "ItemList",
+                      "itemListOrder": "https://schema.org/ItemListOrderDescending",
+                      "numberOfItems": len(release_items),
+                      "itemListElement": [
+                          {
+                              "@type": "ListItem",
+                              "position": index + 1,
+                              "item": item,
+                          }
+                          for index, item in enumerate(release_items)
+                      ],
+                  },
+              },
+          ], indent=2)
 
           page = f"""<!DOCTYPE html>
           <html lang="en">
@@ -657,12 +720,16 @@ jobs:
             <link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html">
             <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html">
             <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html">
+            <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">
             <link rel="stylesheet" href="/css/style.css?v={version}">
             <link rel="icon" href="/images/icon.png" type="image/png">
             <link rel="apple-touch-icon" href="/images/icon.png">
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+            <script type="application/ld+json">
+            {structured_data}
+            </script>
             <style>
               .rel-card {{background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:2rem;margin-bottom:1.5rem;}}
               .rel-header {{display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;}}
@@ -760,7 +827,9 @@ jobs:
              if [ -f ${DEPLOY_PATH}es/faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/faq.html; fi; \
              if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/releases.html; fi; \
              sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}index.html; \
-             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html; fi"
+             if [ -f ${DEPLOY_PATH}releases.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}releases.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/releases.html; fi"
 
           rm /tmp/deploy_key
           echo "Website deployed to cocxy.dev"
