@@ -10,6 +10,16 @@ struct ProjectTemplatePresentation: Identifiable, Equatable {
     let summary: String
     let source: ProjectTemplateSource
     let variableCount: Int
+
+    func localizedRowDetail(using localizer: AppLocalizer) -> String {
+        let key = variableCount == 1 ? "templates.row.detail.one" : "templates.row.detail.many"
+        let fallback = variableCount == 1 ? "%@ - %d var" : "%@ - %d vars"
+        return String(
+            format: localizer.string(key, fallback: fallback),
+            source.localizedTitle(using: localizer),
+            variableCount
+        )
+    }
 }
 
 @MainActor

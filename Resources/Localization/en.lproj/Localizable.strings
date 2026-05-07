@@ -1359,7 +1359,8 @@
 "templates.createdFiles" = "Created Files";
 "templates.pendingHooks" = "Pending Hooks";
 "templates.empty.noSelection" = "No template selected";
-"templates.row.detail" = "%@ - %d vars";
+"templates.row.detail.one" = "%@ - %d var";
+"templates.row.detail.many" = "%@ - %d vars";
 "templates.variable.required" = "Required";
 "templates.builtIn.docker-service.name" = "Docker Service";
 "templates.builtIn.docker-service.summary" = "Creates a minimal local service with Docker assets.";

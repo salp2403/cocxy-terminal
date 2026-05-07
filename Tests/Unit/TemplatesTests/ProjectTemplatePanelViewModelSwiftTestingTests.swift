@@ -178,6 +178,32 @@ struct ProjectTemplatePanelViewModelSwiftTestingTests {
         #expect(viewModel.destinationName == "MiHerramienta")
     }
 
+    @Test("Spanish localizer pluralizes template row variable counts")
+    func spanishLocalizerPluralizesTemplateRowVariableCounts() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let oneVariable = ProjectTemplatePresentation(
+            id: "one",
+            name: "One",
+            summary: "",
+            source: .builtIn,
+            variableCount: 1
+        )
+        let manyVariables = ProjectTemplatePresentation(
+            id: "many",
+            name: "Many",
+            summary: "",
+            source: .builtIn,
+            variableCount: 2
+        )
+
+        #expect(oneVariable.localizedRowDetail(using: spanish) == "incluida - 1 variable")
+        #expect(manyVariables.localizedRowDetail(using: spanish) == "incluida - 2 variables")
+        #expect(oneVariable.localizedRowDetail(using: english) == "built-in - 1 var")
+        #expect(manyVariables.localizedRowDetail(using: english) == "built-in - 2 vars")
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-template-panel-tests-\(UUID().uuidString)", isDirectory: true)

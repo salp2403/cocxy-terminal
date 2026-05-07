@@ -252,11 +252,7 @@ private struct ProjectTemplateRow: View {
     }
 
     private var rowDetail: String {
-        String(
-            format: localizer.string("templates.row.detail", fallback: "%@ - %d vars"),
-            template.source.localizedTitle(using: localizer),
-            template.variableCount
-        )
+        template.localizedRowDetail(using: localizer)
     }
 }
 

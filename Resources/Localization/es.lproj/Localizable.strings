@@ -1359,7 +1359,8 @@
 "templates.createdFiles" = "Archivos creados";
 "templates.pendingHooks" = "Hooks pendientes";
 "templates.empty.noSelection" = "No hay plantilla seleccionada";
-"templates.row.detail" = "%@ - %d vars";
+"templates.row.detail.one" = "%@ - %d variable";
+"templates.row.detail.many" = "%@ - %d variables";
 "templates.variable.required" = "Requerido";
 "templates.builtIn.docker-service.name" = "Servicio Docker";
 "templates.builtIn.docker-service.summary" = "Crea un servicio local mínimo con archivos Docker.";
