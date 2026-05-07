@@ -873,9 +873,14 @@ struct AppLocalizationSwiftTestingTests {
             "Sources/UI/Preferences/PreferencesView.swift": [
                 "0Oo Il1 | [] {} () => -> == != --",
                 "Cocxy Terminal",
+                "~/.cocxy/worktrees",
+                "cocxy/{agent}/{id}",
+                "HEAD",
             ],
-            "Sources/UI/RemoteWorkspace/PortForwardingView.swift": ["SOCKS"],
-            "Sources/UI/RemoteWorkspace/RemoteProfileEditor.swift": ["L", "R", "D"],
+            "Sources/UI/RemoteWorkspace/PortForwardingView.swift": ["SOCKS", "8080"],
+            "Sources/UI/RemoteWorkspace/ProxyControlView.swift": ["1080", "8888", "*.example.com"],
+            "Sources/UI/RemoteWorkspace/RelayControlView.swift": ["127.0.0.1", "10", "3000", "9000"],
+            "Sources/UI/RemoteWorkspace/RemoteProfileEditor.swift": ["L", "R", "D", "~/.ssh/id_ed25519"],
             "Sources/UI/RemoteWorkspace/SSHKeyManagerView.swift": ["Ed25519", "RSA", "ECDSA"],
             "Sources/UI/ScrollbackSearch/ScrollbackSearchBarView.swift": ["aA"],
         ]
@@ -1003,9 +1008,12 @@ struct AppLocalizationSwiftTestingTests {
     ) throws -> [HardcodedVisibleLiteral] {
         let expressions = try [
             #"\b(?:Text|Button|Label)\(\s*"([^"\n]+)""#,
+            #"\b(?:DisclosureGroup|GroupBox|Link|Menu|NavigationLink|Picker|Section|SecureField|TableColumn|TextField|Toggle)\(\s*"([^"\n]+)""#,
             #"\bNSButton\(title:\s*"([^"\n]+)""#,
             #"\bNSTextField\(labelWithString:\s*"([^"\n]+)""#,
+            #"\.(?:alert|confirmationDialog|navigationTitle)\(\s*"([^"\n]+)""#,
             #"\bsetAccessibilityLabel\(\s*"([^"\n]+)""#,
+            #"\.accessibility(?:Label|Hint|Value)\(\s*"([^"\n]+)""#,
             #"\.help\(\s*"([^"\n]+)""#,
         ].map { try NSRegularExpression(pattern: $0, options: []) }
         var result: [HardcodedVisibleLiteral] = []
