@@ -35,16 +35,7 @@ struct CodeReviewGitWorkflowPanel: View {
             }
         }
         .padding(12)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(nsColor: CocxyColors.surface0).opacity(0.82),
-                    Color(nsColor: CocxyColors.base).opacity(0.94),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        .glassPanelBackground()
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(Color(nsColor: CocxyColors.blue).opacity(0.18))

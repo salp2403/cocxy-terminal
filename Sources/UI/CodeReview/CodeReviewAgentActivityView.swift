@@ -55,16 +55,7 @@ struct CodeReviewAgentActivityView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(nsColor: CocxyColors.surface0).opacity(0.76),
-                    Color(nsColor: CocxyColors.mantle).opacity(0.92),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        .glassPanelBackground()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
             localized("codeReview.activity.accessibility", fallback: "Live agent workstream")
