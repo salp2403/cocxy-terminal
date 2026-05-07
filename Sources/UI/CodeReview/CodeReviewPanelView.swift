@@ -1084,7 +1084,7 @@ private struct CodeReviewFileEditorView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color(nsColor: CocxyColors.surface0).opacity(0.9))
+            .glassPanelBackground()
 
             if let error = viewModel.editorErrorMessage {
                 Text(error)

@@ -105,6 +105,8 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         ".background(Color(nsColor: CocxyColors.mantle))",
         ".background(.thickMaterial)",
         ".background(.ultraThinMaterial)",
+        ".background(Color(nsColor: CocxyColors.mantle).opacity(0.98))",
+        ".background(Color(nsColor: CocxyColors.surface0).opacity(0.9))",
         "Color(nsColor: CocxyColors.mantle)\n                VisualEffectBackground(",
     ]
 

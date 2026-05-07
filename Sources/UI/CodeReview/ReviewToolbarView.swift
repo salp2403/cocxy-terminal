@@ -232,7 +232,7 @@ struct ReviewToolbarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color(nsColor: CocxyColors.mantle).opacity(0.98))
+        .glassPanelBackground()
     }
 
     private var totalAdditions: Int {
