@@ -63,6 +63,21 @@ struct AuroraCommandPaletteFilterTests {
         #expect(result.map(\.id) == ["theme.cycle"])
     }
 
+    @Test("Matches the localized Preferences row with the Spanish user term")
+    func matchesLocalizedPreferencesRow() {
+        let actions = [
+            Design.AuroraPaletteAction(
+                id: "preferences.show",
+                label: "Mostrar preferencias",
+                category: "Configuración",
+                subtitle: "Abrir ajustes del terminal"
+            ),
+            Design.AuroraPaletteAction(id: "tabs.new", label: "Nueva pestaña", category: "Pestañas"),
+        ]
+        let result = Design.AuroraPaletteFilter.filter(actions, by: "preferencias")
+        #expect(result.map(\.id) == ["preferences.show"])
+    }
+
     @Test("Nil subtitle does not affect matching semantics")
     func nilSubtitleIsSafe() {
         let actions = [

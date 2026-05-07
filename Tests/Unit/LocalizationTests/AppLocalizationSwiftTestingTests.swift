@@ -114,6 +114,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("commandPalette.footer.action.plural", fallback: "actions") == "acciones")
         #expect(spanish.string("quickSwitch.item.browser.title", fallback: "Browser: %@") == "Navegador: %@")
         #expect(spanish.string("quickSwitch.kind.browserTab", fallback: "Browser tab") == "Pestaña de navegador")
+        #expect(spanish.string("command.preferences.show.name", fallback: "Show Preferences") == "Mostrar preferencias")
         #expect(spanish.string("command.onboarding.show.name", fallback: "Show Onboarding") == "Mostrar configuración guiada")
     }
 
@@ -665,8 +666,17 @@ struct AppLocalizationSwiftTestingTests {
     func commandPaletteViewModelLocalizesActionsAndSearchesSpanish() throws {
         let bundle = try #require(localizationBundle())
         let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let engine = CommandPaletteEngineImpl()
+        engine.registerAction(CommandAction(
+            id: "preferences.show",
+            name: "Show Preferences",
+            description: "Open terminal settings",
+            shortcut: nil,
+            category: .config,
+            handler: {}
+        ))
         let viewModel = CommandPaletteViewModel(
-            engine: CommandPaletteEngineImpl(),
+            engine: engine,
             localizer: localizer
         )
 
@@ -678,6 +688,10 @@ struct AppLocalizationSwiftTestingTests {
         viewModel.query = "pesta"
 
         #expect(viewModel.filteredActions.contains { $0.id == "tabs.new" })
+
+        viewModel.query = "preferencias"
+
+        #expect(viewModel.filteredActions.contains { $0.id == "preferences.show" })
     }
 
     @MainActor

@@ -2226,7 +2226,7 @@
 "command.editor.zoomOut.description" = "Reducir el tamaño de fuente del terminal";
 "command.editor.resetZoom.name" = "Restablecer zoom";
 "command.editor.resetZoom.description" = "Restaurar el tamaño de fuente configurado del terminal";
-"command.preferences.show.name" = "Mostrar ajustes";
+"command.preferences.show.name" = "Mostrar preferencias";
 "command.preferences.show.description" = "Abrir ajustes del terminal";
 "command.welcome.show.name" = "Mostrar bienvenida";
 "command.welcome.show.description" = "Mostrar el overlay de bienvenida con atajos";
