@@ -362,6 +362,10 @@ struct AppLocalizationSwiftTestingTests {
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
 
         #expect(spanish.string("activity.title", fallback: "Activity") == "Actividad")
+        #expect(spanish.string("activity.deleteAll.title", fallback: "Delete all Activity data?") == "¿Eliminar todos los datos de actividad?")
+        #expect(spanish.string("activity.deleteAll.message", fallback: "This removes local Activity and token records from this Mac.") == "Esto elimina los registros locales de actividad y tokens de esta Mac.")
+        #expect(spanish.string("activity.deleteData", fallback: "Delete Activity Data") == "Eliminar datos de actividad")
+        #expect(spanish.string("activity.actionFailed.title", fallback: "Activity action failed") == "Acción de actividad fallida")
         #expect(spanish.string("activity.metric.events", fallback: "Events") == "Eventos")
         #expect(spanish.string("activity.section.projectTime", fallback: "Project Time") == "Tiempo por proyecto")
         #expect(spanish.string("activity.section.insights", fallback: "Insights") == "Hallazgos")

@@ -233,8 +233,8 @@ struct ActivityDashboardSwiftTestingTests {
 
         let copy = SystemActivityDashboardFilePresenter.localizedDeleteAllCopy(localizer: localizer)
 
-        #expect(copy.messageText == "¿Eliminar todos los datos de Activity?")
-        #expect(copy.informativeText == "Esto elimina los registros locales de Activity y tokens de esta Mac.")
+        #expect(copy.messageText == "¿Eliminar todos los datos de actividad?")
+        #expect(copy.informativeText == "Esto elimina los registros locales de actividad y tokens de esta Mac.")
         #expect(copy.primaryButton == "Eliminar")
         #expect(copy.secondaryButton == "Cancelar")
 
