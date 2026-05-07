@@ -148,7 +148,7 @@ else
     fail "Automatic crash-upload implementation absent"
 fi
 
-phone_home_hits="$(grep_repo 'does not phone home|phone home|ping[- ]home|zero data to any external server|no network entitlement|network entitlement beyond|no contacta servidores autom[aá]ticamente' \
+phone_home_hits="$(grep_repo 'does not phone home|phone home|ping[- ]home|zero data to any external server|never sends data to external servers|no network entitlement|network entitlement beyond|no contacta servidores autom[aá]ticamente' \
     README.md Sources Resources Tests .github scripts web/public)"
 if [ -z "$phone_home_hits" ]; then
     ok "No overbroad phone-home copy remains"

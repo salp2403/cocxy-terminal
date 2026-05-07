@@ -94,6 +94,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("PostHog|Sentry|Crashlytics|Mixpanel|Amplitude"))
         #expect(script.contains("network entitlement " + "beyond"))
         #expect(script.contains("zero data to any " + "external server"))
+        #expect(script.contains("never sends data " + "to external servers"))
         #expect(script.contains("api\\.openai\\.com|api\\.anthro[p]ic\\.com|generativelanguage\\.googleapis\\.com"))
         #expect(ci.contains("./scripts/run-privacy-audit.sh --app build/CocxyTerminal.app"))
         #expect(nightly.contains("./scripts/run-privacy-audit.sh --app \"$APP_DIR\""))
@@ -102,6 +103,33 @@ struct CITestGateScriptSwiftTestingTests {
         let result = try runProcess(scriptURL, arguments: [])
         #expect(result.terminationStatus == 0)
         #expect(result.stdout.contains("Privacy audit passed"))
+    }
+
+    @Test("public privacy copy does not overstate explicit network boundaries")
+    func publicPrivacyCopyDoesNotOverstateExplicitNetworkBoundaries() throws {
+        let root = repositoryRoot()
+        let webRoot = root.appendingPathComponent("web/public", isDirectory: true)
+        var files = [
+            root.appendingPathComponent("README.md"),
+        ]
+        files += try Self.files(under: webRoot, fileExtension: "html")
+
+        let forbiddenFragments = [
+            "never sends data " + "to external servers",
+            "zero data to any " + "external server",
+            "no network " + "entitlement " + "beyond",
+            "network entitlement " + "beyond",
+        ]
+
+        for file in files {
+            let contents = try String(contentsOf: file, encoding: .utf8).lowercased()
+            for fragment in forbiddenFragments {
+                #expect(
+                    !contents.contains(fragment),
+                    "\(Self.relativePath(file, root: root)) contains overbroad privacy copy: \(fragment)"
+                )
+            }
+        }
     }
 
     @Test("internal security audit script aggregates privacy bundle and focused regression gates")
